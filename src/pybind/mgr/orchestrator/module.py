@@ -18,12 +18,13 @@ except ImportError:
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
     DriveGroupSpecs
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from mgr_module import MgrModule, HandleCommandResult
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
-    NoOrchestrator, ServiceSpec, PlacementSpec, OrchestratorValidationError, NFSServiceSpec, \
-    RGWSpec, InventoryFilter, InventoryHost, HostPlacementSpec, HostSpec, CLICommandMeta
+    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
+    RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta
 
 def nice_delta(now, t, suffix=''):
     if t:
@@ -457,7 +458,7 @@ Usage:
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
             devs = DeviceSelection(paths=block_devices)
-            drive_groups = [DriveGroupSpec(host_name, data_devices=devs)]
+            drive_groups = [DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)]
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 

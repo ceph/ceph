@@ -30,11 +30,12 @@ import uuid
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
+from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec
 
 from mgr_module import MgrModule
 import orchestrator
-from orchestrator import OrchestratorError, HostPlacementSpec, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, ServiceSpec
+from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
+    CLICommandMeta
 
 from . import remotes
 from .osd import RemoveUtil, OSDRemoval
@@ -121,7 +122,7 @@ class SpecStore():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
         self.mgr = mgr
-        self.specs = {} # type: Dict[str, orchestrator.ServiceSpec]
+        self.specs = {} # type: Dict[str, ServiceSpec]
         self.spec_created = {} # type: Dict[str, datetime.datetime]
 
     def load(self):
@@ -142,7 +143,7 @@ class SpecStore():
                 pass
 
     def save(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
         self.specs[spec.service_name()] = spec
         self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
         self.mgr.set_store(
@@ -161,7 +162,7 @@ class SpecStore():
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
     def find(self, service_name):
-        # type: (str) -> List[orchestrator.ServiceSpec]
+        # type: (str) -> List[ServiceSpec]
         specs = []
         for sn, spec in self.specs.items():
             if sn == service_name or sn.startswith(service_name + '.'):
@@ -1926,7 +1927,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         for drive_group in drive_groups:
             self.log.info("Processing DriveGroup {}".format(drive_group))
             # 1) use fn_filter to determine matching_hosts
-            matching_hosts = drive_group.hosts([x.hostname for x in all_hosts])
+            matching_hosts = drive_group.placement.pattern_matches_hosts([x.hostname for x in all_hosts])
             # 2) Map the inventory to the InventoryHost object
             # FIXME: lazy-load the inventory from a InventoryHost object;
             #        this would save one call to the inventory(at least externally)
@@ -1945,7 +1946,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 drive_selection = selector.DriveSelection(drive_group, inventory_for_host.devices)
                 cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
                 if not cmd:
-                    self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.name))
+                    self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
                     continue
                 cmds.append((host, cmd))
 
@@ -2254,7 +2255,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _apply_all_services(self):
         r = False
-        specs = [] # type: List[orchestrator.ServiceSpec]
+        specs = [] # type: List[ServiceSpec]
         for sn, spec in self.spec_store.specs.items():
             specs.append(spec)
         for spec in specs:
@@ -2407,7 +2408,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                                    extra_config=extra_config)
 
     def add_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('mon', spec, self._create_mon)
 
     def _create_mgr(self, mgr_id, host):
@@ -2426,23 +2427,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._create_daemon('mgr', mgr_id, host, keyring=keyring)
 
     def add_mgr(self, spec):
-        # type: (orchestrator.ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('mgr', spec, self._create_mgr)
 
     def _apply(self, spec):
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
-                'mon': orchestrator.PlacementSpec(count=5),
-                'mgr': orchestrator.PlacementSpec(count=2),
-                'mds': orchestrator.PlacementSpec(count=2),
-                'rgw': orchestrator.PlacementSpec(count=2),
-                'rbd-mirror': orchestrator.PlacementSpec(count=2),
-                'grafana': orchestrator.PlacementSpec(count=1),
-                'alertmanager': orchestrator.PlacementSpec(count=1),
-                'prometheus': orchestrator.PlacementSpec(count=1),
-                'node-exporter': orchestrator.PlacementSpec(all_hosts=True),
-                'crash': orchestrator.PlacementSpec(all_hosts=True),
+                'mon': PlacementSpec(count=5),
+                'mgr': PlacementSpec(count=2),
+                'mds': PlacementSpec(count=2),
+                'rgw': PlacementSpec(count=2),
+                'rbd-mirror': PlacementSpec(count=2),
+                'grafana': PlacementSpec(count=1),
+                'alertmanager': PlacementSpec(count=1),
+                'prometheus': PlacementSpec(count=1),
+                'node-exporter': PlacementSpec(all_hosts=True),
+                'crash': PlacementSpec(all_hosts=True),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -2460,10 +2461,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._apply(spec)
 
     def add_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('mds', spec, self._create_mds, self._config_mds)
 
-    def apply_mds(self, spec: orchestrator.ServiceSpec) -> orchestrator.Completion:
+    def apply_mds(self, spec: ServiceSpec) -> orchestrator.Completion:
         return self._apply(spec)
 
     def _config_mds(self, spec):
@@ -2757,7 +2758,7 @@ receivers:
         return self._apply(spec)
 
     def add_node_exporter(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('node-exporter', spec,
                                 self._create_node_exporter)
 
@@ -2768,7 +2769,7 @@ receivers:
         return self._create_daemon('node-exporter', daemon_id, host)
 
     def add_crash(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('crash', spec,
                                 self._create_crash)
 
@@ -2785,11 +2786,11 @@ receivers:
         return self._create_daemon('crash', daemon_id, host, keyring=keyring)
 
     def add_grafana(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('grafana', spec, self._create_grafana)
 
     def apply_grafana(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
     def _create_grafana(self, daemon_id, host):
@@ -2797,11 +2798,11 @@ receivers:
         return self._create_daemon('grafana', daemon_id, host)
 
     def add_alertmanager(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('alertmanager', spec, self._create_alertmanager)
 
     def apply_alertmanager(self, spec):
-        # type: (orchestrator.ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> AsyncCompletion
         return self._apply(spec)
 
     def _create_alertmanager(self, daemon_id, host):
@@ -3022,7 +3023,7 @@ class BaseScheduler(object):
     """
 
     def __init__(self, placement_spec):
-        # type: (orchestrator.PlacementSpec) -> None
+        # type: (PlacementSpec) -> None
         self.placement_spec = placement_spec
 
     def place(self, host_pool, count=None):
@@ -3061,21 +3062,21 @@ class HostAssignment(object):
     """
 
     def __init__(self,
-                 spec,  # type: orchestrator.ServiceSpec
+                 spec,  # type: ServiceSpec
                  get_hosts_func,  # type: Callable[[Optional[str]],List[str]]
                  get_daemons_func, # type: Callable[[str],List[orchestrator.DaemonDescription]]
 
                  scheduler=None,  # type: Optional[BaseScheduler]
                  ):
         assert spec and get_hosts_func and get_daemons_func
-        self.spec = spec  # type: orchestrator.ServiceSpec
+        self.spec = spec  # type: ServiceSpec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
         self.get_daemons_func = get_daemons_func
         self.service_name = spec.service_name()
 
     def place(self):
-        # type: () -> List[orchestrator.HostPlacementSpec]
+        # type: () -> List[HostPlacementSpec]
         """
         Load hosts into the spec.placement.hosts container.
         """
@@ -3093,6 +3094,15 @@ class HostAssignment(object):
             candidates = [
                 HostPlacementSpec(x, '', '')
                 for x in self.get_hosts_func(None)
+            ]
+            logger.debug('All hosts: {}'.format(candidates))
+            return candidates
+
+        # respect host_pattern
+        if self.spec.placement.host_pattern:
+            candidates = [
+                HostPlacementSpec(x, '', '')
+                for x in self.spec.placement.pattern_matches_hosts(self.get_hosts_func(None))
             ]
             logger.debug('All hosts: {}'.format(candidates))
             return candidates

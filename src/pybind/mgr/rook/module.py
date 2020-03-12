@@ -3,6 +3,7 @@ import functools
 import os
 
 from ceph.deployment import inventory
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
 
 try:
     from typing import List, Dict, Optional, Callable, Any
@@ -297,17 +298,17 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def add_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
+        # type: (ServiceSpec) -> RookCompletion
         return self._service_add_decorate('MDS', spec,
                                        self.rook_cluster.add_filesystem)
 
     def add_rgw(self, spec):
-        # type: (orchestrator.RGWSpec) -> RookCompletion
+        # type: (RGWSpec) -> RookCompletion
         return self._service_add_decorate('RGW', spec,
                                        self.rook_cluster.add_objectstore)
 
     def add_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
+        # type: (NFSServiceSpec) -> RookCompletion
         return self._service_add_decorate("NFS", spec,
                                           self.rook_cluster.add_nfsgw)
 
@@ -334,7 +335,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             )
 
     def apply_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
+        # type: (ServiceSpec) -> RookCompletion
         if spec.placement.hosts or spec.placement.label:
             raise RuntimeError("Host list or label is not supported by rook.")
 
@@ -345,7 +346,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def apply_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
+        # type: (ServiceSpec) -> RookCompletion
         num = spec.placement.count
         return write_completion(
             lambda: self.rook_cluster.update_mds_count(spec.service_id, num),
@@ -354,7 +355,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def apply_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
+        # type: (NFSServiceSpec) -> RookCompletion
         num = spec.placement.count
         return write_completion(
             lambda: self.rook_cluster.update_nfs_count(spec.service_id, num),
@@ -388,12 +389,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         def execute(all_hosts_):
             # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
             all_hosts = [h.hostname for h in all_hosts_]
+            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
 
-            assert len(drive_group.hosts(all_hosts)) == 1
+            assert len(matching_hosts) == 1
 
-            if not self.rook_cluster.node_exists(drive_group.hosts(all_hosts)[0]):
+            if not self.rook_cluster.node_exists(matching_hosts[0]):
                 raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                                   "cluster".format(drive_group.hosts(all_hosts)))
+                                   "cluster".format(matching_hosts))
 
             # Validate whether cluster CRD can accept individual OSD
             # creations (i.e. not useAllDevices)
@@ -403,7 +405,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return orchestrator.Completion.with_progress(
                 message="Creating OSD on {0}:{1}".format(
-                        drive_group.hosts(all_hosts),
+                        matching_hosts,
                         targets),
                 mgr=self,
                 on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),
@@ -412,12 +414,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         @deferred_read
         def has_osds(all_hosts):
+            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+
             # Find OSD pods on this host
             pod_osd_ids = set()
             pods = self.k8s.list_namespaced_pod(self._rook_env.namespace,
                                                  label_selector="rook_cluster={},app=rook-ceph-osd".format(self._rook_env.cluster_name),
                                                  field_selector="spec.nodeName={0}".format(
-                                                     drive_group.hosts(all_hosts)[0]
+                                                     matching_hosts[0]
                                                  )).items
             for p in pods:
                 pod_osd_ids.add(int(p.metadata.labels['ceph-osd-id']))

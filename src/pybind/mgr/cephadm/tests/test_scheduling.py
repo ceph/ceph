@@ -1,8 +1,10 @@
 from typing import NamedTuple, List
 import pytest
 
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
+
 from cephadm.module import HostAssignment
-from orchestrator import ServiceSpec, PlacementSpec, DaemonDescription, OrchestratorValidationError
+from orchestrator import DaemonDescription, OrchestratorValidationError
 
 
 class NodeAssignmentTest(NamedTuple):
@@ -110,6 +112,14 @@ class NodeAssignmentTest(NamedTuple):
             'host1 host2 host3'.split(),
             [],
             ['host1', 'host2', 'host3']
+        ),
+        # host_pattern
+        NodeAssignmentTest(
+            'mon',
+            PlacementSpec(host_pattern='mon*'),
+            'monhost1 monhost2 datahost'.split(),
+            [],
+            ['monhost1', 'monhost2']
         ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
@@ -250,5 +260,5 @@ def test_bad_placements(placement):
     try:
         s = PlacementSpec.from_string(placement.split(' '))
         assert False
-    except OrchestratorValidationError as e:
+    except ServiceSpecValidationError as e:
         pass
