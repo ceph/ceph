@@ -434,17 +434,7 @@ function activate_virtualenv() {
     local env_dir=$top_srcdir/install-deps-python3
 
     if ! test -d $env_dir ; then
-        # Make a temporary virtualenv to get a fresh version of virtualenv
-        # because CentOS 7 has a buggy old version (v1.10.1)
-        # https://github.com/pypa/virtualenv/issues/463
-        virtualenv --python=python3 ${env_dir}_tmp
-        # install setuptools before upgrading virtualenv, as the latter needs
-        # a recent setuptools for setup commands like `extras_require`.
-        ${env_dir}_tmp/bin/pip install --upgrade setuptools
-        ${env_dir}_tmp/bin/pip install --upgrade virtualenv
-        ${env_dir}_tmp/bin/virtualenv --python python3 $env_dir
-        rm -rf ${env_dir}_tmp
-
+        virtualenv --python=python3 ${env_dir}
         . $env_dir/bin/activate
         if ! populate_wheelhouse install ; then
             rm -rf $env_dir
