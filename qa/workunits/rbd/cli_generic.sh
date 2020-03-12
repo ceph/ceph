@@ -965,6 +965,12 @@ test_trash_purge_schedule() {
     rbd trash purge schedule ls -p rbd2 -R | grep 'every 2d starting at 00:17'
     rbd trash purge schedule ls -p rbd2/ns1 -R | grep 'every 2d starting at 00:17'
 
+    for i in `seq 12`; do
+        rbd trash purge schedule status --format xml |
+            $XMLSTARLET sel -t -v '//scheduled/item/pool' | grep 'rbd2' && break
+        sleep 10
+    done
+    rbd trash purge schedule status
     rbd trash purge schedule status --format xml |
         $XMLSTARLET sel -t -v '//scheduled/item/pool' | grep 'rbd2'
 
