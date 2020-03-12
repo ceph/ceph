@@ -132,6 +132,12 @@ class RgwBucketTest(RgwTestCase):
             ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user2'])
         super(RgwBucketTest, cls).tearDownClass()
 
+    def setUp(self):
+        # See how many buckets already exist.
+        data = self._get('/api/rgw/bucket')
+        self.assertStatus(200)
+        self.num_preexisting_buckets = len(data)
+
     def test_all(self):
         # Create a new bucket.
         self._post(
@@ -160,7 +166,7 @@ class RgwBucketTest(RgwTestCase):
         # List all buckets.
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
-        self.assertEqual(len(data), 1)
+        self.assertEqual(len(data), self.num_preexisting_buckets + 1)
         self.assertIn('teuth-test-bucket', data)
 
         # Get the bucket.
@@ -199,7 +205,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
-        self.assertEqual(len(data), 0)
+        self.assertEqual(len(data), self.num_preexisting_buckets)
 
     def test_create_get_update_delete_w_tenant(self):
         # Create a new bucket. The tenant of the user is used when
@@ -220,7 +226,7 @@ class RgwBucketTest(RgwTestCase):
         # List all buckets.
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
-        self.assertEqual(len(data), 1)
+        self.assertEqual(len(data), self.num_preexisting_buckets + 1)
         self.assertIn('testx/teuth-test-bucket', data)
 
         # Get the bucket.
@@ -274,7 +280,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
-        self.assertEqual(len(data), 0)
+        self.assertEqual(len(data), self.num_preexisting_buckets)
 
 
 class RgwDaemonTest(DashboardTestCase):
