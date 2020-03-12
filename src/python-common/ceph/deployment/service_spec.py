@@ -110,7 +110,9 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         if ',' in network:
             networks = [x for x in network.split(',')]
         else:
-            networks.append(network)
+            if network != '':
+                networks.append(network)
+
         for network in networks:
             # only if we have versioned network configs
             if network.startswith('v') or network.startswith('[v'):
@@ -207,7 +209,11 @@ class PlacementSpec(object):
         c = data.copy()
         hosts = c.get('hosts', [])
         if hosts:
-            c['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
+            c['hosts'] = []
+            for host in hosts:
+                c['hosts'].append(HostPlacementSpec.parse(host) if
+                                  isinstance(host, str) else
+                                  HostPlacementSpec.from_json(host))
         _cls = cls(**c)
         _cls.validate()
         return _cls
@@ -426,7 +432,9 @@ class ServiceSpec(object):
                 args.update(v)
                 continue
             args.update({k: v})
-        return cls(**args)
+        _cls = cls(**args)
+        _cls.validate()
+        return _cls
 
     def service_name(self):
         n = self.service_type
