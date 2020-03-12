@@ -363,28 +363,34 @@ class RookCluster(object):
             else:
                 raise
 
-    def add_filesystem(self, spec):
+    def apply_filesystem(self, spec):
         # type: (ServiceSpec) -> None
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
+        def _update_fs(current, new):
+            # type: (cfs.CephFilesystem, cfs.CephFilesystem) -> cfs.CephFilesystem
+            new.spec.metadataServer.activeCount = spec.placement.count or 1
+            return new
 
-        rook_fs = cfs.CephFilesystem(
-            apiVersion=self.rook_env.api_name,
-            metadata=dict(
-                name=spec.service_id,
-                namespace=self.rook_env.namespace,
-            ),
-            spec=cfs.Spec(
-                metadataServer=cfs.MetadataServer(
-                    activeCount=spec.placement.count,
-                    activeStandby=True
+        def _create_fs():
+            # type: () -> cfs.CephFilesystem
+            return cfs.CephFilesystem(
+                apiVersion=self.rook_env.api_name,
+                metadata=dict(
+                    name=spec.service_id,
+                    namespace=self.rook_env.namespace,
+                ),
+                spec=cfs.Spec(
+                    metadataServer=cfs.MetadataServer(
+                        activeCount=spec.placement.count or 1,
+                        activeStandby=True
+                    )
                 )
             )
-        )
-
-        with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.service_id)):
-            self.rook_api_post("cephfilesystems/", body=rook_fs.to_json())
+        return self._create_or_patch(
+            cfs.CephFilesystem, 'cephfilesystems', spec.service_id,
+            _update_fs, _create_fs)
 
     def add_nfsgw(self, spec):
         # TODO use spec.placement
@@ -476,13 +482,6 @@ class RookCluster(object):
             new.spec.mon.count = newcount
             return new
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
-
-    def update_mds_count(self, svc_id, newcount):
-        def _update_nfs_count(current, new):
-            # type: (cfs.CephFilesystem, cfs.CephFilesystem) -> cfs.CephFilesystem
-            new.spec.metadataServer.activeCount = newcount
-            return new
-        return self._patch(cnfs.CephNFS, 'cephnfses', svc_id, _update_nfs_count)
 
     def update_nfs_count(self, svc_id, newcount):
         def _update_nfs_count(current, new):
@@ -582,3 +581,44 @@ class RookCluster(object):
                 "Failed to update {}/{}: {}".format(crd_name, cr_name, e))
 
         return "Success"
+
+    def _create_or_patch(self, crd, crd_name, cr_name, update_func, create_func):
+        try:
+            current_json = self.rook_api_get(
+                "{}/{}".format(crd_name, cr_name)
+            )
+        except ApiException as e:
+            if e.status == 404:
+                current_json = None
+            else:
+                raise
+
+        if current_json:
+            current = crd.from_json(current_json)
+            new = crd.from_json(current_json)  # no deepcopy.
+
+            new = update_func(current, new)
+
+            patch = list(jsonpatch.make_patch(current_json, new.to_json()))
+
+            log.info('patch for {}/{}: \n{}'.format(crd_name, cr_name, patch))
+
+            if len(patch) == 0:
+                return "No change"
+
+            try:
+                self.rook_api_patch(
+                    "{}/{}".format(crd_name, cr_name),
+                    body=patch)
+            except ApiException as e:
+                log.exception("API exception: {0}".format(e))
+                raise ApplyException(
+                    "Failed to update {}/{}: {}".format(crd_name, cr_name, e))
+            return "Updated"
+        else:
+            new = create_func()
+            with self.ignore_409("{} {} already exists".format(crd_name,
+                                                               cr_name)):
+                self.rook_api_post("{}/".format(crd_name),
+                                   body=new.to_json())
+            return "Created"
