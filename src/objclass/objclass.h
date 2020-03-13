@@ -140,7 +140,10 @@ extern int cls_cxx_map_get_vals(cls_method_context_t hctx,
 
 extern int cls_cxx_map_get_val(cls_method_context_t hctx, const std::string &key,
                                bufferlist *outbl);
-extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
+extern int cls_cxx_map_get_vals_by_keys(cls_method_context_t hctx,
+                                        const std::set<std::string> &keys,
+                                        std::map<std::string, bufferlist> *map);
+extern int cls_cxx_map_read_header(cls_method_context_t hctx, ceph::buffer::list *outbl);
 extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
                                 const std::map<string, bufferlist> *map);
 extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
