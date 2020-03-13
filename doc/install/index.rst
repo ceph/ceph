@@ -69,6 +69,11 @@ Install ceph using ceph-deploy
 
    ceph-deploy is no longer actively maintained. It is not tested on versions of Ceph newer than Nautilus. It does not support RHEL8, CentOS 8, or newer operating systems.
 
+.. toctree::
+   :hidden:
+  
+   ceph-deploy/index
+
 
 DeepSea
 -------
@@ -92,6 +97,11 @@ Manually install Ceph using packages.
 
 * :ref:`install-manual`
 
+.. toctree::
+   :hidden:
+  
+   index_manual
+
 Puppet
 ------
 
@@ -100,9 +110,3 @@ Installs Ceph using Puppet
 * `github.com/openstack/puppet-ceph <https://github.com/openstack/puppet-ceph>`_
 
 
-
-
-.. toctree::
-   :hidden:
-  
-   index_manual
