@@ -750,31 +750,33 @@ Usage:
         return HandleCommandResult(stdout=specs)
 
     @_cli_write_command(
-        'orch apply mgr',
+        'orch apply',
+        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus '
         'name=placement,type=CephString,req=false',
-        'Update the size or placement of managers')
-    def _apply_mgr(self, placement=None):
+        'Update the size or placement for a service')
+    def _apply_misc(self, service_type, placement=None):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
 
-        spec = ServiceSpec('mgr', placement=placement)
+        spec = ServiceSpec(service_type, placement=placement)
 
-        completion = self.apply_mgr(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        if service_type == 'mgr':
+            completion = self.apply_mgr(spec)
+        elif service_type == 'mon':
+            completion = self.apply_mon(spec)
+        elif service_type == 'rbd-mirror':
+            completion = self.apply_rbd_mirror(spec)
+        elif service_type == 'crash':
+            completion = self.apply_crash(spec)
+        elif service_type == 'alertmanager':
+            completion = self.apply_alertmanager(spec)
+        elif service_type == 'grafana':
+            completion = self.apply_grafana(spec)
+        elif service_type == 'node-exporter':
+            completion = self.apply_node_exporter(spec)
+        elif service_type == 'prometheus':
+            completion = self.apply_prometheus(spec)
 
-    @_cli_write_command(
-        'orch apply mon',
-        'name=placement,type=CephString,req=false',
-        'Update the number of monitor instances')
-    def _apply_mon(self, placement=None):
-        placement = PlacementSpec.from_string(placement)
-        placement.validate()
-
-        spec = ServiceSpec('mon', placement=placement)
-
-        completion = self.apply_mon(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -791,20 +793,6 @@ Usage:
             'mds', fs_name,
             placement=placement)
         completion = self.apply_mds(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply rbd-mirror',
-        'name=placement,type=CephString,req=false',
-        'Update the number of rbd-mirror instances')
-    def _apply_rbd_mirror(self, placement=None):
-        spec = ServiceSpec(
-            'rbd-mirror',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -837,71 +825,6 @@ Usage:
             placement=PlacementSpec.from_string(placement),
         )
         completion = self.apply_nfs(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply prometheus',
-        'name=placement,type=CephString,req=false',
-        'Scale prometheus service')
-    def _apply_prometheus(self, placement=None):
-        spec = ServiceSpec(
-            'prometheus',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_prometheus(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply grafana',
-        'name=placement,type=CephString,req=false',
-        'Scale grafana service')
-    def _apply_grafana(self, placement=None):
-        spec = ServiceSpec(
-            'grafana',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_grafana(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply alertmanager',
-        'name=placement,type=CephString,req=false',
-        'Scale alertmanager service')
-    def _apply_alertmanager(self, placement=None):
-        spec = ServiceSpec(
-            'alertmanager',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_alertmanager(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply node-exporter',
-        'name=placement,type=CephString,req=false',
-        'Update node_exporter service')
-    def _apply_node_exporter(self, placement=None):
-        spec = ServiceSpec(
-            'node-exporter',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_node_exporter(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply crash',
-        'name=placement,type=CephString,req=false',
-        'Update node_exporter service')
-    def _apply_crash(self, placement=None):
-        spec = ServiceSpec(
-            'crash',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_crash(spec)
         self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 
