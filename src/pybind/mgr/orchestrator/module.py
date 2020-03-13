@@ -356,12 +356,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(services, key=lambda s: s.service_name):
+                if not s.spec:
+                    pl = '<no spec>'
+                elif s.spec.unmanaged:
+                    pl = '<unmanaged>'
+                else:
+                    pl = s.spec.placement.pretty_str()
                 table.add_row((
                     s.service_name,
                     '%d/%d' % (s.running, s.size),
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
-                    s.spec.placement.pretty_str() if s.spec else '-',
+                    pl,
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
                 ))
