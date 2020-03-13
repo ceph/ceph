@@ -162,11 +162,13 @@ class SpecStore():
             del self.spec_created[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
-    def find(self, service_name):
-        # type: (str) -> List[ServiceSpec]
+    def find(self, service_name=None):
+        # type: (Optional[str]) -> List[ServiceSpec]
         specs = []
         for sn, spec in self.specs.items():
-            if sn == service_name or sn.startswith(service_name + '.'):
+            if not service_name or \
+                    sn == service_name or \
+                    sn.startswith(service_name + '.'):
                 specs.append(spec)
         return specs
 
@@ -3042,12 +3044,12 @@ receivers:
         """
         return trivial_result(self.rm_util.report)
 
-    def list_specs(self) -> orchestrator.Completion:
+    def list_specs(self, service_name=None) -> orchestrator.Completion:
         """
         Loads all entries from the service_spec mon_store root.
         """
         specs = list()
-        for service_name, spec in self.spec_store.specs.items():
+        for spec in self.spec_store.find(service_name=service_name):
             specs.append('---')
             specs.append(yaml.safe_dump(spec.to_json()))
         return trivial_result(specs)
