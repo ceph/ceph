@@ -40,8 +40,7 @@ export class MonitorComponent {
             return lastValueA > lastValueB ? 1 : -1;
           }
         }
-      ],
-      data: []
+      ]
     };
 
     this.notInQuorum = {
@@ -49,8 +48,7 @@ export class MonitorComponent {
         { prop: 'name', name: this.i18n('Name'), cellTransformation: CellTemplate.routerLink },
         { prop: 'rank', name: this.i18n('Rank') },
         { prop: 'public_addr', name: this.i18n('Public Address') }
-      ],
-      data: []
+      ]
     };
   }
 
