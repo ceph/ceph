@@ -2531,9 +2531,9 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
-               ictx->read_only, ofs, len, bl.length() <= 0 ? NULL : bl.c_str(), bl.length(),
+               ictx->read_only, ofs, len, bl.length() == 0 ? NULL : bl.c_str(), bl.length(),
                op_flags);
-    if (bl.length() <= 0 || len % bl.length() ||
+    if (bl.length() == 0 || len % bl.length() ||
         len > static_cast<size_t>(std::numeric_limits<int>::max())) {
       tracepoint(librbd, writesame_exit, -EINVAL);
       return -EINVAL;
@@ -2672,7 +2672,7 @@ namespace librbd {
     tracepoint(librbd, aio_writesame_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
                ictx->read_only, off, len, bl.length() <= len ? NULL : bl.c_str(), bl.length(),
                c->pc, op_flags);
-    if (bl.length() <= 0 || len % bl.length()) {
+    if (bl.length() == 0 || len % bl.length()) {
       tracepoint(librbd, aio_writesame_exit, -EINVAL);
       return -EINVAL;
     }
