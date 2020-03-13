@@ -26,6 +26,7 @@ import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdListComponent } from './rbd-list.component';
 import { RbdModel } from './rbd-model';
 
@@ -55,7 +56,8 @@ describe('RbdListComponent', () => {
       RbdListComponent,
       RbdDetailsComponent,
       RbdSnapshotListComponent,
-      RbdConfigurationListComponent
+      RbdConfigurationListComponent,
+      RbdTabsComponent
     ],
     providers: [TaskListService, i18nProviders]
   });

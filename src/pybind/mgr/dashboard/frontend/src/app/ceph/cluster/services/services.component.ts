@@ -28,7 +28,6 @@ export class ServicesComponent implements OnChanges, OnInit {
   permissions: Permissions;
 
   checkingOrchestrator = true;
-  orchestratorExist = false;
   hasOrchestrator = false;
   docsUrl: string;
 
@@ -90,7 +89,7 @@ export class ServicesComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
-    if (this.orchestratorExist) {
+    if (this.hasOrchestrator) {
       this.services = [];
       this.table.reloadData();
     }

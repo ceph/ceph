@@ -37,8 +37,7 @@
               "node_modules/ngx-toastr/toastr.css",
               "node_modules/ngx-bootstrap/datepicker/bs-datepicker.css",
               "src/styles.scss",
-              "src/styles/vendor.overrides.scss",
-              "node_modules/ng2-tree/styles.css"
+              "src/styles/vendor.overrides.scss"
             ],
             "scripts": [
               "node_modules/chart.js/dist/Chart.bundle.js"

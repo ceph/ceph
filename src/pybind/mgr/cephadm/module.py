@@ -162,11 +162,13 @@ class SpecStore():
             del self.spec_created[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
-    def find(self, service_name):
-        # type: (str) -> List[ServiceSpec]
+    def find(self, service_name=None):
+        # type: (Optional[str]) -> List[ServiceSpec]
         specs = []
         for sn, spec in self.specs.items():
-            if sn == service_name or sn.startswith(service_name + '.'):
+            if not service_name or \
+                    sn == service_name or \
+                    sn.startswith(service_name + '.'):
                 specs.append(spec)
         return specs
 
@@ -1719,8 +1721,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def _get_spec_size(self, spec):
         if spec.placement.count:
             return spec.placement.count
-        elif spec.placement.all_hosts:
-            return len(self.inventory)
+        elif spec.placement.host_pattern:
+            return len(spec.placement.pattern_matches_hosts(self.inventory.keys()))
         elif spec.placement.label:
             return len(self._get_hosts(spec.placement.label))
         elif spec.placement.hosts:
@@ -2501,8 +2503,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'grafana': PlacementSpec(count=1),
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
-                'node-exporter': PlacementSpec(all_hosts=True),
-                'crash': PlacementSpec(all_hosts=True),
+                'node-exporter': PlacementSpec(host_pattern='*'),
+                'crash': PlacementSpec(host_pattern='*'),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -3042,12 +3044,12 @@ receivers:
         """
         return trivial_result(self.rm_util.report)
 
-    def list_specs(self) -> orchestrator.Completion:
+    def list_specs(self, service_name=None) -> orchestrator.Completion:
         """
         Loads all entries from the service_spec mon_store root.
         """
         specs = list()
-        for service_name, spec in self.spec_store.specs.items():
+        for spec in self.spec_store.find(service_name=service_name):
             specs.append('---')
             specs.append(yaml.safe_dump(spec.to_json()))
         return trivial_result(specs)
@@ -3148,15 +3150,6 @@ class HostAssignment(object):
             logger.debug('Provided hosts: %s' % self.spec.placement.hosts)
             return self.spec.placement.hosts
 
-        # respect all_hosts=true
-        if self.spec.placement.all_hosts:
-            candidates = [
-                HostPlacementSpec(x, '', '')
-                for x in self.get_hosts_func(None)
-            ]
-            logger.debug('All hosts: {}'.format(candidates))
-            return candidates
-
         # respect host_pattern
         if self.spec.placement.host_pattern:
             candidates = [
@@ -3198,7 +3191,6 @@ class HostAssignment(object):
                 assert self.spec.placement.count is None
                 assert not self.spec.placement.hosts
                 assert not self.spec.placement.label
-                assert not self.spec.placement.all_hosts
                 count = 1
             logger.debug('place %d over all hosts: %s' % (count, hosts))
 
