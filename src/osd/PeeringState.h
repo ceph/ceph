@@ -2273,6 +2273,10 @@ public:
     return last_update_applied;
   }
 
+  eversion_t get_last_update_ondisk() const {
+    return last_update_ondisk;
+  }
+
   bool debug_has_dirty_state() const {
     return dirty_info || dirty_big_info;
   }
