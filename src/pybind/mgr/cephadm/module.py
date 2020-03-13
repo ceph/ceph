@@ -1955,7 +1955,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def create_osds(self, drive_group):
         # type: (DriveGroupSpec) -> orchestrator.Completion
-        self.log.info("Processing DriveGroup {}".format(drive_group))
+        self.log.debug("Processing DriveGroup {}".format(drive_group))
         # 1) use fn_filter to determine matching_hosts
         matching_hosts = drive_group.placement.pattern_matches_hosts([x for x in self.cache.get_hosts()])
         # 2) Map the inventory to the InventoryHost object
@@ -1978,8 +1978,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
             self.log.debug(f"translated to cmd {cmd}")
             if not cmd:
-                self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
+                self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
                 continue
+            self.log.info('Applying %s on host %s...' % (
+                drive_group.service_name(), host))
             ret_msg = self._create_osd(host, cmd)
             ret.append(ret_msg)
         return trivial_result(", ".join(ret))
