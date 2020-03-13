@@ -6,6 +6,7 @@ call methods.
 
 This module is runnable outside of ceph-mgr, useful for testing.
 """
+import datetime
 import threading
 import logging
 import json
@@ -29,7 +30,7 @@ except ImportError:
 
 try:
     from kubernetes.client.rest import ApiException
-    from kubernetes.client import V1ListMeta, CoreV1Api, V1Pod
+    from kubernetes.client import V1ListMeta, CoreV1Api, V1Pod, V1DeleteOptions
     from kubernetes import watch
 except ImportError:
     class ApiException(Exception):  # type: ignore
@@ -313,21 +314,57 @@ class RookCluster(object):
                     return False
             return True
 
+        refreshed = datetime.datetime.utcnow()
         pods = [i for i in self.rook_pods.items if predicate(i)]
 
         pods_summary = []
 
         for p in pods:
             d = p.to_dict()
-            # p['metadata']['creationTimestamp']
-            pods_summary.append({
+
+            image_name = None
+            for c in d['spec']['containers']:
+                # look at the first listed container in the pod...
+                image_name = c['image']
+                break
+
+            s = {
                 "name": d['metadata']['name'],
                 "hostname": d['spec']['node_name'],
                 "labels": d['metadata']['labels'],
-                'phase': d['status']['phase']
-            })
+                'phase': d['status']['phase'],
+                'container_image_name': image_name,
+                'refreshed': refreshed,
+            }
+
+            # note: we want UTC but no tzinfo
+            if 'creation_timestamp' in d['metadata']:
+                s['created'] = d['metadata']['creation_timestamp'].astimezone(
+                    tz=datetime.timezone.utc).replace(tzinfo=None)
+            if 'start_time' in d['status']:
+                s['started'] = d['status']['start_time'].astimezone(
+                    tz=datetime.timezone.utc).replace(tzinfo=None)
+
+            pods_summary.append(s)
 
         return pods_summary
+
+    def remove_pods(self, names):
+        pods = [i for i in self.rook_pods.items]
+        num = 0
+        for p in pods:
+            d = p.to_dict()
+            daemon_type = d['metadata']['labels']['app'].replace('rook-ceph-','')
+            daemon_id = d['metadata']['labels']['ceph_daemon_id']
+            name = daemon_type + '.' + daemon_id
+            if name in names:
+                self.k8s.delete_namespaced_pod(
+                    d['metadata']['name'],
+                    self.rook_env.namespace,
+                    body=V1DeleteOptions()
+                )
+                num += 1
+        return "Removed %d pods" % num
 
     def get_node_names(self):
         return [i.metadata.name for i in self.nodes.items]
@@ -343,28 +380,34 @@ class RookCluster(object):
             else:
                 raise
 
-    def add_filesystem(self, spec):
+    def apply_filesystem(self, spec):
         # type: (ServiceSpec) -> None
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
+        def _update_fs(current, new):
+            # type: (cfs.CephFilesystem, cfs.CephFilesystem) -> cfs.CephFilesystem
+            new.spec.metadataServer.activeCount = spec.placement.count or 1
+            return new
 
-        rook_fs = cfs.CephFilesystem(
-            apiVersion=self.rook_env.api_name,
-            metadata=dict(
-                name=spec.service_id,
-                namespace=self.rook_env.namespace,
-            ),
-            spec=cfs.Spec(
-                metadataServer=cfs.MetadataServer(
-                    activeCount=spec.placement.count,
-                    activeStandby=True
+        def _create_fs():
+            # type: () -> cfs.CephFilesystem
+            return cfs.CephFilesystem(
+                apiVersion=self.rook_env.api_name,
+                metadata=dict(
+                    name=spec.service_id,
+                    namespace=self.rook_env.namespace,
+                ),
+                spec=cfs.Spec(
+                    metadataServer=cfs.MetadataServer(
+                        activeCount=spec.placement.count or 1,
+                        activeStandby=True
+                    )
                 )
             )
-        )
-
-        with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.service_id)):
-            self.rook_api_post("cephfilesystems/", body=rook_fs.to_json())
+        return self._create_or_patch(
+            cfs.CephFilesystem, 'cephfilesystems', spec.service_id,
+            _update_fs, _create_fs)
 
     def add_nfsgw(self, spec):
         # TODO use spec.placement
@@ -456,13 +499,6 @@ class RookCluster(object):
             new.spec.mon.count = newcount
             return new
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
-
-    def update_mds_count(self, svc_id, newcount):
-        def _update_nfs_count(current, new):
-            # type: (cfs.CephFilesystem, cfs.CephFilesystem) -> cfs.CephFilesystem
-            new.spec.metadataServer.activeCount = newcount
-            return new
-        return self._patch(cnfs.CephNFS, 'cephnfses', svc_id, _update_nfs_count)
 
     def update_nfs_count(self, svc_id, newcount):
         def _update_nfs_count(current, new):
@@ -562,3 +598,44 @@ class RookCluster(object):
                 "Failed to update {}/{}: {}".format(crd_name, cr_name, e))
 
         return "Success"
+
+    def _create_or_patch(self, crd, crd_name, cr_name, update_func, create_func):
+        try:
+            current_json = self.rook_api_get(
+                "{}/{}".format(crd_name, cr_name)
+            )
+        except ApiException as e:
+            if e.status == 404:
+                current_json = None
+            else:
+                raise
+
+        if current_json:
+            current = crd.from_json(current_json)
+            new = crd.from_json(current_json)  # no deepcopy.
+
+            new = update_func(current, new)
+
+            patch = list(jsonpatch.make_patch(current_json, new.to_json()))
+
+            log.info('patch for {}/{}: \n{}'.format(crd_name, cr_name, patch))
+
+            if len(patch) == 0:
+                return "No change"
+
+            try:
+                self.rook_api_patch(
+                    "{}/{}".format(crd_name, cr_name),
+                    body=patch)
+            except ApiException as e:
+                log.exception("API exception: {0}".format(e))
+                raise ApplyException(
+                    "Failed to update {}/{}: {}".format(crd_name, cr_name, e))
+            return "Updated"
+        else:
+            new = create_func()
+            with self.ignore_409("{} {} already exists".format(crd_name,
+                                                               cr_name)):
+                self.rook_api_post("{}/".format(crd_name),
+                                   body=new.to_json())
+            return "Created"
