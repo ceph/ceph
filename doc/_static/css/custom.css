@@ -1,0 +1,4 @@
+ul.simple > li {
+    margin-block-begin : 1em;
+    margin-block-end : 1em;
+}

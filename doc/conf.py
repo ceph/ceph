@@ -43,7 +43,9 @@ html_static_path = ["_static"]
 html_sidebars = {
     '**': ['smarttoc.html', 'searchbox.html'],
     }
-
+html_css_files = [
+    'css/custom.css',
+]
 sys.path.insert(0, os.path.abspath('_ext'))
 
 extensions = [
