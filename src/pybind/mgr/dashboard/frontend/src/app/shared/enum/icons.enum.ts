@@ -26,6 +26,7 @@ export enum Icons {
   down = 'fa fa-arrow-down', // Mark Down
   erase = 'fa fa-eraser', // Purge
   user = 'fa fa-user', // User, Initiators
+  users = 'fa fa-users', // Users, Groups
   share = 'fa fa-share-alt', // share
   key = 'fa fa-key-modern', // S3 Keys, Swift Keys, Authentication
   warning = 'fa fa-exclamation-triangle', // Notification warning
