@@ -3,15 +3,12 @@ from __future__ import absolute_import
 
 import json
 
-from orchestrator import OrchestratorError
-
 try:
     from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
 
 from mgr_util import merge_dicts
-from .orchestrator import OrchClient
 from .. import mgr
 
 
@@ -79,14 +76,8 @@ class IscsiGatewaysConfig(object):
     @staticmethod
     def _load_config_from_orchestrator():
         config = {'gateways': {}}  # type: dict
-        try:
-            instances = OrchClient.instance().services.list("iscsi")
-            for instance in instances:
-                config['gateways'][instance.hostname] = {
-                    'service_url': instance.service_url
-                }
-        except (RuntimeError, OrchestratorError, ImportError):
-            pass
+        # FIXME: get iSCSI gateways from orchestrator  # pylint: disable=fixme
+        # See https://tracker.ceph.com/issues/44593.
         return config
 
     @classmethod
