@@ -45,7 +45,7 @@ class NFSGanesha(object):
 
     def create_keyring(self):
         # type: () -> str
-        entity = 'client.' + self.get_rados_user() 
+        entity = cephadm.name_to_config_section(self.get_rados_user())
 
         osd_caps='allow rw pool=%s' % (self.pool)
         if self.namespace:
