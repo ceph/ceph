@@ -28,9 +28,9 @@
     "allowJs": true
   },
   "exclude": [
-    ".protractor-report",
     "coverage",
     "dist",
-    "node_modules"
+    "node_modules",
+    "cypress"
   ]
 }
