@@ -43,7 +43,7 @@ jsonpointer==1.10         # via jsonpatch
 jsonschema==2.6.0         # via warlock
 keystoneauth1==2.19.0     # via openstacksdk, os-client-config, osc-lib, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient
 manhole==1.3.0
-markupsafe==1.0           # via jinja2
+markupsafe==1.1.1         # via jinja2
 monotonic==1.3            # via oslo.utils
 more-itertools==4.3.0     # via pytest
 msgpack-python==0.4.8     # via oslo.serialization
