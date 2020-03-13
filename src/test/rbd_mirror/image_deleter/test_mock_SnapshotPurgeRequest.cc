@@ -71,7 +71,9 @@ public:
 
   void expect_open(librbd::MockTestImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(*mock_image_ctx.state, open(true, _))
-      .WillOnce(WithArg<1>(Invoke([this, r](Context* ctx) {
+      .WillOnce(WithArg<1>(Invoke([this, &mock_image_ctx, r](Context* ctx) {
+                             EXPECT_EQ(0U, mock_image_ctx.read_only_mask &
+                                             librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY);
                              m_threads->work_queue->queue(ctx, r);
                            })));
   }
@@ -157,7 +159,7 @@ public:
   librbd::ImageCtx *m_local_image_ctx;
 };
 
-TEST_F(TestMockImageDeleterSnapshotPurgeRequest, Success) {
+TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SuccessJournal) {
   {
     std::unique_lock image_locker{m_local_image_ctx->image_lock};
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
@@ -192,6 +194,48 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, Success) {
   expect_snap_unprotect(mock_image_ctx, cls::rbd::UserSnapshotNamespace{},
                         "snap1", 0);
   expect_start_op(mock_image_ctx, true);
+  expect_snap_remove(mock_image_ctx, cls::rbd::UserSnapshotNamespace{}, "snap1",
+                     0);
+
+  expect_close(mock_image_ctx, 0);
+  expect_destroy(mock_image_ctx);
+
+  C_SaferCond ctx;
+  auto req = MockSnapshotPurgeRequest::create(m_local_io_ctx, mock_image_ctx.id,
+                                              &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SuccessSnapshot) {
+  {
+    std::unique_lock image_locker{m_local_image_ctx->image_lock};
+    m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
+                                0, {}, RBD_PROTECTION_STATUS_PROTECTED, 0, {});
+    m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap2", 2,
+                                0, {}, RBD_PROTECTION_STATUS_UNPROTECTED, 0,
+                                {});
+  }
+
+  librbd::MockTestImageCtx mock_image_ctx(*m_local_image_ctx);
+
+  InSequence seq;
+  expect_set_journal_policy(mock_image_ctx);
+  expect_open(mock_image_ctx, 0);
+
+  expect_get_snap_namespace(mock_image_ctx, 2,
+                            cls::rbd::UserSnapshotNamespace{}, 0);
+  expect_get_snap_name(mock_image_ctx, 2, "snap2", 0);
+  expect_is_snap_protected(mock_image_ctx, 2, false, 0);
+  expect_snap_remove(mock_image_ctx, cls::rbd::UserSnapshotNamespace{}, "snap2",
+                     0);
+
+  expect_get_snap_namespace(mock_image_ctx, 1,
+                            cls::rbd::UserSnapshotNamespace{}, 0);
+  expect_get_snap_name(mock_image_ctx, 1, "snap1", 0);
+  expect_is_snap_protected(mock_image_ctx, 1, true, 0);
+  expect_snap_unprotect(mock_image_ctx, cls::rbd::UserSnapshotNamespace{},
+                        "snap1", 0);
   expect_snap_remove(mock_image_ctx, cls::rbd::UserSnapshotNamespace{}, "snap1",
                      0);
 

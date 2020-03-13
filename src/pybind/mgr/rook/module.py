@@ -1,8 +1,10 @@
+import datetime
 import threading
 import functools
 import os
 
 from ceph.deployment import inventory
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
 
 try:
     from typing import List, Dict, Optional, Callable, Any
@@ -248,9 +250,92 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [orchestrator.HostSpec(n) for n in self.rook_cluster.get_node_names()]
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, host_name=None, refresh=False):
+    def describe_service(self, service_type=None, service_name=None,
+                         refresh=False):
+        now = datetime.datetime.utcnow()
 
-        pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host_name)
+        # CephCluster
+        cl = self.rook_cluster.rook_api_get(
+            "cephclusters/{0}".format(self.rook_cluster.rook_env.cluster_name))
+        self.log.debug('CephCluster %s' % cl)
+        image_name = cl['spec'].get('cephVersion', {}).get('image', None)
+        num_nodes = len(self.rook_cluster.get_node_names())
+
+        spec = {}
+        spec['mon'] = orchestrator.ServiceDescription(
+            service_name='mon',
+            spec=ServiceSpec(
+                'mon',
+                placement=PlacementSpec(
+                    count=cl['spec'].get('mon', {}).get('count', 1),
+                ),
+            ),
+            size=cl['spec'].get('mon', {}).get('count', 1),
+            container_image_name=image_name,
+            last_refresh=now,
+        )
+        spec['mgr'] = orchestrator.ServiceDescription(
+            service_name='mgr',
+            spec=ServiceSpec(
+                'mgr',
+                placement=PlacementSpec.from_string('count:1'),
+            ),
+            size=1,
+            container_image_name=image_name,
+            last_refresh=now,
+        )
+        if not cl['spec'].get('crashCollector', {}).get('disable', False):
+            spec['crash'] = orchestrator.ServiceDescription(
+                service_name='crash',
+                spec=ServiceSpec(
+                    'crash',
+                    placement=PlacementSpec.from_string('all:true'),
+                ),
+                size=num_nodes,
+                container_image_name=image_name,
+                last_refresh=now,
+            )
+
+        # CephFilesystems
+        all_fs = self.rook_cluster.rook_api_get(
+            "cephfilesystems/")
+        self.log.debug('CephFilesystems %s' % all_fs)
+        for fs in all_fs.get('items', []):
+            svc = 'mds.' + fs['metadata']['name']
+            if svc in spec:
+                continue
+            # FIXME: we are conflating active (+ standby) with count
+            active = fs['spec'].get('metadataServer', {}).get('activeCount', 1)
+            total_mds = active
+            if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
+                total_mds = active * 2
+            spec[svc] = orchestrator.ServiceDescription(
+                service_name=svc,
+                spec=ServiceSpec(
+                    svc,
+                    placement=PlacementSpec(count=active),
+                ),
+                size=total_mds,
+                container_image_name=image_name,
+                last_refresh=now,
+            )
+
+        # FIXME: CephObjectstores
+
+        for dd in self._list_daemons():
+            if dd.service_name() not in spec:
+                continue
+            spec[dd.service_name()].running += 1
+        return [v for k, v in spec.items()]
+
+    @deferred_read
+    def list_daemons(self, daemon_type=None, daemon_id=None, host=None,
+                     refresh=False):
+        return self._list_daemons(daemon_type, daemon_id, host, refresh)
+
+    def _list_daemons(self, daemon_type=None, daemon_id=None, host=None,
+                      refresh=False):
+        pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host)
 
         result = []
         for p in pods:
@@ -268,23 +353,19 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             sd.status = status
             sd.status_desc = p['phase']
 
-            if sd.daemon_type == "osd":
-                sd.daemon_id = "%s" % p['labels']["ceph-osd-id"]
-            elif sd.daemon_type == "mds":
-                pfx = "{0}-".format(p['labels']['rook_file_system'])
-                sd.daemon_id = p['labels']['ceph_daemon_id'].replace(pfx, '', 1)
-            elif sd.daemon_type == "mon":
-                sd.daemon_id = p['labels']["mon"]
-            elif sd.daemon_type == "mgr":
-                sd.daemon_id = p['labels']["mgr"]
-            elif sd.daemon_type == "nfs":
-                sd.daemon_id = p['labels']['instance']
-            elif sd.daemon_type == "rgw":
+            if 'ceph_daemon_id' in p['labels']:
                 sd.daemon_id = p['labels']['ceph_daemon_id']
             else:
                 # Unknown type -- skip it
                 continue
 
+            sd.container_image_name = p['container_image_name']
+
+            sd.created = p['created']
+            sd.last_configured = p['created']
+            sd.last_deployed = p['created']
+            sd.started = p['started']
+            sd.last_refresh = p['refreshed']
             result.append(sd)
 
         return result
@@ -296,18 +377,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def add_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
-        return self._service_add_decorate('MDS', spec,
-                                       self.rook_cluster.add_filesystem)
-
     def add_rgw(self, spec):
-        # type: (orchestrator.RGWSpec) -> RookCompletion
+        # type: (RGWSpec) -> RookCompletion
         return self._service_add_decorate('RGW', spec,
                                        self.rook_cluster.add_objectstore)
 
     def add_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
+        # type: (NFSServiceSpec) -> RookCompletion
         return self._service_add_decorate("NFS", spec,
                                           self.rook_cluster.add_nfsgw)
 
@@ -334,7 +410,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             )
 
     def apply_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
+        # type: (ServiceSpec) -> RookCompletion
         if spec.placement.hosts or spec.placement.label:
             raise RuntimeError("Host list or label is not supported by rook.")
 
@@ -345,20 +421,23 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def apply_mds(self, spec):
-        # type: (orchestrator.ServiceSpec) -> RookCompletion
-        num = spec.placement.count
-        return write_completion(
-            lambda: self.rook_cluster.update_mds_count(spec.service_id, num),
-            "Updating MDS server count in {0} to {1}".format(spec.service_id, num),
-            mgr=self
-        )
+        # type: (ServiceSpec) -> RookCompletion
+        return self._service_add_decorate('MDS', spec,
+                                          self.rook_cluster.apply_filesystem)
 
     def apply_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> RookCompletion
+        # type: (NFSServiceSpec) -> RookCompletion
         num = spec.placement.count
         return write_completion(
             lambda: self.rook_cluster.update_nfs_count(spec.service_id, num),
             "Updating NFS server count in {0} to {1}".format(spec.service_id, num),
+            mgr=self
+        )
+
+    def remove_daemons(self, names, force):
+        return write_completion(
+            lambda: self.rook_cluster.remove_pods(names),
+            "Removing daemons {}".format(','.join(names)),
             mgr=self
         )
 
@@ -388,12 +467,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         def execute(all_hosts_):
             # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
             all_hosts = [h.hostname for h in all_hosts_]
+            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
 
-            assert len(drive_group.hosts(all_hosts)) == 1
+            assert len(matching_hosts) == 1
 
-            if not self.rook_cluster.node_exists(drive_group.hosts(all_hosts)[0]):
+            if not self.rook_cluster.node_exists(matching_hosts[0]):
                 raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                                   "cluster".format(drive_group.hosts(all_hosts)))
+                                   "cluster".format(matching_hosts))
 
             # Validate whether cluster CRD can accept individual OSD
             # creations (i.e. not useAllDevices)
@@ -403,7 +483,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return orchestrator.Completion.with_progress(
                 message="Creating OSD on {0}:{1}".format(
-                        drive_group.hosts(all_hosts),
+                        matching_hosts,
                         targets),
                 mgr=self,
                 on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),
@@ -412,12 +492,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         @deferred_read
         def has_osds(all_hosts):
+            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+
             # Find OSD pods on this host
             pod_osd_ids = set()
             pods = self.k8s.list_namespaced_pod(self._rook_env.namespace,
                                                  label_selector="rook_cluster={},app=rook-ceph-osd".format(self._rook_env.cluster_name),
                                                  field_selector="spec.nodeName={0}".format(
-                                                     drive_group.hosts(all_hosts)[0]
+                                                     matching_hosts[0]
                                                  )).items
             for p in pods:
                 pod_osd_ids.add(int(p.metadata.labels['ceph-osd-id']))

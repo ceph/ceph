@@ -480,6 +480,14 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
   bool rollback = false;
   BOOST_SCOPE_EXIT_ALL(ictx, &mirror_image_internal, &rollback) {
     if (rollback) {
+      // restore the mask bit for treating the non-primary feature as read-only
+      ictx->image_lock.lock();
+      ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+      ictx->image_lock.unlock();
+
+      ictx->state->handle_update_notification();
+
+      // attempt to restore the image state
       CephContext *cct = ictx->cct;
       mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
       int r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
@@ -541,6 +549,17 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
   image_locker.unlock();
 
   if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    // don't let the non-primary feature bit prevent image updates
+    ictx->image_lock.lock();
+    ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+    ictx->image_lock.unlock();
+
+    r = ictx->state->refresh();
+    if (r < 0) {
+      rollback = true;
+      return r;
+    }
+
     // remove any snapshot-based mirroring image-meta from image
     std::string mirror_uuid;
     r = uuid_get(ictx->md_ctx, &mirror_uuid);
@@ -603,21 +622,31 @@ void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
   ldout(cct, 20) << "ictx=" << ictx << ", "
                  << "force=" << force << dendl;
 
-  auto on_refresh = new LambdaContext([ictx, force, on_finish](int r) {
+  // don't let the non-primary feature bit prevent image updates
+  ictx->image_lock.lock();
+  ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  ictx->image_lock.unlock();
+
+  auto on_promote = new LambdaContext([ictx, on_finish](int r) {
+      ictx->image_lock.lock();
+      ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+      ictx->image_lock.unlock();
+
+      ictx->state->handle_update_notification();
+      on_finish->complete(r);
+    });
+
+  auto on_refresh = new LambdaContext([ictx, force, on_promote](int r) {
       if (r < 0) {
         lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
-        on_finish->complete(r);
+        on_promote->complete(r);
         return;
       }
 
-      auto req = mirror::PromoteRequest<>::create(*ictx, force, on_finish);
+      auto req = mirror::PromoteRequest<>::create(*ictx, force, on_promote);
       req->send();
     });
-  if (ictx->state->is_refresh_required()) {
-    ictx->state->refresh(on_refresh);
-  } else {
-    on_refresh->complete(0);
-  }
+  ictx->state->refresh(on_refresh);
 }
 
 template <typename I>
@@ -1515,6 +1544,8 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
       // TODO: optimize.
 
       I *img_ctx = I::create("", image_id, nullptr, ns_io_ctx, false);
+      img_ctx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
       r = img_ctx->state->open(0);
       if (r == -ENOENT) {
         continue;

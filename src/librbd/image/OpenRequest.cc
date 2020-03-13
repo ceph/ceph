@@ -597,7 +597,7 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
 
 template <typename I>
 Context *OpenRequest<I>::send_register_watch(int *result) {
-  if (m_image_ctx->read_only) {
+  if ((m_image_ctx->read_only_flags & IMAGE_READ_ONLY_FLAG_USER) != 0U) {
     return send_set_snap(result);
   }
 

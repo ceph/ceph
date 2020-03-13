@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-lines
 from __future__ import absolute_import
 
 import logging
@@ -25,7 +26,7 @@ class NFSException(DashboardException):
 class Ganesha(object):
     @classmethod
     def _get_clusters_locations(cls):
-        result = {}
+        result = {}  # type: ignore
         location_list_str = Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE
         if not location_list_str:
             raise NFSException("Ganesha config location is not configured. "
@@ -83,7 +84,7 @@ class Ganesha(object):
         if not instances:
             return None
 
-        result = {}
+        result = {}  # type: ignore
         for instance in instances:
             if instance.service is None:
                 instance.service = "_default_"
@@ -755,8 +756,8 @@ class GaneshaConf(object):
         self.cluster_id = cluster_id
         self.rados_pool = rados_pool
         self.rados_namespace = rados_namespace
-        self.export_conf_blocks = []
-        self.daemons_conf_blocks = {}
+        self.export_conf_blocks = []  # type: ignore
+        self.daemons_conf_blocks = {}  # type: ignore
         self._defaults = {}
         self.exports = {}
 
@@ -900,11 +901,12 @@ class GaneshaConf(object):
 
             if len_prefix > 1:
                 # validate pseudo path
-                idx = len(parent_export.pseudo)
+                idx = len(parent_export.pseudo)  # type: ignore
                 idx = idx + 1 if idx > 1 else idx
-                real_path = "{}/{}".format(parent_export.path
-                                           if len(parent_export.path) > 1 else "",
-                                           export.pseudo[idx:])
+                real_path = "{}/{}".format(
+                    parent_export.path  # type: ignore
+                    if len(parent_export.path) > 1 else "",  # type: ignore
+                    export.pseudo[idx:])
                 if export.fsal.name == 'CEPH':
                     cfs = CephFS()
                     if export.path != real_path and not cfs.dir_exists(real_path):
@@ -923,7 +925,7 @@ class GaneshaConf(object):
         return nid
 
     def _persist_daemon_configuration(self):
-        daemon_map = {}
+        daemon_map = {}  # type: ignore
         for daemon_id in self.list_daemons():
             daemon_map[daemon_id] = []
 

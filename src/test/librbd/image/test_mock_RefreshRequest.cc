@@ -1453,5 +1453,66 @@ TEST_F(TestMockImageRefreshRequest, ApplyMetadataError) {
   ASSERT_EQ(0, ctx.wait());
 }
 
+TEST_F(TestMockImageRefreshRequest, NonPrimaryFeature) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockRefreshImageCtx mock_image_ctx(*ictx);
+  MockRefreshParentRequest mock_refresh_parent_request;
+  MockExclusiveLock mock_exclusive_lock;
+  expect_op_work_queue(mock_image_ctx);
+  expect_test_features(mock_image_ctx);
+
+  InSequence seq;
+
+  // ensure the image is put into read-only mode
+  expect_get_mutable_metadata(mock_image_ctx,
+                              ictx->features | RBD_FEATURE_NON_PRIMARY, 0);
+  expect_get_parent(mock_image_ctx, 0);
+  MockGetMetadataRequest mock_get_metadata_request;
+  expect_get_metadata(mock_image_ctx, mock_get_metadata_request,
+                      mock_image_ctx.header_oid, {}, 0);
+  expect_get_metadata(mock_image_ctx, mock_get_metadata_request, RBD_INFO, {},
+                      0);
+  expect_apply_metadata(mock_image_ctx, 0);
+  expect_get_group(mock_image_ctx, 0);
+  expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+
+  C_SaferCond ctx1;
+  auto req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx1);
+  req->send();
+
+  ASSERT_EQ(0, ctx1.wait());
+  ASSERT_TRUE(mock_image_ctx.read_only);
+  ASSERT_EQ(IMAGE_READ_ONLY_FLAG_NON_PRIMARY, mock_image_ctx.read_only_flags);
+
+  // try again but permit R/W against non-primary image
+  mock_image_ctx.read_only_mask = ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
+  expect_get_mutable_metadata(mock_image_ctx,
+                              ictx->features | RBD_FEATURE_NON_PRIMARY, 0);
+  expect_get_parent(mock_image_ctx, 0);
+  expect_get_metadata(mock_image_ctx, mock_get_metadata_request,
+                      mock_image_ctx.header_oid, {}, 0);
+  expect_get_metadata(mock_image_ctx, mock_get_metadata_request, RBD_INFO, {},
+                      0);
+  expect_apply_metadata(mock_image_ctx, 0);
+  expect_get_group(mock_image_ctx, 0);
+  expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    expect_init_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);
+  }
+
+  C_SaferCond ctx2;
+  req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx2);
+  req->send();
+
+  ASSERT_EQ(0, ctx2.wait());
+  ASSERT_FALSE(mock_image_ctx.read_only);
+  ASSERT_EQ(0U, mock_image_ctx.read_only_flags);
+}
+
 } // namespace image
 } // namespace librbd

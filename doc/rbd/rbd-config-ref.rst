@@ -265,6 +265,13 @@ RBD supports advanced features which can be specified via the command line when 
 :Added in: v14.0.1 (Nautilus)
 :KRBD support: no
 
+``Non-primary``
+
+:Description: Used to restrict changes to non-primary images using snapshot-based mirroring.
+:Internal value: 1024
+:Added in: v15.2.0 (Octopus)
+:KRBD support: no
+
 
 QOS Settings
 ============
