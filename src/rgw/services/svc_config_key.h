@@ -26,6 +26,6 @@ public:
   RGWSI_ConfigKey(CephContext *cct) : RGWServiceInstance(cct) {}
   virtual ~RGWSI_ConfigKey() {}
 
-  virtual int get(const string& key, bufferlist *result) = 0;
+  virtual int get(const string& key, bool secure, bufferlist *result) = 0;
 };
 
