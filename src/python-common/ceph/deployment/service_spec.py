@@ -1,7 +1,7 @@
 import fnmatch
 import re
 from collections import namedtuple
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 
 import six
 
@@ -108,20 +108,27 @@ class PlacementSpec(object):
     For APIs that need to specify a host subset
     """
 
-    def __init__(self, label=None, hosts=None, count=None, host_pattern=None):
-        # type: (Optional[str], Optional[List], Optional[int], Optional[str]) -> None
+    def __init__(self,
+                 label=None,  # type: Optional[str]
+                 hosts=None,  # type: Union[List[str],List[HostPlacementSpec]]
+                 count=None,  # type: Optional[int]
+                 host_pattern=None  # type: Optional[str]
+                 ):
+        # type: (...) -> None
         self.label = label
         self.hosts = []  # type: List[HostPlacementSpec]
+
         if hosts:
             if all([isinstance(host, HostPlacementSpec) for host in hosts]):
-                self.hosts = hosts
+                self.hosts = hosts  # type: ignore
             else:
-                self.hosts = [HostPlacementSpec.parse(x, require_network=False) for x in hosts if x]
+                self.hosts = [HostPlacementSpec.parse(x, require_network=False)  # type: ignore
+                              for x in hosts if x]
 
         self.count = count  # type: Optional[int]
 
-        #: An fnmatch pattern to select hosts. Can also be a single host.
-        self.host_pattern = host_pattern
+        #: fnmatch patterns to select hosts. Can also be a single host.
+        self.host_pattern = host_pattern  # type: Optional[str]
 
         self.validate()
 
@@ -151,7 +158,7 @@ class PlacementSpec(object):
         if self.hosts:
             kv.append('%s' % ','.join([str(h) for h in self.hosts]))
         if self.host_pattern:
-            kv.append('host_pattern:{}'.format(self.host_pattern))
+            kv.append(self.host_pattern)
         return ' '.join(kv)
 
     def __repr__(self):
@@ -190,7 +197,7 @@ class PlacementSpec(object):
         if self.count is not None and self.count <= 0:
             raise ServiceSpecValidationError("num/count must be > 1")
         if self.host_pattern and self.hosts:
-            raise ServiceSpecValidationError('cannot combine host_pattern and hosts')
+            raise ServiceSpecValidationError('cannot combine host patterns and hosts')
 
     @classmethod
     def from_string(cls, arg):
@@ -219,13 +226,13 @@ tPlacementSpec(hostname='host2', network='', name='')])
         PlacementSpec(count=3, label='mon')
 
         fnmatch is also supported:
-        >>> PlacementSpec.from_string('host_pattern:data[1-3]')
+        >>> PlacementSpec.from_string('data[1-3]')
         PlacementSpec(host_pattern='data[1-3]')
 
         >>> PlacementSpec.from_string(None)
         PlacementSpec()
         """
-        if arg is None:
+        if arg is None or not arg:
             strings = []
         elif isinstance(arg, str):
             if ' ' in arg:
@@ -259,23 +266,27 @@ tPlacementSpec(hostname='host2', network='', name='')])
                 except ValueError:
                     pass
 
-        if '*' in strings:
-            strings.remove('*')
-            strings.append('host_pattern:*')
+        advanced_hostspecs = [h for h in strings if
+                              (':' in h or '=' in h or not any(c in '[]?*:=' for c in h)) and
+                              'label:' not in h]
+        for a_h in advanced_hostspecs:
+            strings.remove(a_h)
 
-        hosts = [x for x in strings
-                 if x != '*' and 'label:' not in x and not x.startswith('host_pattern:')]
-        labels = [x[6:] for x in strings if 'label:' in x]
+        labels = [x for x in strings if 'label:' in x]
         if len(labels) > 1:
             raise ServiceSpecValidationError('more than one label provided: {}'.format(labels))
-        host_patterns = [x[13:] for x in strings if x.startswith('host_pattern:')]
+        for l in labels:
+            strings.remove(l)
+        label = labels[0][6:] if labels else None
+
+        host_patterns = strings
         if len(host_patterns) > 1:
-            raise ServiceSpecValidationError('more than one host_patterns provided: {}'.format(
-                host_patterns))
+            raise ServiceSpecValidationError(
+                'more than one host pattern provided: {}'.format(host_patterns))
 
         ps = PlacementSpec(count=count,
-                           hosts=hosts,
-                           label=labels[0] if labels else None,
+                           hosts=advanced_hostspecs,
+                           label=label,
                            host_pattern=host_patterns[0] if host_patterns else None)
         return ps
 

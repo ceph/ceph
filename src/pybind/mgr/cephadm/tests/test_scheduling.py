@@ -24,19 +24,10 @@ class NodeAssignmentTest(NamedTuple):
             [],
             ['smithi060']
         ),
-        # zero count
-        NodeAssignmentTest(
-            'mon',
-            PlacementSpec(count=0),
-            ['smithi060'],
-            [],
-            []
-        ),
-
         # all_hosts
         NodeAssignmentTest(
             'mon',
-            PlacementSpec(all_hosts=True),
+            PlacementSpec(host_pattern='*'),
             'host1 host2 host3'.split(),
             [
                 DaemonDescription('mon', 'a', 'host1'),
@@ -64,16 +55,16 @@ class NodeAssignmentTest(NamedTuple):
             ],
             ['host1', 'host2', 'host3']
         ),
-        # zero count + partial host list
+        # count 1 + partial host list
         NodeAssignmentTest(
             'mon',
-            PlacementSpec(count=0, hosts=['host3']),
+            PlacementSpec(count=1, hosts=['host3']),
             'host1 host2 host3'.split(),
             [
                 DaemonDescription('mon', 'a', 'host1'),
                 DaemonDescription('mon', 'b', 'host2'),
             ],
-            []
+            ['host3']
         ),
         # count + partial host list + existing
         NodeAssignmentTest(
