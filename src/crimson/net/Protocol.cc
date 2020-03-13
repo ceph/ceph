@@ -45,7 +45,6 @@ void Protocol::close(bool dispatch_reset,
 {
   if (closed) {
     // already closing
-    assert(close_ready.valid());
     return;
   }
 
@@ -60,10 +59,8 @@ void Protocol::close(bool dispatch_reset,
 #endif
     };
 
-  // close_ready become valid only after state is state_t::closing
-  assert(!close_ready.valid());
-
   // atomic operations
+  closed = true;
   trigger_close();
   if (f_accept_new) {
     (*f_accept_new)();
@@ -71,7 +68,6 @@ void Protocol::close(bool dispatch_reset,
   if (socket) {
     socket->shutdown();
   }
-  closed = true;
   set_write_state(write_state_t::drop);
   auto gate_closed = pending_dispatch.close();
   auto reset_dispatched = seastar::futurize_apply([this, dispatch_reset] {
@@ -86,6 +82,7 @@ void Protocol::close(bool dispatch_reset,
   });
 
   // asynchronous operations
+  assert(!close_ready.valid());
   close_ready = seastar::when_all_succeed(
     std::move(gate_closed).finally([this] {
       if (socket) {
