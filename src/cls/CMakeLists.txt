@@ -318,3 +318,4 @@ set(cls_2pc_queue_client_srcs
   2pc_queue/cls_2pc_queue_client.cc)
 add_library(cls_2pc_queue_client STATIC ${cls_2pc_queue_client_srcs})
 
+add_subdirectory(cmpomap)
