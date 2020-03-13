@@ -162,6 +162,11 @@ PerfCounters *build_osd_logger(CephContext *cct) {
    "recovery bytes",
    "rbt", PerfCountersBuilder::PRIO_INTERESTING);
 
+  osd_plb.add_u64_counter(
+   l_osd_repaired_objects, "repaired_objects",
+   "Repair objects",
+   NULL, PerfCountersBuilder::PRIO_INTERESTING);
+
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
   osd_plb.add_u64(
     l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache");

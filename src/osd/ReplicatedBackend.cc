@@ -1871,6 +1871,7 @@ bool ReplicatedBackend::handle_pull_response(
     if (get_parent()->pg_is_repair()) {
       pi.stat.num_objects_repaired++;
       get_parent()->inc_osd_stat_repaired();
+      get_parent()->get_logger()->inc(l_osd_repaired_objects);
     }
     clear_pull_from(piter);
     to_continue->push_back({hoid, pi.stat});
@@ -2145,8 +2146,10 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     new_progress.data_complete = true;
     if (stat) {
       stat->num_objects_recovered++;
-      if (get_parent()->pg_is_repair())
+      if (get_parent()->pg_is_repair()) {
         stat->num_objects_repaired++;
+        get_parent()->get_logger()->inc(l_osd_repaired_objects);
+      }
     }
   } else if (progress.first && progress.omap_complete) {
     // If omap is not changed, we need recovery omap when recovery cannot be completed once

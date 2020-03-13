@@ -58,6 +58,8 @@ enum {
   l_osd_rop,
   l_osd_rbytes,
 
+  l_osd_repaired_objects,
+
   l_osd_loadavg,
   l_osd_cached_crc,
   l_osd_cached_crc_adjusted,
