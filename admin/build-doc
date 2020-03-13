@@ -75,6 +75,9 @@ export PYTHONPATH=$TOPDIR/src/pybind
 # --global-option=build_ext --global-option="--cython-include-dirs $TOPDIR/src/pybind/rados/"
 # but that doesn't work, so copying the file in the rbd module directly, that's ok for docs
 for bind in rados rbd cephfs rgw; do
+    if $vdir/bin/python -c "import $bind" > /dev/null; then
+        continue
+    fi
     if [ ${bind} != rados ]; then
         cp -f $TOPDIR/src/pybind/rados/rados.pxd $TOPDIR/src/pybind/${bind}/
     fi
