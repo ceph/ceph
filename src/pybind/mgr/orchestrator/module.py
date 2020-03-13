@@ -504,30 +504,33 @@ Usage:
         return HandleCommandResult(stdout=table.get_string())
 
     @_cli_write_command(
-        'orch daemon add mon',
+        'orch daemon add',
+        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus '
         'name=placement,type=CephString,req=false',
-        'Start monitor daemon(s)')
-    def _daemon_add_mon(self, placement=None):
+        'Add daemon(s)')
+    def _daemon_add_misc(self, daemon_type, placement=None):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
 
-        spec = ServiceSpec('mon', placement=placement)
+        spec = ServiceSpec(daemon_type, placement=placement)
 
-        completion = self.add_mon(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        if daemon_type == 'mon':
+            completion = self.add_mon(spec)
+        elif daemon_type == 'mgr':
+            completion = self.add_mgr(spec)
+        elif daemon_type == 'rbd-mirror':
+            completion = self.add_rbd_mirror(spec)
+        elif daemon_type == 'crash':
+            completion = self.add_crash(spec)
+        elif daemon_type == 'alertmanager':
+            completion = self.add_alertmanager(spec)
+        elif daemon_type == 'grafana':
+            completion = self.add_grafana(spec)
+        elif daemon_type == 'node-exporter':
+            completion = self.add_node_exporter(spec)
+        elif daemon_type == 'prometheus':
+            completion = self.add_prometheus(spec)
 
-    @_cli_write_command(
-        'orch daemon add mgr',
-        'name=placement,type=CephString,req=false',
-        'Start rbd-mirror daemon(s)')
-    def _daemon_add_mgr(self, placement=None):
-        spec = ServiceSpec(
-            'mgr',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_mgr(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -537,20 +540,6 @@ Usage:
         desc='Applies a Service Specification from a file. ceph orch apply -i $file')
     def _apply_services(self, inbuf):
         completion = self.apply_service_config(inbuf)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add rbd-mirror',
-        'name=placement,type=CephString,req=false',
-        'Start rbd-mirror daemon(s)')
-    def _rbd_mirror_add(self, placement=None):
-        spec = ServiceSpec(
-            'rbd-mirror',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -617,73 +606,6 @@ Usage:
         completion = self.add_nfs(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add prometheus',
-        'name=placement,type=CephString,req=false',
-        'Add prometheus daemon(s)')
-    def _daemon_add_prometheus(self, placement=None):
-        spec = ServiceSpec(
-            'prometheus',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_prometheus(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add node-exporter',
-        'name=placement,type=CephString,req=false',
-        'Add node-exporter daemon(s)')
-    def _daemon_add_node_exporter(self, placement=None):
-        spec = ServiceSpec(
-            'node-exporter',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_node_exporter(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add crash',
-        'name=placement,type=CephString,req=false',
-        'Add node-exporter daemon(s)')
-    def _daemon_add_crash(self, placement=None):
-        spec = ServiceSpec(
-            'crash',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_crash(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add grafana',
-        'name=placement,type=CephString,req=false',
-        'Add grafana daemon(s)')
-    def _daemon_add_grafana(self, placement=None):
-        # type: (Optional[str]) -> HandleCommandResult
-        spec = ServiceSpec(
-            'grafana',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_grafana(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add alertmanager',
-        'name=placement,type=CephString,req=false',
-        'Add alertmanager daemon(s)')
-    def _daemon_add_alertmanager(self, placement=None):
-        # type: (Optional[str]) -> HandleCommandResult
-        spec = ServiceSpec(
-            'alertmanager',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_alertmanager(spec)
-        self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
