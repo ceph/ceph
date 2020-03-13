@@ -87,10 +87,10 @@ seastar::future<> SocketConnection::keepalive()
   return protocol->keepalive();
 }
 
-seastar::future<> SocketConnection::close()
+void SocketConnection::mark_down()
 {
   assert(seastar::engine().cpu_id() == shard_id());
-  return protocol->close_clean(false);
+  protocol->close(false);
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)
@@ -124,6 +124,12 @@ SocketConnection::start_accept(SocketRef&& sock,
                                const entity_addr_t& _peer_addr)
 {
   protocol->start_accept(std::move(sock), _peer_addr);
+}
+
+seastar::future<>
+SocketConnection::close_clean(bool dispatch_reset)
+{
+  return protocol->close_clean(dispatch_reset);
 }
 
 seastar::shard_id SocketConnection::shard_id() const {

@@ -40,9 +40,7 @@ seastar::future<> Client::stop()
 {
   return gate.close().then([this] {
     if (conn) {
-      return conn->close();
-    } else {
-      return seastar::now();
+      conn->mark_down();
     }
   });
 }
@@ -85,8 +83,7 @@ seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 seastar::future<> Client::reconnect()
 {
   if (conn) {
-    // crimson::net::Protocol::close() is able to close() in background
-    (void)conn->close();
+    conn->mark_down();
     conn = {};
   }
   if (!mgrmap.get_available()) {

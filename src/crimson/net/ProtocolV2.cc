@@ -1390,7 +1390,7 @@ ProtocolV2::server_reconnect()
                     conn, *existing_conn,
                     static_cast<int>(existing_conn->protocol->proto_type));
       // NOTE: this is following async messenger logic, but we may miss the reset event.
-      (void) existing_conn->close();
+      existing_conn->mark_down();
       return send_reset(true);
     }
 

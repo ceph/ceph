@@ -78,7 +78,7 @@ OSD::OSD(int id, uint32_t nonce,
     shard_services{*this, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
-    heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
@@ -1049,10 +1049,10 @@ seastar::future<> OSD::send_beacon()
   return monc->send_message(m);
 }
 
-seastar::future<> OSD::update_heartbeat_peers()
+void OSD::update_heartbeat_peers()
 {
   if (!state.is_active()) {
-    return seastar::now();
+    return;
   }
   for (auto& pg : pg_map.get_pgs()) {
     vector<int> up, acting;
@@ -1067,7 +1067,7 @@ seastar::future<> OSD::update_heartbeat_peers()
       }
     }
   }
-  return heartbeat->update_peers(whoami);
+  heartbeat->update_peers(whoami);
 }
 
 seastar::future<> OSD::handle_peering_op(
