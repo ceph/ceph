@@ -3,6 +3,8 @@
 
 #include "client.h"
 
+#include <seastar/core/sleep.hh>
+
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
