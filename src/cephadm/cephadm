@@ -3237,9 +3237,9 @@ class CustomValidation(argparse.Action):
 ##################################
 
 def get_distro():
-    id_ = None
-    version = None
-    codename = None
+    distro = None
+    distro_version = None
+    distro_codename = None
     with open('/etc/os-release', 'r') as f:
         for line in f.readlines():
             line = line.strip()
@@ -3249,12 +3249,12 @@ def get_distro():
             if val[0] == '"' and val[-1] == '"':
                 val = val[1:-1]
             if var == 'ID':
-                id_ = val.lower()
+                distro = val.lower()
             elif var == 'VERSION_ID':
-                version = val.lower()
+                distro_version = val.lower()
             elif var == 'VERSION_CODENAME':
-                codename = val.lower()
-    return id_, version, codename
+                distro_codename = val.lower()
+    return distro, distro_version, distro_codename
 
 class Packager(object):
     def __init__(self, stable=None, branch=None, commit=None):
@@ -3272,13 +3272,13 @@ class Packager(object):
     def rm_repo(self):
         raise NotImplementedError
 
-    def query_shaman(self, distro, version, branch, commit):
+    def query_shaman(self, distro, distro_version, branch, commit):
         # query shaman
         logging.info('Fetching repo metadata from shaman and chacra...')
-        shaman_url = 'https://shaman.ceph.com/api/repos/ceph/{version}/{sha1}/{distro}/{distro_version}/repo/?arch={arch}'.format(
+        shaman_url = 'https://shaman.ceph.com/api/repos/ceph/{branch}/{sha1}/{distro}/{distro_version}/repo/?arch={arch}'.format(
             distro=distro,
-            distro_version=version,
-            version=branch,
+            distro_version=distro_version,
+            branch=branch,
             sha1=commit or 'latest',
             arch=get_arch()
         )
@@ -3317,10 +3317,10 @@ class Apt(Packager):
     }
 
     def __init__(self, stable, branch, commit,
-                 distro, version, codename):
+                 distro, distro_version, distro_codename):
         super(Apt, self).__init__(stable=stable, branch=branch, commit=commit)
         self.distro = self.DISTRO_NAMES[distro]
-        self.codename = codename
+        self.distro_codename = distro_codename
 
     def repo_path(self):
         return '/etc/apt/sources.list.d/ceph.list'
@@ -3340,9 +3340,9 @@ class Apt(Packager):
 
         if self.stable:
             content = 'deb %s/debian-%s/ %s main\n' % (
-                args.repo_url, self.stable, self.codename)
+                args.repo_url, self.stable, self.distro_codename)
         else:
-            content = self.query_shaman(self.distro, self.codename, self.branch,
+            content = self.query_shaman(self.distro, self.distro_codename, self.branch,
                                         self.commit)
 
         logging.info('Installing repo file at %s...' % self.repo_path())
@@ -3386,9 +3386,9 @@ class YumDnf(Packager):
     }
 
     def __init__(self, stable, branch, commit,
-                 distro, version):
+                 distro, distro_version):
         super(YumDnf, self).__init__(stable=stable, branch=branch, commit=commit)
-        self.major = int(version.split('.')[0])
+        self.major = int(distro_version.split('.')[0])
         self.distro_normalized = self.DISTRO_NAMES[distro][0]
         self.distro_code = self.DISTRO_NAMES[distro][1] + str(self.major)
         if (self.distro_code == 'fc' and self.major >= 30) or \
@@ -3516,13 +3516,13 @@ class Zypper(Packager):
     ]
 
     def __init__(self, stable, branch, commit,
-                 distro, version):
+                 distro, distro_version):
         super(Zypper, self).__init__(stable=stable, branch=branch, commit=commit)
         self.tool = 'zypper'
         self.distro = 'opensuse'
-        self.version = '15.1'
-        if 'tumbleweed' not in distro and version is not None:
-            self.version = version
+        self.distro_version = '15.1'
+        if 'tumbleweed' not in distro and distro_version is not None:
+            self.distro_version = distro_version
 
     def custom_repo(self, **kw):
         """
@@ -3577,7 +3577,7 @@ class Zypper(Packager):
                 )
                 content += '\n\n'
         else:
-            content = self.query_shaman(self.distro, self.version,
+            content = self.query_shaman(self.distro, self.distro_version,
                                         self.branch,
                                         self.commit)
 
@@ -3598,17 +3598,18 @@ class Zypper(Packager):
 
 
 def create_packager(stable=None, branch=None, commit=None):
-    distro, version, codename = get_distro()
+    distro, distro_version, distro_codename = get_distro()
     if distro in YumDnf.DISTRO_NAMES:
         return YumDnf(stable=stable, branch=branch, commit=commit,
-                   distro=distro, version=version)
+                   distro=distro, distro_version=distro_version)
     elif distro in Apt.DISTRO_NAMES:
         return Apt(stable=stable, branch=branch, commit=commit,
-                   distro=distro, version=version, codename=codename)
+                   distro=distro, distro_version=distro_version,
+                   distro_codename=distro_codename)
     elif distro in Zypper.DISTRO_NAMES:
         return Zypper(stable=stable, branch=branch, commit=commit,
-                      distro=distro, version=version)
-    raise Error('Distro %s version %s not supported' % (distro, version))
+                      distro=distro, distro_version=distro_version)
+    raise Error('Distro %s version %s not supported' % (distro, distro_version))
 
 
 def command_add_repo():
