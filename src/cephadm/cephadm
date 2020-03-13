@@ -3257,12 +3257,13 @@ def get_distro():
     return distro, distro_version, distro_codename
 
 class Packager(object):
-    def __init__(self, stable=None, branch=None, commit=None):
+    def __init__(self, stable=None, version=None, branch=None, commit=None):
         assert \
             (stable and not branch and not commit) or \
-            (not stable and branch) or \
-            (not stable and not branch and not commit)
+            (not stable and not version and branch) or \
+            (not stable and not version and not branch and not commit)
         self.stable = stable
+        self.version = version
         self.branch = branch
         self.commit = commit
 
@@ -3316,9 +3317,10 @@ class Apt(Packager):
         'debian': 'debian',
     }
 
-    def __init__(self, stable, branch, commit,
+    def __init__(self, stable, version, branch, commit,
                  distro, distro_version, distro_codename):
-        super(Apt, self).__init__(stable=stable, branch=branch, commit=commit)
+        super(Apt, self).__init__(stable=stable, version=version,
+                                  branch=branch, commit=commit)
         self.distro = self.DISTRO_NAMES[distro]
         self.distro_codename = distro_codename
 
@@ -3339,8 +3341,13 @@ class Apt(Packager):
             f.write(key)
 
         if self.stable:
-            content = 'deb %s/debian-%s/ %s main\n' % (
-                args.repo_url, self.stable, self.distro_codename)
+            if self.version:
+                content = 'deb %s/debian-%s-%s/ %s main\n' % (
+                    args.repo_url, self.stable, self.version,
+                    self.distro_codename)
+            else:
+                content = 'deb %s/debian-%s/ %s main\n' % (
+                    args.repo_url, self.stable, self.distro_codename)
         else:
             content = self.query_shaman(self.distro, self.distro_codename, self.branch,
                                         self.commit)
@@ -3385,9 +3392,10 @@ class YumDnf(Packager):
         'fedora': ('fedora', 'fc'),
     }
 
-    def __init__(self, stable, branch, commit,
+    def __init__(self, stable, version, branch, commit,
                  distro, distro_version):
-        super(YumDnf, self).__init__(stable=stable, branch=branch, commit=commit)
+        super(YumDnf, self).__init__(stable=stable, version=version,
+                                     branch=branch, commit=commit)
         self.major = int(distro_version.split('.')[0])
         self.distro_normalized = self.DISTRO_NAMES[distro][0]
         self.distro_code = self.DISTRO_NAMES[distro][1] + str(self.major)
@@ -3458,7 +3466,13 @@ class YumDnf(Packager):
 
     def repo_baseurl(self):
         assert self.stable
-        return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro_code)
+        if self.version:
+            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
+                                        self.version,
+                                        self.distro_code)
+        else:
+            return '%s/rpm-%s/%s' % (args.repo_url, self.stable,
+                                     self.distro_code)
 
     def add_repo(self):
         if self.stable:
@@ -3515,9 +3529,10 @@ class Zypper(Packager):
         'opensuse-leap'
     ]
 
-    def __init__(self, stable, branch, commit,
+    def __init__(self, stable, version, branch, commit,
                  distro, distro_version):
-        super(Zypper, self).__init__(stable=stable, branch=branch, commit=commit)
+        super(Zypper, self).__init__(stable=stable, version=version,
+                                     branch=branch, commit=commit)
         self.tool = 'zypper'
         self.distro = 'opensuse'
         self.distro_version = '15.1'
@@ -3558,6 +3573,9 @@ class Zypper(Packager):
 
     def repo_baseurl(self):
         assert self.stable
+        if self.version:
+            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
+                                        self.version, self.distro)
         return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
 
     def add_repo(self):
@@ -3597,23 +3615,49 @@ class Zypper(Packager):
         self.install(['podman'])
 
 
-def create_packager(stable=None, branch=None, commit=None):
+def create_packager(stable=None, version=None, branch=None, commit=None):
     distro, distro_version, distro_codename = get_distro()
     if distro in YumDnf.DISTRO_NAMES:
-        return YumDnf(stable=stable, branch=branch, commit=commit,
+        return YumDnf(stable=stable, version=version,
+                      branch=branch, commit=commit,
                    distro=distro, distro_version=distro_version)
     elif distro in Apt.DISTRO_NAMES:
-        return Apt(stable=stable, branch=branch, commit=commit,
+        return Apt(stable=stable, version=version,
+                   branch=branch, commit=commit,
                    distro=distro, distro_version=distro_version,
                    distro_codename=distro_codename)
     elif distro in Zypper.DISTRO_NAMES:
-        return Zypper(stable=stable, branch=branch, commit=commit,
+        return Zypper(stable=stable, version=version,
+                      branch=branch, commit=commit,
                       distro=distro, distro_version=distro_version)
     raise Error('Distro %s version %s not supported' % (distro, distro_version))
 
 
 def command_add_repo():
-    pkg = create_packager(stable=args.release, branch=args.dev,
+    if args.version and args.release:
+        raise Error('you can specify either --release or --version but not both')
+    if args.version:
+        try:
+            (x, y, z) = args.version.split('.')
+        except Exception as e:
+            raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
+        relnames = {
+            '16': 'pacific',
+            '15': 'octopus',
+            '14': 'nautilus',
+            '13': 'mimic',
+            '12': 'luminous',
+            '11': 'kraken',
+            '10': 'jewel',
+        }
+        args.release = relnames.get(x, None)
+        if not args.release:
+            raise Error('unknown release %s (not in %s)' % (
+                x, ' '.join(relnames.values())))
+
+    pkg = create_packager(stable=args.release,
+                          version=args.version,
+                          branch=args.dev,
                           commit=args.dev_commit)
     pkg.add_repo()
 
@@ -3997,7 +4041,10 @@ def _get_parser():
     parser_add_repo.set_defaults(func=command_add_repo)
     parser_add_repo.add_argument(
         '--release',
-        help='use specified upstream release')
+        help='use latest version of a named release (e.g., octopus)')
+    parser_add_repo.add_argument(
+        '--version',
+        help='use specific upstream version (x.y.z)')
     parser_add_repo.add_argument(
         '--dev',
         help='use specified bleeding edge build from git branch or tag')
@@ -4009,7 +4056,7 @@ def _get_parser():
         help='specify alternative GPG key location')
     parser_add_repo.add_argument(
         '--repo-url',
-        default='https://download.ceph.com/',
+        default='https://download.ceph.com',
         help='specify alternative repo location')
     # TODO: proxy?
 
