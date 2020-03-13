@@ -12,9 +12,7 @@ import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../../shared/services/summary.service';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
@@ -63,8 +61,7 @@ export class OsdFormComponent implements OnInit {
   features: { [key: string]: OsdFeature };
   featureList: OsdFeature[] = [];
 
-  checkingOrchestrator = true;
-  orchestratorExist = false;
+  hasOrchestrator = false;
   docsUrl: string;
 
   constructor(
@@ -73,9 +70,7 @@ export class OsdFormComponent implements OnInit {
     private i18n: I18n,
     private orchService: OrchestratorService,
     private router: Router,
-    private bsModalService: BsModalService,
-    private summaryService: SummaryService,
-    private cephReleaseNamePipe: CephReleaseNamePipe
+    private bsModalService: BsModalService
   ) {
     this.resource = this.i18n('OSDs');
     this.action = this.actionLabels.CREATE;
@@ -90,23 +85,9 @@ export class OsdFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
-    });
-
-    this.orchService.status().subscribe((data: { available: boolean }) => {
-      this.orchestratorExist = data.available;
-      this.checkingOrchestrator = false;
-      if (this.orchestratorExist) {
+    this.orchService.status().subscribe((status) => {
+      this.hasOrchestrator = status.available;
+      if (this.hasOrchestrator) {
         this.getDataDevices();
       }
     });

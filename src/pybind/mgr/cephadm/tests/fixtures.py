@@ -64,6 +64,7 @@ def cephadm_module():
             mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix", get_store_prefix):
 
         CephadmOrchestrator._register_commands('')
+        CephadmOrchestrator._register_options('')
         m = CephadmOrchestrator.__new__ (CephadmOrchestrator)
         m._root_logger = mock.MagicMock()
         m._store = {

@@ -14,7 +14,8 @@ from . import ControllerTestCase
 from ..services.exception import handle_rados_error
 from ..controllers import RESTController, ApiController, Controller, \
                           BaseController, Proxy
-from ..tools import dict_contains_path, json_str_to_object, partial_dict, RequestLoggingTool
+from ..tools import dict_contains_path, json_str_to_object, partial_dict,\
+                    dict_get, RequestLoggingTool
 
 
 # pylint: disable=W0613
@@ -196,3 +197,8 @@ class TestFunctions(unittest.TestCase):
         self.assertRaises(KeyError, partial_dict, {'a': 1, 'b': 2, 'c': 3}, ['d'])
         self.assertRaises(TypeError, partial_dict, None, ['a'])
         self.assertRaises(TypeError, partial_dict, {'a': 1, 'b': 2, 'c': 3}, None)
+
+    def test_dict_get(self):
+        self.assertFalse(dict_get({'foo': {'bar': False}}, 'foo.bar'))
+        self.assertIsNone(dict_get({'foo': {'bar': False}}, 'foo.bar.baz'))
+        self.assertEqual(dict_get({'foo': {'bar': False}, 'baz': 'xyz'}, 'baz'), 'xyz')

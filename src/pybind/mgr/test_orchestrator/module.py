@@ -6,6 +6,9 @@ import threading
 import functools
 import itertools
 from subprocess import check_output, CalledProcessError
+
+from ceph.deployment.service_spec import NFSServiceSpec, ServiceSpec
+
 try:
     from typing import Callable, List, Tuple
 except ImportError:
@@ -252,7 +255,10 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
-            drive_group.validate([h.hostname for h in all_hosts])
+            drive_group.validate()
+            if drive_group.placement.host_pattern:
+                if not drive_group.placement.pattern_matches_hosts([h.hostname for h in all_hosts]):
+                    raise orchestrator.OrchestratorValidationError('failed to match')
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
                 message='create_osds',
@@ -286,7 +292,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("Adding NFS service")
     def add_nfs(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> None
+        # type: (NFSServiceSpec) -> None
         assert isinstance(spec.pool, str)
 
     @deferred_write("apply_nfs")
@@ -329,14 +335,14 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_write("apply_mgr")
     def apply_mgr(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h, str) for h in spec.placement.hosts])
 
     @deferred_write("apply_mon")
     def apply_mon(self, spec):
-        # type: (orchestrator.ServiceSpec) -> None
+        # type: (ServiceSpec) -> None
 
         assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
         assert all([isinstance(h[0], str) for h in spec.placement.hosts])

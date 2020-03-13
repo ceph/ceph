@@ -269,6 +269,7 @@ void GetInfoRequest<I>::calc_promotion_state(
         break;
       case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY:
         *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+        *m_primary_mirror_uuid = mirror_ns->primary_mirror_uuid;
         break;
       case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED:
       case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:

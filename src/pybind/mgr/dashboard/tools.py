@@ -742,6 +742,21 @@ def dict_contains_path(dct, keys):
     return True
 
 
+def dict_get(obj, path, default=None):
+    """
+    Get the value at any depth of a nested object based on the path
+    described by `path`. If path doesn't exist, `default` is returned.
+    """
+    current = obj
+    for part in path.split('.'):
+        if not isinstance(current, dict):
+            return default
+        if part not in current.keys():
+            return default
+        current = current.get(part, {})
+    return current
+
+
 if sys.version_info > (3, 0):
     wraps = functools.wraps
     _getargspec = inspect.getfullargspec

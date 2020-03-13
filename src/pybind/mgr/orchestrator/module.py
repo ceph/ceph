@@ -18,12 +18,13 @@ except ImportError:
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
     DriveGroupSpecs
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from mgr_module import MgrModule, HandleCommandResult
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
-    NoOrchestrator, ServiceSpec, PlacementSpec, OrchestratorValidationError, NFSServiceSpec, \
-    RGWSpec, InventoryFilter, InventoryHost, HostPlacementSpec, HostSpec, CLICommandMeta
+    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
+    RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta
 
 def nice_delta(now, t, suffix=''):
     if t:
@@ -358,7 +359,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 table.add_row((
                     s.service_name,
                     '%d/%d' % (s.running, s.size),
-                    nice_delta(now, s.last_refresh, ' age'),
+                    nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
                     s.spec.placement.pretty_str() if s.spec else '-',
                     ukn(s.container_image_name),
@@ -422,7 +423,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     ukn(s.version),
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
-                    ukn(s.container_id)[0:12]))
+                    ukn(s.container_id)))
 
             return HandleCommandResult(stdout=table.get_string())
 
@@ -457,7 +458,7 @@ Usage:
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
             devs = DeviceSelection(paths=block_devices)
-            drive_groups = [DriveGroupSpec(host_name, data_devices=devs)]
+            drive_groups = [DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)]
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
@@ -951,6 +952,20 @@ Usage:
             return HandleCommandResult()
 
         return HandleCommandResult(-errno.EINVAL, stderr="Module '{0}' not found".format(module_name))
+
+    @_cli_write_command(
+        'orch pause',
+        desc='Pause orchestrator background work')
+    def _pause(self):
+        self.pause()
+        return HandleCommandResult()
+
+    @_cli_write_command(
+        'orch resume',
+        desc='Resume orchestrator background work (if paused)')
+    def _resume(self):
+        self.resume()
+        return HandleCommandResult()
 
     @_cli_write_command(
         'orch cancel',

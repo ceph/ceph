@@ -28,6 +28,8 @@ import { LanguageSelectorComponent } from './language-selector/language-selector
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
 import { NotificationsSidebarComponent } from './notifications-sidebar/notifications-sidebar.component';
+import { OrchestratorDocModalComponent } from './orchestrator-doc-modal/orchestrator-doc-modal.component';
+import { OrchestratorDocPanelComponent } from './orchestrator-doc-panel/orchestrator-doc-panel.component';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification/pwd-expiration-notification.component';
 import { RefreshSelectorComponent } from './refresh-selector/refresh-selector.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
@@ -77,7 +79,9 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     ConfigOptionComponent,
     AlertPanelComponent,
     FormModalComponent,
-    PwdExpirationNotificationComponent
+    PwdExpirationNotificationComponent,
+    OrchestratorDocPanelComponent,
+    OrchestratorDocModalComponent
   ],
   providers: [],
   exports: [
@@ -97,7 +101,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     RefreshSelectorComponent,
     ConfigOptionComponent,
     AlertPanelComponent,
-    PwdExpirationNotificationComponent
+    PwdExpirationNotificationComponent,
+    OrchestratorDocPanelComponent
   ],
   entryComponents: [
     ModalComponent,

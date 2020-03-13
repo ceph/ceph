@@ -17,8 +17,8 @@ export class OrchestratorService {
 
   constructor(private http: HttpClient) {}
 
-  status() {
-    return this.http.get(`${this.url}/status`);
+  status(): Observable<{ available: boolean; description: string }> {
+    return this.http.get<{ available: boolean; description: string }>(`${this.url}/status`);
   }
 
   identifyDevice(hostname: string, device: string, duration: number) {
