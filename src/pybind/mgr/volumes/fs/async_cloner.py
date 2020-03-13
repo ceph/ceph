@@ -74,7 +74,7 @@ def handle_clone_pending(volume_client, volname, index, groupname, subvolname, s
 
 def sync_attrs(fs_handle, target_path, source_statx):
     try:
-        fs_handle.lchown(target_path, source_statx["uid"], source_statx["gid"])
+        fs_handle.lchown(target_path, int(source_statx["uid"]), int(source_statx["gid"]))
         fs_handle.lutimes(target_path, (time.mktime(source_statx["atime"].timetuple()),
                                         time.mktime(source_statx["mtime"].timetuple())))
     except cephfs.Error as e:
