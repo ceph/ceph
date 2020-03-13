@@ -2220,6 +2220,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         on the target label and count specified in the placement.
         """
         daemon_type = spec.service_type
+        service_name = spec.service_name()
+        if spec.unmanaged:
+            self.log.debug('Skipping unmanaged service %s spec' % service_name)
+            return False
+        self.log.debug('Applying service %s spec' % service_name)
         create_fns = {
             'mon': self._create_mon,
             'mgr': self._create_mgr,
@@ -2242,8 +2247,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return trivial_result([])
         config_func = config_fns.get(daemon_type, None)
 
-        service_name = spec.service_name()
-        self.log.debug('Applying service %s spec' % service_name)
         daemons = self.cache.get_daemons_by_service(service_name)
         hosts = HostAssignment(
             spec=spec,
