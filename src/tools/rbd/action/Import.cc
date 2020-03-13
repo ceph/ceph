@@ -823,7 +823,8 @@ out:
 static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 		     librados::IoCtx& io_ctx, const char *imgname,
 		     const char *path, librbd::ImageOptions& opts,
-		     bool no_progress, int import_format, size_t sparse_size)
+		     bool no_progress, bool sync, int import_format,
+		     size_t sparse_size)
 {
   int fd, r;
   struct stat stat_buf;
@@ -847,7 +848,11 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
     fd = STDIN_FILENO;
     size = 1ULL << order;
   } else {
-    if ((fd = open(path, O_RDONLY)) < 0) {
+    int flag = O_RDONLY;
+    if (sync) {
+        flag |= O_SYNC;
+    }
+    if ((fd = open(path, flag)) < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << path << std::endl;
       goto done2;
@@ -942,6 +947,7 @@ void get_arguments(po::options_description *positional,
   at::add_sparse_size_option(options);
   at::add_no_progress_option(options);
   at::add_export_format_option(options);
+  at::add_sync_option(options);
 
   // TODO legacy rbd allowed import to accept both 'image'/'dest' and
   //      'pool'/'dest-pool'
@@ -1023,7 +1029,9 @@ int execute(const po::variables_map &vm,
 
   librbd::RBD rbd;
   r = do_import(rados, rbd, io_ctx, image_name.c_str(), path.c_str(),
-                opts, vm[at::NO_PROGRESS].as<bool>(), format, sparse_size);
+                opts, vm[at::NO_PROGRESS].as<bool>(),
+                vm[at::SYNC].as<bool>(),
+                format, sparse_size);
   if (r < 0) {
     std::cerr << "rbd: import failed: " << cpp_strerror(r) << std::endl;
     return r;

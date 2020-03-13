@@ -319,6 +319,11 @@ void add_flatten_option(boost::program_options::options_description *opt) {
      "fill clone with parent data (make it independent)");
 }
 
+void add_sync_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (SYNC.c_str(), po::bool_switch(), "open read/write file with O_SYNC");
+}
+
 std::string get_short_features_help(bool append_suffix) {
   std::ostringstream oss;
   bool first_feature = true;

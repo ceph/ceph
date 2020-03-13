@@ -673,7 +673,7 @@
   
   rbd help export
   usage: rbd export [--pool <pool>] [--namespace <namespace>] [--image <image>] 
-                    [--snap <snap>] [--path <path>] [--no-progress] 
+                    [--snap <snap>] [--path <path>] [--no-progress] [--sync] 
                     [--export-format <export-format>] 
                     <source-image-or-snap-spec> <path-name> 
   
@@ -693,6 +693,7 @@
     --snap arg                   source snapshot name
     --path arg                   export file (or '-' for stdout)
     --no-progress                disable progress output
+    --sync                       open read/write file with O_SYNC
     --export-format arg          format of image file
   
   rbd help export-diff
@@ -1103,7 +1104,7 @@
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] 
                     [--sparse-size <sparse-size>] [--no-progress] 
-                    [--export-format <export-format>] [--pool <pool>] 
+                    [--export-format <export-format>] [--sync] [--pool <pool>] 
                     [--image <image>] 
                     <path-name> <dest-image-spec> 
   
@@ -1136,6 +1137,7 @@
     --journal-pool arg        pool for journal objects
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
+    --sync                    open read/write file with O_SYNC
     --export-format arg       format of image file
     -p [ --pool ] arg         pool name (deprecated)
     --image arg               image name (deprecated)

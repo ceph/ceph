@@ -552,7 +552,7 @@ static int do_export_v1(librbd::Image& image, librbd::image_info_t &info,
 }
 
 static int do_export(librbd::Image& image, const char *path, bool no_progress,
-                     int export_format)
+                     bool sync, int export_format)
 {
   librbd::image_info_t info;
   int64_t r = image.stat(info, sizeof(info));
@@ -565,7 +565,12 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress,
   if (to_stdout) {
     fd = STDOUT_FILENO;
   } else {
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    int flag;
+    flag = O_WRONLY | O_CREAT | O_EXCL;
+    if (sync) {
+        flag |= O_SYNC;
+    }
+    fd = open(path, flag, 0644);
     if (fd < 0) {
       return -errno;
     }
@@ -598,6 +603,7 @@ void get_arguments(po::options_description *positional,
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
   at::add_no_progress_option(options);
+  at::add_sync_option(options);
   at::add_export_format_option(options);
 }
 
@@ -635,7 +641,8 @@ int execute(const po::variables_map &vm,
   if (vm.count("export-format"))
     format = vm["export-format"].as<uint64_t>();
 
-  r = do_export(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(), format);
+  r = do_export(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(),
+                vm[at::SYNC].as<bool>(), format);
   if (r < 0) {
     std::cerr << "rbd: export error: " << cpp_strerror(r) << std::endl;
     return r;

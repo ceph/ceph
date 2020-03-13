@@ -82,8 +82,10 @@ static const std::string NO_ERROR("no-error");
 
 static const std::string LIMIT("limit");
 
+static const std::string SYNC("sync");
+
 static const std::set<std::string> SWITCH_ARGUMENTS = {
-  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERROR};
+  WHOLE_OBJECT, NO_PROGRESS, SYNC, PRETTY_FORMAT, VERBOSE, NO_ERROR};
 
 struct ImageSize {};
 struct ImageOrder {};
@@ -184,6 +186,8 @@ void add_verbose_option(boost::program_options::options_description *opt);
 void add_no_error_option(boost::program_options::options_description *opt);
 
 void add_flatten_option(boost::program_options::options_description *opt);
+
+void add_sync_option(boost::program_options::options_description *opt);
 
 std::string get_short_features_help(bool append_suffix);
 std::string get_long_features_help();
