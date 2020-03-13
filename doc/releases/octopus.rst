@@ -8,7 +8,8 @@ These are draft notes for the upcoming Octopus release.
 Major Changes from Nautilus
 ---------------------------
 
-- *General*:
+General
+~~~~~~~
   
   * A new deployment tool called **cephadm** has been introduced that
     integrates Ceph daemon deployment and management via containers
@@ -21,7 +22,8 @@ Major Changes from Nautilus
   * Health alerts are now raised for recent Ceph daemons crashes.
 
 
-- *Dashboard*:
+Dashboard
+~~~~~~~~~
 
   The :ref:`mgr-dashboard` has gained a lot of new features and functionality:
 
@@ -86,7 +88,8 @@ Major Changes from Nautilus
     - List configured Prometheus alerts
 
 
-- *RADOS*:
+RADOS
+~~~~~
   
   * Objects can now be brought in sync during recovery by copying only
     the modified portion of the object, reducing tail latencies during
@@ -107,7 +110,8 @@ Major Changes from Nautilus
     scalable fashion.
 
 
-- *RBD* block storage:
+*RBD* block storage
+~~~~~~~~~~~~~~~~~~~
   
   * Clone operations now preserve the sparseness of the underlying RBD image.
   * The trash feature has been improved to (optionally) automatically
@@ -117,7 +121,8 @@ Major Changes from Nautilus
   * Caching has been improved to be more efficient and performant.
 
 
-- *RGW* object storage:
+*RGW* object storage
+~~~~~~~~~~~~~~~~~~~~
   
   * Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
   * WORM?
