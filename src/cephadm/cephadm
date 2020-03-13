@@ -2010,6 +2010,7 @@ def command_bootstrap():
 
     # ip
     r = re.compile(r':(\d+)$')
+    base_ip = None
     if args.mon_ip:
         hasport = r.findall(args.mon_ip)
         if hasport:
@@ -2022,8 +2023,10 @@ def command_bootstrap():
                 logger.warning('Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % args.mon_ip
-            check_ip_port(args.mon_ip[0:-(len(str(port)))-1], port)
+            base_ip = args.mon_ip[0:-(len(str(port)))-1]
+            check_ip_port(base_ip, port)
         else:
+            base_ip = args.mon_ip
             addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
             check_ip_port(args.mon_ip, 3300)
             check_ip_port(args.mon_ip, 6789)
@@ -2040,10 +2043,25 @@ def command_bootstrap():
             port = int(hasport[0])
             # strip off v1: or v2: prefix
             addr = re.sub(r'^\w+:', '', addr)
-            check_ip_port(addr[0:-(len(str(port)))-1], port)
+            base_ip = addr[0:-(len(str(port)))-1]
+            check_ip_port(base_ip, port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
-    logger.debug('Final addrv is %s' % addr_arg)
+    logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
+
+    mon_network = None
+    if not args.skip_mon_network:
+        # make sure IP is configured locally, and then figure out the
+        # CIDR network
+        for net, ips in list_networks().items():
+            if base_ip in ips:
+                mon_network = net
+                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
+                                                                 mon_network))
+                break
+        if not mon_network:
+            raise Error('Failed to infer CIDR network for mon ip %s; pass '
+                        '--skip-mon-network to configure it later' % base_ip)
 
     # config
     cp = read_config(args.config)
@@ -2225,6 +2243,10 @@ def command_bootstrap():
             'restart',
             get_unit_name(fsid, 'mon', mon_id)
         ])
+
+    if mon_network:
+        logger.info('Setting mon public_network...')
+        cli(['config', 'set', 'mon', 'public_network', mon_network])
 
     # create mgr
     logger.info('Creating mgr...')
@@ -3949,6 +3971,10 @@ def _get_parser():
         '--dashboard-crt',
         help='Dashboard certificate')
 
+    parser_bootstrap.add_argument(
+        '--skip-mon-network',
+        action='store_true',
+        help='set mon public_network based on bootstrap mon ip')
     parser_bootstrap.add_argument(
         '--skip-dashboard',
         action='store_true',
