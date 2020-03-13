@@ -42,7 +42,6 @@ QEMU.
 
 	Install ceph-deploy <install-ceph-deploy>
     	Install Ceph Storage Cluster <install-storage-cluster>
-	Install Ceph Object Gateway <install-ceph-gateway>
 	Install Virtualization for Block <install-vm-cloud>
 
 
@@ -68,7 +67,5 @@ sequence.
 
 .. toctree::
    :maxdepth: 2
-
-   Upgrading Ceph <upgrading-ceph>
 
 .. _get packages: ../install/get-packages
