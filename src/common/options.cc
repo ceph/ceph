@@ -4200,7 +4200,7 @@ std::vector<Option> get_global_options() {
     .set_description("Writes smaller than this size will be written to the journal and then asynchronously written to the device.  This can be beneficial when using rotational media where seeks are expensive, and is helpful both with and without solid state journal/wal devices."),
 
     Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(32768)
+    .set_default(65536)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for rotational media")
     .add_see_also("bluestore_prefer_deferred_size"),
