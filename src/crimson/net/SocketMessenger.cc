@@ -163,12 +163,12 @@ seastar::future<> SocketMessenger::shutdown()
   // close all connections
   }).then([this] {
     return seastar::parallel_for_each(accepting_conns, [] (auto conn) {
-      return conn->close();
+      return conn->close_clean(false);
     });
   }).then([this] {
     ceph_assert(accepting_conns.empty());
     return seastar::parallel_for_each(connections, [] (auto conn) {
-      return conn.second->close();
+      return conn.second->close_clean(false);
     });
   }).then([this] {
     ceph_assert(connections.empty());

@@ -584,7 +584,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
                         conn, *existing,
                         static_cast<int>(existing->protocol->proto_type));
           // NOTE: this is following async messenger logic, but we may miss the reset event.
-          (void) existing->close();
+          existing->mark_down();
         } else {
           return handle_connect_with_existing(existing, std::move(authorizer_reply));
         }

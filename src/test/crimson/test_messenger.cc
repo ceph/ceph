@@ -1122,7 +1122,8 @@ class FailoverSuite : public Dispatcher {
   seastar::future<> markdown() {
     logger().info("[Test] markdown()");
     ceph_assert(tracked_conn);
-    return tracked_conn->close();
+    tracked_conn->mark_down();
+    return seastar::now();
   }
 
   seastar::future<> wait_blocked() {
@@ -1470,7 +1471,8 @@ class FailoverSuitePeer : public Dispatcher {
   seastar::future<> markdown() {
     logger().info("[TestPeer] markdown()");
     ceph_assert(tracked_conn);
-    return tracked_conn->close();
+    tracked_conn->mark_down();
+    return seastar::now();
   }
 
   static seastar::future<std::unique_ptr<FailoverSuitePeer>>

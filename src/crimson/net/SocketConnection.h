@@ -90,7 +90,7 @@ class SocketConnection : public Connection {
 
   seastar::future<> keepalive() override;
 
-  seastar::future<> close() override;
+  void mark_down() override;
 
   void print(ostream& out) const override;
 
@@ -102,6 +102,8 @@ class SocketConnection : public Connection {
   /// only call when SocketConnection first construct
   void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr);
+
+  seastar::future<> close_clean(bool dispatch_reset);
 
   bool is_server_side() const {
     return policy.server;
