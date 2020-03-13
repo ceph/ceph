@@ -273,13 +273,91 @@ Placement Specification
 
 In order to allow the orchestrator to deploy a *service*, it needs to
 know how many and where it should deploy *daemons*. The orchestrator 
-defines a placement specification:
+defines a placement specification that can either be passed as a command line argument.
 
-* To deploy three *daemons*, simply specify the count: ``3``
-* To deploy *daemons* on specific hosts, specify the host names: ``host1 host2 host3``
-* To deploy *daemons* on a subset of hosts, also specify the count: ``2 host1 host2 host3``
+Explicit placements
+-------------------
 
+Daemons can be explictly placed on hosts by simply specifying them::
+
+    orch apply prometheus "host1 host2 host3"
     
+Or in yaml::
+  
+    service_type: prometheus
+    placement:
+      hosts: 
+        - host1
+        - host2
+        - host3
+     
+MONs and other services may require some enhanced network specifications::
+
+  orch daemon add mon myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name
+  
+Where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
+and ``=name`` specifies the name of the new monitor.
+
+Placement by labels
+-------------------
+
+Daemons can be explictly placed on hosts that match a specifc label::
+
+    orch apply prometheus label:mylabel
+
+Or in yaml::
+
+    service_type: prometheus
+    placement:
+      label: "mylabel"
+
+
+Placement by pattern matching
+-----------------------------
+
+Daemons can be placed on hosts as well::
+
+    orch apply prometheus all:true
+
+Or in yaml::
+
+    service_type: prometheus
+    placement:
+      all_hosts: true
+
+
+Setting a limit
+---------------
+
+By specifying ``count``, only that number of daemons will be created::
+
+    orch apply prometheus 3
+    
+To deploy *daemons* on a subset of hosts, also specify the count::
+
+    orch apply prometheus "2 host1 host2 host3"
+    
+If the count is bigger than the amount of hosts, cephadm still deploys two daemons::
+
+    orch apply prometheus "3 host1 host2"
+
+Or in yaml::
+
+    service_type: prometheus
+    placement:
+      count: 3
+      
+Or with hosts::
+
+    service_type: prometheus
+    placement:
+      count: 2
+      hosts: 
+        - host1
+        - host2
+        - host3
+
+
 Configuring the Orchestrator CLI
 ================================
 
