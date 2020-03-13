@@ -3049,7 +3049,7 @@ receivers:
         specs = list()
         for service_name, spec in self.spec_store.specs.items():
             specs.append('---')
-            specs.append(yaml.dump(spec))
+            specs.append(yaml.safe_dump(spec.to_json()))
         return trivial_result(specs)
 
     def apply_service_config(self, spec_document: str) -> orchestrator.Completion:
