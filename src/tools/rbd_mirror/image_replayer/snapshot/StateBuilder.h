@@ -69,6 +69,7 @@ public:
 
   image_replayer::Replayer* create_replayer(
       Threads<ImageCtxT>* threads,
+      InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
       PoolMetaCache* pool_meta_cache,
       ReplayerListener* replayer_listener) override;

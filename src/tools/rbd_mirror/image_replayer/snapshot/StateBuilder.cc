@@ -103,12 +103,14 @@ BaseRequest* StateBuilder<I>::create_prepare_replay_request(
 
 template <typename I>
 image_replayer::Replayer* StateBuilder<I>::create_replayer(
-   Threads<I>* threads,
+    Threads<I>* threads,
+    InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
     PoolMetaCache* pool_meta_cache,
     ReplayerListener* replayer_listener) {
   return Replayer<I>::create(
-    threads, local_mirror_uuid, pool_meta_cache, this, replayer_listener);
+    threads, instance_watcher, local_mirror_uuid, pool_meta_cache, this,
+    replayer_listener);
 }
 
 } // namespace snapshot

@@ -8,6 +8,7 @@
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayerListener.h"
@@ -219,6 +220,10 @@ namespace rbd {
 namespace mirror {
 
 template <>
+struct InstanceWatcher<librbd::MockTestImageCtx> {
+};
+
+template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
   ceph::mutex &timer_lock;
@@ -349,6 +354,7 @@ public:
   typedef Replayer<librbd::MockTestImageCtx> MockReplayer;
   typedef ApplyImageStateRequest<librbd::MockTestImageCtx> MockApplyImageStateRequest;
   typedef StateBuilder<librbd::MockTestImageCtx> MockStateBuilder;
+  typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
   typedef CloseImageRequest<librbd::MockTestImageCtx> MockCloseImageRequest;
   typedef librbd::deep_copy::ImageCopyRequest<librbd::MockTestImageCtx> MockImageCopyRequest;
@@ -635,13 +641,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InitShutDown) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -688,13 +695,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -798,13 +806,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSync) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -880,13 +889,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -964,13 +974,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, LocalImagePromoted) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1019,13 +1030,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequested) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1062,14 +1074,15 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterLocalUpdateWatcherError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
   MockReplayerListener mock_replayer_listener;
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1094,14 +1107,15 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RegisterRemoteUpdateWatcherError) 
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
   MockReplayerListener mock_replayer_listener;
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1133,13 +1147,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterRemoteUpdateWatcherError
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1174,13 +1189,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnregisterLocalUpdateWatcherError)
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1215,13 +1231,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, LoadImageMetaError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1262,13 +1279,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RefreshLocalImageError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1311,13 +1329,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RefreshRemoteImageError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1361,13 +1380,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopySnapshotsError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1420,13 +1440,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, GetImageStateError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1481,13 +1502,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CreateNonPrimarySnapshotError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1546,13 +1568,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopyImageError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1614,13 +1637,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1686,13 +1710,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
@@ -1771,13 +1796,14 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SplitBrain) {
 
   InSequence seq;
 
+  MockInstanceWatcher mock_instance_watcher;
   MockImageMeta mock_image_meta;
   MockStateBuilder mock_state_builder(mock_local_image_ctx,
                                       mock_remote_image_ctx,
                                       mock_image_meta);
-  MockReplayer mock_replayer{&mock_threads, "local mirror uuid",
-                             &m_pool_meta_cache, &mock_state_builder,
-                             &mock_replayer_listener};
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
   m_pool_meta_cache.set_remote_pool_meta(
     m_remote_io_ctx.get_id(),
     {"remote mirror uuid", "remote mirror peer uuid"});
