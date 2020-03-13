@@ -446,6 +446,9 @@ public:
     bool transaction_applied,
     ObjectStore::Transaction &t,
     bool async = false) override {
+    if (is_primary()) {
+      ceph_assert(trim_to <= last_update_ondisk);
+    }
     if (hset_history) {
       info.hit_set = *hset_history;
     }
