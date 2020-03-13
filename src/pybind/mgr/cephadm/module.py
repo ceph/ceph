@@ -607,6 +607,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.run = True
         self.event = Event()
 
+        if self.get_store('pause'):
+            self.paused = True
+        else:
+            self.paused = False
+
         # for mypy which does not run the code
         if TYPE_CHECKING:
             self.ssh_config_file = None  # type: Optional[str]
@@ -1049,7 +1054,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug("serve starting")
         while self.run:
             self._check_hosts()
-            self.rm_util._remove_osds_bg()
 
             # refresh daemons
             self.log.debug('refreshing hosts')
@@ -1079,14 +1083,29 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
             self._check_for_strays()
 
-            if self._apply_all_services():
-                continue  # did something, refresh
+            if self.paused:
+                self.health_checks['CEPHADM_PAUSED'] = {
+                    'severity': 'warning',
+                    'summary': 'cephadm background work is paused',
+                    'count': 1,
+                    'detail': ["'ceph orch resume' to resume"],
+                }
+                self.set_health_checks(self.health_checks)
+            else:
+                if 'CEPHADM_PAUSED' in self.health_checks:
+                    del self.health_checks['CEPHADM_PAUSED']
+                    self.set_health_checks(self.health_checks)
 
-            self._check_daemons()
+                self.rm_util._remove_osds_bg()
 
-            if self.upgrade_state and not self.upgrade_state.get('paused'):
-                self._do_upgrade()
-                continue
+                if self._apply_all_services():
+                    continue  # did something, refresh
+
+                self._check_daemons()
+
+                if self.upgrade_state and not self.upgrade_state.get('paused'):
+                    self._do_upgrade()
+                    continue
 
             self._serve_sleep()
         self.log.debug("serve exit")
@@ -1111,6 +1130,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def notify(self, notify_type, notify_id):
         pass
+
+    def pause(self):
+        if not self.paused:
+            self.log.info('Paused')
+            self.set_store('pause', 'true')
+            self.paused = True
+            # wake loop so we update the health status
+            self._kick_serve_loop()
+
+    def resume(self):
+        if self.paused:
+            self.log.info('Resumed')
+            self.paused = False
+            self.set_store('pause', None)
+        # unconditionally wake loop so that 'orch resume' can be used to kick
+        # cephadm
+        self._kick_serve_loop()
 
     def get_unique_name(self, daemon_type, host, existing, prefix=None,
                         forcename=None):
