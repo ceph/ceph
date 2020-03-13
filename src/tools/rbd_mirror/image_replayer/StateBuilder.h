@@ -15,6 +15,7 @@ namespace rbd {
 namespace mirror {
 
 struct BaseRequest;
+template <typename> class InstanceWatcher;
 struct PoolMetaCache;
 struct ProgressContext;
 template <typename> class Threads;
@@ -73,6 +74,7 @@ public:
 
   virtual Replayer* create_replayer(
       Threads<ImageCtxT>* threads,
+      InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
       PoolMetaCache* pool_meta_cache,
       ReplayerListener* replayer_listener) = 0;

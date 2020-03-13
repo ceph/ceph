@@ -17,6 +17,7 @@
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Types.h"
@@ -110,11 +111,13 @@ struct Replayer<I>::ProgressContext : public librbd::ProgressContext {
 template <typename I>
 Replayer<I>::Replayer(
     Threads<I>* threads,
+    InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
     PoolMetaCache* pool_meta_cache,
     StateBuilder<I>* state_builder,
     ReplayerListener* replayer_listener)
   : m_threads(threads),
+    m_instance_watcher(instance_watcher),
     m_local_mirror_uuid(local_mirror_uuid),
     m_pool_meta_cache(pool_meta_cache),
     m_state_builder(state_builder),
