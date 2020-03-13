@@ -3,9 +3,93 @@ Manifest
 ========
 
 
+============
+Introduction
+============
 
-RAODS Interface
+As described in ../deduplication.rst, adding transparent redirect
+machinery to RADOS would enable a more capable tiering solution
+than RADOS currently has with "cache/tiering".
+
+See ../deduplication.rst
+
+At a high level, each object has a piece of metadata embedded in
+the object_info_t which can map subsets of the object data payload
+to (refcounted) objects in other pools.
+
+This document exists to detail:
+
+1. Manifest data structures
+2. Rados operations for manipulating manifests.
+3. How those operations interact with other features like snapshots.
+
+Data Structures
 ===============
+
+Each object contains an object_manifest_t embedded within the
+object_info_t (see osd_types.h):
+
+::
+  
+        struct object_manifest_t {
+                enum {
+                        TYPE_NONE = 0,
+                        TYPE_REDIRECT = 1,
+                        TYPE_CHUNKED = 2,
+                };
+                uint8_t type;  // redirect, chunked, ...
+                hobject_t redirect_target;
+                std::map<uint64_t, chunk_info_t> chunk_map;
+        }
+
+TODO: check the following
+
+The type enum reflects three possible states an object can be in:
+
+1. TYPE_NONE: normal rados object
+2. TYPE_REDIRECT: object payload is backed by a single object
+   specified by redirect_target
+3. TYPE_CHUNKED: object payload is distributed among objects with
+   size and offset specified by the chunk_map. chunk_map maps
+   the offset of the chunk to a chunk_info_t shown below further
+   specifying the length, target oid, and flags.
+
+::
+
+        struct chunk_info_t {
+          typedef enum {
+            FLAG_DIRTY = 1, 
+            FLAG_MISSING = 2,
+            FLAG_HAS_REFERENCE = 4,
+            FLAG_HAS_FINGERPRINT = 8,
+          } cflag_t;
+          uint32_t offset;
+          uint32_t length;
+          hobject_t oid;
+          cflag_t flags;   // FLAG_*
+
+TODO: apparently we specify the offset twice, with different widths
+
+Request Handling
+================
+
+Similarly to cache/tiering, the initial touchpoint is
+maybe_handle_manifest_detail.
+
+For manifest operations listed below, we return NOOP and continue onto
+dedicated handling within do_osd_ops.
+
+For redirect objects which haven't been promoted (apparently oi.size >
+0 indicates that it's present?) we proxy reads and writes.
+
+For reads on TYPE_CHUNKED, if can_proxy_chunked_read (basically, all
+of the ops are reads of extents in the object_manifest_t chunk_map),
+we proxy requests to those objects.
+
+
+
+RADOS Interface
+================
 
 To set up deduplication pools, you must have two pools. One will act as the 
 base pool and the other will act as the chunk pool. The base pool need to be
@@ -29,13 +113,15 @@ configured with fingerprint_algorithm option as follows.
 
 Operations:
 
-
 * set-redirect 
 
   set a redirection between a base_object in the base_pool and a target_object 
   in the target_pool.
   A redirected object will forward all operations from the client to the 
   target_object. ::
+
+        void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
+		      uint64_t tgt_version, int flag = 0);
   
         rados -p base_pool set-redirect <base_object> --target-pool <target_pool> 
          <target_object>
@@ -44,6 +130,9 @@ Operations:
 
   set the chunk-offset in a source_object to make a link between it and a 
   target_object. ::
+
+        void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
+                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
   
         rados -p base_pool set-chunk <source_object> <offset> <length> --target-pool 
          <caspool> <target_object> <taget-offset> 
@@ -52,11 +141,15 @@ Operations:
 
   promote the object (including chunks). ::
 
+        void tier_promote();
+
         rados -p base_pool tier-promote <obj-name> 
 
 * unset-manifest
 
   unset the manifest info in the object that has manifest. ::
+
+        void unset_manifest();
 
         rados -p base_pool unset-manifest <obj-name>
 
@@ -64,15 +157,16 @@ Operations:
 
   flush the object which has chunks to the chunk pool. ::
 
-        rados -p base_pool tier-flush <obj-name>
+        void tier_flush();
 
+        rados -p base_pool tier-flush <obj-name>
 
 
 Dedup tool
 ==========
 
 Dedup tool has two features: finding an optimal chunk offset for dedup chunking 
-and fixing the reference count.
+and fixing the reference count (see ./refcount.rst).
 
 * find an optimal chunk offset
 
@@ -151,3 +245,19 @@ and fixing the reference count.
           ceph-dedup-tool --op chunk_scrub --chunk_pool $CHUNK_POOL
 
 
+=====================
+Status and Future Work
+======================
+
+At the moment, the above interfaces exist in rados, but have unclear
+interactions with snapshots.
+
+Snapshots
+---------
+
+Here are some design questions we'll need to tackle:
+
+1. set-redirect
+
+   * What happens if set on a clone?
+   * 
