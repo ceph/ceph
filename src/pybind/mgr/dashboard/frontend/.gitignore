@@ -34,9 +34,8 @@ testem.log
 /src/unit-test-configuration.ts
 
 # e2e
-/e2e/*.js
-/e2e/*.map
-.protractor-fail-fast
+/cypress/screenshots
+/cypress/videos
 
 # System Files
 .DS_Store

@@ -47,7 +47,7 @@ export class PoolListComponent implements OnInit {
   @ViewChild('poolConfigurationSourceTpl', { static: false })
   poolConfigurationSourceTpl: TemplateRef<any>;
 
-  pools: Pool[] = [];
+  pools: Pool[];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   modalRef: BsModalRef;
