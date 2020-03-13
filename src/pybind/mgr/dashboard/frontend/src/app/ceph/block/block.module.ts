@@ -3,8 +3,8 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { TreeModule } from 'ng2-tree';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
@@ -67,8 +67,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     ModalModule.forRoot(),
     SharedModule,
     RouterModule,
-    TreeModule,
-    NgBootstrapFormValidationModule
+    NgBootstrapFormValidationModule,
+    TreeModule.forRoot()
   ],
   declarations: [
     RbdListComponent,
