@@ -107,6 +107,7 @@ private:
 
   bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
+  uint64_t max_snaps_per_dir = 100;
 
   friend class MDSContinuation;
   friend class ServerContext;
