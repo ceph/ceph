@@ -3,6 +3,14 @@ from pecan.rest import RestController
 
 from restful import common, context
 from restful.decorators import auth
+from restful.decorators import expose as ceph_expose
+from restful.api import types
+
+
+class PoolType(types.APIBody):
+
+    name = types.StringType(require=True)
+    pg_num = types.IntegerType(require=True)
 
 
 class PoolId(RestController):
@@ -94,25 +102,19 @@ class Pool(RestController):
         return pools
 
 
-    @expose(template='json')
+    @ceph_expose(body=PoolType)
     @auth
-    def post(self, **kwargs):
+    def post(self, pool, **kwargs):
         """
         Create a new pool
         Requires name and pg_num dict arguments
         """
         args = request.json
+        args.pop("name", None)
+        args.pop("pg_num", None)
 
-        # Check for the required arguments
-        pool_name = args.pop('name', None)
-        if pool_name is None:
-            response.status = 500
-            return {'message': 'You need to specify the pool "name" argument'}
-
-        pg_num = args.pop('pg_num', None)
-        if pg_num is None:
-            response.status = 500
-            return {'message': 'You need to specify the "pg_num" argument'}
+        pool_name = pool.name
+        pg_num = pool.pg_num
 
         # Run the pool create command first
         create_command = {

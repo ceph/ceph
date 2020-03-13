@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from pecan import request, response
+from pecan import expose as pecan_expose
 from base64 import b64decode
 from functools import wraps
 
@@ -76,4 +77,27 @@ def paginate(f):
             _page = len(_out) - (_page*100)
 
         return _out[_page - 100: _page]
+    return decorated
+
+
+def expose(body=None):
+    json_decorator = pecan_expose(template="json", generic=False, content_type="application/json")
+    empty_decorator = pecan_expose()
+
+    def decorated(f):
+        if f.__name__ in ("_lookup", "_route", "_default"):
+            return empty_decorator(f)
+
+        @wraps(f)
+        def _method(self, *args, **kwargs):
+            if body is not None:
+                try:
+                    req_body = body.from_request()
+                    return f(self, req_body, *args, **kwargs)
+                except ValueError as err:
+                    return {"message": str(err)}
+            return f(self, *args, **kwargs)
+
+        return json_decorator(_method)
+
     return decorated
