@@ -8,6 +8,7 @@
 #include "librbd/deep_copy/Utils.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/OpenRequest.h"
+#include "librbd/object_map/DiffRequest.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -53,7 +54,7 @@ void ImageCopyRequest<I>::send() {
     return;
   }
 
-  send_object_copies();
+  compute_diff();
 }
 
 template <typename I>
@@ -62,6 +63,30 @@ void ImageCopyRequest<I>::cancel() {
 
   ldout(m_cct, 20) << dendl;
   m_canceled = true;
+}
+
+template <typename I>
+void ImageCopyRequest<I>::compute_diff() {
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = create_context_callback<
+    ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_compute_diff>(this);
+  auto req = object_map::DiffRequest<I>::create(m_src_image_ctx, m_src_snap_id_start,
+                                                m_src_snap_id_end, &m_object_diff_state,
+                                                ctx);
+  req->send();
+}
+
+template <typename I>
+void ImageCopyRequest<I>::handle_compute_diff(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(m_cct, 10) << "fast-diff optimization disabled" << dendl;
+    m_object_diff_state.resize(0);
+  }
+
+  send_object_copies();
 }
 
 template <typename I>
@@ -87,14 +112,18 @@ void ImageCopyRequest<I>::send_object_copies() {
   bool complete;
   {
     std::lock_guard locker{m_lock};
-    for (uint64_t i = 0;
-         i < m_src_image_ctx->config.template get_val<uint64_t>("rbd_concurrent_management_ops");
-         ++i) {
-      send_next_object_copy();
-      if (m_ret_val < 0 && m_current_ops == 0) {
+    auto max_ops = m_src_image_ctx->config.template get_val<uint64_t>(
+      "rbd_concurrent_management_ops");
+
+    // attempt to schedule at least 'max_ops' initial requests where
+    // some objects might be skipped if fast-diff notes no change
+    while (m_current_ops < max_ops) {
+      int r = send_next_object_copy();
+      if (r < 0) {
         break;
       }
     }
+
     complete = (m_current_ops == 0) && !m_updating_progress;
   }
 
@@ -104,7 +133,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 }
 
 template <typename I>
-void ImageCopyRequest<I>::send_next_object_copy() {
+int ImageCopyRequest<I>::send_next_object_copy() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   if (m_canceled && m_ret_val == 0) {
@@ -112,14 +141,20 @@ void ImageCopyRequest<I>::send_next_object_copy() {
     m_ret_val = -ECANCELED;
   }
 
-  if (m_ret_val < 0 || m_object_no >= m_end_object_no) {
-    return;
+  if (m_ret_val < 0) {
+    return m_ret_val;
+  } else if (m_object_no >= m_end_object_no) {
+    return -ENODATA;
   }
 
   uint64_t ono = m_object_no++;
+  if (ono < m_object_diff_state.size() &&
+      m_object_diff_state[ono] == object_map::DIFF_STATE_NONE) {
+    ldout(m_cct, 20) << "skipping clean object " << ono << dendl;
+    return 1;
+  }
 
   ldout(m_cct, 20) << "object_num=" << ono << dendl;
-
   ++m_current_ops;
 
   Context *ctx = new LambdaContext(
@@ -130,6 +165,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_dst_snap_id_start,
     m_snap_map, ono, m_flatten, ctx);
   req->send();
+  return 0;
 }
 
 template <typename I>
@@ -164,7 +200,13 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
       }
     }
 
-    send_next_object_copy();
+    while (true) {
+      r = send_next_object_copy();
+      if (r != 1) {
+        break;
+      }
+    }
+
     complete = (m_current_ops == 0) && !m_updating_progress;
   }
 
