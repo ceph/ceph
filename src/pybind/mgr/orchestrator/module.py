@@ -740,9 +740,10 @@ Usage:
 
     @_cli_write_command(
         'orch spec dump',
+        'name=service_name,type=CephString,req=false',
         desc='List all Service specs')
-    def _get_service_specs(self):
-        completion = self.list_specs()
+    def _get_service_specs(self, service_name=None):
+        completion = self.list_specs(service_name=service_name)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         specs = completion.result_str()
