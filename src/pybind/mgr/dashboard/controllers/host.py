@@ -122,4 +122,4 @@ class Host(RESTController):
     def daemons(self, hostname: str) -> List[dict]:
         orch = OrchClient.instance()
         daemons = orch.services.list_daemons(None, hostname)
-        return [d.to_json() for d in daemons]
+        return [d.to_dict() for d in daemons]

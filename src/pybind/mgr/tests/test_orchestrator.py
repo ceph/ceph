@@ -12,14 +12,14 @@ from orchestrator import OrchestratorValidationError
 
 def _test_resource(data, resource_class, extra=None):
     # ensure we can deserialize and serialize
-    rsc = resource_class.from_json(data)
-    rsc.to_json()
+    rsc = resource_class.from_dict(data)
+    rsc.to_dict()
 
     if extra:
         # if there is an unexpected data provided
         data.update(extra)
         with pytest.raises(OrchestratorValidationError):
-            resource_class.from_json(data)
+            resource_class.from_dict(data)
 
 
 def test_inventory():
@@ -46,7 +46,7 @@ def test_inventory():
     json_data = [{}, {'name': 'host0', 'addr': '1.2.3.4'}, {'devices': []}]
     for data in json_data:
         with pytest.raises(OrchestratorValidationError):
-            InventoryHost.from_json(data)
+            InventoryHost.from_dict(data)
 
 
 def test_daemon_description():

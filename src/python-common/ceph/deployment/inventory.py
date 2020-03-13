@@ -16,16 +16,16 @@ class Devices(object):
         self.devices = devices  # type: List[Device]
 
     def __eq__(self, other):
-        return self.to_json() == other.to_json()
+        return self.to_dict() == other.to_dict()
 
-    def to_json(self):
+    def to_dict(self):
         # type: () -> List[dict]
-        return [d.to_json() for d in self.devices]
+        return [d.to_dict() for d in self.devices]
 
     @classmethod
-    def from_json(cls, input):
+    def from_dict(cls, input):
         # type: (List[Dict[str, Any]]) -> Devices
-        return cls([Device.from_json(i) for i in input])
+        return cls([Device.from_dict(i) for i in input])
 
     def copy(self):
         return Devices(devices=list(self.devices))
@@ -57,14 +57,14 @@ class Device(object):
         self.lvs = lvs
         self.device_id = device_id
 
-    def to_json(self):
+    def to_dict(self):
         # type: () -> dict
         return {
             k: getattr(self, k) for k in self.report_fields
         }
 
     @classmethod
-    def from_json(cls, input):
+    def from_dict(cls, input):
         # type: (Dict[str, Any]) -> Device
         if not isinstance(input, dict):
             raise ValueError('Device: Expected dict. Got `{}...`'.format(json.dumps(input)[:10]))

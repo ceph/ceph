@@ -27,10 +27,12 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         return res
 
     @classmethod
-    def from_json(cls, data):
+    def from_dict(cls, data):
+        # type: (dict) -> HostPlacementSpec
         return cls(**data)
 
-    def to_json(self):
+    def to_dict(self):
+        # type: () -> dict
         return {
             'hostname': self.hostname,
             'network': self.network,
@@ -173,18 +175,20 @@ class PlacementSpec(object):
         return "PlacementSpec(%s)" % ', '.join(kv)
 
     @classmethod
-    def from_json(cls, data):
+    def from_dict(cls, data):
+        # type: (dict) -> PlacementSpec
         hosts = data.get('hosts', [])
         if hosts:
-            data['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
+            data['hosts'] = [HostPlacementSpec.from_dict(host) for host in hosts]
         _cls = cls(**data)
         _cls.validate()
         return _cls
 
-    def to_json(self):
+    def to_dict(self):
+        # type: () -> dict
         return {
             'label': self.label,
-            'hosts': [host.to_json() for host in self.hosts] if self.hosts else [],
+            'hosts': [host.to_dict() for host in self.hosts] if self.hosts else [],
             'count': self.count,
             'all_hosts': self.all_hosts,
             'host_pattern': self.host_pattern,
@@ -318,18 +322,18 @@ class ServiceSpec(object):
         self.service_id = service_id
 
     @classmethod
-    def from_json(cls, json_spec):
+    def from_dict(cls, dict_spec):
         # type: (dict) -> Any
         # Python 3:
         # >>> ServiceSpecs = TypeVar('Base', bound=ServiceSpec)
         # then, the real type is: (dict) -> ServiceSpecs
         """
         Initialize 'ServiceSpec' object data from a json structure
-        :param json_spec: A valid dict with ServiceSpec
+        :param dict_spec: A valid dict with ServiceSpec
         """
         from ceph.deployment.drive_group import DriveGroupSpec
 
-        service_type = json_spec.get('service_type', '')
+        service_type = dict_spec.get('service_type', '')
         _cls = {
             'rgw': RGWSpec,
             'nfs': NFSServiceSpec,
@@ -339,14 +343,14 @@ class ServiceSpec(object):
         if _cls == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
 
-        return _cls._from_json_impl(json_spec)  # type: ignore
+        return _cls._from_dict_impl(dict_spec)  # type: ignore
 
     @classmethod
-    def _from_json_impl(cls, json_spec):
+    def _from_dict_impl(cls, dict_spec):
         args = {}  # type: Dict[str, Dict[Any, Any]]
-        for k, v in json_spec.items():
+        for k, v in dict_spec.items():
             if k == 'placement':
-                v = PlacementSpec.from_json(v)
+                v = PlacementSpec.from_dict(v)
             if k == 'spec':
                 args.update(v)
                 continue
@@ -359,11 +363,11 @@ class ServiceSpec(object):
             n += '.' + self.service_id
         return n
 
-    def to_json(self):
+    def to_dict(self):
         # type: () -> Dict[str, Any]
         c = self.__dict__.copy()
         if self.placement:
-            c['placement'] = self.placement.to_json()
+            c['placement'] = self.placement.to_dict()
         return c
 
     def validate(self):

@@ -347,6 +347,6 @@ class TestCephadm(object):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.apply_service_config('dummy')
             _save_spec.assert_called_once()
-            _sspec.from_json.assert_called_once()
+            _sspec.from_dict.assert_called_once()
             assert wait(cephadm_module, c) == 'ServiceSpecs saved'
 

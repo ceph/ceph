@@ -43,7 +43,7 @@ class OrchestratorControllerTest(ControllerTestCase):
             inv_hosts = []
             for inv_host in inventory:
                 if hosts is None or inv_host['name'] in hosts:
-                    inv_hosts.append(InventoryHost.from_json(inv_host))
+                    inv_hosts.append(InventoryHost.from_dict(inv_host))
             return inv_hosts
         mock_instance.inventory.list.side_effect = _list_inventory
 

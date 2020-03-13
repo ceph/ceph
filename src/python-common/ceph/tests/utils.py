@@ -31,7 +31,7 @@ def _mk_device(rotational=True,
 def _mk_inventory(devices):
     devs = []
     for dev_, name in zip(devices, map(chr, range(ord('a'), ord('z')))):
-        dev = Device.from_json(dev_.to_json())
+        dev = Device.from_dict(dev_.to_dict())
         dev.path = '/dev/sd' + name
         dev.sys_api = dict(dev_.sys_api, path='/dev/sd' + name)
         devs.append(dev)

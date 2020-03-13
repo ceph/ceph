@@ -65,5 +65,5 @@ def test_rgwspec():
     }
     """
     example = json.loads(test_rgwspec.__doc__.strip())
-    spec = RGWSpec.from_json(example)
+    spec = RGWSpec.from_dict(example)
     assert servicespec_validate_add(spec) is None

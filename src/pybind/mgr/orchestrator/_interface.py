@@ -1127,7 +1127,7 @@ class HostSpec(object):
         #: human readable status
         self.status = status or ''  # type: str
 
-    def to_json(self):
+    def to_dict(self) -> dict:
         return {
             'hostname': self.hostname,
             'addr': self.addr,
@@ -1260,7 +1260,7 @@ class DaemonDescription(object):
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)
 
-    def to_json(self):
+    def to_dict(self) -> dict:
         out = {
             'hostname': self.hostname,
             'container_id': self.container_id,
@@ -1280,7 +1280,7 @@ class DaemonDescription(object):
 
     @classmethod
     @handle_type_error
-    def from_json(cls, data):
+    def from_dict(cls, data) -> "DaemonDescription":
         c = data.copy()
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
@@ -1350,7 +1350,7 @@ class ServiceDescription(object):
     def __repr__(self):
         return "<ServiceDescription>({name})".format(name=self.service_name)
 
-    def to_json(self):
+    def to_dict(self) -> dict:
         out = {
             'container_image_id': self.container_image_id,
             'container_image_name': self.container_image_name,
@@ -1359,7 +1359,7 @@ class ServiceDescription(object):
             'service_url': self.service_url,
             'size': self.size,
             'running': self.running,
-            'spec': self.spec.to_json() if self.spec is not None else None
+            'spec': self.spec.to_dict() if self.spec is not None else None
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):
@@ -1368,7 +1368,7 @@ class ServiceDescription(object):
 
     @classmethod
     @handle_type_error
-    def from_json(cls, data):
+    def from_dict(cls, data) -> "ServiceDescription":
         c = data.copy()
         for k in ['last_refresh', 'created']:
             if k in c:
@@ -1417,21 +1417,21 @@ class InventoryHost(object):
         self.devices = devices
         self.labels = labels
 
-    def to_json(self):
+    def to_dict(self) -> dict:
         return {
             'name': self.name,
             'addr': self.addr,
-            'devices': self.devices.to_json(),
+            'devices': self.devices.to_dict(),
             'labels': self.labels,
         }
 
     @classmethod
-    def from_json(cls, data):
+    def from_dict(cls, data) -> "InventoryHost":
         try:
             _data = copy.deepcopy(data)
             name = _data.pop('name')
             addr = _data.pop('addr', None) or name
-            devices = inventory.Devices.from_json(_data.pop('devices'))
+            devices = inventory.Devices.from_dict(_data.pop('devices'))
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
@@ -1445,8 +1445,8 @@ class InventoryHost(object):
 
 
     @classmethod
-    def from_nested_items(cls, hosts):
-        devs = inventory.Devices.from_json
+    def from_nested_items(cls, hosts) -> List["InventoryHost"]:
+        devs = inventory.Devices.from_dict
         return [cls(item[0], devs(item[1].data)) for item in hosts]
 
     def __repr__(self):

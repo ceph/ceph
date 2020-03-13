@@ -328,7 +328,7 @@ class TestDriveGroup(object):
                     'placement': {'host_pattern': 'data*'}
                 }
 
-            dgo = DriveGroupSpec.from_json(raw_sample)
+            dgo = DriveGroupSpec.from_dict(raw_sample)
             return dgo
 
         return make_sample_data

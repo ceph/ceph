@@ -119,11 +119,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._shutdown.wait(5)
 
     def _init_data(self, data=None):
-        self._inventory = [orchestrator.InventoryHost.from_json(inventory_host)
+        self._inventory = [orchestrator.InventoryHost.from_dict(inventory_host)
                            for inventory_host in data.get('inventory', [])]
-        self._services = [orchestrator.ServiceDescription.from_json(service)
+        self._services = [orchestrator.ServiceDescription.from_dict(service)
                            for service in data.get('services', [])]
-        self._daemons = [orchestrator.DaemonDescription.from_json(daemon)
+        self._daemons = [orchestrator.DaemonDescription.from_dict(daemon)
                           for daemon in data.get('daemons', [])]
 
     @deferred_read
@@ -154,7 +154,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         for out in c_v_out.splitlines():
             self.log.error(out)
-            devs = inventory.Devices.from_json(json.loads(out))
+            devs = inventory.Devices.from_dict(json.loads(out))
             return [orchestrator.InventoryHost('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')

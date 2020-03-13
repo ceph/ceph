@@ -75,7 +75,7 @@ class DeviceSelection(object):
                     repr(self)))
 
     @classmethod
-    def from_json(cls, device_spec):
+    def from_dict(cls, device_spec):
         # type: (dict) -> DeviceSelection
         for applied_filter in list(device_spec.keys()):
             if applied_filter not in cls._supported_filters:
@@ -123,7 +123,7 @@ class DriveGroupSpecs(object):
             ]
         if not isinstance(self.drive_group_json, list):
             raise ServiceSpecValidationError('Specs needs to be a list of specs')
-        dgs = list(map(DriveGroupSpec.from_json, self.drive_group_json))  # type: ignore
+        dgs = list(map(DriveGroupSpec.from_dict, self.drive_group_json))  # type: ignore
         self.drive_groups = dgs  # type: List[DriveGroupSpec]
 
     def __repr__(self):
@@ -212,12 +212,12 @@ class DriveGroupSpec(ServiceSpec):
         self.osd_id_claims = osd_id_claims
 
     @classmethod
-    def _from_json_impl(cls, json_drive_group):
+    def _from_dict_impl(cls, json_drive_group):
         # type: (dict) -> DriveGroupSpec
         """
         Initialize 'Drive group' structure
 
-        :param json_drive_group: A valid json string with a Drive Group
+        :param json_drive_group: A valid dict with a Drive Group
                specification
         """
         # legacy json (pre Octopus)
@@ -237,10 +237,10 @@ class DriveGroupSpec(ServiceSpec):
                     json_drive_group[key] = SizeMatcher.str_to_byte(json_drive_group[key])
 
         if 'placement' in json_drive_group:
-            json_drive_group['placement'] = PlacementSpec.from_json(json_drive_group['placement'])
+            json_drive_group['placement'] = PlacementSpec.from_dict(json_drive_group['placement'])
 
         try:
-            args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
+            args = {k: (DeviceSelection.from_dict(v) if k.endswith('_devices') else v) for k, v in
                     json_drive_group.items()}
             if not args:
                 raise DriveGroupValidationError("Didn't find Drivegroup specs")

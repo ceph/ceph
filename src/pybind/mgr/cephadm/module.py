@@ -132,7 +132,7 @@ class SpecStore():
             service_name = k[len(SPEC_STORE_PREFIX):]
             try:
                 v = json.loads(v)
-                spec = ServiceSpec.from_json(v['spec'])
+                spec = ServiceSpec.from_dict(v['spec'])
                 created = datetime.datetime.strptime(v['created'], DATEFMT)
                 self.specs[service_name] = spec
                 self.spec_created[service_name] = created
@@ -150,7 +150,7 @@ class SpecStore():
         self.mgr.set_store(
             SPEC_STORE_PREFIX + spec.service_name(),
             json.dumps({
-                'spec': spec.to_json(),
+                'spec': spec.to_dict(),
                 'created': self.spec_created[spec.service_name()].strftime(DATEFMT),
             }, sort_keys=True),
         )
@@ -205,9 +205,9 @@ class HostCache():
                 self.daemon_config_deps[host] = {}
                 for name, d in j.get('daemons', {}).items():
                     self.daemons[host][name] = \
-                        orchestrator.DaemonDescription.from_json(d)
+                        orchestrator.DaemonDescription.from_dict(d)
                 for d in j.get('devices', []):
-                    self.devices[host].append(inventory.Device.from_json(d))
+                    self.devices[host].append(inventory.Device.from_dict(d))
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
@@ -274,9 +274,9 @@ class HostCache():
         if host in self.last_device_update:
             j['last_device_update'] = self.last_device_update[host].strftime(DATEFMT) # type: ignore
         for name, dd in self.daemons[host].items():
-            j['daemons'][name] = dd.to_json()  # type: ignore
+            j['daemons'][name] = dd.to_dict()  # type: ignore
         for d in self.devices[host]:
-            j['devices'].append(d.to_json())  # type: ignore
+            j['devices'].append(d.to_dict())  # type: ignore
         for name, depi in self.daemon_config_deps[host].items():
             j['daemon_config_deps'][name] = {   # type: ignore
                 'deps': depi.get('deps', []),
@@ -1568,7 +1568,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             raise OrchestratorError('New host %s (%s) failed check: %s' % (
                 spec.hostname, spec.addr, err))
 
-        self.inventory[spec.hostname] = spec.to_json()
+        self.inventory[spec.hostname] = spec.to_dict()
         self._save_inventory()
         self.cache.prime_empty_host(spec.hostname)
         self.event.set()  # refresh stray health check
@@ -1711,7 +1711,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return 'host %s ceph-volume inventory failed: %s' % (host, e)
         data = json.loads(''.join(out))
         self.log.debug('Refreshed host %s devices (%d)' % (host, len(data)))
-        devices = inventory.Devices.from_json(data)
+        devices = inventory.Devices.from_dict(data)
         self.cache.update_host_devices(host, devices.devices)
         self.cache.save_host(host)
         return None
@@ -3064,7 +3064,7 @@ receivers:
         loaded_specs: List[ServiceSpec] = list()
         for spec in content:
             # load ServiceSpec once to validate
-            spec_o = ServiceSpec.from_json(spec)
+            spec_o = ServiceSpec.from_dict(spec)
             loaded_specs.append(spec_o)
         for spec in loaded_specs:
             self.spec_store.save(spec)

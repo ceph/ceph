@@ -51,7 +51,7 @@ class Matcher(object):
         # using the . notation, but some keys are nested, and hidden behind
         # a different hierarchy, which makes it harder to access programatically
         # hence, make it a dict.
-        disk = device.to_json()
+        disk = device.to_dict()
 
         def findkeys(node, key_val):
             """ Find keys in non-flat dict recursively """

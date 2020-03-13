@@ -209,7 +209,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         if format == 'json':
-            hosts = [host.to_json()
+            hosts = [host.to_dict()
                      for host in completion.result]
             output = json.dumps(hosts, sort_keys=True)
         else:
@@ -269,7 +269,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         raise_if_exception(completion)
 
         if format == 'json':
-            data = [n.to_json() for n in completion.result]
+            data = [n.to_dict() for n in completion.result]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
             out = []
@@ -336,7 +336,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         if len(services) == 0:
             return HandleCommandResult(stdout="No services reported")
         elif format == 'json':
-            data = [s.to_json() for s in services]
+            data = [s.to_dict() for s in services]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
             now = datetime.datetime.utcnow()
@@ -393,7 +393,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         if len(daemons) == 0:
             return HandleCommandResult(stdout="No daemons reported")
         elif format == 'json':
-            data = [s.to_json() for s in daemons]
+            data = [s.to_dict() for s in daemons]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
             now = datetime.datetime.utcnow()
@@ -584,7 +584,7 @@ Usage:
         """
         if inbuf:
             try:
-                rgw_spec = RGWSpec.from_json(json.loads(inbuf))
+                rgw_spec = RGWSpec.from_dict(json.loads(inbuf))
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)

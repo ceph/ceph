@@ -16,6 +16,6 @@ def test_from_json(filename):
         data = json.load(f)
     if 'inventory' in data:
         data = data['inventory']
-    ds = Devices.from_json(data)
+    ds = Devices.from_dict(data)
     assert len(ds.devices) == len(data)
-    assert Devices.from_json(ds.to_json()) == ds
+    assert Devices.from_dict(ds.to_dict()) == ds

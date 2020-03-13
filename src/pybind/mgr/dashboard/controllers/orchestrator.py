@@ -105,7 +105,7 @@ class OrchestratorInventory(RESTController):
     def list(self, hostname=None):
         orch = OrchClient.instance()
         hosts = [hostname] if hostname else None
-        inventory_hosts = [host.to_json() for host in orch.inventory.list(hosts)]
+        inventory_hosts = [host.to_dict() for host in orch.inventory.list(hosts)]
         device_osd_map = get_device_osd_map()
         for inventory_host in inventory_hosts:
             host_osds = device_osd_map.get(inventory_host['name'])
