@@ -87,7 +87,11 @@ class DeviceSelection(object):
         return cls(**device_spec)
 
     def to_json(self):
-        return self.__dict__.copy()
+        # type: () -> Dict[str, Any]
+        c = self.__dict__.copy()
+        if self.paths:
+            c['paths'] = [p.path for p in self.paths]
+        return c
 
     def __repr__(self):
         keys = [
