@@ -4,7 +4,7 @@ import json
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, RGWSpec, \
-    servicespec_validate_add
+    servicespec_validate_add, ServiceSpecValidationError
 
 
 @pytest.mark.parametrize("test_input,expected, require_network",
@@ -31,16 +31,35 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         ("count:2", "PlacementSpec(count=2)"),
         ("3", "PlacementSpec(count=3)"),
         ("host1 host2", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
+        ("host1;host2", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
+        ("host1,host2", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
+        ("host1 host2=b", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='b')])"),
         ("host1=a host2=b", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='', name='a'), HostPlacementSpec(hostname='host2', network='', name='b')])"),
         ("host1:1.2.3.4=a host2:1.2.3.5=b", "PlacementSpec(hosts=[HostPlacementSpec(hostname='host1', network='1.2.3.4', name='a'), HostPlacementSpec(hostname='host2', network='1.2.3.5', name='b')])"),
+        ("myhost:[v1:10.1.1.10:6789]", "PlacementSpec(hosts=[HostPlacementSpec(hostname='myhost', network='[v1:10.1.1.10:6789]', name='')])"),
         ('2 host1 host2', "PlacementSpec(count=2, hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
         ('label:foo', "PlacementSpec(label='foo')"),
         ('3 label:foo', "PlacementSpec(count=3, label='foo')"),
         ('*', "PlacementSpec(host_pattern='*')"),
+        ('3 data[1-3]', "PlacementSpec(count=3, host_pattern='data[1-3]')"),
+        ('3 data?', "PlacementSpec(count=3, host_pattern='data?')"),
+        ('3 data*', "PlacementSpec(count=3, host_pattern='data*')"),
     ])
 def test_parse_placement_specs(test_input, expected):
     ret = PlacementSpec.from_string(test_input)
     assert str(ret) == expected
+
+@pytest.mark.parametrize(
+    "test_input",
+    [
+        ("host=a host*"),
+        ("host=a label:wrong"),
+        ("host? host*"),
+    ]
+)
+def test_parse_placement_specs_raises(test_input):
+    with pytest.raises(ServiceSpecValidationError):
+        PlacementSpec.from_string(test_input)
 
 @pytest.mark.parametrize("test_input",
                          # wrong subnet
