@@ -2260,10 +2260,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         service_name = spec.service_name()
         self.log.debug('Applying service %s spec' % service_name)
         daemons = self.cache.get_daemons_by_service(service_name)
+
+        public_network = None
+        if daemon_type == 'mon':
+            ret, out, err = self.mon_command({
+                'prefix': 'config get',
+                'who': 'mon',
+                'key': 'public_network',
+            })
+            if '/' in out:
+                public_network = out.strip()
+                self.log.debug('mon public_network is %s' % public_network)
+
+        def matches_network(host):
+            # type: (str) -> bool
+            if not public_network:
+                return False
+            # make sure we have 1 or more IPs for that network on that
+            # host
+            return len(self.cache.networks[host].get(public_network, [])) > 0
+
         hosts = HostAssignment(
             spec=spec,
             get_hosts_func=self._get_hosts,
-            get_daemons_func=self.cache.get_daemons_by_service).place()
+            get_daemons_func=self.cache.get_daemons_by_service,
+            filter_new_host=matches_network if daemon_type == 'mon' else None,
+        ).place()
 
         r = False
 
@@ -3145,6 +3167,7 @@ class HostAssignment(object):
                  get_hosts_func,  # type: Callable[[Optional[str]],List[str]]
                  get_daemons_func, # type: Callable[[str],List[orchestrator.DaemonDescription]]
 
+                 filter_new_host=None, # type: Optional[Callable[[str],bool]]
                  scheduler=None,  # type: Optional[BaseScheduler]
                  ):
         assert spec and get_hosts_func and get_daemons_func
@@ -3152,6 +3175,7 @@ class HostAssignment(object):
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
         self.get_daemons_func = get_daemons_func
+        self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
 
     def place(self):
@@ -3238,6 +3262,10 @@ class HostAssignment(object):
         need = count - len(existing + chosen)
         others = [hs for hs in hosts
                   if hs.hostname not in hosts_with_daemons]
+        if self.filter_new_host:
+            old = others
+            others = [h for h in others if self.filter_new_host(h.hostname)]
+            logger.debug('filtered %s down to %s' % (old, hosts))
         chosen = chosen + self.scheduler.place(others, need)
         logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
             existing, chosen))
