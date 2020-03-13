@@ -180,6 +180,7 @@ class HostCache():
         self.daemons = {}   # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
+        self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = [] # type: List[str]
         self.device_refresh_queue = [] # type: List[str]
@@ -205,20 +206,25 @@ class HostCache():
                 self.daemon_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.devices[host] = []
+                self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
                 for name, d in j.get('daemons', {}).items():
                     self.daemons[host][name] = \
                         orchestrator.DaemonDescription.from_json(d)
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
+                self.networks[host] = j.get('networks', {})
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
                         'last_config': datetime.datetime.strptime(
                             d['last_config'], DATEFMT),
                     }
-                self.mgr.log.debug('HostCache.load: host %s has %d daemons, %d devices' % (
-                    host, len(self.daemons[host]), len(self.devices[host])))
+                self.mgr.log.debug(
+                    'HostCache.load: host %s has %d daemons, '
+                    '%d devices, %d networks' % (
+                        host, len(self.daemons[host]), len(self.devices[host]),
+                        len(self.networks[host])))
             except Exception as e:
                 self.mgr.log.warning('unable to load cached state for %s: %s' % (
                     host, e))
@@ -229,9 +235,10 @@ class HostCache():
         self.daemons[host] = dm
         self.last_daemon_update[host] = datetime.datetime.utcnow()
 
-    def update_host_devices(self, host, dls):
-        # type: (str, List[inventory.Device]) -> None
+    def update_host_devices_networks(self, host, dls, nets):
+        # type: (str, List[inventory.Device], Dict[str,List[str]]) -> None
         self.devices[host] = dls
+        self.networks[host] = nets
         self.last_device_update[host] = datetime.datetime.utcnow()
 
     def update_daemon_config_deps(self, host, name, deps, stamp):
@@ -247,6 +254,7 @@ class HostCache():
         """
         self.daemons[host] = {}
         self.devices[host] = []
+        self.networks[host] = {}
         self.daemon_config_deps[host] = {}
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
@@ -280,6 +288,7 @@ class HostCache():
             j['daemons'][name] = dd.to_json()  # type: ignore
         for d in self.devices[host]:
             j['devices'].append(d.to_json())  # type: ignore
+        j['networks'] = self.networks[host]
         for name, depi in self.daemon_config_deps[host].items():
             j['daemon_config_deps'][name] = {   # type: ignore
                 'deps': depi.get('deps', []),
@@ -293,6 +302,8 @@ class HostCache():
             del self.daemons[host]
         if host in self.devices:
             del self.devices[host]
+        if host in self.networks:
+            del self.networks[host]
         if host in self.last_daemon_update:
             del self.last_daemon_update[host]
         if host in self.last_device_update:
@@ -1715,10 +1726,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     host, code, err)
         except Exception as e:
             return 'host %s ceph-volume inventory failed: %s' % (host, e)
-        data = json.loads(''.join(out))
-        self.log.debug('Refreshed host %s devices (%d)' % (host, len(data)))
-        devices = inventory.Devices.from_json(data)
-        self.cache.update_host_devices(host, devices.devices)
+        devices = json.loads(''.join(out))
+        try:
+            out, err, code = self._run_cephadm(
+                host, 'mon',
+                'list-networks',
+                [],
+                no_fsid=True)
+            if code:
+                return 'host %s list-networks returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s list-networks failed: %s' % (host, e)
+        networks = json.loads(''.join(out))
+        self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
+            host, len(devices), len(networks)))
+        devices = inventory.Devices.from_json(devices)
+        self.cache.update_host_devices_networks(host, devices.devices, networks)
         self.cache.save_host(host)
         return None
 
