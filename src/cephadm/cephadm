@@ -2624,6 +2624,36 @@ def command_logs():
 
 ##################################
 
+def list_networks():
+    # type: () -> Dict[str,List[str]]
+    r = {}  # type: Dict[str,List[str]]
+
+    ## sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
+    ## so we'll need to use a regex to parse 'ip' command output.
+    #out, _, _ = call_throws(['ip', '-j', 'route', 'ls'])
+    #j = json.loads(out)
+    #for x in j:
+
+    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
+    p = re.compile(r'^(\S+) (.*)scope link (.*)src (\S+)')
+    for line in out.splitlines():
+        m = p.findall(line)
+        if not m:
+            continue
+        net = m[0][0]
+        ip = m[0][3]
+        if net not in r:
+            r[net] = []
+        r[net].append(ip)
+    return r
+
+def command_list_networks():
+    # type: () -> None
+    r = list_networks()
+    print(json.dumps(r, indent=4))
+
+##################################
+
 def command_ls():
     # type: () -> None
     ls = list_daemons(detail=not args.no_detail,
@@ -3704,6 +3734,10 @@ def _get_parser():
         '--legacy-dir',
         default='/',
         help='base directory for legacy daemon data')
+
+    parser_list_networks = subparsers.add_parser(
+        'list-networks', help='list IP networks')
+    parser_list_networks.set_defaults(func=command_list_networks)
 
     parser_adopt = subparsers.add_parser(
         'adopt', help='adopt daemon deployed with a different tool')
