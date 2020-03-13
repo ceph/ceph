@@ -21,6 +21,7 @@ def task(ctx, config):
         time: <seconds to run>
         pool: <pool to use>
         size: write size to use
+        concurrency: max number of outstanding writes (16)
         objectsize: object size to use
         unique_pool: use a unique pool, defaults to False
         ec_pool: create an ec pool, defaults to False
@@ -76,6 +77,7 @@ def task(ctx, config):
             else:
                 pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
+        concurrency = config.get('concurrency', 16)
         osize = config.get('objectsize', 65536)
         if osize is 0:
             objectsize = []
@@ -94,6 +96,7 @@ def task(ctx, config):
                               '--no-log-to-stderr',
                               '--name', role]
                               + size + objectsize +
+                              ['-t', str(concurrency)] +
                               ['-p' , pool,
                           'bench', str(60), "write", "--no-cleanup"
                           ]).format(tdir=testdir),
