@@ -674,13 +674,15 @@ Usage:
     @_cli_write_command(
         'orch apply',
         'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus '
-        'name=placement,type=CephString,req=false',
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
         'Update the size or placement for a service')
-    def _apply_misc(self, service_type, placement=None):
+    def _apply_misc(self, service_type, placement=None, unmanaged=False):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
 
-        spec = ServiceSpec(service_type, placement=placement)
+        spec = ServiceSpec(service_type, placement=placement,
+                           unmanaged=unmanaged)
 
         if service_type == 'mgr':
             completion = self.apply_mgr(spec)
@@ -706,14 +708,16 @@ Usage:
     @_cli_write_command(
         'orch apply mds',
         'name=fs_name,type=CephString '
-        'name=placement,type=CephString,req=false',
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
         'Update the number of MDS instances for the given fs_name')
-    def _apply_mds(self, fs_name, placement=None):
+    def _apply_mds(self, fs_name, placement=None, unmanaged=False):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
         spec = ServiceSpec(
             'mds', fs_name,
-            placement=placement)
+            placement=placement,
+            unmanaged=unmanaged)
         completion = self.apply_mds(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -723,13 +727,15 @@ Usage:
         'orch apply rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        'name=placement,type=CephString,req=false',
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
-    def _apply_rgw(self, zone_name, realm_name, placement=None):
+    def _apply_rgw(self, zone_name, realm_name, placement=None, unmanaged=False):
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
             placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
         )
         completion = self.apply_rgw(spec)
         self._orchestrator_wait([completion])
@@ -739,12 +745,14 @@ Usage:
     @_cli_write_command(
         'orch apply nfs',
         "name=svc_id,type=CephString "
-        'name=placement,type=CephString,req=false',
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
-    def _apply_nfs(self, svc_id, placement=None):
+    def _apply_nfs(self, svc_id, placement=None, unmanaged=False):
         spec = NFSServiceSpec(
             svc_id,
             placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
         )
         completion = self.apply_nfs(spec)
         self._orchestrator_wait([completion])
