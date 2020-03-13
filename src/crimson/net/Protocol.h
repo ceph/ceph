@@ -34,6 +34,9 @@ class Protocol {
   void close(bool dispatch_reset, std::optional<std::function<void()>> f_accept_new=std::nullopt);
   seastar::future<> close_clean(bool dispatch_reset) {
     close(dispatch_reset);
+    // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
+    // which will otherwise result in deadlock
+    assert(close_ready.valid());
     return close_ready.get_future();
   }
 
