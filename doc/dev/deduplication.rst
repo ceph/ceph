@@ -89,34 +89,64 @@ scheme between replication and erasure coding depending on
 its usage and each pool can be placed in a different storage
 location depending on the required performance.
 
-Manifest Object: 
-Metadata objects are stored in the
-base pool, which contains metadata for data deduplication.
-
-::
-  
-        struct object_manifest_t {
-                enum {
-                        TYPE_NONE = 0,
-                        TYPE_REDIRECT = 1,
-                        TYPE_CHUNKED = 2,
-                };
-                uint8_t type;  // redirect, chunked, ...
-                hobject_t redirect_target;
-                std::map<uint64_t, chunk_info_t> chunk_map;
-        }
-
-
-A chunk Object: 
-Chunk objects are stored in the chunk pool. Chunk object contains chunk data 
-and its reference count information.
-
-
-Although chunk objects and manifest objects have a different purpose 
-from existing objects, they can be handled the same way as 
-original objects. Therefore, to support existing features such as replication,
-no additional operations for dedup are needed.
-
-
 Regarding how to use, please see :doc:`doc/dev/osd_internals/manifest.rst`
+
+=============
+Usage Patterns
+==============
+
+The different ceph interface layers present potentially different oportunities
+and costs for deduplication and tiering in general.
+
+RadosGW
+-------
+
+S3 big data workloads seem like a good opportunity for deduplication.  These
+objects tend to be write once, read mostly objects which don't see partial
+overwrites.  As sugh, it makes sense to fingerprint and dedup up front.
+
+Unlike cephfs and rbd, radosgw has a system for storing
+explicit metadata in the head object of a logical s3 object for
+locating the remaining pieces.  As such, radosgw could use the
+refcounting machinery (osd_internals/refcount.rst) directly without
+needing direct support from rados for manifests.
+
+RBD/Cephfs
+----------
+
+RBD and CephFS both use deterministic naming schemes to partition
+block devices/file data over rados objects.  As such, the redirection
+metadata would need to be included as part of rados, presumably
+transparently.
+
+Moreover, unlike radosgw, rbd/cephfs rados objects can see overwrites.
+For those objects, we don't really want to perform dedup, and we don't
+want to pay a write latency penalty in the hot path to do so anyway.
+As such, performing tiering and dedup on cold objects in the background
+is likely to be preferred.
+   
+One important wrinkle, however, is that both rbd and cephfs workloads
+often feature usage of snapshots.  This means that the rados manifest
+support needs robust support for snapshots.
+
+RADOS Machinery
+===============
+
+For more information on rados redirect/chunk/dedup support, see osd_internals/manifest.rst.
+For more information on rados refcount support, see osd_internals/refcount.rst.
+
+Status and Future Work
+======================
+
+At the moment, there exists some preliminary support for manifest
+objects within the osd as well as a dedup tool.
+
+RadosGW data warehouse workloads probably represent the largest
+opportunity for this feature, so the first priority is probably to add
+direct support for fingerprinting and redirects into the refcount pool
+to radosgw.
+
+Aside from radosgw, completing work on manifest object support in the
+osd particularly as it relates to snapshots would be the next step for
+rbd and cephfs workloads.
 
