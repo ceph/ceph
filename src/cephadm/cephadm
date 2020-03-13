@@ -2919,7 +2919,7 @@ def command_adopt():
     elif daemon_type == 'node-exporter':
         raise Error('adoption of node-exporter not implemented')
     elif daemon_type == 'alertmanager':
-        raise Error('adoption of alert-manager not implemented')
+        command_adopt_alertmanager(daemon_id, fsid)
     else:
         raise Error('daemon type %s not recognized' % daemon_type)
 
@@ -3119,6 +3119,35 @@ def command_adopt_grafana(daemon_id, fsid):
     data_src = '/var/lib/grafana/'
     data_src = os.path.abspath(args.legacy_dir + data_src)
     data_dst = os.path.join(data_dir_dst, 'data')
+    copy_tree([data_src], data_dst, uid=uid, gid=gid)
+
+    make_var_run(fsid, uid, gid)
+    c = get_container(fsid, daemon_type, daemon_id)
+    deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid)
+    update_firewalld(daemon_type)
+
+def command_adopt_alertmanager(daemon_id, fsid):
+    # type: (str, str) -> None
+
+    daemon_type = 'alertmanager'
+    (uid, gid) = extract_uid_gid_monitoring(daemon_type)
+
+    _stop_and_disable('prometheus-alertmanager')
+
+    data_dir_dst = make_data_dir(fsid, daemon_type, daemon_id,
+                                     uid=uid, gid=gid)
+
+    # config
+    config_src = '/etc/prometheus/alertmanager.yml'
+    config_src = os.path.abspath(args.legacy_dir + config_src)
+    config_dst = os.path.join(data_dir_dst, 'etc/alertmanager')
+    makedirs(config_dst, uid, gid, 0o755)
+    copy_files([config_src], config_dst, uid=uid, gid=gid)
+
+    # data
+    data_src = '/var/lib/prometheus/alertmanager/'
+    data_src = os.path.abspath(args.legacy_dir + data_src)
+    data_dst = os.path.join(data_dir_dst, 'etc/alertmanager/data')
     copy_tree([data_src], data_dst, uid=uid, gid=gid)
 
     make_var_run(fsid, uid, gid)
