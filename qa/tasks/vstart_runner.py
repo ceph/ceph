@@ -308,10 +308,22 @@ class LocalRemote(object):
 
         return proc
 
-    def sh(self, command, log_limit=1024, cwd=None, env=None):
+    # XXX: for compatibility keep this method same teuthology.orchestra.remote.sh
+    def sh(self, script, **kwargs):
+        """
+        Shortcut for run method.
 
-        return misc.sh(command=command, log_limit=log_limit, cwd=cwd,
-                        env=env)
+        Usage:
+            my_name = remote.sh('whoami')
+            remote_date = remote.sh('date')
+        """
+        if 'stdout' not in kwargs:
+            kwargs['stdout'] = BytesIO()
+        if 'args' not in kwargs:
+            kwargs['args'] = script
+        proc = self.run(**kwargs)
+        return proc.stdout.getvalue()
+
 
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
