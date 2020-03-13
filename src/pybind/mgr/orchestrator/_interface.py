@@ -859,8 +859,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def list_specs(self):
-        # type: () -> Completion
+    def list_specs(self, service_name=None):
+        # type: (Optional[str]) -> Completion
         """
         Lists saved service specs
         """

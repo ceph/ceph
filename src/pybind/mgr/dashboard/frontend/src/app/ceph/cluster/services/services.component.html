@@ -6,6 +6,7 @@
             forceIdentifier="true"
             columnMode="flex"
             selectionType="single"
+            [autoReload]="60000"
             (fetchData)="getServices($event)"
             (updateSelection)="updateSelection($event)">
     <cd-service-details cdTableDetail

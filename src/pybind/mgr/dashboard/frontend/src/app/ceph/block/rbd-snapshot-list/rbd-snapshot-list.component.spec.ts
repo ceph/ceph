@@ -4,6 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
@@ -27,6 +28,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
@@ -45,15 +47,16 @@ describe('RbdSnapshotListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [RbdSnapshotListComponent],
+    declarations: [RbdSnapshotListComponent, RbdTabsComponent],
     imports: [
-      DataTableModule,
-      ComponentsModule,
-      ToastrModule.forRoot(),
       ApiModule,
+      ComponentsModule,
+      DataTableModule,
       HttpClientTestingModule,
+      PipesModule,
       RouterTestingModule,
-      PipesModule
+      TabsModule.forRoot(),
+      ToastrModule.forRoot()
     ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
