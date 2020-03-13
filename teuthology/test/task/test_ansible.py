@@ -40,7 +40,7 @@ class TestAnsibleTask(TestTask):
         self.patchers = dict()
         self.mocks = dict()
         self.patchers['mkdtemp'] = patch(
-            'teuthology.task.ansible.mkdtemp',
+            'teuthology.task.ansible.mkdtemp', return_value='/tmp/'
         )
         m_NTF = Mock()
         m_file = Mock()
