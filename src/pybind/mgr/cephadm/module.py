@@ -1465,9 +1465,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         if not addr and host in self.inventory:
             addr = self.inventory[host].get('addr', host)
-        conn, connr = self._get_connection(addr)
 
         try:
+            conn, connr = self._get_connection(addr)
+
             assert image or entity
             if not image:
                 daemon_type = entity.split('.', 1)[0] # type: ignore
@@ -1539,8 +1540,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return out, err, code
 
         except execnet.gateway_bootstrap.HostNotFound as e:
-            raise OrchestratorError('New host %s (%s) failed to connect: `ssh %s`' % (
-                host, addr, str(e))) from e
+            # this is a misleading exception as it seems to be thrown for
+            # any sort of connection failure, even those having nothing to
+            # do with "host not found" (e.g., ssh key permission denied).
+            raise OrchestratorError('Failed to connect to %s (%s).  Check that the host is reachable and accepts connections using the cephadm SSH key' % (host, addr)) from e
         except Exception as ex:
             self.log.exception(ex)
             raise
