@@ -5356,7 +5356,7 @@ int image_status_get_summary(
     cls_method_context_t hctx,
     cls::rbd::MirrorPeerDirection mirror_peer_direction,
     const std::set<std::string>& tx_peer_mirror_uuids,
-    std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+    std::map<cls::rbd::MirrorImageStatusState, int32_t> *states) {
   std::set<entity_inst_t> watchers;
   int r = list_watchers(hctx, &watchers);
   if (r < 0) {
@@ -6450,7 +6450,7 @@ int mirror_image_status_list(cls_method_context_t hctx, bufferlist *in,
  * @param std::vector<cls::rbd::MirrorPeer> - optional peers (backwards compatibility)
  *
  * Output:
- * @param std::map<cls::rbd::MirrorImageStatusState, int>: states counts
+ * @param std::map<cls::rbd::MirrorImageStatusState, int32_t>: states counts
  * @returns 0 on success, negative error code on failure
  */
 int mirror_image_status_get_summary(cls_method_context_t hctx, bufferlist *in,
@@ -6483,7 +6483,7 @@ int mirror_image_status_get_summary(cls_method_context_t hctx, bufferlist *in,
     }
   }
 
-  std::map<cls::rbd::MirrorImageStatusState, int> states;
+  std::map<cls::rbd::MirrorImageStatusState, int32_t> states;
   int r = mirror::image_status_get_summary(hctx, mirror_peer_direction,
                                            tx_peer_mirror_uuids, &states);
   if (r < 0) {
