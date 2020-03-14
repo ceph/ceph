@@ -733,7 +733,10 @@ Usage:
         for name in names:
             if '.' not in name:
                 raise OrchestratorError('%s is not a valid daemon name' % name)
-        completion = self.remove_daemons(names, force)
+            (daemon_type) = name.split('.')[0]
+            if not force and daemon_type in ['osd', 'mon', 'prometheus']:
+                raise OrchestratorError('must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
+        completion = self.remove_daemons(names)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
