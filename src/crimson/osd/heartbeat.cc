@@ -176,9 +176,9 @@ void Heartbeat::update_peers(int whoami)
 
 void Heartbeat::remove_peer(osd_id_t peer)
 {
+  logger().info("remove_peer({})", peer);
   auto found = peers.find(peer);
   assert(found != peers.end());
-  logger().info("remove_peer({})", peer);
   found->second.con_front->mark_down();
   found->second.con_back->mark_down();
   peers.erase(peer);
