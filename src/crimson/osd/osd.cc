@@ -1208,7 +1208,8 @@ seastar::future<> OSD::send_beacon()
   epoch_t min_last_epoch_clean = osdmap->get_epoch();
   auto m = make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean,
-				    superblock.last_purged_snaps_scrub);
+                                    superblock.last_purged_snaps_scrub,
+                                    local_conf()->osd_beacon_report_interval);
   return monc->send_message(m);
 }
 
