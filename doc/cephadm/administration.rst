@@ -5,28 +5,78 @@ cephadm Administration
 ======================
 
 
-Configuration
-=============
+SSH Configuration
+=================
 
-The cephadm orchestrator can be configured to use an SSH configuration file. This is
-useful for specifying private keys and other SSH connection options.
+Cephadm uses SSH to connect to remote hosts.  SSH uses a key to authenticate
+with those hosts in a secure way.
 
-::
 
-    # ceph config set mgr mgr/cephadm/ssh_config_file /path/to/config
+Default behavior
+----------------
 
-An SSH configuration file can be provided without requiring an accessible file
-system path as the method above does.
+Cephadm normally stores an SSH key in the monitor that is used to
+connect to remote hosts.  When the cluster is bootstrapped, this SSH
+key is generated automatically.  Normally, no additional configuration
+is necessary.
 
-::
+A *new* SSH key can be generated with::
 
-    # ceph cephadm set-ssh-config -i /path/to/config
+  ceph cephadm generate-key
 
-To clear this value use the command:
+The public portion of the SSH key can be retrieved with::
 
-::
+  ceph cephadm get-pub-key
 
-    # ceph cephadm clear-ssh-config
+The currently stored SSH key can be deleted with::
+
+  ceph cephadm clear-key
+
+You can make use of an existing key by directly importing it with::
+
+  ceph config-key set mgr/cephadm/ssh_identity_key -i <key>
+  ceph config-key set mgr/cephadm/ssh_identity_pub -i <pub>
+
+You will then need to restart the mgr daemon to reload the configuration with::
+
+  ceph mgr fail
+
+
+Customizing the SSH configuration
+---------------------------------
+
+Normally cephadm generates an appropriate ``ssh_config`` file that is
+used for connecting to remote hosts.  This configuration looks
+something like this::
+
+  Host *
+  User root
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+
+There are two ways to customize this configuration for your environment:
+
+#. You can import a customized configuration file that will be stored
+   by the monitor with::
+
+     ceph cephadm set-ssh-config -i <ssh_config_file>
+
+   To remove a customized ssh config and revert back to the default behavior::
+
+     ceph cephadm clear-ssh-config
+
+#. You can configure a file location for the ssh configuration file with::
+
+     ceph config set mgr mgr/cephadm/ssh_config_file <path>
+
+   This approach is *not recommended*, however, as the path name must be
+   visible to *any* mgr daemon, and cephadm runs all daemons as
+   containers. That means that the file either need to be placed
+   inside a customized container image for your deployment, or
+   manually distributed to the mgr data directory
+   (``/var/lib/ceph/<cluster-fsid>/mgr.<id>`` on the host, visible at
+   ``/var/lib/ceph/mgr/ceph-<id>`` from inside the container).
+
 
 Data location
 =============
