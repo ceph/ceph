@@ -5,8 +5,8 @@ from ceph.deployment import drive_selection, translate
 from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpecValidationError
 from ceph.tests.utils import _mk_inventory, _mk_device
-from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
-                                        DeviceSelection, DriveGroupValidationError
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
+    DriveGroupValidationError
 
 @pytest.mark.parametrize("test_input",
 [
@@ -20,25 +20,13 @@ from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupSpecs, \
             }
         ]
     ),
-    (
-        {  # old style json
-            'testing_drivegroup':
-                {
-                    'host_pattern': 'hostname',
-                    'data_devices': {'paths': ['/dev/sda']}
-                }
-       }
-    )
-
 ])
-
 def test_DriveGroup(test_input):
-    dgs = DriveGroupSpecs(test_input)
-    for dg in dgs.drive_groups:
-        assert dg.placement.pattern_matches_hosts(['hostname']) == ['hostname']
-        assert dg.service_id == 'testing_drivegroup'
-        assert all([isinstance(x, Device) for x in dg.data_devices.paths])
-        assert dg.data_devices.paths[0].path == '/dev/sda'
+    dg = [DriveGroupSpec.from_json(inp) for inp in test_input][0]
+    assert dg.placement.pattern_matches_hosts(['hostname']) == ['hostname']
+    assert dg.service_id == 'testing_drivegroup'
+    assert all([isinstance(x, Device) for x in dg.data_devices.paths])
+    assert dg.data_devices.paths[0].path == '/dev/sda'
 
 
 def test_DriveGroup_fail():

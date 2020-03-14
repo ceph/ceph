@@ -4,7 +4,7 @@ import json
 import logging
 import time
 
-from ceph.deployment.drive_group import DriveGroupSpecs, DriveGroupValidationError
+from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
 from mgr_util import get_most_recent_rate
 
 from . import ApiController, RESTController, Endpoint, Task
@@ -249,11 +249,11 @@ class Osd(RESTController):
 
     @raise_if_no_orchestrator
     @handle_orchestrator_error('osd')
-    def _create_with_drive_groups(self, drive_groups):
+    def _create_with_drive_groups(self, drive_group):
         """Create OSDs with DriveGroups."""
         orch = OrchClient.instance()
         try:
-            orch.osds.create(DriveGroupSpecs(drive_groups).drive_groups)
+            orch.osds.create(DriveGroupSpec.from_json(drive_group))
         except (ValueError, TypeError, DriveGroupValidationError) as e:
             raise DashboardException(e, component='osd')
 
@@ -262,7 +262,7 @@ class Osd(RESTController):
     def create(self, method, data, tracking_id):  # pylint: disable=W0622
         if method == 'bare':
             return self._create_bare(data)
-        if method == 'drive_groups':
+        if method == 'drive_group':
             return self._create_with_drive_groups(data)
         raise DashboardException(
             component='osd', http_status_code=400, msg='Unknown method: {}'.format(method))
