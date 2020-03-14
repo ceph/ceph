@@ -6,8 +6,11 @@ import requests
 from teuthology.util.compat import urljoin, urlencode
 
 from collections import OrderedDict
-from cStringIO import StringIO
-
+from teuthology.util.compat import PY3
+if PY3:
+    from io import StringIO
+else:
+    from io import BytesIO as StringIO
 from teuthology import repo_utils
 
 from teuthology.config import config

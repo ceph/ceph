@@ -1,7 +1,7 @@
 import logging
 import os
 
-from cStringIO import StringIO
+from io import StringIO
 
 from teuthology.orchestra import run
 

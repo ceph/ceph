@@ -1,7 +1,9 @@
 """
 Paramiko run support
 """
-from cStringIO import StringIO
+
+import io
+
 from paramiko import ChannelFile
 
 import gevent
@@ -10,6 +12,8 @@ import socket
 import pipes
 import logging
 import shutil
+
+from teuthology.util.compat import PY3
 
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
@@ -268,15 +272,39 @@ def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):
     # Work-around for http://tracker.ceph.com/issues/8313
     if isinstance(f, ChannelFile):
         f._flags += ChannelFile.FLAG_BINARY
-
     for line in f:
         if capture:
-            capture.write(line)
+            #out = ensure_str(line)
+            if PY3:
+                if isinstance(line, str):
+                    out = line.encode()
+                else:
+                    out = line.decode()
+                if isinstance(capture, io.StringIO):
+                    capture.write(out)
+                elif isinstance(capture, io.BytesIO):
+                    capture.write(out.encode())
+            else:
+                if isinstance(line, str):
+                    out = line.decode()
+                else:
+                    out = line.encode()
+                if isinstance(capture, io.StringIO):
+                    capture.write(out)
+                elif isinstance(capture, io.BytesIO):
+                    capture.write(out.encode())
+                else:
+                    # isinstance does not work with cStringIO.StringIO and
+                    # fails with error:
+                    #   TypeError: isinstance() arg 2 must be a class, type,
+                    #   or tuple of classes and types
+                    capture.write(out.encode())
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
         try:
-            line = unicode(line, 'utf-8', 'replace').encode('utf-8')
-            logger.log(loglevel, line.decode('utf-8'))
+            if isinstance(line, bytes):
+                line = line.decode('utf-8', 'replace')
+            logger.log(loglevel, line)
         except (UnicodeDecodeError, UnicodeEncodeError):
             logger.exception("Encountered unprintable line in command output")
 
@@ -286,8 +314,13 @@ def copy_and_close(src, fdst):
     copyfileobj call wrapper.
     """
     if src is not None:
-        if isinstance(src, basestring):
-            src = StringIO(src)
+        if isinstance(src, bytes):
+            src = io.BytesIO(src)
+        elif isinstance(src, str):
+            if PY3:
+                src = io.StringIO(src)
+            else:
+                src = io.BytesIO(src)
         shutil.copyfileobj(src, fdst)
     fdst.close()
 

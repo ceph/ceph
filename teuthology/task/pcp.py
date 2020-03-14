@@ -14,6 +14,8 @@ from teuthology.orchestra import run
 
 from teuthology import misc
 
+from six import string_types as basestring
+
 from teuthology.task import Task
 
 log = logging.getLogger(__name__)
