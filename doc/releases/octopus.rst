@@ -128,7 +128,8 @@ RADOS
   * WORM?
   * bucket tagging?
 
-- *CephFS* distributed file system:
+*CephFS* distributed file system
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
   * Inline data support in CephFS has been deprecated and will likely be
     removed in a future release.
