@@ -5362,12 +5362,13 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Should RGW verify the Keystone server SSL certificate."),
 
-    Option("rgw_keystone_implicit_tenants", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    Option("rgw_keystone_implicit_tenants", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("false")
+    .set_enum_allowed( { "false", "true", "swift", "s3", "both", "0", "1", "none" } )
     .set_description("RGW Keystone implicit tenants creation")
     .set_long_description(
         "Implicitly create new users in their own tenant with the same name when "
-        "authenticating via Keystone."),
+        "authenticating via Keystone.  Can be limited to s3 or swift only."),
 
     Option("rgw_cross_domain_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("<allow-access-from domain=\"*\" secure=\"false\" />")
