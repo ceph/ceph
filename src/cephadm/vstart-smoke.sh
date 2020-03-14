@@ -19,8 +19,7 @@ bin/ceph orch host ls
 
 bin/ceph orch rm crash
 ! bin/ceph orch ls | grep crash
-bin/ceph orch apply crash all:true
-bin/ceph orch apply crash \*
+bin/ceph orch apply crash '*'
 bin/ceph orch ls | grep crash
 
 while ! bin/ceph orch ps | grep crash ; do sleep 1 ; done
@@ -58,7 +57,7 @@ while ! bin/ceph mon dump | grep 'epoch 2' ; do sleep 1 ; done
 
 bin/ceph orch apply rbd-mirror 1
 
-bin/ceph orch apply node-exporter all:true
+bin/ceph orch apply node-exporter '*'
 bin/ceph orch apply prometheus 1
 bin/ceph orch apply alertmanager 1
 bin/ceph orch apply grafana 1

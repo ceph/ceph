@@ -243,9 +243,9 @@ def test_node_assignment3(service_type, placement, hosts,
 
 @pytest.mark.parametrize("placement",
     [
-        ('1 all:true'),
-        ('all:true label:foo'),
-        ('all:true host1 host2'),
+        ('1 *'),
+        ('* label:foo'),
+        ('* host1 host2'),
     ])
 def test_bad_placements(placement):
     try:
