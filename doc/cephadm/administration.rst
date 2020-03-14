@@ -28,6 +28,26 @@ To clear this value use the command:
 
     # ceph cephadm clear-ssh-config
 
+Data location
+=============
+
+Cephadm daemon data and logs in slightly different locations than older
+versions of ceph:
+
+* ``/var/log/ceph/<cluster-fsid>`` contains all cluster logs.  Note
+  that by default cephadm logs via stderr and the container runtime,
+  so these logs are normally not present.
+* ``/var/lib/ceph/<cluster-fsid>`` contains all cluster daemon data
+  (besides logs).
+* ``/var/lib/ceph/<cluster-fsid>/<daemon-name>`` contains all data for
+  an individual daemon.
+* ``/var/lib/ceph/<cluster-fsid>/crash`` contains crash reports for
+  the cluster.
+* ``/var/lib/ceph/<cluster-fsid>/removed`` contains old daemon
+  data directories for stateful daemons (e.g., monitor, prometheus)
+  that have been removed by cephadm.
+
+
 Health checks
 =============
 
