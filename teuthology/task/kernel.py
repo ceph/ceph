@@ -1,12 +1,12 @@
 """
 Kernel installation task
 """
-from cStringIO import StringIO
 
 import logging
 import os
 import re
 import shlex
+from six import (ensure_str, StringIO)
 
 from teuthology.util.compat import urljoin
 
@@ -450,14 +450,12 @@ def install_latest_rh_kernel(ctx, config):
 
 def update_rh_kernel(remote):
     package_type = remote.os.package_type
-    output = StringIO()
     remote.run(args=['uname', '-a'])
     import time
     if package_type == 'rpm':
-        remote.run(args=['sudo', 'yum', 'update', '-y', 'kernel'],
-                   stdout=output)
-        log.info(output.getvalue())
-        if not output.getvalue().find("Installed") == -1:
+        update_log = remote.sh('sudo yum update -y kernel')
+        log.info(update_log)
+        if not update_log.find("Installed") == -1:
             log.info("Kernel updated to latest z stream on %s", remote.shortname)
             log.info("Rebooting %s", remote.shortname)
             remote.run(args=['sudo', 'shutdown', '-r', 'now'], wait=False)
@@ -465,7 +463,7 @@ def update_rh_kernel(remote):
             log.info("Reconnecting after reboot")
             remote.reconnect(timeout=300)
             remote.run(args=['uname', '-a'])
-        elif not output.getvalue().find('No packages marked for update') == -1:
+        elif not update_log.find('No packages marked for update') == -1:
             log.info("Latest version already installed on %s", remote.shortname)
 
 
@@ -545,18 +543,14 @@ def install_and_reboot(ctx, config):
         # it's actually nested under that submenu.  If it gets more
         # complex this will totally break.
 
-        cmdout = StringIO()
-        proc = role_remote.run(
-            args=[
+        kernel_entries = role_remote.sh([
                 'egrep',
                 '(submenu|menuentry.*' + kernel_title + ').*{',
                 '/boot/grub/grub.cfg'
-               ],
-            stdout = cmdout,
-            )
+            ]).split('\n')
         submenu_title = ''
         default_title = ''
-        for l in cmdout.getvalue().split('\n'):
+        for l in kernel_entries:
             fields = shlex.split(l)
             if len(fields) >= 2:
                 command, title = fields[:2]
@@ -566,7 +560,6 @@ def install_and_reboot(ctx, config):
                     if title.endswith(kernel_title):
                         default_title = title
                         break
-        cmdout.close()
         log.info('submenu_title:{}'.format(submenu_title))
         log.info('default_title:{}'.format(default_title))
 
@@ -798,15 +791,7 @@ def maybe_generate_initrd_rpm(remote, path, version):
     :param version: kernel version to generate initrd for
                     e.g. 3.18.0-rc6-ceph-00562-g79a9fa5
     """
-    proc = remote.run(
-        args=[
-            'rpm',
-            '--scripts',
-            '-qp',
-            path,
-        ],
-        stdout=StringIO())
-    out = proc.stdout.getvalue()
+    out = remote.sh(['rpm', '--scripts', '-qp', path])
     if 'bin/installkernel' in out or 'bin/kernel-install' in out:
         return
 
@@ -860,7 +845,8 @@ def install_kernel(remote, path=None, version=None):
     if package_type == 'deb':
         newversion = get_latest_image_version_deb(remote, dist_release)
         if 'ubuntu' in dist_release:
-            grub2conf = teuthology.get_file(remote, '/boot/grub/grub.cfg', True)
+            grub2conf = ensure_str(teuthology.get_file(remote,
+                '/boot/grub/grub.cfg', sudo=True))
             submenu = ''
             menuentry = ''
             for line in grub2conf.split('\n'):
@@ -935,7 +921,7 @@ def grub2_kernel_select_generic(remote, newversion, ostype):
         grubconfig = '/boot/grub/grub.cfg'
         mkconfig = 'grub-mkconfig'
     remote.run(args=['sudo', mkconfig, '-o', grubconfig, ])
-    grub2conf = teuthology.get_file(remote, grubconfig, True)
+    grub2conf = ensure_str(teuthology.get_file(remote, grubconfig, sudo=True))
     entry_num = 0
     if '\nmenuentry ' not in grub2conf:
         # okay, do the newer (el8) grub2 thing
@@ -966,7 +952,8 @@ def generate_legacy_grub_entry(remote, newversion):
     a kernel just via a command. This generates an entry in legacy
     grub for a new kernel version using the existing entry as a base.
     """
-    grubconf = teuthology.get_file(remote, '/boot/grub/grub.conf', True)
+    grubconf = ensure_str(teuthology.get_file(remote,
+        '/boot/grub/grub.conf', sudo=True))
     titleline = ''
     rootline = ''
     kernelline = ''
@@ -1023,25 +1010,12 @@ def get_image_version(remote, path):
     :param path: (rpm or deb) package path
     """
     if remote.os.package_type == 'rpm':
-        proc = remote.run(
-            args=[
-                'rpm',
-                '-qlp',
-                path
-            ],
-            stdout=StringIO())
+        files = remote.run(['rpm', '-qlp', path])
     elif remote.os.package_type == 'deb':
-        proc = remote.run(
-            args=[
-                'dpkg-deb',
-                '-c',
-                path
-            ],
-            stdout=StringIO())
+        files = remote.run(['dpkg-deb', '-c', path])
     else:
         raise UnsupportedPackageTypeError(remote)
 
-    files = proc.stdout.getvalue()
     for file in files.split('\n'):
         if '/boot/vmlinuz-' in file:
             version = file.split('/boot/vmlinuz-')[1]
@@ -1063,18 +1037,10 @@ def get_latest_image_version_rpm(remote):
         kernel_pkg_name = "kernel-default"
     else:
         kernel_pkg_name = "kernel"
-    proc = remote.run(
-        args=[
-            'rpm',
-            '-q',
-            kernel_pkg_name,
-            '--last',  # order by install time
-            run.Raw('|'),
-            'head',  # only show top/latest kernel
-            '-n',
-            '1',
-        ], stdout=StringIO())
-    for kernel in proc.stdout.getvalue().split():
+    # get tip of package list ordered by install time
+    newest_package = remote.sh(
+        'rpm -q %s --last | head -n 1' % kernel_pkg_name).strip()
+    for kernel in newest_package.split():
         if kernel.startswith('kernel'):
             if 'ceph' not in kernel:
                 if dist_release in ['opensuse', 'sle']:
