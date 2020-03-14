@@ -23,6 +23,7 @@
 
 #include <map>
 #include <set>
+#include <utility>
 
 #include "include/types.h"
 #include "include/encoding.h"
@@ -633,8 +634,8 @@ protected:
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
 				       std::ostream *err);
 
-  // when we last received PG stats from each osd
-  std::map<int,utime_t> last_osd_report;
+  // when we last received PG stats from each osd and the osd's osd_beacon_report_interval
+  std::map<int, std::pair<utime_t, int>> last_osd_report;
   // TODO: use last_osd_report to store the osd report epochs, once we don't
   //       need to upgrade from pre-luminous releases.
   std::map<int,epoch_t> osd_epochs;
@@ -732,7 +733,7 @@ public:
 				bool preparing);
 
   bool handle_osd_timeouts(const utime_t &now,
-			   std::map<int,utime_t> &last_osd_report);
+			   std::map<int, std::pair<utime_t, int>> &last_osd_report);
 
   void send_latest(MonOpRequestRef op, epoch_t start=0);
   void send_latest_now_nodelete(MonOpRequestRef op, epoch_t start=0) {
