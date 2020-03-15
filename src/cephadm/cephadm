@@ -1973,6 +1973,14 @@ def command_inspect_image():
 def command_bootstrap():
     # type: () -> int
 
+    if not args.output_config:
+        args.output_config = os.path.join(args.output_dir, 'ceph.conf')
+    if not args.output_keyring:
+        args.output_keyring = os.path.join(args.output_dir,
+                                           'ceph.client.admin.keyring')
+    if not args.output_pub_ssh_key:
+        args.output_pub_ssh_key = os.path.join(args.output_dir, 'ceph.pub')
+
     # verify output files
     for f in [args.output_config, args.output_keyring, args.output_pub_ssh_key]:
         if not args.allow_overwrite:
@@ -3873,16 +3881,17 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     parser_bootstrap.add_argument(
+        '--output-dir',
+        default='/etc/ceph',
+        help='directory to write config, keyring, and pub key files')
+    parser_bootstrap.add_argument(
         '--output-keyring',
-        default='/etc/ceph/ceph.client.admin.keyring',
         help='location to write keyring file with new cluster admin and mon keys')
     parser_bootstrap.add_argument(
         '--output-config',
-        default='/etc/ceph/ceph.conf',
         help='location to write conf file to connect to new cluster')
     parser_bootstrap.add_argument(
         '--output-pub-ssh-key',
-        default='/etc/ceph/ceph.pub',
         help='location to write the cluster\'s public SSH key')
     parser_bootstrap.add_argument(
         '--skip-ssh',
