@@ -341,8 +341,10 @@ Upgrade compatibility notes
 
 * Ceph now packages python bindings for python3.6 instead of
   python3.4, because python3 in EL7/EL8 is now using python3.6
-  as the native python3. see the `announcement <https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/>_`
+  as the native python3. see the `announcement`_
   for more details on the background of this change.
+
+.. _announcement: https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/
 
 * librbd now uses a write-around cache policy be default,
   replacing the previous write-back cache policy default.
