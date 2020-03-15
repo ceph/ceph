@@ -31,15 +31,15 @@ elif command -v yum >/dev/null; then
         exit 1
     fi
 else
-    for command in virtualenv doxygen ant ditaa cython; do
+    for command in dot virtualenv doxygen ant ditaa cython; do
         if ! command -v "$command" > /dev/null; then
             # add a space after old values
             missing="${missing:+$missing }$command"
         fi
     done
     if [ -n "$missing" ]; then
-	echo "$0: missing required command, please install them:" 1>&2
-	echo "$missing"
+        echo "$0: missing required command, please install them:" 1>&2
+        echo "$missing" 1>&2
 	exit 1
     fi
 fi
