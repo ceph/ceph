@@ -10,7 +10,8 @@ from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
 
 import string
 try:
-    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, Any, NamedTuple, Iterator, Set
+    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
+        Any, NamedTuple, Iterator, Set, Sequence
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
@@ -1949,7 +1950,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 r[str(o['osd'])] = o['uuid']
         return r
 
-    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> List[orchestrator.Completion]:
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> Sequence[orchestrator.Completion]:
         completions: List[orchestrator.Completion] = list()
         for spec in specs:
             completions.extend(self._apply(spec))
