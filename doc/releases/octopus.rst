@@ -11,135 +11,135 @@ Major Changes from Nautilus
 General
 ~~~~~~~
   
-  * A new deployment tool called **cephadm** has been introduced that
-    integrates Ceph daemon deployment and management via containers
-    into the orchestration layer.  For more information see
-    :ref:`cephadm-bootstrap`.
-  * Health alerts can now be muted, either temporarily or permanently.
-  * A simple 'alerts' capability has been introduced to send email
-    health alerts for clusters deployed without the benefit of an
-    existing external monitoring infrastructure.
-  * Health alerts are now raised for recent Ceph daemons crashes.
+* A new deployment tool called **cephadm** has been introduced that
+  integrates Ceph daemon deployment and management via containers
+  into the orchestration layer.  For more information see
+  :ref:`cephadm-bootstrap`.
+* Health alerts can now be muted, either temporarily or permanently.
+* A simple 'alerts' capability has been introduced to send email
+  health alerts for clusters deployed without the benefit of an
+  existing external monitoring infrastructure.
+* Health alerts are now raised for recent Ceph daemons crashes.
 
 
 Dashboard
 ~~~~~~~~~
 
-  The :ref:`mgr-dashboard` has gained a lot of new features and functionality:
+The :ref:`mgr-dashboard` has gained a lot of new features and functionality:
 
-  * UI Enhancements
+* UI Enhancements
 
-    - New vertical navigation bar
-    - New unified sidebar: better background task and events notification
-    - Shows all progress mgr module notifications
-    - Multi-select on tables to perform bulk operations
+  - New vertical navigation bar
+  - New unified sidebar: better background task and events notification
+  - Shows all progress mgr module notifications
+  - Multi-select on tables to perform bulk operations
 
-  * Dashboard user account security enhancements
+* Dashboard user account security enhancements
 
-    - Disabling/enabling existing user accounts
-    - Clone an existing user role
-    - Users can change their own password
-    - Configurable password policies: Minimum password complexity/length
-      requirements
-    - Configurable password expiration
-    - Change password after first login
+  - Disabling/enabling existing user accounts
+  - Clone an existing user role
+  - Users can change their own password
+  - Configurable password policies: Minimum password complexity/length
+    requirements
+  - Configurable password expiration
+  - Change password after first login
 
-  New and enhanced management of Ceph features/services:
+New and enhanced management of Ceph features/services:
 
-  * OSD/device management
+* OSD/device management
 
-    - List all disks associated with an OSD
-    - Add support for blinking enclosure LEDs via the orchestrator
-    - List all hosts known by the orchestrator
-    - List all disks and their properties attached to a node
-    - Display disk health information (health prediction and SMART data)
-    - Deploy new OSDs on new disks/hosts
-    - Display and allow sorting by an OSD's default device class in the OSD
-      table
-    - Explicitly set/change the device class of an OSD, display and sort OSDs by
-      device class
+  - List all disks associated with an OSD
+  - Add support for blinking enclosure LEDs via the orchestrator
+  - List all hosts known by the orchestrator
+  - List all disks and their properties attached to a node
+  - Display disk health information (health prediction and SMART data)
+  - Deploy new OSDs on new disks/hosts
+  - Display and allow sorting by an OSD's default device class in the OSD
+    table
+  - Explicitly set/change the device class of an OSD, display and sort OSDs by
+    device class
 
-  * Pool management
+* Pool management
 
-    - Viewing and setting pool quotas
-    - Define and change per-pool PG autoscaling mode
+  - Viewing and setting pool quotas
+  - Define and change per-pool PG autoscaling mode
 
-  * RGW management enhancements
+* RGW management enhancements
 
-    - Enable bucket versioning
-    - Enable MFA support
-    - Select placement target on bucket creation
+  - Enable bucket versioning
+  - Enable MFA support
+  - Select placement target on bucket creation
 
-  * CephFS management enhancements
+* CephFS management enhancements
 
-    - CephFS client eviction
-    - CephFS snapshot management
-    - CephFS quota management
-    - Browse CephFS directory
+  - CephFS client eviction
+  - CephFS snapshot management
+  - CephFS quota management
+  - Browse CephFS directory
 
-  * iSCSI management enhancements
+* iSCSI management enhancements
 
-    - Show iSCSI GW status on landing page
-    - Prevent deletion of IQNs with open sessions
-    - Display iSCSI "logged in" info
+  - Show iSCSI GW status on landing page
+  - Prevent deletion of IQNs with open sessions
+  - Display iSCSI "logged in" info
 
-  * Prometheus alert management
+* Prometheus alert management
 
-    - List configured Prometheus alerts
+  - List configured Prometheus alerts
 
 
 RADOS
 ~~~~~
   
-  * Objects can now be brought in sync during recovery by copying only
-    the modified portion of the object, reducing tail latencies during
-    recovery.
-  * The PG autoscaler feature introduced in Nautilus is enabled for
-    new pools by default, allowing new clusters to autotune *pg num*
-    without any user intervention.  The default values for new pools
-    and RGW/CephFS metadata pools have also been adjusted to perform
-    well for most users.
-  * BlueStore has received several improvements and performance
-    updates, including improved accounting for "omap" (key/value)
-    object data by pool, improved cache memory management, and a
-    reduced allocation unit size for SSD devices.  (Note that by
-    default, the first time each OSD starts after upgrading to octopus
-    it will trigger a conversion that may take from a few minutes to a
-    few hours, depending on the amount of stored "omap" data.)
-  * Snapshot trimming metadata is now managed in a more efficient and
-    scalable fashion.
+* Objects can now be brought in sync during recovery by copying only
+  the modified portion of the object, reducing tail latencies during
+  recovery.
+* The PG autoscaler feature introduced in Nautilus is enabled for
+  new pools by default, allowing new clusters to autotune *pg num*
+  without any user intervention.  The default values for new pools
+  and RGW/CephFS metadata pools have also been adjusted to perform
+  well for most users.
+* BlueStore has received several improvements and performance
+  updates, including improved accounting for "omap" (key/value)
+  object data by pool, improved cache memory management, and a
+  reduced allocation unit size for SSD devices.  (Note that by
+  default, the first time each OSD starts after upgrading to octopus
+  it will trigger a conversion that may take from a few minutes to a
+  few hours, depending on the amount of stored "omap" data.)
+* Snapshot trimming metadata is now managed in a more efficient and
+  scalable fashion.
 
 
 **RBD** block storage
 ~~~~~~~~~~~~~~~~~~~~~
   
-  * Clone operations now preserve the sparseness of the underlying RBD image.
-  * The trash feature has been improved to (optionally) automatically
-    move old parent images to the trash when their children are all
-    deleted or flattened.
-  * The ``rbd-nbd`` tool has been improved to use more modern kernel interfaces.
-  * Caching has been improved to be more efficient and performant.
+* Clone operations now preserve the sparseness of the underlying RBD image.
+* The trash feature has been improved to (optionally) automatically
+  move old parent images to the trash when their children are all
+  deleted or flattened.
+* The ``rbd-nbd`` tool has been improved to use more modern kernel interfaces.
+* Caching has been improved to be more efficient and performant.
 
 
 **RGW** object storage
 ~~~~~~~~~~~~~~~~~~~~~~
   
-  * Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
-  * WORM?
-  * bucket tagging?
+* Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
+* WORM?
+* bucket tagging?
 
 **CephFS** distributed file system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
-  * Inline data support in CephFS has been deprecated and will likely be
-    removed in a future release.
-  * MDS daemons can now be assigned to manage a particular file system via the
-    new ``mds_join_fs`` option.
-  * MDS now aggressively asks idle clients to trim caps which improves stability
-    when file system load changes.
-  * The mgr volumes plugin has received numerous improvements to support CephFS
-    via CSI, including snapshots and cloning.
-  * cephfs-shell has had numerous incremental improvements and bug fixes.
+* Inline data support in CephFS has been deprecated and will likely be
+  removed in a future release.
+* MDS daemons can now be assigned to manage a particular file system via the
+  new ``mds_join_fs`` option.
+* MDS now aggressively asks idle clients to trim caps which improves stability
+  when file system load changes.
+* The mgr volumes plugin has received numerous improvements to support CephFS
+  via CSI, including snapshots and cloning.
+* cephfs-shell has had numerous incremental improvements and bug fixes.
 
 
 Upgrading from Mimic or Nautilus
