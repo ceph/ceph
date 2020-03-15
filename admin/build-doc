@@ -80,10 +80,14 @@ for bind in rados rbd cephfs rgw; do
     fi
     ln -sf lib${bind}.so.1 $vdir/lib/lib${bind}.so
     gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc /dev/null
+    ld_flags="-Wl,-rpath,$vdir/lib"
+    if [ $(uname) != Darwin ]; then
+        ld_flags="${ld_flags},--no-as-needed"
+    fi
     BUILD_DOC=1 \
         CFLAGS="-iquote$TOPDIR/src/include" \
         CPPFLAGS="-iquote$TOPDIR/src/include" \
-        LDFLAGS="-L$vdir/lib -Wl,--no-as-needed,-rpath=$vdir/lib" \
+        LDFLAGS="-L$vdir/lib ${ld_flags}" \
         $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
     # rgwfile_version(), librgw_create(), rgw_mount()
     # since py3.5, distutils adds postfix in between ${bind} and so
