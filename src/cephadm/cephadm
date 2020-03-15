@@ -3621,7 +3621,8 @@ def command_rm_repo():
     pkg.rm_repo()
 
 def command_install():
-    pass
+    pkg = create_packager()
+    pkg.install(args.packages)
 
 ##################################
 
@@ -4019,6 +4020,10 @@ def _get_parser():
     parser_install = subparsers.add_parser(
         'install', help='install ceph package(s)')
     parser_install.set_defaults(func=command_install)
+    parser_install.add_argument(
+        'packages', nargs='*',
+        default=['cephadm'],
+        help='packages')
 
     return parser
 
