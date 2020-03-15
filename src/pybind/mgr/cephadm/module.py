@@ -12,7 +12,7 @@ import string
 try:
     from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
         Any, NamedTuple, Iterator, Set, Sequence
-    from typing import TYPE_CHECKING
+    from typing import TYPE_CHECKING, cast
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
 
@@ -31,8 +31,8 @@ import uuid
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
-from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec, \
-    assert_valid_host
+from ceph.deployment.service_spec import \
+    HostPlacementSpec, NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
 
 from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
@@ -161,6 +161,8 @@ class SpecStore():
                     sn == service_name or \
                     sn.startswith(service_name + '.'):
                 specs.append(spec)
+        self.mgr.log.debug('SpecStore: find spec for %s returned: %s' % (
+            service_name, specs))
         return specs
 
 class HostCache():
@@ -1265,6 +1267,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 continue
             return name
 
+    def get_service_name(self, daemon_type, daemon_id, host):
+        # type: (str, str, str) -> (str)
+        """
+        Returns the generic service name
+        """
+        p = re.compile(r'(.*)\.%s.*' % (host))
+        p.sub(r'\1', daemon_id)
+        return '%s.%s' % (daemon_type, p.sub(r'\1', daemon_id))
+
     def _save_inventory(self):
         self.set_store('inventory', json.dumps(self.inventory))
 
@@ -2240,16 +2251,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                        keyring=None,
                        extra_args=None, extra_config=None,
                        reconfig=False,
-                       osd_uuid_map=None,
-                       cephadm_config=None):
+                       osd_uuid_map=None):
         if not extra_args:
             extra_args = []
         name = '%s.%s' % (daemon_type, daemon_id)
 
         start_time = datetime.datetime.utcnow()
         deps = []  # type: List[str]
-        if not cephadm_config:
-            cephadm_config = {}
+        cephadm_config = {} # type: Dict[str, Any]
         if daemon_type == 'prometheus':
             cephadm_config, deps = self._generate_prometheus_config()
             extra_args.extend(['--config-json', '-'])
@@ -2257,6 +2266,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             cephadm_config, deps = self._generate_grafana_config()
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'nfs':
+            cephadm_config, deps = \
+                    self._generate_nfs_config(daemon_type, daemon_id, host)
             cephadm_config.update(
                     self._get_config_and_keyring(
                         daemon_type, daemon_id,
@@ -2374,6 +2385,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         config_fns = {
             'mds': self._config_mds,
             'rgw': self._config_rgw,
+            'nfs': self._config_nfs,
         }
         create_func = create_fns.get(daemon_type, None)
         if not create_func:
@@ -2792,17 +2804,39 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_rbd_mirror(self, spec):
         return self._apply(spec)
 
+    def _generate_nfs_config(self, daemon_type, daemon_id, host):
+        # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
+        deps = [] # type: List[str]
+
+        # find the matching NFSServiceSpec
+        # TODO: find the spec and pass via _create_daemon instead ??
+        service_name = self.get_service_name(daemon_type, daemon_id, host)
+        specs = self.spec_store.find(service_name)
+        if not specs:
+            raise OrchestratorError('Cannot find service spec %s' % (service_name))
+        elif len(specs) > 1:
+            raise OrchestratorError('Found multiple service specs for %s' % (service_name))
+        else:
+            # cast to keep mypy happy
+            spec = cast(NFSServiceSpec, specs[0])
+
+        # generate the cephadm config
+        nfs = NFSGanesha(self, daemon_id, spec.pool, namespace=spec.namespace)
+        return nfs.get_cephadm_config(), deps
+
     def add_nfs(self, spec):
-        return self._add_daemon('nfs', spec, self._create_nfs)
+        return self._add_daemon('nfs', spec, self._create_nfs, self._config_nfs)
+
+    def _config_nfs(self, spec):
+        logger.info('Saving service %s spec with placement %s' % (
+            spec.service_name(), spec.placement.pretty_str()))
+        self.spec_store.save(spec)
 
     def _create_nfs(self, daemon_id, host, spec):
         nfs = NFSGanesha(self, daemon_id, spec.pool, namespace=spec.namespace)
         keyring = nfs.create_keyring()
-        cephadm_config = nfs.get_cephadm_config()
         nfs.create_rados_config_obj()
-        return self._create_daemon('nfs', daemon_id, host,
-                                   keyring=keyring,
-                                   cephadm_config=cephadm_config)
+        return self._create_daemon('nfs', daemon_id, host, keyring=keyring)
 
     @trivial_completion
     def apply_nfs(self, spec):
