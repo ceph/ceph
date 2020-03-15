@@ -92,8 +92,8 @@ about Ceph, see our `Architecture`_ section.
    :hidden:
 
    start/intro
-   cephadm/index
    install/index
+   cephadm/index
    rados/index
    cephfs/index
    rbd/index
