@@ -74,7 +74,7 @@ This command does a few things:
   key is written to ``ceph.client.admin.keyring`` in the local directory.
 * Generates a new SSH key, and adds the public key to the local root user's
   ``/root/.ssh/authorized_keys`` file.  A copy of the public key is written
-  to ``ceph.pub`` in the local directory.
+  to ``ceph.pub`` in the current directory.
 
 Interacting with the cluster
 ============================
@@ -131,9 +131,9 @@ Adding hosts to the cluster
 For each new host you'd like to add to the cluster, you need to do two things:
 
 #. Install the cluster's public SSH key in the new host's root user's
-   ``authorized_keys`` file.  For example,::
+   ``authorized_keys`` file.  This is easy with the ``ssh-copy-id`` script::
 
-     [monitor 1] # cat ceph.pub | ssh root@*newhost* tee -a /root/.ssh/authorized_keys
+     [monitor 1] # ssh-copy-id -f -i ceph.pub root@*newhost*
 
 #. Tell Ceph that the new node is part of the cluster::
 
