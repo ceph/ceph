@@ -348,6 +348,15 @@ class TestCephadm(object):
             assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_apply_nfs_save(self, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            ps = PlacementSpec(hosts=['test'], count=1)
+            spec = NFSServiceSpec('name', pool='pool', namespace='namespace', placement=ps)
+            c = cephadm_module.apply_nfs(spec)
+            assert wait(cephadm_module, c) == 'Scheduled nfs update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_prometheus_save(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
