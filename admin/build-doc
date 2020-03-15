@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh
 
 cd "$(dirname "$0")"
 cd ..
@@ -32,12 +32,10 @@ elif command -v yum >/dev/null; then
     fi
 else
     for command in virtualenv doxygen ant ditaa cython; do
-	command -v "$command" > /dev/null;
-	ret_code=$?
-	if [ $ret_code -ne 0 ]; then
+        if ! command -v "$command" > /dev/null; then
             # add a space after old values
-	    missing="${missing:+$missing }$command"
-	fi
+            missing="${missing:+$missing }$command"
+        fi
     done
     if [ -n "$missing" ]; then
 	echo "$0: missing required command, please install them:" 1>&2
