@@ -110,8 +110,8 @@ RADOS
     scalable fashion.
 
 
-*RBD* block storage
-~~~~~~~~~~~~~~~~~~~
+**RBD** block storage
+~~~~~~~~~~~~~~~~~~~~~
   
   * Clone operations now preserve the sparseness of the underlying RBD image.
   * The trash feature has been improved to (optionally) automatically
@@ -121,15 +121,15 @@ RADOS
   * Caching has been improved to be more efficient and performant.
 
 
-*RGW* object storage
-~~~~~~~~~~~~~~~~~~~~
+**RGW** object storage
+~~~~~~~~~~~~~~~~~~~~~~
   
   * Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
   * WORM?
   * bucket tagging?
 
-*CephFS* distributed file system
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**CephFS** distributed file system
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
   * Inline data support in CephFS has been deprecated and will likely be
     removed in a future release.
@@ -154,6 +154,8 @@ Notes
 
 Instructions
 ~~~~~~~~~~~~
+
+.. highlight:: console
 
 #. Make sure your cluster is stable and healthy (no down or
    recovering OSDs).  (Optional, but recommended.)
@@ -343,8 +345,6 @@ Upgrade compatibility notes
   python3.4, because python3 in EL7/EL8 is now using python3.6
   as the native python3. see the `announcement`_
   for more details on the background of this change.
-
-.. _announcement: https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/
 
 * librbd now uses a write-around cache policy be default,
   replacing the previous write-back cache policy default.
@@ -571,8 +571,8 @@ Upgrade compatibility notes
   has been removed in favor of the ``osd_mclock_scheduler*`` family
   of options.
 
-* The config subsystem now searches dot ('.') delineated prefixes for
-  options.  That means for an entity like ``client.foo.bar``, it's
+* The config subsystem now searches dot ('.') delimited prefixes for
+  options.  That means for an entity like ``client.foo.bar``, its
   overall configuration will be a combination of the global options,
   ``client``, ``client.foo``, and ``client.foo.bar``.  Previously,
   only global, ``client``, and ``client.foo.bar`` options would apply.
@@ -580,3 +580,5 @@ Upgrade compatibility notes
   ``.`` in their name.
 
   Note that this only applies to configuration options in the
+
+.. _announcement: https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/
