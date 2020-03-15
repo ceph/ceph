@@ -100,8 +100,8 @@ for bind in rados rbd cephfs rgw; do
     else
         func_prefix="(lib)?${bind}"
     fi
-    nm $lib_fn | grep -E "U ${func_prefix}" | \
-        awk '{ print "void "$2"(void) {}" }' | \
+    nm $lib_fn | grep -E "U (_)?${func_prefix}" | \
+        awk '{ gsub(/^_/,"",$2); print "void "$2"(void) {}" }' | \
         gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc -
     if [ ${bind} != rados ]; then
         rm -f $TOPDIR/src/pybind/${bind}/rados.pxd
