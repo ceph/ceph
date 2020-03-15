@@ -68,7 +68,7 @@ cdef extern from "sys/statvfs.h":
         unsigned long int f_padding[32]
 
 
-IF UNAME_SYSNAME == "FreeBSD":
+IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
     cdef extern from "dirent.h":
         cdef struct dirent:
             long int d_ino
@@ -371,14 +371,14 @@ cdef class DirResult(object):
         if not dirent:
             return None
 
-        IF UNAME_SYSNAME == "FreeBSD":
+        IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
             return DirEntry(d_ino=dirent.d_ino,
                             d_off=0,
                             d_reclen=dirent.d_reclen,
                             d_type=dirent.d_type,
                             d_name=dirent.d_name)
         ELSE:
-             return DirEntry(d_ino=dirent.d_ino,
+            return DirEntry(d_ino=dirent.d_ino,
                             d_off=dirent.d_off,
                             d_reclen=dirent.d_reclen,
                             d_type=dirent.d_type,
