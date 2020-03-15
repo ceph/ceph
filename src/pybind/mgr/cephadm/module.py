@@ -2789,7 +2789,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             spec = cast(NFSServiceSpec, specs[0])
 
         # generate the cephadm config
-        nfs = NFSGanesha(self, daemon_id, spec.pool, namespace=spec.namespace)
+        nfs = NFSGanesha(self, daemon_id, spec)
         return nfs.get_cephadm_config(), deps
 
     def add_nfs(self, spec):
@@ -2801,7 +2801,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.spec_store.save(spec)
 
     def _create_nfs(self, daemon_id, host, spec):
-        nfs = NFSGanesha(self, daemon_id, spec.pool, namespace=spec.namespace)
+        nfs = NFSGanesha(self, daemon_id, spec)
         keyring = nfs.create_keyring()
         nfs.create_rados_config_obj()
         return self._create_daemon('nfs', daemon_id, host, keyring=keyring)
