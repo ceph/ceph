@@ -23,6 +23,7 @@ versions of Ceph.
 
     install
     adoption
+    upgrade
     Cephadm operations <operations>
     Cephadm monitoring <monitoring>
     Cephadm CLI <../mgr/orchestrator>
