@@ -2,6 +2,8 @@ import logging
 
 from typing import Dict, Optional
 
+from ceph.deployment.service_spec import NFSServiceSpec
+
 import cephadm
 from orchestrator import OrchestratorError
 
@@ -11,21 +13,15 @@ class NFSGanesha(object):
     def __init__(self,
                  mgr,
                  daemon_id,
-                 pool,
-                 namespace=None):
-        # type: (cephadm.CephadmOrchestrator, str, str, Optional[str]) -> None
-        self.daemon_type = 'nfs'
-        self.daemon_id = daemon_id
-
+                 spec):
+        # type: (cephadm.CephadmOrchestrator, str, NFSServiceSpec) -> None
         self.mgr = mgr
-
-        # rados pool config
-        self.pool = pool
-        self.namespace = namespace
+        self.daemon_id = daemon_id
+        self.spec = spec
 
     def get_daemon_name(self):
         # type: () -> str
-        return '%s.%s' % (self.daemon_type, self.daemon_id)
+        return '%s.%s' % (self.spec.service_type, self.daemon_id)
 
     def get_rados_user(self):
         # type: () -> str
@@ -37,9 +33,9 @@ class NFSGanesha(object):
 
     def get_rados_config_url(self):
         # type: () -> str
-        url = 'rados://' + self.pool + '/'
-        if self.namespace:
-            url += self.namespace + '/'
+        url = 'rados://' + self.spec.pool + '/'
+        if self.spec.namespace:
+            url += self.spec.namespace + '/'
         url += self.get_rados_config_name()
         return url
 
@@ -47,9 +43,9 @@ class NFSGanesha(object):
         # type: () -> str
         entity = cephadm.name_to_config_section(self.get_rados_user())
 
-        osd_caps='allow rw pool=%s' % (self.pool)
-        if self.namespace:
-            osd_caps='%s namespace=%s' % (osd_caps, self.namespace)
+        osd_caps='allow rw pool=%s' % (self.spec.pool)
+        if self.spec.namespace:
+            osd_caps='%s namespace=%s' % (osd_caps, self.spec.namespace)
 
         logger.info('Create keyring: %s' % entity)
         ret, keyring, err = self.mgr.mon_command({
@@ -69,9 +65,9 @@ class NFSGanesha(object):
         # type: () -> None
         obj = self.get_rados_config_name()
         logger.info('Create rados config object: %s' % obj)
-        with self.mgr.rados.open_ioctx(self.pool) as ioctx:
-            if self.namespace:
-                ioctx.set_namespace(self.namespace)
+        with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
+            if self.spec.namespace:
+                ioctx.set_namespace(self.spec.namespace)
             ioctx.write_full(obj, ''.encode('utf-8'))
 
     def get_ganesha_conf(self):
@@ -87,9 +83,9 @@ RADOS_URLS {{
 
     def get_cephadm_config(self):
         # type: () -> Dict
-        config = {'pool' : self.pool} # type: Dict
-        if self.namespace:
-            config['namespace'] = self.namespace
+        config = {'pool' : self.spec.pool} # type: Dict
+        if self.spec.namespace:
+            config['namespace'] = self.spec.namespace
         config['files'] = {
             'ganesha.conf' : self.get_ganesha_conf(),
         }
