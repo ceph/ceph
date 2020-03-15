@@ -1974,11 +1974,14 @@ def command_bootstrap():
     # type: () -> int
 
     # verify output files
-    if not args.allow_overwrite:
-        for f in [args.output_config, args.output_keyring, args.output_pub_ssh_key]:
+    for f in [args.output_config, args.output_keyring, args.output_pub_ssh_key]:
+        if not args.allow_overwrite:
             if os.path.exists(f):
                 raise Error('%s already exists; delete or pass '
                               '--allow-overwrite to overwrite' % f)
+        dirname = os.path.dirname(f)
+        if dirname and not os.path.exists(dirname):
+            raise Error('%s directory %s does not exist' % (f, dirname))
 
     if not args.skip_prepare_host:
         command_prepare_host()
