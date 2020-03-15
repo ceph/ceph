@@ -3874,15 +3874,15 @@ def _get_parser():
         help='cluster FSID')
     parser_bootstrap.add_argument(
         '--output-keyring',
-        default='ceph.client.admin.keyring',
+        default='/etc/ceph/ceph.client.admin.keyring',
         help='location to write keyring file with new cluster admin and mon keys')
     parser_bootstrap.add_argument(
         '--output-config',
-        default='ceph.conf',
+        default='/etc/ceph/ceph.conf',
         help='location to write conf file to connect to new cluster')
     parser_bootstrap.add_argument(
         '--output-pub-ssh-key',
-        default='ceph.pub',
+        default='/etc/ceph/ceph.pub',
         help='location to write the cluster\'s public SSH key')
     parser_bootstrap.add_argument(
         '--skip-ssh',
