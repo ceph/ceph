@@ -913,7 +913,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> List[Completion]:
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> Sequence[Completion]:
         """ Update OSD cluster """
         raise NotImplementedError()
 
