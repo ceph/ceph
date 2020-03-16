@@ -180,8 +180,6 @@ void ProtocolV2::start_accept(SocketRef&& sock,
   ceph_assert(!socket);
   // until we know better
   conn.target_addr = _peer_addr;
-  conn.set_ephemeral_port(_peer_addr.get_port(),
-                          SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   logger().info("{} ProtocolV2::start_accept(): target_addr={}", conn, _peer_addr);
   messenger.accept_conn(
@@ -848,8 +846,6 @@ void ProtocolV2::execute_connecting()
     socket->shutdown();
   }
   gated_execute("execute_connecting", [this] {
-      // we don't know my socket_port yet
-      conn.set_ephemeral_port(0, SocketConnection::side_t::none);
       return messenger.get_global_seq().then([this] (auto gs) {
           global_seq = gs;
           assert(client_cookie != 0);
@@ -902,8 +898,12 @@ void ProtocolV2::execute_connecting()
                           ceph_entity_type_name(_peer_type));
             abort_in_close(*this, true);
           }
-          conn.set_ephemeral_port(_my_addr_from_peer.get_port(),
-                                  SocketConnection::side_t::connector);
+          if (unlikely(state != state_t::CONNECTING)) {
+            logger().debug("{} triggered {} during banner_exchange(), abort",
+                           conn, get_state_name(state));
+            abort_protocol();
+          }
+          socket->learn_ephemeral_port_as_connector(_my_addr_from_peer.get_port());
           if (unlikely(_my_addr_from_peer.is_legacy())) {
             logger().warn("{} peer sent a legacy address for me: {}",
                           conn, _my_addr_from_peer);
