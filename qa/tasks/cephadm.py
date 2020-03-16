@@ -358,6 +358,7 @@ def ceph_bootstrap(ctx, config):
             '--mon-id', first_mon,
             '--mgr-id', first_mgr,
             '--orphan-initial-daemons',   # we will do it explicitly!
+            '--skip-monitoring-stack',    # we'll provision these explicitly
             '--config', '{}/seed.{}.conf'.format(testdir, cluster_name),
             '--output-config', '/etc/ceph/{}.conf'.format(cluster_name),
             '--output-keyring',
