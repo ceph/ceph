@@ -418,11 +418,10 @@ void BlueFS::dump_block_extents(ostream& out)
         << " = 0x" << owned
         << " : using 0x" << owned - free
 	<< std::dec << "(" << byte_u_t(owned - free) << ")";
-    if (i == BDEV_SLOW) {
+    if (i == _get_slow_device_id()) {
       ceph_assert(slow_dev_expander);
-      int id = _get_slow_device_id();
-      ceph_assert(alloc[id]);
-      free = slow_dev_expander->available_freespace(alloc_size[id]);
+      ceph_assert(alloc[i]);
+      free = slow_dev_expander->available_freespace(alloc_size[i]);
       out << std::hex
           << " : bluestore has 0x" << free
           << std::dec << "(" << byte_u_t(free) << ") available";
