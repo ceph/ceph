@@ -27,3 +27,6 @@ overrides:
 #        valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
   s3tests:
     calling-format: subdomain
+#  workunit:
+#    env:
+#      OPENSSL_ia32cap: "~0x1000000000000000" # https://tracker.ceph.com/issues/44362

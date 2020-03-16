@@ -18,3 +18,6 @@ overrides:
         osd_max_pg_log_entries: 10
       client:
         rgw lc debug interval: 10
+#  workunit:
+#    env:
+#      OPENSSL_ia32cap: "~0x1000000000000000" # https://tracker.ceph.com/issues/44362

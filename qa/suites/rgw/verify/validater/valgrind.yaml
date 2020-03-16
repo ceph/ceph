@@ -21,3 +21,6 @@ overrides:
 #      mds: [--tool=memcheck]
 ## https://tracker.ceph.com/issues/38621
 ##      mgr: [--tool=memcheck]
+#  workunit:
+#    env:
+#      OPENSSL_ia32cap: "~0x1000000000000000" # https://tracker.ceph.com/issues/44362
