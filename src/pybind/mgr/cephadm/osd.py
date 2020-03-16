@@ -97,7 +97,7 @@ class RemoveUtil(object):
                     # also remove it from the remove_osd list and set a health_check warning?
                     raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
 
-            self.mgr._remove_daemon(osd.fullname, osd.nodename, True)
+            self.mgr._remove_daemon(osd.fullname, osd.nodename)
             logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.nodename}")
             logger.debug(f"Removing {osd.osd_id} from the queue.")
             self.to_remove_osds.remove(osd)

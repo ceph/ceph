@@ -1862,13 +1862,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             ','.join(['%s.%s' % (a[0], a[1]) for a in args])))
         return self._daemon_actions(args)
 
-    def remove_daemons(self, names, force):
-        # type: (List[str], bool) -> orchestrator.Completion
+    def remove_daemons(self, names):
+        # type: (List[str]) -> orchestrator.Completion
         args = []
         for host, dm in self.cache.daemons.items():
             for name in names:
                 if name in dm:
-                    args.append((name, host, force))
+                    args.append((name, host))
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         self.log.info('Remove daemons %s' % [a[0] for a in args])
@@ -2171,20 +2171,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
-    def _remove_daemons(self, name, host, force=False):
-        return self._remove_daemon(name, host, force)
+    def _remove_daemons(self, name, host):
+        return self._remove_daemon(name, host)
 
-    def _remove_daemon(self, name, host, force=False):
+    def _remove_daemon(self, name, host):
         """
         Remove a daemon
         """
         (daemon_type, daemon_id) = name.split('.', 1)
         if daemon_type == 'mon':
             self._check_safe_to_destroy_mon(daemon_id)
-
-            # fail early, before we update the monmap
-            if not force:
-                raise OrchestratorError('Must pass --force to remove a monitor and DELETE potentially PRECIOUS CLUSTER DATA')
 
             # remove mon from quorum before we destroy the daemon
             self.log.info('Removing monitor %s from monmap...' % name)
@@ -2196,9 +2192,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 raise OrchestratorError('failed to remove mon %s from monmap' % (
                     name))
 
-        args = ['--name', name]
-        if force:
-            args.extend(['--force'])
+        args = ['--name', name, '--force']
         self.log.info('Removing daemon %s from %s' % (name, host))
         out, err, code = self._run_cephadm(
             host, name, 'rm-daemon', args)
@@ -2288,7 +2282,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if d.hostname not in target_hosts:
                 # NOTE: we are passing the 'force' flag here, which means
                 # we can delete a mon instances data.
-                self._remove_daemon(d.name(), d.hostname, True)
+                self._remove_daemon(d.name(), d.hostname)
                 r = True
 
         return r
@@ -2324,7 +2318,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
-                self._remove_daemon(dd.name(), dd.hostname, True)
+                self._remove_daemon(dd.name(), dd.hostname)
 
             # dependencies?
             if dd.daemon_type == 'grafana':
