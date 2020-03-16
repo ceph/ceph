@@ -509,8 +509,8 @@ Upgrade compatibility notes
 
   You can view exactly what information will be reported first with::
 
-    ceph telemetry show        # see everything
-    ceph telemetry show basic  # basic cluster info (including all of the new info)
+    $ ceph telemetry show        # see everything
+    $ ceph telemetry show basic  # basic cluster info (including all of the new info)
 
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
