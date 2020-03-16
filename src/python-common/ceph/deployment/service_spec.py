@@ -304,15 +304,18 @@ class ServiceSpec(object):
     """
 
     def __init__(self,
-                 service_type,  # type: str
+                 service_type,     # type: str
                  service_id=None,  # type: Optional[str]
-                 placement: Optional[PlacementSpec] = None,
-                 count: Optional[int] = None):
+                 placement=None,   # type: Optional[PlacementSpec]
+                 count=None,       # type: Optional[int]
+                 unmanaged=False,  # type: bool
+                 ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
         assert service_type
         self.service_type = service_type
         self.service_id = service_id
+        self.unmanaged = unmanaged
 
     @classmethod
     def from_json(cls, json_spec):
@@ -384,9 +387,11 @@ def servicespec_validate_add(self: ServiceSpec):
 
 class NFSServiceSpec(ServiceSpec):
     def __init__(self, service_id, pool=None, namespace=None, placement=None,
-                 service_type='nfs'):
+                 service_type='nfs', unmanaged=False):
         assert service_type == 'nfs'
-        super(NFSServiceSpec, self).__init__('nfs', service_id=service_id, placement=placement)
+        super(NFSServiceSpec, self).__init__(
+            'nfs', service_id=service_id,
+            placement=placement, unmanaged=unmanaged)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
@@ -413,13 +418,16 @@ class RGWSpec(ServiceSpec):
                  placement=None,
                  service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
+                 unmanaged=False,  # type: bool
                  ):
         assert service_type == 'rgw'
         if service_id:
             (rgw_realm, rgw_zone) = service_id.split('.', 1)
         else:
             service_id = '%s.%s' % (rgw_realm, rgw_zone)
-        super(RGWSpec, self).__init__('rgw', service_id=service_id, placement=placement)
+        super(RGWSpec, self).__init__(
+            'rgw', service_id=service_id,
+            placement=placement, unmanaged=unmanaged)
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone

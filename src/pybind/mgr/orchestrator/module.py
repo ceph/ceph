@@ -342,7 +342,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             now = datetime.datetime.utcnow()
             table = PrettyTable(
                 ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
-                 'SPEC',
+                 'PLACEMENT',
                  'IMAGE NAME', 'IMAGE ID',
                 ],
                 border=False)
@@ -352,16 +352,22 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align['AGE'] = 'l'
             table.align['IMAGE NAME'] = 'l'
             table.align['IMAGE ID'] = 'l'
-            table.align['SPEC'] = 'l'
+            table.align['PLACEMENT'] = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(services, key=lambda s: s.service_name):
+                if not s.spec:
+                    pl = '<no spec>'
+                elif s.spec.unmanaged:
+                    pl = '<unmanaged>'
+                else:
+                    pl = s.spec.placement.pretty_str()
                 table.add_row((
                     s.service_name,
                     '%d/%d' % (s.running, s.size),
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
-                    s.spec.placement.pretty_str() if s.spec else '-',
+                    pl,
                     ukn(s.container_image_name),
                     ukn(s.container_image_id)[0:12],
                 ))
@@ -517,30 +523,33 @@ Usage:
         return HandleCommandResult(stdout=table.get_string())
 
     @_cli_write_command(
-        'orch daemon add mon',
+        'orch daemon add',
+        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus '
         'name=placement,type=CephString,req=false',
-        'Start monitor daemon(s)')
-    def _daemon_add_mon(self, placement=None):
+        'Add daemon(s)')
+    def _daemon_add_misc(self, daemon_type, placement=None):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
 
-        spec = ServiceSpec('mon', placement=placement)
+        spec = ServiceSpec(daemon_type, placement=placement)
 
-        completion = self.add_mon(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        if daemon_type == 'mon':
+            completion = self.add_mon(spec)
+        elif daemon_type == 'mgr':
+            completion = self.add_mgr(spec)
+        elif daemon_type == 'rbd-mirror':
+            completion = self.add_rbd_mirror(spec)
+        elif daemon_type == 'crash':
+            completion = self.add_crash(spec)
+        elif daemon_type == 'alertmanager':
+            completion = self.add_alertmanager(spec)
+        elif daemon_type == 'grafana':
+            completion = self.add_grafana(spec)
+        elif daemon_type == 'node-exporter':
+            completion = self.add_node_exporter(spec)
+        elif daemon_type == 'prometheus':
+            completion = self.add_prometheus(spec)
 
-    @_cli_write_command(
-        'orch daemon add mgr',
-        'name=placement,type=CephString,req=false',
-        'Start rbd-mirror daemon(s)')
-    def _daemon_add_mgr(self, placement=None):
-        spec = ServiceSpec(
-            'mgr',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_mgr(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -550,20 +559,6 @@ Usage:
         desc='Applies a Service Specification from a file. ceph orch apply -i $file')
     def _apply_services(self, inbuf):
         completion = self.apply_service_config(inbuf)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add rbd-mirror',
-        'name=placement,type=CephString,req=false',
-        'Start rbd-mirror daemon(s)')
-    def _rbd_mirror_add(self, placement=None):
-        spec = ServiceSpec(
-            'rbd-mirror',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -633,73 +628,6 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
-        'orch daemon add prometheus',
-        'name=placement,type=CephString,req=false',
-        'Add prometheus daemon(s)')
-    def _daemon_add_prometheus(self, placement=None):
-        spec = ServiceSpec(
-            'prometheus',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_prometheus(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add node-exporter',
-        'name=placement,type=CephString,req=false',
-        'Add node-exporter daemon(s)')
-    def _daemon_add_node_exporter(self, placement=None):
-        spec = ServiceSpec(
-            'node-exporter',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_node_exporter(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add crash',
-        'name=placement,type=CephString,req=false',
-        'Add node-exporter daemon(s)')
-    def _daemon_add_crash(self, placement=None):
-        spec = ServiceSpec(
-            'crash',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_crash(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add grafana',
-        'name=placement,type=CephString,req=false',
-        'Add grafana daemon(s)')
-    def _daemon_add_grafana(self, placement=None):
-        # type: (Optional[str]) -> HandleCommandResult
-        spec = ServiceSpec(
-            'grafana',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_grafana(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add alertmanager',
-        'name=placement,type=CephString,req=false',
-        'Add alertmanager daemon(s)')
-    def _daemon_add_alertmanager(self, placement=None):
-        # type: (Optional[str]) -> HandleCommandResult
-        spec = ServiceSpec(
-            'alertmanager',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.add_alertmanager(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
         'orch',
         "name=action,type=CephChoices,strings=start|stop|restart|redeploy|reconfig "
         "name=service_name,type=CephString",
@@ -766,31 +694,35 @@ Usage:
         return HandleCommandResult(stdout=specs)
 
     @_cli_write_command(
-        'orch apply mgr',
-        'name=placement,type=CephString,req=false',
-        'Update the size or placement of managers')
-    def _apply_mgr(self, placement=None):
+        'orch apply',
+        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus '
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
+        'Update the size or placement for a service')
+    def _apply_misc(self, service_type, placement=None, unmanaged=False):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
 
-        spec = ServiceSpec('mgr', placement=placement)
+        spec = ServiceSpec(service_type, placement=placement,
+                           unmanaged=unmanaged)
 
-        completion = self.apply_mgr(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        if service_type == 'mgr':
+            completion = self.apply_mgr(spec)
+        elif service_type == 'mon':
+            completion = self.apply_mon(spec)
+        elif service_type == 'rbd-mirror':
+            completion = self.apply_rbd_mirror(spec)
+        elif service_type == 'crash':
+            completion = self.apply_crash(spec)
+        elif service_type == 'alertmanager':
+            completion = self.apply_alertmanager(spec)
+        elif service_type == 'grafana':
+            completion = self.apply_grafana(spec)
+        elif service_type == 'node-exporter':
+            completion = self.apply_node_exporter(spec)
+        elif service_type == 'prometheus':
+            completion = self.apply_prometheus(spec)
 
-    @_cli_write_command(
-        'orch apply mon',
-        'name=placement,type=CephString,req=false',
-        'Update the number of monitor instances')
-    def _apply_mon(self, placement=None):
-        placement = PlacementSpec.from_string(placement)
-        placement.validate()
-
-        spec = ServiceSpec('mon', placement=placement)
-
-        completion = self.apply_mon(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -798,29 +730,17 @@ Usage:
     @_cli_write_command(
         'orch apply mds',
         'name=fs_name,type=CephString '
-        'name=placement,type=CephString,req=false',
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
         'Update the number of MDS instances for the given fs_name')
-    def _apply_mds(self, fs_name, placement=None):
+    def _apply_mds(self, fs_name, placement=None, unmanaged=False):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
         spec = ServiceSpec(
             'mds', fs_name,
-            placement=placement)
+            placement=placement,
+            unmanaged=unmanaged)
         completion = self.apply_mds(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply rbd-mirror',
-        'name=placement,type=CephString,req=false',
-        'Update the number of rbd-mirror instances')
-    def _apply_rbd_mirror(self, placement=None):
-        spec = ServiceSpec(
-            'rbd-mirror',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_rbd_mirror(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -829,13 +749,15 @@ Usage:
         'orch apply rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        'name=placement,type=CephString,req=false',
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
-    def _apply_rgw(self, zone_name, realm_name, placement=None):
+    def _apply_rgw(self, zone_name, realm_name, placement=None, unmanaged=False):
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
             placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
         )
         completion = self.apply_rgw(spec)
         self._orchestrator_wait([completion])
@@ -845,79 +767,16 @@ Usage:
     @_cli_write_command(
         'orch apply nfs',
         "name=svc_id,type=CephString "
-        'name=placement,type=CephString,req=false',
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
-    def _apply_nfs(self, svc_id, placement=None):
+    def _apply_nfs(self, svc_id, placement=None, unmanaged=False):
         spec = NFSServiceSpec(
             svc_id,
             placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
         )
         completion = self.apply_nfs(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply prometheus',
-        'name=placement,type=CephString,req=false',
-        'Scale prometheus service')
-    def _apply_prometheus(self, placement=None):
-        spec = ServiceSpec(
-            'prometheus',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_prometheus(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply grafana',
-        'name=placement,type=CephString,req=false',
-        'Scale grafana service')
-    def _apply_grafana(self, placement=None):
-        spec = ServiceSpec(
-            'grafana',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_grafana(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply alertmanager',
-        'name=placement,type=CephString,req=false',
-        'Scale alertmanager service')
-    def _apply_alertmanager(self, placement=None):
-        spec = ServiceSpec(
-            'alertmanager',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_alertmanager(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply node-exporter',
-        'name=placement,type=CephString,req=false',
-        'Update node_exporter service')
-    def _apply_node_exporter(self, placement=None):
-        spec = ServiceSpec(
-            'node-exporter',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_node_exporter(spec)
-        self._orchestrator_wait([completion])
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch apply crash',
-        'name=placement,type=CephString,req=false',
-        'Update node_exporter service')
-    def _apply_crash(self, placement=None):
-        spec = ServiceSpec(
-            'crash',
-            placement=PlacementSpec.from_string(placement),
-        )
-        completion = self.apply_crash(spec)
         self._orchestrator_wait([completion])
         return HandleCommandResult(stdout=completion.result_str())
 
