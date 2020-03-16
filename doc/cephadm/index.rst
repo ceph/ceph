@@ -29,4 +29,3 @@ versions of Ceph.
     Cephadm CLI <../mgr/orchestrator>
     DriveGroups <drivegroups>
     troubleshooting
-    OS recommendations <../start/os-recommendations>
