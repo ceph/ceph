@@ -561,9 +561,8 @@ int main(int argc, char **argv)
     }
   }
   else if (action == "bluefs-bdev-sizes") {
-    BlueFS *fs = open_bluefs(cct.get(), path, devs);
-    fs->dump_block_extents(cout);
-    delete fs;
+    BlueStore bluestore(cct.get(), path);
+    bluestore.dump_bluefs_sizes(cout);
   }
   else if (action == "bluefs-bdev-expand") {
     BlueStore bluestore(cct.get(), path);
