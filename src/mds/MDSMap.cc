@@ -614,81 +614,89 @@ std::string MDSMap::mds_info_t::human_name() const
   return out.str();
 }
 
-void MDSMap::encode(bufferlist& bl, uint64_t features) const
+void MDSMap::encode(bufferlist& bl, uint64_t features, bool is_client) const
 {
-  std::map<mds_rank_t,int32_t> inc;  // Legacy field, fake it so that
-                                     // old-mon peers have something sane
-                                     // during upgrade
+
+  if (!HAVE_FEATURE(features, SERVER_PACIFIC)) {
+    encode_legacy(bl, features);
+    return;
+  }
+
+  // Legacy field, fake it so that old-mon peers have something sane during upgrade
+  std::map<mds_rank_t,int32_t> inc;
+
   for (const auto rank : in) {
     inc.insert(std::make_pair(rank, epoch));
   }
 
   using ceph::encode;
-  if ((features & CEPH_FEATURE_PGID64) == 0) {
-    __u16 v = 2;
-    encode(v, bl);
-    encode(epoch, bl);
-    encode(flags, bl);
-    encode(last_failure, bl);
-    encode(root, bl);
-    encode(session_timeout, bl);
-    encode(session_autoclose, bl);
-    encode(max_file_size, bl);
-    encode(max_mds, bl);
-    __u32 n = mds_info.size();
-    encode(n, bl);
-    for (map<mds_gid_t, mds_info_t>::const_iterator i = mds_info.begin();
-	i != mds_info.end(); ++i) {
-      encode(i->first, bl);
-      encode(i->second, bl, features);
-    }
-    n = data_pools.size();
-    encode(n, bl);
-    for (const auto p: data_pools) {
-      n = p;
-      encode(n, bl);
-    }
+  ENCODE_START(6, 4, bl);
+  encode(epoch, bl);
+  encode(flags, bl);
+  encode(last_failure, bl);
+  encode(root, bl);
+  encode(session_timeout, bl);
+  encode(session_autoclose, bl);
+  encode(max_file_size, bl);
+  encode(max_mds, bl);
+  encode(mds_info, bl, features);
+  encode(data_pools, bl);
+  encode(cas_pool, bl);
 
-    int32_t m = cas_pool;
-    encode(m, bl);
+  __u16 ev = 9;
+  encode(ev, bl);
+
+  if (is_client)
     return;
-  } else if ((features & CEPH_FEATURE_MDSENC) == 0) {
-    __u16 v = 3;
-    encode(v, bl);
-    encode(epoch, bl);
-    encode(flags, bl);
-    encode(last_failure, bl);
-    encode(root, bl);
-    encode(session_timeout, bl);
-    encode(session_autoclose, bl);
-    encode(max_file_size, bl);
-    encode(max_mds, bl);
-    __u32 n = mds_info.size();
-    encode(n, bl);
-    for (map<mds_gid_t, mds_info_t>::const_iterator i = mds_info.begin();
-	i != mds_info.end(); ++i) {
-      encode(i->first, bl);
-      encode(i->second, bl, features);
-    }
-    encode(data_pools, bl);
-    encode(cas_pool, bl);
 
-    __u16 ev = 5;
-    encode(ev, bl);
+  {
+    CompatSet _compat;
+    encode(_compat, bl);
+  }
+  encode((int64_t)0, bl);
+  encode(created, bl);
+  encode(modified, bl);
+  encode((int32_t)0, bl);
+  encode(in, bl);
+  encode(inc, bl);
+  encode(up, bl);
+  encode(failed, bl);
+  encode(stopped, bl);
+  encode(last_failure_osd_epoch, bl);
+  encode((uint8_t)0, bl);
+  encode((uint8_t)0, bl);
+  encode(inline_data_enabled, bl);
+  encode(enabled, bl);
+  encode(fs_name, bl);
+  encode(damaged, bl);
+  ENCODE_FINISH(bl);
+
+  {
+    // ev part
+    ENCODE_START(1, 1, bl);
     encode(compat, bl);
     encode(metadata_pool, bl);
-    encode(created, bl);
-    encode(modified, bl);
     encode(tableserver, bl);
-    encode(in, bl);
-    encode(inc, bl);
-    encode(up, bl);
-    encode(failed, bl);
-    encode(stopped, bl);
-    encode(last_failure_osd_epoch, bl);
-    return;
+    encode(ever_allowed_features, bl);
+    encode(explicitly_allowed_features, bl);
+    encode(balancer, bl);
+    encode(standby_count_wanted, bl);
+    encode(old_max_mds, bl);
+    encode(min_compat_client, bl);
+    ENCODE_FINISH(bl);
+  }
+}
+
+/* old style encoding for the mdses older than the P release.*/
+void MDSMap::encode_legacy(bufferlist& bl, uint64_t features) const
+{
+  // Legacy field, fake it so that old-mon peers have something sane during upgrade
+  std::map<mds_rank_t,int32_t> inc;
+  for (const auto rank : in) {
+    inc.insert(std::make_pair(rank, epoch));
   }
 
+  using ceph::encode;
   ENCODE_START(5, 4, bl);
   encode(epoch, bl);
   encode(flags, bl);
@@ -748,9 +756,11 @@ void MDSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
 void MDSMap::decode(bufferlist::const_iterator& p)
 {
   std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
-
   cached_up_features = 0;
+  bool decode_ev;
+
   DECODE_START_LEGACY_COMPAT_LEN_16(5, 4, 4, p);
+  decode_ev = struct_v >= 6;
   decode(epoch, p);
   decode(flags, p);
   decode(last_failure, p);
@@ -780,17 +790,16 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   __u16 ev = 1;
   if (struct_v >= 2)
     decode(ev, p);
+
+  if (decode_ev)
+    ceph_assert(ev == 9);
+
   if (ev >= 3)
     decode(compat, p);
   else
     compat = get_compat_set_base();
-  if (ev < 5) {
-    __u32 n;
-    decode(n, p);
-    metadata_pool = n;
-  } else {
-    decode(metadata_pool, p);
-  }
+
+  decode(metadata_pool, p);
   decode(created, p);
   decode(modified, p);
   decode(tableserver, p);
@@ -865,6 +874,21 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   }
 
   DECODE_FINISH(p);
+
+  // ev part
+  if (decode_ev) {
+    DECODE_START(1, p);
+    decode(compat, p);
+    decode(metadata_pool, p);
+    decode(tableserver, p);
+    decode(ever_allowed_features, p);
+    decode(explicitly_allowed_features, p);
+    decode(balancer, p);
+    decode(standby_count_wanted, p);
+    decode(old_max_mds, p);
+    decode(min_compat_client, p);
+    DECODE_FINISH(p);
+  }
 }
 
 MDSMap::availability_t MDSMap::is_cluster_available() const
