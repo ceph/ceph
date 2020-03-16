@@ -2010,6 +2010,7 @@ def command_bootstrap():
 
     # ip
     r = re.compile(r':(\d+)$')
+    base_ip = None
     if args.mon_ip:
         hasport = r.findall(args.mon_ip)
         if hasport:
@@ -2022,8 +2023,10 @@ def command_bootstrap():
                 logger.warning('Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % args.mon_ip
-            check_ip_port(args.mon_ip[0:-(len(str(port)))-1], port)
+            base_ip = args.mon_ip[0:-(len(str(port)))-1]
+            check_ip_port(base_ip, port)
         else:
+            base_ip = args.mon_ip
             addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
             check_ip_port(args.mon_ip, 3300)
             check_ip_port(args.mon_ip, 6789)
@@ -2040,10 +2043,25 @@ def command_bootstrap():
             port = int(hasport[0])
             # strip off v1: or v2: prefix
             addr = re.sub(r'^\w+:', '', addr)
-            check_ip_port(addr[0:-(len(str(port)))-1], port)
+            base_ip = addr[0:-(len(str(port)))-1]
+            check_ip_port(base_ip, port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
-    logger.debug('Final addrv is %s' % addr_arg)
+    logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
+
+    mon_network = None
+    if not args.skip_mon_network:
+        # make sure IP is configured locally, and then figure out the
+        # CIDR network
+        for net, ips in list_networks().items():
+            if base_ip in ips:
+                mon_network = net
+                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
+                                                                 mon_network))
+                break
+        if not mon_network:
+            raise Error('Failed to infer CIDR network for mon ip %s; pass '
+                        '--skip-mon-network to configure it later' % base_ip)
 
     # config
     cp = read_config(args.config)
@@ -2225,6 +2243,10 @@ def command_bootstrap():
             'restart',
             get_unit_name(fsid, 'mon', mon_id)
         ])
+
+    if mon_network:
+        logger.info('Setting mon public_network...')
+        cli(['config', 'set', 'mon', 'public_network', mon_network])
 
     # create mgr
     logger.info('Creating mgr...')
@@ -2628,6 +2650,39 @@ def command_logs():
     # stdout with logger prefixing.
     logger.debug("Running command: %s" % ' '.join(cmd))
     subprocess.call(cmd) # type: ignore
+
+##################################
+
+def list_networks():
+    # type: () -> Dict[str,List[str]]
+
+    ## sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
+    ## so we'll need to use a regex to parse 'ip' command output.
+    #out, _, _ = call_throws(['ip', '-j', 'route', 'ls'])
+    #j = json.loads(out)
+    #for x in j:
+
+    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
+    return _parse_ip_route(out)
+
+def _parse_ip_route(out):
+    r = {}  # type: Dict[str,List[str]]
+    p = re.compile(r'^(\S+) (.*)scope link (.*)src (\S+)')
+    for line in out.splitlines():
+        m = p.findall(line)
+        if not m:
+            continue
+        net = m[0][0]
+        ip = m[0][3]
+        if net not in r:
+            r[net] = []
+        r[net].append(ip)
+    return r
+
+def command_list_networks():
+    # type: () -> None
+    r = list_networks()
+    print(json.dumps(r, indent=4))
 
 ##################################
 
@@ -3713,6 +3768,10 @@ def _get_parser():
         default='/',
         help='base directory for legacy daemon data')
 
+    parser_list_networks = subparsers.add_parser(
+        'list-networks', help='list IP networks')
+    parser_list_networks.set_defaults(func=command_list_networks)
+
     parser_adopt = subparsers.add_parser(
         'adopt', help='adopt daemon deployed with a different tool')
     parser_adopt.set_defaults(func=command_adopt)
@@ -3923,6 +3982,10 @@ def _get_parser():
         '--dashboard-crt',
         help='Dashboard certificate')
 
+    parser_bootstrap.add_argument(
+        '--skip-mon-network',
+        action='store_true',
+        help='set mon public_network based on bootstrap mon ip')
     parser_bootstrap.add_argument(
         '--skip-dashboard',
         action='store_true',
