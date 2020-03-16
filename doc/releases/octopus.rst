@@ -480,28 +480,28 @@ Upgrade compatibility notes
   Second, we now report more information about CephFS file systems,
   including:
 
-    - how many MDS daemons (in total and per file system)
-    - which features are (or have been) enabled
-    - how many data pools
-    - approximate file system age (year + month of creation)
-    - how many files, bytes, and snapshots
-    - how much metadata is being cached
+  - how many MDS daemons (in total and per file system)
+  - which features are (or have been) enabled
+  - how many data pools
+  - approximate file system age (year + month of creation)
+  - how many files, bytes, and snapshots
+  - how much metadata is being cached
 
   We have also added:
 
-    - which Ceph release the monitors are running
-    - whether msgr v1 or v2 addresses are used for the monitors
-    - whether IPv4 or IPv6 addresses are used for the monitors
-    - whether RADOS cache tiering is enabled (and which mode)
-    - whether pools are replicated or erasure coded, and
-      which erasure code profile plugin and parameters are in use
-    - how many hosts are in the cluster, and how many hosts have each type of daemon
-    - whether a separate OSD cluster network is being used
-    - how many RBD pools and images are in the cluster, and how many pools have RBD mirroring enabled
-    - how many RGW daemons, zones, and zonegroups are present; which RGW frontends are in use
-    - aggregate stats about the CRUSH map, like which algorithms are used, how
-      big buckets are, how many rules are defined, and what tunables are in
-      use
+  - which Ceph release the monitors are running
+  - whether msgr v1 or v2 addresses are used for the monitors
+  - whether IPv4 or IPv6 addresses are used for the monitors
+  - whether RADOS cache tiering is enabled (and which mode)
+  - whether pools are replicated or erasure coded, and
+    which erasure code profile plugin and parameters are in use
+  - how many hosts are in the cluster, and how many hosts have each type of daemon
+  - whether a separate OSD cluster network is being used
+  - how many RBD pools and images are in the cluster, and how many pools have RBD mirroring enabled
+  - how many RGW daemons, zones, and zonegroups are present; which RGW frontends are in use
+  - aggregate stats about the CRUSH map, like which algorithms are used, how
+    big buckets are, how many rules are defined, and what tunables are in
+    use
 
   If you had telemetry enabled, you will need to re-opt-in with::
 
