@@ -2236,11 +2236,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         elif daemon_type == 'nfs':
             cephadm_config, deps = \
                     self._generate_nfs_config(daemon_type, daemon_id, host)
-            cephadm_config.update(
-                    self._get_config_and_keyring(
-                        daemon_type, daemon_id,
-                        keyring=keyring,
-                        extra_config=extra_config))
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'alertmanager':
             cephadm_config, deps = self._generate_alertmanager_config()
@@ -2788,9 +2783,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # cast to keep mypy happy
             spec = cast(NFSServiceSpec, specs[0])
 
-        # generate the cephadm config
         nfs = NFSGanesha(self, daemon_id, spec)
-        return nfs.get_cephadm_config(), deps
+
+        # create the keyring
+        entity = nfs.get_keyring_entity()
+        keyring = nfs.get_or_create_keyring(entity=entity)
+
+        # update the caps after get-or-create, the keyring might already exist!
+        nfs.update_keyring_caps(entity=entity)
+
+        # create the rados config object
+        nfs.create_rados_config_obj()
+
+        # generate the cephadm config
+        cephadm_config = nfs.get_cephadm_config()
+        cephadm_config.update(
+                self._get_config_and_keyring(
+                    daemon_type, daemon_id,
+                    keyring=keyring))
+
+        return cephadm_config, deps
 
     def add_nfs(self, spec):
         return self._add_daemon('nfs', spec, self._create_nfs, self._config_nfs)
@@ -2801,10 +2813,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.spec_store.save(spec)
 
     def _create_nfs(self, daemon_id, host, spec):
-        nfs = NFSGanesha(self, daemon_id, spec)
-        keyring = nfs.create_keyring()
-        nfs.create_rados_config_obj()
-        return self._create_daemon('nfs', daemon_id, host, keyring=keyring)
+        return self._create_daemon('nfs', daemon_id, host)
 
     @trivial_completion
     def apply_nfs(self, spec):
