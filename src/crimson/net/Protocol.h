@@ -64,6 +64,7 @@ class Protocol {
 
  public:
   const proto_t proto_type;
+  SocketRef socket;
 
  protected:
   template <typename Func>
@@ -79,7 +80,6 @@ class Protocol {
   Dispatcher &dispatcher;
   SocketConnection &conn;
 
-  SocketRef socket;
   AuthConnectionMetaRef auth_meta;
 
  private:

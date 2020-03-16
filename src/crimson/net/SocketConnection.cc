@@ -138,13 +138,13 @@ seastar::shard_id SocketConnection::shard_id() const {
 
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
-    if (side == side_t::none) {
+    if (!protocol->socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;
-    } else if (side == side_t::acceptor) {
+    } else if (protocol->socket->get_side() == Socket::side_t::acceptor) {
       out << " >> " << get_peer_name() << " " << peer_addr
-          << "@" << ephemeral_port;
-    } else { // side == side_t::connector
-      out << "@" << ephemeral_port
+          << "@" << protocol->socket->get_ephemeral_port();
+    } else { // protocol->socket->get_side() == Socket::side_t::connector
+      out << "@" << protocol->socket->get_ephemeral_port()
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }

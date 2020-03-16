@@ -309,8 +309,6 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   state = state_t::connecting;
   set_write_state(write_state_t::delay);
 
-  // we don't know my ephemeral port yet
-  conn.set_ephemeral_port(0, SocketConnection::side_t::none);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
@@ -347,8 +345,10 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
             throw std::system_error(
                 make_error_code(crimson::net::error::bad_peer_address));
           }
-          conn.set_ephemeral_port(caddr.get_port(),
-                                  SocketConnection::side_t::connector);
+          if (state != state_t::connecting) {
+            throw std::system_error(make_error_code(error::protocol_aborted));
+          }
+          socket->learn_ephemeral_port_as_connector(caddr.get_port());
           if (unlikely(caddr.is_msgr2())) {
             logger().warn("{} peer sent a v2 address for me: {}",
                           conn, caddr);
@@ -613,8 +613,6 @@ void ProtocolV1::start_accept(SocketRef&& sock,
   ceph_assert(!socket);
   // until we know better
   conn.target_addr = _peer_addr;
-  conn.set_ephemeral_port(_peer_addr.get_port(),
-                          SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
