@@ -171,11 +171,11 @@ monitors if there are five or more nodes in your cluster.
 
 When Ceph knows what IP subnet the monitors should use it can automatically
 deploy and scale monitors as the cluster grows (or contracts).  By default,
-Ceph assumes that other monitors should use the same subnet that the first
-monitor IP belongs to.
+Ceph assumes that other monitors should use the same subnet as the first
+monitor's IP.
 
 If your Ceph monitors (or the entire cluster) live on a single subnet,
-then cephadm will automatically add up to give monitors as you add new
+then by default cephadm will automatically add up to 5 monitors as you add new
 hosts to the cluster, and no further steps are necessary.
 
 * If there is a specific IP subnet that should be used by monitors, you
@@ -256,7 +256,7 @@ Storage devices on all cluster hosts can be displayed with::
   # ceph orch device ls
 
 A storage device is considered *available* if all of the following
-conditions are met.  Ceph is refuse to provision an OSD on a device
+conditions are met.  Ceph will refuse to provision an OSD on a device
 that is not available.
 
 * The device must have no partitions.
