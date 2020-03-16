@@ -535,7 +535,8 @@ public:
       return mds_info_entry->second.inc;
     return -1;
   }
-  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void encode(ceph::buffer::list& bl, uint64_t features, bool encode_ev=true) const;
+  void encode_legacy(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void decode(const ceph::buffer::list& bl) {
     auto p = bl.cbegin();

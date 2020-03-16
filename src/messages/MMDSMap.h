@@ -35,11 +35,11 @@ public:
 protected:
   MMDSMap() : 
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
-  MMDSMap(const uuid_d &f, const MDSMap &mm) :
+  MMDSMap(const uuid_d &f, const MDSMap &mm, bool encode_ev=true) :
     SafeMessage{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
     fsid(f) {
     epoch = mm.get_epoch();
-    mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
+    mm.encode(encoded, -1, encode_ev);  // we will reencode with fewer features as necessary
   }
   ~MMDSMap() override {}
 
