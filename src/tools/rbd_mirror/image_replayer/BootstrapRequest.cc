@@ -113,8 +113,12 @@ void BootstrapRequest<I>::prepare_local_image() {
   dout(10) << dendl;
   update_progress("PREPARE_LOCAL_IMAGE");
 
+  {
+    std::unique_lock locker{m_lock};
+    m_local_image_name = m_global_image_id;
+  }
+
   ceph_assert(*m_state_builder == nullptr);
-  m_local_image_name = m_global_image_id;
   auto ctx = create_context_callback<
     BootstrapRequest, &BootstrapRequest<I>::handle_prepare_local_image>(this);
   auto req = image_replayer::PrepareLocalImageRequest<I>::create(
