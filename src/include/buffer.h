@@ -1257,6 +1257,9 @@ inline bool operator==(const bufferlist &l, const bufferlist &r) {
   }
   return true;
 }
+inline bool operator!=(const bufferlist &l, const bufferlist &r) {
+  return !(l == r);
+}
 inline bool operator<(const bufferlist& l, const bufferlist& r) {
   return r > l;
 }
