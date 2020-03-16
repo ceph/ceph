@@ -52,6 +52,10 @@ static constexpr uint16_t data_buffer_default_num = 1024;
 
 static constexpr uint32_t data_buffer_size = 8192;
 
+static constexpr uint16_t big_data_buffer_default_num = 4;
+
+static constexpr uint32_t big_data_buffer_size = 8388608;
+
 static constexpr uint16_t inline_segment_num = 32;
 
 enum {
@@ -144,6 +148,7 @@ class SharedDriverQueueData {
     uint32_t current_queue_depth = 0;
     std::atomic_ulong completed_op_seq, queue_op_seq;
     std::vector<void*> data_buf_mempool;
+    std::vector<void*> big_data_buf_mempool;
     PerfCounters *logger = nullptr;
     void _aio_handle(Task *t, IOContext *ioc);
 
@@ -170,6 +175,16 @@ class SharedDriverQueueData {
         ceph_assert(b);
       }
       data_buf_mempool.push_back(b);
+    }
+
+     // allocate spdk dma memory
+    for (uint16_t i = 0; i < big_data_buffer_default_num; i++) {
+      void *b = spdk_dma_zmalloc(big_data_buffer_size, CEPH_PAGE_SIZE, NULL);
+      if (!b) {
+        derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
+        ceph_assert(b);
+      }
+      big_data_buf_mempool.push_back(b);
     }
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
@@ -207,6 +222,17 @@ class SharedDriverQueueData {
       data_buf_mempool.clear();
     }
 
+     // free all spdk dma memory;
+    if (!big_data_buf_mempool.empty()) {
+      for (uint16_t i = 0; i < big_data_buffer_default_num; i++) {
+        void *b = big_data_buf_mempool[i];
+        ceph_assert(b);
+        spdk_dma_free(b);
+      }
+      big_data_buf_mempool.clear();
+    }
+
+
     delete logger;
   }
 };
@@ -229,6 +255,7 @@ struct Task {
   SharedDriverQueueData *queue = nullptr;
   // reference count by subtasks.
   int ref = 0;
+  uint32_t data_buf_size =  data_buffer_size;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0,
        Task *p = nullptr)
     : device(dev), command(c), offset(off), len(l),
@@ -245,13 +272,17 @@ struct Task {
     ceph_assert(!io_request.nseg);
   }
   void release_segs(SharedDriverQueueData *queue_data) {
+    std::vector<void*> *data_pool = &queue_data->data_buf_mempool;
+    if (data_buf_size == big_data_buffer_size) {
+      data_pool = &queue_data->big_data_buf_mempool;
+    }
     if (io_request.extra_segs) {
       for (uint16_t i = 0; i < io_request.nseg; i++)
-        queue_data->data_buf_mempool.push_back(io_request.extra_segs[i]);
+        data_pool->push_back(io_request.extra_segs[i]);
       delete io_request.extra_segs;
     } else if (io_request.nseg) {
       for (uint16_t i = 0; i < io_request.nseg; i++)
-        queue_data->data_buf_mempool.push_back(io_request.inline_segs[i]);
+        data_pool->push_back(io_request.inline_segs[i]);
     }
     ctx->total_nseg -= io_request.nseg;
     io_request.nseg = 0;
@@ -264,7 +295,7 @@ struct Task {
     uint16_t i = 0;
     while (left > 0) {
       char *src = static_cast<char*>(segs[i++]);
-      uint64_t need_copy = std::min(left, data_buffer_size-off);
+      uint64_t need_copy = std::min(left, data_buf_size-off);
       memcpy(buf+copied, src+off, need_copy);
       off = 0;
       left -= need_copy;
@@ -276,12 +307,12 @@ struct Task {
 static void data_buf_reset_sgl(void *cb_arg, uint32_t sgl_offset)
 {
   Task *t = static_cast<Task*>(cb_arg);
-  uint32_t i = sgl_offset / data_buffer_size;
-  uint32_t offset = i * data_buffer_size;
+  uint32_t i = sgl_offset / t->data_buf_size;
+  uint32_t offset = i * t->data_buf_size;
   ceph_assert(i <= t->io_request.nseg);
 
   for (; i < t->io_request.nseg; i++) {
-    offset += data_buffer_size;
+    offset += t->data_buf_size;
     if (offset > sgl_offset) {
       if (offset > t->len)
         offset = t->len;
@@ -307,9 +338,9 @@ static int data_buf_next_sge(void *cb_arg, void **address, uint32_t *length)
 
   addr = t->io_request.extra_segs ? t->io_request.extra_segs[t->io_request.cur_seg_idx] : t->io_request.inline_segs[t->io_request.cur_seg_idx];
 
-  size = data_buffer_size;
+  size = t->data_buf_size;
   if (t->io_request.cur_seg_idx == t->io_request.nseg - 1) {
-      uint64_t tail = t->len % data_buffer_size;
+      uint64_t tail = t->len % t->data_buf_size;
       if (tail) {
         size = (uint32_t) tail;
       }
@@ -332,7 +363,12 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
 {
   uint64_t count = t->io_request.nseg;
   void **segs;
-  if (count > data_buf_mempool.size())
+  std::vector<void*> *data_pool = &data_buf_mempool;
+
+  if (t->data_buf_size == big_data_buffer_size) {
+    data_pool = &big_data_buf_mempool;
+  }
+  if (count > data_pool->size())
     return -ENOMEM;
   if (count <= inline_segment_num) {
     segs = t->io_request.inline_segs;
@@ -340,17 +376,19 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
     t->io_request.extra_segs = new void*[count];
     segs = t->io_request.extra_segs;
   }
+
   for (uint16_t i = 0; i < count; i++) {
-    segs[i] = data_buf_mempool.back();
-    data_buf_mempool.pop_back();
+    segs[i] = data_pool->back();
+    data_pool->pop_back();
   }
+
   if (write) {
     auto blp = t->bl.begin();
     uint32_t len = 0;
     uint16_t i = 0;
     for (; i < count - 1; ++i) {
-      blp.copy(data_buffer_size, static_cast<char*>(segs[i]));
-      len += data_buffer_size;
+      blp.copy(t->data_buf_size, static_cast<char*>(segs[i]));
+      len += t->data_buf_size;
     }
     blp.copy(t->bl.length() - len, static_cast<char*>(segs[i]));
   }
@@ -777,7 +815,7 @@ void NVMEDevice::aio_submit(IOContext *ioc)
 static void ioc_append_task(IOContext *ioc, Task *t)
 {
   Task *first, *last;
-  uint64_t count = t->len / data_buffer_size;
+  uint64_t count = t->len / t->data_buf_size;
 
   first = static_cast<Task*>(ioc->nvme_task_first);
   last = static_cast<Task*>(ioc->nvme_task_last);
@@ -788,7 +826,7 @@ static void ioc_append_task(IOContext *ioc, Task *t)
   ioc->nvme_task_last = t;
   ++ioc->num_pending;
 
-  if (t->len % data_buffer_size)
+  if (t->len % t->data_buf_size)
     ++count;
   t->io_request.nseg = count;
   ioc->total_nseg += count;
@@ -803,7 +841,7 @@ static void write_split(
   uint64_t remain_len = bl.length(), begin = 0, write_size;
   Task *t;
   // This value may need to be got from configuration later.
-  uint64_t split_size = 131072; // 128KB.
+  uint64_t split_size = big_data_buffer_size; // 8MB.
 
   while (remain_len > 0) {
     write_size = std::min(remain_len, split_size);
@@ -825,7 +863,7 @@ static void make_read_tasks(
     uint64_t orig_off, uint64_t orig_len)
 {
   // This value may need to be got from configuration later.
-  uint64_t split_size = 131072; // 128KB.
+  uint64_t split_size = big_data_buffer_size; // 8MB.
   uint64_t tmp_off = orig_off - aligned_off, remain_orig_len = orig_len;
   auto begin = aligned_off;
   const auto aligned_end = begin + aligned_len;
@@ -942,6 +980,9 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
           << " aligned " << aligned_off << "~" << aligned_len << dendl;
   IOContext ioc(g_ceph_context, nullptr);
   Task t(this, IOCommand::READ_COMMAND, aligned_off, aligned_len, 1);
+  if (aligned_len >= big_data_buffer_size) {
+    t->data_buf_size = big_data_buffer_size;
+  }
 
   make_read_tasks(this, aligned_off, &ioc, buf, aligned_len, &t, off, len);
   aio_submit(&ioc);
