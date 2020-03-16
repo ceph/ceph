@@ -466,8 +466,9 @@ public:
       return location;
     }
 
-    int get_cur_part_id() const {
-      return cur_part_id;
+    /* where current part starts */
+    uint64_t get_part_ofs() const {
+      return part_ofs;
     }
 
     /* start of current stripe */

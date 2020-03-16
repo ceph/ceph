@@ -43,6 +43,7 @@
 #include "rgw_tools.h"
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
+#include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
@@ -3243,20 +3244,21 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw_obj obj;
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
+  boost::optional<RGWPutObj_ETagVerifier_Atomic> etag_verifier_atomic;
+  boost::optional<RGWPutObj_ETagVerifier_MPU> etag_verifier_mpu;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
-  bufferlist extra_data_bl, full_obj, manifest_bl;
+  bufferlist extra_data_bl, manifest_bl;
   uint64_t extra_data_left{0};
-  bool need_to_process_attrs{true};
+  bool need_to_process_attrs{true}, is_mpu_obj{false};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
   std::function<int(map<string, bufferlist>&)> attrs_handler;
-  string calculated_etag;
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -3314,6 +3316,58 @@ public:
       filter = &*buffering;
     }
 
+    /*
+     * Presently we don't support ETag based verification if compression or
+     * encryption is requested. We can enable simultaneous support once we have
+     * a mechanism to know the sequence in which the filters must be applied.
+     */
+    if (cct->_conf->rgw_copy_verify_object && !plugin &&
+        src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+
+      RGWObjManifest manifest;
+
+      auto miter = manifest_bl.cbegin();
+      try {
+        decode(manifest, miter);
+      } catch (buffer::error& err) {
+        ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
+        return -EIO;
+      }
+
+      RGWObjManifestRule rule;
+      bool found = manifest.get_rule(0, &rule);
+      if (!found) {
+        lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
+        return -EIO;
+      }
+
+      if (rule.part_size == 0) {
+        /* Atomic object */
+        etag_verifier_atomic = boost::in_place(cct, filter);
+        filter = &*etag_verifier_atomic;
+      } else {
+        is_mpu_obj = true;
+        etag_verifier_mpu = boost::in_place(cct, filter);
+
+        RGWObjManifest::obj_iterator mi;
+        uint64_t cur_part_ofs = UINT64_MAX;
+
+        /*
+         * We must store the offset of each part to calculate the ETAGs for each
+         * MPU part. These part ETags then become the input for the MPU object
+         * Etag.
+         */
+        for (mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
+          if (cur_part_ofs == mi.get_part_ofs())
+            continue;
+          cur_part_ofs = mi.get_part_ofs();
+          ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
+          etag_verifier_mpu->append_part_ofs(cur_part_ofs);
+        }
+        filter = &*etag_verifier_mpu;
+      }
+    }
+
     need_to_process_attrs = false;
 
     return 0;
@@ -3360,8 +3414,6 @@ public:
 
     const uint64_t lofs = data_len;
     data_len += size;
-    if (cct->_conf->rgw_copy_verify_object)
-      full_obj.append(bl);
 
     return filter->process(std::move(bl), lofs);
   }
@@ -3384,84 +3436,13 @@ public:
   }
 
   string get_calculated_etag() {
-    MD5 hash, mpu_etag_hash;
-    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE], mpu_m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-    char calc_md5_part[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-    char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
-    RGWObjManifest manifest;
-    std::string calculated_etag_part;
-    int prev_part_id = 1, cur_part_id = 1;
-
-    auto miter = manifest_bl.cbegin();
-    try {
-      decode(manifest, miter);
-    } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
-      return std::string();
+    if (is_mpu_obj) {
+      etag_verifier_mpu->calculate_etag();
+      return etag_verifier_mpu->get_calculated_etag();
+    } else {
+      etag_verifier_atomic->calculate_etag();
+      return etag_verifier_atomic->get_calculated_etag();
     }
-    RGWObjManifest::obj_iterator mi;
-
-    RGWObjManifestRule rule;
-    bool found = manifest.get_rule(0, &rule);
-    if (!found) {
-      lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
-      return std::string();
-    }
-
-    /*
-     * Check if the object was created using multipart upload. This check is
-     * required as MPU objects' ETag != MD5sum.
-     */
-    if (rule.part_size == 0) {
-      hash.Update((const unsigned char *)full_obj.c_str(), data_len);
-      hash.Final(m);
-      buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-      calculated_etag = calc_md5;
-      ldout(cct, 20) << "Single part object: " << manifest.get_obj().get_oid() <<
-	      " size:" << manifest.get_obj_size() << " etag:" <<
-	      calculated_etag << dendl;
-      return calculated_etag;
-    }
-
-    for (mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
-      bufferlist obj_stripe;
-
-      cur_part_id = mi.get_cur_part_id();
-      if (cur_part_id != prev_part_id) {
-        hash.Final(m);
-        mpu_etag_hash.Update((const unsigned char *)m, sizeof(m));
-	hash.Restart();
-        buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5_part);
-        calculated_etag_part = calc_md5_part;
-        ldout(cct, 20) << "Part " << prev_part_id << " etag: " <<
-	       calculated_etag_part << dendl;
-	prev_part_id = cur_part_id;
-      }
-      full_obj.splice(0, mi.get_stripe_size(), &obj_stripe);
-      hash.Update((const unsigned char *)obj_stripe.c_str(), mi.get_stripe_size());
-    }
-
-    hash.Final(m);
-    mpu_etag_hash.Update((const unsigned char *)m, sizeof(m));
-
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5_part);
-    calculated_etag_part = calc_md5_part;
-    ldout(cct, 20) << "Part " << prev_part_id << " etag: " << calculated_etag_part << dendl;
-
-    /* Refer RGWCompleteMultipart::execute() for ETag calculation for MPU object */
-    mpu_etag_hash.Final(mpu_m);
-    buf_to_hex(mpu_m, CEPH_CRYPTO_MD5_DIGESTSIZE, final_etag_str);
-    snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
-	     sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-             "-%lld", (long long)(mi.get_cur_part_id() - 1));
-    calculated_etag = final_etag_str;
-
-    ldout(cct, 20) << "MPU calculated ETag:"<< calculated_etag << " Object:" <<
-	   manifest.get_obj().get_oid() <<
-	   " size:" << manifest.get_obj_size() << dendl;
-    return calculated_etag;
-
   }
 };
 
@@ -4027,10 +4008,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
 
     if (cct->_conf->rgw_copy_verify_object) {
-      if (cb.get_calculated_etag().compare(etag)) {
+      string trimmed_etag = etag;
+
+      /* Remove the leading and trailing double quotes from etag */
+      trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
+        trimmed_etag.end());
+
+      if (cb.get_calculated_etag().compare(trimmed_etag)) {
         ret = -EIO;
         ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
-          << etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+          << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
         goto set_err_state;
      }
    }
