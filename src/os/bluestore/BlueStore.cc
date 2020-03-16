@@ -5670,8 +5670,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
         (void)r;
       }
       env = new rocksdb::EnvMirror(b, a, false, true);
-    }
-    else {
+    } else {
       env = new BlueRocksEnv(bluefs);
 
       // simplify the dir names, too, as "seen" by rocksdb
@@ -6874,6 +6873,15 @@ int BlueStore::expand_devices(ostream& out)
       }
     }
   }
+  umount();
+  return r;
+}
+
+int BlueStore::dump_bluefs_sizes(ostream& out)
+{
+  int r = _mount(true);
+  ceph_assert(r == 0);
+  bluefs->dump_block_extents(out);
   umount();
   return r;
 }
