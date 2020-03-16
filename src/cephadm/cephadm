@@ -2317,6 +2317,13 @@ def command_bootstrap():
                 logger.info('Deploying %s service with default placement...' % t)
                 cli(['orch', 'apply', t])
 
+        if not args.skip_monitoring_stack:
+            logger.info('Enabling mgr prometheus module...')
+            cli(['mgr', 'module', 'enable', 'prometheus'])
+            for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
+                logger.info('Deploying %s service with default placement...' % t)
+                cli(['orch', 'apply', t])
+
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
@@ -3956,6 +3963,10 @@ def _get_parser():
         '--orphan-initial-daemons',
         action='store_true',
         help='Do not create initial mon, mgr, and crash service specs')
+    parser_bootstrap.add_argument(
+        '--skip-monitoring-stack',
+        action='store_true',
+        help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
