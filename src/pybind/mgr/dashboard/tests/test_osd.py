@@ -272,25 +272,12 @@ class OsdTest(ControllerTestCase):
         fake_client = mock.Mock()
         instance.return_value = fake_client
 
-        # Valid DriveGroups
-        data = {
-            'method': 'drive_groups',
-            'data': {
-                'all_hdd': {
-                    'host_pattern': '*',
-                    'data_devices': {
-                        'rotational': True
-                    }
-                },
-                'b_ssd': {
-                    'host_pattern': 'b',
-                    'data_devices': {
-                        'rotational': False
-                    }
-                }
-            },
-            'tracking_id': 'all_hdd, b_ssd'
-        }
+        # Valid DriveGroup
+        data = {'method': 'drive_group',
+                'data': {'service_type': 'osd', 'service_id': 'all_hdd',
+                         'data_devices': {'rotational': True},
+                         'host_pattern': '*'},
+                'tracking_id': 'all_hdd, b_ssd'}
 
         # Without orchestrator service
         fake_client.available.return_value = False
@@ -302,16 +289,22 @@ class OsdTest(ControllerTestCase):
         self._task_post('/api/osd', data)
         self.assertStatus(201)
         fake_client.osds.create.assert_called_with(
-            [DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
-                            service_id='all_hdd',
-                            data_devices=DeviceSelection(rotational=True)),
-             DriveGroupSpec(placement=PlacementSpec(host_pattern='b'),
-                            service_id='b_ssd',
-                            data_devices=DeviceSelection(rotational=False))])
+            DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                           service_id='all_hdd',
+                           service_type='osd',
+                           data_devices=DeviceSelection(rotational=True)))
 
-        # Invalid DriveGroups
-        data['data']['b'] = {
-            'host_pattern1': 'aa'
-        }
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_osd_create_with_invalid_drive_groups(self, instance):
+        # without orchestrator service
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+
+        # Invalid DriveGroup
+        data = {'method': 'drive_group',
+                'data': {'service_type': 'osd', 'service_id': 'invalid_dg',
+                         'data_devices': {'rotational': True},
+                         'host_pattern_wrong': 'unknown'},
+                'tracking_id': 'all_hdd, b_ssd'}
         self._task_post('/api/osd', data)
         self.assertStatus(400)

@@ -10,7 +10,8 @@ from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
 
 import string
 try:
-    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, Any, NamedTuple, Iterator, Set
+    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
+        Any, NamedTuple, Iterator, Set, Sequence
     from typing import TYPE_CHECKING
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
@@ -162,11 +163,13 @@ class SpecStore():
             del self.spec_created[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
-    def find(self, service_name):
-        # type: (str) -> List[ServiceSpec]
+    def find(self, service_name=None):
+        # type: (Optional[str]) -> List[ServiceSpec]
         specs = []
         for sn, spec in self.specs.items():
-            if sn == service_name or sn.startswith(service_name + '.'):
+            if not service_name or \
+                    sn == service_name or \
+                    sn.startswith(service_name + '.'):
                 specs.append(spec)
         return specs
 
@@ -1463,9 +1466,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         if not addr and host in self.inventory:
             addr = self.inventory[host].get('addr', host)
-        conn, connr = self._get_connection(addr)
 
         try:
+            conn, connr = self._get_connection(addr)
+
             assert image or entity
             if not image:
                 daemon_type = entity.split('.', 1)[0] # type: ignore
@@ -1537,8 +1541,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return out, err, code
 
         except execnet.gateway_bootstrap.HostNotFound as e:
-            raise OrchestratorError('New host %s (%s) failed to connect: `ssh %s`' % (
-                host, addr, str(e))) from e
+            # this is a misleading exception as it seems to be thrown for
+            # any sort of connection failure, even those having nothing to
+            # do with "host not found" (e.g., ssh key permission denied).
+            raise OrchestratorError('Failed to connect to %s (%s).  Check that the host is reachable and accepts connections using the cephadm SSH key' % (host, addr)) from e
         except Exception as ex:
             self.log.exception(ex)
             raise
@@ -1719,8 +1725,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def _get_spec_size(self, spec):
         if spec.placement.count:
             return spec.placement.count
-        elif spec.placement.all_hosts:
-            return len(self.inventory)
+        elif spec.placement.host_pattern:
+            return len(spec.placement.pattern_matches_hosts(self.inventory.keys()))
         elif spec.placement.label:
             return len(self._get_hosts(spec.placement.label))
         elif spec.placement.hosts:
@@ -1744,6 +1750,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 n: str = dd.service_name()
                 if service_name and service_name != n:
                     continue
+                if dd.daemon_type == 'osd':
+                    continue                # ignore OSDs for now
                 spec = None
                 if dd.service_name() in self.spec_store.specs:
                     spec = self.spec_store.specs[dd.service_name()]
@@ -1856,13 +1864,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             ','.join(['%s.%s' % (a[0], a[1]) for a in args])))
         return self._daemon_actions(args)
 
-    def remove_daemons(self, names, force):
-        # type: (List[str], bool) -> orchestrator.Completion
+    def remove_daemons(self, names):
+        # type: (List[str]) -> orchestrator.Completion
         args = []
         for host, dm in self.cache.daemons.items():
             for name in names:
                 if name in dm:
-                    args.append((name, host, force))
+                    args.append((name, host))
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         self.log.info('Remove daemons %s' % [a[0] for a in args])
@@ -1947,54 +1955,44 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 r[str(o['osd'])] = o['uuid']
         return r
 
-    def call_inventory(self, hosts, drive_groups):
-        def call_create(inventory):
-            return self._prepare_deployment(hosts, drive_groups, inventory)
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> Sequence[orchestrator.Completion]:
+        completions: List[orchestrator.Completion] = list()
+        for spec in specs:
+            completions.extend(self._apply(spec))
+        return completions
 
-        return self.get_inventory().then(call_create)
+    def create_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> orchestrator.Completion
+        self.log.debug("Processing DriveGroup {}".format(drive_group))
+        # 1) use fn_filter to determine matching_hosts
+        matching_hosts = drive_group.placement.pattern_matches_hosts([x for x in self.cache.get_hosts()])
+        # 2) Map the inventory to the InventoryHost object
 
-    def create_osds(self, drive_groups):
-        # type: (List[DriveGroupSpec]) -> AsyncCompletion
-        return self.get_hosts().then(lambda hosts: self.call_inventory(hosts, drive_groups))
+        def _find_inv_for_host(hostname: str, inventory_dict: dict):
+            # This is stupid and needs to be loaded with the host
+            for _host, _inventory in inventory_dict.items():
+                if _host == hostname:
+                    return _inventory
+            raise OrchestratorError("No inventory found for host: {}".format(hostname))
 
-    def _prepare_deployment(self,
-                            all_hosts,  # type: List[orchestrator.HostSpec]
-                            drive_groups,  # type: List[DriveGroupSpec]
-                            inventory_list  # type: List[orchestrator.InventoryHost]
-                            ):
-        # type: (...) -> orchestrator.Completion
-
-        for drive_group in drive_groups:
-            self.log.info("Processing DriveGroup {}".format(drive_group))
-            # 1) use fn_filter to determine matching_hosts
-            matching_hosts = drive_group.placement.pattern_matches_hosts([x.hostname for x in all_hosts])
-            # 2) Map the inventory to the InventoryHost object
-            # FIXME: lazy-load the inventory from a InventoryHost object;
-            #        this would save one call to the inventory(at least externally)
-
-            def _find_inv_for_host(hostname, inventory_list):
-                # This is stupid and needs to be loaded with the host
-                for _inventory in inventory_list:
-                    if _inventory.name == hostname:
-                        return _inventory
-                raise OrchestratorError("No inventory found for host: {}".format(hostname))
-
-            cmds = []
-            # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
-            for host in matching_hosts:
-                inventory_for_host = _find_inv_for_host(host, inventory_list)
-                drive_selection = selector.DriveSelection(drive_group, inventory_for_host.devices)
-                cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
-                if not cmd:
-                    self.log.info("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
-                    continue
-                cmds.append((host, cmd))
-
-        return self._create_osds(cmds)
-
-    @async_map_completion
-    def _create_osds(self, host, cmd):
-        return self._create_osd(host, cmd)
+        ret = []
+        # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
+        self.log.debug(f"Checking matching hosts -> {matching_hosts}")
+        for host in matching_hosts:
+            inventory_for_host = _find_inv_for_host(host, self.cache.devices)
+            self.log.debug(f"Found inventory for host {inventory_for_host}")
+            drive_selection = selector.DriveSelection(drive_group, inventory_for_host)
+            self.log.debug(f"Found drive selection {drive_selection}")
+            cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
+            self.log.debug(f"translated to cmd {cmd}")
+            if not cmd:
+                self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
+                continue
+            self.log.info('Applying %s on host %s...' % (
+                drive_group.service_name(), host))
+            ret_msg = self._create_osd(host, cmd)
+            ret.append(ret_msg)
+        return trivial_result(", ".join(ret))
 
     def _create_osd(self, host, cmd):
 
@@ -2175,20 +2173,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @async_map_completion
-    def _remove_daemons(self, name, host, force=False):
-        return self._remove_daemon(name, host, force)
+    def _remove_daemons(self, name, host):
+        return self._remove_daemon(name, host)
 
-    def _remove_daemon(self, name, host, force=False):
+    def _remove_daemon(self, name, host):
         """
         Remove a daemon
         """
         (daemon_type, daemon_id) = name.split('.', 1)
         if daemon_type == 'mon':
             self._check_safe_to_destroy_mon(daemon_id)
-
-            # fail early, before we update the monmap
-            if not force:
-                raise OrchestratorError('Must pass --force to remove a monitor and DELETE potentially PRECIOUS CLUSTER DATA')
 
             # remove mon from quorum before we destroy the daemon
             self.log.info('Removing monitor %s from monmap...' % name)
@@ -2200,9 +2194,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 raise OrchestratorError('failed to remove mon %s from monmap' % (
                     name))
 
-        args = ['--name', name]
-        if force:
-            args.extend(['--force'])
+        args = ['--name', name, '--force']
         self.log.info('Removing daemon %s from %s' % (name, host))
         out, err, code = self._run_cephadm(
             host, name, 'rm-daemon', args)
@@ -2221,6 +2213,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         create_fns = {
             'mon': self._create_mon,
             'mgr': self._create_mgr,
+            'osd': self.create_osds,
             'mds': self._create_mds,
             'rgw': self._create_rgw,
             'rbd-mirror': self._create_rbd_mirror,
@@ -2249,6 +2242,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             get_daemons_func=self.cache.get_daemons_by_service).place()
 
         r = False
+
+        if daemon_type == 'osd':
+            return False if create_func(spec) else True # type: ignore
 
         # sanity check
         if daemon_type in ['mon', 'mgr'] and len(hosts) < 1:
@@ -2288,7 +2284,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if d.hostname not in target_hosts:
                 # NOTE: we are passing the 'force' flag here, which means
                 # we can delete a mon instances data.
-                self._remove_daemon(d.name(), d.hostname, True)
+                self._remove_daemon(d.name(), d.hostname)
                 r = True
 
         return r
@@ -2324,7 +2320,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
-                self._remove_daemon(dd.name(), dd.hostname, True)
+                self._remove_daemon(dd.name(), dd.hostname)
 
             # dependencies?
             if dd.daemon_type == 'grafana':
@@ -2501,8 +2497,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'grafana': PlacementSpec(count=1),
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
-                'node-exporter': PlacementSpec(all_hosts=True),
-                'crash': PlacementSpec(all_hosts=True),
+                'node-exporter': PlacementSpec(host_pattern='*'),
+                'crash': PlacementSpec(host_pattern='*'),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -3042,14 +3038,14 @@ receivers:
         """
         return trivial_result(self.rm_util.report)
 
-    def list_specs(self) -> orchestrator.Completion:
+    def list_specs(self, service_name=None) -> orchestrator.Completion:
         """
         Loads all entries from the service_spec mon_store root.
         """
         specs = list()
-        for service_name, spec in self.spec_store.specs.items():
+        for spec in self.spec_store.find(service_name=service_name):
             specs.append('---')
-            specs.append(yaml.dump(spec))
+            specs.append(yaml.safe_dump(spec.to_json()))
         return trivial_result(specs)
 
     def apply_service_config(self, spec_document: str) -> orchestrator.Completion:
@@ -3148,15 +3144,6 @@ class HostAssignment(object):
             logger.debug('Provided hosts: %s' % self.spec.placement.hosts)
             return self.spec.placement.hosts
 
-        # respect all_hosts=true
-        if self.spec.placement.all_hosts:
-            candidates = [
-                HostPlacementSpec(x, '', '')
-                for x in self.get_hosts_func(None)
-            ]
-            logger.debug('All hosts: {}'.format(candidates))
-            return candidates
-
         # respect host_pattern
         if self.spec.placement.host_pattern:
             candidates = [
@@ -3198,7 +3185,6 @@ class HostAssignment(object):
                 assert self.spec.placement.count is None
                 assert not self.spec.placement.hosts
                 assert not self.spec.placement.label
-                assert not self.spec.placement.all_hosts
                 count = 1
             logger.debug('place %d over all hosts: %s' % (count, hosts))
 

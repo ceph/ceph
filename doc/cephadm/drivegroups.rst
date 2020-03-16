@@ -1,5 +1,6 @@
+===========
 DriveGroups
-============
+===========
 
 DriveGroups are a way to describe a cluster layout using the properties of disks.
 It gives the user an abstract way tell ceph which disks should turn into an OSD

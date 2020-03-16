@@ -8,146 +8,153 @@ These are draft notes for the upcoming Octopus release.
 Major Changes from Nautilus
 ---------------------------
 
-- *General*:
+General
+~~~~~~~
   
-  * A new deployment tool called **cephadm** has been introduced that
-    integrates Ceph daemon deployment and management via containers
-    into the orchestration layer.  For more information see
-    :ref:`cephadm-bootstrap`.
-  * Health alerts can now be muted, either temporarily or permanently.
-  * A simple 'alerts' capability has been introduced to send email
-    health alerts for clusters deployed without the benefit of an
-    existing external monitoring infrastructure.
-  * Health alerts are now raised for recent Ceph daemons crashes.
+* A new deployment tool called **cephadm** has been introduced that
+  integrates Ceph daemon deployment and management via containers
+  into the orchestration layer.  For more information see
+  :ref:`cephadm-bootstrap`.
+* Health alerts can now be muted, either temporarily or permanently.
+* A simple 'alerts' capability has been introduced to send email
+  health alerts for clusters deployed without the benefit of an
+  existing external monitoring infrastructure.
+* Health alerts are now raised for recent Ceph daemons crashes.
 
 
-- *Dashboard*:
+Dashboard
+~~~~~~~~~
 
-  The :ref:`mgr-dashboard` has gained a lot of new features and functionality:
+The :ref:`mgr-dashboard` has gained a lot of new features and functionality:
 
-  * UI Enhancements
+* UI Enhancements
 
-    - New vertical navigation bar
-    - New unified sidebar: better background task and events notification
-    - Shows all progress mgr module notifications
-    - Multi-select on tables to perform bulk operations
+  - New vertical navigation bar
+  - New unified sidebar: better background task and events notification
+  - Shows all progress mgr module notifications
+  - Multi-select on tables to perform bulk operations
 
-  * Dashboard user account security enhancements
+* Dashboard user account security enhancements
 
-    - Disabling/enabling existing user accounts
-    - Clone an existing user role
-    - Users can change their own password
-    - Configurable password policies: Minimum password complexity/length
-      requirements
-    - Configurable password expiration
-    - Change password after first login
+  - Disabling/enabling existing user accounts
+  - Clone an existing user role
+  - Users can change their own password
+  - Configurable password policies: Minimum password complexity/length
+    requirements
+  - Configurable password expiration
+  - Change password after first login
 
-  New and enhanced management of Ceph features/services:
+New and enhanced management of Ceph features/services:
 
-  * OSD/device management
+* OSD/device management
 
-    - List all disks associated with an OSD
-    - Add support for blinking enclosure LEDs via the orchestrator
-    - List all hosts known by the orchestrator
-    - List all disks and their properties attached to a node
-    - Display disk health information (health prediction and SMART data)
-    - Deploy new OSDs on new disks/hosts
-    - Display and allow sorting by an OSD's default device class in the OSD
-      table
-    - Explicitly set/change the device class of an OSD, display and sort OSDs by
-      device class
+  - List all disks associated with an OSD
+  - Add support for blinking enclosure LEDs via the orchestrator
+  - List all hosts known by the orchestrator
+  - List all disks and their properties attached to a node
+  - Display disk health information (health prediction and SMART data)
+  - Deploy new OSDs on new disks/hosts
+  - Display and allow sorting by an OSD's default device class in the OSD
+    table
+  - Explicitly set/change the device class of an OSD, display and sort OSDs by
+    device class
 
-  * Pool management
+* Pool management
 
-    - Viewing and setting pool quotas
-    - Define and change per-pool PG autoscaling mode
+  - Viewing and setting pool quotas
+  - Define and change per-pool PG autoscaling mode
 
-  * RGW management enhancements
+* RGW management enhancements
 
-    - Enable bucket versioning
-    - Enable MFA support
-    - Select placement target on bucket creation
+  - Enable bucket versioning
+  - Enable MFA support
+  - Select placement target on bucket creation
 
-  * CephFS management enhancements
+* CephFS management enhancements
 
-    - CephFS client eviction
-    - CephFS snapshot management
-    - CephFS quota management
-    - Browse CephFS directory
+  - CephFS client eviction
+  - CephFS snapshot management
+  - CephFS quota management
+  - Browse CephFS directory
 
-  * iSCSI management enhancements
+* iSCSI management enhancements
 
-    - Show iSCSI GW status on landing page
-    - Prevent deletion of IQNs with open sessions
-    - Display iSCSI "logged in" info
+  - Show iSCSI GW status on landing page
+  - Prevent deletion of IQNs with open sessions
+  - Display iSCSI "logged in" info
 
-  * Prometheus alert management
+* Prometheus alert management
 
-    - List configured Prometheus alerts
+  - List configured Prometheus alerts
 
 
-- *RADOS*:
+RADOS
+~~~~~
   
-  * Objects can now be brought in sync during recovery by copying only
-    the modified portion of the object, reducing tail latencies during
-    recovery.
-  * The PG autoscaler feature introduced in Nautilus is enabled for
-    new pools by default, allowing new clusters to autotune *pg num*
-    without any user intervention.  The default values for new pools
-    and RGW/CephFS metadata pools have also been adjusted to perform
-    well for most users.
-  * BlueStore has received several improvements and performance
-    updates, including improved accounting for "omap" (key/value)
-    object data by pool, improved cache memory management, and a
-    reduced allocation unit size for SSD devices.  (Note that by
-    default, the first time each OSD starts after upgrading to octopus
-    it will trigger a conversion that may take from a few minutes to a
-    few hours, depending on the amount of stored "omap" data.)
-  * Snapshot trimming metadata is now managed in a more efficient and
-    scalable fashion.
+* Objects can now be brought in sync during recovery by copying only
+  the modified portion of the object, reducing tail latencies during
+  recovery.
+* The PG autoscaler feature introduced in Nautilus is enabled for
+  new pools by default, allowing new clusters to autotune *pg num*
+  without any user intervention.  The default values for new pools
+  and RGW/CephFS metadata pools have also been adjusted to perform
+  well for most users.
+* BlueStore has received several improvements and performance
+  updates, including improved accounting for "omap" (key/value)
+  object data by pool, improved cache memory management, and a
+  reduced allocation unit size for SSD devices.  (Note that by
+  default, the first time each OSD starts after upgrading to octopus
+  it will trigger a conversion that may take from a few minutes to a
+  few hours, depending on the amount of stored "omap" data.)
+* Snapshot trimming metadata is now managed in a more efficient and
+  scalable fashion.
 
 
-- *RBD* block storage:
+**RBD** block storage
+~~~~~~~~~~~~~~~~~~~~~
   
-  * Clone operations now preserve the sparseness of the underlying RBD image.
-  * The trash feature has been improved to (optionally) automatically
-    move old parent images to the trash when their children are all
-    deleted or flattened.
-  * The ``rbd-nbd`` tool has been improved to use more modern kernel interfaces.
-  * Caching has been improved to be more efficient and performant.
+* Clone operations now preserve the sparseness of the underlying RBD image.
+* The trash feature has been improved to (optionally) automatically
+  move old parent images to the trash when their children are all
+  deleted or flattened.
+* The ``rbd-nbd`` tool has been improved to use more modern kernel interfaces.
+* Caching has been improved to be more efficient and performant.
 
 
-- *RGW* object storage:
+**RGW** object storage
+~~~~~~~~~~~~~~~~~~~~~~
   
-  * Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
-  * WORM?
-  * bucket tagging?
+* Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
+* WORM?
+* bucket tagging?
 
-- *CephFS* distributed file system:
+**CephFS** distributed file system
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
-  * Inline data support in CephFS has been deprecated and will likely be
-    removed in a future release.
-  * MDS daemons can now be assigned to manage a particular file system via the
-    new ``mds_join_fs`` option.
-  * MDS now aggressively asks idle clients to trim caps which improves stability
-    when file system load changes.
-  * The mgr volumes plugin has received numerous improvements to support CephFS
-    via CSI, including snapshots and cloning.
-  * cephfs-shell has had numerous incremental improvements and bug fixes.
+* Inline data support in CephFS has been deprecated and will likely be
+  removed in a future release.
+* MDS daemons can now be assigned to manage a particular file system via the
+  new ``mds_join_fs`` option.
+* MDS now aggressively asks idle clients to trim caps which improves stability
+  when file system load changes.
+* The mgr volumes plugin has received numerous improvements to support CephFS
+  via CSI, including snapshots and cloning.
+* cephfs-shell has had numerous incremental improvements and bug fixes.
 
 
 Upgrading from Mimic or Nautilus
 --------------------------------
 
-Notes
-~~~~~
+.. note::
 
-* You can monitor the progress of your upgrade at each stage with the
+  You can monitor the progress of your upgrade at each stage with the
   ``ceph versions`` command, which will tell you what ceph version(s) are
   running for each type of daemon.
 
 Instructions
 ~~~~~~~~~~~~
+
+.. highlight:: console
 
 #. Make sure your cluster is stable and healthy (no down or
    recovering OSDs).  (Optional, but recommended.)
@@ -335,7 +342,7 @@ Upgrade compatibility notes
 
 * Ceph now packages python bindings for python3.6 instead of
   python3.4, because python3 in EL7/EL8 is now using python3.6
-  as the native python3. see the `announcement <https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/>_`
+  as the native python3. see the `announcement`_
   for more details on the background of this change.
 
 * librbd now uses a write-around cache policy be default,
@@ -472,28 +479,28 @@ Upgrade compatibility notes
   Second, we now report more information about CephFS file systems,
   including:
 
-    - how many MDS daemons (in total and per file system)
-    - which features are (or have been) enabled
-    - how many data pools
-    - approximate file system age (year + month of creation)
-    - how many files, bytes, and snapshots
-    - how much metadata is being cached
+  - how many MDS daemons (in total and per file system)
+  - which features are (or have been) enabled
+  - how many data pools
+  - approximate file system age (year + month of creation)
+  - how many files, bytes, and snapshots
+  - how much metadata is being cached
 
   We have also added:
 
-    - which Ceph release the monitors are running
-    - whether msgr v1 or v2 addresses are used for the monitors
-    - whether IPv4 or IPv6 addresses are used for the monitors
-    - whether RADOS cache tiering is enabled (and which mode)
-    - whether pools are replicated or erasure coded, and
-      which erasure code profile plugin and parameters are in use
-    - how many hosts are in the cluster, and how many hosts have each type of daemon
-    - whether a separate OSD cluster network is being used
-    - how many RBD pools and images are in the cluster, and how many pools have RBD mirroring enabled
-    - how many RGW daemons, zones, and zonegroups are present; which RGW frontends are in use
-    - aggregate stats about the CRUSH map, like which algorithms are used, how
-      big buckets are, how many rules are defined, and what tunables are in
-      use
+  - which Ceph release the monitors are running
+  - whether msgr v1 or v2 addresses are used for the monitors
+  - whether IPv4 or IPv6 addresses are used for the monitors
+  - whether RADOS cache tiering is enabled (and which mode)
+  - whether pools are replicated or erasure coded, and
+    which erasure code profile plugin and parameters are in use
+  - how many hosts are in the cluster, and how many hosts have each type of daemon
+  - whether a separate OSD cluster network is being used
+  - how many RBD pools and images are in the cluster, and how many pools have RBD mirroring enabled
+  - how many RGW daemons, zones, and zonegroups are present; which RGW frontends are in use
+  - aggregate stats about the CRUSH map, like which algorithms are used, how
+    big buckets are, how many rules are defined, and what tunables are in
+    use
 
   If you had telemetry enabled, you will need to re-opt-in with::
 
@@ -501,8 +508,8 @@ Upgrade compatibility notes
 
   You can view exactly what information will be reported first with::
 
-    ceph telemetry show        # see everything
-    ceph telemetry show basic  # basic cluster info (including all of the new info)
+    $ ceph telemetry show        # see everything
+    $ ceph telemetry show basic  # basic cluster info (including all of the new info)
 
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
@@ -563,8 +570,8 @@ Upgrade compatibility notes
   has been removed in favor of the ``osd_mclock_scheduler*`` family
   of options.
 
-* The config subsystem now searches dot ('.') delineated prefixes for
-  options.  That means for an entity like ``client.foo.bar``, it's
+* The config subsystem now searches dot ('.') delimited prefixes for
+  options.  That means for an entity like ``client.foo.bar``, its
   overall configuration will be a combination of the global options,
   ``client``, ``client.foo``, and ``client.foo.bar``.  Previously,
   only global, ``client``, and ``client.foo.bar`` options would apply.
@@ -572,3 +579,5 @@ Upgrade compatibility notes
   ``.`` in their name.
 
   Note that this only applies to configuration options in the
+
+.. _announcement: https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/

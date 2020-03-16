@@ -35,4 +35,4 @@ def _mk_inventory(devices):
         dev.path = '/dev/sd' + name
         dev.sys_api = dict(dev_.sys_api, path='/dev/sd' + name)
         devs.append(dev)
-    return Devices(devices=devs)
+    return Devices(devices=devs).devices

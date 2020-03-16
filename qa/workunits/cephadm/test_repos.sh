@@ -10,10 +10,13 @@ CEPHADM=${CEPHADM_SRC_DIR}/cephadm
 function test_install_uninstall() {
     ( sudo apt update && \
 	  sudo apt -y install cephadm && \
+	  sudo $CEPHADM install && \
 	  sudo apt -y remove cephadm ) || \
 	( sudo yum -y install cephadm && \
+	      sudo $CEPHADM install && \
 	      sudo yum -y remove cephadm ) || \
 	( sudo dnf -y install cephadm && \
+	      sudo $CEPHADM install && \
 	      sudo dnf -y remove cephadm )
 }
 

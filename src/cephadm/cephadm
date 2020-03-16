@@ -1973,12 +1973,23 @@ def command_inspect_image():
 def command_bootstrap():
     # type: () -> int
 
+    if not args.output_config:
+        args.output_config = os.path.join(args.output_dir, 'ceph.conf')
+    if not args.output_keyring:
+        args.output_keyring = os.path.join(args.output_dir,
+                                           'ceph.client.admin.keyring')
+    if not args.output_pub_ssh_key:
+        args.output_pub_ssh_key = os.path.join(args.output_dir, 'ceph.pub')
+
     # verify output files
-    if not args.allow_overwrite:
-        for f in [args.output_config, args.output_keyring, args.output_pub_ssh_key]:
+    for f in [args.output_config, args.output_keyring, args.output_pub_ssh_key]:
+        if not args.allow_overwrite:
             if os.path.exists(f):
                 raise Error('%s already exists; delete or pass '
                               '--allow-overwrite to overwrite' % f)
+        dirname = os.path.dirname(f)
+        if dirname and not os.path.exists(dirname):
+            raise Error('%s directory %s does not exist' % (f, dirname))
 
     if not args.skip_prepare_host:
         command_prepare_host()
@@ -3063,20 +3074,19 @@ def command_rm_daemon():
          verbose_on_failure=False)
     call(['systemctl', 'disable', unit_name],
          verbose_on_failure=False)
-    if daemon_type == 'osd':
-        CephContainer(
-            image=args.image,
-            entrypoint='/usr/sbin/ceph-volume',
-            args=[
-                'lvm', 'zap', '--osd-id',
-                str(daemon_id)
-                # not sure if --destroy is useful here
-            ],
-            container_args=['--privileged'],
-            volume_mounts=get_container_mounts(args.fsid, daemon_type, daemon_id)
-        ).run()
     data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
-    call_throws(['rm', '-rf', data_dir])
+    if daemon_type in ['mon', 'osd', 'prometheus'] and \
+       not args.force_delete_data:
+        # rename it out of the way -- do not delete
+        backup_dir = os.path.join(args.data_dir, args.fsid, 'removed')
+        if not os.path.exists(backup_dir):
+            makedirs(backup_dir, 0, 0, DATA_DIR_MODE)
+        dirname = '%s.%s_%s' % (daemon_type, daemon_id,
+                                datetime.datetime.utcnow().strftime(DATEFMT))
+        os.rename(data_dir,
+                  os.path.join(backup_dir, dirname))
+    else:
+        call_throws(['rm', '-rf', data_dir])
 
 ##################################
 
@@ -3621,7 +3631,8 @@ def command_rm_repo():
     pkg.rm_repo()
 
 def command_install():
-    pass
+    pkg = create_packager()
+    pkg.install(args.packages)
 
 ##################################
 
@@ -3742,6 +3753,10 @@ def _get_parser():
         '--force',
         action='store_true',
         help='proceed, even though this may destroy valuable data')
+    parser_rm_daemon.add_argument(
+        '--force-delete-data',
+        action='store_true',
+        help='delete valuable daemon data instead of making a backup')
 
     parser_rm_cluster = subparsers.add_parser(
         'rm-cluster', help='remove all daemons for a cluster')
@@ -3870,16 +3885,17 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     parser_bootstrap.add_argument(
+        '--output-dir',
+        default='/etc/ceph',
+        help='directory to write config, keyring, and pub key files')
+    parser_bootstrap.add_argument(
         '--output-keyring',
-        default='ceph.client.admin.keyring',
         help='location to write keyring file with new cluster admin and mon keys')
     parser_bootstrap.add_argument(
         '--output-config',
-        default='ceph.conf',
         help='location to write conf file to connect to new cluster')
     parser_bootstrap.add_argument(
         '--output-pub-ssh-key',
-        default='ceph.pub',
         help='location to write the cluster\'s public SSH key')
     parser_bootstrap.add_argument(
         '--skip-ssh',
@@ -4019,6 +4035,10 @@ def _get_parser():
     parser_install = subparsers.add_parser(
         'install', help='install ceph package(s)')
     parser_install.set_defaults(func=command_install)
+    parser_install.add_argument(
+        'packages', nargs='*',
+        default=['cephadm'],
+        help='packages')
 
     return parser
 
@@ -4078,11 +4098,13 @@ if __name__ == "__main__":
             sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
             sys.exit(1)
 
-    inferred_image = _infer_image()
-
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
+
+    if args.func != command_bootstrap:
+        inferred_image = _infer_image()
+
     try:
         r = args.func()
     except Error as e:
