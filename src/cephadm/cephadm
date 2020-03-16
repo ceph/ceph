@@ -2648,7 +2648,6 @@ def command_logs():
 
 def list_networks():
     # type: () -> Dict[str,List[str]]
-    r = {}  # type: Dict[str,List[str]]
 
     ## sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
     ## so we'll need to use a regex to parse 'ip' command output.
@@ -2657,6 +2656,10 @@ def list_networks():
     #for x in j:
 
     out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
+    return _parse_ip_route(out)
+
+def _parse_ip_route(out):
+    r = {}  # type: Dict[str,List[str]]
     p = re.compile(r'^(\S+) (.*)scope link (.*)src (\S+)')
     for line in out.splitlines():
         m = p.findall(line)
