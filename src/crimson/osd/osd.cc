@@ -14,6 +14,7 @@
 #include "common/pick_address.h"
 #include "include/util.h"
 
+#include "messages/MCommand.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
@@ -411,6 +412,12 @@ seastar::future<> OSD::_send_alive()
   }
 }
 
+seastar::future<> OSD::handle_command(crimson::net::Connection* conn,
+				      Ref<MCommand> m)
+{
+  return asok->handle_command(conn, std::move(m));
+}
+
 /*
   The OSD's Admin Socket object created here has two servers (i.e. - blocks of commands
   to handle) registered to it:
@@ -574,6 +581,8 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
       conn->get_shared(),
       m);
     return seastar::now();
+  case MSG_COMMAND:
+    return handle_command(conn, boost::static_pointer_cast<MCommand>(m));
   case MSG_OSD_PG_LEASE:
     [[fallthrough]];
   case MSG_OSD_PG_LEASE_ACK:
