@@ -289,7 +289,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 service_name='crash',
                 spec=ServiceSpec(
                     'crash',
-                    placement=PlacementSpec.from_string('all:true'),
+                    placement=PlacementSpec.from_string('*'),
                 ),
                 size=num_nodes,
                 container_image_name=image_name,

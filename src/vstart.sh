@@ -996,7 +996,7 @@ EOF
         ceph_adm mgr module enable cephadm
         ceph_adm orch set backend cephadm
         ceph_adm orch host add $HOSTNAME
-        ceph_adm orch apply crash all:true
+        ceph_adm orch apply crash '*'
     fi
 }
 

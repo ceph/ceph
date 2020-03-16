@@ -317,7 +317,7 @@ Placement by pattern matching
 
 Daemons can be placed on hosts as well::
 
-    orch apply prometheus all:true
+    orch apply prometheus '*'
 
 Or in yaml::
 
