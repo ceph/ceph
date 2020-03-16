@@ -3063,20 +3063,19 @@ def command_rm_daemon():
          verbose_on_failure=False)
     call(['systemctl', 'disable', unit_name],
          verbose_on_failure=False)
-    if daemon_type == 'osd':
-        CephContainer(
-            image=args.image,
-            entrypoint='/usr/sbin/ceph-volume',
-            args=[
-                'lvm', 'zap', '--osd-id',
-                str(daemon_id)
-                # not sure if --destroy is useful here
-            ],
-            container_args=['--privileged'],
-            volume_mounts=get_container_mounts(args.fsid, daemon_type, daemon_id)
-        ).run()
     data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
-    call_throws(['rm', '-rf', data_dir])
+    if daemon_type in ['mon', 'osd', 'prometheus'] and \
+       not args.force_delete_data:
+        # rename it out of the way -- do not delete
+        backup_dir = os.path.join(args.data_dir, args.fsid, 'removed')
+        if not os.path.exists(backup_dir):
+            makedirs(backup_dir, 0, 0, DATA_DIR_MODE)
+        dirname = '%s.%s_%s' % (daemon_type, daemon_id,
+                                datetime.datetime.utcnow().strftime(DATEFMT))
+        os.rename(data_dir,
+                  os.path.join(backup_dir, dirname))
+    else:
+        call_throws(['rm', '-rf', data_dir])
 
 ##################################
 
@@ -3742,6 +3741,10 @@ def _get_parser():
         '--force',
         action='store_true',
         help='proceed, even though this may destroy valuable data')
+    parser_rm_daemon.add_argument(
+        '--force-delete-data',
+        action='store_true',
+        help='delete valuable daemon data instead of making a backup')
 
     parser_rm_cluster = subparsers.add_parser(
         'rm-cluster', help='remove all daemons for a cluster')

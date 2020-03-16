@@ -129,7 +129,7 @@ data_devices:
         self._orch_cmd('daemon', 'add', "nfs", "service_name", "pool")
 
     def test_osd_rm(self):
-        self._orch_cmd('daemon', "rm", "osd.0")
+        self._orch_cmd('daemon', "rm", "osd.0", '--force')
 
     def test_mds_rm(self):
         self._orch_cmd("daemon", "rm", "mds.fsname")

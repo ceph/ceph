@@ -434,7 +434,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def remove_daemons(self, names, force):
+    def remove_daemons(self, names):
         return write_completion(
             lambda: self.rook_cluster.remove_pods(names),
             "Removing daemons {}".format(','.join(names)),

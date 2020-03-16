@@ -275,7 +275,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         )]
 
     @deferred_write("remove_daemons")
-    def remove_daemons(self, names, force):
+    def remove_daemons(self, names):
         assert isinstance(names, list)
 
     @deferred_write("remove_service")
