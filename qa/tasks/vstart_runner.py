@@ -1408,11 +1408,11 @@ def exec_test():
             mount = LocalFuseMount(ctx, test_dir, client_id)
 
         mounts.append(mount)
-        if mount.is_mounted():
-            log.warn("unmounting {0}".format(mount.mountpoint))
-            mount.umount_wait()
-        else:
-            if os.path.exists(mount.mountpoint):
+        if os.path.exists(mount.mountpoint):
+            if mount.is_mounted():
+                log.warn("unmounting {0}".format(mount.mountpoint))
+                mount.umount_wait()
+            else:
                 os.rmdir(mount.mountpoint)
 
     from tasks.cephfs_test_runner import DecoratingLoader
