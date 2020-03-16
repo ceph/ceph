@@ -997,6 +997,7 @@ EOF
         ceph_adm orch set backend cephadm
         ceph_adm orch host add $HOSTNAME
         ceph_adm orch apply crash '*'
+        ceph_adm config set mgr mgr/cephadm/allow_ptrace true
     fi
 }
 
