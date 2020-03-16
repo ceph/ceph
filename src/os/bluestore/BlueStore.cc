@@ -6559,6 +6559,15 @@ int BlueStore::expand_devices(ostream& out)
   return r;
 }
 
+int BlueStore::dump_bluefs_sizes(ostream& out)
+{
+  int r = _mount(true);
+  ceph_assert(r == 0);
+  bluefs->dump_block_extents(out);
+  umount();
+  return r;
+}
+
 void BlueStore::set_cache_shards(unsigned num)
 {
   dout(10) << __func__ << " " << num << dendl;
