@@ -235,7 +235,7 @@ void add_create_image_options(po::options_description *opt,
 
   opt->add_options()
     (IMAGE_ORDER.c_str(), po::value<ImageOrder>(),
-     "object order [12 <= order <= 25]")
+     "object order [12 <= order <= 25] (deprecated)")
     (IMAGE_OBJECT_SIZE.c_str(), po::value<ImageObjectSize>(),
      "object size in B/K/M [4K <= object size <= 32M]")
     (IMAGE_FEATURES.c_str(), po::value<ImageFeatures>()->composing(),

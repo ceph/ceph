@@ -243,7 +243,7 @@
     --dest-pool arg           destination pool name
     --dest-namespace arg      destination namespace name
     --dest arg                destination image name
-    --order arg               object order [12 <= order <= 25]
+    --order arg               object order [12 <= order <= 25] (deprecated)
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
@@ -447,7 +447,7 @@
     --dest-pool arg              destination pool name
     --dest-namespace arg         destination namespace name
     --dest arg                   destination image name
-    --order arg                  object order [12 <= order <= 25]
+    --order arg                  object order [12 <= order <= 25] (deprecated)
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
@@ -493,7 +493,7 @@
     --image-format arg        image format [1 (deprecated) or 2]
     --new-format              use image format 2
                               (deprecated)
-    --order arg               object order [12 <= order <= 25]
+    --order arg               object order [12 <= order <= 25] (deprecated)
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
@@ -548,7 +548,7 @@
     --dest-pool arg              destination pool name
     --dest-namespace arg         destination namespace name
     --dest arg                   destination image name
-    --order arg                  object order [12 <= order <= 25]
+    --order arg                  object order [12 <= order <= 25] (deprecated)
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
@@ -1122,7 +1122,7 @@
     --image-format arg        image format [1 (deprecated) or 2]
     --new-format              use image format 2
                               (deprecated)
-    --order arg               object order [12 <= order <= 25]
+    --order arg               object order [12 <= order <= 25] (deprecated)
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
@@ -1500,7 +1500,7 @@
     --image-format arg        image format [1 (deprecated) or 2]
     --new-format              use image format 2
                               (deprecated)
-    --order arg               object order [12 <= order <= 25]
+    --order arg               object order [12 <= order <= 25] (deprecated)
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
