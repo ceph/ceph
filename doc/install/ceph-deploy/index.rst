@@ -38,12 +38,19 @@ Ceph Block Devices, the Ceph File System, and Ceph Object Storage.
 
 .. toctree::
 	
-   Block Device Quick Start <quick-rbd>
+   Block Device Quick Start <../../start/quick-rbd>
    Filesystem Quick Start <quick-cephfs>
    Object Storage Quick Start <quick-rgw>
 
 .. raw:: html
 
 	</td></tr></tbody></table>
+
+
+.. toctree::
+    :hidden:
+    
+    Upgrading Ceph <upgrading-ceph>
+   	Install Ceph Object Gateway <install-ceph-gateway>
 
 

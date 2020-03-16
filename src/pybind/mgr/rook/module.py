@@ -289,7 +289,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 service_name='crash',
                 spec=ServiceSpec(
                     'crash',
-                    placement=PlacementSpec.from_string('all:true'),
+                    placement=PlacementSpec.from_string('*'),
                 ),
                 size=num_nodes,
                 container_image_name=image_name,
@@ -434,29 +434,21 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             mgr=self
         )
 
-    def remove_daemons(self, names, force):
+    def remove_daemons(self, names):
         return write_completion(
             lambda: self.rook_cluster.remove_pods(names),
             "Removing daemons {}".format(','.join(names)),
             mgr=self
         )
 
-    def create_osds(self, drive_groups):
-        # type: (List[DriveGroupSpec]) -> RookCompletion
+    def create_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> RookCompletion
         """ Creates OSDs from a drive group specification.
-
-        Caveat: Currently limited to a single DriveGroup.
-        The orchestrator_cli expects a single completion which
-        ideally represents a set of operations. This orchestrator
-        doesn't support this notion, yet. Hence it's only accepting
-        a single DriveGroup for now.
-        You can work around it by invoking:
 
         $: ceph orch osd create -i <dg.file>
 
-        multiple times. The drivegroup file must only contain one spec at a time.
+        The drivegroup file must only contain one spec at a time.
         """
-        drive_group = drive_groups[0]
 
         targets = []  # type: List[str]
         if drive_group.data_devices and drive_group.data_devices.paths:

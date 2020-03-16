@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "rgw/rgw_service.h"
 
 #include "svc_config_key.h"
@@ -26,6 +28,13 @@ class RGWSI_RADOS;
 
 class RGWSI_ConfigKey_RADOS : public RGWSI_ConfigKey
 {
+  bool maybe_insecure_mon_conn{false};
+  std::atomic_flag warned_insecure{ATOMIC_FLAG_INIT};
+
+  int do_start() override;
+
+  void warn_if_insecure();
+
 public:
   struct Svc {
     RGWSI_RADOS *rados{nullptr};
@@ -37,7 +46,7 @@ public:
 
   RGWSI_ConfigKey_RADOS(CephContext *cct) : RGWSI_ConfigKey(cct) {}
 
-  int get(const string& key, bufferlist *result) override;
+  int get(const string& key, bool secure, bufferlist *result) override;
 };
 
 

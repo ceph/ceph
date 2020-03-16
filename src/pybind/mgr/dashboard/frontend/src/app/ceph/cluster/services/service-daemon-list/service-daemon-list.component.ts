@@ -1,10 +1,22 @@
-import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
-
+import {
+  AfterViewInit,
+  Component,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  QueryList,
+  TemplateRef,
+  ViewChildren
+} from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { Observable } from 'rxjs';
 
+import * as _ from 'lodash';
+
+import { Observable, Subscription } from 'rxjs';
 import { CephServiceService } from '../../../../shared/api/ceph-service.service';
 import { HostService } from '../../../../shared/api/host.service';
+import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
@@ -15,11 +27,9 @@ import { Daemon } from '../../../../shared/models/daemon.interface';
   templateUrl: './service-daemon-list.component.html',
   styleUrls: ['./service-daemon-list.component.scss']
 })
-export class ServiceDaemonListComponent implements OnInit, OnChanges {
-  @ViewChild(TableComponent, { static: true })
-  table: TableComponent;
-  @ViewChild('lastSeenTpl', { static: true })
-  lastSeenTpl: TemplateRef<any>;
+export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewInit, OnDestroy {
+  @ViewChildren('daemonsTable')
+  daemonsTableTpls: QueryList<TemplateRef<TableComponent>>;
 
   @Input()
   serviceName?: string;
@@ -30,10 +40,16 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges {
   daemons: Daemon[] = [];
   columns: CdTableColumn[] = [];
 
+  hasOrchestrator = false;
+
+  private daemonsTable: TableComponent;
+  private daemonsTableTplsSub: Subscription;
+
   constructor(
     private i18n: I18n,
     private hostService: HostService,
-    private cephServiceService: CephServiceService
+    private cephServiceService: CephServiceService,
+    private orchService: OrchestratorService
   ) {}
 
   ngOnInit() {
@@ -98,15 +114,30 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges {
         flexGrow: 2
       }
     ];
+
+    this.orchService.status().subscribe((data: { available: boolean }) => {
+      this.hasOrchestrator = data.available;
+    });
   }
 
   ngOnChanges() {
-    this.daemons = [];
-    this.table.reloadData();
+    if (!_.isUndefined(this.daemonsTable)) {
+      this.daemonsTable.reloadData();
+    }
   }
 
-  updateData(daemons: Daemon[]) {
-    this.daemons = daemons;
+  ngAfterViewInit() {
+    this.daemonsTableTplsSub = this.daemonsTableTpls.changes.subscribe(
+      (tableRefs: QueryList<TableComponent>) => {
+        this.daemonsTable = tableRefs.first;
+      }
+    );
+  }
+
+  ngOnDestroy() {
+    if (this.daemonsTableTplsSub) {
+      this.daemonsTableTplsSub.unsubscribe();
+    }
   }
 
   getDaemons(context: CdTableFetchDataContext) {

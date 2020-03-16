@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
+#include "common/bit_vector.hpp"
 #include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "librbd/Types.h"
@@ -59,6 +60,10 @@ private:
    * @verbatim
    *
    * <start>
+   *    |
+   *    v
+   * COMPUTE_DIFF
+   *    |
    *    |      . . . . .
    *    |      .       .  (parallel execution of
    *    v      v       .   multiple objects at once)
@@ -94,8 +99,13 @@ private:
   SnapMap m_snap_map;
   int m_ret_val = 0;
 
+  BitVector<2> m_object_diff_state;
+
+  void compute_diff();
+  void handle_compute_diff(int r);
+
   void send_object_copies();
-  void send_next_object_copy();
+  int send_next_object_copy();
   void handle_object_copy(uint64_t object_no, int r);
 
   void finish(int r);

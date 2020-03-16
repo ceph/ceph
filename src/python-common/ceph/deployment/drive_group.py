@@ -77,12 +77,21 @@ class DeviceSelection(object):
     @classmethod
     def from_json(cls, device_spec):
         # type: (dict) -> DeviceSelection
+        if not device_spec:
+            return  # type: ignore
         for applied_filter in list(device_spec.keys()):
             if applied_filter not in cls._supported_filters:
                 raise DriveGroupValidationError(
                     "Filtering for <{}> is not supported".format(applied_filter))
 
         return cls(**device_spec)
+
+    def to_json(self):
+        # type: () -> Dict[str, Any]
+        c = self.__dict__.copy()
+        if self.paths:
+            c['paths'] = [p.path for p in self.paths]
+        return c
 
     def __repr__(self):
         keys = [
@@ -106,28 +115,6 @@ class DriveGroupValidationError(ServiceSpecValidationError):
 
     def __init__(self, msg):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
-
-
-class DriveGroupSpecs(object):
-    """ Container class to parse drivegroups """
-
-    def __init__(self, drive_group_json):
-        # type: (list) -> None
-        self.drive_group_json = drive_group_json
-
-        if isinstance(self.drive_group_json, dict):
-            # from legacy representation (till Octopus)
-            self.drive_group_json = [
-                dict(service_id=name, service_type='osd', **dg)
-                for name, dg in self.drive_group_json.items()
-            ]
-        if not isinstance(self.drive_group_json, list):
-            raise ServiceSpecValidationError('Specs needs to be a list of specs')
-        dgs = list(map(DriveGroupSpec.from_json, self.drive_group_json))  # type: ignore
-        self.drive_groups = dgs  # type: List[DriveGroupSpec]
-
-    def __repr__(self):
-        return ", ".join([repr(x) for x in self.drive_groups])
 
 
 class DriveGroupSpec(ServiceSpec):
@@ -282,6 +269,19 @@ class DriveGroupSpec(ServiceSpec):
             self.service_id,
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
+
+    def to_json(self):
+        # type: () -> Dict[str, Any]
+        c = self.__dict__.copy()
+        if self.placement:
+            c['placement'] = self.placement.to_json()
+        if self.data_devices:
+            c['data_devices'] = self.data_devices.to_json()
+        if self.db_devices:
+            c['db_devices'] = self.db_devices.to_json()
+        if self.wal_devices:
+            c['wal_devices'] = self.wal_devices.to_json()
+        return c
 
     def __eq__(self, other):
         return repr(self) == repr(other)
