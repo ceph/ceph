@@ -281,6 +281,16 @@ void CloneRequest<I>::create_child() {
   }
   m_opts.set(RBD_IMAGE_OPTION_FEATURES, m_features);
 
+  uint64_t stripe_unit = m_parent_image_ctx->stripe_unit;
+  if (m_opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
+    m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+  }
+
+  uint64_t stripe_count = m_parent_image_ctx->stripe_count;
+  if (m_opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
+    m_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+  }
+
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_child>(this);
