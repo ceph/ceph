@@ -145,10 +145,9 @@ RADOS
 Upgrading from Mimic or Nautilus
 --------------------------------
 
-Notes
-~~~~~
+.. note::
 
-* You can monitor the progress of your upgrade at each stage with the
+  You can monitor the progress of your upgrade at each stage with the
   ``ceph versions`` command, which will tell you what ceph version(s) are
   running for each type of daemon.
 
