@@ -37,6 +37,7 @@ Trivial Configuration:
                   "source_id": <source_id>,
                   "dest_id": <dest_id> } ... ],
       "target_path": <target_path>,
+      "allow_bucketalreadyexists": <true | false>,
     }
 
 
@@ -60,6 +61,7 @@ Non Trivial Configuration:
           "dest_id": <id>
         } ... ]
         "target_path": <path> # optional
+        "allow_bucketalreadyexists": <true | false>, # optional, default is false
       },
       "connections": [
           {
@@ -85,6 +87,7 @@ Non Trivial Configuration:
            "connection_id": <connection_id>,
            "acls_id": <mappings_id>,
            "target_path": <dest>,          # optional
+           "allow_bucketalreadyexists": <true | false>, # optional, default is false
           } ... ],
     }
 
@@ -150,6 +153,9 @@ variables:
 
 For example: ``target_path = rgwx-${zone}-${sid}/${owner}/${bucket}``
 
+* ``"allow_bucketalreadyexists`` (true | false)
+
+Some S3 servers return BucketAlreadyExists error even if its the same owner recreating the bucket. This option can be used to handle such servers.
 
 * ``acl_profiles`` (array)
 

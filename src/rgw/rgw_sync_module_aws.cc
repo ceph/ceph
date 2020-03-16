@@ -58,6 +58,7 @@ static string obj_to_aws_path(const rgw_obj& obj)
                   "source_id": <source_id>,
                   "dest_id": <dest_id> } ... ],  # optional, acl mappings, no mappings if does not exist
       "target_path": <target_path>, # override default
+      "allow_bucketalreadyexists": <true | false>, # optional, default is false
            
 
       # anything below here is for non trivial configuration 
@@ -78,6 +79,7 @@ static string obj_to_aws_path(const rgw_obj& obj)
         } ... ]
         "target_path": "rgwx-${sid}/${bucket}" # how a bucket name is mapped to destination path,
                                                # final object name will be target_path + "/" + obj
+        "allow_bucketalreadyexists": <true | false>, # optional, default is false
       },
       "connections": [
           {
@@ -102,6 +104,7 @@ static string obj_to_aws_path(const rgw_obj& obj)
            "target_path": <dest>,   # (override default)
            "connection_id": <connection_id>, # optional, if empty references default connection
            "acls_id": <mappings_id>, # optional, if empty references default mappings
+           "allow_bucketalreadyexists": <true | false>, # optional, default is false
           } ... ],
     }
 
@@ -312,6 +315,7 @@ struct AWSSyncConfig_Profile {
   string target_path;
   string connection_id;
   string acls_id;
+  bool allow_bucketalreadyexists{false};
 
   std::shared_ptr<AWSSyncConfig_Connection> conn_conf;
   std::shared_ptr<ACLMappings> acls;
@@ -330,6 +334,13 @@ struct AWSSyncConfig_Profile {
     target_path = config["target_path"];
     connection_id = config["connection_id"];
     acls_id = config["acls_id"];
+
+    if (config.exists("allow_bucketalreadyexists")) {
+      string s = config["allow_bucketalreadyexists"];
+      if (s == "true") {
+        allow_bucketalreadyexists = true;
+      }
+    }
 
     if (config.exists("connection")) {
       conn_conf = make_shared<AWSSyncConfig_Connection>();
@@ -352,6 +363,8 @@ struct AWSSyncConfig_Profile {
     encode_json("target_path", target_path, &jf);
     encode_json("connection_id", connection_id, &jf);
     encode_json("acls_id", acls_id, &jf);
+    string e = (allow_bucketalreadyexists == true ? "true" : "false");
+    encode_json("allow_bucketalreadyexists", e, &jf);
     if (conn_conf.get()) {
       conn_conf->dump_conf(cct, jf);
     }
@@ -1649,7 +1662,9 @@ public:
             return set_cr_error(retcode);
           }
 
-          if (result.code != "BucketAlreadyOwnedByYou") {
+          if ((result.code != "BucketAlreadyOwnedByYou") &&
+              (!target->allow_bucketalreadyexists ||
+                 (result.code != "BucketAlreadyExists"))) {
             return set_cr_error(retcode);
           }
         }
