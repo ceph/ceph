@@ -1750,6 +1750,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 n: str = dd.service_name()
                 if service_name and service_name != n:
                     continue
+                if dd.daemon_type == 'osd':
+                    continue                # ignore OSDs for now
                 spec = None
                 if dd.service_name() in self.spec_store.specs:
                     spec = self.spec_store.specs[dd.service_name()]
