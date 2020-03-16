@@ -180,6 +180,7 @@ class HostCache():
         self.daemons = {}   # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
+        self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = [] # type: List[str]
         self.device_refresh_queue = [] # type: List[str]
@@ -205,20 +206,25 @@ class HostCache():
                 self.daemon_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.devices[host] = []
+                self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
                 for name, d in j.get('daemons', {}).items():
                     self.daemons[host][name] = \
                         orchestrator.DaemonDescription.from_json(d)
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
+                self.networks[host] = j.get('networks', {})
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
                         'last_config': datetime.datetime.strptime(
                             d['last_config'], DATEFMT),
                     }
-                self.mgr.log.debug('HostCache.load: host %s has %d daemons, %d devices' % (
-                    host, len(self.daemons[host]), len(self.devices[host])))
+                self.mgr.log.debug(
+                    'HostCache.load: host %s has %d daemons, '
+                    '%d devices, %d networks' % (
+                        host, len(self.daemons[host]), len(self.devices[host]),
+                        len(self.networks[host])))
             except Exception as e:
                 self.mgr.log.warning('unable to load cached state for %s: %s' % (
                     host, e))
@@ -229,9 +235,10 @@ class HostCache():
         self.daemons[host] = dm
         self.last_daemon_update[host] = datetime.datetime.utcnow()
 
-    def update_host_devices(self, host, dls):
-        # type: (str, List[inventory.Device]) -> None
+    def update_host_devices_networks(self, host, dls, nets):
+        # type: (str, List[inventory.Device], Dict[str,List[str]]) -> None
         self.devices[host] = dls
+        self.networks[host] = nets
         self.last_device_update[host] = datetime.datetime.utcnow()
 
     def update_daemon_config_deps(self, host, name, deps, stamp):
@@ -247,6 +254,7 @@ class HostCache():
         """
         self.daemons[host] = {}
         self.devices[host] = []
+        self.networks[host] = {}
         self.daemon_config_deps[host] = {}
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
@@ -280,6 +288,7 @@ class HostCache():
             j['daemons'][name] = dd.to_json()  # type: ignore
         for d in self.devices[host]:
             j['devices'].append(d.to_json())  # type: ignore
+        j['networks'] = self.networks[host]
         for name, depi in self.daemon_config_deps[host].items():
             j['daemon_config_deps'][name] = {   # type: ignore
                 'deps': depi.get('deps', []),
@@ -293,6 +302,8 @@ class HostCache():
             del self.daemons[host]
         if host in self.devices:
             del self.devices[host]
+        if host in self.networks:
+            del self.networks[host]
         if host in self.last_daemon_update:
             del self.last_daemon_update[host]
         if host in self.last_device_update:
@@ -1715,10 +1726,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     host, code, err)
         except Exception as e:
             return 'host %s ceph-volume inventory failed: %s' % (host, e)
-        data = json.loads(''.join(out))
-        self.log.debug('Refreshed host %s devices (%d)' % (host, len(data)))
-        devices = inventory.Devices.from_json(data)
-        self.cache.update_host_devices(host, devices.devices)
+        devices = json.loads(''.join(out))
+        try:
+            out, err, code = self._run_cephadm(
+                host, 'mon',
+                'list-networks',
+                [],
+                no_fsid=True)
+            if code:
+                return 'host %s list-networks returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s list-networks failed: %s' % (host, e)
+        networks = json.loads(''.join(out))
+        self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
+            host, len(devices), len(networks)))
+        devices = inventory.Devices.from_json(devices)
+        self.cache.update_host_devices_networks(host, devices.devices, networks)
         self.cache.save_host(host)
         return None
 
@@ -2239,10 +2263,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         config_func = config_fns.get(daemon_type, None)
 
         daemons = self.cache.get_daemons_by_service(service_name)
+
+        public_network = None
+        if daemon_type == 'mon':
+            ret, out, err = self.mon_command({
+                'prefix': 'config get',
+                'who': 'mon',
+                'key': 'public_network',
+            })
+            if '/' in out:
+                public_network = out.strip()
+                self.log.debug('mon public_network is %s' % public_network)
+
+        def matches_network(host):
+            # type: (str) -> bool
+            if not public_network:
+                return False
+            # make sure we have 1 or more IPs for that network on that
+            # host
+            return len(self.cache.networks[host].get(public_network, [])) > 0
+
         hosts = HostAssignment(
             spec=spec,
             get_hosts_func=self._get_hosts,
-            get_daemons_func=self.cache.get_daemons_by_service).place()
+            get_daemons_func=self.cache.get_daemons_by_service,
+            filter_new_host=matches_network if daemon_type == 'mon' else None,
+        ).place()
 
         r = False
 
@@ -3124,6 +3170,7 @@ class HostAssignment(object):
                  get_hosts_func,  # type: Callable[[Optional[str]],List[str]]
                  get_daemons_func, # type: Callable[[str],List[orchestrator.DaemonDescription]]
 
+                 filter_new_host=None, # type: Optional[Callable[[str],bool]]
                  scheduler=None,  # type: Optional[BaseScheduler]
                  ):
         assert spec and get_hosts_func and get_daemons_func
@@ -3131,6 +3178,7 @@ class HostAssignment(object):
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec.placement)
         self.get_hosts_func = get_hosts_func
         self.get_daemons_func = get_daemons_func
+        self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
 
     def place(self):
@@ -3217,6 +3265,10 @@ class HostAssignment(object):
         need = count - len(existing + chosen)
         others = [hs for hs in hosts
                   if hs.hostname not in hosts_with_daemons]
+        if self.filter_new_host:
+            old = others
+            others = [h for h in others if self.filter_new_host(h.hostname)]
+            logger.debug('filtered %s down to %s' % (old, hosts))
         chosen = chosen + self.scheduler.place(others, need)
         logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
             existing, chosen))

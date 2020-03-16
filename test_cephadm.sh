@@ -41,7 +41,8 @@ $CEPHADM $CEPHADM_ARGS \
     --config c \
     --output-keyring k \
     --output-config c \
-    --allow-overwrite
+    --allow-overwrite \
+    --skip-mon-network
 chmod 644 k c
 
 # mon.b

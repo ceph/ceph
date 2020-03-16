@@ -353,6 +353,7 @@ def ceph_bootstrap(ctx, config):
             'sudo',
             ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
+            '-v',
             'bootstrap',
             '--fsid', fsid,
             '--mon-id', first_mon,
