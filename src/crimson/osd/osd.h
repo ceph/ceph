@@ -31,6 +31,7 @@
 #include "osd/osd_perf_counters.h"
 #include "osd/PGPeeringEvent.h"
 
+class MCommand;
 class MOSDMap;
 class MOSDOp;
 class MOSDRepOpReply;
@@ -186,6 +187,8 @@ private:
 
   void check_osdmap_features();
 
+  seastar::future<> handle_command(crimson::net::Connection* conn,
+				   Ref<MCommand> m);
   seastar::future<> start_asok_admin();
 
 public:
