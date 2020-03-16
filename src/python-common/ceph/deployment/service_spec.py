@@ -419,6 +419,7 @@ class RGWSpec(ServiceSpec):
                  service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
                  unmanaged=False,  # type: bool
+                 ssl=False,   # type: bool
                  ):
         assert service_type == 'rgw'
         if service_id:
@@ -432,3 +433,12 @@ class RGWSpec(ServiceSpec):
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
         self.rgw_frontend_port = rgw_frontend_port
+        self.ssl = ssl
+
+    def get_port(self):
+        if self.rgw_frontend_port:
+            return self.rgw_frontend_port
+        if self.ssl:
+            return 443
+        else:
+            return 80
