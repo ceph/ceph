@@ -2,9 +2,9 @@
 Deploying a new Ceph cluster
 ============================
 
-Cephadm new Ceph cluster by "bootstrapping" on a single
-host, expanding the cluster to encompass any additional
-hosts, and deploying the needed services.
+Cephadm creates a new Ceph cluster by "bootstrapping" on a single
+host, expanding the cluster to encompass any additional hosts, and
+then deploying the needed services.
 
 .. highlight:: console
 
@@ -33,28 +33,28 @@ with containerized Ceph daemons when debugging issues.
     # curl --silent --remote-name --location https://github.com/ceph/ceph/raw/octopus/src/cephadm/cephadm
     # chmod +x cephadm
 
-  Although this script is sufficient to get a cluster started, it is
-  convenient to have the ``cephadm`` command install along with the
-  other ceph command line utilities (``ceph``, ``rbd``, etc.).  To install
+  This script can be run directly from the current directory with::
+
+    # ./cephadm <arguments...>
+
+* Although the standalone script is sufficient to get a cluster started, it is
+  convenient to have the ``cephadm`` command installed on the host.  To install
   these packages for the current Octopus release::
 
-    # cephadm add-repo --release octopus
-    # cephadm install
+    # ./cephadm add-repo --release octopus
+    # ./cephadm install
 
-  You can confirm that ``cephadm`` and ``ceph`` are now in your PATH with::
+  Confirm that ``cephadm`` is now in your PATH with::
 
-    # which cephadm ceph
+    # which cephadm
 
 * Some commercial Linux distributions (e.g., RHEL, SLE) may already
   include up-to-date Ceph packages.  In that case, you can install
-  cephadm directly::
+  cephadm directly.  For example::
 
     # dnf install -y cephadm     # or
     # zypper install -y cephadm
 
-  Then::
-
-    # cephadm install     # to get the other ceph commands
 
 
 Bootstrap a new cluster
@@ -85,16 +85,52 @@ The default bootstrap behavior will work for the vast majority of
 users.  See below for a few options that may be useful for some users,
 or run ``cephadm bootstrap -h`` to see all available options:
 
-* We write the files needed to access the new cluster to ``/etc/ceph``
-  for convenience.  Use the ``--output-dir *<directory>*`` option to
-  put them in a different directory, avoiding any potential conflicts
-  with existing Ceph clusters on the same host.
+* Bootstrap writes the files needed to access the new cluster to
+  ``/etc/ceph`` for convenience, so that any Ceph packages installed
+  on the host itself (e.g., to access the command line interface) can
+  easily find them.
+
+  Daemon containers deployed with cephadm, however, do not need
+  ``/etc/ceph`` at all.  Use the ``--output-dir *<directory>*`` option
+  to put them in a different directory (like ``.``), avoiding any
+  potential conflicts with existing Ceph configuration (cephadm or
+  otherwise) on the same host.
 
 * You can pass any initial Ceph configuration options to the new
   cluster by putting them in a standard ini-style configuration file
   and using the ``--config *<config-file>*`` option.
 
-Once the cluster starts, check its status to verify it is reachable::
+
+Accessing the ceph command
+==========================
+
+Cephadm does not require any Ceph packages to be installed on the host.
+However, it is often convenient to have something installed so that you
+can access the ``ceph`` command.  There are several ways to do this:
+
+* The ``cephadm shell`` command will launch a bash shell in a container.  By
+  default, if configuration and keyring files are found in ``/etc/ceph`` on the
+  host, they are passed into the container environment so that the shell
+  is fully functional::
+
+    # cephadm shell
+
+* It may be helpful to create an alias::
+
+    # alias ceph='cephadm shell --'
+
+* You can install the ``ceph-common`` package, which contains all of the
+  ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
+  CephFS file systems), etc.::
+
+    # cephadm install ceph-common
+
+Confirm that the ``ceph`` command is accessible with::
+
+  # ceph -v
+
+Confirm that the ``ceph`` command can connect to the cluster and also
+its status with::
 
   # ceph status
 
