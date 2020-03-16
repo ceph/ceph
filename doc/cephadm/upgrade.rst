@@ -12,7 +12,7 @@ The automated upgrade process follows Ceph best practices.  For example:
 * Each daemon is restarted only after Ceph indicates that the cluster
   will remain available.
 
-Keep in mind that the Ceph cluster health will like switch to
+Keep in mind that the Ceph cluster health status is likely to switch to
 `HEALTH_WARNING` during the upgrade.
 
 
@@ -48,8 +48,8 @@ status output.  For example::
   # ceph -s
   [...]
     progress:
-      Upgrade to docker.io/ceph/ceph:v15.2.1
-        [............................] (time remaining: N/A)
+      Upgrade to docker.io/ceph/ceph:v15.2.1 (00h 20m 12s)
+        [=======.....................] (time remaining: 01h 43m 31s)
 
 You can also watch the cephadm log with::
 
@@ -107,9 +107,11 @@ Using customized container images
 For most users, simplify specifying the Ceph version is sufficient.
 Cephadm will locate the specific Ceph container image to use by
 combining the ``container_image_base`` configuration option (default:
-``docker.io/ceph/ceph``) with a version tag of ``vX.Y.Z``.
+``docker.io/ceph/ceph``) with a tag of ``vX.Y.Z``.
 
 You can also upgrade to an arbitrary container image.  For example, to
 upgrade to a development build::
 
   # ceph upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
+
+For more information about available container images, see :ref:`containers`.
