@@ -762,15 +762,23 @@ Usage:
         'orch apply rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
+        'name=port,type=CephInt,req=false '
+        'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
-    def _apply_rgw(self, zone_name, realm_name, placement=None, unmanaged=False):
+    def _apply_rgw(self, zone_name, realm_name,
+                   port=None,
+                   ssl=False,
+                   placement=None,
+                   unmanaged=False):
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
+            rgw_frontend_port=port,
+            ssl=ssl,
         )
         completion = self.apply_rgw(spec)
         self._orchestrator_wait([completion])
