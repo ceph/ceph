@@ -20,7 +20,7 @@ Starting the upgrade
 ====================
 
 Before you start, you should verify that all hosts are currently online
-and your cluster is generally healthy.
+and your cluster is healthy.
 
 ::
 
@@ -38,7 +38,8 @@ For example, to upgrade to v15.2.1::
 Monitoring the upgrade
 ======================
 
-You can tell whether an upgrade is in progress with::
+Determine whether an upgrade is in process and what version the cluster is
+upgrading to with::
 
   # ceph upgrade status
 

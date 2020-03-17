@@ -5,7 +5,8 @@ Cephadm Operations
 Watching cephadm log messages
 =============================
 
-Cephadm logs to the ``cephadm`` cluster log channel, which means you can monitor progress in realtime with::
+Cephadm logs to the ``cephadm`` cluster log channel, meaning you can
+monitor progress in realtime with::
 
   # ceph -W cephadm
 
@@ -22,7 +23,7 @@ You can see recent events with::
   # ceph log last cephadm
 
 These events are also logged to the ``ceph.cephadm.log`` file on
-monitor hosts and/or to the monitor-daemon stderr.
+monitor hosts and to the monitor daemons' stderr.
 
 
 Ceph daemon logs
@@ -31,14 +32,14 @@ Ceph daemon logs
 Logging to stdout
 -----------------
 
-Traditionally, Ceph daemons have logged to ``/var/log/ceph``.  With
-cephadm, by default, daemons instead log to stderr and the logs are
+Traditionally, Ceph daemons have logged to ``/var/log/ceph``.  By
+default, cephadm daemons log to stderr and the logs are
 captured by the container runtime environment.  For most systems, by
 default, these logs are sent to journald and accessible via
 ``journalctl``.
 
 For example, to view the logs for the daemon ``mon.foo`` for a cluster
-with id ``5c5a50ae-272a-455d-99e9-32c6a013e694``, the command would be
+with ID ``5c5a50ae-272a-455d-99e9-32c6a013e694``, the command would be
 something like::
 
   journalctl -u ceph-5c5a50ae-272a-455d-99e9-32c6a013e694@mon.foo
@@ -62,8 +63,8 @@ To enable logging to files::
   ceph config set global log_to_file true
   ceph config set global mon_cluster_log_to_file true
 
-You probably want to disable logging to stderr (see above) or else everything
-will be logged twice!::
+We recommend disabling logging to stderr (see above) or else everything
+will be logged twice::
 
   ceph config set global log_to_stderr false
   ceph config set global mon_cluster_log_to_stderr false
@@ -96,9 +97,9 @@ Disk usage
 ----------
 
 Because a few Ceph daemons may store a significant amount of data in
-``/var/lib/ceph`` (notably, the monitors and prometheus), you may want
-to move this directory to its own disk, partition, or logical volume so
-that you do not fill up the root file system.
+``/var/lib/ceph`` (notably, the monitors and prometheus), we recommend
+moving this directory to its own disk, partition, or logical volume so
+that it does not fill up the root file system.
 
 
 
@@ -112,9 +113,9 @@ with those hosts in a secure way.
 Default behavior
 ----------------
 
-Cephadm normally stores an SSH key in the monitor that is used to
+Cephadm stores an SSH key in the monitor that is used to
 connect to remote hosts.  When the cluster is bootstrapped, this SSH
-key is generated automatically.  Normally, no additional configuration
+key is generated automatically and no additional configuration
 is necessary.
 
 A *new* SSH key can be generated with::
@@ -142,7 +143,7 @@ You will then need to restart the mgr daemon to reload the configuration with::
 Customizing the SSH configuration
 ---------------------------------
 
-Normally cephadm generates an appropriate ``ssh_config`` file that is
+Cephadm generates an appropriate ``ssh_config`` file that is
 used for connecting to remote hosts.  This configuration looks
 something like this::
 
@@ -153,20 +154,20 @@ something like this::
 
 There are two ways to customize this configuration for your environment:
 
-#. You can import a customized configuration file that will be stored
+#. Import a customized configuration file that will be stored
    by the monitor with::
 
      ceph cephadm set-ssh-config -i <ssh_config_file>
 
-   To remove a customized ssh config and revert back to the default behavior::
+   To remove a customized SSH config and revert back to the default behavior::
 
      ceph cephadm clear-ssh-config
 
-#. You can configure a file location for the ssh configuration file with::
+#. You can configure a file location for the SSH configuration file with::
 
      ceph config set mgr mgr/cephadm/ssh_config_file <path>
 
-   This approach is *not recommended*, however, as the path name must be
+   We do *not recommend* this approach.  The path name must be
    visible to *any* mgr daemon, and cephadm runs all daemons as
    containers. That means that the file either need to be placed
    inside a customized container image for your deployment, or
@@ -182,11 +183,11 @@ CEPHADM_PAUSED
 --------------
 
 Cephadm background work has been paused with ``ceph orch pause``.  Cephadm
-will continue to perform passive monitoring activities (like checking
+continues to perform passive monitoring activities (like checking
 host and daemon status), but it will not make any changes (like deploying
 or removing daemons).
 
-You can resume cephadm work with::
+Resume cephadm work with::
 
   ceph orch resume
 
@@ -206,7 +207,7 @@ Note that you may need to configure SSH access to the remote host
 before this will work.
 
 Alternatively, you can manually connect to the host and ensure that
-services on that host are removed and/or migrated to a host that is
+services on that host are removed or migrated to a host that is
 managed by *cephadm*.
 
 You can also disable this warning entirely with::
@@ -217,14 +218,17 @@ CEPHADM_STRAY_DAEMON
 --------------------
 
 One or more Ceph daemons are running but not are not managed by
-*cephadm*, perhaps because they were deploy using a different tool, or
-were started manually.  This means that those services cannot
-currently be managed by cephadm (e.g., restarted, upgraded, included
-in `ceph orch ps`).
+*cephadm*.  This may be because they were deployed using a different
+tool, or because they were started manually.  Those
+services cannot currently be managed by cephadm (e.g., restarted,
+upgraded, or included in `ceph orch ps`).
 
-**FIXME:** We need to implement and document an adopt procedure here.
+If the daemon is a stateful one (monitor or OSD), it should be adopted
+by cephadm; see :ref:`cephadm-adoption`.  For stateless daemons, it is
+usually easiest to provision a new daemon with the ``ceph orch apply``
+command and then stop the unmanaged daemon.
 
-You can also disable this warning entirely with::
+This warning can be disabled entirely with::
 
   ceph config set mgr mgr/cephadm/warn_on_stray_daemons false
 

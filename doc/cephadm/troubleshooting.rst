@@ -25,7 +25,7 @@ get logs of a daemon running on a different host, give the ``--fsid`` option::
 
     cephadm logs --fsid <fsid> --name <name-of-daemon>
 
-Where the ``<fsid>`` corresponds to the cluster id printed by ``ceph status``.
+where the ``<fsid>`` corresponds to the cluster ID printed by ``ceph status``.
 
 To fetch all log files of all daemons on a given host, run::
 
@@ -66,6 +66,6 @@ To list all container images that are downloaded on a host:
 Manually running containers
 ---------------------------
 
-cephadm writes small wrappers that run a containers. Refer to
-``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the container execution command.
-to execute a container.
+Cephadm writes small wrappers that run a containers. Refer to
+``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the
+container execution command.
