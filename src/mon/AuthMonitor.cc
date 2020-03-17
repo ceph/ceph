@@ -1639,21 +1639,24 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
       mds_cap_string += mds_cap_string.empty() ? "" : ", ";
       mds_cap_string += "allow " + cap;
+
+      if (filesystem != "*" && filesystem != "all") {
+	auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
+	if (!fs) {
+	  ss << "filesystem " << filesystem << " does not exist.";
+	  err = -EINVAL;
+	  goto done;
+	} else {
+	  mds_cap_string += " fsname=" + std::string(fs->mds_map.get_fs_name());
+	}
+      }
+
       if (path != "/") {
 	mds_cap_string += " path=" + path;
       }
     }
 
-    if (filesystem != "*" && filesystem != "all") {
-      auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
-      if (!fs) {
-	ss << "filesystem " << filesystem << " does not exist.";
-	err = -EINVAL;
-	goto done;
-      }
-    }
-
-    osd_cap_string += osd_cap_string.empty()? "" : ", ";
+    osd_cap_string += osd_cap_string.empty() ? "" : ", ";
     osd_cap_string += "allow " + osd_cap_wanted
       + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS
       + " data=" + filesystem;

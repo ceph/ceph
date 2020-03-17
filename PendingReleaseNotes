@@ -157,3 +157,6 @@
   and operate on specific Ceph file systems. The FS can be specificed using
   ``fsname`` in caps. This also affects subcommand ``fs authorize``, the caps
   produce by it will be specific to the FS name passed in its arguments.
+
+* fs: "fs authorize" now sets MON cap to "allow <perm> fsname=<fsname>"
+      instead of setting it to "allow r" all the time.
