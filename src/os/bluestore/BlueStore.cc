@@ -6474,10 +6474,10 @@ string BlueStore::get_device_path(unsigned id)
 
 int BlueStore::expand_devices(ostream& out)
 {
-  int r = _mount(false);
+  int r = cold_open();
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
-  out << "Expanding..." << std::endl;
+  out << "Expanding DB/WAL..." << std::endl;
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
     if (devid == bluefs_shared_bdev ) {
       continue;
@@ -6525,13 +6525,18 @@ int BlueStore::expand_devices(ostream& out)
   }
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
+  cold_close();
   if (size0 < size) {
+    out << "Expanding Main..." << std::endl;
+    int r = _mount(false);
+    ceph_assert(r == 0);
+
     out << bluefs_shared_bdev
 	<<" : expanding " << " from 0x" << std::hex
 	<< size0 << " to 0x" << size << std::dec << std::endl;
     KeyValueDB::Transaction txn;
     txn = db->get_transaction();
-    int r = fm->expand(size, txn);
+    r = fm->expand(size, txn);
     ceph_assert(r == 0);
     db->submit_transaction_sync(txn);
 
@@ -6556,8 +6561,8 @@ int BlueStore::expand_devices(ostream& out)
 	      << std::endl;
       }
     }
+    umount();
   }
-  umount();
   return r;
 }
 
