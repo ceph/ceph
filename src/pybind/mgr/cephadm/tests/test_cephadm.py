@@ -125,8 +125,8 @@ class TestCephadm(object):
             spec = ServiceSpec.from_json(json_spec)
             assert isinstance(spec, DriveGroupSpec)
             c = cephadm_module.apply_drivegroups([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd update...']
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c[0]) == 'Scheduled osd update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -136,8 +136,8 @@ class TestCephadm(object):
             spec = ServiceSpec.from_json(json_spec)
             assert isinstance(spec, DriveGroupSpec)
             c = cephadm_module.apply_drivegroups([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd update...']
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c[0]) == 'Scheduled osd update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):

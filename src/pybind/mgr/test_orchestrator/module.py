@@ -259,7 +259,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def apply_drivegroups(self, specs):
-        # type: (List[DriveGroupSpec]) -> Sequence[TestCompletion]
+        # type: (List[DriveGroupSpec]) -> TestCompletion
         drive_group = specs[0]
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
@@ -267,12 +267,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             if drive_group.placement.host_pattern:
                 if not drive_group.placement.pattern_matches_hosts([h.hostname for h in all_hosts]):
                     raise orchestrator.OrchestratorValidationError('failed to match')
-        return [self.get_hosts().then(run).then(
+        return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
                 message='apply_drivesgroups',
                 mgr=self,
             )
-        )]
+        )
 
     @deferred_write("remove_daemons")
     def remove_daemons(self, names):
