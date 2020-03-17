@@ -536,14 +536,22 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add',
-        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus '
+        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
         'name=placement,type=CephString,req=false',
         'Add daemon(s)')
-    def _daemon_add_misc(self, daemon_type, placement=None):
-        placement = PlacementSpec.from_string(placement)
-        placement.validate()
+    def _daemon_add_misc(self, daemon_type=None, placement=None, inbuf=None):
+        usage = f"""Usage:
+    ceph orch daemon add -i <json_file>
+    ceph orch daemon add {daemon_type or '<daemon_type>'} <placement>"""
+        if inbuf:
+            if daemon_type or placement:
+                raise OrchestratorValidationError(usage)
+            spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
+        else:
+            placement = PlacementSpec.from_string(placement)
+            placement.validate()
 
-        spec = ServiceSpec(daemon_type, placement=placement)
+            spec = ServiceSpec(daemon_type, placement=placement)
 
         if daemon_type == 'mon':
             completion = self.add_mon(spec)
@@ -561,6 +569,8 @@ Usage:
             completion = self.add_node_exporter(spec)
         elif daemon_type == 'prometheus':
             completion = self.add_prometheus(spec)
+        else:
+            raise OrchestratorValidationError(f'unknown daemon type `{daemon_type}`')
 
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
