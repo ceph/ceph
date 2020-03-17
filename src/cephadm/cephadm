@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
-DEFAULT_IMAGE='docker.io/ceph/daemon-base:latest-master-devel'  # FIXME when octopus is ready!!!
+#DEFAULT_IMAGE='docker.io/ceph/ceph:v15.2'
+DEFAULT_IMAGE='quay.io/ceph-ci/ceph:octopus'
 DATA_DIR='/var/lib/ceph'
 LOG_DIR='/var/log/ceph'
 LOCK_DIR='/run/cephadm'
