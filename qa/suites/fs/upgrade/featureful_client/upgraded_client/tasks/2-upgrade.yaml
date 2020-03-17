@@ -10,6 +10,7 @@ overrides:
     - \(SLOW_OPS\)
     - overall HEALTH_
     - \(MON_MSGR2_NOT_ENABLED\)
+    - slow request
     conf:
       global:
         bluestore warn on legacy statfs: false

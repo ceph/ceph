@@ -23,6 +23,7 @@ tasks:
       - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
       - \(OSD_SLOW_PING_TIME
+      - slow request
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgnum_shrink: 2
