@@ -273,11 +273,20 @@ class OsdTest(ControllerTestCase):
         instance.return_value = fake_client
 
         # Valid DriveGroup
-        data = {'method': 'drive_group',
-                'data': {'service_type': 'osd', 'service_id': 'all_hdd',
-                         'data_devices': {'rotational': True},
-                         'host_pattern': '*'},
-                'tracking_id': 'all_hdd, b_ssd'}
+        data = {
+            'method': 'drive_groups',
+            'data': [
+                {
+                    'service_type': 'osd',
+                    'service_id': 'all_hdd',
+                    'data_devices': {
+                        'rotational': True
+                    },
+                    'host_pattern': '*',
+                }
+            ],
+            'tracking_id': 'all_hdd, b_ssd'
+        }
 
         # Without orchestrator service
         fake_client.available.return_value = False
@@ -288,11 +297,11 @@ class OsdTest(ControllerTestCase):
         fake_client.available.return_value = True
         self._task_post('/api/osd', data)
         self.assertStatus(201)
-        fake_client.osds.create.assert_called_with(
-            DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
-                           service_id='all_hdd',
-                           service_type='osd',
-                           data_devices=DeviceSelection(rotational=True)))
+        dg_specs = [DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
+                                   service_id='all_hdd',
+                                   service_type='osd',
+                                   data_devices=DeviceSelection(rotational=True))]
+        fake_client.osds.create.assert_called_with(dg_specs)
 
     @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
     def test_osd_create_with_invalid_drive_groups(self, instance):
@@ -301,10 +310,19 @@ class OsdTest(ControllerTestCase):
         instance.return_value = fake_client
 
         # Invalid DriveGroup
-        data = {'method': 'drive_group',
-                'data': {'service_type': 'osd', 'service_id': 'invalid_dg',
-                         'data_devices': {'rotational': True},
-                         'host_pattern_wrong': 'unknown'},
-                'tracking_id': 'all_hdd, b_ssd'}
+        data = {
+            'method': 'drive_groups',
+            'data': [
+                {
+                    'service_type': 'osd',
+                    'service_id': 'invalid_dg',
+                    'data_devices': {
+                        'rotational': True
+                    },
+                    'host_pattern_wrong': 'unknown',
+                }
+            ],
+            'tracking_id': 'all_hdd, b_ssd'
+        }
         self._task_post('/api/osd', data)
         self.assertStatus(400)

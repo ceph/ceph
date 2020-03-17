@@ -5,7 +5,6 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { map } from 'rxjs/operators';
 
 import * as _ from 'lodash';
-import { DriveGroups } from '../../ceph/cluster/osd/osd-form/drive-groups.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
@@ -64,11 +63,11 @@ export class OsdService {
 
   constructor(private http: HttpClient, private i18n: I18n, private deviceService: DeviceService) {}
 
-  create(driveGroups: DriveGroups) {
+  create(driveGroups: Object[]) {
     const request = {
       method: 'drive_groups',
       data: driveGroups,
-      tracking_id: _.join(_.keys(driveGroups), ', ')
+      tracking_id: _.join(_.map(driveGroups, 'service_id'), ', ')
     };
     return this.http.post(this.path, request, { observe: 'response' });
   }
