@@ -213,8 +213,7 @@ struct Inode {
   InodeRef snapdir_parent;  // only if we are a snapdir inode
   map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
-  //int open_by_mode[CEPH_FILE_MODE_NUM];
-  map<int,int> open_by_mode;
+  int open_by_mode[CEPH_FILE_MODE_BITS] = {};
   map<int,int> cap_refs;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
@@ -344,19 +343,14 @@ struct Inode {
   void mark_caps_clean();
 private:
   // how many opens for write on this Inode?
-  long open_count_for_write()
-  {
-    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
-		  open_by_mode[CEPH_FILE_MODE_WR]);
-  };
+  bool is_opened_for_write() const {
+    return open_by_mode[ffs(CEPH_FILE_MODE_WR)];
+  }
 
   // how many opens of any sort on this inode?
-  long open_count()
-  {
-    return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
-				  [] (int value, const std::map<int, int>::value_type& p)
-                   { return value + p.second; });
-  };
+  bool is_opened() const {
+    return open_by_mode[0];
+  }
 
   void break_deleg(bool skip_read);
   bool delegations_broken(bool skip_read);

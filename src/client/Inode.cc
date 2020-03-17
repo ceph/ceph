@@ -18,6 +18,9 @@ Inode::~Inode()
   dirty_cap_item.remove_myself(); 
   snaprealm_item.remove_myself();
 
+  for (int i = 0; i < CEPH_FILE_MODE_BITS; i++)
+    ceph_assert(!open_by_mode[i]);
+
   if (snapdir_parent) {
     snapdir_parent->flags &= ~I_SNAPDIR_OPEN;
     snapdir_parent.reset();
@@ -127,18 +130,27 @@ void Inode::make_nosnap_relative_path(filepath& p)
 
 void Inode::get_open_ref(int mode)
 {
-  open_by_mode[mode]++;
+  int bits = (mode << 1) | 1;
+  for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
+    if (bits & (1 << i))
+	open_by_mode[i]++;
+  }
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
 
 bool Inode::put_open_ref(int mode)
 {
-  //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
-  auto& ref = open_by_mode.at(mode);
-  ceph_assert(ref > 0);
-  if (--ref == 0)
-    return true;
-  return false;
+  bool last = false;
+  int bits = (mode << 1) | 1;
+  for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
+    if (bits & (1 << i)) {
+      auto &ref = open_by_mode[i];
+      ceph_assert(ref > 0);
+      if (--ref == 0)
+	last = true;
+    }
+  }
+  return last;
 }
 
 void Inode::get_cap_ref(int cap)
@@ -293,13 +305,14 @@ int Inode::caps_used()
 
 int Inode::caps_file_wanted()
 {
-  int want = 0;
-  for (map<int,int>::iterator p = open_by_mode.begin();
-       p != open_by_mode.end();
-       ++p)
-    if (p->second)
-      want |= ceph_caps_for_mode(p->first);
-  return want;
+  int bits = 0;
+  for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
+    if (open_by_mode[i])
+      bits |= 1 << i;
+  }
+  if (bits == 0)
+    return 0;
+  return ceph_caps_for_mode(bits >> 1);
 }
 
 int Inode::caps_wanted()
@@ -496,12 +509,14 @@ void Inode::dump(Formatter *f) const
   }
 
   // open
-  if (!open_by_mode.empty()) {
+  if (!is_opened()) {
     f->open_array_section("open_by_mode");
-    for (map<int,int>::const_iterator p = open_by_mode.begin(); p != open_by_mode.end(); ++p) {
+    for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
+      if (!open_by_mode[i])
+	continue;
       f->open_object_section("ref");
-      f->dump_int("mode", p->first);
-      f->dump_int("refs", p->second);
+      f->dump_int("mode", (1 << i) >> 1);
+      f->dump_int("refs", open_by_mode[i]);
       f->close_section();
     }
     f->close_section();
@@ -674,14 +689,14 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
   // check vs. currently open files on this inode
   switch (type) {
   case CEPH_DELEGATION_RD:
-    if (open_count_for_write()) {
+    if (is_opened_for_write()) {
       lsubdout(client->cct, client, 10) << __func__ <<
 	    ": open for write" << dendl;
       return -EAGAIN;
     }
     break;
   case CEPH_DELEGATION_WR:
-    if (open_count() > 1) {
+    if (is_opened()) {
       lsubdout(client->cct, client, 10) << __func__ << ": open" << dendl;
       return -EAGAIN;
     }
