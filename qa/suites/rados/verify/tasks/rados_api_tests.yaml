@@ -23,6 +23,8 @@ overrides:
 tasks:
 - workunit:
     timeout: 6h
+    env:
+      ALLOW_TIMEOUTS: "1"
     clients:
       client.0:
         - rados/test.sh
