@@ -50,7 +50,9 @@ static const auto signed_subresources = {
   "versioning",
   "versions",
   "website",
-  "object-lock"
+  "object-lock",
+  "append",
+  "position"
 };
 
 /*
