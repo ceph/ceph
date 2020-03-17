@@ -7,6 +7,8 @@ from ceph.deployment.service_spec import NFSServiceSpec
 import cephadm
 from orchestrator import OrchestratorError
 
+from . import utils
+
 logger = logging.getLogger(__name__)
 
 class NFSGanesha(object):
@@ -41,7 +43,7 @@ class NFSGanesha(object):
 
     def get_keyring_entity(self):
         # type: () -> str
-        return cephadm.name_to_config_section(self.get_rados_user())
+        return utils.name_to_config_section(self.get_rados_user())
 
     def get_or_create_keyring(self, entity=None):
         # type: (Optional[str]) -> str
