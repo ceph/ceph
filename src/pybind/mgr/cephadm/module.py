@@ -2547,7 +2547,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: (ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('mgr', spec, self._create_mgr)
 
-    def _apply(self, spec):
+    def _apply(self, spec: ServiceSpec):
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
@@ -2573,6 +2573,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.spec_store.save(spec)
         self._kick_serve_loop()
         return trivial_result("Scheduled %s update..." % spec.service_type)
+
+    def apply(self, specs: List[ServiceSpec]) -> AsyncCompletion:
+        return self._apply(specs)
 
     def apply_mgr(self, spec):
         return self._apply(spec)
@@ -3104,30 +3107,7 @@ receivers:
         """
         Loads all entries from the service_spec mon_store root.
         """
-        specs = list()
-        for spec in self.spec_store.find(service_name=service_name):
-            specs.append('---')
-            specs.append(yaml.safe_dump(spec.to_json()))
-        return trivial_result(specs)
-
-    def apply_service_config(self, spec_document: str) -> orchestrator.Completion:
-        """
-        Parse a multi document yaml file (represented in a inbuf object)
-        and loads it with it's respective ServiceSpec to validate the
-        initial input.
-        If no errors are raised, save them.
-        """
-        content: Iterator[Any] = yaml.load_all(spec_document)
-        # Load all specs from a multi document yaml file.
-        loaded_specs: List[ServiceSpec] = list()
-        for spec in content:
-            # load ServiceSpec once to validate
-            spec_o = ServiceSpec.from_json(spec)
-            loaded_specs.append(spec_o)
-        for spec in loaded_specs:
-            self.spec_store.save(spec)
-        self._kick_serve_loop()
-        return trivial_result("ServiceSpecs saved")
+        return trivial_result(self.spec_store.find(service_name=service_name))
 
 
 class BaseScheduler(object):

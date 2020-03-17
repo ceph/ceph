@@ -11,7 +11,7 @@ from prettytable import PrettyTable
 from mgr_util import format_bytes, to_pretty_timedelta
 
 try:
-    from typing import List, Set, Optional, Dict
+    from typing import List, Set, Optional, Dict, Iterator
 except ImportError:
     pass  # just for type checking.
 
@@ -568,15 +568,6 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
-        'orch apply',
-        desc='Applies a Service Specification from a file. ceph orch apply -i $file')
-    def _apply_services(self, inbuf):
-        completion = self.apply_service_config(inbuf)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
         'orch daemon add mds',
         'name=fs_name,type=CephString '
         'name=placement,type=CephString,req=false',
@@ -703,39 +694,32 @@ Usage:
         completion = self.list_specs(service_name=service_name)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
-        specs = completion.result_str()
-        return HandleCommandResult(stdout=specs)
+        specs = completion.result()
+        return HandleCommandResult(stdout=yaml.safe_dump_all(specs))
 
     @_cli_write_command(
         'orch apply',
-        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus '
+        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
-        'Update the size or placement for a service')
-    def _apply_misc(self, service_type, placement=None, unmanaged=False):
-        placement = PlacementSpec.from_string(placement)
-        placement.validate()
+        'Update the size or placement for a service or apply a large yaml spec')
+    def _apply_misc(self, service_type=None, placement=None, unmanaged=False, inbuf=None):
+        usage = """Usage:
+  ceph orch apply -i <yaml spec>
+  ceph orch apply <service_type> <placement> [--unmanaged]
+        """
+        if inbuf:
+            if service_type or placement or unmanaged:
+                raise OrchestratorValidationError(usage)
+            content: Iterator = yaml.load_all(inbuf)
+            specs = [ServiceSpec.from_json(s) for s in content]
+        else:
+            placement = PlacementSpec.from_string(placement)
+            placement.validate()
 
-        spec = ServiceSpec(service_type, placement=placement,
-                           unmanaged=unmanaged)
+            specs = [ServiceSpec(service_type, placement=placement, unmanaged=unmanaged)]
 
-        if service_type == 'mgr':
-            completion = self.apply_mgr(spec)
-        elif service_type == 'mon':
-            completion = self.apply_mon(spec)
-        elif service_type == 'rbd-mirror':
-            completion = self.apply_rbd_mirror(spec)
-        elif service_type == 'crash':
-            completion = self.apply_crash(spec)
-        elif service_type == 'alertmanager':
-            completion = self.apply_alertmanager(spec)
-        elif service_type == 'grafana':
-            completion = self.apply_grafana(spec)
-        elif service_type == 'node-exporter':
-            completion = self.apply_node_exporter(spec)
-        elif service_type == 'prometheus':
-            completion = self.apply_prometheus(spec)
-
+        completion = self.apply(specs)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

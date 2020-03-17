@@ -844,7 +844,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def apply_service_config(self, spec_document: str) -> Completion:
+    def apply(self, specs: List[ServiceSpec]) -> Completion:
         """
         Saves Service Specs from a yaml|json file
         """
