@@ -611,6 +611,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'default': True,
             'desc': 'log to the "cephadm" cluster log channel"',
         },
+        {
+            'name': 'allow_ptrace',
+            'type': 'bool',
+            'default': False,
+            'desc': 'allow SYS_PTRACE capability on ceph containers',
+            'long_desc': 'The SYS_PTRACE capability is needed to attach to a '
+                         'process with gdb or strace.  Enabling this options '
+                         'can allow debugging daemons that encounter problems '
+                         'at runtime.',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -636,6 +646,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
+            self.allow_ptrace = False
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
@@ -2169,6 +2180,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         if reconfig:
             extra_args.append('--reconfig')
+        if self.allow_ptrace:
+            extra_args.append('--allow-ptrace')
 
         self.log.info('%s daemon %s on %s' % (
             'Reconfiguring' if reconfig else 'Deploying',
