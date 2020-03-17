@@ -465,11 +465,10 @@ Usage:
                 )
             ]
 
-        completions = self.apply_drivegroups(dg_specs)
-        [self._orchestrator_wait([completion]) for completion in completions]  # type: ignore
-        [raise_if_exception(completion) for completion in completions]  # type: ignore
-        result_strings = [completion.result_str() for completion in completions]
-        return HandleCommandResult(stdout=" ".join(result_strings))
+        completion = self.apply_drivegroups(dg_specs)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
         'orch daemon add osd',
