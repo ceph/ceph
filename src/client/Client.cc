@@ -9281,14 +9281,14 @@ int Client::_release_fh(Fh *f)
 
   in->unset_deleg(f);
 
-  if (in->snapid == CEPH_NOSNAP) {
-    if (in->put_open_ref(f->mode)) {
-      _flush(in, new C_Client_FlushComplete(this, in));
-      check_caps(in, 0);
-    }
-  } else {
+  if (in->snapid != CEPH_NOSNAP) {
     ceph_assert(in->snap_cap_refs > 0);
     in->snap_cap_refs--;
+  }
+
+  if (in->put_open_ref(f->mode)) {
+    _flush(in, new C_Client_FlushComplete(this, in));
+    check_caps(in, 0);
   }
 
   _release_filelocks(f);
