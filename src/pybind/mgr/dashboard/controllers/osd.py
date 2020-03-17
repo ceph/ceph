@@ -249,11 +249,12 @@ class Osd(RESTController):
 
     @raise_if_no_orchestrator
     @handle_orchestrator_error('osd')
-    def _create_with_drive_groups(self, drive_group):
+    def _create_with_drive_groups(self, drive_groups):
         """Create OSDs with DriveGroups."""
         orch = OrchClient.instance()
         try:
-            orch.osds.create(DriveGroupSpec.from_json(drive_group))
+            dg_specs = [DriveGroupSpec.from_json(dg) for dg in drive_groups]
+            orch.osds.create(dg_specs)
         except (ValueError, TypeError, DriveGroupValidationError) as e:
             raise DashboardException(e, component='osd')
 
@@ -262,7 +263,7 @@ class Osd(RESTController):
     def create(self, method, data, tracking_id):  # pylint: disable=W0622
         if method == 'bare':
             return self._create_bare(data)
-        if method == 'drive_group':
+        if method == 'drive_groups':
             return self._create_with_drive_groups(data)
         raise DashboardException(
             component='osd', http_status_code=400, msg='Unknown method: {}'.format(method))
