@@ -1422,9 +1422,11 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
 
     return mounts
 
-def get_container(fsid, daemon_type, daemon_id, privileged=False,
+def get_container(fsid, daemon_type, daemon_id,
+                  privileged=False,
+                  ptrace=False,
                   container_args=[]):
-    # type: (str, str, Union[int, str], bool, List[str]) -> CephContainer
+    # type: (str, str, Union[int, str], bool, bool, List[str]) -> CephContainer
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
@@ -1484,6 +1486,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
         envs=envs,
         privileged=privileged,
+        ptrace=ptrace,
     )
 
 def extract_uid_gid(img='', file_path='/var/lib/ceph'):
@@ -1838,16 +1841,18 @@ class CephContainer:
                  cname='',
                  container_args=[],
                  envs=None,
-                 privileged=False):
-        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], Optional[bool]) -> None
+                 privileged=False,
+                 ptrace=False):
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
         self.cname = cname
         self.container_args = container_args
-        self.privileged = privileged
         self.envs = envs
+        self.privileged = privileged
+        self.ptrace = ptrace
 
     def run_cmd(self):
         # type: () -> List[str]
@@ -1863,6 +1868,8 @@ class CephContainer:
             priv = ['--privileged',
                     # let OSD etc read block devs that haven't been chowned
                     '--group-add=disk']
+        if self.ptrace:
+            priv.append('--cap-add=SYS_PTRACE')
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -2428,7 +2435,8 @@ def command_deploy():
         (config, keyring) = get_config_and_keyring()
         (uid, gid) = extract_uid_gid()
         make_var_run(args.fsid, uid, gid)
-        c = get_container(args.fsid, daemon_type, daemon_id)
+        c = get_container(args.fsid, daemon_type, daemon_id,
+                          ptrace=args.allow_ptrace)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       osd_fsid=args.osd_fsid,
@@ -4111,6 +4119,10 @@ def _get_parser():
         '--reconfig',
         action='store_true',
         help='Reconfigure a previously deployed daemon')
+    parser_deploy.add_argument(
+        '--allow-ptrace',
+        action='store_true',
+        help='Allow SYS_PTRACE on daemon container')
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')

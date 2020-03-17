@@ -1161,7 +1161,7 @@ COMMAND("mgr dump "
 	"name=epoch,type=CephInt,range=0,req=false",
 	"dump the latest MgrMap",
 	"mgr", "r")
-COMMAND("mgr fail name=who,type=CephString",
+COMMAND("mgr fail name=who,type=CephString,req=false",
 	"treat the named manager daemon as failed", "mgr", "rw")
 COMMAND("mgr module ls",
 	"list active mgr modules", "mgr", "r")
