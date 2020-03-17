@@ -48,6 +48,10 @@ void Protocol::close(bool dispatch_reset,
     return;
   }
 
+  logger().info("{} closing: reset {}, replace {}", conn,
+                dispatch_reset ? "yes" : "no",
+                f_accept_new ? "yes" : "no");
+
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn_ref = conn.shared_from_this(), this] {
       logger().debug("{} closed!", conn);
