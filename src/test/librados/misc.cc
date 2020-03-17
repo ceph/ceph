@@ -318,7 +318,12 @@ static void shutdown_racer_func()
   int i;
 
   for (i = 0; i < niter; ++i) {
-    ASSERT_EQ("", connect_cluster(&rad));
+    auto r = connect_cluster(&rad);
+    if (getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_TRUE(r == "" || r == "rados_connect failed with error -110");
+    } else {
+      ASSERT_EQ("", r);
+    }
     rados_shutdown(rad);
   }
 }
