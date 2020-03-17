@@ -9,7 +9,7 @@ overrides:
   ceph:
     conf:
       global:
-        osd heartbeat grace: 40
+        osd heartbeat grace: 80
       mon:
         mon osd crush smoke test: false
       osd:
