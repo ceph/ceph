@@ -19,6 +19,7 @@ Requirements
 Any modern Linux distribution should be sufficient.  Dependencies
 are installed automatically by the bootstrap process below.
 
+.. _get-cephadm:
 
 Get cephadm
 ===========
