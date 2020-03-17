@@ -198,12 +198,16 @@ class PlacementSpec(object):
         return _cls
 
     def to_json(self):
-        return {
-            'label': self.label,
-            'hosts': [host.to_json() for host in self.hosts] if self.hosts else [],
-            'count': self.count,
-            'host_pattern': self.host_pattern,
-        }
+        r = {}
+        if self.label:
+            r['label'] = self.label
+        if self.hosts:
+            r['hosts'] = [host.to_json() for host in self.hosts]
+        if self.count:
+            r['count'] = self.count
+        if self.host_pattern:
+            r['host_pattern'] = self.host_pattern
+        return r
 
     def validate(self):
         if self.hosts and self.label:
@@ -378,9 +382,12 @@ class ServiceSpec(object):
 
     def to_json(self):
         # type: () -> Dict[str, Any]
-        c = self.__dict__.copy()
-        if self.placement:
-            c['placement'] = self.placement.to_json()
+        c = {}
+        for key, val in self.__dict__.items():
+            if hasattr(val, 'to_json'):
+                val = val.to_json()
+            if val:
+                c[key] = val
         return c
 
     def validate(self):
