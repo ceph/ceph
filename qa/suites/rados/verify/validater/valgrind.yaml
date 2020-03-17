@@ -14,6 +14,8 @@ overrides:
         mon osd crush smoke test: false
       osd:
         osd fast shutdown: false
+        debug bluestore: 1
+        debug bluefs: 1
     log-whitelist:
       - overall HEALTH_
 # valgrind is slow.. we might get PGs stuck peering etc
