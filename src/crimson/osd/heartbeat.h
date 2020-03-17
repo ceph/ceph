@@ -38,9 +38,6 @@ public:
   seastar::future<> update_peers(int whoami);
   seastar::future<> remove_peer(osd_id_t peer);
 
-  seastar::future<> send_heartbeats();
-  seastar::future<> send_failures();
-
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
@@ -109,12 +106,14 @@ private:
   };
   using peers_map_t = std::map<osd_id_t, PeerInfo>;
   peers_map_t peers;
-
   // osds which are considered failed
   // osd_id => when was the last time that both front and back pings were acked
   //           use for calculating how long the OSD has been unresponsive
   using failure_queue_t = std::map<osd_id_t, clock::time_point>;
-  failure_queue_t failure_queue;
+  seastar::future<> send_failures(failure_queue_t&& failure_queue);
+  seastar::future<> send_heartbeats();
+  void heartbeat_check();
+
   struct failure_info_t {
     clock::time_point failed_since;
     entity_addrvec_t addrs;
