@@ -31,7 +31,8 @@ import uuid
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
-from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec, \
+    assert_valid_host
 
 from mgr_module import MgrModule
 import orchestrator
@@ -106,18 +107,6 @@ def name_to_config_section(name):
         return name
     else:
         return 'mon'
-
-def assert_valid_host(name):
-    p = re.compile('^[a-zA-Z0-9-]+$')
-    try:
-        assert len(name) <= 250, 'name is too long (max 250 chars)'
-        parts = name.split('.')
-        for part in name.split('.'):
-            assert len(part) > 0, '.-delimited name component must not be empty'
-            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
-            assert p.match(part), 'name component must include only a-z, 0-9, and -'
-    except AssertionError as e:
-        raise OrchestratorError(e)
 
 
 class SpecStore():

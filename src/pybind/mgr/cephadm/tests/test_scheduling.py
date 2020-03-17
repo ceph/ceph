@@ -246,6 +246,7 @@ def test_node_assignment3(service_type, placement, hosts,
         ('1 *'),
         ('* label:foo'),
         ('* host1 host2'),
+        ('hostname12hostname12hostname12hostname12hostname12hostname12hostname12'),  # > 63 chars
     ])
 def test_bad_placements(placement):
     try:
