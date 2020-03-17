@@ -29,20 +29,24 @@ describe('OsdService', () => {
   it('should call create', () => {
     const post_data = {
       method: 'drive_groups',
-      data: {
-        all_hdd: {
+      data: [
+        {
+          service_name: 'osd',
+          service_id: 'all_hdd',
           host_pattern: '*',
           data_devices: {
             rotational: true
           }
         },
-        host1_ssd: {
+        {
+          service_name: 'osd',
+          service_id: 'host1_ssd',
           host_pattern: 'host1',
           data_devices: {
             rotational: false
           }
         }
-      },
+      ],
       tracking_id: 'all_hdd, host1_ssd'
     };
     service.create(post_data.data).subscribe();
