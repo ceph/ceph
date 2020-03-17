@@ -21,17 +21,13 @@ class NFSGanesha(object):
         self.daemon_id = daemon_id
         self.spec = spec
 
-    def get_daemon_name(self):
+    def get_rados_user(self):
         # type: () -> str
         return '%s.%s' % (self.spec.service_type, self.daemon_id)
 
-    def get_rados_user(self):
-        # type: () -> str
-        return self.get_daemon_name()
-
     def get_rados_config_name(self):
         # type: () -> str
-        return 'conf-' + self.get_daemon_name()
+        return 'conf-' + self.get_rados_user()
 
     def get_rados_config_url(self):
         # type: () -> str
