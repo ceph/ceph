@@ -248,18 +248,6 @@ class CephAnsible(Task):
                         'libffi-dev',
                         'python-dev'
                     ])
-            else:
-                # cleanup rpm packages the task installed
-                installer_node.run(args=[
-                    'sudo',
-                    'yum',
-                    'remove',
-                    '-y',
-                    'libffi-devel',
-                    'python-devel',
-                    'openssl-devel',
-                    'libselinux-python'
-                ])
 
     def collect_logs(self):
         ctx = self.ctx
@@ -363,26 +351,7 @@ class CephAnsible(Task):
         # setup ansible on first mon node
         ceph_installer = self.ceph_installer
         args = self.args
-        if ceph_installer.os.package_type == 'rpm':
-            # handle selinux init issues during purge-cluster
-            # https://bugzilla.redhat.com/show_bug.cgi?id=1364703
-            ceph_installer.run(
-                args=[
-                    'sudo', 'yum', 'remove', '-y', 'libselinux-python'
-                ]
-            )
-            # install crypto/selinux packages for ansible
-            ceph_installer.run(args=[
-                'sudo',
-                'yum',
-                'install',
-                '-y',
-                'libffi-devel',
-                'python-devel',
-                'openssl-devel',
-                'libselinux-python'
-            ])
-        else:
+        if ceph_installer.os.package_type == 'deb':
             # update ansible from ppa
             ceph_installer.run(args=[
                 'sudo',
