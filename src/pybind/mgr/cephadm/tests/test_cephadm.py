@@ -308,8 +308,8 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('mgr', placement=ps)
             c = cephadm_module.apply_mgr(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled mgr update...'
+            _save_spec.assert_called_with(spec)
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -318,8 +318,8 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('mds', 'fsname', placement=ps)
             c = cephadm_module.apply_mds(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled mds update...'
+            _save_spec.assert_called_with(spec)
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -328,8 +328,8 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('rgw', 'r.z', placement=ps)
             c = cephadm_module.apply_rgw(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled rgw update...'
+            _save_spec.assert_called_with(spec)
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -338,8 +338,8 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('rbd-mirror', placement=ps)
             c = cephadm_module.apply_rbd_mirror(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled rbd-mirror update...'
+            _save_spec.assert_called_with(spec)
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -348,8 +348,8 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('prometheus', placement=ps)
             c = cephadm_module.apply_prometheus(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled prometheus update...'
+            _save_spec.assert_called_with(spec)
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -358,5 +358,5 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('node_exporter', placement=ps)
             c = cephadm_module.apply_node_exporter(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled node_exporter update...'
+            _save_spec.assert_called_with(spec)
