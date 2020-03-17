@@ -36,11 +36,15 @@ class OrchestratorAPI(OrchestratorClientMixin):
 def wait_api_result(method):
     @wraps(method)
     def inner(self, *args, **kwargs):
-        completion = method(self, *args, **kwargs)
-        self.api.orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return completion.result
-
+        completions = method(self, *args, **kwargs)
+        if not isinstance(completions, list):
+            completions = [completions]
+        self.api.orchestrator_wait(completions)
+        for compl in completions:
+            raise_if_exception(compl)
+        if len(completions) == 1:
+            return completions[0].result
+        return [compl.result for compl in completions]
     return inner
 
 
@@ -105,8 +109,8 @@ class ServiceManager(ResourceManager):
 
 class OsdManager(ResourceManager):
     @wait_api_result
-    def create(self, drive_group):
-        return self.api.create_osds(drive_group)
+    def create(self, drive_group_specs):
+        return self.api.apply_drivegroups(drive_group_specs)
 
     @wait_api_result
     def remove(self, osd_ids):

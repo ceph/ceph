@@ -9,7 +9,6 @@ import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { FinishedTask } from '../../../../shared/models/finished-task';
 import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
-import { DriveGroups } from '../osd-form/drive-groups.interface';
 
 @Component({
   selector: 'cd-osd-creation-preview-modal',
@@ -18,7 +17,7 @@ import { DriveGroups } from '../osd-form/drive-groups.interface';
 })
 export class OsdCreationPreviewModalComponent implements OnInit {
   @Input()
-  driveGroups: DriveGroups = {};
+  driveGroups: Object[] = [];
 
   @Output()
   submitAction = new EventEmitter();
@@ -47,7 +46,7 @@ export class OsdCreationPreviewModalComponent implements OnInit {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('osd/' + URLVerbs.CREATE, {
-          tracking_id: _.join(_.keys(this.driveGroups), ', ')
+          tracking_id: _.join(_.map(this.driveGroups, 'service_id'), ', ')
         }),
         call: this.osdService.create(this.driveGroups)
       })
