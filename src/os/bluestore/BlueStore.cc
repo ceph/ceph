@@ -6792,7 +6792,7 @@ string BlueStore::get_device_path(unsigned id)
 
 int BlueStore::expand_devices(ostream& out)
 {
-  int r = _mount(true);
+  int r = cold_open();
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
@@ -6843,9 +6843,9 @@ int BlueStore::expand_devices(ostream& out)
   }
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
+  cold_close();
   if (size0 < size) {
     out << "Expanding Main..." << std::endl;
-    umount();
     int r = _mount(false);
     ceph_assert(r == 0);
 
@@ -6879,8 +6879,8 @@ int BlueStore::expand_devices(ostream& out)
 	      << std::endl;
       }
     }
+    umount();
   }
-  umount();
   return r;
 }
 
