@@ -4,7 +4,7 @@
 Installing Ceph
 ===============
 
-There are several different ways to install Ceph.  Please choose the
+There are several different ways to install Ceph.  Choose the
 method that best suites your needs.
 
 Recommended methods
@@ -13,7 +13,7 @@ Recommended methods
 :ref:`Cephadm <cephadm>` installs and manages a Ceph cluster using containers and
 systemd, with tight integration with the CLI and dashboard GUI.
 
-* cephadm supports only Octopus and newer releases.
+* cephadm only supports only Octopus and newer releases.
 * cephadm is fully integrated with the new orchestration API and
   fully supports the new CLI and dashboard features to manage
   cluster deployment.
@@ -22,14 +22,14 @@ systemd, with tight integration with the CLI and dashboard GUI.
 
 `Rook <https://rook.io/>`_ deploys and manages Ceph clusters running
 in Kubernetes, while also enabling management of storage resources and
-provisioning via Kubernetes APIs.  Rook is the recommended way to run Ceph in
+provisioning via Kubernetes APIs.  We recommend Rook as the way to run Ceph in
 Kubernetes or to connect an existing Ceph storage cluster to Kubernetes.
 
-* Rook supports only Nautilus and newer releases of Ceph.
+* Rook only supports Nautilus and newer releases of Ceph.
 * Rook is the preferred method for running Ceph on Kubernetes, or for
   connecting a Kubernetes cluster to an existing (external) Ceph
   cluster.
-* Rook fully suports the new orchestrator API. New management features
+* Rook supports the new orchestrator API. New management features
   in the CLI and dashboard are fully supported.
 
 Other methods
@@ -44,7 +44,7 @@ Ceph clusters using Ansible.
   management features and dashboard integration are not available.
 
 
-:ref:`ceph-deploy <ceph-deploy-index>` is a tool for quickly deploying simple clusters.
+:ref:`ceph-deploy <ceph-deploy-index>` is a tool for quickly deploying clusters.
 
   .. IMPORTANT::
 
