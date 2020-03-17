@@ -591,15 +591,14 @@ class Module(MgrModule):
             pgs_by_osd = {}
             objects_by_osd = {}
             bytes_by_osd = {}
-            for root in pe.pool_roots[pool]:
-                for osd in pe.target_by_root[root]:
-                    pgs_by_osd[osd] = 0
-                    objects_by_osd[osd] = 0
-                    bytes_by_osd[osd] = 0
             for pgid, up in six.iteritems(pm):
                 for osd in [int(osd) for osd in up]:
                     if osd == CRUSHMap.ITEM_NONE:
                         continue
+                    if osd not in pgs_by_osd:
+                        pgs_by_osd[osd] = 0
+                        objects_by_osd[osd] = 0
+                        bytes_by_osd[osd] = 0
                     pgs_by_osd[osd] += 1
                     objects_by_osd[osd] += ms.pg_stat[pgid]['num_objects']
                     bytes_by_osd[osd] += ms.pg_stat[pgid]['num_bytes']
