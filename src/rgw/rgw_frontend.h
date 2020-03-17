@@ -252,11 +252,16 @@ public:
 class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   std::list<RGWFrontend*> &frontends;
   RGWRealmReloader::Pauser* pauser;
+  rgw::auth::ImplicitTenants& implicit_tenants;
 
  public:
   RGWFrontendPauser(std::list<RGWFrontend*> &frontends,
+                    rgw::auth::ImplicitTenants& implicit_tenants,
                     RGWRealmReloader::Pauser* pauser = nullptr)
-    : frontends(frontends), pauser(pauser) {}
+    : frontends(frontends),
+      pauser(pauser),
+      implicit_tenants(implicit_tenants) {
+  }
 
   void pause() override {
     for (auto frontend : frontends)
@@ -268,7 +273,7 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, store);
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store);
 
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store, auth_registry);
