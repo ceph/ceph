@@ -1057,6 +1057,12 @@ def get_valgrind_args(testdir, name, preamble, v):
         return preamble
     if not isinstance(v, list):
         v = [v]
+
+    # https://tracker.ceph.com/issues/44362
+    preamble.extend([
+        'env', 'OPENSSL_ia32cap=~0x1000000000000000',
+    ])
+
     val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
@@ -1068,6 +1074,7 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
+            '--vgdb=yes',
         ]
     else:
         extra_args = [
@@ -1077,6 +1084,7 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
+            '--vgdb=yes',
         ]
     args = [
         'cd', testdir,
