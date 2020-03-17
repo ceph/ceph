@@ -3020,9 +3020,9 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
 {
   int r = -ENOSPC;
   if (slow_dev_expander) {
-    int id = _get_slow_device_id();
+    auto id = _get_slow_device_id();
     auto min_alloc_size = alloc_size[id];
-    ceph_assert(id <= (int)alloc.size() && alloc[id]);
+    ceph_assert(id <= alloc.size() && alloc[id]);
     auto min_need = round_up_to(need, min_alloc_size);
     need = std::max(need,
       slow_dev_expander->get_recommended_expansion_delta(

@@ -341,7 +341,9 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  unsigned _get_slow_device_id() {
+    return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
+  }
   const char* get_device_name(unsigned id);
   int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
