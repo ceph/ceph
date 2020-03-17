@@ -9,6 +9,7 @@
 #include "messages/MOSDFailure.h"
 
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/formatter.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/osd/shard_services.h"
@@ -33,7 +34,10 @@ Heartbeat::Heartbeat(const crimson::osd::ShardServices& service,
     front_msgr{front_msgr},
     back_msgr{back_msgr},
     // do this in background
-    timer{[this] { (void)send_heartbeats(); }}
+    timer{[this] {
+      heartbeat_check();
+      (void)send_heartbeats();
+    }}
 {}
 
 seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
@@ -294,7 +298,6 @@ seastar::future<> Heartbeat::handle_reply(crimson::net::Connection* conn,
   }
   if (peer.is_healthy(now)) {
     // cancel false reports
-    failure_queue.erase(from);
     if (auto pending = failure_pending.find(from);
         pending != failure_pending.end()) {
       return send_still_alive(from, pending->second.addrs);
@@ -307,6 +310,34 @@ seastar::future<> Heartbeat::handle_you_died()
 {
   // TODO: ask for newer osdmap
   return seastar::now();
+}
+
+void Heartbeat::heartbeat_check()
+{
+  failure_queue_t failure_queue;
+  const auto now = clock::now();
+  for (const auto& [osd, peer_info]: peers) {
+    if (clock::is_zero(peer_info.first_tx)) {
+      continue;
+    }
+
+    if (peer_info.is_unhealthy(now)) {
+      logger().error(" heartbeat_check: no reply from osd.{} "
+		     "since back {} front {} (oldest deadline {})",
+		     osd, peer_info.last_rx_back, peer_info.last_rx_front,
+		     peer_info.ping_history.begin()->second.deadline);
+      failure_queue[osd] = std::min(peer_info.last_rx_back,
+				    peer_info.last_rx_front);
+    }
+  }
+  if (!failure_queue.empty()) {
+    // send_failures can run in background, because messages
+    // are sent in order, if later checks find out the previous
+    // "failed" peers to be healthy, that "still alive" messages
+    // would be sent after the previous "osd failure" messages
+    // which is totally safe.
+    (void)send_failures(std::move(failure_queue));
+  }
 }
 
 seastar::future<> Heartbeat::send_heartbeats()
@@ -353,7 +384,7 @@ seastar::future<> Heartbeat::send_heartbeats()
     });
 }
 
-seastar::future<> Heartbeat::send_failures()
+seastar::future<> Heartbeat::send_failures(failure_queue_t&& failure_queue)
 {
   using failure_item_t = typename failure_queue_t::value_type;
   return seastar::parallel_for_each(failure_queue,
@@ -374,9 +405,6 @@ seastar::future<> Heartbeat::send_failures()
       failure_pending.emplace(osd, failure_info_t{failed_since,
                                                   osdmap->get_addrs(osd)});
       return monc.send_message(failure_report);
-    }).then([this] {
-      failure_queue.clear();
-      return seastar::now();
     });
 }
 
