@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -ex
+set -e
 
 script_location="$(dirname "$(readlink -f "$0")")"
 cd "$script_location"
