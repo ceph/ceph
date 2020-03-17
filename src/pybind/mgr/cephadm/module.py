@@ -40,6 +40,7 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
     CLICommandMeta
 
 from . import remotes
+from . import utils
 from .nfs import NFSGanesha
 from .osd import RemoveUtil, OSDRemoval
 
@@ -95,19 +96,6 @@ except ImportError:
 
         def __exit__(self, exc_type, exc_value, traceback):
             self.cleanup()
-
-
-def name_to_config_section(name):
-    """
-    Map from daemon names to ceph entity names (as seen in config)
-    """
-    daemon_type = name.split('.', 1)[0]
-    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'crash']:
-        return 'client.' + name
-    elif daemon_type in ['mon', 'osd', 'mds', 'mgr', 'client']:
-        return name
-    else:
-        return 'mon'
 
 
 class SpecStore():
@@ -900,7 +888,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'prefix': 'config set',
                     'name': 'container_image',
                     'value': target_name,
-                    'who': name_to_config_section(daemon_type + '.' + d.daemon_id),
+                    'who': utils.name_to_config_section(daemon_type + '.' + d.daemon_id),
                 })
                 self._daemon_action(
                     d.daemon_type,
@@ -964,7 +952,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 })
             to_clean = []
             for section in image_settings.keys():
-                if section.startswith(name_to_config_section(daemon_type) + '.'):
+                if section.startswith(utils.name_to_config_section(daemon_type) + '.'):
                     to_clean.append(section)
             if to_clean:
                 self.log.debug('Upgrade: Cleaning up container_image for %s...' %
@@ -991,7 +979,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             ret, image, err = self.mon_command({
                 'prefix': 'config rm',
                 'name': 'container_image',
-                'who': name_to_config_section(daemon_type),
+                'who': utils.name_to_config_section(daemon_type),
             })
 
         self.log.info('Upgrade: Complete!')
@@ -1562,7 +1550,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     # get container image
                     ret, image, err = self.mon_command({
                         'prefix': 'config get',
-                        'who': name_to_config_section(entity),
+                        'who': utils.name_to_config_section(entity),
                         'key': 'container_image',
                     })
                     image = image.strip() # type: ignore
@@ -2197,7 +2185,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if daemon_type == 'mon':
                 ename = 'mon.'
             else:
-                ename = name_to_config_section(daemon_type + '.' + daemon_id)
+                ename = utils.name_to_config_section(daemon_type + '.' + daemon_id)
             ret, keyring, err = self.mon_command({
                 'prefix': 'auth get',
                 'entity': ename,
