@@ -205,6 +205,7 @@ protected:
   void discard_out_queue();
 
   void reset_recv_state();
+  void reset_security();
 
   ostream &_conn_prefix(std::ostream *_dout);
 

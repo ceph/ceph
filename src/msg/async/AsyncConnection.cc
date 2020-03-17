@@ -298,7 +298,7 @@ ssize_t AsyncConnection::write(bufferlist &bl,
                                bool more) {
 
     std::unique_lock<std::mutex> l(write_lock);
-    outcoming_bl.claim_append(bl);
+    outgoing_bl.claim_append(bl);
     ssize_t r = _try_send(more);
     if (r > 0) {
       writeCallback = callback;
@@ -318,16 +318,16 @@ ssize_t AsyncConnection::_try_send(bool more)
   }
 
   ceph_assert(center->in_thread());
-  ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outcoming_bl.length()
+  ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outgoing_bl.length()
                              << " bytes" << dendl;
-  ssize_t r = cs.send(outcoming_bl, more);
+  ssize_t r = cs.send(outgoing_bl, more);
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
-                             << " remaining bytes " << outcoming_bl.length() << dendl;
+                             << " remaining bytes " << outgoing_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
     center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
@@ -342,7 +342,7 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
-  return outcoming_bl.length();
+  return outgoing_bl.length();
 }
 
 void AsyncConnection::inject_delay() {
@@ -578,7 +578,7 @@ void AsyncConnection::fault()
 
   recv_start = recv_end = 0;
   state_offset = 0;
-  outcoming_bl.clear();
+  outgoing_bl.clear();
 }
 
 void AsyncConnection::_stop() {
@@ -596,7 +596,7 @@ void AsyncConnection::_stop() {
 }
 
 bool AsyncConnection::is_queued() const {
-  return outcoming_bl.length();
+  return outgoing_bl.length();
 }
 
 void AsyncConnection::shutdown_socket() {

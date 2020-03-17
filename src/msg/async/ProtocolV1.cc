@@ -363,8 +363,8 @@ void ProtocolV1::write_event() {
       if (left) {
         ceph_le64 s;
         s = in_seq;
-        connection->outcoming_bl.append(CEPH_MSGR_TAG_ACK);
-        connection->outcoming_bl.append((char *)&s, sizeof(s));
+        connection->outgoing_bl.append(CEPH_MSGR_TAG_ACK);
+        connection->outgoing_bl.append((char *)&s, sizeof(s));
         ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
                        << " messages" << dendl;
         ack_left -= left;
@@ -552,16 +552,16 @@ void ProtocolV1::append_keepalive_or_ack(bool ack, utime_t *tp) {
     ceph_assert(tp);
     struct ceph_timespec ts;
     tp->encode_timeval(&ts);
-    connection->outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
-    connection->outcoming_bl.append((char *)&ts, sizeof(ts));
+    connection->outgoing_bl.append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
+    connection->outgoing_bl.append((char *)&ts, sizeof(ts));
   } else if (connection->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
     struct ceph_timespec ts;
     utime_t t = ceph_clock_now();
     t.encode_timeval(&ts);
-    connection->outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE2);
-    connection->outcoming_bl.append((char *)&ts, sizeof(ts));
+    connection->outgoing_bl.append(CEPH_MSGR_TAG_KEEPALIVE2);
+    connection->outgoing_bl.append((char *)&ts, sizeof(ts));
   } else {
-    connection->outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE);
+    connection->outgoing_bl.append(CEPH_MSGR_TAG_KEEPALIVE);
   }
 }
 
@@ -1060,9 +1060,9 @@ void ProtocolV1::session_reset() {
 
   connection->dispatch_queue->discard_queue(connection->conn_id);
   discard_out_queue();
-  // note: we need to clear outcoming_bl here, but session_reset may be
+  // note: we need to clear outgoing_bl here, but session_reset may be
   // called by other thread, so let caller clear this itself!
-  // outcoming_bl.clear();
+  // outgoing_bl.clear();
 
   connection->dispatch_queue->queue_remote_reset(connection);
 
@@ -1118,8 +1118,8 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     }
   }
 
-  connection->outcoming_bl.append(CEPH_MSGR_TAG_MSG);
-  connection->outcoming_bl.append((char *)&header, sizeof(header));
+  connection->outgoing_bl.append(CEPH_MSGR_TAG_MSG);
+  connection->outgoing_bl.append((char *)&header, sizeof(header));
 
   ldout(cct, 20) << __func__ << " sending message type=" << header.type
                  << " src " << entity_name_t(header.src)
@@ -1128,17 +1128,17 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
 
   if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.buffers().size() > 1)) {
     for (const auto &pb : bl.buffers()) {
-      connection->outcoming_bl.append((char *)pb.c_str(), pb.length());
+      connection->outgoing_bl.append((char *)pb.c_str(), pb.length());
     }
   } else {
-    connection->outcoming_bl.claim_append(bl);
+    connection->outgoing_bl.claim_append(bl);
   }
 
   // send footer; if receiver doesn't support signatures, use the old footer
   // format
   ceph_msg_footer_old old_footer;
   if (connection->has_feature(CEPH_FEATURE_MSG_AUTH)) {
-    connection->outcoming_bl.append((char *)&footer, sizeof(footer));
+    connection->outgoing_bl.append((char *)&footer, sizeof(footer));
   } else {
     if (messenger->crcflags & MSG_CRC_HEADER) {
       old_footer.front_crc = footer.front_crc;
@@ -1150,20 +1150,20 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     old_footer.data_crc =
         messenger->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
     old_footer.flags = footer.flags;
-    connection->outcoming_bl.append((char *)&old_footer, sizeof(old_footer));
+    connection->outgoing_bl.append((char *)&old_footer, sizeof(old_footer));
   }
 
   m->trace.event("async writing message");
   ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
                  << dendl;
-  ssize_t total_send_size = connection->outcoming_bl.length();
+  ssize_t total_send_size = connection->outgoing_bl.length();
   ssize_t rc = connection->_try_send(more);
   if (rc < 0) {
     ldout(cct, 1) << __func__ << " error sending " << m << ", "
                   << cpp_strerror(rc) << dendl;
   } else {
     connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
+        l_msgr_send_bytes, total_send_size - connection->outgoing_bl.length());
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
@@ -1240,13 +1240,37 @@ void ProtocolV1::discard_out_queue() {
   write_in_progress = false;
 }
 
-void ProtocolV1::reset_recv_state() {
+void ProtocolV1::reset_security()
+{
+  ldout(cct, 5) << __func__ << dendl;
+
   // clean up state internal variables and states
   if (state == CONNECTING_SEND_CONNECT_MSG) {
     if (authorizer) {
       delete authorizer;
     }
     authorizer = nullptr;
+  }
+}
+
+void ProtocolV1::reset_recv_state() {
+  ldout(cct, 5) << __func__ << dendl;
+
+  // execute in the same thread that uses the `session_security`.
+  // We need to do the warp because holding `write_lock` is not
+  // enough as `write_event()` releases it just before calling
+  // `write_message()`. `submit_to()` here is NOT blocking.
+  if (!connection->center->in_thread()) {
+    connection->center->submit_to(connection->center->get_id(), [this] {
+      ldout(cct, 5) << "reset_recv_state (warped) reseting security handlers"
+                    << dendl;
+      // Possibly unnecessary. See the comment in `deactivate_existing`.
+      std::lock_guard<std::mutex> l(connection->lock);
+      std::lock_guard<std::mutex> wl(connection->write_lock);
+      reset_security();
+    }, /* nowait = */true);
+  } else {
+    reset_security();
   }
 
   // clean read and write callbacks
@@ -1602,7 +1626,7 @@ CtPtr ProtocolV1::handle_connect_reply_2() {
     connect_seq = 0;
 
     // see session_reset
-    connection->outcoming_bl.clear();
+    connection->outgoing_bl.clear();
 
     return CONTINUE(send_connect_message);
   }
@@ -2290,7 +2314,7 @@ CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
             std::lock_guard<std::mutex> l(existing->lock);
             existing->write_lock.lock();
             exproto->requeue_sent();
-            existing->outcoming_bl.clear();
+            existing->outgoing_bl.clear();
             existing->open_write = false;
             existing->write_lock.unlock();
             if (exproto->state == NONE) {
