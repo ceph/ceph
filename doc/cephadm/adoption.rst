@@ -1,3 +1,5 @@
+.. _cephadm-adoption:
+
 Converting an existing cluster to cephadm
 =========================================
 
