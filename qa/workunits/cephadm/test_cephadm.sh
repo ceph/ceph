@@ -191,7 +191,8 @@ $CEPHADM bootstrap \
       --output-config $CONFIG \
       --output-keyring $KEYRING \
       --allow-overwrite \
-      --skip-mon-network
+      --skip-mon-network \
+      --skip-monitoring-stack
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
