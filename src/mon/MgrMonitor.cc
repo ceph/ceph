@@ -1051,7 +1051,13 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
 
   if (prefix == "mgr fail") {
     string who;
-    cmd_getval(cmdmap, "who", who);
+    if (!cmd_getval(cmdmap, "who", who)) {
+      if (!map.active_gid) {
+	ss << "Currently no active mgr";
+	goto out;
+      }
+      who = map.active_name;
+    }
 
     std::string err;
     uint64_t gid = strict_strtol(who.c_str(), 10, &err);
