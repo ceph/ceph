@@ -360,15 +360,3 @@ class TestCephadm(object):
             c = cephadm_module.apply_node_exporter(spec)
             _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled node_exporter update...'
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.yaml.load_all", return_value=[{'service_type': 'rgw', 'placement': {'count': 1}, 'spec': {'rgw_realm': 'realm1', 'rgw_zone': 'zone1'}}])
-    @mock.patch("cephadm.module.ServiceSpec")
-    def test_apply_service_config(self, _sspec, _yaml, _save_spec, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.apply_service_config('dummy')
-            _save_spec.assert_called_once()
-            _sspec.from_json.assert_called_once()
-            assert wait(cephadm_module, c) == 'ServiceSpecs saved'
-
