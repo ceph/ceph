@@ -22,7 +22,7 @@ installed on any machine running those platforms.
 
 Teuthology has a `list of platforms that it supports
 <https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_ (as
-of December 2017 the list consisted of "CentOS 7.2" and "Ubuntu 16.04").  It
+of February 2020 the list consisted of "CentOS 8" and "Ubuntu 18.04").  It
 expects to be provided pre-built Ceph packages for these platforms.
 Teuthology deploys these platforms on machines (bare-metal or
 cloud-provisioned), installs the packages on them, and deploys Ceph
