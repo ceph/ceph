@@ -238,6 +238,22 @@ BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  yaml-cpp-devel
+%if 0%{?fedora}
+BuildRequires:  fmt-devel
+BuildRequires:  libubsan
+BuildRequires:  libasan
+BuildRequires:  libatomic
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:  devtoolset-8-libubsan
+BuildRequires:  devtoolset-8-libasan
+BuildRequires:  devtoolset-8-libatomic
+%endif
+%if 0%{?rhel} >= 8
+BuildRequires:  libubsan
+BuildRequires:  libasan
+BuildRequires:  libatomic
+%endif
 %endif
 #################################################################################
 # distro-conditional dependencies
