@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+from ceph.deployment.service_spec import ServiceSpec
+from test_orchestrator import TestOrchestrator as _TestOrchestrator
 from tests import mock
 
 import pytest
@@ -226,3 +228,12 @@ def test_pretty_print():
 
     assert p.result == 5
 
+def test_apply():
+    to = _TestOrchestrator('', 0, 0)
+    completion = to.apply([
+        ServiceSpec(service_type='nfs'),
+        ServiceSpec(service_type='nfs'),
+        ServiceSpec(service_type='nfs'),
+    ])
+    completion.finalize(42)
+    assert  completion.result == [None, None, None]
