@@ -2609,6 +2609,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'name': 'rgw_realm',
             'value': spec.rgw_realm,
         })
+        if spec.ssl:
+            v = 'beast ssl_port=%d' % spec.get_port()
+        else:
+            v = 'beast port=%d' % spec.get_port()
+        ret, out, err = self.mon_command({
+            'prefix': 'config set',
+            'who': 'client.rgw.' + spec.service_id,
+            'name': 'rgw_frontends',
+            'value': v,
+        })
 
     def _create_rgw(self, rgw_id, host):
         ret, keyring, err = self.mon_command({
