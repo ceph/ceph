@@ -356,7 +356,7 @@ class TestCephadm(object):
     def test_apply_node_exporter_save(self, _save_spec, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            spec = ServiceSpec('node_exporter', placement=ps)
+            spec = ServiceSpec('node-exporter', placement=ps)
             c = cephadm_module.apply_node_exporter(spec)
-            assert wait(cephadm_module, c) == 'Scheduled node_exporter update...'
+            assert wait(cephadm_module, c) == 'Scheduled node-exporter update...'
             _save_spec.assert_called_with(spec)

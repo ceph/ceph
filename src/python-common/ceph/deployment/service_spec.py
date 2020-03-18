@@ -302,6 +302,8 @@ class ServiceSpec(object):
     start the services.
 
     """
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana mds mgr mon nfs ' \
+                          'node-exporter osd prometheus rbd-mirror rgw'.split()
 
     def __init__(self,
                  service_type,     # type: str
@@ -312,7 +314,7 @@ class ServiceSpec(object):
                  ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
-        assert service_type
+        assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES, service_type
         self.service_type = service_type
         self.service_id = service_id
         self.unmanaged = unmanaged
