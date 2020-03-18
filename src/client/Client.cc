@@ -3470,16 +3470,12 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 	in->auth_cap->session->readonly)
       return -CEPHFS_EROFS;
 
-    if (in->flags & I_CAP_DROPPED) {
-      int mds_wanted = in->caps_mds_wanted();
-      if ((mds_wanted & need) != need) {
-	int ret = _renew_caps(in);
-	if (ret < 0)
-	  return ret;
-	continue;
-      }
-      if (!(file_wanted & ~mds_wanted))
-	in->flags &= ~I_CAP_DROPPED;
+    int mds_wanted = in->caps_mds_wanted();
+    if ((mds_wanted & need) != need) {
+      int ret = _renew_caps(in);
+      if (ret < 0)
+	return ret;
+      continue;
     }
 
     if (waitfor_caps)
@@ -4015,9 +4011,6 @@ void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
       if (cap->gen < s->cap_gen) {
 	// mds did not re-issue stale cap.
 	cap->issued = cap->implemented = CEPH_CAP_PIN;
-	// make sure mds knows what we want.
-	if (in.caps_file_wanted() & ~cap->wanted)
-	  in.flags |= I_CAP_DROPPED;
       }
     }
     signal_cond_list(in.waitfor_caps);
@@ -4339,8 +4332,6 @@ void Client::remove_session_caps(MetaSession *s, int err)
 	in->flags |= I_ERROR_FILELOCK;
     }
     auto caps = cap->implemented;
-    if (cap->wanted | cap->issued)
-      in->flags |= I_CAP_DROPPED;
     remove_cap(cap, false);
     in->cap_snaps.clear();
     if (dirty_caps) {
@@ -5209,9 +5200,6 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, const MConstRef<
 		         &cap == in->auth_cap ? CEPH_CAP_FLAG_AUTH : 0,
 		         cap.latest_perms);
         }
-      } else {
-	if (cap.wanted | cap.issued)
-	  in->flags |= I_CAP_DROPPED;
       }
 
       remove_cap(&cap, false);
