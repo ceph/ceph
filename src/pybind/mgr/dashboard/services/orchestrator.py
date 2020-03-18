@@ -7,6 +7,7 @@ from typing import List, Optional
 from orchestrator import InventoryFilter, DeviceLightLoc, Completion
 from orchestrator import ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
+from orchestrator import HostSpec
 from .. import mgr
 from ..tools import wraps
 
@@ -55,19 +56,19 @@ class ResourceManager(object):
 
 class HostManger(ResourceManager):
     @wait_api_result
-    def list(self):
+    def list(self) -> List[HostSpec]:
         return self.api.get_hosts()
 
-    def get(self, hostname):
-        hosts = [host for host in self.list() if host.name == hostname]
+    def get(self, hostname: str) -> Optional[HostSpec]:
+        hosts = [host for host in self.list() if host.hostname == hostname]
         return hosts[0] if hosts else None
 
     @wait_api_result
-    def add(self, hostname):
-        return self.api.add_host(hostname)
+    def add(self, hostname: str):
+        return self.api.add_host(HostSpec(hostname))
 
     @wait_api_result
-    def remove(self, hostname):
+    def remove(self, hostname: str):
         return self.api.remove_host(hostname)
 
 
