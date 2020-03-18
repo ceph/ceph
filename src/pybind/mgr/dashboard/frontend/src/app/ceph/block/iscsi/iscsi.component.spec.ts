@@ -66,8 +66,16 @@ describe('IscsiComponent', () => {
   it('should refresh with stats', () => {
     tcmuiscsiData.images.push({
       stats_history: {
-        rd_bytes: [[1540551220, 0.0], [1540551225, 0.0], [1540551230, 0.0]],
-        wr_bytes: [[1540551220, 0.0], [1540551225, 0.0], [1540551230, 0.0]]
+        rd_bytes: [
+          [1540551220, 0.0],
+          [1540551225, 0.0],
+          [1540551230, 0.0]
+        ],
+        wr_bytes: [
+          [1540551220, 0.0],
+          [1540551225, 0.0],
+          [1540551230, 0.0]
+        ]
       }
     });
     component.refresh();
