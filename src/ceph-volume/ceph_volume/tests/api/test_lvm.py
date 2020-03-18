@@ -544,6 +544,7 @@ class TestCreateLV(object):
         self.foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
         self.foo_group = api.VolumeGroup(vg_name='foo_group',
                                          vg_extent_size=4194304,
+                                         vg_extent_count=100,
                                          vg_free_count=100)
 
     @patch('ceph_volume.api.lvm.process.run')
