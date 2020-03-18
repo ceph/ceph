@@ -952,7 +952,14 @@ def default_image(func):
     @wraps(func)
     def _default_image():
         if not args.image:
-            args.image = DEFAULT_IMAGE
+            if 'name' in args and args.name:
+                type_ = args.name.split('.', 1)[0]
+                if type_ in Monitoring.components:
+                    args.image = Monitoring.components[type_]['image']
+            if not args.image:
+                args.image = os.environ.get('CEPHADM_IMAGE')
+            if not args.image:
+                args.image = DEFAULT_IMAGE
         return func()
 
     return _default_image
@@ -2445,6 +2452,7 @@ def extract_uid_gid_monitoring(daemon_type):
     return uid, gid
 
 
+@default_image
 def command_deploy():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -4208,17 +4216,7 @@ def _get_parser():
 
 def _parse_args(av):
     parser = _get_parser()
-    args = parser.parse_args(av)
-
-    if not args.image:
-        if 'name' in args and args.name:
-            type_ = args.name.split('.', 1)[0]
-            if type_ in Monitoring.components:
-                args.image = Monitoring.components[type_]['image']
-        if not args.image:
-            args.image = os.environ.get('CEPHADM_IMAGE')
-
-    return args
+    return parser.parse_args(av)
 
 if __name__ == "__main__":
     # allow argv to be injected
