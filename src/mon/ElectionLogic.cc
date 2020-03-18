@@ -223,6 +223,10 @@ bool ElectionLogic::propose_classic_prefix(int from, epoch_t mepoch)
 void ElectionLogic::receive_propose(int from, epoch_t mepoch,
 				    const ConnectionTracker *ct)
 {
+  if (from == elector->get_my_rank()) {
+    lderr(cct) << "I got a propose from my own rank, hopefully this is startup weirdness,dropping" << dendl;
+    return;
+  }
   switch (strategy) {
   case CLASSIC:
     propose_classic_handler(from, mepoch);
