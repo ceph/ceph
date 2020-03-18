@@ -4104,6 +4104,8 @@ if __name__ == "__main__":
 
     if args.func != command_bootstrap:
         inferred_image = _infer_image()
+    elif args.func == command_bootstrap and not args.image:
+        args.image = DEFAULT_IMAGE
 
     try:
         r = args.func()
