@@ -703,7 +703,7 @@ Usage:
         completion = self.list_specs(service_name=service_name)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
-        specs = completion.result()
+        specs = completion.result
         return HandleCommandResult(stdout=yaml.safe_dump_all(specs))
 
     @_cli_write_command(

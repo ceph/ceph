@@ -846,9 +846,28 @@ class Orchestrator(object):
 
     def apply(self, specs: List[ServiceSpec]) -> Completion:
         """
-        Saves Service Specs from a yaml|json file
+        Applies any spec
         """
-        raise NotImplementedError()
+        fns = {
+            'alertmanager': self.apply_alertmanager,
+            'crash': self.apply_crash,
+            'grafana': self.apply_grafana,
+            'mds': self.apply_mds,
+            'mgr': self.apply_mgr,
+            'mon': self.apply_mon,
+            'nfs': self.apply_nfs,
+            'node-exporter': self.apply_node_exporter,
+            'osd': self.apply_drivegroups,
+            'prometheus': self.apply_prometheus,
+            'rbd-mirror': self.apply_rbd_mirror,
+            'rgw': self.apply_rgw,
+        }
+        spec, [specs] = specs
+
+        completion = fns[spec.service_name](spec)
+        for s in specs:
+            completion.then(fns[spec.service_name](spec))
+        return completion
 
     def remove_daemons(self, names):
         # type: (List[str]) -> Completion
