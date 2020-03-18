@@ -23,7 +23,7 @@ from mgr_module import MgrModule, CLICommand, HandleCommandResult
 
 try:
     from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
-        Type, Sequence, Dict
+    Type, Sequence, Dict, cast
 except ImportError:
     pass
 
@@ -223,8 +223,11 @@ class _Promise(object):
         Call ``on_complete`` as soon as this promise is finalized.
         """
         assert self._state in (self.INITIALIZED, self.RUNNING)
+
+        if self._next_promise is not None:
+            return self._next_promise.then(on_complete)
+
         if self._on_complete is not None:
-            assert self._next_promise is None
             self._set_next_promise(self.__class__(
                 _first_promise=self._first_promise,
                 on_complete=on_complete
@@ -844,11 +847,38 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def apply_service_config(self, spec_document: str) -> Completion:
+    def apply(self, specs: List[ServiceSpec]) -> Completion:
         """
-        Saves Service Specs from a yaml|json file
+        Applies any spec
         """
-        raise NotImplementedError()
+        fns: Dict[str, Callable[[ServiceSpec], Completion]] = {
+            'alertmanager': self.apply_alertmanager,
+            'crash': self.apply_crash,
+            'grafana': self.apply_grafana,
+            'mds': self.apply_mds,
+            'mgr': self.apply_mgr,
+            'mon': self.apply_mon,
+            'nfs': cast(Callable[[ServiceSpec], Completion], self.apply_nfs),
+            'node-exporter': self.apply_node_exporter,
+            'osd': cast(Callable[[ServiceSpec], Completion], lambda dg: self.apply_drivegroups([dg])),
+            'prometheus': self.apply_prometheus,
+            'rbd-mirror': self.apply_rbd_mirror,
+            'rgw': cast(Callable[[ServiceSpec], Completion], self.apply_rgw),
+        }
+
+        def merge(ls, r):
+            if isinstance(ls, list):
+                return ls + [r]
+            return [ls, r]
+
+        spec, *specs = specs
+
+        completion = fns[spec.service_type](spec)
+        for s in specs:
+            def next(ls):
+                return fns[s.service_type](s).then(lambda r: merge(ls, r))
+            completion = completion.then(next)
+        return completion
 
     def remove_daemons(self, names):
         # type: (List[str]) -> Completion
@@ -913,7 +943,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> Sequence[Completion]:
+    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> Completion:
         """ Update OSD cluster """
         raise NotImplementedError()
 

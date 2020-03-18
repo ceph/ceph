@@ -125,8 +125,8 @@ class TestCephadm(object):
             spec = ServiceSpec.from_json(json_spec)
             assert isinstance(spec, DriveGroupSpec)
             c = cephadm_module.apply_drivegroups([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd update...']
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c[0]) == 'Scheduled osd update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -136,8 +136,8 @@ class TestCephadm(object):
             spec = ServiceSpec.from_json(json_spec)
             assert isinstance(spec, DriveGroupSpec)
             c = cephadm_module.apply_drivegroups([spec])
+            assert wait(cephadm_module, c) == ['Scheduled osd update...']
             _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c[0]) == 'Scheduled osd update...'
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):
@@ -302,73 +302,56 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    def test_apply_mgr_save(self, _save_spec, cephadm_module):
+    def test_apply_mgr_save(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('mgr', placement=ps)
             c = cephadm_module.apply_mgr(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled mgr update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    def test_apply_mds_save(self, _save_spec, cephadm_module):
+    def test_apply_mds_save(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('mds', 'fsname', placement=ps)
             c = cephadm_module.apply_mds(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled mds update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    def test_apply_rgw_save(self, _save_spec, cephadm_module):
+    def test_apply_rgw_save(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('rgw', 'r.z', placement=ps)
             c = cephadm_module.apply_rgw(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled rgw update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    def test_apply_rbd_mirror_save(self, _save_spec, cephadm_module):
+    def test_apply_rbd_mirror_save(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('rbd-mirror', placement=ps)
             c = cephadm_module.apply_rbd_mirror(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled rbd-mirror update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    def test_apply_prometheus_save(self, _save_spec, cephadm_module):
+    def test_apply_prometheus_save(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
             spec = ServiceSpec('prometheus', placement=ps)
             c = cephadm_module.apply_prometheus(spec)
-            _save_spec.assert_called_with(spec)
             assert wait(cephadm_module, c) == 'Scheduled prometheus update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    def test_apply_node_exporter_save(self, _save_spec, cephadm_module):
+    def test_apply_node_exporter_save(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            spec = ServiceSpec('node_exporter', placement=ps)
+            spec = ServiceSpec('node-exporter', placement=ps, service_id='my_exporter')
             c = cephadm_module.apply_node_exporter(spec)
-            _save_spec.assert_called_with(spec)
-            assert wait(cephadm_module, c) == 'Scheduled node_exporter update...'
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    @mock.patch("cephadm.module.yaml.load_all", return_value=[{'service_type': 'rgw', 'placement': {'count': 1}, 'spec': {'rgw_realm': 'realm1', 'rgw_zone': 'zone1'}}])
-    @mock.patch("cephadm.module.ServiceSpec")
-    def test_apply_service_config(self, _sspec, _yaml, _save_spec, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.apply_service_config('dummy')
-            _save_spec.assert_called_once()
-            _sspec.from_json.assert_called_once()
-            assert wait(cephadm_module, c) == 'ServiceSpecs saved'
-
+            assert wait(cephadm_module, c) == 'Scheduled node-exporter update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+            assert wait(cephadm_module, cephadm_module.list_specs('node-exporter.my_exporter')) == [spec]
