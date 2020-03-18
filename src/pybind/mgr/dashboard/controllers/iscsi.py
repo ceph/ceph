@@ -249,10 +249,6 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
                                      component='iscsi')
-        if target_iqn not in config['targets']:
-            raise DashboardException(msg='Target does not exist',
-                                     code='target_does_not_exist',
-                                     component='iscsi')
         portal_names = list(config['targets'][target_iqn]['portals'].keys())
         validate_rest_api(portal_names)
         if portal_names:
