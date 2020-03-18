@@ -3288,10 +3288,14 @@ public:
 
       src_attrs.erase(RGW_ATTR_COMPRESSION);
       /* We need the manifest to recompute the ETag for verification */
-      manifest_bl = src_attrs[RGW_ATTR_MANIFEST];
+      auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+      if (iter != src_attrs.end()) {
+        manifest_bl = std::move(iter->second);
+        src_attrs.erase(iter);
+      }
 
       // filter out olh attributes
-      auto iter = src_attrs.lower_bound(RGW_ATTR_OLH_PREFIX);
+      iter = src_attrs.lower_bound(RGW_ATTR_OLH_PREFIX);
       while (iter != src_attrs.end()) {
         if (!boost::algorithm::starts_with(iter->first, RGW_ATTR_OLH_PREFIX)) {
           break;
@@ -3317,11 +3321,11 @@ public:
     }
 
     /*
-     * Presently we don't support ETag based verification if compression or
-     * encryption is requested. We can enable simultaneous support once we have
-     * a mechanism to know the sequence in which the filters must be applied.
+     * Presently we don't support ETag based verification if encryption is
+     * requested. We can enable simultaneous support once we have a mechanism
+     * to know the sequence in which the filters must be applied.
      */
-    if (cct->_conf->rgw_copy_verify_object && !plugin &&
+    if (cct->_conf->rgw_sync_obj_integrity &&
         src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
 
       RGWObjManifest manifest;
@@ -3348,8 +3352,6 @@ public:
       } else {
         is_mpu_obj = true;
         etag_verifier_mpu = boost::in_place(cct, filter);
-
-        RGWObjManifest::obj_iterator mi;
         uint64_t cur_part_ofs = UINT64_MAX;
 
         /*
@@ -3357,7 +3359,7 @@ public:
          * MPU part. These part ETags then become the input for the MPU object
          * Etag.
          */
-        for (mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
+        for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
           if (cur_part_ofs == mi.get_part_ofs())
             continue;
           cur_part_ofs = mi.get_part_ofs();
@@ -3436,6 +3438,9 @@ public:
   }
 
   string get_calculated_etag() {
+    if (!cct->_conf->rgw_sync_obj_integrity)
+      return "";
+
     if (is_mpu_obj) {
       etag_verifier_mpu->calculate_etag();
       return etag_verifier_mpu->get_calculated_etag();
@@ -3997,6 +4002,21 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     set_mtime_weight.init(set_mtime, svc.zone->get_zone_short_id(), pg_ver);
   }
 
+  if (cct->_conf->rgw_sync_obj_integrity) {
+    string trimmed_etag = etag;
+
+    /* Remove the leading and trailing double quotes from etag */
+    trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
+      trimmed_etag.end());
+
+    if (cb.get_calculated_etag().compare(trimmed_etag)) {
+      ret = -EIO;
+      ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
+        << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+      goto set_err_state;
+    }
+  }
+
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
@@ -4006,21 +4026,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (ret < 0) {
       goto set_err_state;
     }
-
-    if (cct->_conf->rgw_copy_verify_object) {
-      string trimmed_etag = etag;
-
-      /* Remove the leading and trailing double quotes from etag */
-      trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
-        trimmed_etag.end());
-
-      if (cb.get_calculated_etag().compare(trimmed_etag)) {
-        ret = -EIO;
-        ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
-          << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
-        goto set_err_state;
-     }
-   }
 
     if (copy_if_newer && canceled) {
       ldout(cct, 20) << "raced with another write of obj: " << dest_obj << dendl;

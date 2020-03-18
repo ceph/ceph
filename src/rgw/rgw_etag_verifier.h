@@ -31,7 +31,6 @@ public:
 
   virtual void calculate_etag() = 0;
   string get_calculated_etag() { return calculated_etag;}
-  virtual void append_part_ofs(uint64_t ofs) = 0;
 
 }; /* RGWPutObj_ETagVerifier */
 
@@ -43,7 +42,6 @@ public:
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
-  void append_part_ofs(uint64_t ofs) override {}
 
 }; /* RGWPutObj_ETagVerifier_Atomic */
 
@@ -53,7 +51,7 @@ class RGWPutObj_ETagVerifier_MPU : public RGWPutObj_ETagVerifier
   int cur_part_index{0}, next_part_index{1};
   MD5 mpu_etag_hash;
  
-  void process_end_of_MPU_part(bufferlist in);
+  void process_end_of_MPU_part();
 
 public:
   RGWPutObj_ETagVerifier_MPU(CephContext* cct_, rgw::putobj::DataProcessor *next)
@@ -61,7 +59,7 @@ public:
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
-  void append_part_ofs(uint64_t ofs) override { part_ofs.emplace_back(ofs); }
+  void append_part_ofs(uint64_t ofs) { part_ofs.emplace_back(ofs); }
 
 }; /* RGWPutObj_ETagVerifier_MPU */
 
