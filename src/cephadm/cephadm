@@ -3162,28 +3162,43 @@ def check_time_sync(enabler=None):
 
 def command_check_host():
     # type: () -> None
-    # caller already checked for docker/podman
-    logger.info('podman|docker (%s) is present' % container_path)
-
+    errors = []
     commands = ['systemctl', 'lvcreate']
+
+    if args.docker:
+            container_path = find_program('docker')
+    else:
+        for i in CONTAINER_PREFERENCE:
+            try:
+                container_path = find_program(i)
+                break
+            except Exception as e:
+                logger.debug('Could not locate %s: %s' % (i, e))
+        if not container_path:
+            errors.append('Unable to locate any of %s' % CONTAINER_PREFERENCE)
+        else:
+            logger.info('podman|docker (%s) is present' % container_path)
 
     for command in commands:
         try:
             find_program(command)
             logger.info('%s is present' % command)
         except ValueError:
-            raise Error('%s binary does not appear to be installed' % command)
+            errors.append('%s binary does not appear to be installed' % command)
 
     # check for configured+running chronyd or ntp
     if not check_time_sync():
-        raise Error('No time synchronization is active')
+        errors.append('No time synchronization is active')
 
     if 'expect_hostname' in args and args.expect_hostname:
         if get_hostname() != args.expect_hostname:
-            raise Error('hostname "%s" does not match expected hostname "%s"' % (
+            errors.append('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), args.expect_hostname))
         logger.info('Hostname "%s" matches what is expected.',
                     args.expect_hostname)
+    
+    if errors:
+        raise Error('\n'.join(errors))
 
     logger.info('Host looks OK')
 
@@ -4085,18 +4100,19 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # podman or docker?
-    if args.docker:
-        container_path = find_program('docker')
-    else:
-        for i in CONTAINER_PREFERENCE:
-            try:
-                container_path = find_program(i)
-                break
-            except Exception as e:
-                logger.debug('Could not locate %s: %s' % (i, e))
-        if not container_path and args.func != command_prepare_host:
-            sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
-            sys.exit(1)
+    if args.func != command_check_host:
+        if args.docker:
+            container_path = find_program('docker')
+        else:
+            for i in CONTAINER_PREFERENCE:
+                try:
+                    container_path = find_program(i)
+                    break
+                except Exception as e:
+                    logger.debug('Could not locate %s: %s' % (i, e))
+            if not container_path and args.func != command_prepare_host:
+                sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
+                sys.exit(1)
 
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
