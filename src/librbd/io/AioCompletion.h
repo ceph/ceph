@@ -178,6 +178,7 @@ struct AioCompletion {
 private:
   void queue_complete();
   void complete_external_callback();
+  void complete_event_socket();
 
 };
 
