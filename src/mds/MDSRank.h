@@ -266,7 +266,8 @@ class MDSRank {
     void inc_dispatch_depth() { ++dispatch_depth; }
     void dec_dispatch_depth() { --dispatch_depth; }
     void retry_dispatch(const Message::const_ref &m);
-    bool handle_deferrable_message(const Message::const_ref &m);
+    bool is_valid_message(const Message::const_ref &m);
+    void handle_message(const Message::const_ref &m);
     void _advance_queues();
     bool _dispatch(const Message::const_ref &m, bool new_msg);
 
@@ -667,16 +668,6 @@ public:
       Context *respawn_hook_,
       Context *suicide_hook_);
 };
-
-// This utility for MDS and MDSRank dispatchers.
-#define ALLOW_MESSAGES_FROM(peers) \
-do { \
-  if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
-    dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
-           << " allowing=" << #peers << " message=" << *m << dendl; \
-    return true; \
-  } \
-} while (0)
 
 #endif // MDS_RANK_H_
 
