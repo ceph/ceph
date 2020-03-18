@@ -30,6 +30,12 @@ struct BlockExtent {
   BlockExtent(uint64_t block_start, uint64_t block_end)
     : block_start(block_start), block_end(block_end) {
   }
+
+  friend ostream& operator<< (ostream& os, const BlockExtent& block_extent) {
+    os << "[block_start = " << block_extent.block_start << ", "
+       << "block_end = " << block_extent.block_end << ")";
+    return os;
+  }
 };
 
 struct BlockGuardCell {
