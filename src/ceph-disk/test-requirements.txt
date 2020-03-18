@@ -4,7 +4,7 @@ discover
 fixtures>=0.3.14
 python-subunit
 testrepository>=0.0.17
-testtools>=0.9.32
+testtools>=0.9.32,<=2.3.0
 mock
 pytest
 tox>=2.0
