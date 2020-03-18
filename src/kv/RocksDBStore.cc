@@ -1085,34 +1085,35 @@ int RocksDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  rocksdb::PinnableSlice value;
   utime_t start = ceph_clock_now();
   auto cf = get_cf_handle(prefix);
   if (cf) {
     for (auto& key : keys) {
-      std::string value;
       auto status = db->Get(rocksdb::ReadOptions(),
 			    cf,
 			    rocksdb::Slice(key),
 			    &value);
       if (status.ok()) {
-	(*out)[key].append(value);
+	(*out)[key].append(value.data(), value.size());
       } else if (status.IsIOError()) {
 	ceph_abort_msg(status.getState());
       }
+      value.Reset();
     }
   } else {
     for (auto& key : keys) {
-      std::string value;
       string k = combine_strings(prefix, key);
       auto status = db->Get(rocksdb::ReadOptions(),
 			    default_cf,
 			    rocksdb::Slice(k),
 			    &value);
       if (status.ok()) {
-	(*out)[key].append(value);
+	(*out)[key].append(value.data(), value.size());
       } else if (status.IsIOError()) {
 	ceph_abort_msg(status.getState());
       }
+      value.Reset();
     }
   }
   utime_t lat = ceph_clock_now() - start;
@@ -1129,7 +1130,7 @@ int RocksDBStore::get(
   ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
-  string value;
+  rocksdb::PinnableSlice value;
   rocksdb::Status s;
   auto cf = get_cf_handle(prefix);
   if (cf) {
@@ -1145,7 +1146,7 @@ int RocksDBStore::get(
 		&value);
   }
   if (s.ok()) {
-    out->append(value);
+    out->append(value.data(), value.size());
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
@@ -1166,7 +1167,7 @@ int RocksDBStore::get(
   ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
-  string value;
+  rocksdb::PinnableSlice value;
   rocksdb::Status s;
   auto cf = get_cf_handle(prefix);
   if (cf) {
@@ -1183,7 +1184,7 @@ int RocksDBStore::get(
 		&value);
   }
   if (s.ok()) {
-    out->append(value);
+    out->append(value.data(), value.size());
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
