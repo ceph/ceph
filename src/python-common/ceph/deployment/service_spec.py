@@ -16,6 +16,18 @@ class ServiceSpecValidationError(Exception):
         super(ServiceSpecValidationError, self).__init__(msg)
 
 
+def assert_valid_host(name):
+    p = re.compile('^[a-zA-Z0-9-]+$')
+    try:
+        assert len(name) <= 250, 'name is too long (max 250 chars)'
+        for part in name.split('.'):
+            assert len(part) > 0, '.-delimited name component must not be empty'
+            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
+            assert p.match(part), 'name component must include only a-z, 0-9, and -'
+    except AssertionError as e:
+        raise ServiceSpecValidationError(e)
+
+
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
         res = ''
@@ -99,8 +111,11 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
             except ValueError as e:
                 # logging?
                 raise e
-
+        host_spec.validate()
         return host_spec
+
+    def validate(self):
+        assert_valid_host(self.hostname)
 
 
 class PlacementSpec(object):
@@ -183,12 +198,16 @@ class PlacementSpec(object):
         return _cls
 
     def to_json(self):
-        return {
-            'label': self.label,
-            'hosts': [host.to_json() for host in self.hosts] if self.hosts else [],
-            'count': self.count,
-            'host_pattern': self.host_pattern,
-        }
+        r = {}
+        if self.label:
+            r['label'] = self.label
+        if self.hosts:
+            r['hosts'] = [host.to_json() for host in self.hosts]
+        if self.count:
+            r['count'] = self.count
+        if self.host_pattern:
+            r['host_pattern'] = self.host_pattern
+        return r
 
     def validate(self):
         if self.hosts and self.label:
@@ -198,6 +217,8 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError("num/count must be > 1")
         if self.host_pattern and self.hosts:
             raise ServiceSpecValidationError('cannot combine host patterns and hosts')
+        for h in self.hosts:
+            h.validate()
 
     @classmethod
     def from_string(cls, arg):
@@ -361,9 +382,12 @@ class ServiceSpec(object):
 
     def to_json(self):
         # type: () -> Dict[str, Any]
-        c = self.__dict__.copy()
-        if self.placement:
-            c['placement'] = self.placement.to_json()
+        c = {}
+        for key, val in self.__dict__.items():
+            if hasattr(val, 'to_json'):
+                val = val.to_json()
+            if val:
+                c[key] = val
         return c
 
     def validate(self):
@@ -375,6 +399,9 @@ class ServiceSpec(object):
 
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
+
+    def one_line_str(self):
+        return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
 
 
 def servicespec_validate_add(self: ServiceSpec):
