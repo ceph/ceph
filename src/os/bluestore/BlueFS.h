@@ -442,7 +442,7 @@ public:
   // the super is always stored on bdev 0
   int mkfs(uuid_d osd_uuid);
   int mount();
-  void umount();
+  void umount(bool avoid_compact = false);
   int prepare_new_device(int id);
   
   int log_dump();
@@ -511,7 +511,7 @@ public:
   void compact_log();
 
   /// sync any uncommitted state to disk
-  void sync_metadata();
+  void sync_metadata(bool avoid_compact);
 
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;
