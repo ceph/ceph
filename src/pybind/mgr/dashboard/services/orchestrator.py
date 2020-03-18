@@ -36,15 +36,10 @@ class OrchestratorAPI(OrchestratorClientMixin):
 def wait_api_result(method):
     @wraps(method)
     def inner(self, *args, **kwargs):
-        completions = method(self, *args, **kwargs)
-        if not isinstance(completions, list):
-            completions = [completions]
-        self.api.orchestrator_wait(completions)
-        for compl in completions:
-            raise_if_exception(compl)
-        if len(completions) == 1:
-            return completions[0].result
-        return [compl.result for compl in completions]
+        completion = method(self, *args, **kwargs)
+        self.api.orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return completion.result
     return inner
 
 
