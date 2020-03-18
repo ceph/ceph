@@ -67,15 +67,33 @@ Now set the newly created config for Ceph.
 
 ::
 
-   # ceph cephadm set-ssh-config -i <path_to_ssh_conf>
+   # ceph cephadm set-ssh-config -i <PATH_TO_SSH_CONF>
 
+Sometimes it is necessary to adapt the `/etc/hosts` file, e.g. in a vstart environment. This can be done by running the following command (please adapt `num_daemons` if necessary)::
+
+    # sh <<EOF
+    #!/bin/sh
+    pip install paramiko
+    python3 <<EOS
+    import os
+    import paramiko
+    stream = os.popen('ceph config-key get "mgr/cephadm/ssh_config"')
+    config = paramiko.SSHConfig.from_text(stream.read())
+    num_daemons = 1
+    with open('/etc/hosts', 'a') as f:
+        for i in range(num_daemons):
+            for type_ in ['osd', 'mgr', 'mon']:
+                hostname = '{}{}'.format(type_, i)
+                host_config = config.lookup(hostname)
+                f.write('{} {}\n'.format(host_config.get('hostname'), hostname))
+    EOS
+    EOF
 
 3) Add the new host
 
 Add the newly created host(s) to the inventory.
 
 ::
-
 
    # ceph orch host add <host>
 
