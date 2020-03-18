@@ -210,6 +210,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   encode(t, blist);
   encode(disallowed_leaders, blist);
   encode(stretch_mode_enabled, blist);
+  encode(tiebreaker_mon, blist);
   if (stretch_mode_enabled) {
     new_compat_v = 9;
   }
@@ -270,6 +271,10 @@ void MonMap::decode(bufferlist::const_iterator& p)
   }
   if (struct_v >= 9) {
     decode(stretch_mode_enabled, p);
+    decode(tiebreaker_mon, p);
+  } else {
+    stretch_mode_enabled = false;
+    tiebreaker_mon = "";
   }
   calc_addr_mons();
   DECODE_FINISH(p);
