@@ -327,7 +327,10 @@ int Inode::caps_mds_wanted()
 {
   int want = 0;
   for (const auto &pair : caps) {
-    want |= pair.second.wanted;
+    if (auth_cap == &pair.second)
+      want |= pair.second.wanted;
+    else
+      want |= pair.second.wanted & ~CEPH_CAP_ANY_WR;
   }
   return want;
 }
