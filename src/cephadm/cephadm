@@ -608,82 +608,23 @@ def call(command,  # type: List[str]
     fcntl.fcntl(process.stdout, fcntl.F_SETFL, stdout_flags | os.O_NONBLOCK)
     fcntl.fcntl(process.stderr, fcntl.F_SETFL, stderr_flags | os.O_NONBLOCK)
 
-    out = ''
-    err = ''
-    reads = None
-    stop = False
-    out_buffer = ''   # partial line (no newline yet)
-    err_buffer = ''   # partial line (no newline yet)
-    start_time = time.time()
-    end_time = None
-    if timeout:
-        end_time = start_time + timeout
-    while not stop:
-        if end_time and (time.time() >= end_time):
-            logger.info(desc + ':timeout after %s seconds' % timeout)
-            stop = True
-            process.kill()
-        if reads and process.poll() is not None:
-            # we want to stop, but first read off anything remaining
-            # on stdout/stderr
-            stop = True
-        else:
-            reads, _, _ = select.select(
-                [process.stdout.fileno(), process.stderr.fileno()],
-                [], [], timeout
-            )
-        for fd in reads:
-            try:
-                message_b = os.read(fd, 1024)
-                if isinstance(message_b, bytes):
-                    message = message_b.decode('utf-8')
-                if isinstance(message_b, str):
-                    message = message_b
-                if fd == process.stdout.fileno():
-                    out += message
-                    message = out_buffer + message
-                    lines = message.split('\n')
-                    out_buffer = lines.pop()
-                    for line in lines:
-                        if verbose:
-                            logger.info(desc + ':stdout ' + line)
-                        else:
-                            logger.debug(desc + ':stdout ' + line)
-                elif fd == process.stderr.fileno():
-                    err += message
-                    message = err_buffer + message
-                    lines = message.split('\n')
-                    err_buffer = lines.pop()
-                    for line in lines:
-                        if verbose:
-                            logger.info(desc + ':stderr ' + line)
-                        else:
-                            logger.debug(desc + ':stderr ' + line)
-                else:
-                    assert False
-            except (IOError, OSError):
-                pass
+    out_b, err_b = process.communicate(timeout=timeout)
+    out, err = out_b.decode('utf-8'), err_b.decode('utf-8')
 
     returncode = process.wait()
 
-    if out_buffer != '':
-        if verbose:
-            logger.info(desc + ':stdout ' + out_buffer)
-        else:
-            logger.debug(desc + ':stdout ' + out_buffer)
-    if err_buffer != '':
-        if verbose:
-            logger.info(desc + ':stderr ' + err_buffer)
-        else:
-            logger.debug(desc + ':stderr ' + err_buffer)
-
-    if returncode != 0 and verbose_on_failure and not verbose:
-        # dump stdout + stderr
+    if returncode != 0:
         logger.info('Non-zero exit code %d from %s' % (returncode, ' '.join(command)))
-        for line in out.splitlines():
-            logger.info(desc + ':stdout ' + line)
-        for line in err.splitlines():
-            logger.info(desc + ':stderr ' + line)
+
+    if (returncode != 0 and verbose_on_failure) or verbose:
+        logger_fn = logger.info
+    else:
+        logger_fn = logger.debug
+    # dump stdout + stderr
+    for line in out.splitlines():
+        logger_fn(desc + ':stdout ' + line)
+    for line in err.splitlines():
+        logger_fn(desc + ':stderr ' + line)
 
     return out, err, returncode
 
