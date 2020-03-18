@@ -6062,6 +6062,17 @@ void OSDMap::check_health(CephContext *cct,
       d.detail.swap(detail);
     }
   }
+
+  // DEGRADED STRETCH MODE
+  if (cct->_conf.get_val<bool>("mon_warn_on_degraded_stretch_mode")) {
+    if (degraded_stretch_mode) {
+      stringstream ss;
+      ss << "We are missing stretch mode buckets, only requiring "
+	 << degraded_stretch_mode << " of " << stretch_bucket_count << " buckets to peer" ;
+      auto& d = checks->add("DEGRADED_STRETCH_MODE", HEALTH_WARN, // TODO: HEALTH_ERR?
+			    ss.str(), 0);
+    }
+  }
 }
 
 int OSDMap::parse_osd_id_list(const vector<string>& ls, set<int> *out,

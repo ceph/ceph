@@ -1614,6 +1614,11 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("The difference in connection score allowed before a peon stops ignoring out-of-quorum PROPOSEs"),
 
+    Option("mon_warn_on_degraded_stretch_mode", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("Issue a health warning if we are in degraded stretch mode"),
+
     Option("mon_clock_drift_allowed", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.050)
     .add_service("mon")
