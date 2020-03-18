@@ -134,7 +134,8 @@ inline int append_time(const log_time& t, char *out, int outlen) {
   bool coarse = t.time_since_epoch().count().coarse;
   auto tv = log_clock::to_timeval(t);
   std::tm bdt;
-  localtime_r((time_t*)&tv.tv_sec, &bdt);
+  time_t t_sec = tv.tv_sec;
+  localtime_r(&t_sec, &bdt);
   char tz[32] = { 0 };
   strftime(tz, sizeof(tz), "%z", &bdt);
 
