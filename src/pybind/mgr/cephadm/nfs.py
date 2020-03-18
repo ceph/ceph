@@ -1,4 +1,5 @@
 import logging
+import rados
 
 from typing import Dict, Optional
 
@@ -81,14 +82,27 @@ class NFSGanesha(object):
                     'Unable to update keyring caps %s: %s %s' \
                             % (entity, ret, err))
 
-    def create_rados_config_obj(self):
-        # type: () -> None
+    def create_rados_config_obj(self, clobber=False):
+        # type: (Optional[bool]) -> None
         obj = self.get_rados_config_name()
-        logger.info('Create rados config object: %s' % obj)
+
         with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
             if self.spec.namespace:
                 ioctx.set_namespace(self.spec.namespace)
-            ioctx.write_full(obj, ''.encode('utf-8'))
+
+            exists = True
+            try:
+                ioctx.stat(obj)
+            except rados.ObjectNotFound as e:
+                exists = False
+
+            if exists and not clobber:
+                # Assume an existing config
+                logger.info('Rados config object exists: %s' % obj)
+            else:
+                # Create an empty config object
+                logger.info('Creating rados config object: %s' % obj)
+                ioctx.write_full(obj, ''.encode('utf-8'))
 
     def get_ganesha_conf(self):
         # type: () -> str
