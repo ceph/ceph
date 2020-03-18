@@ -3340,7 +3340,8 @@ def get_distro():
 class Packager(object):
     def __init__(self, stable=None, version=None, branch=None, commit=None):
         assert \
-            (stable and not branch and not commit) or \
+            (stable and not version and not branch and not commit) or \
+            (not stable and version and not branch and not commit) or \
             (not stable and not version and branch) or \
             (not stable and not version and not branch and not commit)
         self.stable = stable
@@ -3380,7 +3381,7 @@ class Packager(object):
     def repo_gpgkey(self):
         if args.gpg_url:
             return args.gpg_url
-        if self.stable:
+        if self.stable or self.version:
             return 'https://download.ceph.com/keys/release.asc', 'release'
         else:
             return 'https://download.ceph.com/keys/autobuild.asc', 'autobuild'
@@ -3421,14 +3422,12 @@ class Apt(Packager):
         with open('/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name, 'w') as f:
             f.write(key)
 
-        if self.stable:
-            if self.version:
-                content = 'deb %s/debian-%s-%s/ %s main\n' % (
-                    args.repo_url, self.stable, self.version,
-                    self.distro_codename)
-            else:
-                content = 'deb %s/debian-%s/ %s main\n' % (
-                    args.repo_url, self.stable, self.distro_codename)
+        if self.version:
+            content = 'deb %s/debian-%s/ %s main\n' % (
+                args.repo_url, self.version, self.distro_codename)
+        elif self.stable:
+            content = 'deb %s/debian-%s/ %s main\n' % (
+                args.repo_url, self.stable, self.distro_codename)
         else:
             content = self.query_shaman(self.distro, self.distro_codename, self.branch,
                                         self.commit)
@@ -3546,17 +3545,16 @@ class YumDnf(Packager):
         return '/etc/yum.repos.d/ceph.repo'
 
     def repo_baseurl(self):
-        assert self.stable
+        assert self.stable or self.version
         if self.version:
-            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
-                                        self.version,
-                                        self.distro_code)
+            return '%s/rpm-%s/%s' % (args.repo_url, self.version,
+                                     self.distro_code)
         else:
             return '%s/rpm-%s/%s' % (args.repo_url, self.stable,
                                      self.distro_code)
 
     def add_repo(self):
-        if self.stable:
+        if self.stable or self.version:
             content = ''
             for n, t in {
                     'Ceph': '$basearch',
@@ -3653,14 +3651,14 @@ class Zypper(Packager):
         return '/etc/zypp/repos.d/ceph.repo'
 
     def repo_baseurl(self):
-        assert self.stable
+        assert self.stable or self.version
         if self.version:
-            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
-                                        self.version, self.distro)
-        return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
+            return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
+        else:
+            return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
 
     def add_repo(self):
-        if self.stable:
+        if self.stable or self.version:
             content = ''
             for n, t in {
                     'Ceph': '$basearch',
@@ -3722,19 +3720,6 @@ def command_add_repo():
             (x, y, z) = args.version.split('.')
         except Exception as e:
             raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
-        relnames = {
-            '16': 'pacific',
-            '15': 'octopus',
-            '14': 'nautilus',
-            '13': 'mimic',
-            '12': 'luminous',
-            '11': 'kraken',
-            '10': 'jewel',
-        }
-        args.release = relnames.get(x, None)
-        if not args.release:
-            raise Error('unknown release %s (not in %s)' % (
-                x, ' '.join(relnames.values())))
 
     pkg = create_packager(stable=args.release,
                           version=args.version,
