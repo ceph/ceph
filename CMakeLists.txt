@@ -656,6 +656,9 @@ if(WITH_GRAFANA)
   add_subdirectory(monitoring/grafana/dashboards)
 endif()
 
+CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
+  "NOT WITH_SYSTEM_BOOST" OFF)
+
 include(CTags)
 option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
 add_tags(ctags
