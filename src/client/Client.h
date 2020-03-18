@@ -854,10 +854,9 @@ public:
 
 protected:
   /* Flags for check_caps() */
-  static const unsigned CHECK_CAPS_NODELAY = 0x1;
-  static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x2;
+  static const unsigned CHECK_CAPS_SYNCHRONOUS = 0x1;
 
-  void check_caps(Inode *in, unsigned flags);
+  void check_caps(Inode *in, unsigned flags=0);
 
   void set_cap_epoch_barrier(epoch_t e);
 
