@@ -31,7 +31,8 @@ import uuid
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
-from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec, \
+    assert_valid_host
 
 from mgr_module import MgrModule
 import orchestrator
@@ -106,18 +107,6 @@ def name_to_config_section(name):
         return name
     else:
         return 'mon'
-
-def assert_valid_host(name):
-    p = re.compile('^[a-zA-Z0-9-]+$')
-    try:
-        assert len(name) <= 250, 'name is too long (max 250 chars)'
-        parts = name.split('.')
-        for part in name.split('.'):
-            assert len(part) > 0, '.-delimited name component must not be empty'
-            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
-            assert p.match(part), 'name component must include only a-z, 0-9, and -'
-    except AssertionError as e:
-        raise OrchestratorError(e)
 
 
 class SpecStore():
@@ -2568,6 +2557,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
              spec.placement.count < 1:
             raise OrchestratorError('cannot scale %s service below 1' % (
                 spec.service_type))
+
+        HostAssignment(
+            spec=spec,
+            get_hosts_func=self._get_hosts,
+            get_daemons_func=self.cache.get_daemons_by_service,
+        ).validate()
+
         self.log.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
@@ -3194,11 +3190,38 @@ class HostAssignment(object):
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
 
+
+    def validate(self):
+        self.spec.validate()
+
+        if self.spec.placement.hosts:
+            explicit_hostnames = {h.hostname for h in self.spec.placement.hosts}
+            unknown_hosts = explicit_hostnames.difference(set(self.get_hosts_func(None)))
+            if unknown_hosts:
+                raise OrchestratorValidationError(
+                    f'Cannot place {self.spec.one_line_str()} on {unknown_hosts}: Unknown hosts')
+
+        if self.spec.placement.host_pattern:
+            pattern_hostnames = self.spec.placement.pattern_matches_hosts(self.get_hosts_func(None))
+            if not pattern_hostnames:
+                raise OrchestratorValidationError(
+                    f'Cannot place {self.spec.one_line_str()}: No matching hosts')
+
+        if self.spec.placement.label:
+            label_hostnames = self.get_hosts_func(self.spec.placement.label)
+            if not label_hostnames:
+                raise OrchestratorValidationError(
+                    f'Cannot place {self.spec.one_line_str()}: No matching '
+                    f'hosts for label {self.spec.placement.label}')
+
     def place(self):
         # type: () -> List[HostPlacementSpec]
         """
         Load hosts into the spec.placement.hosts container.
         """
+
+        self.validate()
+
         # count == 0
         if self.spec.placement.count == 0:
             return []
