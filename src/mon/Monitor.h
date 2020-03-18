@@ -251,10 +251,12 @@ private:
   bool degraded_stretch_mode{false};
   bool recovering_stretch_mode{false};
   string stretch_bucket_divider;
-  map<string, set<string>> dead_mon_buckets; // locations with no live mons
+  map<string, set<string>> dead_mon_buckets; // bucket->mon ranks, locations with no live mons
   set<string> up_mon_buckets; // locations with a live mon
   void do_stretch_mode_election_work();
 
+  bool session_stretch_allowed(MonSession *s, MonOpRequestRef& op);
+  void disconnect_disallowed_stretch_sessions();
 public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
@@ -263,6 +265,8 @@ public:
   void maybe_go_degraded_stretch_mode();
   void set_degraded_stretch_mode(const set<string>& dead_mons,
 				 const set<int>& dead_buckets);
+  void enable_stretch_mode();
+
   
 private:
 
