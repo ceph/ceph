@@ -1098,6 +1098,7 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   // TODO: and that there are only 2 such locations (besides tiebreaker)
   // TODO: and that tiebreaker has a different one
   pending_map.disallowed_leaders.insert(tiebreaker_mon);
+  pending_map.tiebreaker_mon = tiebreaker_mon;
   pending_map.stretch_mode_enabled = true;
   *okay = true;
 }
