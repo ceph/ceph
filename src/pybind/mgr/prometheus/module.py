@@ -191,7 +191,7 @@ class Module(MgrModule):
         {'name': 'server_port'},
         {'name': 'scrape_interval'},
         {'name': 'rbd_stats_pools'},
-        {'name': 'rbd_stats_pools_refresh_interval'},
+        {'name': 'rbd_stats_pools_refresh_interval', 'type': 'int', 'default': 300},
     ]
 
     def __init__(self, *args, **kwargs):
