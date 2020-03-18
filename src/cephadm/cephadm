@@ -936,6 +936,27 @@ def infer_fsid(func):
 
     return _infer_fsid
 
+def infer_image(func):
+    """
+    Use the most recent ceph image
+    """
+    @wraps(func)
+    def _infer_image():
+        if not args.image:
+            args.image = get_last_local_ceph_image()
+        return func()
+
+    return _infer_image
+
+def default_image(func):
+    @wraps(func)
+    def _default_image():
+        if not args.image:
+            args.image = DEFAULT_IMAGE
+        return func()
+
+    return _default_image
+
 def get_last_local_ceph_image():
     """
     :return: The most recent local ceph image (already pulled)
@@ -1943,6 +1964,7 @@ class CephContainer:
 
 ##################################
 
+@infer_image
 def command_version():
     # type: () -> int
     out = CephContainer(args.image, 'ceph', ['--version']).run()
@@ -1951,6 +1973,7 @@ def command_version():
 
 ##################################
 
+@infer_image
 def command_pull():
     # type: () -> int
     logger.info('Pulling latest %s...' % args.image)
@@ -1959,6 +1982,7 @@ def command_pull():
 
 ##################################
 
+@infer_image
 def command_inspect_image():
     # type: () -> int
     out, err, ret = call_throws([
@@ -1978,6 +2002,7 @@ def command_inspect_image():
 
 ##################################
 
+@default_image
 def command_bootstrap():
     # type: () -> int
 
@@ -2452,7 +2477,7 @@ def command_deploy():
             daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
             if any([port_in_use(port) for port in daemon_ports]):
                 raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
-            elif args.image == DEFAULT_IMAGE or args.image == inferred_image:
+            elif args.image == DEFAULT_IMAGE:
                 raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
         # make sure provided config-json is sufficient
@@ -2488,6 +2513,7 @@ def command_deploy():
 
 ##################################
 
+@infer_image
 def command_run():
     # type: () -> int
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -2498,6 +2524,7 @@ def command_run():
 ##################################
 
 @infer_fsid
+@infer_image
 def command_shell():
     # type: () -> int
     if args.fsid:
@@ -2589,6 +2616,7 @@ def command_enter():
 ##################################
 
 @infer_fsid
+@infer_image
 def command_ceph_volume():
     # type: () -> None
     if args.fsid:
@@ -2848,6 +2876,7 @@ def list_daemons(detail=True, legacy_dir=None):
 
 ##################################
 
+@default_image
 def command_adopt():
     # type: () -> None
 
@@ -4191,15 +4220,6 @@ def _parse_args(av):
 
     return args
 
-def _infer_image():
-    inferred = None
-    if not args.image:
-        inferred = get_last_local_ceph_image()
-        args.image = inferred
-    if not args.image:
-        args.image = DEFAULT_IMAGE
-    return inferred
-
 if __name__ == "__main__":
     # allow argv to be injected
     try:
@@ -4236,9 +4256,6 @@ if __name__ == "__main__":
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
-
-    if args.func != command_bootstrap:
-        inferred_image = _infer_image()
 
     try:
         r = args.func()
