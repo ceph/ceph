@@ -327,9 +327,9 @@ export abstract class PageHelper {
    * Uncheck all checked table rows.
    */
   async uncheckAllTableRows() {
-    await $$('.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked').each(
-      (e: ElementFinder) => e.click()
-    );
+    await $$(
+      '.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked'
+    ).each((e: ElementFinder) => e.click());
   }
 
   async filterTable(name: string, option: string) {

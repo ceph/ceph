@@ -80,7 +80,10 @@ export class CrushRuleFormModalComponent implements OnInit {
         nodes.forEach((node) => {
           this.easyNodes[node.id] = node;
         });
-        this.buckets = _.sortBy(nodes.filter((n) => n.children), 'name');
+        this.buckets = _.sortBy(
+          nodes.filter((n) => n.children),
+          'name'
+        );
         this.names = names;
         this.preSelectRoot();
       });

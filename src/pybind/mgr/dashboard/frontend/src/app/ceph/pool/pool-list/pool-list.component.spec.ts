@@ -320,7 +320,14 @@ describe('PoolListComponent', () => {
         stats: {
           bytes_used: { latest: 5, rate: 0, rates: [] },
           max_avail: { latest: 15, rate: 0, rates: [] },
-          rd_bytes: { latest: 6, rate: 4, rates: [[0, 2], [1, 6]] }
+          rd_bytes: {
+            latest: 6,
+            rate: 4,
+            rates: [
+              [0, 2],
+              [1, 6]
+            ]
+          }
         },
         pg_status: { 'active+clean': 8, down: 2 }
       });

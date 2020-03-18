@@ -161,7 +161,10 @@ describe('TableComponent', () => {
 
         // multiple
         expectColumnFiltered(
-          [{ filter: filterOdd, value: 'false' }, { filter: filterIndex, value: '2' }],
+          [
+            { filter: filterOdd, value: 'false' },
+            { filter: filterIndex, value: '2' }
+          ],
           [{ a: 2, b: 20, c: false }]
         );
 
@@ -361,14 +364,23 @@ describe('TableComponent', () => {
     });
 
     it('should search through arrays', () => {
-      component.columns = [{ prop: 'a', name: 'Index' }, { prop: 'b', name: 'ArrayColumn' }];
+      component.columns = [
+        { prop: 'a', name: 'Index' },
+        { prop: 'b', name: 'ArrayColumn' }
+      ];
 
-      component.data = [{ a: 1, b: ['foo', 'bar'] }, { a: 2, b: ['baz', 'bazinga'] }];
+      component.data = [
+        { a: 1, b: ['foo', 'bar'] },
+        { a: 2, b: ['baz', 'bazinga'] }
+      ];
       expectSearch('bar', [{ a: 1, b: ['foo', 'bar'] }]);
       expectSearch('arraycolumn:bar arraycolumn:foo', [{ a: 1, b: ['foo', 'bar'] }]);
       expectSearch('arraycolumn:baz arraycolumn:inga', [{ a: 2, b: ['baz', 'bazinga'] }]);
 
-      component.data = [{ a: 1, b: [1, 2] }, { a: 2, b: [3, 4] }];
+      component.data = [
+        { a: 1, b: [1, 2] },
+        { a: 2, b: [3, 4] }
+      ];
       expectSearch('arraycolumn:1 arraycolumn:2', [{ a: 1, b: [1, 2] }]);
     });
 
