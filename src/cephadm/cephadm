@@ -944,6 +944,10 @@ def infer_image(func):
     def _infer_image():
         if not args.image:
             args.image = get_last_local_ceph_image()
+        if not args.image:
+            args.image = DEFAULT_IMAGE
+        if not args.image:
+            args.image = os.environ.get('CEPHADM_IMAGE')
         return func()
 
     return _infer_image
