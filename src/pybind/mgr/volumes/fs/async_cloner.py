@@ -66,7 +66,10 @@ def get_clone_source(clone_subvolume):
 
 def handle_clone_pending(volume_client, volname, index, groupname, subvolname, should_cancel):
     try:
-        next_state = OpSm.get_next_state("clone", "pending", 0)
+        if should_cancel():
+            next_state = OpSm.get_next_state("clone", "pending", -errno.EINTR)
+        else:
+            next_state = OpSm.get_next_state("clone", "pending", 0)
     except OpSmException as oe:
         raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
@@ -83,9 +86,7 @@ def sync_attrs(fs_handle, target_path, source_statx):
 def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     """
     bulk copy data from source to destination -- only directories, symlinks
-    and regular files are synced. note that @should_cancel is not used right
-    now but would be required when implementing cancelation for in-progress
-    clone operations.
+    and regular files are synced.
     """
     log.info("copying data from {0} to {1}".format(source_path, dst_path))
     def cptree(src_root_path, dst_root_path):
@@ -93,7 +94,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
         try:
             with fs_handle.opendir(src_root_path) as dir_handle:
                 d = fs_handle.readdir(dir_handle)
-                while d:
+                while d and not should_cancel():
                     if d.d_name not in (b".", b".."):
                         log.debug("d={0}".format(d))
                         d_full_src = os.path.join(src_root_path, d.d_name)
@@ -125,7 +126,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                                     raise
                         elif stat.S_ISREG(stx["mode"]):
                             log.debug("cptree: (REG) {0}".format(d_full_src))
-                            copy_file(fs_handle, d_full_src, d_full_dst, mo)
+                            copy_file(fs_handle, d_full_src, d_full_dst, mo, cancel_check=should_cancel)
                         else:
                             handled = False
                             log.warn("cptree: (IGNORE) {0}".format(d_full_src))
@@ -141,6 +142,8 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
             if not e.args[0] == errno.ENOENT:
                 raise VolumeException(-e.args[0], e.args[1])
     cptree(source_path, dst_path)
+    if should_cancel():
+        raise VolumeException(-errno.EINTR, "clone operation interrupted")
 
 def do_clone(volume_client, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(volume_client, volname) as fs_handle:
@@ -157,7 +160,7 @@ def handle_clone_in_progress(volume_client, volname, index, groupname, subvolnam
         next_state = OpSm.get_next_state("clone", "in-progress", 0)
     except VolumeException as ve:
         # jump to failed state
-        next_state = OpSm.get_next_state("clone", "in-progress", -1)
+        next_state = OpSm.get_next_state("clone", "in-progress", ve.errno)
     except OpSmException as oe:
         raise VolumeException(oe.errno, oe.error_str)
     return (next_state, False)
@@ -233,9 +236,71 @@ class Cloner(AsyncJobs):
             'pending'     : handle_clone_pending,
             'in-progress' : handle_clone_in_progress,
             'complete'    : handle_clone_complete,
-            'failed'      : handle_clone_failed
+            'failed'      : handle_clone_failed,
+            'canceled'    : handle_clone_failed,
         }
         super(Cloner, self).__init__(volume_client, "cloner", tp_size)
+
+    def is_clone_cancelable(self, clone_state):
+        return not (OpSm.is_final_state(clone_state) or OpSm.is_failed_state(clone_state))
+
+    def get_clone_tracking_index(self, fs_handle, clone_subvolume):
+        with open_clone_index(fs_handle, self.vc.volspec) as index:
+            return index.find_clone_entry_index(clone_subvolume.base_path)
+
+    def _cancel_pending_clone(self, fs_handle, clone_subvolume, status, track_idx):
+        clone_state = status['state']
+        assert self.is_clone_cancelable(clone_state)
+
+        s_groupname = status['source'].get('group', None)
+        s_subvolname = status['source']['subvolume']
+        s_snapname = status['source']['snapshot']
+
+        with open_group(fs_handle, self.vc.volspec, s_groupname) as s_group:
+            with open_subvol(fs_handle, self.vc.volspec, s_group, s_subvolname) as s_subvolume:
+                next_state = OpSm.get_next_state("clone", clone_state, -errno.EINTR)
+                clone_subvolume.state = (next_state, True)
+                s_subvolume.detach_snapshot(s_snapname, track_idx.decode('utf-8'))
+
+    def cancel_job(self, volname, job):
+        """
+        override base class `cancel_job`. interpret @job as (clone, group) tuple.
+        """
+        clonename = job[0]
+        groupname = job[1]
+        track_idx = None
+
+        try:
+            with open_volume(self.vc, volname) as fs_handle:
+                with open_group(fs_handle, self.vc.volspec, groupname) as group:
+                    with open_subvol(fs_handle, self.vc.volspec, group, clonename,
+                                     need_complete=False, expected_types=["clone"]) as clone_subvolume:
+                        status = clone_subvolume.status
+                        clone_state = status['state']
+                        if not self.is_clone_cancelable(clone_state):
+                            raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
+                        track_idx = self.get_clone_tracking_index(fs_handle, clone_subvolume)
+                        if not track_idx:
+                            log.warn("cannot lookup clone tracking index for {0}".format(clone_subvolume.base_path))
+                            raise VolumeException(-errno.EINVAL, "error canceling clone")
+                        if OpSm.is_init_state("clone", clone_state):
+                            # clone has not started yet -- cancel right away.
+                            self._cancel_pending_clone(fs_handle, clone_subvolume, status, track_idx)
+                            return
+            # cancelling an on-going clone would persist "canceled" state in subvolume metadata.
+            # to persist the new state, async cloner accesses the volume in exclusive mode.
+            # accessing the volume in exclusive mode here would lead to deadlock.
+            assert track_idx is not None
+            with self.lock:
+                with open_volume_lockless(self.vc, volname) as fs_handle:
+                    with open_group(fs_handle, self.vc.volspec, groupname) as group:
+                        with open_subvol(fs_handle, self.vc.volspec, group, clonename,
+                                         need_complete=False, expected_types=["clone"]) as clone_subvolume:
+                            if not self._cancel_job(volname, (track_idx, clone_subvolume.base_path)):
+                                raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
+        except (IndexException, MetadataMgrException) as e:
+            log.error("error cancelling clone {0}: ({1})".format(job, e))
+            raise VolumeException(-errno.EINVAL, "error canceling clone")
 
     def get_next_job(self, volname, running_jobs):
         return get_next_clone_entry(self.vc, volname, running_jobs)
