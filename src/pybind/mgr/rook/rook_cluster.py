@@ -409,6 +409,59 @@ class RookCluster(object):
             cfs.CephFilesystem, 'cephfilesystems', spec.service_id,
             _update_fs, _create_fs)
 
+    def apply_objectstore(self, spec):
+
+        # FIXME: service_id is $realm.$zone, but rook uses realm
+        # $crname and zone $crname.  The '.'  will confuse kubernetes.
+        # For now, assert that realm==zone.
+        (realm, zone) = spec.service_id.split('.', 1)
+        assert realm == zone
+        name = realm
+
+        def _create_zone():
+            # type: () -> cos.CephObjectStore
+            port = None
+            secure_port = None
+            if spec.ssl:
+                secure_port = spec.get_port()
+            else:
+                port = spec.get_port()
+            return cos.CephObjectStore(
+                apiVersion=self.rook_env.api_name,
+                metadata=dict(
+                    name=name,
+                    namespace=self.rook_env.namespace
+                ),
+                spec=cos.Spec(
+                    metadataPool=cos.MetadataPool(
+                        failureDomain='host',
+                        replicated=cos.Replicated(
+                            size=1
+                        )
+                    ),
+                    dataPool=cos.DataPool(
+                        failureDomain='host',
+                        replicated=cos.Replicated(
+                            size=1
+                        )
+                    ),
+                    gateway=cos.Gateway(
+                        type='s3',
+                        port=port,
+                        securePort=secure_port,
+                        instances=spec.placement.count or 1,
+                    )
+                )
+            )
+
+        def _update_zone(current, new):
+            new.spec.gateway.instances = spec.placement.count or 1
+            return new
+
+        return self._create_or_patch(
+            cos.CephObjectStore, 'cephobjectstores', name,
+            _update_zone, _create_zone)
+
     def add_nfsgw(self, spec):
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
@@ -435,38 +488,6 @@ class RookCluster(object):
 
         with self.ignore_409("NFS cluster '{0}' already exists".format(spec.service_id)):
             self.rook_api_post("cephnfses/", body=rook_nfsgw.to_json())
-
-    def add_objectstore(self, spec):
-
-        rook_os = cos.CephObjectStore(
-            apiVersion=self.rook_env.api_name,
-            metadata=dict(
-                name=spec.service_id,
-                namespace=self.rook_env.namespace
-            ),
-            spec=cos.Spec(
-                metadataPool=cos.MetadataPool(
-                    failureDomain='host',
-                    replicated=cos.Replicated(
-                        size=1
-                    )
-                ),
-                dataPool=cos.DataPool(
-                    failureDomain='osd',
-                    replicated=cos.Replicated(
-                        size=1
-                    )
-                ),
-                gateway=cos.Gateway(
-                    type='s3',
-                    port=spec.rgw_frontend_port if spec.rgw_frontend_port is not None else 80,
-                    instances=spec.placement.count
-                )
-            )
-        )
-        
-        with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.service_id)):
-            self.rook_api_post("cephobjectstores/", body=rook_os.to_json())
 
     def rm_service(self, rooktype, service_id):
 
