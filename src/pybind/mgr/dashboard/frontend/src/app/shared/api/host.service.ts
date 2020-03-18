@@ -22,11 +22,11 @@ export class HostService {
     return this.http.get(this.baseURL);
   }
 
-  add(hostname: string) {
+  create(hostname: string) {
     return this.http.post(this.baseURL, { hostname: hostname }, { observe: 'response' });
   }
 
-  remove(hostname: string) {
+  delete(hostname: string) {
     return this.http.delete(`${this.baseURL}/${hostname}`, { observe: 'response' });
   }
 

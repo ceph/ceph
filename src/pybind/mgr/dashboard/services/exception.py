@@ -8,6 +8,7 @@ import six
 
 import cherrypy
 
+from orchestrator import OrchestratorError
 import rbd
 import rados
 
@@ -131,6 +132,5 @@ def handle_send_command_error(component):
 def handle_orchestrator_error(component):
     try:
         yield
-    except RuntimeError as e:
-        # how to catch remote error e.g. NotImplementedError ?
+    except OrchestratorError as e:
         raise DashboardException(e, component=component)
