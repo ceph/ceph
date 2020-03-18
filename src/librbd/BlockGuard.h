@@ -115,8 +115,7 @@ public:
                      << "block_end="
                      << detained_block_extent.block_extent.block_end << "), "
                      << "pending_ops="
-                     << (detained_block_extent.block_operations.empty() ?
-                          0 : detained_block_extent.block_operations.size() - 1)
+                     << detained_block_extent.block_operations.size()
                      << dendl;
 
     *block_operations = std::move(detained_block_extent.block_operations);
