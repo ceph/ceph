@@ -175,6 +175,10 @@ void Replayer<I>::shut_down(Context* on_finish) {
   std::swap(m_state, state);
 
   if (state == STATE_REPLAYING) {
+    // if a sync request was pending, request a cancelation
+    m_instance_watcher->cancel_sync_request(
+      m_state_builder->local_image_ctx->id);
+
     // TODO interrupt snapshot copy and image copy state machines even if remote
     // cluster is unreachable
     dout(10) << "shut down pending on completion of snapshot replay" << dendl;
@@ -711,7 +715,7 @@ void Replayer<I>::handle_get_local_image_state(int r) {
     return;
   }
 
-  copy_image();
+  request_sync();
 }
 
 template <typename I>
@@ -739,6 +743,37 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
   }
 
   dout(15) << "local_snap_id_end=" << m_local_snap_id_end << dendl;
+
+  request_sync();
+}
+
+template <typename I>
+void Replayer<I>::request_sync() {
+  dout(10) << dendl;
+
+  std::unique_lock locker{m_lock};
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      Replayer<I>, &Replayer<I>::handle_request_sync>(this));
+  m_instance_watcher->notify_sync_request(m_state_builder->local_image_ctx->id,
+                                          ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_request_sync(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r == -ECANCELED) {
+    dout(5) << "image-sync canceled" << dendl;
+    handle_replay_complete(r, "image-sync canceled");
+    return;
+  } else if (r < 0) {
+    derr << "failed to request image-sync: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "failed to request image-sync");
+    return;
+  }
+
+  m_sync_in_progress = true;
 
   copy_image();
 }
@@ -943,6 +978,10 @@ void Replayer<I>::finish_sync() {
   {
     std::unique_lock locker{m_lock};
     notify_status_updated();
+
+    m_sync_in_progress = false;
+    m_instance_watcher->notify_sync_complete(
+      m_state_builder->local_image_ctx->id);
   }
 
   if (is_replay_interrupted()) {
@@ -1138,6 +1177,12 @@ void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
   if (m_error_code == 0) {
     m_error_code = r;
     m_error_description = description;
+  }
+
+  if (m_sync_in_progress) {
+    m_sync_in_progress = false;
+    m_instance_watcher->notify_sync_complete(
+      m_state_builder->local_image_ctx->id);
   }
 
   if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {
