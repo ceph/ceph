@@ -900,22 +900,13 @@ void Replayer<I>::handle_notify_image_update(int r) {
     derr << "failed to notify local image update: " << cpp_strerror(r) << dendl;
   }
 
-  if (is_replay_interrupted()) {
-    return;
-  }
-
   unlink_peer();
 }
 
 template <typename I>
 void Replayer<I>::unlink_peer() {
   if (m_remote_snap_id_start == 0) {
-    {
-      std::unique_lock locker{m_lock};
-      notify_status_updated();
-    }
-
-    load_local_image_meta();
+    finish_sync();
     return;
   }
 
@@ -942,9 +933,20 @@ void Replayer<I>::handle_unlink_peer(int r) {
     return;
   }
 
+  finish_sync();
+}
+
+template <typename I>
+void Replayer<I>::finish_sync() {
+  dout(10) << dendl;
+
   {
     std::unique_lock locker{m_lock};
     notify_status_updated();
+  }
+
+  if (is_replay_interrupted()) {
+    return;
   }
 
   load_local_image_meta();
