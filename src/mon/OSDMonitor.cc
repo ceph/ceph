@@ -933,6 +933,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     // will be called by on_active() on the leader, avoid doing so twice
     start_mapping();
   }
+  if (osdmap.stretch_mode_enabled) {
+    mon->maybe_engage_stretch_mode();
+  }
 }
 
 int OSDMonitor::register_cache_with_pcm()
@@ -14223,7 +14226,60 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     pending_inc.stretch_mode_enabled = true;
     pending_inc.new_stretch_bucket_count = bucket_count;
     pending_inc.new_degraded_stretch_mode = 0;
+    pending_inc.new_stretch_mode_bucket = dividing_id;
   }
   *okay = true;
   return;
+}
+
+bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_buckets,
+					    set<int> *really_down_buckets,
+					    set<string> *really_down_mons)
+{
+  ceph_assert(is_readable());
+  if (dead_buckets.empty()) return false;
+  set<int> down_cache;
+  bool really_down = false;
+  for (auto dbi : dead_buckets) {
+    const string& bucket_name = dbi.first;
+    ceph_assert(osdmap.crush->name_exists(bucket_name));
+    int bucket_id = osdmap.crush->get_item_id(bucket_name);
+    bool subtree_down = osdmap.subtree_is_down(bucket_id, &down_cache);
+    if (subtree_down) {
+      really_down = true;
+      really_down_buckets->insert(bucket_id);
+      really_down_mons->insert(dbi.second.begin(), dbi.second.end());
+    }
+  }
+  return really_down;
+}
+
+void OSDMonitor::set_degraded_stretch_mode(const set<int>& dead_buckets,
+					   const set<string>& live_zones)
+{
+  // update the general OSDMap changes
+  pending_inc.change_stretch_mode = true;
+  pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
+  pending_inc.new_stretch_bucket_count = osdmap.stretch_bucket_count;
+  int new_site_count = osdmap.stretch_bucket_count - dead_buckets.size();
+  ceph_assert(new_site_count == 1); // stretch count 2!
+  pending_inc.new_degraded_stretch_mode = new_site_count;
+  pending_inc.new_stretch_mode_bucket = osdmap.stretch_mode_bucket;
+
+  // and then apply them to all the pg_pool_ts
+  ceph_assert(live_zones.size() == 1); // only support 2 zones now
+  const string& remaining_site_name = *(live_zones.begin());
+  ceph_assert(osdmap.crush->name_exists(remaining_site_name));
+  int remaining_site = osdmap.crush->get_item_id(remaining_site_name);
+  for (auto pgi : osdmap.pools) {
+    if (pgi.second.peering_crush_bucket_count) {
+      pg_pool_t newp(pgi.second);
+      newp.peering_crush_bucket_count = new_site_count;
+      newp.peering_crush_mandatory_member = remaining_site;
+      newp.min_size = 1;
+      newp.size = pgi.second.size / 2; // only support 2 zones now
+      pending_inc.new_pools[pgi.first] = newp;
+    }
+  }
+  propose_pending();
 }
