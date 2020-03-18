@@ -468,6 +468,9 @@ public:
   int get_caps_issued(int fd);
   int get_caps_issued(const char *path, const UserPerm& perms);
 
+  auto get_caps_wanted_delay_min() const { return caps_wanted_delay_min; }
+  auto get_caps_wanted_delay_max() const { return caps_wanted_delay_max; }
+
   snapid_t ll_get_snapid(Inode *in);
   vinodeno_t ll_get_vino(Inode *in) {
     std::lock_guard lock(client_lock);
@@ -1208,8 +1211,6 @@ private:
   int user_id, group_id;
   int acl_type = NO_ACL;
 
-  epoch_t cap_epoch_barrier = 0;
-
   // mds sessions
   map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
   std::set<mds_rank_t> mds_ranks_closing;  // mds ranks currently tearing down sessions
@@ -1262,6 +1263,12 @@ private:
   // dirty_list keeps all the dirty inodes before flushing.
   xlist<Inode*> delayed_list, dirty_list;
   int num_flushing_caps = 0;
+
+  epoch_t cap_epoch_barrier = 0;
+
+  unsigned caps_wanted_delay_min;
+  unsigned caps_wanted_delay_max;
+
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 

@@ -354,7 +354,6 @@ OPTION(client_mount_uid, OPT_INT)
 OPTION(client_mount_gid, OPT_INT)
 OPTION(client_notify_timeout, OPT_INT) // in seconds
 OPTION(osd_client_watch_timeout, OPT_INT) // in seconds
-OPTION(client_caps_release_delay, OPT_INT) // in seconds
 OPTION(client_quota_df, OPT_BOOL) // use quota for df on subdir mounts
 OPTION(client_oc, OPT_BOOL)
 OPTION(client_oc_size, OPT_INT)    // MB * n

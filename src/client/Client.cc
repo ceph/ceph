@@ -293,6 +293,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
+  caps_wanted_delay_min = cct->_conf.get_val<uint64_t>( "client_caps_wanted_delay_min");
+  caps_wanted_delay_max = cct->_conf.get_val<uint64_t>( "client_caps_wanted_delay_max");
+
   // file handles
   free_fd_set.insert(10, 1<<30);
 
@@ -2217,6 +2220,8 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   auto r = build_client_request(request);
   if (request->dentry()) {
     r->set_dentry_wanted();
+    if (Inode *dir = request->inode())
+      dir->touch_open_ref(CEPH_FILE_MODE_RD);
   }
   if (request->got_unsafe) {
     r->set_replayed_op();
@@ -2242,8 +2247,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   }
   request->mds = mds;
 
-  Inode *in = request->inode();
-  if (in) {
+  if (Inode *in = request->inode()) {
     auto it = in->caps.find(mds);
     if (it != in->caps.end()) {
       request->sent_on_mseq = it->second.mseq;
@@ -2820,9 +2824,10 @@ void Client::send_reconnect(MetaSession *session)
       }
 
       Cap &cap = it->second;
+      cap.wanted = in->caps_wanted();
       ldout(cct, 10) << " caps on " << p->first
 	       << " " << ccap_string(cap.issued)
-	       << " wants " << ccap_string(in->caps_wanted())
+	       << " wants " << ccap_string(cap.wanted)
 	       << dendl;
       filepath path;
       in->make_long_path(path);
@@ -2848,7 +2853,7 @@ void Client::send_reconnect(MetaSession *session)
       m->add_cap(p->first.ino, 
 		 cap.cap_id,
 		 path.get_ino(), path.get_path(),   // ino
-		 in->caps_wanted(), // wanted
+		 cap.wanted, // wanted
 		 cap.issued,     // issued
 		 in->snaprealm->ino,
 		 snap_follows,
@@ -3238,13 +3243,20 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
   if (r < 0)
     return r;
 
+  if (((need & CEPH_CAP_FILE_RD) && !in->is_opened_for_read()) ||
+      ((need & CEPH_CAP_FILE_WR) && !in->is_opened_for_write())) {
+    ldout(cct, 10) << "get_caps " << *in << " need " << ccap_string(need) << " EBADF " << dendl;
+    return -EBADF;
+  }
+
   while (1) {
-    int file_wanted = in->caps_file_wanted();
-    if ((file_wanted & need) != need) {
-      ldout(cct, 10) << "get_caps " << *in << " need " << ccap_string(need)
-		     << " file_wanted " << ccap_string(file_wanted) << ", EBADF "
-		     << dendl;
-      return -EBADF;
+    if (need & (CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR)) {
+      int fmode = 0;
+      if (need & CEPH_CAP_FILE_RD)
+       fmode |= CEPH_FILE_MODE_RD;
+      if (need & CEPH_CAP_FILE_WR)
+       fmode |= CEPH_FILE_MODE_WR;
+      in->touch_open_ref(fmode);
     }
 
     if ((fh->mode & CEPH_FILE_MODE_WR) && fh->gen != fd_gen)
@@ -3323,10 +3335,12 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
       continue;
     }
 
+    in->inc_cap_waiter(need);
     if (waitfor_caps)
       wait_on_list(in->waitfor_caps);
     else if (waitfor_commit)
       wait_on_list(in->waitfor_commit);
+    in->dec_cap_waiter(need);
   }
 }
 
@@ -3343,7 +3357,7 @@ void Client::cap_delay_requeue(Inode *in)
 {
   ldout(cct, 10) << __func__ << " on " << *in << dendl;
   in->hold_caps_until = ceph_clock_now();
-  in->hold_caps_until += cct->_conf->client_caps_release_delay;
+  in->hold_caps_until += caps_wanted_delay_max;
   delayed_list.push_back(&in->delay_cap_item);
 }
 
@@ -3519,7 +3533,7 @@ static int adjust_caps_used_for_lazyio(int used, int issued, int implemented)
  */
 void Client::check_caps(Inode *in, unsigned flags)
 {
-  unsigned wanted = in->caps_wanted();
+  unsigned file_wanted = in->caps_file_wanted();
   unsigned used = get_caps_used(in);
   unsigned cap_used;
 
@@ -3530,6 +3544,7 @@ void Client::check_caps(Inode *in, unsigned flags)
   int orig_used = used;
   used = adjust_caps_used_for_lazyio(used, issued, implemented);
 
+  unsigned wanted = file_wanted;
   int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting && in->nlink > 0) {
     if (wanted) {
@@ -3551,6 +3566,9 @@ void Client::check_caps(Inode *in, unsigned flags)
 	retain |= CEPH_CAP_ANY_RD;
     }
   }
+  // match in->caps_wanted()
+  if (used & CEPH_CAP_FILE_BUFFER)
+    wanted |= CEPH_CAP_FILE_EXCL;
 
   ldout(cct, 10) << __func__ << " on " << *in
 	   << " wanted " << ccap_string(wanted)
@@ -3654,6 +3672,11 @@ void Client::check_caps(Inode *in, unsigned flags)
     send_cap(in, session, &cap, msg_flags, cap_used, wanted, retain,
 	     flushing, flush_tid);
   }
+
+  if ((file_wanted & ~CEPH_CAP_PIN) &&
+      !(used & (CEPH_CAP_FILE_RD | CEPH_CAP_ANY_FILE_WR)) &&
+      !in->delay_cap_item.is_on_list())
+    cap_delay_requeue(in);
 }
 
 
@@ -4405,7 +4428,7 @@ void Client::force_session_readonly(MetaSession *s)
   s->readonly = true;
   for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
     auto &in = (*p)->inode;
-    if (in.caps_wanted() & CEPH_CAP_FILE_WR)
+    if (in.caps_file_wanted() & CEPH_CAP_FILE_WR)
       signal_cond_list(in.waitfor_caps);
   }
 }
@@ -4465,15 +4488,20 @@ void Client::flush_caps_sync()
 {
   ldout(cct, 10) << __func__ << dendl;
   xlist<Inode*>::iterator p = delayed_list.begin();
+  size_t n = delayed_list.size();
   while (!p.end()) {
     unsigned flags = CHECK_CAPS_NODELAY;
     Inode *in = *p;
 
     ++p;
+    --n;
     delayed_list.pop_front();
-    if (p.end() && dirty_list.empty())
+    if (!n && dirty_list.empty())
       flags |= CHECK_CAPS_SYNCHRONOUS;
     check_caps(in, flags);
+    // check_caps() may requeue current inode
+    if (!n)
+      break;
   }
 
   // other caps, too
@@ -4541,13 +4569,12 @@ void Client::kick_flushing_caps(Inode *in, MetaSession *session)
     }
   }
 
-  int wanted = in->caps_wanted();
   int used = get_caps_used(in) | in->caps_dirty();
   auto it = in->cap_snaps.begin();
   for (auto& p : in->flushing_cap_tids) {
     if (p.second) {
       int msg_flags = p.first < last_snap_flush ? MClientCaps::FLAG_PENDING_CAPSNAP : 0;
-      send_cap(in, session, cap, msg_flags, used, wanted, (cap->issued | cap->implemented),
+      send_cap(in, session, cap, msg_flags, used, cap->wanted, (cap->issued | cap->implemented),
 	       p.second, p.first);
     } else {
       ceph_assert(it != in->cap_snaps.end());
@@ -5259,7 +5286,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 {
   mds_rank_t mds = session->mds_num;
   int used = get_caps_used(in);
-  int wanted = in->caps_wanted();
+  int wanted = in->caps_file_wanted();
 
   const unsigned new_caps = m->get_caps();
   const bool was_stale = session->cap_gen > cap->gen;
@@ -6507,6 +6534,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   goto done;
 
  hit_dn:
+  dir->touch_open_ref(CEPH_FILE_MODE_RD);
   if (dn->inode) {
     *target = dn->inode;
   } else {
@@ -8210,8 +8238,9 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     return -ENOTCONN;
 
   dir_result_t *dirp = static_cast<dir_result_t*>(d);
+  InodeRef& diri = dirp->inode;
 
-  ldout(cct, 10) << __func__ << " " << *dirp->inode << " offset " << hex << dirp->offset
+  ldout(cct, 10) << __func__ << " " << *diri << " offset " << hex << dirp->offset
 		 << dec << " at_end=" << dirp->at_end()
 		 << " hash_order=" << dirp->hash_order() << dendl;
 
@@ -8220,7 +8249,6 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
   memset(&de, 0, sizeof(de));
   memset(&stx, 0, sizeof(stx));
 
-  InodeRef& diri = dirp->inode;
 
   if (dirp->at_end())
     return 0;
@@ -8290,13 +8318,18 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 
   // can we read from our cache?
   ldout(cct, 10) << "offset " << hex << dirp->offset << dec
-	   << " snapid " << dirp->inode->snapid << " (complete && ordered) "
-	   << dirp->inode->is_complete_and_ordered()
-	   << " issued " << ccap_string(dirp->inode->caps_issued())
+	   << " snapid " << diri->snapid << " (complete && ordered) "
+	   << diri->is_complete_and_ordered()
+	   << " issued " << ccap_string(diri->caps_issued())
 	   << dendl;
-  if (dirp->inode->snapid != CEPH_SNAPDIR &&
-      dirp->inode->is_complete_and_ordered() &&
-      dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
+
+
+  // request Fx cap. if have Fx, we don't need to release Fs cap for later create/unlink.
+  diri->touch_open_ref(CEPH_FILE_MODE_WR);
+
+  if (diri->snapid != CEPH_SNAPDIR &&
+      diri->is_complete_and_ordered() &&
+      diri->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
     int err = _readdir_cache_cb(dirp, cb, p, caps, getref);
     if (err != -EAGAIN)
       return err;
@@ -14708,6 +14741,13 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     acl_type = NO_ACL;
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
+  }
+
+  if (changed.count("client_caps_wanted_delay_min")) {
+    caps_wanted_delay_min = cct->_conf.get_val<uint64_t>( "client_caps_wanted_delay_min");
+  }
+  if (changed.count("client_caps_wanted_delay_max")) {
+    caps_wanted_delay_max = cct->_conf.get_val<uint64_t>( "client_caps_wanted_delay_max");
   }
 }
 

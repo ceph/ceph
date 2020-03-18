@@ -115,6 +115,8 @@ struct CapSnap {
 #define I_KICK_FLUSH		(1 << 3)
 #define I_ERROR_FILELOCK	(1 << 4)
 
+static const int FMODE_WAIT_BIAS = 1000;
+
 struct Inode {
   Client *client;
 
@@ -213,6 +215,8 @@ struct Inode {
   map<snapid_t,CapSnap> cap_snaps;   // pending flush to mds
 
   int open_by_mode[CEPH_FILE_MODE_BITS] = {};
+  utime_t last_rd, last_wr;
+
   map<int,int> cap_refs;
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
@@ -308,7 +312,10 @@ struct Inode {
   // CAPS --------
   void get_open_ref(int mode);
   bool put_open_ref(int mode);
+  void touch_open_ref(int mode);
 
+  void inc_cap_waiter(int cap);
+  void dec_cap_waiter(int cap);
   void get_cap_ref(int cap);
   int put_cap_ref(int cap);
   bool is_any_caps();
@@ -340,17 +347,18 @@ struct Inode {
 
   void mark_caps_dirty(int caps);
   void mark_caps_clean();
-private:
-  // how many opens for write on this Inode?
+
+  bool is_opened_for_read() const {
+    return open_by_mode[ffs(CEPH_FILE_MODE_RD)];
+  }
   bool is_opened_for_write() const {
     return open_by_mode[ffs(CEPH_FILE_MODE_WR)];
   }
-
   // how many opens of any sort on this inode?
   bool is_opened() const {
     return open_by_mode[0];
   }
-
+private:
   void break_deleg(bool skip_read);
   bool delegations_broken(bool skip_read);
 

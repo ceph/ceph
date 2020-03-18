@@ -8466,9 +8466,15 @@ std::vector<Option> get_mds_client_options() {
     .set_default(30)
     .set_description(""),
 
-    Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_DEV)
+    Option("client_caps_wanted_delay_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_min_max(1, 30)
+    .set_description("delay to clear wanted caps that are not used by any open file"),
+
+    Option("client_caps_wanted_delay_max", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_min(30)
+    .set_description("delay to clear wanted caps that are only used by idle open file"),
 
     Option("client_quota_df", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

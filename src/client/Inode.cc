@@ -135,6 +135,9 @@ void Inode::get_open_ref(int mode)
     if (bits & (1 << i))
 	open_by_mode[i]++;
   }
+
+  touch_open_ref(mode);
+
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
 
@@ -151,6 +154,42 @@ bool Inode::put_open_ref(int mode)
     }
   }
   return last;
+}
+
+void Inode::touch_open_ref(int mode)
+{
+  auto now = ceph_clock_now();
+  if (mode & CEPH_FILE_MODE_RD)
+    last_rd = now;
+  if (mode & CEPH_FILE_MODE_WR)
+    last_wr = now;
+
+  if (snapid == CEPH_NOSNAP &&
+      (!delay_cap_item.is_on_list() || hold_caps_until <= now))
+    client->cap_delay_requeue(this);
+}
+
+
+void Inode::inc_cap_waiter(int cap)
+{
+  if (cap & CEPH_CAP_FILE_RD)
+    open_by_mode[ffs(CEPH_FILE_MODE_RD)] += FMODE_WAIT_BIAS;
+  if (cap & CEPH_CAP_FILE_WR)
+    open_by_mode[ffs(CEPH_FILE_MODE_WR)] += FMODE_WAIT_BIAS;
+}
+
+void Inode::dec_cap_waiter(int cap)
+{
+  if (cap & CEPH_CAP_FILE_RD) {
+    auto& ref = open_by_mode[ffs(CEPH_FILE_MODE_RD)];
+    ceph_assert(ref >= FMODE_WAIT_BIAS);
+    ref -= FMODE_WAIT_BIAS;
+  }
+  if (cap & CEPH_CAP_FILE_WR) {
+    auto& ref = open_by_mode[ffs(CEPH_FILE_MODE_WR)];
+    ceph_assert(ref >= FMODE_WAIT_BIAS);
+    ref -= FMODE_WAIT_BIAS;
+  }
 }
 
 void Inode::get_cap_ref(int cap)
@@ -305,20 +344,62 @@ int Inode::caps_used()
 
 int Inode::caps_file_wanted()
 {
-  int bits = 0;
-  for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
-    if (open_by_mode[i])
-      bits |= 1 << i;
+  const int PIN_SHIFT = ffs(CEPH_FILE_MODE_PIN);
+  const int RD_SHIFT = ffs(CEPH_FILE_MODE_RD);
+  const int WR_SHIFT = ffs(CEPH_FILE_MODE_WR);
+  const int LAZY_SHIFT = ffs(CEPH_FILE_MODE_LAZY);
+  auto now = ceph_clock_now();
+  auto used_cutoff = now - client->get_caps_wanted_delay_max();
+  auto idle_cutoff = now - client->get_caps_wanted_delay_min();
+
+  if (is_dir()) {
+    int want = 0;
+
+    /* use used_cutoff here, to keep dir's wanted caps longer */
+    if (open_by_mode[RD_SHIFT] > 0 || last_rd > used_cutoff)
+      want |= CEPH_CAP_ANY_SHARED;
+
+    if (open_by_mode[WR_SHIFT] > 0 || last_wr > used_cutoff) {
+      want |= CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_EXCL;
+    }
+
+    if (want || open_by_mode[PIN_SHIFT] > 0)
+      want |= CEPH_CAP_PIN;
+
+    return want;
+  } else {
+    int bits = 0;
+
+    if (open_by_mode[RD_SHIFT] > 0) {
+      if (open_by_mode[RD_SHIFT] >= FMODE_WAIT_BIAS ||
+	  last_rd > used_cutoff)
+	bits |= 1 << RD_SHIFT;
+    } else if (last_rd > idle_cutoff) {
+      bits |= 1 << RD_SHIFT;
+    }
+
+    if (open_by_mode[WR_SHIFT] > 0) {
+      if (open_by_mode[WR_SHIFT] >= FMODE_WAIT_BIAS ||
+	  last_wr > used_cutoff)
+	bits |= 1 << WR_SHIFT;
+    } else if (last_wr > idle_cutoff) {
+      bits |= 1 << WR_SHIFT;
+    }
+
+    /* check lazyio only when read/write is wanted */
+    if ((bits & (CEPH_FILE_MODE_RDWR << 1)) &&
+	open_by_mode[LAZY_SHIFT] > 0)
+      bits |= 1 << LAZY_SHIFT;
+
+    return bits ? ceph_caps_for_mode(bits >> 1) : 0;
   }
-  if (bits == 0)
-    return 0;
-  return ceph_caps_for_mode(bits >> 1);
 }
 
 int Inode::caps_wanted()
 {
-  int want = caps_file_wanted() | caps_used();
-  if (want & CEPH_CAP_FILE_BUFFER)
+  int want = caps_file_wanted();
+  int used = caps_used();
+  if (used & CEPH_CAP_FILE_BUFFER)
     want |= CEPH_CAP_FILE_EXCL;
   return want;
 }
