@@ -113,13 +113,21 @@ RADOS
 **RBD** block storage
 ~~~~~~~~~~~~~~~~~~~~~
   
+* Mirroring now supports a new snapshot-based mode that no longer requires
+  the journaling feature and its related impacts in exchange for the loss
+  of point-in-time consistency (it remains crash consistent).
 * Clone operations now preserve the sparseness of the underlying RBD image.
 * The trash feature has been improved to (optionally) automatically
   move old parent images to the trash when their children are all
   deleted or flattened.
+* The trash can be configured to automatically purge on a defined schedule.
+* Images can be online re-sparsified to reduce the usage of zeroed extents.
 * The ``rbd-nbd`` tool has been improved to use more modern kernel interfaces.
 * Caching has been improved to be more efficient and performant.
-
+* ``rbd-mirror`` automatically adjusts its per-image memory usage based
+  upon its memory target.
+* A new persistent read-only caching daemon is available to offload reads from
+  shared parent images.
 
 **RGW** object storage
 ~~~~~~~~~~~~~~~~~~~~~~
