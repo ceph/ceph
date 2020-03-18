@@ -799,6 +799,21 @@ describe('PoolFormComponent', () => {
       fixture.detectChanges();
     });
 
+    it('should select the newly created rule', () => {
+      expect(form.getValue('crushRule').rule_name).toBe('rep1');
+      const name = 'awesomeRule';
+      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+        return {
+          content: {
+            submitAction: of({ name })
+          }
+        };
+      });
+      infoReturn.crush_rules_replicated.push(createCrushRule({ id: 8, name }));
+      component.addCrushRule();
+      expect(form.getValue('crushRule').rule_name).toBe(name);
+    });
+
     it('should not show info per default', () => {
       fixtureHelper.expectElementVisible('#crushRule', true);
       fixtureHelper.expectElementVisible('#crush-info-block', false);
@@ -837,30 +852,32 @@ describe('PoolFormComponent', () => {
 
       const expectSuccessfulDeletion = (name: string) => {
         expect(crushRuleService.delete).toHaveBeenCalledWith(name);
-        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith({
-          task: {
-            name: 'crushRule/delete',
-            metadata: {
-              name: name
+        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith(
+          expect.objectContaining({
+            task: {
+              name: 'crushRule/delete',
+              metadata: {
+                name: name
+              }
             }
-          },
-          call: undefined // because of stub
-        });
+          })
+        );
       };
 
       beforeEach(() => {
         modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
-          (deletionClass, config) => {
+          (deletionClass: any, config: any) => {
             deletion = Object.assign(new deletionClass(), config.initialState);
             return {
               content: deletion
             };
           }
         );
-        deleteSpy = spyOn(crushRuleService, 'delete').and.callFake((name) => {
+        deleteSpy = spyOn(crushRuleService, 'delete').and.callFake((name: string) => {
           const rules = infoReturn.crush_rules_replicated;
           const index = _.findIndex(rules, (rule) => rule.rule_name === name);
           rules.splice(index, 1);
+          return of(undefined);
         });
         taskWrapper = TestBed.get(TaskWrapperService);
         spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
