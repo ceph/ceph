@@ -3784,8 +3784,12 @@ void Client::check_caps(Inode *in, unsigned flags)
     }
 
     /* want more caps from mds? */
-    if (wanted & ~(cap.wanted | cap.issued))
-      goto ack;
+    if (wanted & ~cap.wanted) {
+      if (wanted & ~(cap.wanted | cap.issued))
+	goto ack;
+      if (!in->cap_is_valid(cap))
+	goto ack;
+    }
 
     if (!revoking && is_unmounting() && (cap_used == 0))
       goto ack;
