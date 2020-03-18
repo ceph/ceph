@@ -263,6 +263,8 @@ private:
   void unlink_peer();
   void handle_unlink_peer(int r);
 
+  void finish_sync();
+
   void register_local_update_watcher();
   void handle_register_local_update_watcher(int r);
 
