@@ -43,9 +43,9 @@ configuration parameter. The parameter is a comma or space separated list
 of ``pool[/namespace]`` entries. If the namespace is not specified the
 statistics are collected for all namespaces in the pool.
 
-Example to enable the images ``image1``, ``image2`` and ``imageN``::
+Example to activate the RBD-enabled pools ``pool1``, ``pool2`` and ``poolN``::
 
-  ceph config set mgr mgr/prometheus/rbd_stats_pools "image1,image2,imageN"
+  ceph config set mgr mgr/prometheus/rbd_stats_pools "pool1,pool2,poolN"
 
 The module makes the list of all available images scanning the specified
 pools and namespaces and refreshes it periodically. The period is
