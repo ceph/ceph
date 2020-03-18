@@ -213,6 +213,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(disallowed_leaders, blist);
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
+  encode(stretch_marked_down_mons, blist);
   if (stretch_mode_enabled) {
     new_compat_v = 9;
   }
@@ -274,9 +275,11 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   if (struct_v >= 9) {
     decode(stretch_mode_enabled, p);
     decode(tiebreaker_mon, p);
+    decode(stretch_marked_down_mons, p);
   } else {
     stretch_mode_enabled = false;
     tiebreaker_mon = "";
+    stretch_marked_down_mons.clear();
   }
   calc_addr_mons();
   DECODE_FINISH(p);

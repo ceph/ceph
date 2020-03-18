@@ -1103,6 +1103,12 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   *okay = true;
 }
 
+void MonmapMonitor::set_degraded_stretch_mode(const set<string>& dead_mons)
+{
+  pending_map.stretch_marked_down_mons.insert(dead_mons.begin(), dead_mons.end());
+  propose_pending();
+}
+
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
   auto join = op->get_req<MMonJoin>();
