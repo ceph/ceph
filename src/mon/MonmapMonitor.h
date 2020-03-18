@@ -94,6 +94,12 @@ private:
 			       const string& tiebreaker_mon,
 			       const string& dividing_bucket);
 
+public:
+  /**
+   * Set us to degraded stretch mode. Put the dead_mons in
+   * the MonMap.
+   */
+  void set_degraded_stretch_mode(const set<string>& dead_mons);
 };
 
 
