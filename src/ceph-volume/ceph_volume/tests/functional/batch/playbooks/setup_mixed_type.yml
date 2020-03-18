@@ -3,6 +3,22 @@
   become: yes
   tasks:
 
+    - name: install lvm2
+      package:
+        name: lvm2
+        state: present
+    - name: tell lvm to globally ignore loop devices
+      lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: '        global_filter = [ "r|loop|", "a|.*|" ]'
+        insertafter: '^devices {'
+    - name: tell lvm to ignore loop devices
+      lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: '        filter = [ "r|loop|", "a|.*|" ]'
+        insertafter: '^devices {'
+    - name: rescan pvs
+      command: "pvscan --cache"
     - name: create the nvme image systemd unit
       copy:
         content: |
