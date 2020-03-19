@@ -444,11 +444,16 @@ bool rgw::auth::RemoteApplier::is_identity(const idset_t& ids) const {
       return true;
     } else if (id.is_user() &&
 	       (info.acct_user.tenant.empty() ?
-		info.acct_user.id :
-		info.acct_user.tenant) == id.get_tenant()) {
+		      info.acct_user.id :
+		      info.acct_user.tenant) == id.get_tenant()) {
       if (info.acct_user.id == id.get_id()) {
         return true;
       }
+      std::string wildcard_subuser = user_info.user_id.id;
+      wildcard_subuser.append(":*");
+      if (wildcard_subuser == id.get_id()) {
+        return true;
+      } else if (subuser != NO_SUBUSER) {
       std::string user = info.acct_user.id;
       user.append(":");
       user.append(info.subuser);
