@@ -2534,6 +2534,7 @@ void DaemonServer::adjust_pgs()
 		       << dendl;
 	      ok = false;
 	    }
+	    vector<int32_t> source_acting;
             for (auto &merge_participant : {merge_source, merge_target}) {
               bool is_merge_source = merge_participant == merge_source;
               if (osdmap.have_pg_upmaps(merge_participant)) {
@@ -2565,6 +2566,19 @@ void DaemonServer::adjust_pgs()
 		         << " not clean (" << pg_state_string(q->second.state)
 		         << ")" << dendl;
 	        ok = false;
+	      }
+	      if (is_merge_source) {
+		source_acting = q->second.acting;
+	      } else if (ok && q->second.acting != source_acting) {
+		dout(10) << "pool " << i.first
+		         << " pg_num_target " << p.get_pg_num_target()
+		         << " pg_num " << p.get_pg_num()
+		         << (is_merge_source ? " - merge source " : " - merge target ")
+                         << merge_participant
+			 << " acting does not match (source " << source_acting
+			 << " != target " << q->second.acting
+			 << ")" << dendl;
+		ok = false;
 	      }
             }
 
