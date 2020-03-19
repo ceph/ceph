@@ -402,7 +402,7 @@ class Module(MgrModule):
             # anonymize device id
             anon_devid = self.get_store('devid-id/%s' % devid)
             if not anon_devid:
-                anon_devid = devid[:devid.rfind('_')] + '_' + uuid.uuid1()
+                anon_devid = devid[:devid.rfind('_')] + '_' + str(uuid.uuid1())
                 self.set_store('devid-id/%s' % devid, anon_devid)
             self.log.info('devid %s / %s, host %s / %s' % (devid, anon_devid,
                                                            host, anon_host))
