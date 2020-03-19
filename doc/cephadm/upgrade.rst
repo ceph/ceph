@@ -28,11 +28,11 @@ and your cluster is healthy.
 
 To upgrade (or downgrade) to a specific release::
 
-  # ceph upgrade start --version <version>
+  # ceph orch upgrade start --version <version>
 
 For example, to upgrade to v15.2.1::
 
-  # ceph upgrade start --version 15.2.1
+  # ceph orch upgrade start --version 15.2.1
 
 
 Monitoring the upgrade
@@ -41,7 +41,7 @@ Monitoring the upgrade
 Determine whether an upgrade is in process and what version the cluster is
 upgrading to with::
 
-  # ceph upgrade status
+  # ceph orch upgrade status
 
 While the upgrade is underway, you will see a progress bar in the ceph
 status output.  For example::
@@ -62,7 +62,7 @@ Canceling an upgrade
 
 You can stop the upgrade process at any time with::
 
-  # ceph upgrade stop
+  # ceph orch upgrade stop
 
 
 Potential problems
@@ -98,8 +98,8 @@ one or more hosts in the cluster.
 
 You can cancel the existing upgrade and specify a different target version with::
 
-  # ceph upgrade stop
-  # ceph upgrade start --version <version>
+  # ceph orch upgrade stop
+  # ceph orch upgrade start --version <version>
 
 
 Using customized container images
@@ -113,6 +113,6 @@ combining the ``container_image_base`` configuration option (default:
 You can also upgrade to an arbitrary container image.  For example, to
 upgrade to a development build::
 
-  # ceph upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
+  # ceph orch upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
 
 For more information about available container images, see :ref:`containers`.
