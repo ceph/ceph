@@ -368,7 +368,7 @@ class TestCephadm(object):
             spec = ServiceSpec('mgr', placement=ps)
             c = cephadm_module.apply_mgr(spec)
             assert wait(cephadm_module, c) == 'Scheduled mgr update...'
-            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_mds_save(self, cephadm_module):
@@ -377,7 +377,7 @@ class TestCephadm(object):
             spec = ServiceSpec('mds', 'fsname', placement=ps)
             c = cephadm_module.apply_mds(spec)
             assert wait(cephadm_module, c) == 'Scheduled mds update...'
-            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_rgw_save(self, cephadm_module):
@@ -386,7 +386,7 @@ class TestCephadm(object):
             spec = ServiceSpec('rgw', 'r.z', placement=ps)
             c = cephadm_module.apply_rgw(spec)
             assert wait(cephadm_module, c) == 'Scheduled rgw update...'
-            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_rbd_mirror_save(self, cephadm_module):
@@ -395,7 +395,7 @@ class TestCephadm(object):
             spec = ServiceSpec('rbd-mirror', placement=ps)
             c = cephadm_module.apply_rbd_mirror(spec)
             assert wait(cephadm_module, c) == 'Scheduled rbd-mirror update...'
-            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_nfs_save(self, cephadm_module):
@@ -404,7 +404,7 @@ class TestCephadm(object):
             spec = NFSServiceSpec('name', pool='pool', namespace='namespace', placement=ps)
             c = cephadm_module.apply_nfs(spec)
             assert wait(cephadm_module, c) == 'Scheduled nfs update...'
-            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_prometheus_save(self, cephadm_module):
@@ -413,7 +413,7 @@ class TestCephadm(object):
             spec = ServiceSpec('prometheus', placement=ps)
             c = cephadm_module.apply_prometheus(spec)
             assert wait(cephadm_module, c) == 'Scheduled prometheus update...'
-            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_node_exporter_save(self, cephadm_module):
@@ -422,5 +422,5 @@ class TestCephadm(object):
             spec = ServiceSpec('node-exporter', placement=ps, service_id='my_exporter')
             c = cephadm_module.apply_node_exporter(spec)
             assert wait(cephadm_module, c) == 'Scheduled node-exporter update...'
-            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
-            assert wait(cephadm_module, cephadm_module.list_specs('node-exporter.my_exporter')) == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
+            assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service(service_name='node-exporter.my_exporter'))] == [spec]
