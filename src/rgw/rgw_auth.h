@@ -469,12 +469,14 @@ public:
     friend class RemoteApplier;
   protected:
     const rgw_user acct_user;
+    const std::string subuser;
     const std::string acct_name;
     const uint32_t perm_mask;
     const bool is_admin;
     const uint32_t acct_type;
 
   public:
+    static const std::string NO_SUBUSER;
     enum class acct_privilege_t {
       IS_ADMIN_ACCT,
       IS_PLAIN_ACCT
@@ -482,10 +484,12 @@ public:
 
     AuthInfo(const rgw_user& acct_user,
              const std::string& acct_name,
+             const std::string& subuser,
              const uint32_t perm_mask,
              const acct_privilege_t level,
              const uint32_t acct_type=TYPE_NONE)
     : acct_user(acct_user),
+      subuser(subuser),
       acct_name(acct_name),
       perm_mask(perm_mask),
       is_admin(acct_privilege_t::IS_ADMIN_ACCT == level),

@@ -108,6 +108,10 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
   return token_body;
 }
 
+/* rgw::auth::RemoteApplier::AuthInfo */
+/* static declaration */
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
+
 TokenEngine::auth_info_t
 TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
                             const std::vector<std::string>& admin_roles
@@ -129,6 +133,7 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
     rgw_user(token.get_project_id()),
     /* User's display name (aka real name). */
     token.get_project_name(),
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
     /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
@@ -517,6 +522,7 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     rgw_user(token.get_project_id()),
     /* User's display name (aka real name). */
     token.get_project_name(),
+    rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
     /* Keystone doesn't support RGW's subuser concept, so we cannot cut down
      * the access rights through the perm_mask. At least at this layer. */
     RGW_PERM_FULL_CONTROL,
