@@ -300,6 +300,7 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target IQN already in use',
                                      code='target_iqn_already_in_use',
                                      component='iscsi')
+
         settings = IscsiClient.instance(gateway_name=gateway).get_settings()
         new_portal_names = {p['host'] for p in portals}
         old_portal_names = set(config['targets'][target_iqn]['portals'].keys())
@@ -479,9 +480,12 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _target_deletion_required(target, new_target_iqn, new_target_controls):
+        gateway = get_available_gateway()
+        settings = IscsiClient.instance(gateway_name=gateway).get_settings()
+
         if target['target_iqn'] != new_target_iqn:
             return True
-        if target['target_controls'] != new_target_controls:
+        if settings['api_version'] < 2 and target['target_controls'] != new_target_controls:
             return True
         return False
 
@@ -621,6 +625,13 @@ class IscsiTarget(RESTController):
                                                                              targetauth_action)
 
     @staticmethod
+    def _is_auth_equal(target_auth, auth):
+        return auth['user'] == target_auth['username'] and \
+               auth['password'] == target_auth['password'] and \
+               auth['mutual_user'] == target_auth['mutual_username'] and \
+               auth['mutual_password'] == target_auth['mutual_password']
+
+    @staticmethod
     def _create(target_iqn, target_controls, acl_enabled,
                 auth, portals, disks, clients, groups,
                 task_progress_begin, task_progress_end, config, settings):
@@ -647,13 +658,17 @@ class IscsiTarget(RESTController):
                                                                                    ip_list)
                 TaskManager.current_task().inc_progress(task_progress_inc)
 
-            if acl_enabled:
-                IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
-                IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled, gateway_name)
-
-            else:
-                IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled, gateway_name)
-                IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
+            if not target_config or \
+               acl_enabled != target_config['acl_enabled'] or \
+               not IscsiTarget._is_auth_equal(target_config['auth'], auth):
+                if acl_enabled:
+                    IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
+                    IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled,
+                                                  gateway_name)
+                else:
+                    IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled,
+                                                  gateway_name)
+                    IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
 
             for disk in disks:
                 pool = disk['pool']
