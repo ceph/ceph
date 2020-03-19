@@ -1026,6 +1026,7 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					    const string& tiebreaker_mon,
 					    const string& dividing_bucket)
 {
+  dout(20) << __func__ << dendl;
   *okay = false;
   if (pending_map.strategy != MonMap::CONNECTIVITY) {
     ss << "Monitors must use the connectivity strategy to enable stretch mode";
@@ -1060,6 +1061,7 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 
 void MonmapMonitor::set_degraded_stretch_mode(const set<string>& dead_mons)
 {
+  dout(20) << __func__ << dendl;
   pending_map.stretch_marked_down_mons.insert(dead_mons.begin(), dead_mons.end());
   propose_pending();
 }
