@@ -249,7 +249,7 @@ class Module(MgrModule):
                                 measurement['tags'], now)
                     self.log.debug(line.to_line_protocol())
                     s.send(line.to_line_protocol())
-            except (socket.error, RuntimeError, IOError, OSError):
+            except (socket.error, RuntimeError, IOError, OSError, FileNotFoundError):
                 self.log.exception('Failed to send statistics to Telegraf:')
 
     def shutdown(self):
