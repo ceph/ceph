@@ -3512,6 +3512,9 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
     RGWHandler_REST_PSTopic_AWS topic_handler(auth_registry, post_body);
     topic_handler.init(store, s, s->cio);
     auto op = topic_handler.get_op(store);
+    if (op) {
+      return op;
+    }
   }
 
   return NULL;
