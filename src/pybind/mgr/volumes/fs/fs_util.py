@@ -86,7 +86,7 @@ def list_one_entry_at_a_time(fs, dirpath):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
-def copy_file(fs, src, dst, mode):
+def copy_file(fs, src, dst, mode, cancel_check=None):
     """
     Copy a regular file from @src to @dst. @dst is overwritten if it exists.
     """
@@ -104,6 +104,8 @@ def copy_file(fs, src, dst, mode):
     IO_SIZE = 8 * 1024 * 1024
     try:
         while True:
+            if cancel_check and cancel_check():
+                raise VolumeException(-errno.EINTR, "copy operation interrupted")
             data = fs.read(src_fd, -1, IO_SIZE)
             if not len(data):
                 break
@@ -126,6 +128,6 @@ def get_ancestor_xattr(fs, path, attr):
         return fs.getxattr(path, attr).decode('utf-8')
     except cephfs.NoData as e:
         if path == "/":
-            raise VolumeException(-e.args[0]. e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
         else:
             return get_ancestor_xattr(fs, os.path.split(path)[0], attr)

@@ -1,15 +1,15 @@
 import time
 import errno
 import logging
+import sys
+
 from contextlib import contextmanager
 from threading import Lock, Condition
 
-try:
-    # py2
-    from threading import _Timer as Timer
-except ImportError:
-    #py3
+if sys.version_info >= (3, 3):
     from threading import Timer
+else:
+    from threading import _Timer as Timer
 
 import cephfs
 import orchestrator
@@ -87,6 +87,7 @@ class ConnectionPool(object):
 
         def disconnect(self):
             try:
+                assert self.fs
                 assert self.ops_in_progress == 0
                 log.info("disconnecting from cephfs '{0}'".format(self.fs_name))
                 self.fs.shutdown()
@@ -96,6 +97,7 @@ class ConnectionPool(object):
                 raise
 
         def abort(self):
+            assert self.fs
             assert self.ops_in_progress == 0
             log.info("aborting connection from cephfs '{0}'".format(self.fs_name))
             self.fs.abort_conn()
@@ -206,15 +208,15 @@ def create_volume(mgr, volname):
     r, outb, outs = create_pool(mgr, data_pool, 8)
     if r != 0:
         #cleanup
-        remove_pool(metadata_pool)
+        remove_pool(mgr, metadata_pool)
         return r, outb, outs
     # create filesystem
     r, outb, outs = create_filesystem(mgr, volname, metadata_pool, data_pool)
     if r != 0:
         log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
         #cleanup
-        remove_pool(data_pool)
-        remove_pool(metadata_pool)
+        remove_pool(mgr, data_pool)
+        remove_pool(mgr, metadata_pool)
         return r, outb, outs
     # create mds
     return create_mds(mgr, volname)

@@ -56,7 +56,7 @@ class VolumeClient(object):
             self.purge_queue.queue_job(fs['mdsmap']['fs_name'])
 
     def is_stopping(self):
-        return self.stopping.isSet()
+        return self.stopping.is_set()
 
     def shutdown(self):
         log.info("shutting down")
@@ -103,7 +103,7 @@ class VolumeClient(object):
         return delete_volume(self.mgr, volname)
 
     def list_fs_volumes(self):
-        if self.stopping.isSet():
+        if self.stopping.is_set():
             return -errno.ESHUTDOWN, "", "shutdown in progress"
         volumes = list_volumes(self.mgr)
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
@@ -373,6 +373,18 @@ class VolumeClient(object):
                     with open_subvol(fs_handle, self.volspec, group, clonename,
                                      need_complete=False, expected_types=["clone"]) as subvolume:
                         ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def clone_cancel(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        clonename = kwargs['clone_name']
+        groupname = kwargs['group_name']
+
+        try:
+            self.cloner.cancel_job(volname, (clonename, groupname))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

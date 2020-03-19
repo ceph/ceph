@@ -25,6 +25,7 @@ class JobThread(threading.Thread):
     def run(self):
         retries = 0
         thread_id = threading.currentThread()
+        assert isinstance(thread_id, JobThread)
         thread_name = thread_id.getName()
 
         while retries < JobThread.MAX_RETRIES_ON_EXCEPTION:
@@ -66,7 +67,7 @@ class JobThread(threading.Thread):
         self.cancel_event.set()
 
     def should_cancel(self):
-        return self.cancel_event.isSet()
+        return self.cancel_event.is_set()
 
     def reset_cancel(self):
         self.cancel_event.clear()
@@ -155,7 +156,7 @@ class AsyncJobs(object):
         thread_id.reset_cancel()
 
         # wake up cancellation waiters if needed
-        if not self.jobs[volname] and cancelled:
+        if cancelled:
             logging.info("waking up cancellation waiters")
             self.cancel_cv.notifyAll()
 
@@ -192,6 +193,32 @@ class AsyncJobs(object):
             self.jobs.pop(volname)
         except (KeyError, ValueError):
             pass
+
+    def _cancel_job(self, volname, job):
+        """
+        cancel a executing job for a given volume. return True if canceled, False
+        otherwise (volume/job not found).
+        """
+        canceled = False
+        log.info("canceling job {0} for volume {1}".format(job, volname))
+        try:
+            if not volname in self.q and not volname in self.jobs and not job in self.jobs[volname]:
+                return canceled
+            for j in self.jobs[volname]:
+                if j[0] == job:
+                    j[1].cancel_job()
+                    # be safe against _cancel_jobs() running concurrently
+                    while j in self.jobs.get(volname, []):
+                        self.cancel_cv.wait()
+                    canceled = True
+                    break
+        except (KeyError, ValueError):
+            pass
+        return canceled
+
+    def cancel_job(self, volname, job):
+        with self.lock:
+            return self._cancel_job(volname, job)
 
     def cancel_jobs(self, volname):
         """

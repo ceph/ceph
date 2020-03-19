@@ -203,6 +203,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Get status on a cloned subvolume.",
             'perm': 'r'
         },
+        {
+            'cmd': 'fs clone cancel '
+                   'name=vol_name,type=CephString '
+                   'name=clone_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Cancel an pending or ongoing clone operation.",
+            'perm': 'r'
+        },
 
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -361,4 +369,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_fs_clone_status(self, inbuf, cmd):
         return self.vc.clone_status(
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_clone_cancel(self, inbuf, cmd):
+        return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
