@@ -246,6 +246,7 @@ def test_node_assignment3(service_type, placement, hosts,
         ('1 *'),
         ('* label:foo'),
         ('* host1 host2'),
+        ('hostname12hostname12hostname12hostname12hostname12hostname12hostname12'),  # > 63 chars
     ])
 def test_bad_placements(placement):
     try:
@@ -253,3 +254,45 @@ def test_bad_placements(placement):
         assert False
     except ServiceSpecValidationError as e:
         pass
+
+
+class NodeAssignmentTestBadSpec(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    hosts: List[str]
+    daemons: List[DaemonDescription]
+    expected: str
+@pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
+    [
+        # unknown host
+        NodeAssignmentTestBadSpec(
+            'mon',
+            PlacementSpec(hosts=['unknownhost']),
+            ['knownhost'],
+            [],
+            "Cannot place <ServiceSpec for service_name=mon> on {'unknownhost'}: Unknown hosts"
+        ),
+        # unknown host pattern
+        NodeAssignmentTestBadSpec(
+            'mon',
+            PlacementSpec(host_pattern='unknownhost'),
+            ['knownhost'],
+            [],
+            "Cannot place <ServiceSpec for service_name=mon>: No matching hosts"
+        ),
+        # unknown label
+        NodeAssignmentTestBadSpec(
+            'mon',
+            PlacementSpec(label='unknownlabel'),
+            [],
+            [],
+            "Cannot place <ServiceSpec for service_name=mon>: No matching hosts for label unknownlabel"
+        ),
+    ])
+def test_bad_specs(service_type, placement, hosts, daemons, expected):
+    with pytest.raises(OrchestratorValidationError) as e:
+        hosts = HostAssignment(
+            spec=ServiceSpec(service_type, placement=placement),
+            get_hosts_func=lambda _: hosts,
+            get_daemons_func=lambda _: daemons).place()
+    assert str(e.value) == expected

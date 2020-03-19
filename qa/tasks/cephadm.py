@@ -353,11 +353,13 @@ def ceph_bootstrap(ctx, config):
             'sudo',
             ctx.cephadm,
             '--image', ctx.ceph[cluster_name].image,
+            '-v',
             'bootstrap',
             '--fsid', fsid,
             '--mon-id', first_mon,
             '--mgr-id', first_mgr,
             '--orphan-initial-daemons',   # we will do it explicitly!
+            '--skip-monitoring-stack',    # we'll provision these explicitly
             '--config', '{}/seed.{}.conf'.format(testdir, cluster_name),
             '--output-config', '/etc/ceph/{}.conf'.format(cluster_name),
             '--output-keyring',
@@ -410,6 +412,10 @@ def ceph_bootstrap(ctx, config):
             run.Raw('&&'),
             'sudo', 'chmod', '0600', '/root/.ssh/authorized_keys',
         ])
+
+        # set options
+        _shell(ctx, cluster_name, bootstrap_remote,
+               ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
 
         # add other hosts
         for remote in ctx.cluster.remotes.keys():

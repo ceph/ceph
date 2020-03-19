@@ -168,12 +168,11 @@ create_self_managed_snapshot() {
   cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
-cluster = rados.Rados(conffile="", rados_id="${ID}")
-cluster.connect()
-ioctx = cluster.open_ioctx("${POOL}")
+with rados.Rados(conffile="", rados_id="${ID}") as cluster:
+  ioctx = cluster.open_ioctx("${POOL}")
 
-snap_id = ioctx.create_self_managed_snap()
-print ("Created snap id {}".format(snap_id))
+  snap_id = ioctx.create_self_managed_snap()
+  print ("Created snap id {}".format(snap_id))
 EOF
 }
 
@@ -184,19 +183,17 @@ remove_self_managed_snapshot() {
   cat << EOF | CEPH_ARGS="-k $KEYRING" python3
 import rados
 
-cluster1 = rados.Rados(conffile="", rados_id="mon_write")
-cluster1.connect()
-ioctx1 = cluster1.open_ioctx("${POOL}")
+with rados.Rados(conffile="", rados_id="mon_write") as cluster1, \
+     rados.Rados(conffile="", rados_id="${ID}") as cluster2:
+  ioctx1 = cluster1.open_ioctx("${POOL}")
 
-snap_id = ioctx1.create_self_managed_snap()
-print ("Created snap id {}".format(snap_id))
+  snap_id = ioctx1.create_self_managed_snap()
+  print ("Created snap id {}".format(snap_id))
 
-cluster2 = rados.Rados(conffile="", rados_id="${ID}")
-cluster2.connect()
-ioctx2 = cluster2.open_ioctx("${POOL}")
+  ioctx2 = cluster2.open_ioctx("${POOL}")
 
-ioctx2.remove_self_managed_snap(snap_id)
-print ("Removed snap id {}".format(snap_id))
+  ioctx2.remove_self_managed_snap(snap_id)
+  print ("Removed snap id {}".format(snap_id))
 EOF
 }
 

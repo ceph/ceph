@@ -111,8 +111,10 @@ class OsdTest(DashboardTestCase):
     def test_create_with_drive_group(self):
         data = {
             'method': 'drive_groups',
-            'data': {
-                'test': {
+            'data': [
+                {
+                    'service_type': 'osd',
+                    'service_id': 'test',
                     'host_pattern': '*',
                     'data_devices': {
                         'vendor': 'abc',
@@ -136,7 +138,7 @@ class OsdTest(DashboardTestCase):
                     'db_slots': 5,
                     'encrypted': True
                 }
-            },
+            ],
             'tracking_id': 'test'
         }
         self._post('/api/osd', data)
