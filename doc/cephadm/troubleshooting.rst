@@ -8,6 +8,39 @@ a specific service no longer runs properly.
 As cephadm deploys daemons as containers, troubleshooting daemons is slightly
 different. Here are a few tools and commands to help investigating issues.
 
+Pausing or disabling cephadm
+----------------------------
+
+If thigns go wrong and cephadm is doing something you don't like, you can
+pause most background activity with::
+
+  ceph orch pause
+
+This will stop any changes, but cephadm will still periodically check hosts to
+refresh its inventory of daemons and devices.  You can disable cephadm
+completely with::
+
+  ceph orch set backend ''
+  ceph mgr module disable cephadm
+
+This will disable all of the ``ceph orch ...`` CLI commands but the previously
+deployed daemon containers will still continue to exist and start as they
+did before.
+
+Checking cephadm logs
+---------------------
+
+You can monitor the cephadm log in realtime with::
+
+  ceph -W cephadm
+
+You can see the last few messages with::
+
+  ceph log last cephadm
+
+If you have enabled logging to files, you can see a cephadm log file called
+``ceph.cephadm.log`` on monitor hosts (see :ref:`cephadm-logs`).
+
 Gathering log files
 -------------------
 
