@@ -1,6 +1,7 @@
 import fnmatch
 import re
 from collections import namedtuple
+from functools import wraps
 from typing import Optional, Dict, Any, List, Union
 
 import six
@@ -28,6 +29,17 @@ def assert_valid_host(name):
         raise ServiceSpecValidationError(e)
 
 
+def handle_type_error(method):
+    @wraps(method)
+    def inner(cls, *args, **kwargs):
+        try:
+            return method(cls, *args, **kwargs)
+        except (TypeError, AttributeError) as e:
+            error_msg = '{}: {}'.format(cls.__name__, e)
+        raise ServiceSpecValidationError(error_msg)
+    return inner
+
+
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
         res = ''
@@ -39,6 +51,7 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         return res
 
     @classmethod
+    @handle_type_error
     def from_json(cls, data):
         return cls(**data)
 
@@ -189,6 +202,7 @@ class PlacementSpec(object):
         return "PlacementSpec(%s)" % ', '.join(kv)
 
     @classmethod
+    @handle_type_error
     def from_json(cls, data):
         c = data.copy()
         hosts = c.get('hosts', [])
@@ -370,6 +384,7 @@ class ServiceSpec(object):
         self.unmanaged = unmanaged
 
     @classmethod
+    @handle_type_error
     def from_json(cls, json_spec):
         # type: (dict) -> Any
         # Python 3:
@@ -383,7 +398,11 @@ class ServiceSpec(object):
         service_type = json_spec.get('service_type', '')
         _cls = cls._cls(service_type)
 
-        return _cls._from_json_impl(json_spec)  # type: ignore
+        c = json_spec.copy()
+        if 'status' in c:
+            del c['status']  # kludge to make us compatible to `ServiceDescription.to_json()`
+
+        return _cls._from_json_impl(c)  # type: ignore
 
     @classmethod
     def _from_json_impl(cls, json_spec):
