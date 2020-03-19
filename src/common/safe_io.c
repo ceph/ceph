@@ -237,7 +237,7 @@ int safe_write_file(const char *base, const char *file,
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
   snprintf(tmp, sizeof(tmp), "%s/%s.tmp", base, file);
-  fd = open(tmp, O_WRONLY|O_CREAT|O_TRUNC, mode);
+  fd = open(tmp, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, mode);
   if (fd < 0) {
     ret = errno;
     return -ret;
@@ -262,7 +262,7 @@ int safe_write_file(const char *base, const char *file,
     return ret;
   }
 
-  fd = open(base, O_RDONLY);
+  fd = open(base, O_RDONLY|O_BINARY);
   if (fd < 0) {
     ret = -errno;
     return ret;
@@ -281,7 +281,7 @@ int safe_read_file(const char *base, const char *file,
   int fd, len;
 
   snprintf(fn, sizeof(fn), "%s/%s", base, file);
-  fd = open(fn, O_RDONLY);
+  fd = open(fn, O_RDONLY|O_BINARY);
   if (fd < 0) {
     return -errno;
   }

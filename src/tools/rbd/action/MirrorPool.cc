@@ -911,7 +911,7 @@ int execute_peer_bootstrap_import(
 
   int fd = STDIN_FILENO;
   if (token_path != "-") {
-    fd = open(token_path.c_str(), O_RDONLY);
+    fd = open(token_path.c_str(), O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << token_path << std::endl;

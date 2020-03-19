@@ -15,6 +15,7 @@
 // This code assumes that IO IDs and timestamps are related monotonically.
 // In other words, (a.id < b.id) == (a.timestamp < b.timestamp) for all IOs a and b.
 
+#include "include/compat.h"
 #include "common/errno.h"
 #include "rbd_replay/ActionTypes.h"
 #include <babeltrace/babeltrace.h>
@@ -198,7 +199,7 @@ public:
 
     struct bt_iter *bt_itr = bt_ctf_get_iter(itr);
 
-    int fd = open(output_file_name.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    int fd = open(output_file_name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0644);
     ASSERT_EXIT(fd >= 0, "Error opening output file " << output_file_name <<
                          ": " << cpp_strerror(errno));
     BOOST_SCOPE_EXIT( (fd) ) {

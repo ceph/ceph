@@ -185,7 +185,7 @@ int main(int argc, const char **argv)
 	cerr << "expecting filename" << std::endl;
 	exit(1);
       }
-      int fd = ::open(*i, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+      int fd = ::open(*i, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0644);
       if (fd < 0) {
 	cerr << "error opening " << *i << " for write: " << cpp_strerror(errno) << std::endl;
 	exit(1);
