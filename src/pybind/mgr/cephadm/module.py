@@ -1868,18 +1868,25 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     continue
                 if dd.daemon_type == 'osd':
                     continue                # ignore OSDs for now
-                spec = None
                 if dd.service_name() in self.spec_store.specs:
                     spec = self.spec_store.specs[dd.service_name()]
+                else:
+                    spec = ServiceSpec(
+                        unmanaged=True,
+                        service_type=dd.daemon_type,
+                        service_id=dd.service_id(),
+                        placement=PlacementSpec(
+                            hosts=[dd.hostname]
+                        )
+                    )
                 if n not in sm:
                     sm[n] = orchestrator.ServiceDescription(
-                        service_name=n,
                         last_refresh=dd.last_refresh,
                         container_image_id=dd.container_image_id,
                         container_image_name=dd.container_image_name,
                         spec=spec,
                     )
-                if spec:
+                if dd.service_name() in self.spec_store.specs:
                     sm[n].size = self._get_spec_size(spec)
                     sm[n].created = self.spec_store.spec_created[dd.service_name()]
                 else:
@@ -1900,12 +1907,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if service_name is not None and service_name != n:
                 continue
             sm[n] = orchestrator.ServiceDescription(
-                service_name=n,
                 spec=spec,
                 size=self._get_spec_size(spec),
                 running=0,
             )
-        return [s for n, s in sm.items()]
+        return list(sm.values())
 
     @trivial_completion
     def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None,
