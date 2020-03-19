@@ -961,7 +961,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 })
             to_clean = []
             for section in image_settings.keys():
-                if section.startswith(daemon_type + '.'):
+                if section.startswith(name_to_config_section(daemon_type) + '.'):
                     to_clean.append(section)
             if to_clean:
                 self.log.debug('Upgrade: Cleaning up container_image for %s...' %
