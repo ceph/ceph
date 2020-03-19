@@ -698,17 +698,6 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
-        'orch spec dump',
-        'name=service_name,type=CephString,req=false',
-        desc='List all Service specs')
-    def _get_service_specs(self, service_name=None):
-        completion = self.list_specs(service_name=service_name)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        specs = completion.result
-        return HandleCommandResult(stdout=yaml.safe_dump_all(specs))
-
-    @_cli_write_command(
         'orch apply',
         'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
         'name=placement,type=CephString,req=false '

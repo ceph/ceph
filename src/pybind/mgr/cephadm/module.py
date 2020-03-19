@@ -3335,13 +3335,6 @@ receivers:
         """
         return self.rm_util.report
 
-    @trivial_completion
-    def list_specs(self, service_name=None):
-        """
-        Loads all entries from the service_spec mon_store root.
-        """
-        return self.spec_store.find(service_name=service_name)
-
 
 class BaseScheduler(object):
     """
