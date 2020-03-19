@@ -1274,14 +1274,17 @@ class DaemonDescription(object):
             return self.name().startswith(service_name + '.')
         return False
 
-    def service_name(self):
+    def service_id(self):
         if self.daemon_type == 'rgw':
             v = self.daemon_id.split('.')
-            s_name = '.'.join(v[0:2])
-            return 'rgw.%s' % s_name
+            return '.'.join(v[0:2])
         if self.daemon_type in ['mds', 'nfs']:
-            _s_name = self.daemon_id.split('.')[0]
-            return '%s.%s' % (self.daemon_type, _s_name)
+            return self.daemon_id.split('.')[0]
+        return self.daemon_type
+
+    def service_name(self):
+        if self.daemon_type in ['rgw', 'mds', 'nfs']:
+            return f'{self.daemon_type}.{self.service_id()}'
         return self.daemon_type
 
     def __repr__(self):
@@ -1330,25 +1333,20 @@ class ServiceDescription(object):
     """
 
     def __init__(self,
+                 spec: ServiceSpec,
                  container_image_id=None,
                  container_image_name=None,
-                 service_name=None,
                  rados_config_location=None,
                  service_url=None,
                  last_refresh=None,
                  created=None,
                  size=0,
-                 running=0,
-                 spec=None):
+                 running=0):
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
         # (image name)
         self.container_image_id = container_image_id      # image hash
         self.container_image_name = container_image_name  # image friendly name
-
-        # The service_name is either a bare type (e.g., 'mgr') or
-        # type.id combination (e.g., 'mds.fsname' or 'rgw.realm.zone').
-        self.service_name = service_name
 
         # Location of the service configuration when stored in rados
         # object. Format: "rados://<pool>/[<namespace/>]<object>"
