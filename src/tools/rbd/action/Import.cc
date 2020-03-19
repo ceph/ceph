@@ -449,7 +449,7 @@ int do_import_diff(librados::Rados &rados, librbd::Image &image,
   if (strcmp(path, "-") == 0) {
     fd = STDIN_FILENO;
   } else {
-    fd = open(path, O_RDONLY);
+    fd = open(path, O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << path << std::endl;
@@ -843,7 +843,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
     fd = STDIN_FILENO;
     size = 1ULL << order;
   } else {
-    if ((fd = open(path, O_RDONLY)) < 0) {
+    if ((fd = open(path, O_RDONLY|O_BINARY)) < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << path << std::endl;
       goto done2;

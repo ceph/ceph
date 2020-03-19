@@ -43,7 +43,7 @@ class TraceIter {
   MonitorDBStore::TransactionRef t;
 public:
   explicit TraceIter(string fname) : fd(-1), idx(-1) {
-    fd = ::open(fname.c_str(), O_RDONLY);
+    fd = ::open(fname.c_str(), O_RDONLY|O_BINARY);
     t.reset(new MonitorDBStore::Transaction);
   }
   bool valid() {
@@ -879,7 +879,7 @@ int main(int argc, char **argv) {
 
     int fd = STDOUT_FILENO;
     if (!outpath.empty()){
-      fd = ::open(outpath.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
+      fd = ::open(outpath.c_str(), O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0666);
       if (fd < 0) {
         std::cerr << "error opening output file: "
           << cpp_strerror(errno) << std::endl;
