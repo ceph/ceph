@@ -6479,12 +6479,14 @@ struct CMonEnableStretchMode : public Context {
 };
 void Monitor::maybe_engage_stretch_mode()
 {
+  dout(20) << __func__ << dendl;
   if (stretch_mode_engaged) return;
   if (!osdmon()->is_readable()) {
     osdmon()->wait_for_readable_ctx(new CMonEnableStretchMode(this));
   }
   if (osdmon()->osdmap.stretch_mode_enabled &&
       monmap->stretch_mode_enabled) {
+    dout(10) << "Engaging stretch mode!" << dendl;
     stretch_mode_engaged = true;
     int32_t stretch_divider_id = osdmon()->osdmap.stretch_mode_bucket;
     stretch_bucket_divider = osdmon()->osdmap.
@@ -6496,8 +6498,10 @@ void Monitor::maybe_engage_stretch_mode()
 
 void Monitor::do_stretch_mode_election_work()
 {
+  dout(20) << __func__ << dendl;
   if (!is_stretch_mode() ||
       !is_leader()) return;
+  dout(20) << "checking for degraded stretch mode" << dendl;
   map<string, set<string>> old_dead_buckets;
   old_dead_buckets.swap(dead_mon_buckets);
   up_mon_buckets.clear();
@@ -6513,11 +6517,15 @@ void Monitor::do_stretch_mode_election_work()
       down_mon_buckets[ci->second].insert(mi.name);
     }
   }
+  dout(20) << "prior dead_mon_buckets: " << old_dead_buckets
+	   << "; down_mon_buckets: " << down_mon_buckets
+	   << "; up_mon_buckets: " << up_mon_buckets << dendl;
   for (auto di : down_mon_buckets) {
     if (!up_mon_buckets.count(di.first)) {
       dead_mon_buckets[di.first] = di.second;
     }
   }
+  dout(20) << "new dead_mon_buckets " << dead_mon_buckets << dendl;
 
   if (dead_mon_buckets != old_dead_buckets) {
     maybe_go_degraded_stretch_mode();
@@ -6534,6 +6542,7 @@ struct CMonGoDegraded : public Context {
 
 void Monitor::maybe_go_degraded_stretch_mode()
 {
+  dout(20) << __func__ << dendl;
   if (is_degraded_stretch_mode()) return;
   if (dead_mon_buckets.empty()) return;
   if (!osdmon()->is_readable()) {
@@ -6566,6 +6575,7 @@ void Monitor::maybe_go_degraded_stretch_mode()
 void Monitor::set_degraded_stretch_mode(const set<string>& dead_mons,
 					const set<int>& dead_buckets)
 {
+  dout(20) << __func__ << dendl;
   ceph_assert(osdmon()->is_writeable());
   ceph_assert(monmon()->is_writeable());
 
@@ -6591,6 +6601,7 @@ bool Monitor::session_stretch_allowed(MonSession *s, MonOpRequestRef& op)
   if (s->validated_stretch_connection) return true;
   if (!s->con) return true;
   if (s->con->peer_is_osd()) {
+    dout(20) << __func__ << "checking OSD session" << s << dendl;
     // okay, check the crush location
     int barrier_id;
     int retval = osdmon()->osdmap.crush->get_validated_type_id(stretch_bucket_divider,
@@ -6623,6 +6634,7 @@ bool Monitor::session_stretch_allowed(MonSession *s, MonOpRequestRef& op)
 
 void Monitor::disconnect_disallowed_stretch_sessions()
 {
+  dout(20) << __func__ << dendl;
   MonOpRequestRef blank;
   auto i = session_map.sessions.begin();
   while (i != session_map.sessions.end()) {

@@ -14114,6 +14114,7 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 					       set<pg_pool_t*>* pools,
 					       const string& new_crush_rule)
 {
+  dout(20) << __func__ << dendl;
   *okay = false;
   int new_crush_rule_result = osdmap.crush->get_rule_id(new_crush_rule);
   if (new_crush_rule_result < 0) {
@@ -14151,6 +14152,9 @@ void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
       pp = &pending_inc.new_pools[poolid];
       *pp = *p;
     }
+    // TODO: The part where we unconditionally copy the pools into pending_inc is bad
+    // the attempt may fail and then we have these pool updates...but they won't do anything
+    // if there is a failure, so if it's hard to change the interface, no need to bother
     pools->insert(pp);
   }
   *okay = true;
@@ -14164,6 +14168,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					 const set<pg_pool_t*>& pools,
 					 const string& new_crush_rule)
 {
+  dout(20) << __func__ << dendl;
   *okay = false;
   CrushWrapper crush;
   _get_pending_crush(crush);
@@ -14236,6 +14241,7 @@ bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_
 					    set<int> *really_down_buckets,
 					    set<string> *really_down_mons)
 {
+  dout(20) << __func__ << " with dead mon zones " << dead_buckets << dendl;
   ceph_assert(is_readable());
   if (dead_buckets.empty()) return false;
   set<int> down_cache;
@@ -14244,19 +14250,25 @@ bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_
     const string& bucket_name = dbi.first;
     ceph_assert(osdmap.crush->name_exists(bucket_name));
     int bucket_id = osdmap.crush->get_item_id(bucket_name);
+    dout(20) << "Checking " << bucket_name << " id " << bucket_id
+	     << " to see if OSDs are also down" << dendl;
     bool subtree_down = osdmap.subtree_is_down(bucket_id, &down_cache);
     if (subtree_down) {
+      dout(20) << "subtree is down!" << dendl;
       really_down = true;
       really_down_buckets->insert(bucket_id);
       really_down_mons->insert(dbi.second.begin(), dbi.second.end());
     }
   }
+  dout(10) << "We determined CRUSH buckets " << *really_down_buckets
+	   << " and mons " << *really_down_mons << " are really down" << dendl;
   return really_down;
 }
 
 void OSDMonitor::set_degraded_stretch_mode(const set<int>& dead_buckets,
 					   const set<string>& live_zones)
 {
+  dout(20) << __func__ << dendl;
   // update the general OSDMap changes
   pending_inc.change_stretch_mode = true;
   pending_inc.stretch_mode_enabled = osdmap.stretch_mode_enabled;
