@@ -7364,6 +7364,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("validate new image names for RBD compatibility"),
 
+    Option("rbd_invalidate_object_map_on_timeout", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("true if object map should be invalidated when load or update timeout"),
+
     Option("rbd_auto_exclusive_lock_until_manual_request", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("automatically acquire/release exclusive lock until it is explicitly requested"),

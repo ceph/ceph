@@ -22,7 +22,11 @@ bool Request::should_complete(int r) {
   switch (m_state)
   {
   case STATE_REQUEST:
-    if (r < 0) {
+    if (r == -ETIMEDOUT &&
+        !cct->_conf.get_val<bool>("rbd_invalidate_object_map_on_timeout")) {
+      m_state = STATE_TIMEOUT;
+      return true;
+    } else if (r < 0) {
       lderr(cct) << "failed to update object map: " << cpp_strerror(r)
 		 << dendl;
       return invalidate();
