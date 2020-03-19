@@ -71,6 +71,52 @@ class TestCephadm(object):
             c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
 
+            ps = PlacementSpec(hosts=['test'], count=1)
+            c = cephadm_module.add_mds(ServiceSpec('mds', 'name', placement=ps))
+            [out] = wait(cephadm_module, c)
+            match_glob(out, "Deployed mds.name.* on host 'test'")
+
+            c = cephadm_module.list_daemons()
+
+            def remove_id(dd):
+                out = dd.to_json()
+                del out['daemon_id']
+                return out
+
+            assert [remove_id(dd) for dd in wait(cephadm_module, c)] == [
+                {
+                    'daemon_type': 'mds',
+                    'hostname': 'test',
+                    'status': 1,
+                    'status_desc': 'starting'}
+            ]
+
+            ps = PlacementSpec(hosts=['test'], count=1)
+            spec = ServiceSpec('rgw', 'r.z', placement=ps)
+            c = cephadm_module.apply_rgw(spec)
+            assert wait(cephadm_module, c) == 'Scheduled rgw update...'
+
+            c = cephadm_module.describe_service()
+            out = [o.to_json() for o in wait(cephadm_module, c)]
+            assert out == [
+                {
+                    'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
+                    'service_id': 'name',
+                    'service_type': 'mds',
+                    'status': {'running': 1, 'size': 0},
+                    'unmanaged': True
+                },
+                {
+                    'placement': {
+                        'count': 1,
+                        'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
+                    },
+                    'service_id': 'r.z',
+                    'service_type': 'rgw',
+                    'status': {'running': 0, 'size': 1}
+                }
+            ]
+
     def test_device_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.get_inventory()
