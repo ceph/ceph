@@ -1,7 +1,10 @@
 
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
+from textwrap import dedent
+import os
 import errno
 import time
 import json
@@ -187,6 +190,65 @@ class TestMisc(CephFSTestCase):
         info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
         assert info['path'] == "/foo"
 
+    def test_open_file_timeout(self):
+        """
+        Check if client clears wanted caps after open file has been idle
+        for 'client_caps_wanted_delay_max' seconds.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client")
+
+        self.mount_a.umount_wait()
+
+        timeout = 30
+        self.config_set('client', 'client caps wanted delay max', timeout)
+
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+        mount_a_client_id = self.mount_a.get_global_id()
+
+        filename = "testfile"
+        path = os.path.join(self.mount_a.mountpoint, filename)
+        pyscript = dedent("""
+            import os
+            import sys
+
+            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0O666)
+            os.write(fd, b'content')
+
+            print("write done")
+            sys.stdout.flush()
+
+            sys.stdin.readline()
+
+            os.write(fd, b'content')
+            """).format(path=path)
+
+        rproc = self.mount_a.client_remote.run(
+                    args=['sudo', 'python3', '-c', pyscript],
+                    wait=False, stdin=run.PIPE, stdout=run.PIPE)
+
+        rproc.stdout.readline()
+
+        ino = self.mount_a.path_to_ino(filename)
+
+        info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+        caps = list(filter(lambda c: c['client_id'] == mount_a_client_id, info['client_caps']))[0]
+        log.info("caps = {}".format(caps))
+        self.assertNotEqual(caps['wanted'], '-')
+
+        time.sleep(timeout * 2)
+
+        info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+        caps = list(filter(lambda c: c['client_id'] == mount_a_client_id, info['client_caps']))[0]
+        log.info("caps = {}".format(caps))
+        self.assertEqual(caps['wanted'], '-')
+
+        rproc.stdin.writelines(['continue\n'])
+        rproc.stdin.flush()
+
+        rproc.wait()
+        self.assertEqual(rproc.exitstatus, 0)
 
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
