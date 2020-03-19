@@ -190,10 +190,11 @@ class PlacementSpec(object):
 
     @classmethod
     def from_json(cls, data):
-        hosts = data.get('hosts', [])
+        c = data.copy()
+        hosts = c.get('hosts', [])
         if hosts:
-            data['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
-        _cls = cls(**data)
+            c['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
+        _cls = cls(**c)
         _cls.validate()
         return _cls
 
@@ -326,6 +327,34 @@ class ServiceSpec(object):
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw'.split()
 
+    @classmethod
+    def _cls(cls, service_type):
+        from ceph.deployment.drive_group import DriveGroupSpec
+
+        ret = {
+            'rgw': RGWSpec,
+            'nfs': NFSServiceSpec,
+            'osd': DriveGroupSpec
+        }.get(service_type, cls)
+        if ret == ServiceSpec and not service_type:
+            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+        return ret
+
+    def __new__(cls, *args, **kwargs):
+        """
+        Some Python foo to make sure, we don't have an object
+        like `ServiceSpec('rgw')` of type `ServiceSpec`. Now we have:
+
+        >>> type(ServiceSpec('rgw')) == type(RGWSpec('rgw'))
+        True
+
+        """
+        if cls != ServiceSpec:
+            return object.__new__(cls)
+        service_type = kwargs.get('service_type', args[0] if args else None)
+        sub_cls = cls._cls(service_type)
+        return object.__new__(sub_cls)
+
     def __init__(self,
                  service_type,     # type: str
                  service_id=None,  # type: Optional[str]
@@ -350,17 +379,9 @@ class ServiceSpec(object):
         Initialize 'ServiceSpec' object data from a json structure
         :param json_spec: A valid dict with ServiceSpec
         """
-        from ceph.deployment.drive_group import DriveGroupSpec
 
         service_type = json_spec.get('service_type', '')
-        _cls = {
-            'rgw': RGWSpec,
-            'nfs': NFSServiceSpec,
-            'osd': DriveGroupSpec
-        }.get(service_type, cls)
-
-        if _cls == ServiceSpec and not service_type:
-            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+        _cls = cls._cls(service_type)
 
         return _cls._from_json_impl(json_spec)  # type: ignore
 
@@ -415,7 +436,7 @@ def servicespec_validate_add(self: ServiceSpec):
 
 
 class NFSServiceSpec(ServiceSpec):
-    def __init__(self, service_id, pool=None, namespace=None, placement=None,
+    def __init__(self, service_id=None, pool=None, namespace=None, placement=None,
                  service_type='nfs', unmanaged=False):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
