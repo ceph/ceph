@@ -1770,7 +1770,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             for name, dd in dm.items():
                 if service_type and service_type != dd.daemon_type:
                     continue
-                # <name> i.e. rgw.realm.zone
                 n: str = dd.service_name()
                 if service_name and service_name != n:
                     continue

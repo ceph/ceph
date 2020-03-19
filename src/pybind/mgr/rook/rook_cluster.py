@@ -416,6 +416,7 @@ class RookCluster(object):
         # For now, assert that realm==zone.
         (realm, zone) = spec.service_id.split('.', 1)
         assert realm == zone
+        assert spec.subcluster is None
         name = realm
 
         def _create_zone():
