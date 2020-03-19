@@ -231,15 +231,18 @@ $CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").version' | grep -q \\.
 ## deploy
 # add mon.b
 cp $CONFIG $MONCONFIG
-echo "public addr = $IP:3301" >> $MONCONFIG
+echo "public addrv = [v2:$IP:3301,v1:$IP:6790]" >> $MONCONFIG
 $CEPHADM deploy --name mon.b \
       --fsid $FSID \
       --keyring /var/lib/ceph/$FSID/mon.a/keyring \
-      --config $CONFIG
+      --config $MONCONFIG
 for u in ceph-$FSID@mon.b; do
     systemctl is-enabled $u
     systemctl is-active $u
 done
+cond="$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	    ceph mon stat | grep '2 mons'"
+is_available "mon.b" "$cond" 30
 
 # add mgr.y
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
