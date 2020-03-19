@@ -1366,40 +1366,44 @@ class ServiceDescription(object):
         self.last_refresh = last_refresh   # type: Optional[datetime.datetime]
         self.created = created   # type: Optional[datetime.datetime]
 
-        self.spec = spec
+        self.spec: ServiceSpec = spec
 
     def service_type(self):
-        if self.service_name:
-            return self.service_name.split('.')[0]
-        return None
+        return self.spec.service_type
 
     def __repr__(self):
-        return "<ServiceDescription>({name})".format(name=self.service_name)
+        return f"<ServiceDescription of {self.spec.one_line_str()}>"
 
     def to_json(self):
-        out = {
+        out = self.spec.to_json()
+        status = {
             'container_image_id': self.container_image_id,
             'container_image_name': self.container_image_name,
-            'service_name': self.service_name,
             'rados_config_location': self.rados_config_location,
             'service_url': self.service_url,
             'size': self.size,
             'running': self.running,
-            'spec': self.spec.to_json() if self.spec is not None else None
+            'last_refresh': self.last_refresh,
+            'created': self.created
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):
-                out[k] = getattr(self, k).strftime(DATEFMT)
-        return {k: v for (k, v) in out.items() if v is not None}
+                status[k] = getattr(self, k).strftime(DATEFMT)
+        status = {k: v for (k, v) in status.items() if v is not None}
+        out['status'] = status
+        return out
 
     @classmethod
     @handle_type_error
-    def from_json(cls, data):
-        c = data.copy()
+    def from_json(cls, data: dict):
+        status = data.pop('status', {})
+        spec = ServiceSpec.from_json(data)
+
+        c = status.copy()
         for k in ['last_refresh', 'created']:
             if k in c:
                 c[k] = datetime.datetime.strptime(c[k], DATEFMT)
-        return cls(**c)
+        return cls(spec=spec, **c)
 
 
 class InventoryFilter(object):
