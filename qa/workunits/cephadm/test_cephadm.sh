@@ -190,6 +190,7 @@ $CEPHADM bootstrap \
       --config $ORIG_CONFIG \
       --output-config $CONFIG \
       --output-keyring $KEYRING \
+      --output-pub-ssh-key $TMPDIR/ceph.pub \
       --allow-overwrite \
       --skip-mon-network \
       --skip-monitoring-stack
@@ -212,6 +213,11 @@ systemctl | grep system-ceph | grep -q .slice  # naming is escaped and annoying
 # check ceph -s works (via shell w/ passed config/keyring)
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       ceph -s | grep $FSID
+
+for t in mon mgr node-exporter prometheus grafana; do
+    $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	     ceph orch apply $t --unmanaged
+done
 
 ## ls
 $CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").fsid' \
@@ -301,6 +307,8 @@ $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
         ceph osd pool create $nfs_rados_pool 64
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
         rados --pool nfs-ganesha --namespace nfs-ns create conf-nfs.a
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	 ceph orch pause
 $CEPHADM deploy --name nfs.a \
       --fsid $FSID \
       --keyring $KEYRING \
@@ -308,6 +316,8 @@ $CEPHADM deploy --name nfs.a \
       --config-json ${CEPHADM_SAMPLES_DIR}/nfs.json
 cond="$SUDO ss -tlnp '( sport = :nfs )' | grep 'ganesha.nfsd'"
 is_available "nfs" "$cond" 10
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	 ceph orch resume
 
 ## run
 # WRITE ME

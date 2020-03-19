@@ -2431,12 +2431,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         grafanas = []  # type: List[orchestrator.DaemonDescription]
         for dd in daemons:
             # orphan?
-            if dd.service_name() not in self.spec_store.specs and \
-               dd.daemon_type not in ['mon', 'mgr', 'osd']:
+            spec = self.spec_store.specs.get(dd.service_name(), None)
+            if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
                 self._remove_daemon(dd.name(), dd.hostname)
+
+            # ignore unmanaged services
+            if not spec or spec.unmanaged:
+                continue
 
             # dependencies?
             if dd.daemon_type == 'grafana':
