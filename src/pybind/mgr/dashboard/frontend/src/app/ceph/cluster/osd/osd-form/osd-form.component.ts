@@ -19,7 +19,6 @@ import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/dev
 import { DevicesSelectionClearEvent } from '../osd-devices-selection-groups/devices-selection-clear-event.interface';
 import { OsdDevicesSelectionGroupsComponent } from '../osd-devices-selection-groups/osd-devices-selection-groups.component';
 import { DriveGroup } from './drive-group.model';
-import { DriveGroups } from './drive-groups.interface';
 import { OsdFeature } from './osd-feature.interface';
 
 @Component({
@@ -209,11 +208,9 @@ export class OsdFormComponent implements OnInit {
   submit() {
     // use user name and timestamp for drive group name
     const user = this.authStorageService.getUsername();
-    const driveGroups: DriveGroups = {
-      [`dashboard-${user}-${_.now()}`]: this.driveGroup.spec
-    };
+    this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
     const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, {
-      initialState: { driveGroups: driveGroups }
+      initialState: { driveGroups: [this.driveGroup.spec] }
     });
     modalRef.content.submitAction.subscribe(() => {
       this.router.navigate(['/osd']);

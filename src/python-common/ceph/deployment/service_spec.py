@@ -16,6 +16,18 @@ class ServiceSpecValidationError(Exception):
         super(ServiceSpecValidationError, self).__init__(msg)
 
 
+def assert_valid_host(name):
+    p = re.compile('^[a-zA-Z0-9-]+$')
+    try:
+        assert len(name) <= 250, 'name is too long (max 250 chars)'
+        for part in name.split('.'):
+            assert len(part) > 0, '.-delimited name component must not be empty'
+            assert len(part) <= 63, '.-delimited name component must not be more than 63 chars'
+            assert p.match(part), 'name component must include only a-z, 0-9, and -'
+    except AssertionError as e:
+        raise ServiceSpecValidationError(e)
+
+
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
         res = ''
@@ -99,8 +111,11 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
             except ValueError as e:
                 # logging?
                 raise e
-
+        host_spec.validate()
         return host_spec
+
+    def validate(self):
+        assert_valid_host(self.hostname)
 
 
 class PlacementSpec(object):
@@ -183,12 +198,16 @@ class PlacementSpec(object):
         return _cls
 
     def to_json(self):
-        return {
-            'label': self.label,
-            'hosts': [host.to_json() for host in self.hosts] if self.hosts else [],
-            'count': self.count,
-            'host_pattern': self.host_pattern,
-        }
+        r = {}
+        if self.label:
+            r['label'] = self.label
+        if self.hosts:
+            r['hosts'] = [host.to_json() for host in self.hosts]
+        if self.count:
+            r['count'] = self.count
+        if self.host_pattern:
+            r['host_pattern'] = self.host_pattern
+        return r
 
     def validate(self):
         if self.hosts and self.label:
@@ -198,6 +217,8 @@ class PlacementSpec(object):
             raise ServiceSpecValidationError("num/count must be > 1")
         if self.host_pattern and self.hosts:
             raise ServiceSpecValidationError('cannot combine host patterns and hosts')
+        for h in self.hosts:
+            h.validate()
 
     @classmethod
     def from_string(cls, arg):
@@ -302,17 +323,22 @@ class ServiceSpec(object):
     start the services.
 
     """
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana mds mgr mon nfs ' \
+                          'node-exporter osd prometheus rbd-mirror rgw'.split()
 
     def __init__(self,
-                 service_type,  # type: str
+                 service_type,     # type: str
                  service_id=None,  # type: Optional[str]
-                 placement: Optional[PlacementSpec] = None,
-                 count: Optional[int] = None):
+                 placement=None,   # type: Optional[PlacementSpec]
+                 count=None,       # type: Optional[int]
+                 unmanaged=False,  # type: bool
+                 ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
-        assert service_type
+        assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES, service_type
         self.service_type = service_type
         self.service_id = service_id
+        self.unmanaged = unmanaged
 
     @classmethod
     def from_json(cls, json_spec):
@@ -358,9 +384,12 @@ class ServiceSpec(object):
 
     def to_json(self):
         # type: () -> Dict[str, Any]
-        c = self.__dict__.copy()
-        if self.placement:
-            c['placement'] = self.placement.to_json()
+        c = {}
+        for key, val in self.__dict__.items():
+            if hasattr(val, 'to_json'):
+                val = val.to_json()
+            if val:
+                c[key] = val
         return c
 
     def validate(self):
@@ -373,6 +402,9 @@ class ServiceSpec(object):
     def __repr__(self):
         return "{}({!r})".format(self.__class__.__name__, self.__dict__)
 
+    def one_line_str(self):
+        return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
+
 
 def servicespec_validate_add(self: ServiceSpec):
     # This must not be a method of ServiceSpec, otherwise you'll hunt
@@ -384,9 +416,11 @@ def servicespec_validate_add(self: ServiceSpec):
 
 class NFSServiceSpec(ServiceSpec):
     def __init__(self, service_id, pool=None, namespace=None, placement=None,
-                 service_type='nfs'):
+                 service_type='nfs', unmanaged=False):
         assert service_type == 'nfs'
-        super(NFSServiceSpec, self).__init__('nfs', service_id=service_id, placement=placement)
+        super(NFSServiceSpec, self).__init__(
+            'nfs', service_id=service_id,
+            placement=placement, unmanaged=unmanaged)
 
         #: RADOS pool where NFS client recovery data is stored.
         self.pool = pool
@@ -413,13 +447,16 @@ class RGWSpec(ServiceSpec):
                  placement=None,
                  service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
+                 unmanaged=False,  # type: bool
                  ):
         assert service_type == 'rgw'
         if service_id:
             (rgw_realm, rgw_zone) = service_id.split('.', 1)
         else:
             service_id = '%s.%s' % (rgw_realm, rgw_zone)
-        super(RGWSpec, self).__init__('rgw', service_id=service_id, placement=placement)
+        super(RGWSpec, self).__init__(
+            'rgw', service_id=service_id,
+            placement=placement, unmanaged=unmanaged)
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone

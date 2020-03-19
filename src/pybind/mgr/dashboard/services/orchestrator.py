@@ -40,7 +40,6 @@ def wait_api_result(method):
         self.api.orchestrator_wait([completion])
         raise_if_exception(completion)
         return completion.result
-
     return inner
 
 
@@ -105,8 +104,8 @@ class ServiceManager(ResourceManager):
 
 class OsdManager(ResourceManager):
     @wait_api_result
-    def create(self, drive_group):
-        return self.api.create_osds(drive_group)
+    def create(self, drive_group_specs):
+        return self.api.apply_drivegroups(drive_group_specs)
 
     @wait_api_result
     def remove(self, osd_ids):

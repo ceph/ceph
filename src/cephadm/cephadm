@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
-DEFAULT_IMAGE='docker.io/ceph/daemon-base:latest-master-devel'  # FIXME when octopus is ready!!!
+#DEFAULT_IMAGE='docker.io/ceph/ceph:v15.2'
+DEFAULT_IMAGE='quay.io/ceph-ci/ceph:octopus'
 DATA_DIR='/var/lib/ceph'
 LOG_DIR='/var/log/ceph'
 LOCK_DIR='/run/cephadm'
@@ -1422,9 +1423,11 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
 
     return mounts
 
-def get_container(fsid, daemon_type, daemon_id, privileged=False,
+def get_container(fsid, daemon_type, daemon_id,
+                  privileged=False,
+                  ptrace=False,
                   container_args=[]):
-    # type: (str, str, Union[int, str], bool, List[str]) -> CephContainer
+    # type: (str, str, Union[int, str], bool, bool, List[str]) -> CephContainer
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
@@ -1484,6 +1487,7 @@ def get_container(fsid, daemon_type, daemon_id, privileged=False,
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
         envs=envs,
         privileged=privileged,
+        ptrace=ptrace,
     )
 
 def extract_uid_gid(img='', file_path='/var/lib/ceph'):
@@ -1838,16 +1842,18 @@ class CephContainer:
                  cname='',
                  container_args=[],
                  envs=None,
-                 privileged=False):
-        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], Optional[bool]) -> None
+                 privileged=False,
+                 ptrace=False):
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
         self.cname = cname
         self.container_args = container_args
-        self.privileged = privileged
         self.envs = envs
+        self.privileged = privileged
+        self.ptrace = ptrace
 
     def run_cmd(self):
         # type: () -> List[str]
@@ -1863,6 +1869,8 @@ class CephContainer:
             priv = ['--privileged',
                     # let OSD etc read block devs that haven't been chowned
                     '--group-add=disk']
+        if self.ptrace:
+            priv.append('--cap-add=SYS_PTRACE')
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
@@ -2010,6 +2018,7 @@ def command_bootstrap():
 
     # ip
     r = re.compile(r':(\d+)$')
+    base_ip = None
     if args.mon_ip:
         hasport = r.findall(args.mon_ip)
         if hasport:
@@ -2022,8 +2031,10 @@ def command_bootstrap():
                 logger.warning('Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % args.mon_ip
-            check_ip_port(args.mon_ip[0:-(len(str(port)))-1], port)
+            base_ip = args.mon_ip[0:-(len(str(port)))-1]
+            check_ip_port(base_ip, port)
         else:
+            base_ip = args.mon_ip
             addr_arg = '[v2:%s:3300,v1:%s:6789]' % (args.mon_ip, args.mon_ip)
             check_ip_port(args.mon_ip, 3300)
             check_ip_port(args.mon_ip, 6789)
@@ -2040,10 +2051,25 @@ def command_bootstrap():
             port = int(hasport[0])
             # strip off v1: or v2: prefix
             addr = re.sub(r'^\w+:', '', addr)
-            check_ip_port(addr[0:-(len(str(port)))-1], port)
+            base_ip = addr[0:-(len(str(port)))-1]
+            check_ip_port(base_ip, port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
-    logger.debug('Final addrv is %s' % addr_arg)
+    logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
+
+    mon_network = None
+    if not args.skip_mon_network:
+        # make sure IP is configured locally, and then figure out the
+        # CIDR network
+        for net, ips in list_networks().items():
+            if base_ip in ips:
+                mon_network = net
+                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
+                                                                 mon_network))
+                break
+        if not mon_network:
+            raise Error('Failed to infer CIDR network for mon ip %s; pass '
+                        '--skip-mon-network to configure it later' % base_ip)
 
     # config
     cp = read_config(args.config)
@@ -2226,6 +2252,10 @@ def command_bootstrap():
             get_unit_name(fsid, 'mon', mon_id)
         ])
 
+    if mon_network:
+        logger.info('Setting mon public_network...')
+        cli(['config', 'set', 'mon', 'public_network', mon_network])
+
     # create mgr
     logger.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
@@ -2317,6 +2347,13 @@ def command_bootstrap():
                 logger.info('Deploying %s service with default placement...' % t)
                 cli(['orch', 'apply', t])
 
+        if not args.skip_monitoring_stack:
+            logger.info('Enabling mgr prometheus module...')
+            cli(['mgr', 'module', 'enable', 'prometheus'])
+            for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
+                logger.info('Deploying %s service with default placement...' % t)
+                cli(['orch', 'apply', t])
+
     if not args.skip_dashboard:
         logger.info('Enabling the dashboard module...')
         cli(['mgr', 'module', 'enable', 'dashboard'])
@@ -2399,7 +2436,8 @@ def command_deploy():
         (config, keyring) = get_config_and_keyring()
         (uid, gid) = extract_uid_gid()
         make_var_run(args.fsid, uid, gid)
-        c = get_container(args.fsid, daemon_type, daemon_id)
+        c = get_container(args.fsid, daemon_type, daemon_id,
+                          ptrace=args.allow_ptrace)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       osd_fsid=args.osd_fsid,
@@ -2621,6 +2659,39 @@ def command_logs():
     # stdout with logger prefixing.
     logger.debug("Running command: %s" % ' '.join(cmd))
     subprocess.call(cmd) # type: ignore
+
+##################################
+
+def list_networks():
+    # type: () -> Dict[str,List[str]]
+
+    ## sadly, 18.04's iproute2 4.15.0-2ubun doesn't support the -j flag,
+    ## so we'll need to use a regex to parse 'ip' command output.
+    #out, _, _ = call_throws(['ip', '-j', 'route', 'ls'])
+    #j = json.loads(out)
+    #for x in j:
+
+    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
+    return _parse_ip_route(out)
+
+def _parse_ip_route(out):
+    r = {}  # type: Dict[str,List[str]]
+    p = re.compile(r'^(\S+) (.*)scope link (.*)src (\S+)')
+    for line in out.splitlines():
+        m = p.findall(line)
+        if not m:
+            continue
+        net = m[0][0]
+        ip = m[0][3]
+        if net not in r:
+            r[net] = []
+        r[net].append(ip)
+    return r
+
+def command_list_networks():
+    # type: () -> None
+    r = list_networks()
+    print(json.dumps(r, indent=4))
 
 ##################################
 
@@ -3247,9 +3318,9 @@ class CustomValidation(argparse.Action):
 ##################################
 
 def get_distro():
-    id_ = None
-    version = None
-    codename = None
+    distro = None
+    distro_version = None
+    distro_codename = None
     with open('/etc/os-release', 'r') as f:
         for line in f.readlines():
             line = line.strip()
@@ -3259,20 +3330,21 @@ def get_distro():
             if val[0] == '"' and val[-1] == '"':
                 val = val[1:-1]
             if var == 'ID':
-                id_ = val.lower()
+                distro = val.lower()
             elif var == 'VERSION_ID':
-                version = val.lower()
+                distro_version = val.lower()
             elif var == 'VERSION_CODENAME':
-                codename = val.lower()
-    return id_, version, codename
+                distro_codename = val.lower()
+    return distro, distro_version, distro_codename
 
 class Packager(object):
-    def __init__(self, stable=None, branch=None, commit=None):
+    def __init__(self, stable=None, version=None, branch=None, commit=None):
         assert \
             (stable and not branch and not commit) or \
-            (not stable and branch) or \
-            (not stable and not branch and not commit)
+            (not stable and not version and branch) or \
+            (not stable and not version and not branch and not commit)
         self.stable = stable
+        self.version = version
         self.branch = branch
         self.commit = commit
 
@@ -3282,13 +3354,13 @@ class Packager(object):
     def rm_repo(self):
         raise NotImplementedError
 
-    def query_shaman(self, distro, version, branch, commit):
+    def query_shaman(self, distro, distro_version, branch, commit):
         # query shaman
         logging.info('Fetching repo metadata from shaman and chacra...')
-        shaman_url = 'https://shaman.ceph.com/api/repos/ceph/{version}/{sha1}/{distro}/{distro_version}/repo/?arch={arch}'.format(
+        shaman_url = 'https://shaman.ceph.com/api/repos/ceph/{branch}/{sha1}/{distro}/{distro_version}/repo/?arch={arch}'.format(
             distro=distro,
-            distro_version=version,
-            version=branch,
+            distro_version=distro_version,
+            branch=branch,
             sha1=commit or 'latest',
             arch=get_arch()
         )
@@ -3326,11 +3398,12 @@ class Apt(Packager):
         'debian': 'debian',
     }
 
-    def __init__(self, stable, branch, commit,
-                 distro, version, codename):
-        super(Apt, self).__init__(stable=stable, branch=branch, commit=commit)
+    def __init__(self, stable, version, branch, commit,
+                 distro, distro_version, distro_codename):
+        super(Apt, self).__init__(stable=stable, version=version,
+                                  branch=branch, commit=commit)
         self.distro = self.DISTRO_NAMES[distro]
-        self.codename = codename
+        self.distro_codename = distro_codename
 
     def repo_path(self):
         return '/etc/apt/sources.list.d/ceph.list'
@@ -3349,10 +3422,15 @@ class Apt(Packager):
             f.write(key)
 
         if self.stable:
-            content = 'deb %s/debian-%s/ %s main\n' % (
-                args.repo_url, self.stable, self.codename)
+            if self.version:
+                content = 'deb %s/debian-%s-%s/ %s main\n' % (
+                    args.repo_url, self.stable, self.version,
+                    self.distro_codename)
+            else:
+                content = 'deb %s/debian-%s/ %s main\n' % (
+                    args.repo_url, self.stable, self.distro_codename)
         else:
-            content = self.query_shaman(self.distro, self.codename, self.branch,
+            content = self.query_shaman(self.distro, self.distro_codename, self.branch,
                                         self.commit)
 
         logging.info('Installing repo file at %s...' % self.repo_path())
@@ -3395,10 +3473,11 @@ class YumDnf(Packager):
         'fedora': ('fedora', 'fc'),
     }
 
-    def __init__(self, stable, branch, commit,
-                 distro, version):
-        super(YumDnf, self).__init__(stable=stable, branch=branch, commit=commit)
-        self.major = int(version.split('.')[0])
+    def __init__(self, stable, version, branch, commit,
+                 distro, distro_version):
+        super(YumDnf, self).__init__(stable=stable, version=version,
+                                     branch=branch, commit=commit)
+        self.major = int(distro_version.split('.')[0])
         self.distro_normalized = self.DISTRO_NAMES[distro][0]
         self.distro_code = self.DISTRO_NAMES[distro][1] + str(self.major)
         if (self.distro_code == 'fc' and self.major >= 30) or \
@@ -3468,7 +3547,13 @@ class YumDnf(Packager):
 
     def repo_baseurl(self):
         assert self.stable
-        return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro_code)
+        if self.version:
+            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
+                                        self.version,
+                                        self.distro_code)
+        else:
+            return '%s/rpm-%s/%s' % (args.repo_url, self.stable,
+                                     self.distro_code)
 
     def add_repo(self):
         if self.stable:
@@ -3525,14 +3610,15 @@ class Zypper(Packager):
         'opensuse-leap'
     ]
 
-    def __init__(self, stable, branch, commit,
-                 distro, version):
-        super(Zypper, self).__init__(stable=stable, branch=branch, commit=commit)
+    def __init__(self, stable, version, branch, commit,
+                 distro, distro_version):
+        super(Zypper, self).__init__(stable=stable, version=version,
+                                     branch=branch, commit=commit)
         self.tool = 'zypper'
         self.distro = 'opensuse'
-        self.version = '15.1'
-        if 'tumbleweed' not in distro and version is not None:
-            self.version = version
+        self.distro_version = '15.1'
+        if 'tumbleweed' not in distro and distro_version is not None:
+            self.distro_version = distro_version
 
     def custom_repo(self, **kw):
         """
@@ -3568,6 +3654,9 @@ class Zypper(Packager):
 
     def repo_baseurl(self):
         assert self.stable
+        if self.version:
+            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
+                                        self.version, self.distro)
         return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
 
     def add_repo(self):
@@ -3587,7 +3676,7 @@ class Zypper(Packager):
                 )
                 content += '\n\n'
         else:
-            content = self.query_shaman(self.distro, self.version,
+            content = self.query_shaman(self.distro, self.distro_version,
                                         self.branch,
                                         self.commit)
 
@@ -3607,22 +3696,49 @@ class Zypper(Packager):
         self.install(['podman'])
 
 
-def create_packager(stable=None, branch=None, commit=None):
-    distro, version, codename = get_distro()
+def create_packager(stable=None, version=None, branch=None, commit=None):
+    distro, distro_version, distro_codename = get_distro()
     if distro in YumDnf.DISTRO_NAMES:
-        return YumDnf(stable=stable, branch=branch, commit=commit,
-                   distro=distro, version=version)
+        return YumDnf(stable=stable, version=version,
+                      branch=branch, commit=commit,
+                   distro=distro, distro_version=distro_version)
     elif distro in Apt.DISTRO_NAMES:
-        return Apt(stable=stable, branch=branch, commit=commit,
-                   distro=distro, version=version, codename=codename)
+        return Apt(stable=stable, version=version,
+                   branch=branch, commit=commit,
+                   distro=distro, distro_version=distro_version,
+                   distro_codename=distro_codename)
     elif distro in Zypper.DISTRO_NAMES:
-        return Zypper(stable=stable, branch=branch, commit=commit,
-                      distro=distro, version=version)
-    raise Error('Distro %s version %s not supported' % (distro, version))
+        return Zypper(stable=stable, version=version,
+                      branch=branch, commit=commit,
+                      distro=distro, distro_version=distro_version)
+    raise Error('Distro %s version %s not supported' % (distro, distro_version))
 
 
 def command_add_repo():
-    pkg = create_packager(stable=args.release, branch=args.dev,
+    if args.version and args.release:
+        raise Error('you can specify either --release or --version but not both')
+    if args.version:
+        try:
+            (x, y, z) = args.version.split('.')
+        except Exception as e:
+            raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
+        relnames = {
+            '16': 'pacific',
+            '15': 'octopus',
+            '14': 'nautilus',
+            '13': 'mimic',
+            '12': 'luminous',
+            '11': 'kraken',
+            '10': 'jewel',
+        }
+        args.release = relnames.get(x, None)
+        if not args.release:
+            raise Error('unknown release %s (not in %s)' % (
+                x, ' '.join(relnames.values())))
+
+    pkg = create_packager(stable=args.release,
+                          version=args.version,
+                          branch=args.dev,
                           commit=args.dev_commit)
     pkg.add_repo()
 
@@ -3705,6 +3821,10 @@ def _get_parser():
         '--legacy-dir',
         default='/',
         help='base directory for legacy daemon data')
+
+    parser_list_networks = subparsers.add_parser(
+        'list-networks', help='list IP networks')
+    parser_list_networks.set_defaults(func=command_list_networks)
 
     parser_adopt = subparsers.add_parser(
         'adopt', help='adopt daemon deployed with a different tool')
@@ -3917,6 +4037,10 @@ def _get_parser():
         help='Dashboard certificate')
 
     parser_bootstrap.add_argument(
+        '--skip-mon-network',
+        action='store_true',
+        help='set mon public_network based on bootstrap mon ip')
+    parser_bootstrap.add_argument(
         '--skip-dashboard',
         action='store_true',
         help='do not enable the Ceph Dashboard')
@@ -3956,6 +4080,10 @@ def _get_parser():
         '--orphan-initial-daemons',
         action='store_true',
         help='Do not create initial mon, mgr, and crash service specs')
+    parser_bootstrap.add_argument(
+        '--skip-monitoring-stack',
+        action='store_true',
+        help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
@@ -3992,6 +4120,10 @@ def _get_parser():
         '--reconfig',
         action='store_true',
         help='Reconfigure a previously deployed daemon')
+    parser_deploy.add_argument(
+        '--allow-ptrace',
+        action='store_true',
+        help='Allow SYS_PTRACE on daemon container')
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
@@ -4012,7 +4144,10 @@ def _get_parser():
     parser_add_repo.set_defaults(func=command_add_repo)
     parser_add_repo.add_argument(
         '--release',
-        help='use specified upstream release')
+        help='use latest version of a named release (e.g., octopus)')
+    parser_add_repo.add_argument(
+        '--version',
+        help='use specific upstream version (x.y.z)')
     parser_add_repo.add_argument(
         '--dev',
         help='use specified bleeding edge build from git branch or tag')
@@ -4024,7 +4159,7 @@ def _get_parser():
         help='specify alternative GPG key location')
     parser_add_repo.add_argument(
         '--repo-url',
-        default='https://download.ceph.com/',
+        default='https://download.ceph.com',
         help='specify alternative repo location')
     # TODO: proxy?
 

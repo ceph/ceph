@@ -49,6 +49,9 @@ class TestVolumes(CephFSTestCase):
     def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("failed", clone, clone_group, timo)
 
+    def _check_clone_canceled(self, clone, clone_group=None):
+        self.__check_clone_state("canceled", clone, clone_group, timo=1)
+
     def _verify_clone_attrs(self, subvolume, clone, source_group=None, clone_group=None):
         path1 = self._get_subvolume_path(self.volname, subvolume, group_name=source_group)
         path2 = self._get_subvolume_path(self.volname, clone, group_name=clone_group)
@@ -2123,6 +2126,118 @@ class TestVolumes(CephFSTestCase):
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_cancel_in_progress(self):
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=128)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # cancel on-going clone
+        self._fs_cmd("clone", "cancel", self.volname, clone)
+
+        # verify canceled state
+        self._check_clone_canceled(clone)
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_cancel_pending(self):
+        """
+        this test is a bit more involved compared to canceling an in-progress clone.
+        we'd need to ensure that a to-be canceled clone has still not been picked up
+        by cloner threads. exploit the fact that clones are picked up in an FCFS
+        fashion and there are four (4) cloner threads by default. When the number of
+        cloner threads increase, this test _may_ start tripping -- so, the number of
+        clone operations would need to be jacked up.
+        """
+        # default number of clone threads
+        NR_THREADS = 4
+        # good enough for 4 threads
+        NR_CLONES = 5
+        # yeh, 1gig -- we need the clone to run for sometime
+        FILE_SIZE_MB = 1024
+
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clones = self._generate_random_clone_name(NR_CLONES)
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=4, file_size=FILE_SIZE_MB)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule clones
+        for clone in clones:
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        to_wait = clones[0:NR_THREADS]
+        to_cancel = clones[NR_THREADS:]
+
+        # cancel pending clones and verify
+        for clone in to_cancel:
+            status = json.loads(self._fs_cmd("clone", "status", self.volname, clone))
+            self.assertEqual(status["status"]["state"], "pending")
+            self._fs_cmd("clone", "cancel", self.volname, clone)
+            self._check_clone_canceled(clone)
+
+        # let's cancel on-going clones. handle the case where some of the clones
+        # _just_ complete
+        for clone in list(to_wait):
+            try:
+                self._fs_cmd("clone", "cancel", self.volname, clone)
+                to_cancel.append(clone)
+                to_wait.remove(clone)
+            except CommandFailedError as ce:
+                if ce.exitstatus != errno.EINVAL:
+                    raise RuntimeError("invalid error code when cancelling on-going clone")
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        for clone in to_wait:
+            self._fs_cmd("subvolume", "rm", self.volname, clone)
+        for clone in to_cancel:
+            self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
