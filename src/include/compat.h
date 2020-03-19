@@ -355,4 +355,11 @@ static inline int ceph_sock_errno() {
 #endif
 }
 
+// Needed on Windows when handling binary files. Without it, line
+// endings will be replaced and certain characters can be treated as
+// EOF.
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
 #endif /* !CEPH_COMPAT_H */
