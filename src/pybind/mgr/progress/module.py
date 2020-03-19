@@ -5,6 +5,8 @@ except ImportError:
     TYPE_CHECKING = False
 
 from mgr_module import MgrModule, OSDMap
+from mgr_util import to_pretty_timedelta
+from datetime import timedelta
 import os
 import threading
 import datetime
@@ -36,16 +38,12 @@ class Event(object):
         self._refs = refs
         self.started_at = started_at if started_at else time.time()
         self.id = None  # type: Optional[str]
-        self.update_duration_event()
-        self._time_remaining_str = "(time remaining: N/A)"
 
     def _refresh(self):
         global _module
         assert _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
                                                                 self.progress))
-        self.update_duration_event()
-        self.update_time_remaining()
         _module.update_progress_event(
             self.id, self.twoline_progress(6), self.progress)
 
@@ -66,7 +64,9 @@ class Event(object):
 
     @property
     def duration_str(self):
-        return self._duration_str
+        duration = time.time() - self.started_at
+        return "(%s)" % (
+            to_pretty_timedelta(timedelta(seconds=duration)))
 
     @property
     def failed(self):
@@ -78,7 +78,8 @@ class Event(object):
 
     def summary(self):
         # type: () -> str
-        return "{0} {1} {2}".format(self.progress, self.message, self.duration_str)
+        return "{0} {1} {2}".format(self.progress, self.message,
+                                    self.duration_str)
 
     def _progress_str(self, width):
         inner_width = width - 2
@@ -94,15 +95,21 @@ class Event(object):
         """
         e.g.
 
-        - Eating my delicious strudel (since: 00h 00m 30s)
-            [===============..............] (time remaining: 00h 03m 57s)
+        - Eating my delicious strudel (since: 30s)
+            [===============..............] (remaining: 04m)
 
         """
+        time_remaining = self.estimated_time_remaining()
+        if time_remaining:
+            remaining = "(remaining: %s)" % (
+                to_pretty_timedelta(timedelta(seconds=time_remaining)))
+        else:
+            remaining = ''
         return "{0} {1}\n{2}{3} {4}".format(self._message,
-                                            self._duration_str,
+                                            self.duration_str,
                                             " " * indent,
                                             self._progress_str(30),
-                                            self._time_remaining_str)
+                                            remaining)
 
     def to_json(self):
         # type: () -> Dict[str, Any]
@@ -116,27 +123,12 @@ class Event(object):
             "time_remaining": self.estimated_time_remaining()
         }
 
-    def update_duration_event(self):
-        # Update duration of event in seconds/minutes/hours
-
-        duration = time.time() - self.started_at
-        self._duration_str = time.strftime("(%Hh %Mm %Ss)", time.gmtime(duration))
-
-
     def estimated_time_remaining(self):
         elapsed = time.time() - self.started_at
         progress = self.progress
         if progress == 0.0:
             return None
         return int(elapsed * (1 - progress) / progress)
-
-    def update_time_remaining(self):
-        time_remaining = self.estimated_time_remaining()
-        if time_remaining:
-            self._time_remaining_str = time.strftime(
-                "(time remaining: %Hh %Mm %Ss)", time.gmtime(time_remaining))
-        else:
-            self._time_remaining_str = "(time remaining: N/A)"
 
 class GhostEvent(Event):
     """
