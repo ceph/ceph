@@ -2458,17 +2458,30 @@ static inline int parse_value_and_bound(
     char *endptr;
     output = strtol(input.c_str(), &endptr, 10);
     if (endptr) {
-      if (endptr == input.c_str()) return -EINVAL;
-      while (*endptr && isspace(*endptr)) // ignore white space
+      if (endptr == input.c_str()) {
+	// if no numeric characters, invalid input
+	return -EINVAL;
+      }
+      while (*endptr && isspace(*endptr)) { // ignore white space
         endptr++;
+      }
       if (*endptr) {
+	// if after skipping white-space we're not at the null
+	// terminating character, then there are one/more illegal
+	// characters
         return -EINVAL;
       }
     }
-    if(output > upper_bound) {
-      output = upper_bound;
+
+    // if the default values is greater than the upper-bound, it
+    // becomes the upper-bound; for example, Swift's default value for
+    // bucket listing is 10,000
+    const long true_upper_bound = std::max(upper_bound, default_val);
+
+    if (output > true_upper_bound) {
+      output = true_upper_bound;
     }
-    if(output < lower_bound) {
+    if (output < lower_bound) {
       output = lower_bound;
     }
   } else {
