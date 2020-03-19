@@ -6378,7 +6378,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(1_M)
     .set_description("Send copy-object progress info after these many bytes"),
 
-    Option("rgw_sync_obj_integrity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("rgw_sync_obj_etag_verify", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Verify if the object copied from remote is identical to its source")
     .set_long_description(

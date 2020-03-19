@@ -3325,7 +3325,7 @@ public:
      * requested. We can enable simultaneous support once we have a mechanism
      * to know the sequence in which the filters must be applied.
      */
-    if (cct->_conf->rgw_sync_obj_integrity &&
+    if (cct->_conf->rgw_sync_obj_etag_verify &&
         src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
 
       RGWObjManifest manifest;
@@ -3438,7 +3438,7 @@ public:
   }
 
   string get_calculated_etag() {
-    if (!cct->_conf->rgw_sync_obj_integrity)
+    if (!cct->_conf->rgw_sync_obj_etag_verify)
       return "";
 
     if (is_mpu_obj) {
@@ -4002,7 +4002,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     set_mtime_weight.init(set_mtime, svc.zone->get_zone_short_id(), pg_ver);
   }
 
-  if (cct->_conf->rgw_sync_obj_integrity) {
+  if (cct->_conf->rgw_sync_obj_etag_verify) {
     string trimmed_etag = etag;
 
     /* Remove the leading and trailing double quotes from etag */
