@@ -762,12 +762,14 @@ Usage:
         'orch apply rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
+        'name=subcluster,type=CephString,req=false '
         'name=port,type=CephInt,req=false '
         'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
     def _apply_rgw(self, zone_name, realm_name,
+                   subcluster=None,
                    port=None,
                    ssl=False,
                    placement=None,
@@ -775,6 +777,7 @@ Usage:
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
+            subcluster=subcluster,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             rgw_frontend_port=port,
