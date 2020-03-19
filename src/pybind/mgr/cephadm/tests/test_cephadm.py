@@ -98,7 +98,7 @@ class TestCephadm(object):
 
             c = cephadm_module.describe_service()
             out = [o.to_json() for o in wait(cephadm_module, c)]
-            assert out == [
+            expected = [
                 {
                     'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
                     'service_id': 'name',
@@ -111,11 +111,15 @@ class TestCephadm(object):
                         'count': 1,
                         'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
                     },
+                    'rgw_realm': 'r',
+                    'rgw_zone': 'z',
                     'service_id': 'r.z',
                     'service_type': 'rgw',
                     'status': {'running': 0, 'size': 1}
                 }
             ]
+            assert out == expected
+            assert [ServiceDescription.from_json(o).to_json() for o in expected] == expected
 
     def test_device_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):

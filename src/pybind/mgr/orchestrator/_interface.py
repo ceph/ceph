@@ -1396,14 +1396,15 @@ class ServiceDescription(object):
     @classmethod
     @handle_type_error
     def from_json(cls, data: dict):
-        status = data.pop('status', {})
-        spec = ServiceSpec.from_json(data)
+        c = data.copy()
+        status = c.pop('status', {})
+        spec = ServiceSpec.from_json(c)
 
-        c = status.copy()
+        c_status = status.copy()
         for k in ['last_refresh', 'created']:
             if k in c:
-                c[k] = datetime.datetime.strptime(c[k], DATEFMT)
-        return cls(spec=spec, **c)
+                c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
+        return cls(spec=spec, **c_status)
 
 
 class InventoryFilter(object):
