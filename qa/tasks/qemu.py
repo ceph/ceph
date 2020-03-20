@@ -203,7 +203,7 @@ def generate_iso(ctx, config):
     try:
         yield
     finally:
-        for client in config.iterkeys():
+        for client in config.keys():
             (remote,) = ctx.cluster.only(client).remotes.keys()
             remote.run(
                 args=[
@@ -253,7 +253,7 @@ def download_image(ctx, config):
         yield
     finally:
         log.debug('cleaning up base image files')
-        for client in config.iterkeys():
+        for client in config.keys():
             base_file = '{tdir}/qemu/base.{client}.qcow2'.format(
                 tdir=testdir,
                 client=client,
@@ -430,7 +430,7 @@ def run_qemu(ctx, config):
             time.sleep(time_wait)
 
         log.debug('checking that qemu tests succeeded...')
-        for client in config.iterkeys():
+        for client in config.keys():
             (remote,) = ctx.cluster.only(client).remotes.keys()
 
             # ensure we have permissions to all the logs
