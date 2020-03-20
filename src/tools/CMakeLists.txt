@@ -127,3 +127,4 @@ if(WITH_RBD)
 endif(WITH_RBD)
 
 add_subdirectory(ceph-dencoder)
+add_subdirectory(erasure-code)
