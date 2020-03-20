@@ -133,7 +133,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "pcuzner/ceph-grafana-el8:latest",
+            "image": "ceph/ceph-grafana:latest",
             "cpus": "2",
             "memory": "4GB",
             "args": [],
