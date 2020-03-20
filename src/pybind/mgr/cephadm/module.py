@@ -156,7 +156,7 @@ class SpecStore():
 class HostCache():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
-        self.mgr = mgr
+        self.mgr: CephadmOrchestrator = mgr
         self.daemons = {}   # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
