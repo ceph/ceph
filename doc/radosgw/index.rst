@@ -58,6 +58,7 @@ you may write data with one API and retrieve it with the other.
    Multi-tenancy <multitenancy>
    Compression <compression>
    LDAP Authentication <ldap-auth>
+   External Authentication <external-authentication>
    Server-Side Encryption <encryption>
    Bucket Policy <bucketpolicy>
    Dynamic bucket index resharding <dynamicresharding>

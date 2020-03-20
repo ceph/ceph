@@ -3,6 +3,9 @@
 
 #include <string>
 
+#include <errno.h>
+#include <fnmatch.h>
+
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "include/types.h"
@@ -18,10 +21,11 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+
 namespace rgw::auth::s3 {
 namespace external_authentication {
 
-std::pair<boost::optional<rgw::auth::s3::external_authentication::EAUserInfo>, int>
+std::pair<boost::optional<EAUserInfo>, int>
 EAEngine::get_user_info(const DoutPrefixProvider* dpp,
                         const boost::string_view& access_key_id,
                         const std::string& string_to_sign,
@@ -29,11 +33,11 @@ EAEngine::get_user_info(const DoutPrefixProvider* dpp,
                         const signature_factory_t& signature_factory) const
 {
   using server_signature_t = VersionAbstractor::server_signature_t;
-  boost::optional<boost::external_authentication::EAUserInfo> user_info;
+  boost::optional<EAUserInfo> user_info;
   int failure_reason;
 
   /* Get a token from the cache if one has already been stored */
-  boost::optional<boost::tuple<rgw::auth::s3::external_authentication::EAUserInfo, std::string>>
+  boost::optional<boost::tuple<EAUserInfo, std::string>>
     u = secret_cache.find(access_key_id.to_string());
   
   /* Check that credentials can correctly be used to sign data */
@@ -117,8 +121,9 @@ EAEngine::get_secret_from_server(const DoutPrefixProvider* dpp,
   return make_pair(secret_string, 0);
 }
 
-std::pair<boost::optional<rgw::auth::s3::external_authentication::EAUserInfo>, int>
-EAEngine::get_from_server(const DoutPrefixProvider* dpp, const boost::string_view& access_key_id,
+std::pair<boost::optional<EAUserInfo>, int>
+EAEngine::get_from_server(const DoutPrefixProvider* dpp,
+                          const boost::string_view& access_key_id,
                           const std::string& string_to_sign,
                           const boost::string_view& signature) const
 {
@@ -178,7 +183,7 @@ EAEngine::get_from_server(const DoutPrefixProvider* dpp, const boost::string_vie
   return std::make_pair(std::move(user_info), 0);
 }
 
-rgw::auth::Engine::result_t EAEngine::authentication(
+rgw::auth::Engine::result_t EAEngine::authenticate(
   const DoutPrefixProvider* dpp,
   const boost::string_view& access_key_id,
   const boost::string_view& signature,
@@ -197,19 +202,10 @@ rgw::auth::Engine::result_t EAEngine::authentication(
     return result_t::deny(failure_reason);
   }
 
-  auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*u),
+  auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(*u));
   return result_t::grant(std::move(apl), completer_factory(boost::none));
 }
-
-EAEngine::acl_strategy_t EAEngine::get_acl_strategy() const
-{
-  return nullptr;
-}
-
-/* rgw::auth::RemoteApplier::AuthInfo */
-/* static declaration */
-const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
 
 EAEngine::auth_info_t
 EAEngine::get_creds_info(const EAEngine::user_info_t& user_info) const noexcept

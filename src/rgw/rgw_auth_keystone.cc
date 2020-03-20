@@ -108,10 +108,6 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
   return token_body;
 }
 
-/* rgw::auth::RemoteApplier::AuthInfo */
-/* static declaration */
-const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
-
 TokenEngine::auth_info_t
 TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
                             const std::vector<std::string>& admin_roles

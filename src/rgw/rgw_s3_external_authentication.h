@@ -12,10 +12,18 @@ namespace rgw::auth::s3 {
 namespace external_authentication {
 
 class Config {
-protected:
-  Config() = default;
+  Config() {}
 
 public:
+  Config(const Config&) = delete;
+  void operator=(const Config&) = delete;
+
+  static Config& get_instance() {
+    /* In C++11 this is thread safe. */
+    static Config instance;
+    return instance;
+  }
+
   std::string get_auth_endpoint_url() const noexcept {
     return g_ceph_context->_conf->rgw_s3_external_authentication_auth_endpoint;
   }
@@ -25,7 +33,7 @@ public:
   std::string get_token() const noexcept {
     return g_ceph_context->_conf->rgw_s3_external_authentication_token;
   }
-  std::bool verify_ssl() const noexcept {
+  bool verify_ssl() const noexcept {
     return g_ceph_context->_conf->rgw_s3_external_authentication_verify_ssl;
   }
 };
@@ -104,19 +112,18 @@ public:
   void add(const std::string& access_key_id, const user_info_t& user_info, const std::string& secret);
 }; /* class SecretCache */
 
-class EAEngine : public rgw::auth::s3::AWSEngine
-{
+class EAEngine : public rgw::auth::s3::AWSEngine {
     using acl_strategy_t = rgw::auth::RemoteApplier::acl_strategy_t;
     using auth_info_t = rgw::auth::RemoteApplier::AuthInfo;
     using result_t = rgw::auth::Engine::result_t;
     using user_info_t = rgw::auth::s3::external_authentication::EAUserInfo;
 
     const rgw::auth::RemoteApplier::Factory* const apl_factory;
-    rgw::auth::s3::external_authentication::Config config;
-    rgw::auth::s3::external_authentication::SecretCache& secret_cache;
+    SecretCache& secret_cache;
+    Config& config;
 
 
-    acl_strategy_t get_acl_strategy() const;
+    acl_strategy_t get_acl_strategy() const { return nullptr; };
     auth_info_t get_creds_info(const user_info_t& user_info) const noexcept;
     result_t authenticate(const DoutPrefixProvider* dpp,
                           const boost::string_view& access_key_id,
@@ -148,7 +155,8 @@ public:
             rgw::auth::s3::external_authentication::SecretCache& secret_cache)
     : AWSEngine(cct, *ver_abstractor),
       apl_factory(apl_factory),
-      secret_cache(secret_cache) {
+      secret_cache(secret_cache),
+      config(Config::get_instance()) {
   }
 
   using AWSEngine::authenticate;

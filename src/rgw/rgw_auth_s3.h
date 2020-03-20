@@ -20,6 +20,7 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_auth_keystone.h"
+#include "rgw_s3_external_authentication.h"
 
 
 namespace rgw {
@@ -142,13 +143,13 @@ public:
                               static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                               keystone_config_t::get_instance(),
                               keystone_cache_t::get_instance<keystone_config_t>(),
-			      secret_cache_t::get_instance());
+                              secret_cache_t::get_instance());
       add_engine(Control::SUFFICIENT, *keystone_engine);
 
     }
 
     if (cct->_conf->rgw_s3_auth_use_external_authentication &&
-        ! cct->_conf->rgw_s3_external_authentication_auth_endpoint.empty()
+        ! cct->_conf->rgw_s3_external_authentication_auth_endpoint.empty() &&
         ! cct->_conf->rgw_s3_external_authentication_secret_endpoint.empty()) {
           external_authentication_engine.emplace(cct, ver_abstractor,
                                                   static_cast<rgw::auth::RemoteApplier::Factory*>(this),
