@@ -227,7 +227,7 @@ macro(build_boost version)
       INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}"
       IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
       IMPORTED_LOCATION "${Boost_${upper_c}_LIBRARY}")
-    if(c MATCHES "coroutine|context")
+    if((c MATCHES "coroutine|context") AND (WITH_BOOST_VALGRIND))
       set_target_properties(Boost::${c} PROPERTIES
 	INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
     endif()
