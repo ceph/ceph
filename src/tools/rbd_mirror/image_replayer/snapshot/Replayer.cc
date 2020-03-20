@@ -763,17 +763,21 @@ template <typename I>
 void Replayer<I>::handle_request_sync(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r == -ECANCELED) {
+  std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
+  } else if (r == -ECANCELED) {
     dout(5) << "image-sync canceled" << dendl;
-    handle_replay_complete(r, "image-sync canceled");
+    handle_replay_complete(&locker, r, "image-sync canceled");
     return;
   } else if (r < 0) {
     derr << "failed to request image-sync: " << cpp_strerror(r) << dendl;
-    handle_replay_complete(r, "failed to request image-sync");
+    handle_replay_complete(&locker, r, "failed to request image-sync");
     return;
   }
 
   m_sync_in_progress = true;
+  locker.unlock();
 
   copy_image();
 }
