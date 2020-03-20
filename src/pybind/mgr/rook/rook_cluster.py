@@ -338,10 +338,10 @@ class RookCluster(object):
             }
 
             # note: we want UTC but no tzinfo
-            if 'creation_timestamp' in d['metadata']:
+            if d['metadata'].get('creation_timestamp', None):
                 s['created'] = d['metadata']['creation_timestamp'].astimezone(
                     tz=datetime.timezone.utc).replace(tzinfo=None)
-            if 'start_time' in d['status']:
+            if d['status'].get('start_time', None):
                 s['started'] = d['status']['start_time'].astimezone(
                     tz=datetime.timezone.utc).replace(tzinfo=None)
 
