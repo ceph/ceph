@@ -1839,7 +1839,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 {
   ldout(cct, 20) << __func__ << " enter(in:" << *in << ", req:" << req
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
-	   << ", have:" << ", force:" << force << ")" << dendl;
+	   << ", force:" << force << ")" << dendl;
   int released = 0;
   auto it = in->caps.find(mds);
   if (it != in->caps.end()) {
@@ -1847,15 +1847,20 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
     drop &= ~(in->dirty_caps | get_caps_used(in));
     if ((drop & cap.issued) &&
 	!(unless & cap.issued)) {
-      ldout(cct, 25) << "Dropping caps. Initial " << ccap_string(cap.issued) << dendl;
+      ldout(cct, 25) << "dropping caps " << ccap_string(drop) << dendl;
       cap.issued &= ~drop;
       cap.implemented &= ~drop;
       released = 1;
-      ldout(cct, 25) << "Now have: " << ccap_string(cap.issued) << dendl;
     } else {
       released = force;
     }
     if (released) {
+      cap.wanted = in->caps_wanted();
+      if (&cap == in->auth_cap &&
+	  !(cap.wanted & CEPH_CAP_ANY_FILE_WR)) {
+	in->requested_max_size = 0;
+	ldout(cct, 25) << "reset requested_max_size due to not wanting any file write cap" << dendl;
+      }
       ceph_mds_request_release rel;
       rel.ino = in->ino;
       rel.cap_id = cap.cap_id;
@@ -3221,13 +3226,16 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
     bool waitfor_commit = false;
 
     if (have & need & CEPH_CAP_FILE_WR) {
-      if (endoff > 0 &&
-	  (endoff >= (loff_t)in->max_size ||
-	   endoff > (loff_t)(in->size << 1)) &&
-	  endoff > (loff_t)in->wanted_max_size) {
-	ldout(cct, 10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
-	in->wanted_max_size = endoff;
-	check_caps(in, 0);
+      if (endoff > 0) {
+	 if ((endoff >= (loff_t)in->max_size ||
+	      endoff > (loff_t)(in->size << 1)) &&
+	     endoff > (loff_t)in->wanted_max_size) {
+	   ldout(cct, 10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
+	   in->wanted_max_size = endoff;
+	 }
+	 if (in->wanted_max_size > in->max_size &&
+	     in->wanted_max_size > in->requested_max_size)
+	   check_caps(in, 0);
       }
 
       if (endoff >= 0 && endoff > (loff_t)in->max_size) {
@@ -3411,9 +3419,14 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->set_snap_follows(follows);
   cap->wanted = want;
   if (cap == in->auth_cap) {
-    m->set_max_size(in->wanted_max_size);
-    in->requested_max_size = in->wanted_max_size;
-    ldout(cct, 15) << "auth cap, setting max_size = " << in->requested_max_size << dendl;
+    if (want & CEPH_CAP_ANY_FILE_WR) {
+      m->set_max_size(in->wanted_max_size);
+      in->requested_max_size = in->wanted_max_size;
+      ldout(cct, 15) << "auth cap, requesting max_size " << in->requested_max_size << dendl;
+    } else {
+      in->requested_max_size = 0;
+      ldout(cct, 15) << "auth cap, reset requested_max_size due to not wanting any file write cap" << dendl;
+    }
   }
 
   if (!session->flushing_caps_tids.empty())
@@ -4882,8 +4895,10 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<
   SnapRealm *realm = NULL;
   update_snap_trace(m->snapbl, &realm);
 
+  int issued = m->get_caps();
+  int wanted = m->get_wanted();
   add_update_cap(in, session, m->get_cap_id(),
-		 m->get_caps(), m->get_wanted(), m->get_seq(), m->get_mseq(),
+		 issued, wanted, m->get_seq(), m->get_mseq(),
 		 m->get_realm(), CEPH_CAP_FLAG_AUTH, cap_perms);
   
   if (cap && cap->cap_id == m->peer.cap_id) {
@@ -4894,6 +4909,11 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<
     put_snap_realm(realm);
   
   if (in->auth_cap && in->auth_cap->session == session) {
+    if (!(wanted & CEPH_CAP_ANY_FILE_WR) ||
+	in->requested_max_size > m->get_max_size()) {
+      in->requested_max_size = 0;
+      ldout(cct, 15) << "reset requested_max_size after cap import" << dendl;
+    }
     // reflush any/all caps (if we are now the auth_cap)
     kick_flushing_caps(in, session);
   }
