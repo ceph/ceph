@@ -1,10 +1,15 @@
+$table-components-size: 10px;
+
 table {
   tr {
     height: 10px;
+    height: $table-components-size;
   }
 
   td {
     width: 10px;
     height: 10px;
+    width: $table-components-size;
+    height: $table-components-size;
   }
 }
