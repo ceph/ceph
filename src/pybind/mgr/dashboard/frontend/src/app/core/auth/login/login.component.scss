@@ -5,15 +5,34 @@
     margin: 0 0 30px 0;
   }
 
+  .form-group {
+    border-left: 4px solid white;
+    background-color: $color-password-toggle-bg;
+    height: auto;
+    margin-bottom: 2rem;
+
+    &:focus-within {
+      border-left: 4px solid $color-accent;
+    }
+
+    .invalid-feedback {
+      display: inline;
+    }
+  }
+
   .btn-password,
   .btn-password:focus,
   .form-control,
   .form-control:focus {
+    border: none;
+    outline: none;
+    -webkit-box-shadow: none;
+    box-shadow: none;
     color: $color-password-toggle-text;
     background-color: $color-password-toggle-bg;
   }
 
-  .form-control::placeholder {
+  .placeholder {
     color: $color-password-toggle-placeholder-text;
   }
 
