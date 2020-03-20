@@ -433,18 +433,6 @@ class RookCluster(object):
                     namespace=self.rook_env.namespace
                 ),
                 spec=cos.Spec(
-                    metadataPool=cos.MetadataPool(
-                        failureDomain='host',
-                        replicated=cos.Replicated(
-                            size=1
-                        )
-                    ),
-                    dataPool=cos.DataPool(
-                        failureDomain='host',
-                        replicated=cos.Replicated(
-                            size=1
-                        )
-                    ),
                     gateway=cos.Gateway(
                         type='s3',
                         port=port,
