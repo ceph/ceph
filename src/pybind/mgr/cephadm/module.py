@@ -343,6 +343,9 @@ class HostCache():
 
     def host_needs_daemon_refresh(self, host):
         # type: (str) -> bool
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Skipping daemon refresh')
+            return False
         if host in self.daemon_refresh_queue:
             self.daemon_refresh_queue.remove(host)
             return True
@@ -354,6 +357,9 @@ class HostCache():
 
     def host_needs_device_refresh(self, host):
         # type: (str) -> bool
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Skipping device refresh')
+            return False
         if host in self.device_refresh_queue:
             self.device_refresh_queue.remove(host)
             return True
