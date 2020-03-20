@@ -707,6 +707,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if h not in self.inventory:
                 self.cache.rm_host(h)
 
+        # in-memory only.
+        self.offline_hosts: Set[str] = set()
+
     def shutdown(self):
         self.log.debug('shutdown')
         self._worker_pool.close()
@@ -1307,6 +1310,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             conn.exit()
         self._cons = {}
 
+    def offline_hosts_remove(self, host):
+        if host in self.offline_hosts:
+            self.offline_hosts.remove(host)
+
+
     @staticmethod
     def can_run():
         if remoto is not None:
@@ -1533,6 +1541,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if not addr and host in self.inventory:
             addr = self.inventory[host].get('addr', host)
 
+        self.offline_hosts_remove(host)
+
         try:
             try:
                 conn, connr = self._get_connection(addr)
@@ -1616,6 +1626,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # this is a misleading exception as it seems to be thrown for
             # any sort of connection failure, even those having nothing to
             # do with "host not found" (e.g., ssh key permission denied).
+            self.offline_hosts.add(host)
             user = 'root' if self.mode == 'root' else 'cephadm'
             msg = f'Failed to connect to {host} ({addr}).  ' \
                   f'Check that the host is reachable and accepts connections using the cephadm SSH key\n' \
@@ -1654,6 +1665,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.inventory[spec.hostname] = spec.to_json()
         self._save_inventory()
         self.cache.prime_empty_host(spec.hostname)
+        self.offline_hosts_remove(spec.hostname)
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
@@ -1700,7 +1712,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 hostname,
                 addr=info.get('addr', hostname),
                 labels=info.get('labels', []),
-                status=info.get('status', ''),
+                status='Offline' if hostname in self.offline_hosts else info.get('status', ''),
             ))
         return r
 
