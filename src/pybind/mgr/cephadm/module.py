@@ -395,12 +395,10 @@ class AsyncCompletion(orchestrator.Completion):
                  value=orchestrator._Promise.NO_RESULT,  # type: Any
                  on_complete=None,  # type: Optional[Callable]
                  name=None,  # type: Optional[str]
-                 many=False, # type: bool
                  update_progress=False,  # type: bool
                  ):
 
         assert CephadmOrchestrator.instance is not None
-        self.many = many
         self.update_progress = update_progress
         if name is None and on_complete is not None:
             name = getattr(on_complete, '__name__', None)
@@ -442,33 +440,14 @@ class AsyncCompletion(orchestrator.Completion):
                 assert self._on_complete_ is not None
                 try:
                     res = self._on_complete_(*args, **kwargs)
-                    if self.update_progress and self.many:
-                        assert self.progress_reference
-                        self.progress_reference.progress += 1.0 / len(value)
                     return res
                 except Exception as e:
                     self.fail(e)
                     raise
 
             assert CephadmOrchestrator.instance
-            if self.many:
-                if not value:
-                    logger.info('calling map_async without values')
-                    callback([])
-                if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
-                                                                    callback=callback,
-                                                                    error_callback=error_callback)
-                else:
-                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
-                                                                    callback=callback)
-            else:
-                if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
-                                                                      callback=callback, error_callback=error_callback)
-                else:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
-                                                                      callback=callback)
+            CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
+                                                              callback=callback, error_callback=error_callback)
             return self.ASYNC_RESULT
 
         return run
@@ -478,41 +457,6 @@ class AsyncCompletion(orchestrator.Completion):
         # type: (Callable) -> None
         self._on_complete_ = inner
 
-
-def ssh_completion(cls=AsyncCompletion, **c_kwargs):
-    # type: (Type[orchestrator.Completion], Any) -> Callable
-    """
-    See ./HACKING.rst for a how-to
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args):
-
-            name = f.__name__
-            many = c_kwargs.get('many', False)
-
-            # Some weired logic to make calling functions with multiple arguments work.
-            if len(args) == 1:
-                [value] = args
-                if many and value and isinstance(value[0], tuple):
-                    return cls(on_complete=lambda x: f(*x), value=value, name=name, **c_kwargs)
-                else:
-                    return cls(on_complete=f, value=value, name=name, **c_kwargs)
-            else:
-                if many:
-                    self, value = args
-
-                    def call_self(inner_args):
-                        if not isinstance(inner_args, tuple):
-                            inner_args = (inner_args, )
-                        return f(self, *inner_args)
-
-                    return cls(on_complete=call_self, value=value, name=name, **c_kwargs)
-                else:
-                    return cls(on_complete=lambda x: f(*x), value=args, name=name, **c_kwargs)
-
-        return wrapper
-    return decorator
 
 def forall_hosts(f):
     @wraps(f)
@@ -543,32 +487,6 @@ def forall_hosts(f):
 
 
     return forall_hosts_wrapper
-
-
-def async_completion(f):
-    # type: (Callable) -> Callable[..., AsyncCompletion]
-    """
-    See ./HACKING.rst for a how-to
-
-    :param f: wrapped function
-    """
-    return ssh_completion()(f)
-
-
-def async_map_completion(f):
-    # type: (Callable) -> Callable[..., AsyncCompletion]
-    """
-    See ./HACKING.rst for a how-to
-
-    :param f: wrapped function
-
-    kind of similar to
-
-    >>> def sync_map(f):
-    ...     return lambda x: map(f, x)
-
-    """
-    return ssh_completion(many=True)(f)
 
 
 def trivial_completion(f):
