@@ -395,10 +395,22 @@ class ServiceSpec(object):
         :param json_spec: A valid dict with ServiceSpec
         """
 
-        service_type = json_spec.get('service_type', '')
+        c = json_spec.copy()
+
+        # kludge to make `from_json` compatible to `Orchestrator.describe_service`
+        # Open question: Remove `service_id` form to_json?
+        if c.get('service_name', ''):
+            service_type_id = c['service_name'].split('.', 1)
+
+            if not c.get('service_type', ''):
+                c['service_type'] = service_type_id[0]
+            if not c.get('service_id', '') and len(service_type_id) > 1:
+                c['service_id'] = service_type_id[1]
+            del c['service_name']
+
+        service_type = c.get('service_type', '')
         _cls = cls._cls(service_type)
 
-        c = json_spec.copy()
         if 'status' in c:
             del c['status']  # kludge to make us compatible to `ServiceDescription.to_json()`
 
@@ -430,6 +442,8 @@ class ServiceSpec(object):
                 val = val.to_json()
             if val:
                 c[key] = val
+
+        c['service_name'] = self.service_name()
         return c
 
     def validate(self):
