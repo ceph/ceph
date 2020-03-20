@@ -900,6 +900,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->store->apply_transaction(t);
   }
 
+  bool marked_osd_down = false;
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
     if (osdmap.is_out(o))
       continue;
@@ -909,6 +910,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       if (found == down_pending_out.end()) {
         dout(10) << " adding osd." << o << " to down_pending_out map" << dendl;
         down_pending_out[o] = ceph_clock_now();
+	marked_osd_down = true;
       }
     } else {
       if (found != down_pending_out.end()) {
@@ -934,7 +936,15 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     start_mapping();
   }
   if (osdmap.stretch_mode_enabled) {
+    dout(20) << "Stretch mode enabled in this map" << dendl;
     mon->maybe_engage_stretch_mode();
+    if (osdmap.degraded_stretch_mode) {
+      dout(20) << "Degraded stretch mode set in this map" << dendl;
+      mon->set_degraded_stretch_mode();
+    } else if (marked_osd_down) {
+      dout(20) << "Checking degraded stretch mode due to osd changes" << dendl;
+      mon->maybe_go_degraded_stretch_mode();
+    }
   }
 }
 
@@ -14265,8 +14275,8 @@ bool OSDMonitor::check_for_dead_crush_zones(const map<string,set<string>>& dead_
   return really_down;
 }
 
-void OSDMonitor::set_degraded_stretch_mode(const set<int>& dead_buckets,
-					   const set<string>& live_zones)
+void OSDMonitor::trigger_degraded_stretch_mode(const set<int>& dead_buckets,
+					       const set<string>& live_zones)
 {
   dout(20) << __func__ << dendl;
   // update the general OSDMap changes

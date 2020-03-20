@@ -826,8 +826,8 @@ public:
    * Set degraded mode in the OSDMap, adding the given dead buckets to the dead set
    * and using the live_zones (should presently be size 1)
    */
-  void set_degraded_stretch_mode(const set<int>& dead_buckets,
-				 const set<string>& live_zones);
+  void trigger_degraded_stretch_mode(const set<int>& dead_buckets,
+				     const set<string>& live_zones);
 };
 
 #endif
