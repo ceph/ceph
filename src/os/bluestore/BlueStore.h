@@ -2270,8 +2270,11 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db(bool read_only);
-  int _open_fm(KeyValueDB::Transaction t);
+  int _open_fm(KeyValueDB::Transaction t, bool read_only);
   void _close_fm();
+  int _write_out_fm_meta(uint64_t target_size,
+    bool update_root_size = false,
+    bluestore_bdev_label_t* res_label = nullptr);
   int _open_alloc();
   void _close_alloc();
   int _open_collections();
@@ -2430,7 +2433,7 @@ private:
 
   // -- ondisk version ---
 public:
-  const int32_t latest_ondisk_format = 3;        ///< our version
+  const int32_t latest_ondisk_format = 4;        ///< our version
   const int32_t min_readable_ondisk_format = 1;  ///< what we can read
   const int32_t min_compat_ondisk_format = 3;    ///< who can read us
 
