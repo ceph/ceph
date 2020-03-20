@@ -364,6 +364,7 @@ public:
 
   /* rgw::io::DecoratedRestfulClient. */
   size_t recv_body(char* buf, size_t max) override;
+  size_t recv_chunk_body(char* const buf, const size_t buf_max);
 
   /* rgw::auth::Completer. */
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s_rw) override;
