@@ -1349,6 +1349,13 @@ OPTION(rgw_s3_auth_use_ldap, OPT_BOOL)
 /* rgw_ldap_searchfilter  LDAP search filter */
 OPTION(rgw_ldap_searchfilter, OPT_STR)
 
+OPTION(rgw_s3_external_authentication_auth_endpoint, OPT_STR) // url for external authentication server to authenticate user
+OPTION(rgw_s3_external_authentication_secret_endpoint, OPT_STR) // url for external authentication server to get secret
+OPTION(rgw_s3_external_authentication_token, OPT_STR) // Bearer token for external authentication uses to authenticate client requests
+OPTION(rgw_s3_external_authentication_key_cache_size, OPT_INT)  // max number of entries in keystone token cache
+OPTION(rgw_s3_external_authentication_verify_ssl, OPT_BOOL) // should we try to verify external authentication ssl
+OPTION(rgw_s3_auth_use_external_authentication, OPT_BOOL)  // should we try to use external authentication for s3?
+
 OPTION(rgw_admin_entry, OPT_STR)  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL)
 OPTION(rgw_swift_token_expiration, OPT_INT) // time in seconds for swift token expiration

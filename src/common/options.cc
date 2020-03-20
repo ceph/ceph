@@ -5772,6 +5772,37 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
     .set_description("LDAP search filter."),
 
+    Option("rgw_s3_external_authentication_auth_endpoint", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("URL to external authentication server to get user info"),
+
+    Option("rgw_s3_external_authentication_secret_endpoint", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("URL to external authentication server to get user secret")
+    .set_long_description(
+    "To cache user access key and secret key we use to send GET request to this URL"
+    "in pattern of URL/?access_key_id=ACCESS_KEY_ID and need response in format of"
+    "JSON: {secret:SECRET_KEY}."),
+
+    Option("rgw_s3_external_authentication_token", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("The Bearer token external authentication uses to authenticate client requests."),
+
+    Option("rgw_s3_external_authentication_key_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
+    .set_description("external authentication access key cache size")
+    .set_long_description(
+        "Max number of access keys that will be cached. Access Key that is not cached "
+        "requires RGW to access the external authentication server when authenticating."),
+
+    Option("rgw_s3_external_authentication_verify_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Should RGW verify the external authentication server SSL certificate."),
+
+    Option("rgw_s3_auth_use_external_authentication", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Should external authentication be used to authenticate users."),
+
     Option("rgw_opa_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("URL to OPA server."),

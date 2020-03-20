@@ -426,6 +426,9 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   case TYPE_LDAP:
     user_source_type = "ldap";
     break;
+  case TYPE_EXTERNAL_AUTHENTICATION:
+    user_source_type = "external_authentication";
+    break;
   case TYPE_NONE:
     user_source_type = "none";
     break;

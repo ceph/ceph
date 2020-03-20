@@ -108,6 +108,10 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
   boost::optional <EC2Engine> keystone_engine;
   LDAPEngine ldap_engine;
 
+  using EAEngine = rgw::auth::s3::external_authentication::EAEngine;
+  boost::optional<EAEngine> external_authentication_engine;
+  using ea_secret_cache_t = rgw::auth::s3::external_authentication::SecretCache;
+
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
@@ -141,6 +145,15 @@ public:
 			      secret_cache_t::get_instance());
       add_engine(Control::SUFFICIENT, *keystone_engine);
 
+    }
+
+    if (cct->_conf->rgw_s3_auth_use_external_authentication &&
+        ! cct->_conf->rgw_s3_external_authentication_auth_endpoint.empty()
+        ! cct->_conf->rgw_s3_external_authentication_secret_endpoint.empty()) {
+          external_authentication_engine.emplace(cct, ver_abstractor,
+                                                  static_cast<rgw::auth::RemoteApplier::Factory*>(this),
+                                                  ea_secret_cache_t::get_instance());
+          add_engine(Control::SUFFICIENT, *external_authentication_engine);
     }
 
     if (ldap_engine.valid()) {
