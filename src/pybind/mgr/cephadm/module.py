@@ -997,38 +997,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self._save_upgrade_state()
         return
 
-    def _check_hosts(self):
-        self.log.debug('_check_hosts')
-        bad_hosts = []
-        hosts = self.inventory.keys()
-        for host in hosts:
-            if host not in self.inventory:
-                continue
-            self.log.debug(' checking %s' % host)
-            try:
-                out, err, code = self._run_cephadm(
-                    host, 'client', 'check-host', [],
-                    error_ok=True, no_fsid=True)
-                if code:
-                    self.log.debug(' host %s failed check' % host)
-                    if self.warn_on_failed_host_check:
-                        bad_hosts.append('host %s failed check: %s' % (host, err))
-                else:
-                    self.log.debug(' host %s ok' % host)
-            except Exception as e:
-                self.log.debug(' host %s failed check' % host)
-                bad_hosts.append('host %s failed check: %s' % (host, e))
-        if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
-            del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
-        if bad_hosts:
-            self.health_checks['CEPHADM_HOST_CHECK_FAILED'] = {
-                'severity': 'warning',
-                'summary': '%d hosts fail cephadm check' % len(bad_hosts),
-                'count': len(bad_hosts),
-                'detail': bad_hosts,
-            }
-        self.set_health_checks(self.health_checks)
-
     def _check_host(self, host):
         if host not in self.inventory:
             return
