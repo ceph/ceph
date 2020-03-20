@@ -1690,7 +1690,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 r.append(h)
         return r
 
-    @async_completion
+    @trivial_completion
     def add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -1714,7 +1714,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
 
-    @async_completion
+    @trivial_completion
     def remove_host(self, host):
         # type: (str) -> str
         """
@@ -1730,7 +1730,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Removed host %s' % host)
         return "Removed host '{}'".format(host)
 
-    @async_completion
+    @trivial_completion
     def update_host_addr(self, host, addr):
         if host not in self.inventory:
             raise OrchestratorError('host %s not registered' % host)
@@ -1760,7 +1760,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             ))
         return r
 
-    @async_completion
+    @trivial_completion
     def add_host_label(self, host, label):
         if host not in self.inventory:
             raise OrchestratorError('host %s does not exist' % host)
@@ -1773,7 +1773,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Added label %s to host %s' % (label, host))
         return 'Added label %s to host %s' % (label, host)
 
-    @async_completion
+    @trivial_completion
     def remove_host_label(self, host, label):
         if host not in self.inventory:
             raise OrchestratorError('host %s does not exist' % host)
@@ -1998,6 +1998,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
+    @trivial_completion
     def daemon_action(self, action, daemon_type, daemon_id):
         args = []
         for host, dm in self.cache.daemons.items():
