@@ -1104,7 +1104,7 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
   *okay = true;
 }
 
-void MonmapMonitor::set_degraded_stretch_mode(const set<string>& dead_mons)
+void MonmapMonitor::trigger_degraded_stretch_mode(const set<string>& dead_mons)
 {
   dout(20) << __func__ << dendl;
   pending_map.stretch_marked_down_mons.insert(dead_mons.begin(), dead_mons.end());

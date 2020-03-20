@@ -6454,6 +6454,11 @@ void Monitor::notify_new_monmap()
     dout(10) << __func__ << "removing rank " << rank << dendl;
     elector.notify_rank_removed(rank);
   }
+
+  if (monmap->stretch_mode_enabled) {
+    maybe_engage_stretch_mode();
+  }
+
   set<int> dl;
   for (auto name : monmap->disallowed_leaders) {
     dl.insert(monmap->get_rank(name));
@@ -6462,12 +6467,12 @@ void Monitor::notify_new_monmap()
     for (auto name : monmap->stretch_marked_down_mons) {
       dl.insert(monmap->get_rank(name));
     }
+    if (!monmap->stretch_marked_down_mons.empty()) {
+      set_degraded_stretch_mode();
+    }
     dl.insert(monmap->get_rank(monmap->tiebreaker_mon));
   }
   elector.set_disallowed_leaders(dl);
-  if (monmap->stretch_mode_enabled) {
-    maybe_engage_stretch_mode();
-  }
 }
 
 struct CMonEnableStretchMode : public Context {
@@ -6544,6 +6549,7 @@ void Monitor::maybe_go_degraded_stretch_mode()
 {
   dout(20) << __func__ << dendl;
   if (is_degraded_stretch_mode()) return;
+  if (!is_leader()) return;
   if (dead_mon_buckets.empty()) return;
   if (!osdmon()->is_readable()) {
     osdmon()->wait_for_readable_ctx(new CMonGoDegraded(this));
@@ -6568,12 +6574,12 @@ void Monitor::maybe_go_degraded_stretch_mode()
     if (!monmon()->is_writeable()) {
       monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
     }
-    set_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
+    trigger_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
   }
 }
 
-void Monitor::set_degraded_stretch_mode(const set<string>& dead_mons,
-					const set<int>& dead_buckets)
+void Monitor::trigger_degraded_stretch_mode(const set<string>& dead_mons,
+					    const set<int>& dead_buckets)
 {
   dout(20) << __func__ << dendl;
   ceph_assert(osdmon()->is_writeable());
@@ -6588,8 +6594,13 @@ void Monitor::set_degraded_stretch_mode(const set<string>& dead_mons,
   live_zones.erase(ci->second);
   ceph_assert(live_zones.size() == 1); // only support 2 zones right now
   
-  osdmon()->set_degraded_stretch_mode(dead_buckets, live_zones);
-  monmon()->set_degraded_stretch_mode(dead_mons);
+  osdmon()->trigger_degraded_stretch_mode(dead_buckets, live_zones);
+  monmon()->trigger_degraded_stretch_mode(dead_mons);
+  set_degraded_stretch_mode();
+}
+
+void Monitor::set_degraded_stretch_mode()
+{
   degraded_stretch_mode = true;
   recovering_stretch_mode = false;
 }
