@@ -462,17 +462,17 @@ class RGWSpec(ServiceSpec):
 
     """
     def __init__(self,
+                 service_type='rgw',
+                 service_id=None,  # type: Optional[str]
+                 placement=None,
                  rgw_realm=None,  # type: Optional[str]
                  rgw_zone=None,  # type: Optional[str]
                  subcluster=None,  # type: Optional[str]
-                 service_id=None,  # type: Optional[str]
-                 placement=None,
-                 service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
                  unmanaged=False,  # type: bool
                  ssl=False,   # type: bool
                  ):
-        assert service_type == 'rgw'
+        assert service_type == 'rgw', service_type
         if service_id:
             a = service_id.split('.', 2)
             rgw_realm = a[0]
