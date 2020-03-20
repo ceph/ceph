@@ -102,6 +102,7 @@ class TestCephadm(object):
                 {
                     'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
                     'service_id': 'name',
+                    'service_name': 'mds.name',
                     'service_type': 'mds',
                     'status': {'running': 1, 'size': 0},
                     'unmanaged': True
@@ -114,6 +115,7 @@ class TestCephadm(object):
                     'rgw_realm': 'r',
                     'rgw_zone': 'z',
                     'service_id': 'r.z',
+                    'service_name': 'rgw.r.z',
                     'service_type': 'rgw',
                     'status': {'running': 0, 'size': 1}
                 }
