@@ -1371,7 +1371,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: (Optional[str]) -> List[str]
         return list(self.inventory.filter_by_label(label))
 
-    @async_completion
+    @trivial_completion
     def add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -1395,7 +1395,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
 
-    @async_completion
+    @trivial_completion
     def remove_host(self, host):
         # type: (str) -> str
         """
@@ -1410,7 +1410,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Removed host %s' % host)
         return "Removed host '{}'".format(host)
 
-    @async_completion
+    @trivial_completion
     def update_host_addr(self, host, addr):
         self.inventory.set_addr(host, addr)
         self._reset_con(host)
@@ -1429,13 +1429,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         return list(self.inventory.all_specs())
 
-    @async_completion
+    @trivial_completion
     def add_host_label(self, host, label):
         self.inventory.add_label(host, label)
         self.log.info('Added label %s to host %s' % (label, host))
         return 'Added label %s to host %s' % (label, host)
 
-    @async_completion
+    @trivial_completion
     def remove_host_label(self, host, label):
         self.inventory.rm_label(host, label)
         self.log.info('Removed label %s to host %s' % (label, host))
@@ -1681,6 +1681,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
+    @trivial_completion
     def daemon_action(self, action, daemon_type, daemon_id):
         args = []
         for host, dm in self.cache.daemons.items():
@@ -2290,6 +2291,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_rgw(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_iscsi(self, spec):
         # type: (ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('iscsi', spec, self.iscsi_servcie.create, self.iscsi_servcie.config)
@@ -2298,6 +2300,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_iscsi(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_rbd_mirror(self, spec):
         return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.create)
 
@@ -2305,6 +2308,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_rbd_mirror(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_nfs(self, spec):
         return self._add_daemon('nfs', spec, self.nfs_service.create, self.nfs_service.config)
 
