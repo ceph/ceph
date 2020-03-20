@@ -459,7 +459,13 @@ public:
     // apply the tm_gmtoff manually below, since none of mktime,
     // gmtime, and localtime seem to do it.  zero it out here just in
     // case some other libc *does* apply it.  :(
-    auto gmtoff = tm.tm_gmtoff;
+
+    // get gmtoff .because tm.tm_gmtoff is always 0.
+    time_t timep;
+    struct tm tmptm;
+    time(&timep);
+    localtime_r(&timep, &tmptm);
+    auto gmtoff = tmptm.tm_gmtoff;
     tm.tm_gmtoff = 0;
 
     time_t t = internal_timegm(&tm);
