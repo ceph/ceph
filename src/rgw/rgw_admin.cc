@@ -2731,7 +2731,7 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
     return -EBUSY;
   }
 
-  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+  int num_source_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
   if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
     cerr << "num shards is less or equal to current shards count" << std::endl
@@ -3179,7 +3179,7 @@ int main(int argc, const char **argv)
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
   boost::optional<string> data_extra_pool;
-  RGWBucketIndexType placement_index_type = RGWBIType_Normal;
+  rgw::BucketIndexType placement_index_type = rgw::BucketIndexType::Normal;
   bool index_type_specified = false;
 
   boost::optional<std::string> compression_type;
@@ -3549,11 +3549,11 @@ int main(int argc, const char **argv)
       data_extra_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
       if (val == "normal") {
-        placement_index_type = RGWBIType_Normal;
+        placement_index_type = rgw::BucketIndexType::Normal;
       } else if (val == "indexless") {
-        placement_index_type = RGWBIType_Indexless;
+        placement_index_type = rgw::BucketIndexType::Indexless;
       } else {
-        placement_index_type = (RGWBucketIndexType)strict_strtol(val.c_str(), 10, &err);
+        placement_index_type = (rgw::BucketIndexType)strict_strtol(val.c_str(), 10, &err);
         if (!err.empty()) {
           cerr << "ERROR: failed to parse index type index: " << err << std::endl;
           return EINVAL;
@@ -6513,14 +6513,14 @@ next:
       max_entries = 1000;
     }
 
-    int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+    int max_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
     formatter->open_array_section("entries");
 
     int i = (specified_shard_id ? shard_id : 0);
     for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(store->getRados());
-      int shard_id = (bucket_info.num_shards > 0  ? i : -1);
+      int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
       int ret = bs.init(bucket, shard_id, nullptr /* no RGWBucketInfo */);
       marker.clear();
 
@@ -6580,11 +6580,11 @@ next:
       return EINVAL;
     }
 
-    int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+    int max_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
     for (int i = 0; i < max_shards; i++) {
       RGWRados::BucketShard bs(store->getRados());
-      int shard_id = (bucket_info.num_shards > 0  ? i : -1);
+      int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
       int ret = bs.init(bucket, shard_id, nullptr /* no RGWBucketInfo */);
       if (ret < 0) {
         cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
@@ -6881,7 +6881,7 @@ next:
       return ret;
     }
 
-    int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+    int num_source_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
     RGWReshard reshard(store);
     cls_rgw_reshard_entry entry;
