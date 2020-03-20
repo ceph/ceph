@@ -29,9 +29,9 @@ describe('MgrSummaryPipe', () => {
       standbys: []
     };
     const expected = [
-      { class: 'mgr-active-name', content: 'n/a active', titleText: '' },
+      { class: 'popover-info', content: 'n/a active', titleText: '' },
       { class: 'card-text-line-break', content: '', titleText: '' },
-      { class: '', content: '0 standby', titleText: '' }
+      { class: 'popover-info', content: '0 standby', titleText: '' }
     ];
 
     expect(pipe.transform(payload)).toEqual(expected);
@@ -39,13 +39,13 @@ describe('MgrSummaryPipe', () => {
 
   it('transforms with 1 active and 2 standbys', () => {
     const payload = {
-      active_name: 'a',
-      standbys: ['b', 'c']
+      active_name: 'x',
+      standbys: [{ name: 'y' }, { name: 'z' }]
     };
     const expected = [
-      { class: 'mgr-active-name', content: '1 active', titleText: 'active daemon: a' },
+      { class: 'popover-info', content: '1 active', titleText: 'active daemon: x' },
       { class: 'card-text-line-break', content: '', titleText: '' },
-      { class: '', content: '2 standby', titleText: '' }
+      { class: 'popover-info', content: '2 standby', titleText: 'standby daemons: y, z' }
     ];
 
     expect(pipe.transform(payload)).toEqual(expected);
