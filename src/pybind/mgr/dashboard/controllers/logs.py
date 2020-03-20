@@ -49,7 +49,7 @@ class Logs(BaseController):
 
     def load_buffer(self, buf, channel_name):
         lines = CephService.send_command(
-            'mon', 'log last', channel=channel_name, num=LOG_BUFFER_SIZE)
+            'mon', 'log last', channel=channel_name, num=LOG_BUFFER_SIZE, level='debug')
         for l in lines:
             buf.appendleft(l)
 
