@@ -335,6 +335,9 @@ class RookCluster(object):
                 'phase': d['status']['phase'],
                 'container_image_name': image_name,
                 'refreshed': refreshed,
+                # these may get set below...
+                'started': None,
+                'created': None,
             }
 
             # note: we want UTC but no tzinfo

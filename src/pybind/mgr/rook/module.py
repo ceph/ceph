@@ -320,7 +320,36 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 last_refresh=now,
             )
 
-        # FIXME: CephObjectstores
+        # CephObjectstores
+        all_zones = self.rook_cluster.rook_api_get(
+            "cephobjectstores/")
+        self.log.debug('CephObjectstores %s' % all_zones)
+        for zone in all_zones.get('items', []):
+            rgw_realm = zone['metadata']['name']
+            rgw_zone = rgw_realm
+            svc = 'rgw.' + rgw_realm + '.' + rgw_zone
+            if svc in spec:
+                continue
+            active = zone['spec']['gateway']['instances'];
+            if 'securePort' in zone['spec']['gateway']:
+                ssl = True
+                port = zone['spec']['gateway']['securePort']
+            else:
+                ssl = False
+                port = zone['spec']['gateway']['port'] or 80
+            spec[svc] = orchestrator.ServiceDescription(
+                service_name=svc,
+                spec=RGWSpec(
+                    rgw_realm=rgw_realm,
+                    rgw_zone=rgw_zone,
+                    ssl=ssl,
+                    rgw_frontend_port=port,
+                    placement=PlacementSpec(count=active),
+                ),
+                size=active,
+                container_image_name=image_name,
+                last_refresh=now,
+            )
 
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
