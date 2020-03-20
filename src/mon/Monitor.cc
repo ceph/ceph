@@ -6180,6 +6180,10 @@ int Monitor::handle_auth_request(
     dout(10) << __func__ << " haven't formed initial quorum, EBUSY" << dendl;
     return -EBUSY;
   }
+  if (!con->peer_is_mon() && !authmon()->is_readable()) {
+    dout(10) << __func__ << " authmon not readable, EBUSY" << dendl;
+    return -EBUSY;
+  }
 
   RefCountedPtr priv;
   MonSession *s;
@@ -6189,7 +6193,6 @@ int Monitor::handle_auth_request(
     if (con->get_priv()) {
       return -EACCES; // wtf
     }
-
     // handler?
     unique_ptr<AuthServiceHandler> auth_handler{get_auth_service_handler(
       auth_method, g_ceph_context, &key_server)};
