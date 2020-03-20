@@ -289,7 +289,7 @@ There are a few ways to create new OSDs:
   based on their properties, such device type (SSD or HDD), device
   model names, size, or the hosts on which the devices exist::
 
-    # ceph orch osd create -i spec.yml
+    # ceph orch apply osd -i spec.yml
 
 
 Deploy MDSs
