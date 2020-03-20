@@ -18,6 +18,12 @@
 #include "rgw_putobj.h"
 #include "rgw_op.h"
 
+enum SourceObjType {
+  OBJ_TYPE_UNINIT, /* Object type is not initialised yet */
+  OBJ_TYPE_ATOMIC,
+  OBJ_TYPE_MPU, /* Object at source was created through MPU */
+};
+
 class RGWPutObj_ETagVerifier : public rgw::putobj::Pipe
 {
 protected:

@@ -3253,7 +3253,8 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   void *progress_data;
   bufferlist extra_data_bl, manifest_bl;
   uint64_t extra_data_left{0};
-  bool need_to_process_attrs{true}, is_mpu_obj{false};
+  bool need_to_process_attrs{true};
+  SourceObjType obj_type{OBJ_TYPE_UNINIT};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
@@ -3347,10 +3348,11 @@ public:
 
       if (rule.part_size == 0) {
         /* Atomic object */
+        obj_type = OBJ_TYPE_ATOMIC;
         etag_verifier_atomic = boost::in_place(cct, filter);
         filter = &*etag_verifier_atomic;
       } else {
-        is_mpu_obj = true;
+        obj_type = OBJ_TYPE_MPU;
         etag_verifier_mpu = boost::in_place(cct, filter);
         uint64_t cur_part_ofs = UINT64_MAX;
 
@@ -3438,15 +3440,14 @@ public:
   }
 
   string get_calculated_etag() {
-    if (!cct->_conf->rgw_sync_obj_etag_verify)
-      return "";
-
-    if (is_mpu_obj) {
+    if (obj_type == OBJ_TYPE_ATOMIC) {
+      etag_verifier_atomic->calculate_etag();
+      return etag_verifier_atomic->get_calculated_etag();
+    } else if (obj_type == OBJ_TYPE_MPU) {
       etag_verifier_mpu->calculate_etag();
       return etag_verifier_mpu->get_calculated_etag();
     } else {
-      etag_verifier_atomic->calculate_etag();
-      return etag_verifier_atomic->get_calculated_etag();
+      return "";
     }
   }
 };
