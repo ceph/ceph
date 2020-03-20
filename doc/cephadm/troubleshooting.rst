@@ -11,8 +11,8 @@ different. Here are a few tools and commands to help investigating issues.
 Pausing or disabling cephadm
 ----------------------------
 
-If thigns go wrong and cephadm is doing something you don't like, you can
-pause most background activity with::
+If something goes wrong and cephadm is doing behaving in a way you do
+not like, you can pause most background activity with::
 
   ceph orch pause
 
@@ -30,7 +30,7 @@ did before.
 Checking cephadm logs
 ---------------------
 
-You can monitor the cephadm log in realtime with::
+You can monitor the cephadm log in real time with::
 
   ceph -W cephadm
 
