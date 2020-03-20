@@ -12,7 +12,7 @@ import pytest
 
 from tests import mock
 from .fixtures import cephadm_module, wait
-from ..module import trivial_completion, async_completion, async_map_completion
+from ..module import trivial_completion, async_completion, async_map_completion, forall_hosts
 
 
 class TestCompletion(object):
@@ -53,6 +53,11 @@ class TestCompletion(object):
         wait(cephadm_module, c)
         assert c.result == expected
 
+        @forall_hosts
+        def run_forall(*args):
+            return str(args)
+        assert run_forall(input) == expected
+
     def test_async_self(self, cephadm_module):
         class Run(object):
             def __init__(self):
@@ -83,9 +88,16 @@ class TestCompletion(object):
                 assert self.attr == 1
                 return str(args)
 
+            @forall_hosts
+            def run_forall(self, *args):
+                assert self.attr == 1
+                return str(args)
+
         c = Run().run(input)
         wait(cephadm_module, c)
         assert c.result == expected
+
+        assert Run().run_forall(input) == expected
 
     def test_then1(self, cephadm_module):
         @async_map_completion
