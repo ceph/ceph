@@ -94,6 +94,8 @@ RADOS
 * Objects can now be brought in sync during recovery by copying only
   the modified portion of the object, reducing tail latencies during
   recovery.
+* Ceph will allow recovery below *min_size* for Erasure coded pools,
+  wherever possible.
 * The PG autoscaler feature introduced in Nautilus is enabled for
   new pools by default, allowing new clusters to autotune *pg num*
   without any user intervention.  The default values for new pools
