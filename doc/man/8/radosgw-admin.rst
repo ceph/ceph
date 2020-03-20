@@ -108,6 +108,11 @@ which are as follows:
 :command:`bucket rewrite`
   Rewrite all objects in the specified bucket.
 
+:command:`bucket radoslist`
+  List the rados objects that contain the data for all objects is
+  the designated bucket, if --bucket=<bucket> is specified, or
+  otherwise all buckets.
+
 :command:`bucket reshard`
   Reshard a bucket.
 
@@ -399,13 +404,16 @@ which are as follows:
   Read data log status.
 
 :command:`orphans find`
-  Init and run search for leaked rados objects
+  Init and run search for leaked rados objects.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`orphans finish`
-  Clean up search for leaked rados objects
+  Clean up search for leaked rados objects.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`orphans list-jobs`
   List the current job-ids for the orphans search.
+  DEPRECATED. See the "rgw-orphan-list" tool.
 
 :command:`role create`
   create a new AWS role for use with STS.
