@@ -6189,7 +6189,9 @@ int Monitor::handle_auth_request(
     if (con->get_priv()) {
       return -EACCES; // wtf
     }
-
+    if (!authmon()->is_readable()) {
+      return -EAGAIN;
+    }
     // handler?
     unique_ptr<AuthServiceHandler> auth_handler{get_auth_service_handler(
       auth_method, g_ceph_context, &key_server)};
