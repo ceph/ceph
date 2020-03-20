@@ -1,50 +1,61 @@
 <div *ngIf="isLoginActive">
-  <h1 i18n="The welcome message on the login page">Welcome to Ceph!</h1>
   <form name="loginForm"
         (ngSubmit)="login()"
         #loginForm="ngForm"
         novalidate>
 
     <!-- Username -->
-    <div class="form-group has-feedback">
-      <input name="username"
+    <div class="form-group has-feedback d-flex flex-column py-3">
+      <label class="placeholder pl-4"
+             for="username"
+             i18n>Username</label>
+      <input id="username"
+             name="username"
              [(ngModel)]="model.username"
              #username="ngModel"
              type="text"
-             placeholder="Enter your username..."
-             class="form-control"
+             [attr.aria-invalid]="username.invalid"
+             aria-labelledby="username"
+             class="form-control pl-4"
              required
              autofocus>
-      <div class="invalid-feedback"
+      <div class="invalid-feedback pl-4"
            *ngIf="(loginForm.submitted || username.dirty) && username.invalid"
            i18n>Username is required</div>
     </div>
 
     <!-- Password -->
-    <div class="form-group has-feedback">
-      <div class="input-group">
-        <input id="password"
-               name="password"
-               [(ngModel)]="model.password"
-               #password="ngModel"
-               type="password"
-               placeholder="Enter your password..."
-               class="form-control"
-               required>
-        <span class="input-group-append">
+    <div class="form-group has-feedback"
+         id="password-div">
+      <div class="input-group d-flex flex-nowrap">
+        <div class="d-flex flex-column flex-grow-1 py-3">
+          <label class="placeholder pl-4"
+                 for="password"
+                 i18n>Password</label>
+          <input id="password"
+                 name="password"
+                 [(ngModel)]="model.password"
+                 #password="ngModel"
+                 type="password"
+                 [attr.aria-invalid]="password.invalid"
+                 aria-labelledby="password"
+                 class="form-control pl-4"
+                 required>
+          <div class="invalid-feedback pl-4"
+               *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
+               i18n>Password is required</div>
+        </div>
+        <span class="form-group-append">
           <button type="button"
-                  class="btn btn-outline-light btn-password"
+                  class="btn btn-outline-light btn-password h-100 px-4"
                   cdPasswordButton="password">
           </button>
         </span>
       </div>
-      <div class="invalid-feedback"
-           *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
-           i18n>Password is required</div>
     </div>
 
     <input type="submit"
-           class="btn btn-secondary btn-block"
+           class="btn btn-secondary px-5 py-2"
            [disabled]="loginForm.invalid"
            value="Login"
            i18n-value>
