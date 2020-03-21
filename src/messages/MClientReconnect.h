@@ -26,8 +26,8 @@ private:
   static constexpr int COMPAT_VERSION = 4;
 
 public:
-  map<inodeno_t, cap_reconnect_t> caps; // only head inodes
-  vector<snaprealm_reconnect_t> realms;
+  std::map<inodeno_t, cap_reconnect_t> caps; // only head inodes
+  std::vector<snaprealm_reconnect_t> realms;
   bool more = false;
 
 private:
@@ -42,7 +42,7 @@ private:
   void calc_item_size() {
     using ceph::encode;
     {
-      bufferlist bl;
+      ceph::buffer::list bl;
       inodeno_t ino;
       cap_reconnect_t cr;
       encode(ino, bl);
@@ -50,7 +50,7 @@ private:
       cap_size = bl.length();
     }
     {
-      bufferlist bl;
+      ceph::buffer::list bl;
       snaprealm_reconnect_t sr;
       encode(sr, bl);
       realm_size = bl.length();
@@ -59,7 +59,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "client_reconnect"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_reconnect("
 	<< caps.size() << " caps " << realms.size() << " realms )";
   }
@@ -77,8 +77,8 @@ public:
   void mark_more() { more = true; }
   bool has_more() const { return more; }
 
-  void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const string& path,
-	       int wanted, int issued, inodeno_t sr, snapid_t sf, bufferlist& lb)
+  void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const std::string& path,
+	       int wanted, int issued, inodeno_t sr, snapid_t sf, ceph::buffer::list& lb)
   {
     caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr, sf, lb);
     if (!cap_size)
@@ -125,7 +125,7 @@ public:
 	  p.second.encode_old(data);
 	}
       } else {
-	map<inodeno_t, old_cap_reconnect_t> ocaps;
+	std::map<inodeno_t, old_cap_reconnect_t> ocaps;
 	for (auto& p : caps) {
 	  ocaps[p.first] = p.second;
 	encode(ocaps, data);
@@ -136,6 +136,7 @@ public:
     }
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = data.cbegin();
     if (header.version >= 4) {
       decode(caps, p);
@@ -155,7 +156,7 @@ public:
 	  caps[ino].decode_old(p);
 	}
       } else {
-	map<inodeno_t, old_cap_reconnect_t> ocaps;
+	std::map<inodeno_t, old_cap_reconnect_t> ocaps;
 	decode(ocaps, p);
 	for (auto &q : ocaps)
 	  caps[q.first] = q.second;

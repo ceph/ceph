@@ -112,21 +112,21 @@ public:
   MDSCacheObjectInfo object_info;
   
   // for authpins
-  vector<MDSCacheObjectInfo> authpins;
+  std::vector<MDSCacheObjectInfo> authpins;
 
  public:
   // for rename prep
   filepath srcdnpath;
   filepath destdnpath;
-  set<mds_rank_t> witnesses;
-  bufferlist inode_export;
+  std::set<mds_rank_t> witnesses;
+  ceph::buffer::list inode_export;
   version_t inode_export_v;
   mds_rank_t srcdn_auth;
   utime_t op_stamp;
 
-  mutable bufferlist straybl;  // stray dir + dentry
-  bufferlist srci_snapbl;
-  bufferlist desti_snapbl;
+  mutable ceph::buffer::list straybl;  // stray dir + dentry
+  ceph::buffer::list srci_snapbl;
+  ceph::buffer::list desti_snapbl;
 
 public:
   metareqid_t get_reqid() const { return reqid; }
@@ -140,8 +140,8 @@ public:
   const MDSCacheObjectInfo &get_authpin_freeze() const { return object_info; }
   MDSCacheObjectInfo &get_authpin_freeze() { return object_info; }
 
-  const vector<MDSCacheObjectInfo>& get_authpins() const { return authpins; }
-  vector<MDSCacheObjectInfo>& get_authpins() { return authpins; }
+  const std::vector<MDSCacheObjectInfo>& get_authpins() const { return authpins; }
+  std::vector<MDSCacheObjectInfo>& get_authpins() { return authpins; }
   void mark_nonblocking() { flags |= FLAG_NONBLOCKING; }
   bool is_nonblocking() const { return (flags & FLAG_NONBLOCKING); }
   void mark_error_wouldblock() { flags |= FLAG_WOULDBLOCK; }
@@ -161,8 +161,8 @@ public:
   void mark_req_blocked() { flags |= FLAG_REQBLOCKED; }
 
   void set_lock_type(int t) { lock_type = t; }
-  const bufferlist& get_lock_data() const { return inode_export; }
-  bufferlist& get_lock_data() { return inode_export; }
+  const ceph::buffer::list& get_lock_data() const { return inode_export; }
+  ceph::buffer::list& get_lock_data() { return inode_export; }
 
 protected:
   MMDSSlaveRequest() : SafeMessage{MSG_MDS_SLAVE_REQUEST, HEAD_VERSION, COMPAT_VERSION} { }
@@ -194,6 +194,7 @@ public:
     encode(desti_snapbl, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(reqid, p);
     decode(attempt, p);
@@ -215,7 +216,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "slave_request"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "slave_request(" << reqid
 	<< "." << attempt
 	<< " " << get_opname(op) 

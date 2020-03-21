@@ -40,12 +40,13 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "fsmap.user"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "fsmap.user(e " << epoch << ")";
   }
 
   // marshalling
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(fsmap, p);

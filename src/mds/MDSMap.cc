@@ -12,13 +12,27 @@
  * 
  */
 
+#include <sstream>
+
 #include "common/debug.h"
 #include "mon/health_check.h"
 
 #include "MDSMap.h"
 
-#include <sstream>
+using std::dec;
+using std::hex;
+using std::list;
+using std::make_pair;
+using std::map;
+using std::multimap;
+using std::ostream;
+using std::pair;
+using std::string;
+using std::set;
 using std::stringstream;
+
+using ceph::bufferlist;
+using ceph::Formatter;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
@@ -440,7 +454,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
     health_check_t& fscheck = checks->get_or_add(
       "FS_DEGRADED", HEALTH_WARN,
       "%num% filesystem%plurals% %isorare% degraded", 1);
-    ostringstream ss;
+    std::ostringstream ss;
     ss << "fs " << fs_name << " is degraded";
     fscheck.detail.push_back(ss.str());
 

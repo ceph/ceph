@@ -36,6 +36,11 @@
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
 
+using std::cerr;
+using std::make_pair;
+using std::pair;
+using std::string;
+
 using namespace ceph;
 
 #define CEPH_BUFFER_ALLOC_UNIT  4096u

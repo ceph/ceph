@@ -44,11 +44,11 @@ void QueueStrategy::ds_dispatch(Message *m) {
 void QueueStrategy::entry(QSThread *thrd)
 {
   for (;;) {
-    ref_t<Message> m;
+    ceph::ref_t<Message> m;
     std::unique_lock l{lock};
     for (;;) {
       if (! mqueue.empty()) {
-	m = ref_t<Message>(&mqueue.front(), false);
+	m = ceph::ref_t<Message>(&mqueue.front(), false);
 	mqueue.pop_front();
 	break;
       }
@@ -98,7 +98,7 @@ void QueueStrategy::start()
   std::lock_guard l{lock};
   threads.reserve(n_threads);
   for (int ix = 0; ix < n_threads; ++ix) {
-    string thread_name = "ms_qs_";
+    std::string thread_name = "ms_qs_";
     thread_name.append(std::to_string(ix));
     auto thrd = std::make_unique<QSThread>(this);
     thrd->create(thread_name.c_str());

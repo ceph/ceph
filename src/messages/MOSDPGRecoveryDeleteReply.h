@@ -15,7 +15,7 @@ public:
   spg_t pgid;
   epoch_t map_epoch = 0;
   epoch_t min_epoch = 0;
-  list<pair<hobject_t, eversion_t> > objects;
+  std::list<std::pair<hobject_t, eversion_t> > objects;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -32,6 +32,7 @@ public:
   {}
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
@@ -51,7 +52,7 @@ public:
     encode(from, payload);
   }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "MOSDPGRecoveryDeleteReply(" << pgid
         << " e" << map_epoch << "," << min_epoch << " " << objects << ")";
   }

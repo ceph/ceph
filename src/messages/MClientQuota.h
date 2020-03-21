@@ -18,7 +18,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "client_quota"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_quota(";
     out << " [" << ino << "] ";
     out << rstat << " ";
@@ -36,6 +36,7 @@ public:
     encode(quota, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(ino, p);
     decode(rstat.rctime, p);

@@ -76,7 +76,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "replica scrub"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "replica_scrub(pg: "	<< pgid
 	<< ",from:" << scrub_from
 	<< ",to:" << scrub_to
@@ -109,6 +109,7 @@ public:
     encode(high_priority, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(scrub_from, p);

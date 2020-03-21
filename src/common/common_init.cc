@@ -71,7 +71,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 #endif	// #ifndef WITH_SEASTAR
 
 void complain_about_parse_error(CephContext *cct,
-				const string& parse_error)
+				const std::string& parse_error)
 {
   if (parse_error.empty())
     return;

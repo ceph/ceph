@@ -47,6 +47,7 @@ private:
 public:
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     decode(session_mon_tid, p);
     entity_inst_t dest_unused;
     decode(dest_unused, p);
@@ -69,7 +70,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "route"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     if (msg)
       o << "route(" << *msg;
     else

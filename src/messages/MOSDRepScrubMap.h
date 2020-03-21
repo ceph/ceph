@@ -29,7 +29,7 @@ public:
   spg_t pgid;            // primary spg_t
   epoch_t map_epoch = 0;
   pg_shard_t from;   // whose scrubmap this is
-  bufferlist scrub_map_bl;
+  ceph::buffer::list scrub_map_bl;
   bool preempted = false;
 
   epoch_t get_map_epoch() const override {
@@ -53,7 +53,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "rep_scrubmap"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "rep_scrubmap(" << pgid << " e" << map_epoch
 	<< " from shard " << from
 	<< (preempted ? " PREEMPTED":"") << ")";
@@ -67,6 +67,7 @@ public:
     encode(preempted, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);

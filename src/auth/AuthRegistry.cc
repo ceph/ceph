@@ -16,6 +16,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "AuthRegistry(" << this << ") "
 
+using std::string;
+
 AuthRegistry::AuthRegistry(CephContext *cct)
   : cct(cct)
 {

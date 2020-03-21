@@ -18,6 +18,12 @@
 // rbd feature validation
 #include "librbd/Features.h"
 
+using std::ostream;
+using std::ostringstream;
+
+using ceph::Formatter;
+using ceph::parse_timespan;
+
 namespace {
 class printer : public boost::static_visitor<> {
   ostream& out;
@@ -198,7 +204,7 @@ int Option::parse_value(
   } else if (type == Option::TYPE_SECS) {
     try {
       *out = parse_timespan(val);
-    } catch (const invalid_argument& e) {
+    } catch (const std::invalid_argument& e) {
       *error_message = e.what();
       return -EINVAL;
     }

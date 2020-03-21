@@ -24,15 +24,16 @@
  */
 class MMgrDigest : public Message {
 public:
-  bufferlist mon_status_json;
-  bufferlist health_json;
+  ceph::buffer::list mon_status_json;
+  ceph::buffer::list health_json;
 
   std::string_view get_type_name() const override { return "mgrdigest"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_type_name();
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(mon_status_json, p);
     decode(health_json, p);

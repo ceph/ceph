@@ -142,7 +142,7 @@ public:
       state = LOCK_LOCK;
   }
 
-  void encode_state_for_rejoin(bufferlist& bl, int rep) {
+  void encode_state_for_rejoin(ceph::buffer::list& bl, int rep) {
     __s16 s = get_replica_state();
     if (is_gathering(rep)) {
       // the recovering mds may hold rejoined wrlocks
@@ -171,7 +171,7 @@ public:
     encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
     SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();
@@ -190,7 +190,7 @@ public:
     return SimpleLock::remove_replica(from);
   }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "(";
     _print(out);
     if (is_dirty())

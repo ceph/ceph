@@ -28,7 +28,7 @@ public:
 
   spg_t pgid;            ///< target spg_t
   epoch_t map_epoch = 0;
-  list<pair<hobject_t,eversion_t>> ls;    ///< objects to remove
+  std::list<std::pair<hobject_t,eversion_t>> ls;    ///< objects to remove
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -53,7 +53,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "backfill_remove"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "backfill_remove(" << pgid << " e" << map_epoch
 	<< " " << ls << ")";
   }
@@ -65,6 +65,7 @@ public:
     encode(ls, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);

@@ -76,6 +76,7 @@ public:
 
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     decode(epoch, p);
     if (header.version == 6) {
       // decode legacy vector<pair<pg_notify_t,PastIntervals>>
@@ -90,7 +91,7 @@ public:
     }
     decode(pg_list, p);
   }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_notify(";
     for (auto i = pg_list.begin();
          i != pg_list.end();

@@ -13,9 +13,20 @@
 
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
 #define BUFFER_MEMORY_WEIGHT CEPH_PAGE_SHIFT  // memory usage of BufferHead, count in (1<<n)
+				 /// while holding the lock
 
 using std::chrono::seconds;
-				 /// while holding the lock
+using std::list;
+using std::map;
+using std::make_pair;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
+using namespace std::literals;
 
 /*** ObjectCacher::BufferHead ***/
 
@@ -133,13 +144,11 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
 
   // move read waiters
   if (!left->waitfor_read.empty()) {
-    map<loff_t, list<Context*> >::iterator start_remove
-      = left->waitfor_read.begin();
+    auto start_remove = left->waitfor_read.begin();
     while (start_remove != left->waitfor_read.end() &&
 	   start_remove->first < right->start())
       ++start_remove;
-    for (map<loff_t, list<Context*> >::iterator p = start_remove;
-	 p != left->waitfor_read.end(); ++p) {
+    for (auto p = start_remove; p != left->waitfor_read.end(); ++p) {
       ldout(oc->cct, 20) << "split  moving waiters at byte " << p->first
 			 << " to right bh" << dendl;
       right->waitfor_read[p->first].swap( p->second );
@@ -181,7 +190,7 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   left->set_nocache(right->get_nocache() ? left->get_nocache() : false);
 
   // waiters
-  for (map<loff_t, list<Context*> >::iterator p = right->waitfor_read.begin();
+  for (auto p = right->waitfor_read.begin();
        p != right->waitfor_read.end();
        ++p)
     left->waitfor_read[p->first].splice(left->waitfor_read[p->first].begin(),
@@ -214,7 +223,7 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
     return;
 
   // to the left?
-  map<loff_t,BufferHead*>::iterator p = data.find(bh->start());
+  auto p = data.find(bh->start());
   ceph_assert(p->second == bh);
   if (p != data.begin()) {
     --p;
@@ -252,7 +261,7 @@ void ObjectCacher::Object::maybe_rebuild_buffer(BufferHead *bh)
 bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
 {
   ceph_assert(ceph_mutex_is_locked(oc->lock));
-  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(cur);
+  auto p = data_lower_bound(cur);
   while (left > 0) {
     if (p == data.end())
       return false;
@@ -282,8 +291,8 @@ bool ObjectCacher::Object::include_all_cached_data(loff_t off, loff_t len)
   ceph_assert(ceph_mutex_is_locked(oc->lock));
   if (data.empty())
       return true;
-  map<loff_t, BufferHead*>::iterator first = data.begin();
-  map<loff_t, BufferHead*>::reverse_iterator last = data.rbegin();
+  auto first = data.begin();
+  auto last = data.rbegin();
   if (first->second->start() >= off && last->second->end() <= (off + len))
     return true;
   else
@@ -307,7 +316,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
   loff_t cur = ex.offset;
   loff_t left = ex.length;
 
-  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(ex.offset);
+  auto p = data_lower_bound(ex.offset);
   while (left > 0) {
     // at end?
     if (p == data.end()) {
@@ -384,8 +393,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
 void ObjectCacher::Object::audit_buffers()
 {
   loff_t offset = 0;
-  for (map<loff_t, BufferHead*>::const_iterator it = data.begin();
-       it != data.end(); ++it) {
+  for (auto it = data.begin(); it != data.end(); ++it) {
     if (it->first != it->second->start()) {
       lderr(oc->cct) << "AUDIT FAILURE: map position " << it->first
 		     << " does not match bh start position: "
@@ -399,8 +407,7 @@ void ObjectCacher::Object::audit_buffers()
       ceph_assert(it->first >= offset);
     }
     BufferHead *bh = it->second;
-    map<loff_t, list<Context*> >::const_iterator w_it;
-    for (w_it = bh->waitfor_read.begin();
+    for (auto w_it = bh->waitfor_read.begin();
 	 w_it != bh->waitfor_read.end(); ++w_it) {
       if (w_it->first < bh->start() ||
 	    w_it->first >= bh->start() + bh->length()) {
@@ -433,7 +440,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
   loff_t cur = ex.offset;
   loff_t left = ex.length;
 
-  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(ex.offset);
+  auto p = data_lower_bound(ex.offset);
   while (left > 0) {
     loff_t max = left;
 
@@ -596,7 +603,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
     complete = false;
   }
 
-  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(off);
+  auto p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
     if (bh->start() >= off + len)
@@ -680,10 +687,7 @@ ObjectCacher::~ObjectCacher()
   finisher.stop();
   perf_stop();
   // we should be empty.
-  for (vector<ceph::unordered_map<sobject_t, Object *> >::iterator i
-	 = objects.begin();
-       i != objects.end();
-       ++i)
+  for (auto i = objects.begin(); i != objects.end(); ++i)
     ceph_assert(i->empty());
   ceph_assert(bh_lru_rest.lru_get_size() == 0);
   ceph_assert(bh_lru_dirty.lru_get_size() == 0);
@@ -844,11 +848,9 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       //   read 1~1 -> immediate ENOENT
       //   reply to first 1~1 -> ooo ENOENT
       bool allzero = true;
-      for (map<loff_t, BufferHead*>::iterator p = ob->data.begin();
-	   p != ob->data.end(); ++p) {
+      for (auto p = ob->data.begin(); p != ob->data.end(); ++p) {
 	BufferHead *bh = p->second;
-	for (map<loff_t, list<Context*> >::iterator p
-	       = bh->waitfor_read.begin();
+	for (auto p = bh->waitfor_read.begin();
 	     p != bh->waitfor_read.end();
 	     ++p)
 	  ls.splice(ls.end(), p->second);
@@ -882,7 +884,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	  ldout(cct, 10)
 	    << "bh_read_finish ENOENT and allzero, getting rid of "
 	    << "bhs for " << *ob << dendl;
-	  map<loff_t, BufferHead*>::iterator p = ob->data.begin();
+	  auto p = ob->data.begin();
 	  while (p != ob->data.end()) {
 	    BufferHead *bh = p->second;
 	    // current iterator will be invalidated by bh_remove()
@@ -897,7 +899,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
     // apply to bh's!
     loff_t opos = start;
     while (true) {
-      map<loff_t, BufferHead*>::const_iterator p = ob->data_lower_bound(opos);
+      auto p = ob->data_lower_bound(opos);
       if (p == ob->data.end())
 	break;
       if (opos >= start+(loff_t)length) {
@@ -911,8 +913,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
       ldout(cct, 20) << "checking bh " << *bh << dendl;
 
       // finishers?
-      for (map<loff_t, list<Context*> >::iterator it
-	     = bh->waitfor_read.begin();
+      for (auto it = bh->waitfor_read.begin();
 	   it != bh->waitfor_read.end();
 	   ++it)
 	ls.splice(ls.end(), it->second);

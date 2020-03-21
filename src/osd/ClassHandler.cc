@@ -25,6 +25,12 @@
 #define CLS_PREFIX "libcls_"
 #define CLS_SUFFIX ".so"
 
+using std::map;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+
 
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
@@ -319,7 +325,7 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
       ret = method(ctx, indata.c_str(), indata.length(), &out, &olen);
       if (out) {
         // assume *out was allocated via cls_alloc (which calls malloc!)
-        buffer::ptr bp = buffer::claim_malloc(olen, out);
+	ceph::buffer::ptr bp = ceph::buffer::claim_malloc(olen, out);
         outdata.push_back(bp);
       }
     } else {

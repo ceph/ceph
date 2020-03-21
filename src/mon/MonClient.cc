@@ -542,7 +542,7 @@ int MonClient::authenticate(double timeout)
   while (!active_con && authenticate_err >= 0) {
     if (timeout > 0.0) {
       auto r = auth_cond.wait_until(lock, until);
-      if (r == cv_status::timeout && !active_con) {
+      if (r == std::cv_status::timeout && !active_con) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -ETIMEDOUT;
       }

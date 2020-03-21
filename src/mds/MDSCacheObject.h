@@ -27,6 +27,10 @@ class SimpleLock;
 class MDSCacheObject;
 class MDSContext;
 
+namespace ceph {
+class Formatter;
+}
+
 struct ClientLease {
   ClientLease(client_t c, MDSCacheObject *p) :
     client(c), parent(p),
@@ -191,8 +195,8 @@ class MDSCacheObject {
   }
 #endif
 
-  void dump_states(Formatter *f) const;
-  void dump(Formatter *f) const;
+  void dump_states(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
   // auth pins
   enum {
@@ -263,9 +267,9 @@ class MDSCacheObject {
       seq = ++last_wait_seq;
       mask &= ~WAIT_ORDERED;
     }
-    waiting.insert(pair<uint64_t, pair<uint64_t, MDSContext*> >(
+    waiting.insert(std::pair<uint64_t, std::pair<uint64_t, MDSContext*> >(
 			    mask,
-			    pair<uint64_t, MDSContext*>(seq, c)));
+			    std::pair<uint64_t, MDSContext*>(seq, c)));
 //    pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this)) 
 //			       << "add_waiter " << hex << mask << dec << " " << c
 //			       << " on " << *this
@@ -280,8 +284,8 @@ class MDSCacheObject {
   // noop unless overloaded.
   virtual SimpleLock* get_lock(int type) { ceph_abort(); return 0; }
   virtual void set_object_info(MDSCacheObjectInfo &info) { ceph_abort(); }
-  virtual void encode_lock_state(int type, bufferlist& bl) { ceph_abort(); }
-  virtual void decode_lock_state(int type, const bufferlist& bl) { ceph_abort(); }
+  virtual void encode_lock_state(int type, ceph::buffer::list& bl) { ceph_abort(); }
+  virtual void decode_lock_state(int type, const ceph::buffer::list& bl) { ceph_abort(); }
   virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { ceph_abort(); }
   virtual void add_lock_waiter(int type, uint64_t mask, MDSContext *c) { ceph_abort(); }
   virtual bool is_lock_waiting(int type, uint64_t mask) { ceph_abort(); return false; }

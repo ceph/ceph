@@ -288,9 +288,9 @@ void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
   }
 }
 
-void Message::dump(Formatter *f) const
+void Message::dump(ceph::Formatter *f) const
 {
-  stringstream ss;
+  std::stringstream ss;
   print(ss);
   f->dump_string("summary", ss.str());
 }
@@ -347,11 +347,13 @@ Message *decode_message(CephContext *cct,
   }
 
   // make message
-  ref_t<Message> m;
+  ceph::ref_t<Message> m;
   int type = header.type;
   switch (type) {
 
     // -- with payload --
+
+    using ceph::make_message;
 
   case MSG_PGSTATS:
     m = make_message<MPGStats>();
@@ -929,7 +931,7 @@ Message *decode_message(CephContext *cct,
   try {
     m->decode_payload();
   }
-  catch (const buffer::error &e) {
+  catch (const ceph::buffer::error &e) {
     if (cct) {
       lderr(cct) << "failed to decode message of type " << type
 		 << " v" << header.version
@@ -948,7 +950,7 @@ Message *decode_message(CephContext *cct,
   return m.detach();
 }
 
-void Message::encode_trace(bufferlist &bl, uint64_t features) const
+void Message::encode_trace(ceph::bufferlist &bl, uint64_t features) const
 {
   using ceph::encode;
   auto p = trace.get_info();
@@ -959,7 +961,7 @@ void Message::encode_trace(bufferlist &bl, uint64_t features) const
   encode(*p, bl);
 }
 
-void Message::decode_trace(bufferlist::const_iterator &p, bool create)
+void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 {
   blkin_trace_info info = {};
   decode(info, p);
@@ -992,7 +994,7 @@ void Message::decode_trace(bufferlist::const_iterator &p, bool create)
 // problems, we currently always encode and decode using the old footer format that doesn't
 // allow for message authentication.  Eventually we should fix that.  PLR
 
-void encode_message(Message *msg, uint64_t features, bufferlist& payload)
+void encode_message(Message *msg, uint64_t features, ceph::bufferlist& payload)
 {
   ceph_msg_footer_old old_footer;
   msg->encode(features, MSG_CRC_ALL);
@@ -1006,6 +1008,7 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
   old_footer.flags = footer.flags;   
   encode(old_footer, payload);
 
+  using ceph::encode;
   encode(msg->get_payload(), payload);
   encode(msg->get_middle(), payload);
   encode(msg->get_data(), payload);
@@ -1016,12 +1019,12 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
 // We've slipped in a 0 signature at this point, so any signature checking after this will
 // fail.  PLR
 
-Message *decode_message(CephContext *cct, int crcflags, bufferlist::const_iterator& p)
+Message *decode_message(CephContext *cct, int crcflags, ceph::bufferlist::const_iterator& p)
 {
   ceph_msg_header h;
   ceph_msg_footer_old fo;
   ceph_msg_footer f;
-  bufferlist fr, mi, da;
+  ceph::bufferlist fr, mi, da;
   decode(h, p);
   decode(fo, p);
   f.front_crc = fo.front_crc;
@@ -1029,6 +1032,7 @@ Message *decode_message(CephContext *cct, int crcflags, bufferlist::const_iterat
   f.data_crc = fo.data_crc;
   f.flags = fo.flags;
   f.sig = 0;
+  using ceph::decode;
   decode(fr, p);
   decode(mi, p);
   decode(da, p);

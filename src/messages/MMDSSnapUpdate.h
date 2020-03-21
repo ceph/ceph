@@ -26,7 +26,7 @@ public:
   inodeno_t get_ino() const { return ino; }
   int get_snap_op() const { return snap_op; }
 
-  bufferlist snap_blob;
+  ceph::buffer::list snap_blob;
 
 protected:
   MMDSSnapUpdate() : SafeMessage{MSG_MDS_SNAPUPDATE} {}
@@ -38,7 +38,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "snap_update"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "snap_update(" << ino << " table_tid " << get_tid() << ")";
   }
 

@@ -4,14 +4,12 @@
 
 #define dout_subsys ceph_subsys_auth
 
-
-
 bool CephxAuthorizeHandler::verify_authorizer(
   CephContext *cct,
   const KeyStore& keys,
-  const bufferlist& authorizer_data,
+  const ceph::bufferlist& authorizer_data,
   size_t connection_secret_required_len,
-  bufferlist *authorizer_reply,
+  ceph::bufferlist *authorizer_reply,
   EntityName *entity_name,
   uint64_t *global_id,
   AuthCapsInfo *caps_info,
