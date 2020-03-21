@@ -20,7 +20,7 @@
 #include "SnappyCompressor.h"
 // -----------------------------------------------------------------------------
 
-class CompressionPluginSnappy : public CompressionPlugin {
+class CompressionPluginSnappy : public ceph::CompressionPlugin {
 
 public:
 

@@ -21,7 +21,7 @@
 #include "ZstdCompressor.h"
 // -----------------------------------------------------------------------------
 
-class CompressionPluginZstd : public CompressionPlugin {
+class CompressionPluginZstd : public ceph::CompressionPlugin {
 
 public:
 
