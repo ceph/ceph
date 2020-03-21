@@ -29,6 +29,8 @@
 
 #include "include/compat.h"
 
+using std::string;
+
 //
 // derr can be used for functions exclusively called from pidfile_write
 //
