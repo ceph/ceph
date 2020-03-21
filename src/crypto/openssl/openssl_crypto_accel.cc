@@ -23,7 +23,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-static ostream&
+static std::ostream&
 _prefix(std::ostream* _dout)
 {
   return *_dout << "OpensslCryptoAccel: ";
