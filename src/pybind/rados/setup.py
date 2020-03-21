@@ -64,17 +64,20 @@ __version__ = '2.0.0'
 def get_python_flags(libs):
     py_libs = sum((libs.split() for libs in
                    distutils.sysconfig.get_config_vars('LIBS', 'SYSLIBS')), [])
+    ldflags = list(filterfalse(lambda lib: lib.startswith('-l'), py_libs))
+    py_libs = [lib.replace('-l', '') for lib in
+               filter(lambda lib: lib.startswith('-l'), py_libs)]
     compiler = new_compiler()
     distutils.sysconfig.customize_compiler(compiler)
     return dict(
         include_dirs=[distutils.sysconfig.get_python_inc()],
         library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
-        libraries=libs + [lib.replace('-l', '') for lib in py_libs],
+        libraries=libs + py_libs,
         extra_compile_args=filter_unsupported_flags(
             compiler.compiler[0],
             distutils.sysconfig.get_config_var('CFLAGS').split()),
         extra_link_args=(distutils.sysconfig.get_config_var('LDFLAGS').split() +
-                         distutils.sysconfig.get_config_var('LINKFORSHARED').split()))
+                         ldflags))
 
 
 def check_sanity():
