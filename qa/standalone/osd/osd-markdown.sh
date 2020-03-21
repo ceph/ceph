@@ -42,6 +42,7 @@ function markdown_N_impl() {
   for i in `seq 1 $markdown_times`
   do
     # check the OSD is UP
+    ceph tell osd.0 get_latest_osdmap || return 1
     ceph osd tree
     ceph osd tree | grep osd.0 |grep up || return 1
     # mark the OSD down.
@@ -98,6 +99,7 @@ function TEST_markdown_boot() {
     markdown_N_impl $count $period $sleeptime
     #down N times, osd.0 should be up
     sleep 15  # give osd plenty of time to notice and come back up
+    ceph tell osd.0 get_latest_osdmap || return 1
     ceph osd tree | grep up | grep osd.0 || return 1
 }
 
@@ -121,6 +123,7 @@ function TEST_markdown_boot_exceed_time() {
 
     markdown_N_impl $(($count+1)) $period $sleeptime
     sleep 15  # give osd plenty of time to notice and come back up
+    ceph tell osd.0 get_latest_osdmap || return 1
     ceph osd tree | grep up | grep osd.0 || return 1
 }
 
