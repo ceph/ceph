@@ -21,7 +21,7 @@ reduction of the number of entries in each bucket index shard. This
 process is transparent to the user.
 
 By default dynamic bucket index resharding can only increase the
-number of bucket index sharts to 1999, although the upper-bound is a
+number of bucket index shards to 1999, although the upper-bound is a
 configuration parameter (see Configuration below). Furthermore, when
 possible, the process chooses a prime number of bucket index shards to
 help spread the number of bucket index entries across the bucket index
