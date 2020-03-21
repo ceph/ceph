@@ -1,0 +1,19 @@
+tasks:
+- install:
+    extra_packages: ['ceph-immutable-object-cache']
+- ceph:
+    conf:
+      client:
+        rbd_parent_cache_enabled: true
+        immutable object cache path: /tmp/ceph-immutable-object-cache
+        immutable object cache max size: 10G
+- parent_cache_fio:
+    client.0:
+      thick-provision: true
+      fio-io-size: 100%
+      formats: [2]
+      features: [[layering]]
+      io-engine: rbd
+      test-clone-io: 1
+      rw: randread
+      runtime: 600

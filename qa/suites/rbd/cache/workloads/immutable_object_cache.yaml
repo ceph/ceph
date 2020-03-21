@@ -1,0 +1,18 @@
+tasks:
+- install:
+    extra_packages: ['ceph-immutable-object-cache']
+- ceph:
+    conf:
+      client:
+        rbd_parent_cache_enabled: true
+        #debug immutable_obj_cache: 20/20
+        immutable object cache path: /tmp/ceph-immutable-object-cache
+        immutable object cache max size: 10G
+- immutable_object_cache:
+    all:
+      clone: true
+      test: qa/run_xfstests_qemu.sh
+      image_url: http://cloud-images.ubuntu.com/releases/bionic/release/ubuntu-18.04-server-cloudimg-amd64.img
+      cpus: 4
+      memory: 4096
+      disks: 3

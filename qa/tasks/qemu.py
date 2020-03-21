@@ -338,7 +338,6 @@ def _teardown_nfs_mount(remote, client, service_name):
             'sudo', 'systemctl', 'start', service_name
         ])
 
-
 @contextlib.contextmanager
 def run_qemu(ctx, config):
     """Setup kvm environment and start qemu"""
@@ -373,6 +372,7 @@ def run_qemu(ctx, config):
         if remote.os.package_type == "rpm":
             qemu_cmd = "/usr/libexec/qemu-kvm"
         args=[
+            'sudo',
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
