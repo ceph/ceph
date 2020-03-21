@@ -946,7 +946,7 @@ void LeaderWatcher<I>::handle_heartbeat(Context *on_notify_ack) {
     std::scoped_lock locker{m_threads->timer_lock, m_lock};
     if (is_leader(m_lock)) {
       dout(5) << "got another leader heartbeat, ignoring" << dendl;
-    } else {
+    } else if (!m_locker.cookie.empty()) {
       cancel_timer_task();
       m_acquire_attempts = 0;
       schedule_acquire_leader_lock(1);
