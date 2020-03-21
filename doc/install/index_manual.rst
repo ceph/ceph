@@ -68,4 +68,4 @@ sequence.
 .. toctree::
    :maxdepth: 2
 
-.. _get packages: ../install/get-packages
+.. _get packages: ../get-packages

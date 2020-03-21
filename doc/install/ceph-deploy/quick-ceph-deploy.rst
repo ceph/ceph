@@ -331,16 +331,16 @@ data migration or balancing manually.
 
 
 .. _Preflight Checklist: ../quick-start-preflight
-.. _Ceph Deploy: ../../rados/deployment
-.. _ceph-deploy install -h: ../../rados/deployment/ceph-deploy-install
-.. _ceph-deploy new -h: ../../rados/deployment/ceph-deploy-new
-.. _ceph-deploy osd: ../../rados/deployment/ceph-deploy-osd
-.. _Running Ceph with Upstart: ../../rados/operations/operating#running-ceph-with-upstart
-.. _Running Ceph with sysvinit: ../../rados/operations/operating#running-ceph-with-sysvinit
-.. _CRUSH Map: ../../rados/operations/crush-map
-.. _pool: ../../rados/operations/pools
-.. _placement group: ../../rados/operations/placement-groups
-.. _Monitoring a Cluster: ../../rados/operations/monitoring
-.. _Monitoring OSDs and PGs: ../../rados/operations/monitoring-osd-pg
-.. _Network Configuration Reference: ../../rados/configuration/network-config-ref
-.. _User Management: ../../rados/operations/user-management
+.. _Ceph Deploy: ../../../rados/deployment
+.. _ceph-deploy install -h: ../../../rados/deployment/ceph-deploy-install
+.. _ceph-deploy new -h: ../../../rados/deployment/ceph-deploy-new
+.. _ceph-deploy osd: ../../../rados/deployment/ceph-deploy-osd
+.. _Running Ceph with Upstart: ../../../rados/operations/operating#running-ceph-with-upstart
+.. _Running Ceph with sysvinit: ../../../rados/operations/operating#running-ceph-with-sysvinit
+.. _CRUSH Map: ../../../rados/operations/crush-map
+.. _pool: ../../../rados/operations/pools
+.. _placement group: ../../../rados/operations/placement-groups
+.. _Monitoring a Cluster: ../../../rados/operations/monitoring
+.. _Monitoring OSDs and PGs: ../../../rados/operations/monitoring-osd-pg
+.. _Network Configuration Reference: ../../../rados/configuration/network-config-ref
+.. _User Management: ../../../rados/operations/user-management
