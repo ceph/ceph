@@ -21,7 +21,7 @@
 #include "LZ4Compressor.h"
 // -----------------------------------------------------------------------------
 
-class CompressionPluginLZ4 : public CompressionPlugin {
+class CompressionPluginLZ4 : public ceph::CompressionPlugin {
 
 public:
 
