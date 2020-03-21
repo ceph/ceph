@@ -229,7 +229,7 @@ If you do not have the latest version, you may need to uninstall, auto remove
 dependencies and reinstall.
 
 
-.. _using your distro's package manager: ../install-storage-cluster/
-.. _Operating a Cluster: ../../rados/operations/operating
-.. _Monitoring a Cluster: ../../rados/operations/monitoring
-.. _release notes document of your release: ../../releases
+.. _using your distro's package manager: ../../install-storage-cluster/
+.. _Operating a Cluster: ../../../rados/operations/operating
+.. _Monitoring a Cluster: ../../../rados/operations/monitoring
+.. _release notes document of your release: ../../../releases

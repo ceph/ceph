@@ -26,5 +26,5 @@ the steps specific to Apache are no longer needed.
 
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
-.. _RGW Admin Guide: ../../radosgw/admin
-.. _Configuring Ceph Object Gateway: ../../radosgw/config-fcgi
+.. _RGW Admin Guide: ../../../radosgw/admin
+.. _Configuring Ceph Object Gateway: ../../../radosgw/config-fcgi
