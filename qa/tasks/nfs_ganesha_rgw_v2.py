@@ -93,9 +93,9 @@ def task(ctx, config):
 
     rgw[0].run(args=['sudo', 'setenforce', '1'])
 
-    log.info('restarting nfs_ganesha service')
+    log.info('restarting nfs-ganesha service')
 
-    rgw[0].run(args=['sudo', 'systemctl', 'restart', 'nfs_ganesha.service'])
+    rgw[0].run(args=['sudo', 'systemctl', 'restart', 'nfs-ganesha.service'])
 
     time.sleep(60)
 
