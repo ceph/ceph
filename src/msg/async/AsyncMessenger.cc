@@ -32,11 +32,11 @@
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-static ostream& _prefix(std::ostream *_dout, AsyncMessenger *m) {
+static std::ostream& _prefix(std::ostream *_dout, AsyncMessenger *m) {
   return *_dout << "-- " << m->get_myaddrs() << " ";
 }
 
-static ostream& _prefix(std::ostream *_dout, Processor *p) {
+static std::ostream& _prefix(std::ostream *_dout, Processor *p) {
   return *_dout << " Processor -- ";
 }
 
@@ -60,7 +60,7 @@ Processor::Processor(AsyncMessenger *r, Worker *w, CephContext *c)
     listen_handler(new C_processor_accept(this)) {}
 
 int Processor::bind(const entity_addrvec_t &bind_addrs,
-		    const set<int>& avoid_ports,
+		    const std::set<int>& avoid_ports,
 		    entity_addrvec_t* bound_addrs)
 {
   const auto& conf = msgr->cct->_conf;
@@ -278,7 +278,7 @@ class C_handle_reap : public EventCallback {
  */
 
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
-                               const std::string &type, string mname, uint64_t _nonce)
+                               const std::string &type, std::string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name),
     dispatch_queue(cct, this, mname),
     nonce(_nonce)
@@ -397,7 +397,7 @@ int AsyncMessenger::bindv(const entity_addrvec_t &bind_addrs)
   lock.unlock();
 
   // bind to a socket
-  set<int> avoid_ports;
+  std::set<int> avoid_ports;
   entity_addrvec_t bound_addrs;
   unsigned i = 0;
   for (auto &&p : processors) {
@@ -421,7 +421,7 @@ int AsyncMessenger::bindv(const entity_addrvec_t &bind_addrs)
   return 0;
 }
 
-int AsyncMessenger::rebind(const set<int>& avoid_ports)
+int AsyncMessenger::rebind(const std::set<int>& avoid_ports)
 {
   ldout(cct,1) << __func__ << " rebind avoid " << avoid_ports << dendl;
   ceph_assert(did_bind);
@@ -437,7 +437,7 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
 
   entity_addrvec_t bound_addrs;
   entity_addrvec_t bind_addrs = get_myaddrs();
-  set<int> new_avoid(avoid_ports);
+  std::set<int> new_avoid(avoid_ports);
   for (auto& a : bind_addrs.v) {
     new_avoid.insert(a.get_port());
     a.set_port(0);

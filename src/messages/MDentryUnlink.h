@@ -26,14 +26,14 @@ private:
   static const int COMPAT_VERSION = 1;
   
   dirfrag_t dirfrag;
-  string dn;
+  std::string dn;
 
  public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
-  const string& get_dn() const { return dn; }
+  const std::string& get_dn() const { return dn; }
 
-  bufferlist straybl;
-  bufferlist snapbl;
+  ceph::buffer::list straybl;
+  ceph::buffer::list snapbl;
 
 protected:
   MDentryUnlink() :
@@ -46,11 +46,12 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "dentry_unlink";}
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "dentry_unlink(" << dirfrag << " " << dn << ")";
   }
   
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(dn, p);

@@ -31,11 +31,12 @@ public:
   void inc_tried_discover() const { ++tried_discover; }
 
   std::string_view get_type_name() const override { return "dir_update"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "dir_update(" << get_dirfrag() << ")";
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(from_mds, p);
     decode(dirfrag, p);

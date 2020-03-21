@@ -6,6 +6,12 @@
 #include "osd/ClassHandler.h"
 #include "messages/MOSDOp.h"
 
+using std::ostream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
 bool OpInfo::check_rmw(int flag) const {
   ceph_assert(rmw_flags != 0);
   return rmw_flags & flag;

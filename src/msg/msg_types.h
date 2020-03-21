@@ -523,13 +523,13 @@ struct entity_addr_t {
 #endif
       uint16_t ss_family;
       if (elen < sizeof(ss_family)) {
-	throw buffer::malformed_input("elen smaller than family len");
+	throw ceph::buffer::malformed_input("elen smaller than family len");
       }
       decode(ss_family, bl);
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
       if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
-	throw buffer::malformed_input("elen exceeds sockaddr len");
+	throw ceph::buffer::malformed_input("elen exceeds sockaddr len");
       }
       bl.copy(elen, u.sa.sa_data);
     }

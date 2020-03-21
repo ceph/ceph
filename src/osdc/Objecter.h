@@ -1004,7 +1004,8 @@ struct ObjectOperation {
   }
 
   void omap_rm_range(std::string_view key_begin, std::string_view key_end) {
-    bufferlist bl;
+    ceph::buffer::list bl;
+    using ceph::encode;
     encode(key_begin, bl);
     encode(key_end, bl);
     add_data(CEPH_OSD_OP_OMAPRMKEYRANGE, 0, bl.length(), bl);
@@ -2108,7 +2109,7 @@ private:
     return op_budget;
   }
   int take_linger_budget(LingerOp *info);
-  friend class WatchContext; // to invoke put_up_budget_bytes
+  friend struct WatchContext; // to invoke put_up_budget_bytes
   void put_op_budget_bytes(int op_budget) {
     ceph_assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);

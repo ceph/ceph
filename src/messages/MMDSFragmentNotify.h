@@ -34,7 +34,7 @@ private:
   bool is_ack_wanted() const { return ack_wanted; }
   void mark_ack_wanted() { ack_wanted = true; }
 
-  bufferlist basebl;
+  ceph::buffer::list basebl;
 
 protected:
   MMDSFragmentNotify() :
@@ -46,9 +46,9 @@ protected:
   }
   ~MMDSFragmentNotify() override {}
 
-public:  
+public: 
   std::string_view get_type_name() const override { return "fragment_notify"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "fragment_notify(" << base_dirfrag << " " << (int)bits << ")";
   }
 
@@ -60,6 +60,7 @@ public:
     encode(ack_wanted, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(base_dirfrag, p);
     decode(bits, p);

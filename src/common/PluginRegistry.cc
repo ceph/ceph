@@ -34,6 +34,11 @@
 
 #define dout_subsys ceph_subsys_context
 
+using std::map;
+using std::string;
+
+namespace ceph {
+
 PluginRegistry::PluginRegistry(CephContext *cct) :
   cct(cct),
   loading(false),
@@ -210,6 +215,7 @@ int PluginRegistry::load(const std::string &type,
   ldout(cct, 1) << __func__ << ": " << type << " " << name
 		<< " loaded and registered" << dendl;
   return 0;
+}
 }
 
 /*

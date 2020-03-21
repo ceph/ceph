@@ -28,13 +28,13 @@ private:
   epoch_t epoch = 0;
 
  public:
-  vector<spg_t> pg_list;
+  std::vector<spg_t> pg_list;
 
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGRemove() :
     Message{MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION} {}
-  MOSDPGRemove(epoch_t e, vector<spg_t>& l) :
+  MOSDPGRemove(epoch_t e, std::vector<spg_t>& l) :
     Message{MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION} {
     this->epoch = e;
     pg_list.swap(l);
@@ -42,7 +42,7 @@ private:
 private:
   ~MOSDPGRemove() override {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "PGrm"; }
 
   void encode_payload(uint64_t features) override {
@@ -51,15 +51,14 @@ public:
     encode(pg_list, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(pg_list, p);
   }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd pg remove(" << "epoch " << epoch << "; ";
-    for (vector<spg_t>::const_iterator i = pg_list.begin();
-         i != pg_list.end();
-         ++i) {
+    for (auto i = pg_list.begin(); i != pg_list.end(); ++i) {
       out << "pg" << *i << "; ";
     }
     out << ")";

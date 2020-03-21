@@ -1054,17 +1054,17 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
-  void get_upmap_pgs(vector<pg_t> *upmap_pgs) const;
+  void get_upmap_pgs(std::vector<pg_t> *upmap_pgs) const;
   bool check_pg_upmaps(
     CephContext *cct,
-    const vector<pg_t>& to_check,
-    vector<pg_t> *to_cancel,
-    map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const;
+    const std::vector<pg_t>& to_check,
+    std::vector<pg_t> *to_cancel,
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>> *to_remap) const;
   void clean_pg_upmaps(
     CephContext *cct,
     Incremental *pending_inc,
-    const vector<pg_t>& to_cancel,
-    const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const;
+    const std::vector<pg_t>& to_cancel,
+    const std::map<pg_t, mempool::osdmap::vector<std::pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
   int apply_incremental(const Incremental &inc);
@@ -1427,7 +1427,7 @@ public:
       pg_upmap_items.count(pg);
   }
 
-  bool check_full(const set<pg_shard_t> &missing_on) const {
+  bool check_full(const std::set<pg_shard_t> &missing_on) const {
     for (auto shard : missing_on) {
       if (get_state(shard.osd) & CEPH_OSD_FULL)
 	return true;

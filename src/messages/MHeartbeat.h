@@ -23,15 +23,15 @@
 class MHeartbeat : public Message {
 private:
   mds_load_t load;
-  __s32        beat = 0;
-  map<mds_rank_t, float> import_map;
+  __s32 beat = 0;
+  std::map<mds_rank_t, float> import_map;
 
  public:
   const mds_load_t& get_load() const { return load; }
   int get_beat() const { return beat; }
 
-  const map<mds_rank_t, float>& get_import_map() const { return import_map; }
-  map<mds_rank_t, float>& get_import_map() { return import_map; }
+  const std::map<mds_rank_t, float>& get_import_map() const { return import_map; }
+  std::map<mds_rank_t, float>& get_import_map() { return import_map; }
 
 protected:
   MHeartbeat() : Message(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
@@ -52,6 +52,7 @@ public:
     encode(import_map, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(load, p);
     decode(beat, p);

@@ -23,16 +23,16 @@ private:
   static const int COMPAT_VERSION = 1;
 
   dirfrag_t dirfrag;
-  pair<__s32,__s32> new_auth;
+  std::pair<__s32,__s32> new_auth;
 
  public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
-  pair<__s32,__s32> get_new_auth() const { return new_auth; }
+  std::pair<__s32,__s32> get_new_auth() const { return new_auth; }
   
 protected:
   MExportDirNotifyAck() :
     SafeMessage{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION} {}
-  MExportDirNotifyAck(dirfrag_t df, uint64_t tid, pair<__s32,__s32> na) :
+  MExportDirNotifyAck(dirfrag_t df, uint64_t tid, std::pair<__s32,__s32> na) :
     SafeMessage{MSG_MDS_EXPORTDIRNOTIFYACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), new_auth(na) {
     set_tid(tid);
   }
@@ -40,7 +40,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "ExNotA"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export_notify_ack(" << dirfrag << ")";
   }
 

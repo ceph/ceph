@@ -204,10 +204,10 @@ public:
   int get_cap_shift() const;
   int get_cap_mask() const;
 
-  void decode_locked_state(const bufferlist& bl) {
+  void decode_locked_state(const ceph::buffer::list& bl) {
     parent->decode_lock_state(type->type, bl);
   }
-  void encode_locked_state(bufferlist& bl) {
+  void encode_locked_state(ceph::buffer::list& bl) {
     parent->encode_lock_state(type->type, bl);
   }
   void finish_waiters(uint64_t mask, int r=0) {
@@ -283,10 +283,10 @@ public:
   }
 
   // gather set
-  static set<int32_t> empty_gather_set;
+  static std::set<int32_t> empty_gather_set;
 
   // int32_t: <0 is client, >=0 is MDS rank
-  const set<int32_t>& get_gather_set() const {
+  const std::set<int32_t>& get_gather_set() const {
     return have_more() ? more()->gather_set : empty_gather_set;
   }
 
@@ -465,7 +465,7 @@ public:
   }
 
   // encode/decode
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 2, bl);
     encode(state, bl);
     if (have_more())
@@ -474,28 +474,28 @@ public:
       encode(empty_gather_set, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     DECODE_START(2, p);
     decode(state, p);
-    set<__s32> g;
+    std::set<__s32> g;
     decode(g, p);
     if (!g.empty())
       more()->gather_set.swap(g);
     DECODE_FINISH(p);
   }
-  void encode_state_for_replica(bufferlist& bl) const {
+  void encode_state_for_replica(ceph::buffer::list& bl) const {
     __s16 s = get_replica_state();
     using ceph::encode;
     encode(s, bl);
   }
-  void decode_state(bufferlist::const_iterator& p, bool is_new=true) {
+  void decode_state(ceph::buffer::list::const_iterator& p, bool is_new=true) {
     using ceph::decode;
     __s16 s;
     decode(s, p);
     if (is_new)
       state = s;
   }
-  void decode_state_rejoin(bufferlist::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
     __s16 s;
     using ceph::decode;
     decode(s, p);
@@ -562,7 +562,7 @@ public:
     return false;
   }
 
-  void _print(ostream& out) const {
+  void _print(std::ostream& out) const {
     out << get_lock_type_name(get_type()) << " ";
     out << get_state_name(get_state());
     if (!get_gather_set().empty())
@@ -589,9 +589,9 @@ public:
    * Write bare values (caller must be in an object section)
    * to formatter, or nothing if is_sync_and_unlocked.
    */
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
-  virtual void print(ostream& out) const {
+  virtual void print(std::ostream& out) const {
     out << "(";
     _print(out);
     out << ")";
@@ -629,7 +629,7 @@ private:
 	lock_caches.empty();
     }
 
-    set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
+    std::set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
 
     // local state
     int num_wrlock = 0, num_xlock = 0;
@@ -658,7 +658,7 @@ private:
 };
 WRITE_CLASS_ENCODER(SimpleLock)
 
-inline ostream& operator<<(ostream& out, const SimpleLock& l) 
+inline std::ostream& operator<<(std::ostream& out, const SimpleLock& l) 
 {
   l.print(out);
   return out;

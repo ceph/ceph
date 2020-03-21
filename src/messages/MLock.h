@@ -32,11 +32,11 @@ private:
   __u16      lock_type = 0;  // lock object type
   MDSCacheObjectInfo object_info;  
   
-  bufferlist lockdata;  // and possibly some data
+  ceph::buffer::list lockdata;  // and possibly some data
   
 public:
-  bufferlist& get_data() { return lockdata; }
-  const bufferlist& get_data() const { return lockdata; }
+  ceph::buffer::list& get_data() { return lockdata; }
+  const ceph::buffer::list& get_data() const { return lockdata; }
   int get_asker() const { return asker; }
   int get_action() const { return action; }
   metareqid_t get_reqid() const { return reqid; }
@@ -57,7 +57,7 @@ protected:
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
-  MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
+  MLock(SimpleLock *lock, int ac, mds_rank_t as, ceph::buffer::list& bl) :
     SafeMessage{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
@@ -67,7 +67,7 @@ protected:
   
 public:
   std::string_view get_type_name() const override { return "ILock"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "lock(a=" << SimpleLock::get_lock_action_name(action)
 	<< " " << SimpleLock::get_lock_type_name(lock_type)
 	<< " " << object_info
@@ -75,7 +75,7 @@ public:
   }
   
   void set_reqid(metareqid_t ri) { reqid = ri; }
-  void set_data(const bufferlist& lockdata) {
+  void set_data(const ceph::buffer::list& lockdata) {
     this->lockdata = lockdata;
   }
   

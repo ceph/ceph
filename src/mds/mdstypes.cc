@@ -8,6 +8,14 @@
 
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 
+using std::list;
+using std::make_pair;
+using std::ostream;
+using std::set;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::Formatter;
 
 /*
  * frag_info_t
@@ -237,7 +245,7 @@ void inline_data_t::decode(bufferlist::const_iterator &p)
   uint32_t inline_len;
   decode(inline_len, p);
   if (inline_len > 0)
-    decode_nohead(inline_len, get_data(), p);
+    ceph::decode_nohead(inline_len, get_data(), p);
   else
     free_data();
 }
@@ -849,7 +857,7 @@ void cap_reconnect_t::encode_old(bufferlist& bl) const {
   encode(path, bl);
   capinfo.flock_len = flockbl.length();
   encode(capinfo, bl);
-  encode_nohead(flockbl, bl);
+  ceph::encode_nohead(flockbl, bl);
 }
 
 void cap_reconnect_t::decode(bufferlist::const_iterator& bl) {
@@ -864,7 +872,7 @@ void cap_reconnect_t::decode_old(bufferlist::const_iterator& bl) {
   using ceph::decode;
   decode(path, bl);
   decode(capinfo, bl);
-  decode_nohead(capinfo.flock_len, flockbl, bl);
+  ceph::decode_nohead(capinfo.flock_len, flockbl, bl);
 }
 
 void cap_reconnect_t::dump(Formatter *f) const

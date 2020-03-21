@@ -20,7 +20,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "timer(" << this << ")."
 
+using std::pair;
 
+using ceph::operator <<;
 
 class SafeTimerThread : public Thread {
   SafeTimer *parent;

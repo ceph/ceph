@@ -12,18 +12,23 @@
  *
  */
 
-#include "common/BackTrace.h"
-#include "common/perf_counters.h"
-#include "global/pidfile.h"
-#include "common/debug.h"
-#include "common/signal.h"
-#include "common/config.h"
-
-#include <signal.h>
+#include <cstdlib>
 #include <sstream>
-#include <stdlib.h>
+
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <signal.h>
+
+#include "common/BackTrace.h"
+#include "common/config.h"
+#include "common/debug.h"
+#include "common/signal.h"
+#include "common/perf_counters.h"
+
+#include "global/pidfile.h"
+
+using namespace std::literals;
 
 std::string signal_mask_to_str()
 {
@@ -32,9 +37,9 @@ std::string signal_mask_to_str()
     return "(pthread_signmask failed)";
   }
 
-  ostringstream oss;
+  std::ostringstream oss;
   oss << "show_signal_mask: { ";
-  string sep("");
+  auto sep = ""s;
   for (int signum = 0; signum < NSIG; ++signum) {
     if (sigismember(&old_sigset, signum) == 1) {
       oss << sep << signum;

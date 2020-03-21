@@ -648,7 +648,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const cref_t<Message>& m) {
+  bool ms_can_fast_dispatch(const ceph::cref_t<Message>& m) {
     for (const auto &dispatcher : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m))
 	return true;
@@ -662,7 +662,7 @@ public:
    * @param m The Message we are fast dispatching.
    * If none of our Dispatchers can handle it, ceph_abort().
    */
-  void ms_fast_dispatch(const ref_t<Message> &m) {
+  void ms_fast_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m)) {
@@ -673,12 +673,12 @@ public:
     ceph_abort();
   }
   void ms_fast_dispatch(Message *m) {
-    return ms_fast_dispatch(ref_t<Message>(m, false)); /* consume ref */
+    return ms_fast_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    *
    */
-  void ms_fast_preprocess(const ref_t<Message> &m) {
+  void ms_fast_preprocess(const ceph::ref_t<Message> &m) {
     for (const auto &dispatcher : fast_dispatchers) {
       dispatcher->ms_fast_preprocess2(m);
     }
@@ -690,7 +690,7 @@ public:
    *
    *  @param m The Message to deliver.
    */
-  void ms_deliver_dispatch(const ref_t<Message> &m) {
+  void ms_deliver_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : dispatchers) {
       if (dispatcher->ms_dispatch2(m))
@@ -701,7 +701,7 @@ public:
     ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
   }
   void ms_deliver_dispatch(Message *m) {
-    return ms_deliver_dispatch(ref_t<Message>(m, false)); /* consume ref */
+    return ms_deliver_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call

@@ -28,7 +28,7 @@ AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
-  for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
+  for (auto iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
     if (iter->compare("cephx") == 0) {
       auth_supported.push_back(CEPH_AUTH_CEPHX);
@@ -54,7 +54,7 @@ bool AuthMethodList::is_supported_auth(int auth_type)
 
 int AuthMethodList::pick(const std::set<__u32>& supported)
 {
-  for (set<__u32>::const_reverse_iterator p = supported.rbegin(); p != supported.rend(); ++p)
+  for (auto p = supported.rbegin(); p != supported.rend(); ++p)
     if (is_supported_auth(*p))
       return *p;
   return CEPH_AUTH_UNKNOWN;
@@ -62,7 +62,7 @@ int AuthMethodList::pick(const std::set<__u32>& supported)
 
 void AuthMethodList::remove_supported_auth(int auth_type)
 {
-  for (list<__u32>::iterator p = auth_supported.begin(); p != auth_supported.end(); ) {
+  for (auto p = auth_supported.begin(); p != auth_supported.end(); ) {
     if (*p == (__u32)auth_type)
       auth_supported.erase(p++);
     else 
