@@ -1371,7 +1371,10 @@ def get_parm(option):
         return js
 
 def get_config_and_keyring():
-    # type: () -> Tuple[str, str]
+    # type: () -> Tuple[Optional[str], Optional[str]]
+    config = None
+    keyring = None
+
     if 'config_json' in args and args.config_json:
         d = get_parm(args.config_json)
         config = d.get('config')
@@ -1386,11 +1389,6 @@ def get_config_and_keyring():
     elif 'keyring' in args and args.keyring:
         with open(args.keyring, 'r') as f:
             keyring = f.read()
-
-    if not config:
-        raise Error('no config provided')
-    elif not keyring:
-        raise Error('no keyring provided')
 
     return (config, keyring)
 
