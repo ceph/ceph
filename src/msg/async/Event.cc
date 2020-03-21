@@ -248,7 +248,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
     event->write_cb = ctxt;
   }
   ldout(cct, 20) << __func__ << " create event end fd=" << fd << " mask=" << mask
-                 << " original mask is " << event->mask << dendl;
+                 << " current mask is " << event->mask << dendl;
   return 0;
 }
 
@@ -281,7 +281,7 @@ void EventCenter::delete_file_event(int fd, int mask)
 
   event->mask = event->mask & (~mask);
   ldout(cct, 30) << __func__ << " delete event end fd=" << fd << " mask=" << mask
-                 << " original mask is " << event->mask << dendl;
+                 << " current mask is " << event->mask << dendl;
 }
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)
