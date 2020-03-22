@@ -43,7 +43,7 @@ protected:
   class Path {
   public:
     /// Returned path
-    string full_path;
+    std::string full_path;
     /// Ref to parent Index
     CollectionIndex* parent_ref;
     /// coll_t for parent Index
@@ -51,13 +51,13 @@ protected:
 
     /// Normal Constructor
     Path(
-      string path,                              ///< [in] Path to return.
+      std::string path,                              ///< [in] Path to return.
       CollectionIndex* ref)
       : full_path(path), parent_ref(ref), parent_coll(parent_ref->coll()) {}
 
     /// Debugging Constructor
     Path(
-      string path,                              ///< [in] Path to return.
+      std::string path,                              ///< [in] Path to return.
       const coll_t& coll)                              ///< [in] collection
       : full_path(path), parent_coll(coll) {}
 
@@ -79,7 +79,7 @@ protected:
   /// Type of returned paths
   typedef std::shared_ptr<Path> IndexedPath;
 
-  static IndexedPath get_testing_path(string path, coll_t collection) {
+  static IndexedPath get_testing_path(std::string path, coll_t collection) {
     return std::make_shared<Path>(path, collection);
   }
 
@@ -174,7 +174,7 @@ protected:
     const ghobject_t &start, ///< [in] object at which to start
     const ghobject_t &end,    ///< [in] list only objects < end
     int max_count,          ///< [in] return at most max_count objects
-    vector<ghobject_t> *ls,  ///< [out] Listed objects
+    std::vector<ghobject_t> *ls,  ///< [out] Listed objects
     ghobject_t *next         ///< [out] Next object to list
     ) = 0;
 

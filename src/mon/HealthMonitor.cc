@@ -32,6 +32,35 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
 using namespace TOPNSPC::common;
+
+using namespace std::literals;
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::parse_timespan;
+using ceph::timespan_str;
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
                         const HealthMonitor *hmon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank

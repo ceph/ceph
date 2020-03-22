@@ -118,7 +118,7 @@ public:
   virtual void init() { }
 
   virtual int get_type() = 0;
-  virtual string get_name() const = 0;
+  virtual std::string get_name() const = 0;
 
 };
 

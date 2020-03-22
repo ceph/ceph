@@ -27,6 +27,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "fuse "
 
+using std::list;
+using std::map;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+
 // some fuse-y bits of state
 struct fs_info {
   struct fuse_args args;

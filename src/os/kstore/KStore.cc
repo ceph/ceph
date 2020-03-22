@@ -45,6 +45,21 @@
 
  */
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+using ceph::JSONFormatter;
+
 const string PREFIX_SUPER = "S"; // field -> value
 const string PREFIX_COLL = "C"; // collection name -> (nothing)
 const string PREFIX_OBJ = "O";  // object name -> onode
@@ -900,7 +915,7 @@ int KStore::_open_collections(int *errors)
       auto p = bl.cbegin();
       try {
         decode(c->cnode, p);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
         derr << __func__ << " failed to decode cnode, key:"
              << pretty_binary_string(it->key()) << dendl;
         return -EIO;
@@ -1900,7 +1915,7 @@ int KStore::_open_super_meta()
     auto p = bl.cbegin();
     try {
       decode(nid_max, p);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
     nid_last = nid_max;

@@ -28,6 +28,8 @@
 #include "kstore/KStore.h"
 #endif
 
+using std::string;
+
 ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
 				 const string& data,

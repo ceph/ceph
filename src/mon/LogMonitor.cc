@@ -36,6 +36,34 @@
 
 using namespace TOPNSPC::common;
 
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
+
 string LogMonitor::log_channel_info::get_log_file(const string &channel)
 {
   dout(25) << __func__ << " for channel '"
@@ -324,8 +352,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << __func__ << " v" << version << dendl;
   __u8 v = 1;
   encode(v, bl);
-  multimap<utime_t,LogEntry>::iterator p;
-  for (p = pending_log.begin(); p != pending_log.end(); ++p)
+  for (auto p = pending_log.begin(); p != pending_log.end(); ++p)
     p->second.encode(bl, mon->get_quorum_con_features());
 
   put_version(t, version, bl);
@@ -418,7 +445,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
     goto done;
   }
   
-  for (deque<LogEntry>::iterator p = m->entries.begin();
+  for (auto p = m->entries.begin();
        p != m->entries.end();
        ++p) {
     if (!pending_summary.contains(p->key()))
@@ -460,7 +487,7 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
     return false;
   }
 
-  for (deque<LogEntry>::iterator p = m->entries.begin();
+  for (auto p = m->entries.begin();
        p != m->entries.end();
        ++p) {
     dout(10) << " logging " << *p << dendl;

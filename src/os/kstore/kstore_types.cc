@@ -16,6 +16,11 @@
 #include "common/Formatter.h"
 #include "include/stringify.h"
 
+using std::list;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 // cnode_t
 
 void kstore_cnode_t::encode(bufferlist& bl) const
@@ -80,8 +85,7 @@ void kstore_onode_t::dump(Formatter *f) const
   f->dump_unsigned("nid", nid);
   f->dump_unsigned("size", size);
   f->open_object_section("attrs");
-  for (map<string,bufferptr>::const_iterator p = attrs.begin();
-       p != attrs.end(); ++p) {
+  for (auto p = attrs.begin(); p != attrs.end(); ++p) {
     f->open_object_section("attr");
     f->dump_string("name", p->first);
     f->dump_unsigned("len", p->second.length());

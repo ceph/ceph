@@ -21,7 +21,7 @@ class StupidAllocator : public Allocator {
   int64_t block_size;
 
   typedef mempool::bluestore_alloc::pool_allocator<
-    pair<const uint64_t,uint64_t>> allocator_t;
+    std::pair<const uint64_t,uint64_t>> allocator_t;
   typedef btree::btree_map<uint64_t,uint64_t,std::less<uint64_t>,allocator_t> interval_set_map_t;
   typedef interval_set<uint64_t,interval_set_map_t> interval_set_t;
   std::vector<interval_set_t> free;  ///< leading-edge copy
