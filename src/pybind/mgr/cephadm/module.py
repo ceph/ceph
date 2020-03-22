@@ -1833,7 +1833,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             for name, dd in dm.items():
                 if service_type and service_type != dd.daemon_type:
                     continue
-                # <name> i.e. rgw.realm.zone
                 n: str = dd.service_name()
                 if service_name and service_name != n:
                     continue
@@ -2692,6 +2691,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'who': 'client.rgw.' + spec.rgw_realm,
             'name': 'rgw_realm',
             'value': spec.rgw_realm,
+        })
+        if spec.ssl:
+            v = 'beast ssl_port=%d' % spec.get_port()
+        else:
+            v = 'beast port=%d' % spec.get_port()
+        ret, out, err = self.mon_command({
+            'prefix': 'config set',
+            'who': 'client.rgw.' + spec.service_id,
+            'name': 'rgw_frontends',
+            'value': v,
         })
 
     def _create_rgw(self, rgw_id, host):

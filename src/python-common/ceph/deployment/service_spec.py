@@ -443,21 +443,40 @@ class RGWSpec(ServiceSpec):
     def __init__(self,
                  rgw_realm=None,  # type: Optional[str]
                  rgw_zone=None,  # type: Optional[str]
+                 subcluster=None,  # type: Optional[str]
                  service_id=None,  # type: Optional[str]
                  placement=None,
                  service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
                  unmanaged=False,  # type: bool
+                 ssl=False,   # type: bool
                  ):
         assert service_type == 'rgw'
         if service_id:
-            (rgw_realm, rgw_zone) = service_id.split('.', 1)
+            a = service_id.split('.', 2)
+            rgw_realm = a[0]
+            rgw_zone = a[1]
+            if len(a) > 2:
+                subcluster = a[2]
         else:
-            service_id = '%s.%s' % (rgw_realm, rgw_zone)
+            if subcluster:
+                service_id = '%s.%s.%s' % (rgw_realm, rgw_zone, subcluster)
+            else:
+                service_id = '%s.%s' % (rgw_realm, rgw_zone)
         super(RGWSpec, self).__init__(
             'rgw', service_id=service_id,
             placement=placement, unmanaged=unmanaged)
 
         self.rgw_realm = rgw_realm
         self.rgw_zone = rgw_zone
+        self.subcluster = subcluster
         self.rgw_frontend_port = rgw_frontend_port
+        self.ssl = ssl
+
+    def get_port(self):
+        if self.rgw_frontend_port:
+            return self.rgw_frontend_port
+        if self.ssl:
+            return 443
+        else:
+            return 80
