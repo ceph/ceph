@@ -27,6 +27,14 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx server " << entity_name << ": "
 
+using std::dec;
+using std::hex;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 int CephxServiceHandler::start_session(
   const EntityName& name,
   size_t connection_secret_required_length,
@@ -63,7 +71,7 @@ int CephxServiceHandler::handle_request(
   struct CephXRequestHeader cephx_header;
   try {
     decode(cephx_header, indata);
-  } catch (buffer::error& e) {
+  } catch (ceph::buffer::error& e) {
     ldout(cct, 0) << __func__ << " failed to decode CephXRequestHeader: "
 		  << e.what() << dendl;
     return -EPERM;
@@ -78,7 +86,7 @@ int CephxServiceHandler::handle_request(
       CephXAuthenticate req;
       try {
 	decode(req, indata);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
 	ldout(cct, 0) << __func__ << " failed to decode CephXAuthenticate: "
 		      << e.what() << dendl;
 	ret = -EPERM;
@@ -249,7 +257,7 @@ int CephxServiceHandler::handle_request(
       CephXServiceTicketRequest ticket_req;
       try {
 	decode(ticket_req, indata);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
 	ldout(cct, 0) << __func__
 		      << " failed to decode CephXServiceTicketRequest: "
 		      << e.what() << dendl;

@@ -24,6 +24,7 @@
 #include "include/ipaddr.h"
 
 using std::ostream;
+using std::string;
 using std::vector;
 
 ostream& operator<<(ostream& out, const osd_rwxa_t& p)

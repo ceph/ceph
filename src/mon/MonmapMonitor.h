@@ -31,7 +31,7 @@
 
 class MonmapMonitor : public PaxosService {
  public:
-  MonmapMonitor(Monitor *mn, Paxos *p, const string& service_name)
+  MonmapMonitor(Monitor *mn, Paxos *p, const std::string& service_name)
     : PaxosService(mn, p, service_name)
   {
   }
@@ -51,7 +51,7 @@ class MonmapMonitor : public PaxosService {
   void apply_mon_features(const mon_feature_t& features,
 			  ceph_release_t min_mon_release);
 
-  void dump_info(Formatter *f);
+  void dump_info(ceph::Formatter *f);
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
@@ -62,7 +62,7 @@ class MonmapMonitor : public PaxosService {
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  int get_monmap(bufferlist &bl);
+  int get_monmap(ceph::buffer::list &bl);
 
   /*
    * Since monitors are pretty
@@ -76,7 +76,7 @@ class MonmapMonitor : public PaxosService {
 
 private:
   void check_subs();
-  bufferlist monmap_bl;
+  ceph::buffer::list monmap_bl;
 };
 
 

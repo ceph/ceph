@@ -77,7 +77,32 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
 // bluestore_txc
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
 			      bluestore_txc);
+using std::deque;
+using std::min;
+using std::make_pair;
+using std::numeric_limits;
+using std::pair;
+using std::list;
+using std::map;
+using std::max;
+using std::ostream;
+using std::ostringstream;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
 
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::coarse_mono_clock;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_timespan;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
 
 // kv store prefixes
 const string PREFIX_SUPER = "S";       // field -> value
@@ -4800,7 +4825,7 @@ int BlueStore::_read_bdev_label(CephContext* cct, string path,
     crc = t.crc32c(-1);
     decode(expected_crc, p);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     dout(2) << __func__ << " unable to decode label at offset " << p.get_off()
 	 << ": " << e.what()
 	 << dendl;
@@ -6076,7 +6101,7 @@ int BlueStore::_open_collections()
       auto p = bl.cbegin();
       try {
         decode(c->cnode, p);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
         derr << __func__ << " failed to decode cnode, key:"
              << pretty_binary_string(it->key()) << dendl;
         return -EIO;
@@ -6166,7 +6191,7 @@ void BlueStore::_open_statfs()
 
         dout(30) << __func__ << " pool " << pool_id
 		 << " statfs " << st << dendl;
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
         derr << __func__ << " failed to decode pool stats, key:"
              << pretty_binary_string(it->key()) << dendl;
       }   
@@ -7220,7 +7245,7 @@ void BlueStore::_fsck_check_pool_statfs(
       auto blp = bl.cbegin();
       try {
 	vstatfs.decode(blp);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
         derr << "fsck error: failed to decode Pool StatFS record"
 	     << pretty_binary_string(key) << dendl;
         if (repairer) {
@@ -8236,7 +8261,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  ++errors;
 	}
       }
-      catch (buffer::error& e) {
+      catch (ceph::buffer::error& e) {
 	derr << "fsck error: failed to retrieve bluefs_extents from kv" << dendl;
 	++errors;
       }
@@ -8359,7 +8384,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	auto blp = bl.cbegin();
 	try {
     	  decode(shared_blob, blp);
-	} catch (buffer::error& e) {
+	} catch (ceph::buffer::error& e) {
           ++errors;
           // Force update and don't report as missing
           sbi.updated = sbi.passed = true;
@@ -8707,7 +8732,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         bluestore_deferred_transaction_t wt;
         try {
 	  decode(wt, p);
-        } catch (buffer::error& e) {
+        } catch (ceph::buffer::error& e) {
 	  derr << "fsck error: failed to decode deferred txn "
 	       << pretty_binary_string(it->key()) << dendl;
 	  if (repair) {
@@ -10879,7 +10904,7 @@ int BlueStore::_open_super_meta()
       uint64_t v;
       decode(v, p);
       nid_max = v;
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       derr << __func__ << " unable to read nid_max" << dendl;
       return -EIO;
     }
@@ -10897,7 +10922,7 @@ int BlueStore::_open_super_meta()
       uint64_t v;
       decode(v, p);
       blobid_max = v;
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       derr << __func__ << " unable to read blobid_max" << dendl;
       return -EIO;
     }
@@ -10932,7 +10957,7 @@ int BlueStore::_open_super_meta()
       auto p = bl.cbegin();
       try {
 	decode(ondisk_format, p);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
 	derr << __func__ << " unable to read ondisk_format" << dendl;
 	return -EIO;
       }
@@ -10943,7 +10968,7 @@ int BlueStore::_open_super_meta()
 	auto p = bl.cbegin();
 	try {
 	  decode(compat_ondisk_format, p);
-	} catch (buffer::error& e) {
+	} catch (ceph::buffer::error& e) {
 	  derr << __func__ << " unable to read compat_ondisk_format" << dendl;
 	  return -EIO;
 	}
@@ -10971,7 +10996,7 @@ int BlueStore::_open_super_meta()
       min_alloc_size = val;
       min_alloc_size_order = ctz(val);
       ceph_assert(min_alloc_size == 1u << min_alloc_size_order);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       derr << __func__ << " unable to read min_alloc_size" << dendl;
       return -EIO;
     }
@@ -11017,7 +11042,7 @@ int BlueStore::_upgrade_super()
 	  uint64_t val;
 	  decode(val, p);
 	  min_alloc_size = val;
-	} catch (buffer::error& e) {
+	} catch (ceph::buffer::error& e) {
 	  derr << __func__ << " failed to read min_min_alloc_size" << dendl;
 	  return -EIO;
 	}
@@ -12303,7 +12328,7 @@ int BlueStore::_deferred_replay()
     auto p = bl.cbegin();
     try {
       decode(*deferred_txn, p);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       derr << __func__ << " failed to decode deferred txn "
 	   << pretty_binary_string(it->key()) << dendl;
       delete deferred_txn;
@@ -12836,7 +12861,7 @@ void BlueStore::_pad_zeros(
   size_t pad_count = 0;
   if (front_pad) {
     size_t front_copy = std::min<uint64_t>(chunk_size - front_pad, length);
-    bufferptr z = buffer::create_small_page_aligned(chunk_size);
+    bufferptr z = ceph::buffer::create_small_page_aligned(chunk_size);
     z.zero(0, front_pad, false);
     pad_count += front_pad;
     bl->begin().copy(front_copy, z.c_str() + front_pad);

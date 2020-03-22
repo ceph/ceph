@@ -47,7 +47,21 @@
 
 #define dout_subsys ceph_subsys_mon
 
+using std::cerr;
+using std::cout;
+using std::list;
+using std::map;
+using std::ostringstream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::JSONFormatter;
+
 Monitor *mon = NULL;
+
 
 void handle_mon_signal(int signum)
 {
@@ -396,7 +410,7 @@ int main(int argc, const char **argv)
 
 	// always mark seed/mkfs monmap as epoch 0
 	monmap.set_epoch(0);
-      } catch (const buffer::error& e) {
+      } catch (const ceph::buffer::error& e) {
 	derr << argv[0] << ": error decoding monmap " << monmap_fn << ": " << e.what() << dendl;
 	exit(1);
       }
@@ -692,7 +706,7 @@ int main(int argc, const char **argv)
     if (err >= 0) {
       try {
         monmap.decode(mapbl);
-      } catch (const buffer::error& e) {
+      } catch (const ceph::buffer::error& e) {
         derr << "can't decode monmap: " << e.what() << dendl;
       }
     } else {

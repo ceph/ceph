@@ -15,6 +15,8 @@
 
 #include "include/ceph_assert.h"
 
+using ceph::bufferptr;
+
 /*
  * chaining xattrs
  *
