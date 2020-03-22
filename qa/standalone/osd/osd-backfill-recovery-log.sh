@@ -74,6 +74,8 @@ function _common_test() {
     sleep 1
     wait_for_clean
 
+    flush_pg_stats
+
     newprimary=$(ceph pg dump pgs --format=json | jq '.pg_stats[0].up_primary')
     kill_daemons
 
