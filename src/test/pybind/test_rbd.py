@@ -538,6 +538,10 @@ class TestImage(object):
     def test_image_auto_close(self):
         image = Image(ioctx, image_name)
 
+    def test_use_after_close(self):
+        self.image.close()
+        assert_raises(InvalidArgument, self.image.stat)
+
     def test_write(self):
         data = rand_data(256)
         self.image.write(data, 0)
