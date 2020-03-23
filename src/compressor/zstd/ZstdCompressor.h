@@ -22,7 +22,7 @@
 #include "include/encoding.h"
 #include "compressor/Compressor.h"
 
-#define COMPRESSION_LEVEL 5
+#define COMPRESSION_LEVEL 1
 
 class ZstdCompressor : public Compressor {
  public:
