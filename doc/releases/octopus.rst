@@ -1,9 +1,7 @@
-v15.1.0 Octopus
+v15.2.0 Octopus
 ===============
 
-.. note: This is a release candidate and not (yet) intended for production use.
-
-These are draft notes for the upcoming Octopus release.
+This is the first stable release of Ceph Octopus.
 
 Major Changes from Nautilus
 ---------------------------
@@ -16,10 +14,20 @@ General
   into the orchestration layer.  For more information see
   :ref:`cephadm`.
 * Health alerts can now be muted, either temporarily or permanently.
-* A simple 'alerts' capability has been introduced to send email
+* Health alerts are now raised for recent Ceph daemons crashes.
+* A simple 'alerts' module has been introduced to send email
   health alerts for clusters deployed without the benefit of an
   existing external monitoring infrastructure.
-* Health alerts are now raised for recent Ceph daemons crashes.
+* Packages are built for the following distributions:
+
+  - CentOS 8
+  - CentOS 7 (partial--see below)
+  - Ubuntu 18.04 (Bionic)
+  - :ref:`Container image <containers>` (based on CentOS 8)
+
+  Note that the dashboard, prometheus, and restful manager modules
+  will not work on the CentOS 7 build due to Python 3 module
+  dependencies that are missing in CentOS 7.
 
 
 Dashboard
@@ -112,8 +120,8 @@ RADOS
   scalable fashion.
 
 
-**RBD** block storage
-~~~~~~~~~~~~~~~~~~~~~
+RBD block storage
+~~~~~~~~~~~~~~~~~
   
 * Mirroring now supports a new snapshot-based mode that no longer requires
   the journaling feature and its related impacts in exchange for the loss
@@ -131,15 +139,15 @@ RADOS
 * A new persistent read-only caching daemon is available to offload reads from
   shared parent images.
 
-**RGW** object storage
-~~~~~~~~~~~~~~~~~~~~~~
+RGW object storage
+~~~~~~~~~~~~~~~~~~
   
 * Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
 * WORM?
 * bucket tagging?
 
-**CephFS** distributed file system
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+CephFS distributed file system
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
 * Inline data support in CephFS has been deprecated and will likely be
   removed in a future release.
