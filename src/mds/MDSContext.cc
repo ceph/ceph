@@ -98,7 +98,6 @@ void MDSIOContextBase::complete(int r) {
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
             << typeid(*this).name() << dendl;
-    MDSContext::complete(r);
     return;
   }
 
