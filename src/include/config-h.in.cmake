@@ -238,6 +238,9 @@
 /* yasm can also build the isa-l */
 #cmakedefine HAVE_BETTER_YASM_ELF64
 
+/* Define if isa-l is compiled for arm64 */
+#cmakedefine HAVE_ARMV8_SIMD
+
 /* Define to 1 if strerror_r returns char *. */
 #cmakedefine STRERROR_R_CHAR_P 1
 

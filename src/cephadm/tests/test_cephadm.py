@@ -21,11 +21,6 @@ class TestCephAdm(object):
         args = cd._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
 
-    @mock.patch.dict(os.environ,{'CEPHADM_IMAGE':'bar'})
-    def test__get_parser_image_with_envvar(self):
-        args = cd._parse_args(['version'])
-        assert args.image == 'bar'
-
     def test_CustomValidation(self):
         assert cd._parse_args(['deploy', '--name', 'mon.a', '--fsid', 'fsid'])
 

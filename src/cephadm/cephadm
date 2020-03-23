@@ -133,7 +133,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "pcuzner/ceph-grafana-el8:latest",
+            "image": "ceph/ceph-grafana:latest",
             "cpus": "2",
             "memory": "4GB",
             "args": [],
@@ -215,7 +215,7 @@ class NFSGanesha(object):
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
-        mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha'
+        mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
         return mounts
 
     @staticmethod
@@ -935,6 +935,38 @@ def infer_fsid(func):
         return func()
 
     return _infer_fsid
+
+def infer_image(func):
+    """
+    Use the most recent ceph image
+    """
+    @wraps(func)
+    def _infer_image():
+        if not args.image:
+            args.image = os.environ.get('CEPHADM_IMAGE')
+        if not args.image:
+            args.image = get_last_local_ceph_image()
+        if not args.image:
+            args.image = DEFAULT_IMAGE
+        return func()
+
+    return _infer_image
+
+def default_image(func):
+    @wraps(func)
+    def _default_image():
+        if not args.image:
+            if 'name' in args and args.name:
+                type_ = args.name.split('.', 1)[0]
+                if type_ in Monitoring.components:
+                    args.image = Monitoring.components[type_]['image']
+            if not args.image:
+                args.image = os.environ.get('CEPHADM_IMAGE')
+            if not args.image:
+                args.image = DEFAULT_IMAGE
+        return func()
+
+    return _default_image
 
 def get_last_local_ceph_image():
     """
@@ -1943,6 +1975,7 @@ class CephContainer:
 
 ##################################
 
+@infer_image
 def command_version():
     # type: () -> int
     out = CephContainer(args.image, 'ceph', ['--version']).run()
@@ -1951,6 +1984,7 @@ def command_version():
 
 ##################################
 
+@infer_image
 def command_pull():
     # type: () -> int
     logger.info('Pulling latest %s...' % args.image)
@@ -1959,6 +1993,7 @@ def command_pull():
 
 ##################################
 
+@infer_image
 def command_inspect_image():
     # type: () -> int
     out, err, ret = call_throws([
@@ -1978,6 +2013,7 @@ def command_inspect_image():
 
 ##################################
 
+@default_image
 def command_bootstrap():
     # type: () -> int
 
@@ -2420,6 +2456,7 @@ def extract_uid_gid_monitoring(daemon_type):
     return uid, gid
 
 
+@default_image
 def command_deploy():
     # type: () -> None
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -2452,8 +2489,6 @@ def command_deploy():
             daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
             if any([port_in_use(port) for port in daemon_ports]):
                 raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
-            elif args.image == DEFAULT_IMAGE or args.image == inferred_image:
-                raise Error("--image parameter must be supplied for {}".format(daemon_type))
 
         # make sure provided config-json is sufficient
         config = get_parm(args.config_json) # type: ignore
@@ -2488,6 +2523,7 @@ def command_deploy():
 
 ##################################
 
+@infer_image
 def command_run():
     # type: () -> int
     (daemon_type, daemon_id) = args.name.split('.', 1)
@@ -2498,6 +2534,7 @@ def command_run():
 ##################################
 
 @infer_fsid
+@infer_image
 def command_shell():
     # type: () -> int
     if args.fsid:
@@ -2589,6 +2626,7 @@ def command_enter():
 ##################################
 
 @infer_fsid
+@infer_image
 def command_ceph_volume():
     # type: () -> None
     if args.fsid:
@@ -2845,6 +2883,7 @@ def list_daemons(detail=True, legacy_dir=None):
 
 ##################################
 
+@default_image
 def command_adopt():
     # type: () -> None
 
@@ -3337,7 +3376,8 @@ def get_distro():
 class Packager(object):
     def __init__(self, stable=None, version=None, branch=None, commit=None):
         assert \
-            (stable and not branch and not commit) or \
+            (stable and not version and not branch and not commit) or \
+            (not stable and version and not branch and not commit) or \
             (not stable and not version and branch) or \
             (not stable and not version and not branch and not commit)
         self.stable = stable
@@ -3377,7 +3417,7 @@ class Packager(object):
     def repo_gpgkey(self):
         if args.gpg_url:
             return args.gpg_url
-        if self.stable:
+        if self.stable or self.version:
             return 'https://download.ceph.com/keys/release.asc', 'release'
         else:
             return 'https://download.ceph.com/keys/autobuild.asc', 'autobuild'
@@ -3418,14 +3458,12 @@ class Apt(Packager):
         with open('/etc/apt/trusted.gpg.d/ceph.%s.gpg' % name, 'w') as f:
             f.write(key)
 
-        if self.stable:
-            if self.version:
-                content = 'deb %s/debian-%s-%s/ %s main\n' % (
-                    args.repo_url, self.stable, self.version,
-                    self.distro_codename)
-            else:
-                content = 'deb %s/debian-%s/ %s main\n' % (
-                    args.repo_url, self.stable, self.distro_codename)
+        if self.version:
+            content = 'deb %s/debian-%s/ %s main\n' % (
+                args.repo_url, self.version, self.distro_codename)
+        elif self.stable:
+            content = 'deb %s/debian-%s/ %s main\n' % (
+                args.repo_url, self.stable, self.distro_codename)
         else:
             content = self.query_shaman(self.distro, self.distro_codename, self.branch,
                                         self.commit)
@@ -3543,17 +3581,16 @@ class YumDnf(Packager):
         return '/etc/yum.repos.d/ceph.repo'
 
     def repo_baseurl(self):
-        assert self.stable
+        assert self.stable or self.version
         if self.version:
-            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
-                                        self.version,
-                                        self.distro_code)
+            return '%s/rpm-%s/%s' % (args.repo_url, self.version,
+                                     self.distro_code)
         else:
             return '%s/rpm-%s/%s' % (args.repo_url, self.stable,
                                      self.distro_code)
 
     def add_repo(self):
-        if self.stable:
+        if self.stable or self.version:
             content = ''
             for n, t in {
                     'Ceph': '$basearch',
@@ -3650,14 +3687,14 @@ class Zypper(Packager):
         return '/etc/zypp/repos.d/ceph.repo'
 
     def repo_baseurl(self):
-        assert self.stable
+        assert self.stable or self.version
         if self.version:
-            return '%s/rpm-%s-%s/%s' % (args.repo_url, self.stable,
-                                        self.version, self.distro)
-        return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
+            return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
+        else:
+            return '%s/rpm-%s/%s' % (args.repo_url, self.stable, self.distro)
 
     def add_repo(self):
-        if self.stable:
+        if self.stable or self.version:
             content = ''
             for n, t in {
                     'Ceph': '$basearch',
@@ -3719,19 +3756,6 @@ def command_add_repo():
             (x, y, z) = args.version.split('.')
         except Exception as e:
             raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
-        relnames = {
-            '16': 'pacific',
-            '15': 'octopus',
-            '14': 'nautilus',
-            '13': 'mimic',
-            '12': 'luminous',
-            '11': 'kraken',
-            '10': 'jewel',
-        }
-        args.release = relnames.get(x, None)
-        if not args.release:
-            raise Error('unknown release %s (not in %s)' % (
-                x, ' '.join(relnames.values())))
 
     pkg = create_packager(stable=args.release,
                           version=args.version,
@@ -4182,26 +4206,7 @@ def _get_parser():
 
 def _parse_args(av):
     parser = _get_parser()
-    args = parser.parse_args(av)
-
-    if not args.image:
-        if 'name' in args and args.name:
-            type_ = args.name.split('.', 1)[0]
-            if type_ in Monitoring.components:
-                args.image = Monitoring.components[type_]['image']
-        if not args.image:
-            args.image = os.environ.get('CEPHADM_IMAGE')
-
-    return args
-
-def _infer_image():
-    inferred = None
-    if not args.image:
-        inferred = get_last_local_ceph_image()
-        args.image = inferred
-    if not args.image:
-        args.image = DEFAULT_IMAGE
-    return inferred
+    return parser.parse_args(av)
 
 if __name__ == "__main__":
     # allow argv to be injected
@@ -4239,9 +4244,6 @@ if __name__ == "__main__":
     if 'func' not in args:
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
-
-    if args.func != command_bootstrap:
-        inferred_image = _infer_image()
 
     try:
         r = args.func()

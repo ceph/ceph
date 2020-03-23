@@ -17,6 +17,7 @@
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
+#include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Types.h"
@@ -110,11 +111,13 @@ struct Replayer<I>::ProgressContext : public librbd::ProgressContext {
 template <typename I>
 Replayer<I>::Replayer(
     Threads<I>* threads,
+    InstanceWatcher<I>* instance_watcher,
     const std::string& local_mirror_uuid,
     PoolMetaCache* pool_meta_cache,
     StateBuilder<I>* state_builder,
     ReplayerListener* replayer_listener)
   : m_threads(threads),
+    m_instance_watcher(instance_watcher),
     m_local_mirror_uuid(local_mirror_uuid),
     m_pool_meta_cache(pool_meta_cache),
     m_state_builder(state_builder),
@@ -172,6 +175,10 @@ void Replayer<I>::shut_down(Context* on_finish) {
   std::swap(m_state, state);
 
   if (state == STATE_REPLAYING) {
+    // if a sync request was pending, request a cancelation
+    m_instance_watcher->cancel_sync_request(
+      m_state_builder->local_image_ctx->id);
+
     // TODO interrupt snapshot copy and image copy state machines even if remote
     // cluster is unreachable
     dout(10) << "shut down pending on completion of snapshot replay" << dendl;
@@ -708,7 +715,7 @@ void Replayer<I>::handle_get_local_image_state(int r) {
     return;
   }
 
-  copy_image();
+  request_sync();
 }
 
 template <typename I>
@@ -736,6 +743,41 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
   }
 
   dout(15) << "local_snap_id_end=" << m_local_snap_id_end << dendl;
+
+  request_sync();
+}
+
+template <typename I>
+void Replayer<I>::request_sync() {
+  dout(10) << dendl;
+
+  std::unique_lock locker{m_lock};
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      Replayer<I>, &Replayer<I>::handle_request_sync>(this));
+  m_instance_watcher->notify_sync_request(m_state_builder->local_image_ctx->id,
+                                          ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_request_sync(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
+  } else if (r == -ECANCELED) {
+    dout(5) << "image-sync canceled" << dendl;
+    handle_replay_complete(&locker, r, "image-sync canceled");
+    return;
+  } else if (r < 0) {
+    derr << "failed to request image-sync: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(&locker, r, "failed to request image-sync");
+    return;
+  }
+
+  m_sync_in_progress = true;
+  locker.unlock();
 
   copy_image();
 }
@@ -897,22 +939,13 @@ void Replayer<I>::handle_notify_image_update(int r) {
     derr << "failed to notify local image update: " << cpp_strerror(r) << dendl;
   }
 
-  if (is_replay_interrupted()) {
-    return;
-  }
-
   unlink_peer();
 }
 
 template <typename I>
 void Replayer<I>::unlink_peer() {
   if (m_remote_snap_id_start == 0) {
-    {
-      std::unique_lock locker{m_lock};
-      notify_status_updated();
-    }
-
-    load_local_image_meta();
+    finish_sync();
     return;
   }
 
@@ -939,9 +972,24 @@ void Replayer<I>::handle_unlink_peer(int r) {
     return;
   }
 
+  finish_sync();
+}
+
+template <typename I>
+void Replayer<I>::finish_sync() {
+  dout(10) << dendl;
+
   {
     std::unique_lock locker{m_lock};
     notify_status_updated();
+
+    m_sync_in_progress = false;
+    m_instance_watcher->notify_sync_complete(
+      m_state_builder->local_image_ctx->id);
+  }
+
+  if (is_replay_interrupted()) {
+    return;
   }
 
   load_local_image_meta();
@@ -1133,6 +1181,12 @@ void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
   if (m_error_code == 0) {
     m_error_code = r;
     m_error_description = description;
+  }
+
+  if (m_sync_in_progress) {
+    m_sync_in_progress = false;
+    m_instance_watcher->notify_sync_complete(
+      m_state_builder->local_image_ctx->id);
   }
 
   if (m_state != STATE_REPLAYING && m_state != STATE_IDLE) {

@@ -63,6 +63,12 @@ bool SocketConnection::is_closed() const
   return protocol->is_closed();
 }
 
+bool SocketConnection::is_closed_clean() const
+{
+  assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_closed_clean;
+}
+
 #endif
 bool SocketConnection::peer_wins() const
 {
@@ -81,10 +87,10 @@ seastar::future<> SocketConnection::keepalive()
   return protocol->keepalive();
 }
 
-seastar::future<> SocketConnection::close()
+void SocketConnection::mark_down()
 {
   assert(seastar::engine().cpu_id() == shard_id());
-  return protocol->close();
+  protocol->close(false);
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)
@@ -120,19 +126,25 @@ SocketConnection::start_accept(SocketRef&& sock,
   protocol->start_accept(std::move(sock), _peer_addr);
 }
 
+seastar::future<>
+SocketConnection::close_clean(bool dispatch_reset)
+{
+  return protocol->close_clean(dispatch_reset);
+}
+
 seastar::shard_id SocketConnection::shard_id() const {
   return messenger.shard_id();
 }
 
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
-    if (side == side_t::none) {
+    if (!protocol->socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;
-    } else if (side == side_t::acceptor) {
+    } else if (protocol->socket->get_side() == Socket::side_t::acceptor) {
       out << " >> " << get_peer_name() << " " << peer_addr
-          << "@" << ephemeral_port;
-    } else { // side == side_t::connector
-      out << "@" << ephemeral_port
+          << "@" << protocol->socket->get_ephemeral_port();
+    } else { // protocol->socket->get_side() == Socket::side_t::connector
+      out << "@" << protocol->socket->get_ephemeral_port()
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }
