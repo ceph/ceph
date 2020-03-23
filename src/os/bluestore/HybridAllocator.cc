@@ -153,16 +153,6 @@ void HybridAllocator::dump(std::function<void(uint64_t offset, uint64_t length)>
   }
 }
 
-void HybridAllocator::init_add_free(uint64_t offset, uint64_t length)
-{
-  std::lock_guard l(lock);
-  ldout(cct, 10) << __func__ << std::hex
-                 << " offset 0x" << offset
-                 << " length 0x" << length
-                 << std::dec << dendl;
-  _add_to_tree(offset, length);
-}
-
 void HybridAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
