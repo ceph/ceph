@@ -18,7 +18,7 @@ General
 * A simple 'alerts' module has been introduced to send email
   health alerts for clusters deployed without the benefit of an
   existing external monitoring infrastructure.
-* Packages are built for the following distributions:
+* :ref:`Packages <packages>` are built for the following distributions:
 
   - CentOS 8
   - CentOS 7 (partial--see below)
