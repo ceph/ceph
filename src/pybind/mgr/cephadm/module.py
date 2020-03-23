@@ -34,7 +34,7 @@ from ceph.deployment.drive_selection import selector
 from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec, \
     assert_valid_host
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta
@@ -1280,9 +1280,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             temp_files += [f]
             ssh_config_fname = f.name
         if ssh_config_fname:
-            if not os.path.isfile(ssh_config_fname):
-                raise Exception("ssh_config \"{}\" does not exist".format(
-                    ssh_config_fname))
+            self.validate_ssh_config_fname(ssh_config_fname)
             ssh_options += ['-F', ssh_config_fname]
 
         # identity
@@ -1314,6 +1312,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.ssh_user = 'cephadm'
 
         self._reset_cons()
+
+    def validate_ssh_config_fname(self, ssh_config_fname):
+        if not os.path.isfile(ssh_config_fname):
+            raise OrchestratorValidationError("ssh_config \"{}\" does not exist".format(
+                ssh_config_fname))
 
     def _reset_con(self, host):
         conn, r = self._cons.get(host, (None, None))
@@ -1394,6 +1397,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.ssh_config_tmp = None
         self.log.info('Cleared ssh_config')
         return 0, "", ""
+
+    @orchestrator._cli_read_command(
+        prefix='cephadm get-ssh-config',
+        desc='Returns the ssh config as used by cephadm'
+    )
+    def _get_ssh_config(self):
+        if self.ssh_config_file:
+            self.validate_ssh_config_fname(self.ssh_config_file)
+            with open(self.ssh_config_file) as f:
+                return HandleCommandResult(stdout=f.read())
+        ssh_config = self.get_store("ssh_config")
+        if ssh_config:
+            return HandleCommandResult(stdout=ssh_config)
+        return HandleCommandResult(stdout=DEFAULT_SSH_CONFIG)
+
 
     @orchestrator._cli_write_command(
         'cephadm generate-key',
@@ -1617,7 +1635,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # this is a misleading exception as it seems to be thrown for
             # any sort of connection failure, even those having nothing to
             # do with "host not found" (e.g., ssh key permission denied).
-            raise OrchestratorError('Failed to connect to %s (%s).  Check that the host is reachable and accepts connections using the cephadm SSH key' % (host, addr)) from e
+            user = 'root' if self.mode == 'root' else 'cephadm'
+            msg = f'Failed to connect to {host} ({addr}).  ' \
+                  f'Check that the host is reachable and accepts connections using the cephadm SSH key\n' \
+                  f'you may want to run: \n' \
+                  f'> ssh -F =(ceph cephadm get-ssh-config) -i =(ceph config-key get mgr/cephadm/ssh_identity_key) {user}@{host}'
+            raise OrchestratorError(msg) from e
         except Exception as ex:
             self.log.exception(ex)
             raise
