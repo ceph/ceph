@@ -42,6 +42,7 @@ strippedBinDir="$BUILD_DIR/bin_stripped"
 depsSrcDir="$DEPS_DIR/src"
 depsToolsetDir="$DEPS_DIR/mingw"
 
+generatorUsed="Unix Makefiles"
 lz4Dir="${depsToolsetDir}/lz4"
 sslDir="${depsToolsetDir}/openssl"
 curlDir="${depsToolsetDir}/curl"
@@ -50,15 +51,13 @@ zlibDir="${depsToolsetDir}/zlib"
 backtraceDir="${depsToolsetDir}/backtrace"
 snappyDir="${depsToolsetDir}/snappy"
 winLibDir="${depsToolsetDir}/windows/lib"
-generatorUsed="Unix Makefiles"
 wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 
 depsDirs="$lz4Dir;$curlDir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
 depsDirs+=";$winLibDir"
 
-# That's actually a dll, we may want to rename the file.
-lz4Lib="${lz4Dir}/lib/liblz4.so.1.9.2"
+lz4Lib="${lz4Dir}/lib/dll/liblz4-1.dll"
 lz4Include="${lz4Dir}/lib"
 curlLib="${curlDir}/lib/libcurl.dll.a"
 curlInclude="${curlDir}/include"
@@ -109,10 +108,8 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D WITH_CEPHFS=OFF -D WITH_MANPAGE=OFF \
       -D WITH_MGR_DASHBOARD_FRONTEND=OFF -D WITH_SYSTEMD=OFF -D WITH_TESTS=OFF \
       -D LZ4_INCLUDE_DIR=$lz4Include -D LZ4_LIBRARY=$lz4Lib \
-      -D Backtrace_Header="$backtraceDir/include/backtrace.h" \
       -D Backtrace_INCLUDE_DIR="$backtraceDir/include" \
       -D Backtrace_LIBRARY="$backtraceDir/lib/libbacktrace.dll.a" \
-      -D Boost_THREADAPI="pthread" \
       -D ENABLE_GIT_VERSION=$ENABLE_GIT_VERSION \
       -D ALLOCATOR="$ALLOCATOR" -D CMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE \
       -D WNBD_INCLUDE_DIRS="$wnbdSrcDir/include" \
@@ -147,6 +144,7 @@ if [[ -z $SKIP_DLL_COPY ]]; then
     mingwTargetLibDir="/usr/lib/gcc/x86_64-w64-mingw32/$mingwVersion"
     required_dlls=(
         $zlibDir/zlib1.dll
+        $lz4Dir/lib/dll/liblz4-1.dll
         $sslDir/bin/libcrypto-1_1-x64.dll
         $sslDir/bin/libssl-1_1-x64.dll
         $mingwTargetLibDir/libstdc++-6.dll
