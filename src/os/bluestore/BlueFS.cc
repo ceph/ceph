@@ -703,6 +703,7 @@ void BlueFS::umount()
 
 int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
 {
+  std::unique_lock l(lock);
   dout(1) << __func__ << dendl;
 
   if(id == BDEV_NEWDB) {
@@ -1551,6 +1552,7 @@ int BlueFS::device_migrate_to_existing(
   int dev_target,
   const bluefs_layout_t& layout)
 {
+  std::unique_lock l(lock);
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
 
@@ -1691,6 +1693,7 @@ int BlueFS::device_migrate_to_new(
   int dev_target,
   const bluefs_layout_t& layout)
 {
+  std::unique_lock l(lock);
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
 
@@ -2813,11 +2816,15 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     uint64_t x_len = std::min(p->length - x_off, length);
     bufferlist t;
     t.substr_of(bl, bloff, x_len);
+    h->lock.lock();
+    lock.unlock();
     if (cct->_conf->bluefs_sync_write) {
       bdev[p->bdev]->write(p->offset + x_off, t, buffered, h->write_hint);
     } else {
       bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered, h->write_hint);
     }
+    lock.lock();
+    h->lock.unlock();
     h->dirty_devs[p->bdev] = true;
     if (p->bdev == BDEV_SLOW) {
       bytes_written_slow += t.length();
