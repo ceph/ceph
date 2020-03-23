@@ -1,52 +1,77 @@
+.. _packages:
+
 ==============
  Get Packages
 ==============
 
 To install Ceph and other enabling software, you need to retrieve packages from
-the Ceph repository. Follow this guide to get packages; then, proceed to the
-`Install Ceph Object Storage`_.
+the Ceph repository. 
 
+There are three ways to get packages:
 
-Getting Packages
-================
-
-There are two ways to get packages:
-
-- **Add Repositories:** Adding repositories is the easiest way to get packages,
-  because package management tools will retrieve the packages and all enabling
-  software for you in most cases. However, to use this approach, each
+- **Cephadm:** Cephadm can configure your Ceph repositories for you
+  based on a release name or a specific Ceph version.  Each
   :term:`Ceph Node` in your cluster must have internet access.
+
+- **Configure Repositories Manually:** You can manually configure your
+  package management tool to retrieve Ceph packages and all enabling
+  software.  Each :term:`Ceph Node` in your cluster must have internet
+  access.
 
 - **Download Packages Manually:** Downloading packages manually is a convenient
   way to install Ceph if your environment does not allow a :term:`Ceph Node` to
   access the internet.
 
+Install packages with cephadm
+=============================
 
-Requirements
-============
+#. Download the cephadm script::
+
+    curl --silent --remote-name --location https://github.com/ceph/ceph/raw/octopus/src/cephadm/cephadm
+    chmod +x cephadm
+
+#. Configure the Ceph repository based on the release name::
+
+     ./cephadm add-repo --release nautilus
+
+   For Octopus (15.2.0) and later releases, you can also specify a specific
+   version::
+
+     ./cephadm add-repo --version 15.2.1
+
+   For development packages, you can specify a specific branch name::
+
+     ./cephadm add-repo --dev my-branch
+
+#. Install the appropriate packages.  You can install them using your
+   package management tool (e.g., APT, Yum) directly, or you can also
+   use the cephadm wrapper.  For example::
+
+     ./cephadm install ceph-common
+   
+     
+Configure Repositories Manually
+===============================
 
 All Ceph deployments require Ceph packages (except for development). You should
 also add keys and recommended packages.
 
 - **Keys: (Recommended)** Whether you add repositories or download packages
   manually, you should download keys to verify the packages. If you do not get
-  the keys, you may encounter security warnings. See `Add Keys`_ for details.
+  the keys, you may encounter security warnings.
 
 - **Ceph: (Required)** All Ceph deployments require Ceph release packages,
   except for deployments that use development packages (development, QA, and
-  bleeding edge deployments only). See `Add Ceph`_ for details.
+  bleeding edge deployments only).
 
 - **Ceph Development: (Optional)** If you are developing for Ceph, testing Ceph
   development builds, or if you want features from the bleeding edge of Ceph
-  development, you may get Ceph development packages. See
-  `Add Ceph Development`_ for details.
+  development, you may get Ceph development packages.
 
-
-If you intend to download packages manually, see Section `Download Packages`_.
 
 
 Add Keys
-========
+--------
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
 major releases (e.g., ``luminous``, ``mimic``, ``nautilus``) and development releases
@@ -54,7 +79,7 @@ major releases (e.g., ``luminous``, ``mimic``, ``nautilus``) and development rel
 
 
 APT
----
+~~~
 
 To install the ``release.asc`` key, execute the following::
 
@@ -62,14 +87,14 @@ To install the ``release.asc`` key, execute the following::
 
 
 RPM
----
+~~~
 
 To install the ``release.asc`` key, execute the following::
 
 	sudo rpm --import 'https://download.ceph.com/keys/release.asc'
 
-Add Ceph
-========
+Ceph Release Packages
+---------------------
 
 Release repositories use the ``release.asc`` key to verify packages.
 To install Ceph packages with the Advanced Package Tool (APT) or
@@ -83,18 +108,22 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 	https://download.ceph.com/rpm-{release-name}
 
-The major releases of Ceph are summarized at: :ref:`ceph-releases-general`
+For Octopus and later releases, you can also configure a repository for a
+specific version ``x.y.z``.  For Debian/Ubuntu packages::
 
-Every second major release is considered Long Term Stable (LTS). Critical
-bugfixes are backported to LTS releases until their retirement. Since retired
-releases are no longer maintained, we recommend that users upgrade their
-clusters regularly - preferably to the latest LTS release.
+  https://download.ceph.com/debian-{version}
+
+For RPMs::
+
+  https://download.ceph.com/rpm-{version}
+
+The major releases of Ceph are summarized at: :ref:`ceph-releases-general`
 
 .. tip:: For non-US users: There might be a mirror close to you where
          to download Ceph from. For more information see: `Ceph Mirrors`_.
 
 Debian Packages
----------------
+~~~~~~~~~~~~~~~
 
 Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to
@@ -130,10 +159,10 @@ of Debian and Ubuntu releases supported. ::
 
 
 RPM Packages
-------------
+~~~~~~~~~~~~
 
 RHEL
-----
+^^^^
 
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
@@ -189,28 +218,28 @@ You can download the RPMs directly from::
          to download Ceph from. For more information see: `Ceph Mirrors`_.
 
 openSUSE Leap 15.1
-------------------
+^^^^^^^^^^^^^^^^^^
 
 You need to add the Ceph package repository to your list of zypper sources. This can be done with the following command ::
 
     zypper ar https://download.opensuse.org/repositories/filesystems:/ceph/openSUSE_Leap_15.1/filesystems:ceph.repo
 
 openSUSE Tumbleweed
--------------------
+^^^^^^^^^^^^^^^^^^^
 
 The newest major release of Ceph is already available through the normal Tumbleweed repositories.
 There's no need to add another package repository manually.
 
 
-Add Ceph Development
-====================
+Ceph Development Packages
+-------------------------
 
 If you are developing Ceph and need to deploy and test specific Ceph branches,
 ensure that you remove repository entries for major releases first.
 
 
 DEB Packages
-------------
+~~~~~~~~~~~~
 
 We automatically build Ubuntu packages for current development branches in the
 Ceph source code repository.  These packages are intended for developers and QA
@@ -235,7 +264,7 @@ For Ubuntu Xenial and the master branch of Ceph, it would look like::
 .. warning:: Development repositories are no longer available after two weeks.
 
 RPM Packages
-------------
+~~~~~~~~~~~~
 
 For current development branches, you may add a Ceph entry to the
 ``/etc/yum.repos.d`` directory. The `the shaman page`_ can be used to retrieve the full details
@@ -254,15 +283,15 @@ For CentOS 7 and the master branch of Ceph, it would look like::
 
 .. note:: If the repository is not ready an HTTP 504 will be returned
 
-Download Packages
-=================
+Download Packages Manually
+--------------------------
 
 If you are attempting to install behind a firewall in an environment without internet
 access, you must retrieve the packages (mirrored with all the necessary dependencies)
 before attempting an install.
 
 Debian Packages
----------------
+~~~~~~~~~~~~~~~
 
 Ceph requires additional third party libraries.
 
@@ -286,7 +315,7 @@ your Linux distribution codename. Replace ``{arch}`` with the CPU architecture.
 
 
 RPM Packages
-------------
+~~~~~~~~~~~~
 
 Ceph requires additional additional third party libraries.
 To add the EPEL repository, execute the following::
@@ -325,7 +354,6 @@ line to get the short codename. ::
 
 
 
-.. _Install Ceph Object Storage: ../install-storage-cluster
 .. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
 .. _the shaman page: https://shaman.ceph.com
 .. _Ceph Mirrors: ../mirrors
