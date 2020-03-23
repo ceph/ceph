@@ -604,6 +604,5 @@ Upgrade compatibility notes
   This change may affect the configuration for clients that include a
   ``.`` in their name.
 
-  Note that this only applies to configuration options in the
 
 .. _announcement: https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/
