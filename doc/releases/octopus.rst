@@ -134,9 +134,19 @@ RADOS
 **RGW** object storage
 ~~~~~~~~~~~~~~~~~~~~~~
   
-* Multi-site replication can now be managed on a per-bucket basis (EXPERIMENTAL).
-* WORM?
-* bucket tagging?
+* New `Multisite Sync Policy`_ primitives for per-bucket replication. (EXPERIMENTAL)
+* S3 feature support:
+    - Bucket Replication (EXPERIMENTAL)
+    - `Bucket Notifications`_ via HTTP/S, AMQP and Kafka
+    - Bucket Tagging
+    - Object Lock
+    - Public Access Block for buckets
+* Bucket sharding:
+    - Significantly improved listing performance on buckets with many shards.
+    - Dynamic resharding prefers prime shard counts for improved distribution.
+    - Raised the default number of bucket shards to 11.
+* Added `HashiCorp Vault Integration`_ for SSE-KMS.
+* Added Keystone token cache for S3 requests.
 
 **CephFS** distributed file system
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -591,3 +601,6 @@ Upgrade compatibility notes
   Note that this only applies to configuration options in the
 
 .. _announcement: https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/
+.. _Bucket Notifications: ../../radosgw/notifications
+.. _HashiCorp Vault Integration: ../../radosgw/vault
+.. _Multisite Sync Policy: ../../radosgw/multisite-sync-policy
