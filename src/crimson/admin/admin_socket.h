@@ -152,6 +152,7 @@ private:
   seastar::future<tell_result_t> execute_command(const std::vector<std::string>& cmd,
 						 ceph::bufferlist&& buf);
 
+  std::optional<seastar::future<>> task;
   std::optional<seastar::server_socket> server_sock;
   std::optional<seastar::connected_socket> connected_sock;
 
