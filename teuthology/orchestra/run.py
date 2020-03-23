@@ -276,29 +276,36 @@ def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):
         if capture:
             #out = ensure_str(line)
             if PY3:
-                if isinstance(line, str):
-                    out = line.encode()
-                else:
-                    out = line.decode()
                 if isinstance(capture, io.StringIO):
-                    capture.write(out)
+                    if isinstance(line, str):
+                        capture.write(line)
+                    else:
+                        capture.write(line.decode('utf-8', 'replace'))
                 elif isinstance(capture, io.BytesIO):
-                    capture.write(out.encode())
+                    if isinstance(line, str):
+                        capture.write(line.encode())
+                    else:
+                        capture.write(line)
             else:
-                if isinstance(line, str):
-                    out = line.decode()
-                else:
-                    out = line.encode()
                 if isinstance(capture, io.StringIO):
-                    capture.write(out)
+                    if isinstance(line, str):
+                        capture.write(line.decode('utf-8', 'replace'))
+                    else:
+                        capture.write(line)
                 elif isinstance(capture, io.BytesIO):
-                    capture.write(out.encode())
+                    if isinstance(line, str):
+                        capture.write(line)
+                    else:
+                        capture.write(line.encode())
                 else:
                     # isinstance does not work with cStringIO.StringIO and
                     # fails with error:
                     #   TypeError: isinstance() arg 2 must be a class, type,
                     #   or tuple of classes and types
-                    capture.write(out.encode())
+                    if isinstance(line, str):
+                        capture.write(line)
+                    else:
+                        capture.write(line.encode())
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
         try:
