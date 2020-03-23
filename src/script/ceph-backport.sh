@@ -1082,7 +1082,8 @@ function try_known_milestones {
         luminous) mn="10" ;;
         mimic) mn="11" ;;
         nautilus) mn="12" ;;
-        octopus) echo "Octopus milestone number is unknown! Update the script now." ; exit 1 ;;
+        octopus) mn="13" ;;
+        pacific) mn="TBD" ;;
     esac
     echo "$mn"
 }
