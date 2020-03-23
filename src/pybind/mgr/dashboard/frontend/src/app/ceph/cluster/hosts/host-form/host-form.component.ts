@@ -29,7 +29,7 @@ export class HostFormComponent implements OnInit {
     private taskWrapper: TaskWrapperService
   ) {
     this.resource = this.i18n('host');
-    this.action = this.actionLabels.ADD;
+    this.action = this.actionLabels.CREATE;
     this.createForm();
   }
 
@@ -59,10 +59,10 @@ export class HostFormComponent implements OnInit {
     const hostname = this.hostForm.get('hostname').value;
     this.taskWrapper
       .wrapTaskAroundCall({
-        task: new FinishedTask('host/' + URLVerbs.ADD, {
+        task: new FinishedTask('host/' + URLVerbs.CREATE, {
           hostname: hostname
         }),
-        call: this.hostService.add(hostname)
+        call: this.hostService.create(hostname)
       })
       .subscribe(
         undefined,

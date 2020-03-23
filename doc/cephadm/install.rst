@@ -309,14 +309,35 @@ Deploy RGWs
 
 Cephadm deploys radosgw as a collection of daemons that manage a
 particular *realm* and *zone*.  (For more information about realms and
-zones, see :ref:`multisite`.)  To deploy a set of radosgw daemons for
-a particular realm and zone::
-
-  # ceph orch apply rgw *<realm-name>* *<zone-name>* *<num-daemons>* [*<host1>* ...]
+zones, see :ref:`multisite`.)
 
 Note that with cephadm, radosgw daemons are configured via the monitor
 configuration database instead of via a `ceph.conf` or the command line.  If
-that confiruation isn't already in place (usually in the
+that configuration isn't already in place (usually in the
 ``client.rgw.<realmname>.<zonename>`` section), then the radosgw
 daemons will start up with default settings (e.g., binding to port
 80).
+
+If a realm has not been created yet, first create a realm::
+
+  # radosgw-admin realm create --rgw-realm=<realm-name> --default
+
+Next create a new zonegroup::
+
+  # radosgw-admin zonegroup create --rgw-zonegroup=<zonegroup-name>  --master --default
+
+Next create a zone::
+
+  # radosgw-admin zone create --rgw-zonegroup=<zonegroup-name> --rgw-zone=<zone-name> --master --default
+
+To deploy a set of radosgw daemons for a particular realm and zone::
+
+  # ceph orch apply rgw *<realm-name>* *<zone-name>* *<num-daemons>* [*<host1>* ...]
+
+For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-1*
+zone on *myhost1* and *myhost2*::
+
+  # radosgw-admin realm create --rgw-realm=myorg --default
+  # radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
+  # radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=us-east-1 --master --default
+  # ceph orch apply rgw myorg us-east-1 2 myhost1 myhost2

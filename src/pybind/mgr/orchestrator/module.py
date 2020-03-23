@@ -755,15 +755,26 @@ Usage:
         'orch apply rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
+        'name=subcluster,type=CephString,req=false '
+        'name=port,type=CephInt,req=false '
+        'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
-    def _apply_rgw(self, zone_name, realm_name, placement=None, unmanaged=False):
+    def _apply_rgw(self, zone_name, realm_name,
+                   subcluster=None,
+                   port=None,
+                   ssl=False,
+                   placement=None,
+                   unmanaged=False):
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
+            subcluster=subcluster,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
+            rgw_frontend_port=port,
+            ssl=ssl,
         )
         completion = self.apply_rgw(spec)
         self._orchestrator_wait([completion])
@@ -901,7 +912,7 @@ Usage:
         assert c.has_result
 
     @_cli_write_command(
-        'upgrade check',
+        'orch upgrade check',
         'name=image,type=CephString,req=false '
         'name=ceph_version,type=CephString,req=false',
         desc='Check service versions vs available and target containers')
@@ -912,7 +923,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
-        'upgrade status',
+        'orch upgrade status',
         desc='Check service versions vs available and target containers')
     def _upgrade_status(self):
         completion = self.upgrade_status()
@@ -928,7 +939,7 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command(
-        'upgrade start',
+        'orch upgrade start',
         'name=image,type=CephString,req=false '
         'name=ceph_version,type=CephString,req=false',
         desc='Initiate upgrade')
@@ -939,7 +950,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
-        'upgrade pause',
+        'orch upgrade pause',
         desc='Pause an in-progress upgrade')
     def _upgrade_pause(self):
         completion = self.upgrade_pause()
@@ -948,7 +959,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
-        'upgrade resume',
+        'orch upgrade resume',
         desc='Resume paused upgrade')
     def _upgrade_resume(self):
         completion = self.upgrade_resume()
@@ -957,7 +968,7 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
-        'upgrade stop',
+        'orch upgrade stop',
         desc='Stop an in-progress upgrade')
     def _upgrade_stop(self):
         completion = self.upgrade_stop()

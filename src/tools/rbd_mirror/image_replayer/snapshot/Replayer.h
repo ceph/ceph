@@ -22,6 +22,7 @@ namespace snapshot { template <typename I> class Replay; }
 namespace rbd {
 namespace mirror {
 
+template <typename> struct InstanceWatcher;
 class PoolMetaCache;
 template <typename> struct Threads;
 
@@ -40,16 +41,18 @@ class Replayer : public image_replayer::Replayer {
 public:
   static Replayer* create(
       Threads<ImageCtxT>* threads,
+      InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
       PoolMetaCache* pool_meta_cache,
       StateBuilder<ImageCtxT>* state_builder,
       ReplayerListener* replayer_listener) {
-    return new Replayer(threads, local_mirror_uuid, pool_meta_cache,
-                        state_builder, replayer_listener);
+    return new Replayer(threads, instance_watcher, local_mirror_uuid,
+                        pool_meta_cache, state_builder, replayer_listener);
   }
 
   Replayer(
       Threads<ImageCtxT>* threads,
+      InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& local_mirror_uuid,
       PoolMetaCache* pool_meta_cache,
       StateBuilder<ImageCtxT>* state_builder,
@@ -123,6 +126,9 @@ private:
    *    |                     |/----------------------/ |
    *    |                     |                         |
    *    |                     v                         |
+   *    |                 REQUEST_SYNC                  |
+   *    |                     |                         |
+   *    |                     v                         |
    *    |                 COPY_IMAGE                    |
    *    |                     |                         |
    *    |                     v                         |
@@ -180,6 +186,7 @@ private:
   struct ProgressContext;
 
   Threads<ImageCtxT>* m_threads;
+  InstanceWatcher<ImageCtxT>* m_instance_watcher;
   std::string m_local_mirror_uuid;
   PoolMetaCache* m_pool_meta_cache;
   StateBuilder<ImageCtxT>* m_state_builder;
@@ -217,6 +224,7 @@ private:
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
+  bool m_sync_in_progress = false;
 
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);
@@ -242,6 +250,9 @@ private:
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
 
+  void request_sync();
+  void handle_request_sync(int r);
+
   void copy_image();
   void handle_copy_image(int r);
   void handle_copy_image_progress(uint64_t object_number,
@@ -258,6 +269,8 @@ private:
 
   void unlink_peer();
   void handle_unlink_peer(int r);
+
+  void finish_sync();
 
   void register_local_update_watcher();
   void handle_register_local_update_watcher(int r);
