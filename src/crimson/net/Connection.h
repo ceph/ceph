@@ -95,6 +95,8 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 #ifdef UNIT_TESTS_BUILT
   virtual bool is_closed() const = 0;
 
+  virtual bool is_closed_clean() const = 0;
+
   virtual bool peer_wins() const = 0;
 #endif
 
@@ -105,10 +107,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   /// handshake
   virtual seastar::future<> keepalive() = 0;
 
-  // close the connection and cancel any any pending futures from read/send
-  // Note it's OK to discard the returned future because Messenger::shutdown()
-  // will wait for all connections closed
-  virtual seastar::future<> close() = 0;
+  // close the connection and cancel any any pending futures from read/send,
+  // without dispatching any reset event
+  virtual void mark_down() = 0;
 
   virtual void print(ostream& out) const = 0;
 

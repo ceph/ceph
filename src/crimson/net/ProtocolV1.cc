@@ -309,8 +309,6 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   state = state_t::connecting;
   set_write_state(write_state_t::delay);
 
-  // we don't know my ephemeral port yet
-  conn.set_ephemeral_port(0, SocketConnection::side_t::none);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
@@ -318,7 +316,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  (void) seastar::with_gate(pending_dispatch, [this] {
+  gated_dispatch("start_connect", [this] {
       return Socket::connect(conn.peer_addr)
         .then([this](SocketRef sock) {
           socket = std::move(sock);
@@ -347,8 +345,10 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
             throw std::system_error(
                 make_error_code(crimson::net::error::bad_peer_address));
           }
-          conn.set_ephemeral_port(caddr.get_port(),
-                                  SocketConnection::side_t::connector);
+          if (state != state_t::connecting) {
+            throw std::system_error(make_error_code(error::protocol_aborted));
+          }
+          socket->learn_ephemeral_port_as_connector(caddr.get_port());
           if (unlikely(caddr.is_msgr2())) {
             logger().warn("{} peer sent a v2 address for me: {}",
                           conn, caddr);
@@ -377,7 +377,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", conn, eptr);
-          (void) close();
+          close(true);
         });
     });
 }
@@ -466,7 +466,7 @@ seastar::future<stop_t> ProtocolV1::replace_existing(
     // will all be performed using v2 protocol.
     ceph_abort("lossless policy not supported for v1");
   }
-  (void) existing->close();
+  existing->protocol->close(true);
   return send_connect_reply_ready(reply_tag, std::move(authorizer_reply));
 }
 
@@ -583,7 +583,8 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
           logger().warn("{} existing {} proto version is {} not 1, close existing",
                         conn, *existing,
                         static_cast<int>(existing->protocol->proto_type));
-          (void) existing->close();
+          // NOTE: this is following async messenger logic, but we may miss the reset event.
+          existing->mark_down();
         } else {
           return handle_connect_with_existing(existing, std::move(authorizer_reply));
         }
@@ -612,12 +613,10 @@ void ProtocolV1::start_accept(SocketRef&& sock,
   ceph_assert(!socket);
   // until we know better
   conn.target_addr = _peer_addr;
-  conn.set_ephemeral_port(_peer_addr.get_port(),
-                          SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  (void) seastar::with_gate(pending_dispatch, [this] {
+  gated_dispatch("start_accept", [this] {
       // stop learning my_addr before sending it out, so it won't change
       return messenger.learned_addr(messenger.get_myaddr(), conn).then([this] {
           // encode/send server's handshake header
@@ -663,7 +662,7 @@ void ProtocolV1::start_accept(SocketRef&& sock,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
           logger().warn("{} accepting fault: {}", conn, eptr);
-          (void) close();
+          close(false);
         });
     });
 }
@@ -847,15 +846,11 @@ seastar::future<> ProtocolV1::read_message()
       }
 
       // start dispatch, ignoring exceptions from the application layer
-      (void) seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-          logger().debug("{} <== #{} === {} ({})",
-                         conn, msg->get_seq(), *msg, msg->get_type());
-          return dispatcher.ms_dispatch(&conn, std::move(msg))
-            .handle_exception([this] (std::exception_ptr eptr) {
-              logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-              ceph_assert(false);
-            });
-        });
+      gated_dispatch("ms_dispatch", [this, msg = std::move(msg_ref)] {
+        logger().debug("{} <== #{} === {} ({})",
+                       conn, msg->get_seq(), *msg, msg->get_type());
+        return dispatcher.ms_dispatch(&conn, std::move(msg));
+      });
     });
 }
 
@@ -894,31 +889,23 @@ void ProtocolV1::execute_open()
   state = state_t::open;
   set_write_state(write_state_t::open);
 
-  (void) seastar::with_gate(pending_dispatch, [this] {
+  gated_dispatch("execute_open", [this] {
       // start background processing of tags
       return handle_tags()
         .handle_exception_type([this] (const std::system_error& e) {
           logger().warn("{} open fault: {}", conn, e);
           if (e.code() == error::protocol_aborted ||
-              e.code() == std::errc::connection_reset) {
-            return dispatcher.ms_handle_reset(
-                seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-              .then([this] {
-                (void) close();
-              });
-          } else if (e.code() == error::read_eof) {
-            return dispatcher.ms_handle_remote_reset(
-                seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-              .then([this] {
-                (void) close();
-              });
+              e.code() == std::errc::connection_reset ||
+              e.code() == error::read_eof) {
+            close(true);
+            return seastar::now();
           } else {
             throw e;
           }
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the open state
           logger().warn("{} open fault: {}", conn, eptr);
-          (void) close();
+          close(true);
         });
     });
 }

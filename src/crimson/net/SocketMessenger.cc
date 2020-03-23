@@ -141,6 +141,7 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
   ceph_assert(peer_addr.get_port() > 0);
 
   if (auto found = lookup_conn(peer_addr); found) {
+    logger().info("{} connect to existing", *found);
     return found->shared_from_this();
   }
   SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
@@ -163,12 +164,12 @@ seastar::future<> SocketMessenger::shutdown()
   // close all connections
   }).then([this] {
     return seastar::parallel_for_each(accepting_conns, [] (auto conn) {
-      return conn->close();
+      return conn->close_clean(false);
     });
   }).then([this] {
     ceph_assert(accepting_conns.empty());
     return seastar::parallel_for_each(connections, [] (auto conn) {
-      return conn.second->close();
+      return conn.second->close_clean(false);
     });
   }).then([this] {
     ceph_assert(connections.empty());
