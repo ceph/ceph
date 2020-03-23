@@ -158,7 +158,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       ictx->exclusive_lock->block_requests(0);
 
       r = ictx->operations->prepare_image_update(
-        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, false);
+        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, true);
       if (r < 0) {
         lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
         ictx->owner_lock.unlock_shared();

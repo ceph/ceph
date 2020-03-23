@@ -542,7 +542,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	    goto out;
 	  }
 	} else {
-	  if (!wrlock_start(lock, mdr)) {
+	  if (!wrlock_start(p, mdr)) {
 	    ceph_assert(!p.is_remote_wrlock());
 	    marker.message = "failed to wrlock, waiting";
 	    goto out;
