@@ -38,10 +38,18 @@ fi
 # I18N
 npm run i18n:extract
 i18n_lint=`awk '/<source> |<source>$| <\/source>/,/<\/context-group>/ {printf "%-4s ", NR; print}' src/locale/messages.xlf`
-if [[ ! -z $i18n_lint ]]; then
+if [ "$i18n_lint" ]; then
   echo -e "The following source translations in 'messages.xlf' need to be \
 fixed, please check the I18N suggestions in 'HACKING.rst':\n"
   echo "${i18n_lint}"
+  failed=true
+fi
+
+# npm resolutions
+npm run fix:audit
+resolutions=`git status | grep package-lock.json`
+if [ "$resolutions" ]; then
+  echo "Please run 'npm run fix:audit' before committing."
   failed=true
 fi
 
