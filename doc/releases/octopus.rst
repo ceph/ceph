@@ -352,6 +352,14 @@ upgrading to Octopus.
 Upgrade compatibility notes
 ---------------------------
 
+* Starting with Octopus, there is now a separate repository directory
+  for each version on `download.ceph.com` (e.g., ``rpm-15.2.0`` and
+  ``debian-15.2.0``).  The traditional package directory that is named
+  after the release (e.g., ``rpm-octopus`` and ``debian-octopus``) is
+  now a symlink to the most recently bug fix version for that release.
+  We no longer generate a single repository that combines all bug fix
+  versions for a single named release.
+
 * The RGW "num_rados_handles" has been removed.
   If you were using a value of "num_rados_handles" greater than 1
   multiply your current "objecter_inflight_ops" and
