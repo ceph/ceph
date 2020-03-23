@@ -77,7 +77,7 @@ if [[ ! -d $zlibDir ]]; then
 fi
 cd zlib
 # Apparently the configure script is broken...
-sed -e s/"PREFIX ="/"PREFIX = x86_64-w64-mingw32-"/ -i win32/Makefile.gcc
+sed -e s/"PREFIX = *$"/"PREFIX = x86_64-w64-mingw32-"/ -i win32/Makefile.gcc
 _make -f win32/Makefile.gcc
 _make BINARY_PATH=$zlibDir \
      INCLUDE_PATH=$zlibDir/include \
@@ -92,7 +92,9 @@ fi
 cd lz4
 git checkout $lz4Tag
 _make BUILD_STATIC=no CC=x86_64-w64-mingw32-gcc \
-      DLLTOOL=x86_64-w64-mingw32-dlltool OS=Windows_NT
+      DLLTOOL=x86_64-w64-mingw32-dlltool \
+      WINDRES=x86_64-w64-mingw32-windres \
+      TARGET_OS=Windows_NT
 
 cd $depsSrcDir
 if [[ ! -d $sslSrcDir ]]; then
