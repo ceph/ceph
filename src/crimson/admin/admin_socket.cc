@@ -220,8 +220,7 @@ seastar::future<> AdminSocket::handle_client(seastar::input_stream<char>& in,
     return in.close();
   }).handle_exception([](auto ep) {
     logger().debug("exception on {}: {}", __func__, ep);
-    return seastar::make_ready_future<>();
-  }).discard_result();
+  });
 }
 
 seastar::future<> AdminSocket::start(const std::string& path)
@@ -236,7 +235,7 @@ seastar::future<> AdminSocket::start(const std::string& path)
   auto sock_path = seastar::socket_address{ seastar::unix_domain_addr{ path } };
   server_sock = seastar::engine().listen(sock_path);
   // listen in background
-  std::ignore = seastar::do_until(
+  task = seastar::do_until(
     [this] { return stop_gate.is_closed(); },
     [this] {
       return seastar::with_gate(stop_gate, [this] {
@@ -257,11 +256,7 @@ seastar::future<> AdminSocket::start(const std::string& path)
           }
         });
       });
-    }).then([] {
-      logger().debug("AdminSocket::init(): admin-sock thread terminated");
-      return seastar::now();
     });
-
   return seastar::make_ready_future<>();
 }
 
@@ -271,13 +266,17 @@ seastar::future<> AdminSocket::stop()
     return seastar::now();
   }
   server_sock->abort_accept();
-  server_sock.reset();
   if (connected_sock) {
     connected_sock->shutdown_input();
     connected_sock->shutdown_output();
-    connected_sock.reset();
   }
-  return stop_gate.close();
+  return stop_gate.close().then([this] {
+    assert(task.has_value());
+    return task->then([] {
+      logger().info("AdminSocket: stopped");
+      return seastar::now();
+    });
+  });
 }
 
 /////////////////////////////////////////
