@@ -895,7 +895,6 @@ function milestone_number_from_remote_api {
     local mtt="$1"  # milestone to try
     local mn=""     # milestone number
     local milestones
-    warning "Milestone ->$mtt<- unknown to script - falling back to GitHub API"
     remote_api_output=$(curl -u ${github_user}:${github_token} --silent -X GET "https://api.github.com/repos/ceph/ceph/milestones")
     mn=$(echo "$remote_api_output" | jq --arg milestone "$mtt" '.[] | select(.title==$milestone) | .number')
     if [ "$mn" -gt "0" ] >/dev/null 2>&1 ; then
@@ -1620,10 +1619,12 @@ fi
 
 milestone_number=$(try_known_milestones "$milestone")
 if [ "$milestone_number" -gt "0" ] >/dev/null 2>&1 ; then
-    target_branch="$milestone"
+    debug "Milestone ->$milestone<- is known to have number ->$milestone_number<-: skipping remote API call"
 else
+    warning "Milestone ->$milestone<- is unknown to the script: falling back to GitHub API"
     milestone_number=$(milestone_number_from_remote_api "$milestone")
 fi
+target_branch="$milestone"
 info "milestone/release is $milestone"
 debug "milestone number is $milestone_number"
 
