@@ -1844,10 +1844,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   ceph::ref_t<Session> session;
   if (can_backoff) {
     session = static_cast<Session*>(m->get_connection()->get_priv().get());
-    if (!session.get()) {
-      dout(10) << __func__ << " no session" << dendl;
-      return;
-    }
+    // do_request already check
+    ceph_assert(session.get());
 
     if (session->check_backoff(cct, info.pgid, head, m)) {
       return;
