@@ -8,7 +8,7 @@ import os.path
 import shutil
 import tempfile
 
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

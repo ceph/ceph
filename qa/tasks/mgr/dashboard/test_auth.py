@@ -6,7 +6,7 @@ import time
 
 import jwt
 
-from .helper import DashboardTestCase
+from tasks.mgr.dashboard.helper import DashboardTestCase
 
 
 class AuthTest(DashboardTestCase):

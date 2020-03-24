@@ -27,7 +27,7 @@ import boto.s3.acl
 import httplib2
 
 
-from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
+from tasks.util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
 
@@ -195,7 +195,7 @@ def ignore_this_entry(cat, bucket, user, out, b_in, err):
     pass
 class requestlog_queue():
     def __init__(self, add):
-        self.q = Queue.Queue(1000)
+        self.q = queue.Queue(1000)
         self.adder = add
     def handle_request_data(self, request, response, error=False):
         now = datetime.datetime.now()

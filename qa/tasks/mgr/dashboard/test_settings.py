@@ -2,8 +2,7 @@
 
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, JList, JObj, JAny
-from pprint import pformat
+from tasks.mgr.dashboard.helper import DashboardTestCase, JList, JObj, JAny
 
 
 class SettingsTest(DashboardTestCase):

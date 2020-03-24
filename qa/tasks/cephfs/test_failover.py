@@ -4,7 +4,7 @@ import logging
 from unittest import case, SkipTest
 from random import randint
 
-from cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 

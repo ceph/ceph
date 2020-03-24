@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase
+from contextlib import contextmanager
+
+from tasks.mgr.dashboard.helper import DashboardTestCase
 
 
 class CephfsTest(DashboardTestCase):
