@@ -891,7 +891,7 @@ cdef class LibCephFS(object):
  
         :param path: the path of the directory to create.  This must be either an
                      absolute path or a relative path off of the current working directory.
-        :param mode the permissions the directory should have once created.
+        :param mode: the permissions the directory should have once created.
         """
 
         self.require_state("mounted")
@@ -909,9 +909,10 @@ cdef class LibCephFS(object):
     def chmod(self, path, mode) :
         """
         Change directory mode.
+
         :param path: the path of the directory to create.  This must be either an
-                    absolute path or a relative path off of the current working directory.
-        :param mode the permissions the directory should have once created.
+                     absolute path or a relative path off of the current working directory.
+        :param mode: the permissions the directory should have once created.
         """
         self.require_state("mounted")
         path = cstr(path, 'path')
@@ -928,6 +929,7 @@ cdef class LibCephFS(object):
     def chown(self, path, uid, gid, follow_symlink=True):
         """
         Change directory ownership
+
         :param path: the path of the directory to change.
         :param uid: the uid to set
         :param gid: the gid to set
@@ -969,7 +971,7 @@ cdef class LibCephFS(object):
 
         :param path: the full path of directories and sub-directories that should
                      be created.
-        :param mode the permissions the directory should have once created
+        :param mode: the permissions the directory should have once created
         """
         self.require_state("mounted")
         path = cstr(path, 'path')
@@ -1073,10 +1075,10 @@ cdef class LibCephFS(object):
         """
         Read data from the file.
  
-        :param fd : the file descriptor of the open file to read from.
-        :param offset : the offset in the file to read from.  If this value is negative, the
-                        function reads from the current offset of the file descriptor.
-        :param l : the flag to indicate what type of seeking to perform
+        :param fd: the file descriptor of the open file to read from.
+        :param offset: the offset in the file to read from.  If this value is negative, the
+                       function reads from the current offset of the file descriptor.
+        :param l: the flag to indicate what type of seeking to perform
         """     
         self.require_state("mounted")
         if not isinstance(offset, int):
@@ -1116,10 +1118,10 @@ cdef class LibCephFS(object):
         """
         Write data to a file.
        
-        :param fd : the file descriptor of the open file to write to
-        :param buf : the bytes to write to the file
-        :param offset : the offset of the file write into.  If this value is negative, the
-                        function writes to the current offset of the file descriptor.
+        :param fd: the file descriptor of the open file to write to
+        :param buf: the bytes to write to the file
+        :param offset: the offset of the file write into.  If this value is negative, the
+                       function writes to the current offset of the file descriptor.
         """
         self.require_state("mounted")
         if not isinstance(fd, int):
@@ -1564,10 +1566,10 @@ cdef class LibCephFS(object):
         """
         Set the file's current position.
  
-        :param fd : the file descriptor of the open file to read from.
-        :param offset : the offset in the file to read from.  If this value is negative, the
-                        function reads from the current offset of the file descriptor.
-        :param whence : the flag to indicate what type of seeking to performs:SEEK_SET, SEEK_CUR, SEEK_END
+        :param fd: the file descriptor of the open file to read from.
+        :param offset: the offset in the file to read from.  If this value is negative, the
+                       function reads from the current offset of the file descriptor.
+        :param whence: the flag to indicate what type of seeking to performs:SEEK_SET, SEEK_CUR, SEEK_END
         """     
         self.require_state("mounted")
         if not isinstance(fd, int):

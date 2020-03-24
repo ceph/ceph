@@ -184,7 +184,7 @@ Developer Guides
 
     Journaler Configuration <journaler>
     Client's Capabilities <capabilities>
-    libcephfs for Java <../../api/libcephfs-java/>
+    Java and Python bindings <api/index>
     Mantle <mantle>
 
 
