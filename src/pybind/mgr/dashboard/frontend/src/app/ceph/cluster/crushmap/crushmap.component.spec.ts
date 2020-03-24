@@ -33,8 +33,8 @@ describe('CrushmapComponent', () => {
 
   it('should display right title', () => {
     fixture.detectChanges();
-    const span = debugElement.nativeElement.querySelector('span');
-    expect(span.textContent).toBe('CRUSH map viewer');
+    const card = debugElement.nativeElement.querySelector('.card-header');
+    expect(card.textContent).toBe('CRUSH map viewer');
   });
 
   describe('test tree', () => {
