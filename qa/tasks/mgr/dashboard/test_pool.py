@@ -288,8 +288,10 @@ class PoolTest(DashboardTestCase):
             'compression_algorithms': JList(six.string_types),
             'compression_modes': JList(six.string_types),
             'is_all_bluestore': bool,
-            "bluestore_compression_algorithm": six.string_types,
+            'bluestore_compression_algorithm': six.string_types,
             'osd_count': int,
             'crush_rules_replicated': JList(JObj({}, allow_unknown=True)),
             'crush_rules_erasure': JList(JObj({}, allow_unknown=True)),
+            'pg_autoscale_default_mode': six.string_types,
+            'pg_autoscale_modes': JList(six.string_types),
         }))

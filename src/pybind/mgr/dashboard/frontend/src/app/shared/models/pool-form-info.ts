@@ -9,4 +9,6 @@ export class PoolFormInfo {
   compression_modes: string[];
   crush_rules_replicated: CrushRule[];
   crush_rules_erasure: CrushRule[];
+  pg_autoscale_default_mode: string;
+  pg_autoscale_modes: string[];
 }

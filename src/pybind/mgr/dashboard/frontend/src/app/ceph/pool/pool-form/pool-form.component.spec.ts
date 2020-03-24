@@ -130,7 +130,9 @@ describe('PoolFormComponent', () => {
       compression_algorithms: ['snappy'],
       compression_modes: ['none', 'passive'],
       crush_rules_replicated: [],
-      crush_rules_erasure: []
+      crush_rules_erasure: [],
+      pg_autoscale_default_mode: 'off',
+      pg_autoscale_modes: ['off', 'warn', 'on']
     };
     const ecp1 = new ErasureCodeProfile();
     ecp1.name = 'ecp1';
