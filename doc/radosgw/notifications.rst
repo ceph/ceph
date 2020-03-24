@@ -250,50 +250,50 @@ Events
 ~~~~~~
 
 The events are in JSON format (regardless of the actual endpoint), and share the same structure as the S3-compatible events
-pushed or pulled using the pubsub sync module.
+pushed or pulled using the pubsub sync module. For example:
 
 ::
 
    {"Records":[  
        {
-           "eventVersion":"2.1"
-           "eventSource":"aws:s3",
-           "awsRegion":"",
-           "eventTime":"",
-           "eventName":"",
+           "eventVersion":"2.1",
+           "eventSource":"ceph:s3",
+           "awsRegion":"us-east-1",
+           "eventTime":"2019-11-22T13:47:35.124724Z",
+           "eventName":"s3:ObjectCreated:Put",
            "userIdentity":{  
-               "principalId":""
+               "principalId":"tester"
            },
            "requestParameters":{
                "sourceIPAddress":""
            },
            "responseElements":{
-               "x-amz-request-id":"",
-               "x-amz-id-2":""
+               "x-amz-request-id":"503a4c37-85eb-47cd-8681-2817e80b4281.5330.903595",
+               "x-amz-id-2":"14d2-zone1-zonegroup1"
            },
            "s3":{
                "s3SchemaVersion":"1.0",
-               "configurationId":"",
+               "configurationId":"mynotif1",
                "bucket":{
-                   "name":"",
+                   "name":"mybucket1",
                    "ownerIdentity":{
-                       "principalId":""
+                       "principalId":"tester"
                    },
-                   "arn":"",
-                   "id:""
+                   "arn":"arn:aws:s3:us-east-1::mybucket1",
+                   "id":"503a4c37-85eb-47cd-8681-2817e80b4281.5332.38"
                },
                "object":{
-                   "key":"",
-                   "size":"",
-                   "eTag":"",
+                   "key":"myimage1.jpg",
+                   "size":"1024",
+                   "eTag":"37b51d194a7513e45b56f6524f2d51f2",
                    "versionId":"",
-                   "sequencer": "",
+                   "sequencer": "F7E6D75DC742D108",
                    "metadata":[],
                    "tags":[]
                }
            },
            "eventId":"",
-           "opaqueData":"",
+           "opaqueData":"me@example.com"
        }
    ]}
 
