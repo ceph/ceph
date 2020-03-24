@@ -1528,6 +1528,7 @@ def read_ceph_conf(shell, config_file):
         perror(e)
         shell.exit_code = e.get_error_code()
 
+
 if __name__ == '__main__':
     config_file = ''
 
