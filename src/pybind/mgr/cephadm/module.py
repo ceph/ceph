@@ -590,7 +590,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_base',
-            'default': 'ceph/ceph',
+            'default': 'docker.io/ceph/ceph',
             'desc': 'Container image name, without the tag',
             'runtime': True,
         },
