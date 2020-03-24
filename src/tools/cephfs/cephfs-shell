@@ -1551,7 +1551,7 @@ if __name__ == '__main__':
         if LooseVersion(cmd2_version) <= LooseVersion("0.9.13"):
             args.commands = ['load ' + args.batch, ',quit']
         else:
-            args.commands = ['run_script ' +  args.batch, ',quit']
+            args.commands = ['run_script ' + args.batch, ',quit']
     if args.test:
         args.commands.extend(['-t,'] + [arg + ',' for arg in args.test])
 
