@@ -74,7 +74,7 @@ build_dashboard_frontend() {
 
   $CURR_DIR/src/tools/setup-virtualenv.sh $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
-  $TEMP_DIR/bin/nodeenv -p --node=10.18.1
+  $TEMP_DIR/bin/nodeenv -p --node=12.16.2
   cd src/pybind/mgr/dashboard/frontend
 
   DEFAULT_LANG=`jq -r .config.locale package.json`
@@ -97,7 +97,7 @@ build_dashboard_frontend() {
   [ -z "$MAX_DASHBOARD_PARALLEL_BUILDS" ] && MAX_DASHBOARD_PARALLEL_BUILDS=1
 
   . $TEMP_DIR/bin/activate
-  NG_CLI_ANALYTICS="false" timeout 1h npm ci
+  timeout 1h npm ci
   echo "Building ceph-dashboard frontend with build${BUILD_TARGET} script";
   # we need to use "-- --" because so that "--prod" survives accross all
   # scripts redirections inside package.json
