@@ -214,7 +214,8 @@ int main(int argc, char **argv)
   uint64_t start = Cycles::rdtsc();
   client.start();
   uint64_t stop = Cycles::rdtsc();
-  cerr << " Total op " << ios << " run time " << Cycles::to_microseconds(stop - start) << "us." << std::endl;
+  cerr << " Total op " << (ios * numjobs) << " run time "
+       << Cycles::to_microseconds(stop - start) << "us." << std::endl;
 
   return 0;
 }
