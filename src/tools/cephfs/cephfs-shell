@@ -1492,6 +1492,7 @@ def setup_cephfs(config_file):
         print(e)
         sys.exit(1)
 
+
 def get_bool_vals_for_boolopts(val):
     if not isinstance(val, str):
         return val
@@ -1503,6 +1504,7 @@ def get_bool_vals_for_boolopts(val):
         return False
     else:
         return val
+
 
 def read_ceph_conf(shell, config_file):
     try:
