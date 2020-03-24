@@ -66,36 +66,10 @@ class GaneshaConfParser(object):
             conf_str += GaneshaConfParser.write_block(block, 0)
         return conf_str
 
-class FSal(object):
-    def __init__(self, name):
-        self.name = name
-
-    @classmethod
-    def validate_path(cls, _):
-        raise NotImplementedError()
-
-    def create_path(self, path):
-        raise NotImplementedError()
-
-    @staticmethod
-    def from_fsal_block(fsal_block):
-        if fsal_block['name'] == "CEPH":
-            return CephFSFSal.from_fsal_block(fsal_block)
-        return None
-
-    def to_fsal_block(self):
-        raise NotImplementedError()
-
-    @staticmethod
-    def from_dict(fsal_dict):
-        if fsal_dict['name'] == "CEPH":
-            return CephFSFSal.from_dict(fsal_dict)
-        return None
-
-class CephFSFSal(FSal):
+class CephFSFSal():
     def __init__(self, name, user_id=None, fs_name=None, sec_label_xattr=None,
                  cephx_key=None):
-        super(CephFSFSal, self).__init__(name)
+        self.name = name
         self.fs_name = fs_name
         self.user_id = user_id
         self.sec_label_xattr = sec_label_xattr
@@ -178,28 +152,22 @@ class Client(object):
 class Export(object):
     # pylint: disable=R0902
     def __init__(self, export_id, path, fsal, cluster_id, daemons, pseudo=None,
-                 tag=None, access_type=None, squash=None,
-                 attr_expiration_time=None, security_label=False,
-                 protocols=None, transports=None, clients=None):
+                 access_type='R', clients=None):
         self.export_id = export_id
         self.path = GaneshaConf.format_path(path)
         self.fsal = fsal
         self.cluster_id = cluster_id
         self.daemons = set(daemons)
         self.pseudo = GaneshaConf.format_path(pseudo)
-        self.tag = tag
         self.access_type = access_type
-        self.squash = GaneshaConf.format_squash(squash)
-        if attr_expiration_time is None:
-            self.attr_expiration_time = 0
-        else:
-            self.attr_expiration_time = attr_expiration_time
-        self.security_label = security_label
-        self.protocols = {GaneshaConf.format_protocol(p) for p in protocols}
-        self.transports = set(transports)
+        self.squash = 'no_root_squash'
+        self.attr_expiration_time = 0
+        self.security_label = True
+        self.protocols = [4]
+        self.transports = ["TCP"]
         self.clients = clients
 
-    def to_export_block(self, defaults):
+    def to_export_block(self):
         # pylint: disable=too-many-branches
         result = {
             'block_name': 'EXPORT',
@@ -208,32 +176,12 @@ class Export(object):
         }
         if self.pseudo:
             result['pseudo'] = self.pseudo
-        if self.tag:
-            result['tag'] = self.tag
-        if 'access_type' not in defaults \
-                or self.access_type != defaults['access_type']:
-            result['access_type'] = self.access_type
-        if 'squash' not in defaults or self.squash != defaults['squash']:
-            result['squash'] = self.squash
-        if self.fsal.name == 'CEPH':
-            result['attr_expiration_time'] = self.attr_expiration_time
-            result['security_label'] = self.security_label
-        if 'protocols' not in defaults:
-            result['protocols'] = [p for p in self.protocols]
-        else:
-            def_proto = defaults['protocols']
-            if not isinstance(def_proto, list):
-                def_proto = set([def_proto])
-            if self.protocols != def_proto:
-                result['protocols'] = [p for p in self.protocols]
-        if 'transports' not in defaults:
-            result['transports'] = [t for t in self.transports]
-        else:
-            def_transp = defaults['transports']
-            if not isinstance(def_transp, list):
-                def_transp = set([def_transp])
-            if self.transports != def_transp:
-                result['transports'] = [t for t in self.transports]
+        result['access_type'] = self.access_type
+        result['squash'] = self.squash
+        result['attr_expiration_time'] = self.attr_expiration_time
+        result['security_label'] = self.security_label
+        result['protocols'] = self.protocols
+        result['transports'] = [self.transports]
 
         result['_blocks_'] = [self.fsal.to_fsal_block()]
         result['_blocks_'].extend([client.to_client_block()
@@ -241,20 +189,14 @@ class Export(object):
         return result
 
     @classmethod
-    def from_dict(cls, export_id, ex_dict, old_export=None):
+    def from_dict(cls, export_id, ex_dict):
         return cls(export_id,
                    ex_dict['path'],
-                   FSal.from_dict(ex_dict['fsal']),
+                   CephFSFSal.from_dict(ex_dict['fsal']),
                    ex_dict['cluster_id'],
                    ex_dict['daemons'],
                    ex_dict['pseudo'],
-                   ex_dict['tag'],
                    ex_dict['access_type'],
-                   ex_dict['squash'],
-                   old_export.attr_expiration_time if old_export else None,
-                   ex_dict['security_label'],
-                   ex_dict['protocols'],
-                   ex_dict['transports'],
                    [Client.from_dict(client) for client in ex_dict['clients']])
 
 class GaneshaConf(object):
@@ -269,7 +211,6 @@ class GaneshaConf(object):
         self.export_conf_blocks = []
         self.daemons_conf_blocks = {}
         self.exports = {}
-        self.export_defaults = {}
 
     def _write_raw_config(self, conf_block, obj):
         raw_config = GaneshaConfParser.write_conf(conf_block)
@@ -280,6 +221,14 @@ class GaneshaConf(object):
             log.debug(
                     "write configuration into rados object %s/%s/%s:\n%s",
                     self.rados_pool, self.rados_namespace, obj, raw_config)
+
+    @classmethod
+    def format_path(cls, path):
+        if path is not None:
+            path = path.strip()
+            if len(path) > 1 and path[-1] == '/':
+                path = path[:-1]
+        return path
 
     @classmethod
     def format_squash(cls, squash):
@@ -294,26 +243,7 @@ class GaneshaConf(object):
         if squash.lower() in ["all", "all_squash", "allsquash",
                               "all_anonymous", "allanonymous"]:
             return "all_squash"
-        logger.error("could not parse squash value: %s", squash)
-        raise NFSException("'{}' is an invalid squash option".format(squash))
-
-    @classmethod
-    def format_protocol(cls, protocol):
-        if str(protocol) in ["NFSV3", "3", "V3", "NFS3"]:
-            return 3
-        if str(protocol) in ["NFSV4", "4", "V4", "NFS4"]:
-            return 4
-        logger.error("could not parse protocol value: %s", protocol)
-        raise NFSException("'{}' is an invalid NFS protocol version identifier"
-                           .format(protocol))
-
-    @classmethod
-    def format_path(cls, path):
-        if path is not None:
-            path = path.strip()
-            if len(path) > 1 and path[-1] == '/':
-                path = path[:-1]
-        return path
+        log.error("could not parse squash value: %s", squash)
 
     def _gen_export_id(self):
         exports = sorted(self.exports)
@@ -353,7 +283,7 @@ class GaneshaConf(object):
     def _save_export(self, export):
         export.fsal.cephx_key = self.cephx_key
         self.exports[export.export_id] = export
-        conf_block = export.to_export_block(self.export_defaults)
+        conf_block = export.to_export_block()
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
         self._persist_daemon_configuration()
 
@@ -461,12 +391,7 @@ class NFSConfig(object):
             'pseudo': "/cephfs",
             'cluster_id': self.cluster_id,
             'daemons': ["ganesha.a"],
-            'tag': "",
             'access_type': "RW",
-            'squash': "no_root_squash",
-            'security_label': True,
-            'protocols': [4],
-            'transports': ["TCP"],
             'fsal': {"name": "CEPH", "user_id":self.cluster_id, "fs_name": "a", "sec_label_xattr": ""},
             'clients': []
             })
