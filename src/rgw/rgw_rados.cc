@@ -3450,6 +3450,10 @@ public:
       return "";
     }
   }
+
+  SourceObjType get_obj_type() {
+    return obj_type;
+  }
 };
 
 /*
@@ -4003,7 +4007,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     set_mtime_weight.init(set_mtime, svc.zone->get_zone_short_id(), pg_ver);
   }
 
-  if (cct->_conf->rgw_sync_obj_etag_verify) {
+  /* Perform ETag verification is we have computed the object's MD5 sum at our end */
+  if (cb.get_obj_type() != OBJ_TYPE_UNINIT) {
     string trimmed_etag = etag;
 
     /* Remove the leading and trailing double quotes from etag */
