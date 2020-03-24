@@ -26,6 +26,8 @@ These events are also logged to the ``ceph.cephadm.log`` file on
 monitor hosts and to the monitor daemons' stderr.
 
 
+.. _cephadm-logs:
+
 Ceph daemon logs
 ================
 
