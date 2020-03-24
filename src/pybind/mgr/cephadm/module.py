@@ -3114,7 +3114,7 @@ receivers:
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
         self.event.set()
-        return 'Initiating upgrade to %s' % (image)
+        return 'Initiating upgrade to %s' % (target_name)
 
     @trivial_completion
     def upgrade_pause(self):
