@@ -23,11 +23,18 @@ General
   - CentOS 8
   - CentOS 7 (partial--see below)
   - Ubuntu 18.04 (Bionic)
+  - Debian Buster
   - :ref:`Container image <containers>` (based on CentOS 8)
 
   Note that the dashboard, prometheus, and restful manager modules
   will not work on the CentOS 7 build due to Python 3 module
   dependencies that are missing in CentOS 7.
+
+  Besides this packages built by the community will also available for the
+  following distros:
+
+  - Fedora (33/rawhide)
+  - openSUSE (15.2, Tumbleweed)
 
 
 Dashboard
