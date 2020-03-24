@@ -496,7 +496,8 @@ struct MDLockCache : public MutationImpl {
 
   void attach_locks();
   void attach_dirfrags(std::vector<CDir*>&& dfv);
-  void detach_all();
+  void detach_locks();
+  void detach_dirfrags();
 
   CInode *diri;
   Capability *client_cap;

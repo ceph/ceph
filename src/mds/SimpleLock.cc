@@ -95,12 +95,14 @@ void SimpleLock::remove_cache(MDLockCacheItem& item) {
   }
 }
 
-MDLockCache* SimpleLock::get_first_cache() {
+std::vector<MDLockCache*> SimpleLock::get_active_caches() {
+  std::vector<MDLockCache*> result;
   if (have_more()) {
-    auto& lock_caches = more()->lock_caches;
-    if (!lock_caches.empty()) {
-      return lock_caches.front()->parent;
+    for (auto it = more()->lock_caches.begin_use_current(); !it.end(); ++it) {
+      auto lock_cache = (*it)->parent;
+      if (!lock_cache->invalidating)
+	result.push_back(lock_cache);
     }
   }
-  return nullptr;
+  return result;
 }
