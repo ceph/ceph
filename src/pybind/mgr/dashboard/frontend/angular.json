@@ -134,10 +134,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "cs"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "cs"
+              ],
+              "outputPath": "dist"
+            },
             "de-DE": {
               "budgets": [
                 {
@@ -145,10 +146,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "de-DE"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "de-DE"
+              ],
+              "outputPath": "dist"
+            },
             "en-US": {
               "budgets": [
                 {
@@ -156,10 +158,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "en-US"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "en-US"
+              ],
+              "outputPath": "dist"
+            },
             "es-ES": {
               "budgets": [
                 {
@@ -167,10 +170,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "es-ES"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "es-ES"
+              ],
+              "outputPath": "dist"
+            },
             "fr-FR": {
               "budgets": [
                 {
@@ -178,10 +182,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "fr-FR"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "fr-FR"
+              ],
+              "outputPath": "dist"
+            },
             "id-ID": {
               "budgets": [
                 {
@@ -189,10 +194,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "id-ID"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "id-ID"
+              ],
+              "outputPath": "dist"
+            },
             "it-IT": {
               "budgets": [
                 {
@@ -200,10 +206,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "it-IT"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "it-IT"
+              ],
+              "outputPath": "dist"
+            },
             "ja-JP": {
               "budgets": [
                 {
@@ -211,10 +218,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "ja-JP"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "ja-JP"
+              ],
+              "outputPath": "dist"
+            },
             "ko-KR": {
               "budgets": [
                 {
@@ -222,10 +230,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "ko-KR"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "ko-KR"
+              ],
+              "outputPath": "dist"
+            },
             "pl-PL": {
               "budgets": [
                 {
@@ -233,10 +242,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "pl-PL"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "pl-PL"
+              ],
+              "outputPath": "dist"
+            },
             "pt-BR": {
               "budgets": [
                 {
@@ -244,10 +254,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "pt-BR"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "pt-BR"
+              ],
+              "outputPath": "dist"
+            },
             "zh-CN": {
               "budgets": [
                 {
@@ -255,10 +266,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "zh-CN"
-            ],
-              "outputPath": "dist"},
+              "localize": [
+                "zh-CN"
+              ],
+              "outputPath": "dist"
+            },
             "zh-TW": {
               "budgets": [
                 {
@@ -266,10 +278,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
-            "localize": [
-              "zh-TW"
-            ],
-              "outputPath": "dist"}
+              "localize": [
+                "zh-TW"
+              ],
+              "outputPath": "dist"
+            }
           }
         },
         "serve": {
@@ -355,5 +368,7 @@
       "prefix": "cd"
     }
   },
-  "cli": {}
+  "cli": {
+    "analytics": false
+  }
 }

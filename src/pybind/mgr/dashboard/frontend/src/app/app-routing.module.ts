@@ -1,4 +1,4 @@
-import { NgModule, Injectable } from '@angular/core';
+import { Injectable, NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, PreloadAllModules, RouterModule, Routes } from '@angular/router';
 
 import * as _ from 'lodash';
