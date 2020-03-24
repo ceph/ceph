@@ -9,13 +9,12 @@ import os
 import yaml
 import time
 
-from teuthology import misc as teuthology
-from teuthology import contextutil
 from tasks import rbd
-from teuthology.orchestra import run
+from tasks.util.workunit import get_refspec_after_overrides
+from teuthology import contextutil
+from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
-
-from util.workunit import get_refspec_after_overrides
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

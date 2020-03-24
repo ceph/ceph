@@ -13,10 +13,10 @@ import uuid
 
 import six
 import toml
-from ceph_manager import CephManager
 from io import BytesIO
 from six import StringIO
 from tarfile import ReadError
+from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run

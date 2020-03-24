@@ -4,7 +4,7 @@ Dump_stuck command
 import logging
 import time
 
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 

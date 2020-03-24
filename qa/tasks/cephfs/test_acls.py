@@ -1,7 +1,7 @@
 import logging
 
 from io import BytesIO
-from xfstests_dev import XFSTestsDev
+from tasks.cephfs.xfstests_dev import XFSTestsDev
 
 log = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ except ImportError:
 
 from nose.tools import eq_ as eq
 
-from .multisite import *
+from tasks.rgw_multi.multisite import *
 
 log = logging.getLogger(__name__)
 

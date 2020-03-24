@@ -5,7 +5,7 @@ from nose.tools import assert_not_equal, assert_equal
 
 from boto.s3.deletemarker import DeleteMarker
 
-from .tests import get_realm, \
+from tasks.rgw_multi.tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
     zone_meta_checkpoint, \
@@ -17,7 +17,7 @@ from .tests import get_realm, \
     get_user, \
     get_tenant
 
-from .zone_az import print_connection_info
+from tasks.rgw_multi.zone_az import print_connection_info
 
 
 # configure logging for the tests module

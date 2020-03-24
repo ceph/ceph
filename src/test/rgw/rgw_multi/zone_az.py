@@ -1,6 +1,6 @@
 import logging
 
-from .multisite import Zone
+from tasks.rgw_multi.multisite import Zone
 
 
 log = logging.getLogger('rgw_multi.tests')

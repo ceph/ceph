@@ -5,7 +5,7 @@ import operator
 from random import randint
 from six.moves import range
 
-from cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 

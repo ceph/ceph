@@ -4,19 +4,20 @@ ceph_objectstore_tool - Simple test of ceph-objectstore-tool utility
 from io import BytesIO
 
 import contextlib
+import json
 import logging
-import ceph_manager
-from teuthology import misc as teuthology
-import time
 import os
 import six
 import sys
 import tempfile
-import json
+import time
+from tasks import ceph_manager
+from tasks.util.rados import (rados, create_replicated_pool, create_ec_pool)
+from teuthology import misc as teuthology
+from teuthology.orchestra import run
 
 from teuthology.exceptions import CommandFailedError
 
-from util.rados import (rados, create_replicated_pool, create_ec_pool)
 # from util.rados import (rados, create_ec_pool,
 #                               create_replicated_pool,
 #                               create_cache_pool)

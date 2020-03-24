@@ -3,7 +3,7 @@ from six import StringIO
 
 import json
 
-from .conn import get_gateway_connection, get_gateway_secure_connection
+from tasks.rgw_multi.conn import get_gateway_connection, get_gateway_secure_connection
 
 class Cluster:
     """ interface to run commands against a distinct ceph cluster """

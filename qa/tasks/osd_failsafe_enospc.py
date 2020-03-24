@@ -7,7 +7,7 @@ import six
 import time
 
 from teuthology.orchestra import run
-from util.rados import rados
+from tasks.util.rados import rados
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

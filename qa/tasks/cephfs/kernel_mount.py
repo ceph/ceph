@@ -9,7 +9,7 @@ from teuthology import misc
 from teuthology.orchestra import remote as orchestra_remote
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
-from .mount import CephFSMount
+from tasks.cephfs.mount import CephFSMount
 
 log = logging.getLogger(__name__)
 
