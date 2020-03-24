@@ -5393,6 +5393,9 @@ cdef class LockOwnerIterator(object):
                                           &self.num_lock_owners)
             if ret >= 0:
                 break
+            elif ret == -errno.ENOENT:
+                self.num_lock_owners = 0
+                break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing lock owners for image %s' % image.name)
 
