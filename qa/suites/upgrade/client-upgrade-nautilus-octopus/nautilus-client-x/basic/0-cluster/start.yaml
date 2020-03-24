@@ -1,0 +1,23 @@
+meta:
+- desc: |
+   Insatll and run ceph on one node,
+   with a separate client 0.
+   Upgrade client 0 to nautilus
+   Run tests against old cluster
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+  - mgr.x
+- - client.0
+overrides:
+  ceph:
+    log-whitelist:
+    - failed to encode map
+    - CACHE_POOL_NO_HIT_SET
+    - POOL_APP_NOT_ENABLED
+    - application not enabled
+    fs: xfs
