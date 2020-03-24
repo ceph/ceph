@@ -1952,7 +1952,7 @@ private:
 	if (b->Valid()) {
 	  return false;
 	} else {
-	  return static_cast<void*>(a) < static_cast<void*>(b);
+	  return false;
 	}
       }
     }
@@ -1996,9 +1996,19 @@ public:
 	return -1;
       }
     }
-    for (size_t i = 0; i < iters.size(); i++) {
-      if (keyless(iters[0], iters[i])) {
-	swap(iters[0], iters[i]);
+    for (size_t i = 1; i < iters.size(); i++) {
+      if (iters[0]->Valid()) {
+	if (iters[i]->Valid()) {
+	  if (keyless(iters[0], iters[i])) {
+	    swap(iters[0], iters[i]);
+	  }
+	} else {
+	  //iters[i] empty
+	}
+      } else {
+	if (iters[i]->Valid()) {
+	  swap(iters[0], iters[i]);
+	}
       }
       //it might happen that cf was empty
       if (iters[i]->Valid()) {
@@ -2087,7 +2097,7 @@ public:
 	iters[0]->Prev();
 	ceph_assert(!iters[0]->Valid());
       }
-      return -1;
+      return 0;
     }
     //2,3
     rocksdb::Iterator* highest = prev_done[0];
