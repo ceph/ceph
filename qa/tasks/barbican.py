@@ -5,8 +5,8 @@ import argparse
 import contextlib
 import logging
 import string
-import httplib
-from urlparse import urlparse
+from six.moves import http_client
+from six.moves.urllib.parse import urlparse
 import json
 
 from teuthology import misc as teuthology
@@ -260,7 +260,7 @@ def create_secrets(ctx, config):
                                                  port=barbican_port)
     log.info("barbican_url=%s", barbican_url)
     #fetching user_id of user that gets secrets for radosgw
-    token_req = httplib.HTTPConnection(keystone_host, keystone_port, timeout=30)
+    token_req = http_client.HTTPConnection(keystone_host, keystone_port, timeout=30)
     token_req.request(
         'POST',
         '/v2.0/tokens',
@@ -297,7 +297,7 @@ def create_secrets(ctx, config):
             if 'password' not in secret:
                 raise ConfigError('barbican.secrets must have "password" field')
 
-            token_req = httplib.HTTPConnection(keystone_host, keystone_port, timeout=30)
+            token_req = http_client.HTTPConnection(keystone_host, keystone_port, timeout=30)
             token_req.request(
                 'POST',
                 '/v2.0/tokens',
@@ -334,7 +334,7 @@ def create_secrets(ctx, config):
                     "payload_content_encoding": "base64"
                 })
 
-            sec_req = httplib.HTTPConnection(barbican_host, barbican_port, timeout=30)
+            sec_req = http_client.HTTPConnection(barbican_host, barbican_port, timeout=30)
             try:
                 sec_req.request(
                     'POST',
@@ -365,7 +365,7 @@ def create_secrets(ctx, config):
                         "project-access": True
                     }
                 })
-            acl_req = httplib.HTTPConnection(secret_url_parsed.netloc, timeout=30)
+            acl_req = http_client.HTTPConnection(secret_url_parsed.netloc, timeout=30)
             acl_req.request(
                 'PUT',
                 secret_url_parsed.path+'/acl',
