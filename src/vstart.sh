@@ -1065,15 +1065,14 @@ EOF
 # https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.7
 
 start_ganesha() {
-    #GANESHA_PORT=$(($CEPH_PORT + 4000))
+    GANESHA_PORT=$(($CEPH_PORT + 4000))
     local ganesha=0
 
     for name in a b c d e f g h i j k l m n o p
     do
         [ $ganesha -eq $GANESHA_DAEMON_NUM ] && break
 
-        #port=$(($GANESHA_PORT + ganesha))
-        port=2049
+        port=$(($GANESHA_PORT + ganesha))
         ganesha=$(($ganesha + 1))
         ganesha_dir="$CEPH_DEV_DIR/ganesha.$name"
 
@@ -1083,7 +1082,14 @@ start_ganesha() {
 	keyring=$(ceph_adm auth print-key client.ganesha-tester)
 	prun $SUDO "$CEPH_BIN/ceph-authtool" --name=client.ganesha-tester --add-key=$keyring keyring
 
-        echo "%url rados://nfs-ganesha/tester/a" > "$ganesha_dir/ganesha.conf"
+        echo "%url rados://nfs-ganesha/tester/a
+
+NFS_CORE_PARAM {
+        Enable_NLM = false;
+        Enable_RQUOTA = false;
+        Protocols = 4;
+        NFS_Port = $port;
+}" > "$ganesha_dir/ganesha.conf"
 	wconf <<EOF
 [ganesha.$name]
         host = $HOSTNAME
