@@ -1,14 +1,261 @@
-import errno
 import json
 import logging
 
 import cephfs
 import orchestrator
-from dashboard.services.cephx import CephX
-from dashboard.services.ganesha import Ganesha, NFSException, Export, GaneshaConfParser
 from .fs_util import create_pool
 
 log = logging.getLogger(__name__)
+
+class GaneshaConfParser(object):
+    def __init__(self, raw_config):
+        self.pos = 0
+        self.text = ""
+
+    @staticmethod
+    def _indentation(depth, size=4):
+        conf_str = ""
+        for _ in range(0, depth*size):
+            conf_str += " "
+        return conf_str
+
+    @staticmethod
+    def write_block_body(block, depth=0):
+        def format_val(key, val):
+            if isinstance(val, list):
+                return ', '.join([format_val(key, v) for v in val])
+            if isinstance(val, bool):
+                return str(val).lower()
+            if isinstance(val, int) or (block['block_name'] == 'CLIENT'
+                                        and key == 'clients'):
+                return '{}'.format(val)
+            return '"{}"'.format(val)
+
+        conf_str = ""
+        for key, val in block.items():
+            if key == 'block_name':
+                continue
+            elif key == '_blocks_':
+                for blo in val:
+                    conf_str += GaneshaConfParser.write_block(blo, depth)
+            elif val:
+                conf_str += GaneshaConfParser._indentation(depth)
+                conf_str += '{} = {};\n'.format(key, format_val(key, val))
+        return conf_str
+
+    @staticmethod
+    def write_block(block, depth):
+        if block['block_name'] == "%url":
+            return '%url "{}"\n\n'.format(block['value'])
+
+        conf_str = ""
+        conf_str += GaneshaConfParser._indentation(depth)
+        conf_str += format(block['block_name'])
+        conf_str += " {\n"
+        conf_str += GaneshaConfParser.write_block_body(block, depth+1)
+        conf_str += GaneshaConfParser._indentation(depth)
+        conf_str += "}\n\n"
+        return conf_str
+
+    @staticmethod
+    def write_conf(blocks):
+        if not isinstance(blocks, list):
+            blocks = [blocks]
+        conf_str = ""
+        for block in blocks:
+            conf_str += GaneshaConfParser.write_block(block, 0)
+        return conf_str
+
+class FSal(object):
+    def __init__(self, name):
+        self.name = name
+
+    @classmethod
+    def validate_path(cls, _):
+        raise NotImplementedError()
+
+    def create_path(self, path):
+        raise NotImplementedError()
+
+    @staticmethod
+    def from_fsal_block(fsal_block):
+        if fsal_block['name'] == "CEPH":
+            return CephFSFSal.from_fsal_block(fsal_block)
+        return None
+
+    def to_fsal_block(self):
+        raise NotImplementedError()
+
+    @staticmethod
+    def from_dict(fsal_dict):
+        if fsal_dict['name'] == "CEPH":
+            return CephFSFSal.from_dict(fsal_dict)
+        return None
+
+class CephFSFSal(FSal):
+    def __init__(self, name, user_id=None, fs_name=None, sec_label_xattr=None,
+                 cephx_key=None):
+        super(CephFSFSal, self).__init__(name)
+        self.fs_name = fs_name
+        self.user_id = user_id
+        self.sec_label_xattr = sec_label_xattr
+        self.cephx_key = cephx_key
+
+    @classmethod
+    def validate_path(cls, path):
+        return re.match(r'^/[^><|&()?]*$', path)
+
+    def create_path(self, path):
+        cfs = CephFS(self.fs_name)
+        cfs.mk_dirs(path)
+
+    @classmethod
+    def from_fsal_block(cls, fsal_block):
+        return cls(fsal_block['name'],
+                   fsal_block.get('user_id', None),
+                   fsal_block.get('filesystem', None),
+                   fsal_block.get('sec_label_xattr', None),
+                   fsal_block.get('secret_access_key', None))
+
+    def to_fsal_block(self):
+        result = {
+            'block_name': 'FSAL',
+            'name': self.name,
+        }
+        if self.user_id:
+            result['user_id'] = self.user_id
+        if self.fs_name:
+            result['filesystem'] = self.fs_name
+        if self.sec_label_xattr:
+            result['sec_label_xattr'] = self.sec_label_xattr
+        if self.cephx_key:
+            result['secret_access_key'] = self.cephx_key
+        return result
+
+    @classmethod
+    def from_dict(cls, fsal_dict):
+        return cls(fsal_dict['name'], fsal_dict['user_id'],
+                   fsal_dict['fs_name'], fsal_dict['sec_label_xattr'], None)
+
+class Client(object):
+    def __init__(self, addresses, access_type=None, squash=None):
+        self.addresses = addresses
+        self.access_type = access_type
+        self.squash = GaneshaConf.format_squash(squash)
+
+    @classmethod
+    def from_client_block(cls, client_block):
+        addresses = client_block['clients']
+        if not isinstance(addresses, list):
+            addresses = [addresses]
+        return cls(addresses,
+                   client_block.get('access_type', None),
+                   client_block.get('squash', None))
+
+    def to_client_block(self):
+        result = {
+            'block_name': 'CLIENT',
+            'clients': self.addresses,
+        }
+        if self.access_type:
+            result['access_type'] = self.access_type
+        if self.squash:
+            result['squash'] = self.squash
+        return result
+
+    @classmethod
+    def from_dict(cls, client_dict):
+        return cls(client_dict['addresses'], client_dict['access_type'],
+                   client_dict['squash'])
+
+    def to_dict(self):
+        return {
+            'addresses': self.addresses,
+            'access_type': self.access_type,
+            'squash': self.squash
+        }
+
+class Export(object):
+    # pylint: disable=R0902
+    def __init__(self, export_id, path, fsal, cluster_id, daemons, pseudo=None,
+                 tag=None, access_type=None, squash=None,
+                 attr_expiration_time=None, security_label=False,
+                 protocols=None, transports=None, clients=None):
+        self.export_id = export_id
+        self.path = GaneshaConf.format_path(path)
+        self.fsal = fsal
+        self.cluster_id = cluster_id
+        self.daemons = set(daemons)
+        self.pseudo = GaneshaConf.format_path(pseudo)
+        self.tag = tag
+        self.access_type = access_type
+        self.squash = GaneshaConf.format_squash(squash)
+        if attr_expiration_time is None:
+            self.attr_expiration_time = 0
+        else:
+            self.attr_expiration_time = attr_expiration_time
+        self.security_label = security_label
+        self.protocols = {GaneshaConf.format_protocol(p) for p in protocols}
+        self.transports = set(transports)
+        self.clients = clients
+
+    def to_export_block(self, defaults):
+        # pylint: disable=too-many-branches
+        result = {
+            'block_name': 'EXPORT',
+            'export_id': self.export_id,
+            'path': self.path
+        }
+        if self.pseudo:
+            result['pseudo'] = self.pseudo
+        if self.tag:
+            result['tag'] = self.tag
+        if 'access_type' not in defaults \
+                or self.access_type != defaults['access_type']:
+            result['access_type'] = self.access_type
+        if 'squash' not in defaults or self.squash != defaults['squash']:
+            result['squash'] = self.squash
+        if self.fsal.name == 'CEPH':
+            result['attr_expiration_time'] = self.attr_expiration_time
+            result['security_label'] = self.security_label
+        if 'protocols' not in defaults:
+            result['protocols'] = [p for p in self.protocols]
+        else:
+            def_proto = defaults['protocols']
+            if not isinstance(def_proto, list):
+                def_proto = set([def_proto])
+            if self.protocols != def_proto:
+                result['protocols'] = [p for p in self.protocols]
+        if 'transports' not in defaults:
+            result['transports'] = [t for t in self.transports]
+        else:
+            def_transp = defaults['transports']
+            if not isinstance(def_transp, list):
+                def_transp = set([def_transp])
+            if self.transports != def_transp:
+                result['transports'] = [t for t in self.transports]
+
+        result['_blocks_'] = [self.fsal.to_fsal_block()]
+        result['_blocks_'].extend([client.to_client_block()
+                                   for client in self.clients])
+        return result
+
+    @classmethod
+    def from_dict(cls, export_id, ex_dict, old_export=None):
+        return cls(export_id,
+                   ex_dict['path'],
+                   FSal.from_dict(ex_dict['fsal']),
+                   ex_dict['cluster_id'],
+                   ex_dict['daemons'],
+                   ex_dict['pseudo'],
+                   ex_dict['tag'],
+                   ex_dict['access_type'],
+                   ex_dict['squash'],
+                   old_export.attr_expiration_time if old_export else None,
+                   ex_dict['security_label'],
+                   ex_dict['protocols'],
+                   ex_dict['transports'],
+                   [Client.from_dict(client) for client in ex_dict['clients']])
 
 class GaneshaConf(object):
     # pylint: disable=R0902
@@ -21,59 +268,8 @@ class GaneshaConf(object):
         self.rados_namespace = nfs_conf.pool_ns
         self.export_conf_blocks = []
         self.daemons_conf_blocks = {}
-        self._defaults = {}
         self.exports = {}
-
-        self._read_raw_config()
-
-        # load defaults
-        def_block = [b for b in self.export_conf_blocks
-                     if b['block_name'] == "EXPORT_DEFAULTS"]
-        self.export_defaults = def_block[0] if def_block else {}
-        self._defaults = self.ganesha_defaults(self.export_defaults)
-
-        for export_block in [block for block in self.export_conf_blocks
-                             if block['block_name'] == "EXPORT"]:
-            export = Export.from_export_block(export_block, nfs_conf.cluster_id,
-                                              self._defaults)
-            self.exports[export.export_id] = export
-
-        # link daemons to exports
-        for daemon_id, daemon_blocks in self.daemons_conf_blocks.items():
-            for block in daemon_blocks:
-                if block['block_name'] == "%url":
-                    rados_url = block['value']
-                    _, _, obj = Ganesha.parse_rados_url(rados_url)
-                    if obj.startswith("export-"):
-                        export_id = int(obj[obj.find('-')+1:])
-                        self.exports[export_id].daemons.add(daemon_id)
-
-    def _read_raw_config(self):
-        with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
-            if self.rados_namespace:
-                ioctx.set_namespace(self.rados_namespace)
-            objs = ioctx.list_objects()
-            for obj in objs:
-                if obj.key.startswith("export-"):
-                    size, _ = obj.stat()
-                    raw_config = obj.read(size)
-                    raw_config = raw_config.decode("utf-8")
-                    log.debug("read export configuration from rados "
-                              "object %s/%s/%s:\n%s", self.rados_pool,
-                              self.rados_namespace, obj.key, raw_config)
-                    self.export_conf_blocks.extend(
-                        GaneshaConfParser(raw_config).parse())
-                elif obj.key.startswith("conf-"):
-                    size, _ = obj.stat()
-                    raw_config = obj.read(size)
-                    raw_config = raw_config.decode("utf-8")
-                    log.debug("read daemon configuration from rados "
-                              "object %s/%s/%s:\n%s", self.rados_pool,
-                              self.rados_namespace, obj.key, raw_config)
-
-                    idx = obj.key.find('-')
-                    self.daemons_conf_blocks[obj.key[idx+1:]] = \
-                        GaneshaConfParser(raw_config).parse()
+        self.export_defaults = {}
 
     def _write_raw_config(self, conf_block, obj):
         raw_config = GaneshaConfParser.write_conf(conf_block)
@@ -85,19 +281,39 @@ class GaneshaConf(object):
                     "write configuration into rados object %s/%s/%s:\n%s",
                     self.rados_pool, self.rados_namespace, obj, raw_config)
 
+    @classmethod
+    def format_squash(cls, squash):
+        if squash is None:
+            return None
+        if squash.lower() in ["no_root_squash", "noidsquash", "none"]:
+            return "no_root_squash"
+        if squash.lower() in ["rootid", "root_id_squash", "rootidsquash"]:
+            return "root_id_squash"
+        if squash.lower() in ["root", "root_squash", "rootsquash"]:
+            return "root_squash"
+        if squash.lower() in ["all", "all_squash", "allsquash",
+                              "all_anonymous", "allanonymous"]:
+            return "all_squash"
+        logger.error("could not parse squash value: %s", squash)
+        raise NFSException("'{}' is an invalid squash option".format(squash))
 
     @classmethod
-    def ganesha_defaults(cls, export_defaults):
-        """
-        According to
-        https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/config_samples/export.txt
-        """
-        return {
-            'access_type': export_defaults.get('access_type', 'NONE'),
-            'protocols': export_defaults.get('protocols', [4]),
-            'transports': export_defaults.get('transports', ['TCP']),
-            'squash': export_defaults.get('squash', 'root_squash')
-        }
+    def format_protocol(cls, protocol):
+        if str(protocol) in ["NFSV3", "3", "V3", "NFS3"]:
+            return 3
+        if str(protocol) in ["NFSV4", "4", "V4", "NFS4"]:
+            return 4
+        logger.error("could not parse protocol value: %s", protocol)
+        raise NFSException("'{}' is an invalid NFS protocol version identifier"
+                           .format(protocol))
+
+    @classmethod
+    def format_path(cls, path):
+        if path is not None:
+            path = path.strip()
+            if len(path) > 1 and path[-1] == '/':
+                path = path[:-1]
+        return path
 
     def _gen_export_id(self):
         exports = sorted(self.exports)
@@ -121,8 +337,7 @@ class GaneshaConf(object):
             for daemon in ex.daemons:
                 daemon_map[daemon].append({
                     'block_name': "%url",
-                    'value': Ganesha.make_rados_url(
-                        self.rados_pool, self.rados_namespace,
+                    'value': self.make_rados_url(
                         "export-{}".format(ex.export_id))
                 })
         for daemon_id, conf_blocks in daemon_map.items():
@@ -168,6 +383,11 @@ class GaneshaConf(object):
                 ioctx.set_namespace(self.rados_namespace)
             for daemon_id in daemons:
                 ioctx.notify("conf-{}".format(daemon_id))
+
+    def make_rados_url(self, obj):
+        if self.rados_namespace:
+            return "rados://{}/{}/{}".format(self.rados_pool, self.rados_namespace, obj)
+        return "rados://{}/{}".format(self.rados_pool, obj)
 
 class NFSConfig(object):
     exp_num = 0
