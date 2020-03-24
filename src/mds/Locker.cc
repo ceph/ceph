@@ -802,6 +802,8 @@ void Locker::put_lock_cache(MDLockCache* lock_cache)
 
   ceph_assert(lock_cache->invalidating);
 
+  lock_cache->detach_locks();
+
   CInode *diri = lock_cache->get_dir_inode();
   for (auto dir : lock_cache->auth_pinned_dirfrags) {
     if (dir->get_inode() != diri)
@@ -832,7 +834,7 @@ void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
     ceph_assert(!lock_cache->client_cap);
   } else {
     lock_cache->invalidating = true;
-    lock_cache->detach_all();
+    lock_cache->detach_dirfrags();
   }
 
   Capability *cap = lock_cache->client_cap;
@@ -880,8 +882,10 @@ void Locker::invalidate_lock_caches(CDir *dir)
 void Locker::invalidate_lock_caches(SimpleLock *lock)
 {
   dout(10) << "invalidate_lock_caches " << *lock << " on " << *lock->get_parent() << dendl;
-  while (lock->is_cached()) {
-    invalidate_lock_cache(lock->get_first_cache());
+  if (lock->is_cached()) {
+    auto&& lock_caches = lock->get_active_caches();
+    for (auto& lc : lock_caches)
+      invalidate_lock_cache(lc);
   }
 }
 
