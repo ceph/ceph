@@ -14,7 +14,6 @@ from tasks.cephfs.mount import CephFSMount
 
 log = logging.getLogger(__name__)
 
-
 # Refer mount.py for docstrings.
 class FuseMount(CephFSMount):
     def __init__(self, ctx, client_config, test_dir, client_id,
@@ -32,7 +31,7 @@ class FuseMount(CephFSMount):
         self.inst = None
         self.addr = None
 
-    def mount(self, mntopts=[], createfs=True, **kwargs):
+    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
         self.update_attrs(**kwargs)
         self.assert_and_log_minimum_mount_details()
 
@@ -45,7 +44,7 @@ class FuseMount(CephFSMount):
             self.setupfs(name=self.cephfs_name)
 
         try:
-            return self._mount(mntopts)
+            return self._mount(mntopts, check_status)
         except RuntimeError:
             # Catch exceptions by the mount() logic (i.e. not remote command
             # failures) and ensure the mount is not left half-up.
@@ -55,7 +54,7 @@ class FuseMount(CephFSMount):
             self.umount_wait(force=True)
             raise
 
-    def _mount(self, mntopts):
+    def _mount(self, mntopts, check_status):
         log.info("Client client.%s config is %s" % (self.client_id,
                                                     self.client_config))
 
@@ -137,14 +136,16 @@ class FuseMount(CephFSMount):
         pre_mount_conns = list_connections()
         log.info("Pre-mount connections: {0}".format(pre_mount_conns))
 
-        proc = self.client_remote.run(
+        mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
+        self.fuse_daemon = self.client_remote.run(
             args=run_cmd,
             cwd=cwd,
             logger=log.getChild('ceph-fuse.{id}'.format(id=self.client_id)),
             stdin=run.PIPE,
-            wait=False,
+            stdout=mountcmd_stdout,
+            stderr=mountcmd_stderr,
+            wait=False
         )
-        self.fuse_daemon = proc
 
         # Wait for the connection reference to appear in /sys
         mount_wait = self.client_config.get('mount_wait', 0)
@@ -159,13 +160,21 @@ class FuseMount(CephFSMount):
             if self.fuse_daemon.finished:
                 # Did mount fail?  Raise the CommandFailedError instead of
                 # hitting the "failed to populate /sys/" timeout
-                self.fuse_daemon.wait()
+                try:
+                    self.fuse_daemon.wait()
+                except CommandFailedError as e:
+                    log.info('mount command failed.')
+                    if check_status:
+                        raise
+                    else:
+                        return (e, mountcmd_stdout.getvalue(),
+                                mountcmd_stderr.getvalue())
             time.sleep(1)
             waited += 1
             if waited > timeout:
-                raise RuntimeError("Fuse mount failed to populate /sys/ after {0} seconds".format(
-                    waited
-                ))
+                raise RuntimeError(
+                    "Fuse mount failed to populate/sys/ after {} "
+                    "seconds".format(waited))
             else:
                 post_mount_conns = list_connections()
 
