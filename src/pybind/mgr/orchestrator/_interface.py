@@ -837,8 +837,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def list_daemons(self, daemon_type=None, daemon_id=None, host=None, refresh=False):
-        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion
+    def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None, refresh=False):
+        # type: (Optional[str], Optional[str], Optional[str], Optional[str], bool) -> Completion
         """
         Describe a daemon (of any kind) that is already configured in
         the orchestrator.
