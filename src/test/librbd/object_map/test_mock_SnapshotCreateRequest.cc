@@ -134,7 +134,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, ReadMapError) {
     std::shared_lock image_locker{ictx->image_lock};
     request->send();
   }
-  ASSERT_EQ(0, cond_ctx.wait());
+  ASSERT_EQ(-ENOENT, cond_ctx.wait());
 
   expect_unlock_exclusive_lock(*ictx);
 }
@@ -162,7 +162,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, WriteMapError) {
     std::shared_lock image_locker{ictx->image_lock};
     request->send();
   }
-  ASSERT_EQ(0, cond_ctx.wait());
+  ASSERT_EQ(-ENOENT, cond_ctx.wait());
 
   expect_unlock_exclusive_lock(*ictx);
 }
@@ -191,7 +191,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, AddSnapshotError) {
     std::shared_lock image_locker{ictx->image_lock};
     request->send();
   }
-  ASSERT_EQ(0, cond_ctx.wait());
+  ASSERT_EQ(-ENOENT, cond_ctx.wait());
 
   expect_unlock_exclusive_lock(*ictx);
 }
