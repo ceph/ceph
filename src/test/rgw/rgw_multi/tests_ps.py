@@ -1,8 +1,7 @@
 import logging
 import json
 import tempfile
-import BaseHTTPServer
-import SocketServer
+from six.moves import BaseHTTPServer
 import random
 import threading
 import subprocess

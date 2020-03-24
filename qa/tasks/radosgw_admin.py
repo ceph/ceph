@@ -14,7 +14,7 @@ import json
 import logging
 import time
 import datetime
-import Queue
+from six.moves import queue
 
 import sys
 
