@@ -611,5 +611,5 @@ The output should be::
 
  my-new-bucket
 
-.. _Preflight:  ../../start/quick-start-preflight
-.. _HTTP Frontends: ../../radosgw/frontends
+.. _Preflight:  ../quick-start-preflight
+.. _HTTP Frontends: ../../../radosgw/frontends

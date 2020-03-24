@@ -356,9 +356,9 @@ This completes the Quick Start Preflight. Proceed to the `Storage Cluster
 Quick Start`_.
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
-.. _OS Recommendations: ../os-recommendations
-.. _Network Configuration Reference: ../../rados/configuration/network-config-ref
-.. _Clock: ../../rados/configuration/mon-config-ref#clock
+.. _OS Recommendations: ../../../start/os-recommendations
+.. _Network Configuration Reference: ../../../rados/configuration/network-config-ref
+.. _Clock: ../../../rados/configuration/mon-config-ref#clock
 .. _NTP: http://www.ntp.org/
-.. _Infernalis release: ../../release-notes/#v9-1-0-infernalis-release-candidate
+.. _Infernalis release: ../../../release-notes/#v9-1-0-infernalis-release-candidate
 .. _EPEL wiki: https://fedoraproject.org/wiki/EPEL
