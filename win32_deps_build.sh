@@ -29,8 +29,8 @@ boostSrcDir="${depsSrcDir}/boost_1_70_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
-backtraceDir="${depsToolsetDir}/backtrace"
-backtraceSrcDir="${depsSrcDir}/backtrace"
+backtraceDir="${depsToolsetDir}/libbacktrace"
+backtraceSrcDir="${depsSrcDir}/libbacktrace"
 snappySrcDir="${depsSrcDir}/snappy"
 snappyDir="${depsToolsetDir}/snappy"
 snappyTag="1.1.7"
@@ -72,10 +72,10 @@ sudo apt-get -y install mingw-w64 cmake pkg-config python3-dev python3-pip \
 sudo python3 -m pip install cython
 
 cd $depsSrcDir
-if [[ ! -d $zlibDir ]]; then
+if [[ ! -d $zlibSrcDir ]]; then
     git clone https://github.com/madler/zlib
 fi
-cd zlib
+cd $zlibSrcDir
 # Apparently the configure script is broken...
 sed -e s/"PREFIX = *$"/"PREFIX = x86_64-w64-mingw32-"/ -i win32/Makefile.gcc
 _make -f win32/Makefile.gcc
@@ -88,9 +88,9 @@ _make BINARY_PATH=$zlibDir \
 cd $depsToolsetDir
 if [[ ! -d $lz4Dir ]]; then
     git clone https://github.com/lz4/lz4
+    cd $lz4Dir; git checkout $lz4Tag
 fi
-cd lz4
-git checkout $lz4Tag
+cd $lz4Dir
 _make BUILD_STATIC=no CC=x86_64-w64-mingw32-gcc \
       DLLTOOL=x86_64-w64-mingw32-dlltool \
       WINDRES=x86_64-w64-mingw32-windres \
@@ -111,9 +111,9 @@ _make install
 cd $depsSrcDir
 if [[ ! -d $curlSrcDir ]]; then
     git clone https://github.com/curl/curl
+    cd $curlSrcDir && git checkout $curlTag
 fi
 cd $curlSrcDir
-git checkout $curlTag
 ./buildconf
 ./configure --prefix=$curlDir --with-ssl=$sslDir --with-zlib=$zlibDir \
             --host=x86_64-w64-mingw32
@@ -263,8 +263,8 @@ cd $depsSrcDir
 if [[ ! -d $backtraceSrcDir ]]; then
     git clone https://github.com/ianlancetaylor/libbacktrace
 fi
-mkdir libbacktrace/build
-cd libbacktrace/build
+mkdir -p $backtraceSrcDir/build
+cd $backtraceSrcDir/build
 ../configure --prefix=$backtraceDir --exec-prefix=$backtraceDir \
              --host x86_64-w64-mingw32 --enable-host-shared
 _make LDFLAGS="-no-undefined"
@@ -274,10 +274,10 @@ cp $backtraceDir/lib/libbacktrace.a $backtraceDir/lib/libbacktrace.dll.a
 cd $depsSrcDir
 if [[ ! -d $snappySrcDir ]]; then
     git clone https://github.com/google/snappy
+    cd $snappySrcDir && git checkout $snappyTag
 fi
-mkdir -p snappy/build
-cd snappy && git checkout $snappyTag
-cd build
+mkdir -p $snappySrcDir/build
+cd $snappySrcDir/build
 
 cmake -DCMAKE_INSTALL_PREFIX=$snappyDir \
       -DCMAKE_BUILD_TYPE=Release \
