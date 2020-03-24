@@ -8,7 +8,7 @@ from teuthology import misc
 from teuthology.exceptions import ConfigError
 from teuthology import contextutil
 from teuthology import packaging
-from util import get_remote_for_role
+from tasks.util import get_remote_for_role
 
 log = logging.getLogger(__name__)
 
