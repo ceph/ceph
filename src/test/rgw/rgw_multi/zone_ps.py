@@ -1,12 +1,12 @@
 import logging
-import httplib
 import ssl
 import urllib
-import urlparse
 import hmac
 import hashlib
 import base64
 import xmltodict
+from six.moves import http_client
+from six.moves.urllib.parse import urlparse
 from time import gmtime, strftime
 from tasks.rgw_multi.multisite import Zone
 import boto3
@@ -88,7 +88,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     headers = {'Authorization': 'AWS '+conn.aws_access_key_id+':'+signature,
                'Date': string_date,
                'Host': conn.host+':'+str(conn.port)}
-    http_conn = httplib.HTTPConnection(conn.host, conn.port)
+    http_conn = http_client.HTTPConnection(conn.host, conn.port)
     if log.getEffectiveLevel() <= 10:
         http_conn.set_debuglevel(5)
     http_conn.request(method, resource+url_params, NO_HTTP_BODY, headers)
@@ -227,10 +227,10 @@ class PSTopicS3:
                    'Host': self.conn.host+':'+str(self.conn.port),
                    'Content-Type': content_type}
         if self.conn.is_secure:
-            http_conn = httplib.HTTPSConnection(self.conn.host, self.conn.port, 
+            http_conn = http_client.HTTPSConnection(self.conn.host, self.conn.port,
                     context=ssl.create_default_context(cafile='./cert.pem'))
         else:
-            http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
+            http_conn = http_client.HTTPConnection(self.conn.host, self.conn.port)
         http_conn.request(method, resource, body, headers)
         response = http_conn.getresponse()
         data = response.read()
@@ -269,10 +269,10 @@ class PSTopicS3:
                    'Host': self.conn.host+':'+str(self.conn.port),
                    'Content-Type': content_type}
         if self.conn.is_secure:
-            http_conn = httplib.HTTPSConnection(self.conn.host, self.conn.port, 
+            http_conn = http_client.HTTPSConnection(self.conn.host, self.conn.port,
                     context=ssl.create_default_context(cafile='./cert.pem'))
         else:
-            http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
+            http_conn = http_client.HTTPConnection(self.conn.host, self.conn.port)
         http_conn.request(method, resource, body, headers)
         response = http_conn.getresponse()
         data = response.read()
