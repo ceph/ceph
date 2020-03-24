@@ -1,11 +1,12 @@
 import errno
 import json
 
+from typing import Optional
+
 from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
-#from .fs.nfs import check_fsal_valid, create_instance, create_export, delete_export
 from .fs.nfs import NFSConfig
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
@@ -297,7 +298,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
-        self.nfs_obj = ""
+        self.nfs_obj = None # type: Optional[NFSConfig]
 
     def __del__(self):
         self.vc.shutdown()
