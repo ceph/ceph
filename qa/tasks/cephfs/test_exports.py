@@ -128,7 +128,7 @@ class TestExports(CephFSTestCase):
             self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0), ('/1/2/3', 2)])
 
         if not isinstance(self.mount_a, FuseMount):
-            p = self.mount_a.client_remote.sh('uname -r'), wait=True)
+            p = self.mount_a.client_remote.sh('uname -r', wait=True)
             dir_pin = self.mount_a.getfattr("1", "ceph.dir.pin")
             log.debug("mount.getfattr('1','ceph.dir.pin'): %s " % dir_pin)
             if str(p) < "5" and not(dir_pin):
