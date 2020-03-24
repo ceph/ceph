@@ -32,7 +32,7 @@ else()
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=10.18.1
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=12.16.2
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
   )
@@ -49,7 +49,7 @@ endif()
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
-  COMMAND NG_CLI_ANALYTICS=false CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress npm ci
+  COMMAND CYPRESS_CACHE_FOLDER=${CMAKE_SOURCE_DIR}/build/src/pybind/mgr/dashboard/cypress npm ci
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend dependencies are being installed"
