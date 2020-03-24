@@ -331,3 +331,5 @@ EOF
 
 x86_64-w64-mingw32-dlltool -d $winLibDir/mswsock.def \
                            -l $winLibDir/libmswsock.a
+
+touch $depsToolsetDir/completed
