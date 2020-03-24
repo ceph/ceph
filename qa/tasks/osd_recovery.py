@@ -2,8 +2,8 @@
 osd recovery
 """
 import logging
-import ceph_manager
 import time
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 

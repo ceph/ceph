@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import time
 
-from .helper import DashboardTestCase
+from tasks.mgr.dashboard.helper import DashboardTestCase
 
 
 class ClusterConfigurationTest(DashboardTestCase):

@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import six
 from contextlib import contextmanager
 
-from .helper import DashboardTestCase, JObj, JList, JLeaf
+from tasks.mgr.dashboard.helper import DashboardTestCase, JObj, JList, JLeaf
 
 
 class CephfsTest(DashboardTestCase):

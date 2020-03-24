@@ -5,7 +5,7 @@ import logging
 import time
 
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks.util.rados import rados
 
 log = logging.getLogger(__name__)
 

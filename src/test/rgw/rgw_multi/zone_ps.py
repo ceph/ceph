@@ -8,7 +8,7 @@ import hashlib
 import base64
 import xmltodict
 from time import gmtime, strftime
-from .multisite import Zone
+from tasks.rgw_multi.multisite import Zone
 import boto3
 from botocore.client import Config
 
