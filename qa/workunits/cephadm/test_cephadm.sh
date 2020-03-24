@@ -281,8 +281,12 @@ $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       ceph auth get client.bootstrap-osd > $TMPDIR/keyring.bootstrap.osd
 
+# create lvs first so ceph-volume doesn't overlap with lv creation
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
+done
+
+for id in `seq 0 $((--OSD_TO_CREATE))`; do
     device_name=/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 
     # prepare the osd
