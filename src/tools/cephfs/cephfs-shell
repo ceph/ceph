@@ -1509,18 +1509,18 @@ def get_bool_vals_for_boolopts(val):
 def read_ceph_conf(shell, config_file):
     try:
         shell.debug = get_bool_vals_for_boolopts(cephfs.
-            conf_get('debug_shell'))
+                                                 conf_get('debug_shell'))
         shell.allow_ansi = get_bool_vals_for_boolopts(cephfs.
-            conf_get('allow_ansi'))
+                                                      conf_get('allow_ansi'))
         shell.echo = get_bool_vals_for_boolopts(cephfs.conf_get('echo'))
         shell.continuation_prompt = get_bool_vals_for_boolopts(cephfs.
-            conf_get('continuation_prompt'))
+                                                               conf_get('continuation_prompt'))
         shell.colors = get_bool_vals_for_boolopts(cephfs.conf_get('colors'))
         shell.editor = get_bool_vals_for_boolopts(cephfs.conf_get('editor'))
         shell.feedback_to_output = get_bool_vals_for_boolopts(cephfs.
-            conf_get('feedback_to_output'))
+                                                              conf_get('feedback_to_output'))
         shell.max_completion_items = get_bool_vals_for_boolopts(cephfs.
-            conf_get('max_completion_items'))
+                                                                conf_get('max_completion_items'))
         shell.prompt = get_bool_vals_for_boolopts(cephfs.conf_get('prompt'))
         shell.quiet = get_bool_vals_for_boolopts(cephfs.conf_get('quiet'))
         shell.timing = get_bool_vals_for_boolopts(cephfs.conf_get('timing'))
