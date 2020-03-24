@@ -1485,7 +1485,7 @@ def setup_cephfs(config_file):
     try:
         cephfs = libcephfs.LibCephFS(conffile=config_file)
         cephfs.mount()
-    except libcephfs.ObjectNotFound as e:
+    except libcephfs.ObjectNotFound:
         print('couldn\'t find ceph configuration not found')
         sys.exit(1)
     except libcephfs.Error as e:
