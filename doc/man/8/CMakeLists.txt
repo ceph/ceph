@@ -49,7 +49,9 @@ endif()
 if(WITH_RADOSGW)
   list(APPEND man_srcs
 	radosgw.rst
-	radosgw-admin.rst)
+	radosgw-admin.rst
+	rgw-orphan-list.rst
+	ceph-diff-sorted.rst)
 endif()
 
 if(WITH_RBD)
