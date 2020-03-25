@@ -149,6 +149,7 @@ class DriveGroupSpec(ServiceSpec):
                  block_wal_size=None,  # type: Optional[int]
                  journal_size=None,  # type: Optional[int]
                  service_type=None,  # type: Optional[str]
+                 unmanaged=None,  # type: Optional[bool]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id, placement=placement)
