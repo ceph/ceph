@@ -168,8 +168,11 @@ class Remote(object):
         return self.ssh.get_transport().is_active()
 
     def ensure_online(self):
+        if self.is_online:
+            return
+        self.connect()
         if not self.is_online:
-            return self.connect()
+            raise Exception('unable to connect')
 
     @property
     def system_type(self):
