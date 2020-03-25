@@ -45,6 +45,7 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
+  bool is_blacklisted() const;
   bool is_leader() const;
   bool is_releasing_leader() const;
   bool get_leader_instance_id(std::string *instance_id) const;
@@ -219,6 +220,8 @@ private:
   MirrorStatusWatcher<ImageCtxT> *m_status_watcher = nullptr;
   Instances<ImageCtxT> *m_instances = nullptr;
   librbd::managed_lock::Locker m_locker;
+
+  bool m_blacklisted = false;
 
   AsyncOpTracker m_timer_op_tracker;
   Context *m_timer_task = nullptr;
