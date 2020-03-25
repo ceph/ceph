@@ -486,7 +486,6 @@ add_dependencies(tests
   cls_lock
   ceph_test_objectstore
   ceph_erasure_code_non_regression
-  ceph_erasure_code
   cython_modules)
 if (WITH_CEPHFS)
   add_dependencies(tests ceph-mds)
