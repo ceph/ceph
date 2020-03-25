@@ -187,7 +187,8 @@ void HybridAllocator::shutdown()
   }
 }
 
-void HybridAllocator::_spillover_range(uint64_t start, uint64_t end) {
+void HybridAllocator::_spillover_range(uint64_t start, uint64_t end)
+{
   auto size = end - start;
   dout(20) << __func__
     << std::hex << " "
@@ -206,4 +207,16 @@ void HybridAllocator::_spillover_range(uint64_t start, uint64_t end) {
       get_name());
   }
   bmap_alloc->init_add_free(start, size);
+}
+
+void HybridAllocator::_add_to_tree(uint64_t start, uint64_t size)
+{
+  if (bmap_alloc) {
+    uint64_t head = bmap_alloc->claim_free_to_left(start);
+    uint64_t tail = bmap_alloc->claim_free_to_right(start + size);
+    ceph_assert(head <= start);
+    start -= head;
+    size += head + tail;
+  }
+  AvlAllocator::_add_to_tree(start, size);
 }
