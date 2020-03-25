@@ -1915,8 +1915,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if host:
                 self._refresh_host_daemons(host)
             else:
-                for host, hi in self.inventory.items():
-                    self._refresh_host_daemons(host)
+                for hostname, hi in self.inventory.items():
+                    self._refresh_host_daemons(hostname)
         result = []
         for h, dm in self.cache.daemons.items():
             if host and h != host:
