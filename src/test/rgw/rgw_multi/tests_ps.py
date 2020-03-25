@@ -9,7 +9,7 @@ import socket
 import time
 import os
 from random import randint
-from tasks.rgw_multi.tests import get_realm, \
+from .tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
     zone_meta_checkpoint, \
@@ -20,7 +20,7 @@ from tasks.rgw_multi.tests import get_realm, \
     gen_bucket_name, \
     get_user, \
     get_tenant
-from tasks.rgw_multi.zone_ps import PSTopic, \
+from .zone_ps import PSTopic, \
     PSTopicS3, \
     PSNotification, \
     PSSubscription, \
@@ -30,7 +30,7 @@ from tasks.rgw_multi.zone_ps import PSTopic, \
     put_object_tagging, \
     get_object_tagging, \
     delete_all_objects
-from tasks.rgw_multi.multisite import User
+from .multisite import User
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
 import boto.s3.tagging
