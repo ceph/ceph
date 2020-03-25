@@ -54,14 +54,14 @@ struct OptionMask {
     }
     return r;
   }
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 };
 
 struct MaskedOption {
-  string raw_value;               ///< raw, unparsed, unvalidated value
+  std::string raw_value;               ///< raw, unparsed, unvalidated value
   const Option *opt;              ///< the option
   OptionMask mask;
-  unique_ptr<const Option> unknown_opt; ///< if fabricated for an unknown option
+  std::unique_ptr<const Option> unknown_opt; ///< if fabricated for an unknown option
 
   MaskedOption(const Option *o, bool fab=false) : opt(o) {
     if (fab) {
@@ -80,9 +80,9 @@ struct MaskedOption {
   /// return a precision metric (smaller is more precise)
   int get_precision(const CrushWrapper *crush);
 
-  friend ostream& operator<<(ostream& out, const MaskedOption& o);
+  friend std::ostream& operator<<(std::ostream& out, const MaskedOption& o);
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 };
 
 struct Section {
@@ -91,7 +91,7 @@ struct Section {
   void clear() {
     options.clear();
   }
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   std::string get_minimal_conf() const;
 };
 
@@ -119,13 +119,13 @@ struct ConfigMap {
     by_type.clear();
     by_id.clear();
   }
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   std::map<std::string,std::string,std::less<>> generate_entity_map(
     const EntityName& name,
-    const map<std::string,std::string>& crush_location,
+    const std::map<std::string,std::string>& crush_location,
     const CrushWrapper *crush,
     const std::string& device_class,
-    std::map<std::string,pair<std::string,const MaskedOption*>> *src=0);
+    std::map<std::string,std::pair<std::string,const MaskedOption*>> *src=0);
 
   static bool parse_mask(
     const std::string& in,
@@ -137,11 +137,11 @@ struct ConfigMap {
 struct ConfigChangeSet {
   version_t version;
   utime_t stamp;
-  string name;
+  std::string name;
 
   // key -> (old value, new value)
-  map<string,pair<boost::optional<string>,boost::optional<string>>> diff;
+  std::map<std::string,std::pair<boost::optional<std::string>,boost::optional<std::string>>> diff;
 
-  void dump(Formatter *f) const;
-  void print(ostream& out) const;
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream& out) const;
 };

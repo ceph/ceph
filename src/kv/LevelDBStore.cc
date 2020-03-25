@@ -7,8 +7,6 @@
 #include <string>
 #include <cerrno>
 
-using std::string;
-
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
@@ -19,6 +17,15 @@ using std::string;
 #define dout_subsys ceph_subsys_leveldb
 #undef dout_prefix
 #define dout_prefix *_dout << "leveldb: "
+
+using std::list;
+using std::string;
+using std::ostream;
+using std::pair;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
 
 class CephLevelDBLogger : public leveldb::Logger {
   CephContext *cct;

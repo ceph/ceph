@@ -6,8 +6,8 @@
 
 FreelistManager *FreelistManager::create(
   CephContext* cct,
-  string type,
-  string prefix)
+  std::string type,
+  std::string prefix)
 {
   // a bit of a hack... we hard-code the prefixes here.  we need to
   // put the freelistmanagers in different prefixes because the merge

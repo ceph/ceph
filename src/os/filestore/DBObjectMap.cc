@@ -23,6 +23,16 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore "
 
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::bufferlist;
+
 const string DBObjectMap::USER_PREFIX = "_USER_";
 const string DBObjectMap::XATTR_PREFIX = "_AXATTR_";
 const string DBObjectMap::SYS_PREFIX = "_SYS_";

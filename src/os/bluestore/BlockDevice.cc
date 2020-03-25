@@ -42,6 +42,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev "
 
+using std::string;
+
 void IOContext::aio_wait()
 {
   std::unique_lock l(lock);

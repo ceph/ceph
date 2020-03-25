@@ -344,7 +344,7 @@ public:
   virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
 			  bool *per_pool_omap) = 0;
 
-  virtual void collect_metadata(std::map<std::string,string> *pm) { }
+  virtual void collect_metadata(std::map<std::string,std::string> *pm) { }
 
   /**
    * write_meta - write a simple configuration key out-of-band
@@ -555,7 +555,7 @@ public:
   virtual int dump_onode(
     CollectionHandle &c,
     const ghobject_t& oid,
-    const string& section_name,
+    const std::string& section_name,
     ceph::Formatter *f) {
     return -ENOTSUP;
   }

@@ -48,6 +48,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "btrfsfilestorebackend(" << get_basedir_path() << ") "
 
+using std::cerr;
+using std::list;
+using std::string;
+
 #define ALIGN_DOWN(x, by) ((x) - ((x) % (by)))
 #define ALIGNED(x, by) (!((x) % (by)))
 #define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))

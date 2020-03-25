@@ -38,28 +38,28 @@ struct MonOpRequest : public TrackedOp {
     forwarded_to_leader = true;
   }
 
-  void mark_svc_event(const string &service, const string &event) {
-    string s = service;
+  void mark_svc_event(const std::string &service, const std::string &event) {
+    std::string s = service;
     s.append(":").append(event);
     mark_event(s);
   }
 
-  void mark_logmon_event(const string &event) {
+  void mark_logmon_event(const std::string &event) {
     mark_svc_event("logm", event);
   }
-  void mark_osdmon_event(const string &event) {
+  void mark_osdmon_event(const std::string &event) {
     mark_svc_event("osdmap", event);
   }
-  void mark_pgmon_event(const string &event) {
+  void mark_pgmon_event(const std::string &event) {
     mark_svc_event("pgmap", event);
   }
-  void mark_mdsmon_event(const string &event) {
+  void mark_mdsmon_event(const std::string &event) {
     mark_svc_event("mdsmap", event);
   }
-  void mark_authmon_event(const string &event) {
+  void mark_authmon_event(const std::string &event) {
     mark_svc_event("auth", event);
   }
-  void mark_paxos_event(const string &event) {
+  void mark_paxos_event(const std::string &event) {
     mark_svc_event("paxos", event);
   }
 
@@ -101,7 +101,7 @@ private:
     }
   }
 
-  void _dump(Formatter *f) const override {
+  void _dump(ceph::Formatter *f) const override {
     {
       f->open_array_section("events");
       std::lock_guard l(lock);
@@ -119,7 +119,7 @@ private:
   }
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const override {
+  void _dump_op_descriptor_unlocked(std::ostream& stream) const override {
     get_req()->print(stream);
   }
 
@@ -215,7 +215,7 @@ struct C_MonOp : public Context
     _finish(r);
   }
 
-  void mark_op_event(const string &event) {
+  void mark_op_event(const std::string &event) {
     if (op)
       op->mark_event(event);
   }

@@ -37,11 +37,11 @@ public:
   int detect_features() override;
   bool can_checkpoint() override;
   int create_current() override;
-  int list_checkpoints(list<string>& ls) override;
-  int create_checkpoint(const string& name, uint64_t *cid) override;
+  int list_checkpoints(std::list<std::string>& ls) override;
+  int create_checkpoint(const std::string& name, uint64_t *cid) override;
   int sync_checkpoint(uint64_t cid) override;
-  int rollback_to(const string& name) override;
-  int destroy_checkpoint(const string& name) override;
+  int rollback_to(const std::string& name) override;
+  int destroy_checkpoint(const std::string& name) override;
   int syncfs() override;
   int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) override;
 };

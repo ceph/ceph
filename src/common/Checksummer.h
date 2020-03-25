@@ -4,8 +4,11 @@
 #ifndef CEPH_OS_BLUESTORE_CHECKSUMMER
 #define CEPH_OS_BLUESTORE_CHECKSUMMER
 
-#include "xxHash/xxhash.h"
+#include "include/buffer.h"
 #include "include/byteorder.h"
+#include "include/ceph_assert.h"
+
+#include "xxHash/xxhash.h"
 
 class Checksummer {
 public:
@@ -83,7 +86,7 @@ public:
       state_t state,
       init_value_t init_value,
       size_t len,
-      bufferlist::const_iterator& p
+      ceph::buffer::list::const_iterator& p
       ) {
       return p.crc32c(len, init_value);
     }
@@ -104,7 +107,7 @@ public:
       state_t state,
       init_value_t init_value,
       size_t len,
-      bufferlist::const_iterator& p
+      ceph::buffer::list::const_iterator& p
       ) {
       return p.crc32c(len, init_value) & 0xffff;
     }
@@ -125,7 +128,7 @@ public:
       state_t state,
       init_value_t init_value,
       size_t len,
-      bufferlist::const_iterator& p
+      ceph::buffer::list::const_iterator& p
       ) {
       return p.crc32c(len, init_value) & 0xff;
     }
@@ -147,7 +150,7 @@ public:
       state_t state,
       init_value_t init_value,
       size_t len,
-      bufferlist::const_iterator& p
+      ceph::buffer::list::const_iterator& p
       ) {
       XXH32_reset(state, init_value);
       while (len > 0) {
@@ -176,7 +179,7 @@ public:
       state_t state,
       init_value_t init_value,
       size_t len,
-      bufferlist::const_iterator& p
+      ceph::buffer::list::const_iterator& p
       ) {
       XXH64_reset(state, init_value);
       while (len > 0) {
@@ -194,8 +197,8 @@ public:
     size_t csum_block_size,
     size_t offset,
     size_t length,
-    const bufferlist &bl,
-    bufferptr* csum_data
+    const ceph::buffer::list &bl,
+    ceph::buffer::ptr* csum_data
     ) {
     return calculate<Alg>(-1, csum_block_size, offset, length, bl, csum_data);
   }
@@ -206,11 +209,11 @@ public:
       size_t csum_block_size,
       size_t offset,
       size_t length,
-      const bufferlist &bl,
-      bufferptr* csum_data) {
+      const ceph::buffer::list &bl,
+      ceph::buffer::ptr* csum_data) {
     ceph_assert(length % csum_block_size == 0);
     size_t blocks = length / csum_block_size;
-    bufferlist::const_iterator p = bl.begin();
+    ceph::buffer::list::const_iterator p = bl.begin();
     ceph_assert(bl.length() >= length);
 
     typename Alg::state_t state;
@@ -235,12 +238,12 @@ public:
     size_t csum_block_size,
     size_t offset,
     size_t length,
-    const bufferlist &bl,
-    const bufferptr& csum_data,
+    const ceph::buffer::list &bl,
+    const ceph::buffer::ptr& csum_data,
     uint64_t *bad_csum=0
     ) {
     ceph_assert(length % csum_block_size == 0);
-    bufferlist::const_iterator p = bl.begin();
+    ceph::buffer::list::const_iterator p = bl.begin();
     ceph_assert(bl.length() >= length);
 
     typename Alg::state_t state;

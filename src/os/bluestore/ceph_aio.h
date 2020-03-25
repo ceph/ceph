@@ -34,7 +34,7 @@ struct aio_t {
   boost::container::small_vector<iovec,4> iov;
   uint64_t offset, length;
   long rval;
-  bufferlist bl;  ///< write payload (so that it remains stable for duration)
+  ceph::buffer::list bl;  ///< write payload (so that it remains stable for duration)
 
   boost::intrusive::list_member_hook<> queue_item;
 
@@ -94,7 +94,7 @@ typedef boost::intrusive::list<
     &aio_t::queue_item> > aio_list_t;
 
 struct io_queue_t {
-  typedef list<aio_t>::iterator aio_iter;
+  typedef std::list<aio_t>::iterator aio_iter;
 
   virtual ~io_queue_t() {};
 

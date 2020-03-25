@@ -51,12 +51,12 @@ struct Page {
       return lhs.offset < rhs.offset;
     }
   };
-  void encode(bufferlist &bl, size_t page_size) const {
+  void encode(ceph::buffer::list &bl, size_t page_size) const {
     using ceph::encode;
-    bl.append(buffer::copy(data, page_size));
+    bl.append(ceph::buffer::copy(data, page_size));
     encode(offset, bl);
   }
-  void decode(bufferlist::const_iterator &p, size_t page_size) {
+  void decode(ceph::buffer::list::const_iterator &p, size_t page_size) {
     using ceph::decode;
     p.copy(page_size, data);
     decode(offset, p);
@@ -206,7 +206,7 @@ class PageSet {
     free_pages(cur, pages.end());
   }
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
     encode(page_size, bl);
     unsigned count = pages.size();
@@ -214,7 +214,7 @@ class PageSet {
     for (auto p = pages.rbegin(); p != pages.rend(); ++p)
       p->encode(bl, page_size);
   }
-  void decode(bufferlist::const_iterator &p) {
+  void decode(ceph::buffer::list::const_iterator &p) {
     using ceph::decode;
     ceph_assert(empty());
     decode(page_size, p);

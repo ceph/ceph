@@ -18,8 +18,8 @@ public:
 
   static FreelistManager *create(
     CephContext* cct,
-    string type,
-    string prefix);
+    std::string type,
+    std::string prefix);
 
   static void setup_merge_operators(KeyValueDB *db);
 

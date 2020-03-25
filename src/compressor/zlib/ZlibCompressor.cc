@@ -30,6 +30,11 @@
 
 // -----------------------------------------------------------------------------
 
+using std::ostream;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+
 static ostream&
 _prefix(std::ostream* _dout)
 {
@@ -78,7 +83,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
 
     strm.next_in = c_in;
     do {
-      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
+      bufferptr ptr = ceph::buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
@@ -134,7 +139,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
     strm.next_in = c_in;
 
     do {
-      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
+      bufferptr ptr = ceph::buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
@@ -216,7 +221,7 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
 
     do {
       strm.avail_out = MAX_LEN;
-      bufferptr ptr = buffer::create_page_aligned(MAX_LEN);
+      bufferptr ptr = ceph::buffer::create_page_aligned(MAX_LEN);
       strm.next_out = (unsigned char*)ptr.c_str();
       ret = inflate(&strm, Z_NO_FLUSH);
       if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR) {

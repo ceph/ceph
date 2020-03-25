@@ -30,8 +30,8 @@ public:
   version_t round = 0;
 
   utime_t timestamp;
-  map<int, double> skews;
-  map<int, double> latencies;
+  std::map<int, double> skews;
+  std::map<int, double> latencies;
 
   MTimeCheck2() : Message{MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION} { }
   MTimeCheck2(int op) :
