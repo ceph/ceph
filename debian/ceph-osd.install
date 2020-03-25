@@ -4,6 +4,7 @@ lib/systemd/system/ceph-osd*
 lib/systemd/system/ceph-volume@.service
 usr/bin/ceph-bluestore-tool
 usr/bin/ceph-clsinfo
+usr/bin/ceph-erasure-code-tool
 usr/bin/ceph-objectstore-tool
 usr/bin/ceph-osdomap-tool
 usr/bin/${CEPH_OSD_BASENAME} => /usr/bin/ceph-osd
