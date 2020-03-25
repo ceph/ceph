@@ -2211,7 +2211,6 @@ fi
 %{_bindir}/ceph_bench_log
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
-%{_bindir}/ceph_erasure_code
 %{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_omapbench
 %{_bindir}/ceph_objectstore_bench
