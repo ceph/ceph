@@ -159,6 +159,8 @@ class Remote(object):
     def is_online(self):
         if self.ssh is None:
             return False
+        if self.ssh.get_transport() is None:
+            return False
         try:
             self.run(args="true")
         except Exception:
