@@ -629,3 +629,86 @@ void AllocatorLevel01Loose::dump(
     notify(off, len);
 }
 
+uint64_t AllocatorLevel01Loose::_claim_free_to_left_l0(int64_t l0_pos_start)
+{
+  int64_t d0 = L0_ENTRIES_PER_SLOT;
+
+  int64_t pos = l0_pos_start - 1;
+  slot_t bits = (slot_t)1 << (pos % d0);
+  int64_t idx = pos / d0;
+  slot_t* val_s = l0.data() + idx;
+
+  int64_t pos_e = p2align<int64_t>(pos, d0);
+
+  while (pos >= pos_e) {
+    if (0 == ((*val_s) & bits))
+      return pos + 1;
+    (*val_s) &= ~bits;
+    bits >>= 1;
+    --pos;
+  }
+  --idx;
+  val_s = l0.data() + idx;
+  while (idx >= 0 && (*val_s) == all_slot_set) {
+    *val_s = all_slot_clear;
+    --idx;
+    pos -= d0;
+    val_s = l0.data() + idx;
+  }
+
+  if (idx >= 0 &&
+      (*val_s) != all_slot_set && (*val_s) != all_slot_clear) {
+    int64_t pos_e = p2align<int64_t>(pos, d0);
+    slot_t bits = (slot_t)1 << (pos % d0);
+    while (pos >= pos_e) {
+      if (0 == ((*val_s) & bits))
+        return pos + 1;
+      (*val_s) &= ~bits;
+      bits >>= 1;
+      --pos;
+    }
+  }
+  return pos + 1;
+}
+
+uint64_t AllocatorLevel01Loose::_claim_free_to_right_l0(int64_t l0_pos_start)
+{
+  auto d0 = L0_ENTRIES_PER_SLOT;
+
+  int64_t pos = l0_pos_start;
+  slot_t bits = (slot_t)1 << (pos % d0);
+  size_t idx = pos / d0;
+  slot_t* val_s = l0.data() + idx;
+
+  int64_t pos_e = p2roundup<int64_t>(pos + 1, d0);
+
+  while (pos < pos_e) {
+    if (0 == ((*val_s) & bits))
+      return pos;
+    (*val_s) &= ~bits;
+    bits <<= 1;
+    ++pos;
+  }
+  ++idx;
+  val_s = l0.data() + idx;
+  while (idx < l0.size() && (*val_s) == all_slot_set) {
+    *val_s = all_slot_clear;
+    ++idx;
+    pos += d0;
+    val_s = l0.data() + idx;
+  }
+
+  if (idx < l0.size() &&
+      (*val_s) != all_slot_set && (*val_s) != all_slot_clear) {
+    int64_t pos_e = p2roundup<int64_t>(pos + 1, d0);
+    slot_t bits = (slot_t)1 << (pos % d0);
+    while (pos < pos_e) {
+      if (0 == ((*val_s) & bits))
+        return pos;
+      (*val_s) &= ~bits;
+      bits <<= 1;
+      ++pos;
+    }
+  }
+  return pos;
+}
