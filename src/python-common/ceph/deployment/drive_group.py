@@ -128,7 +128,7 @@ class DriveGroupSpec(ServiceSpec):
         "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size"
+        "journal_size", "unmanaged"
     ]
 
     def __init__(self,
