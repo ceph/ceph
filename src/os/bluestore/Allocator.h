@@ -59,7 +59,7 @@ public:
   virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
 
-  static Allocator *create(CephContext* cct, string type, int64_t size,
+  static Allocator *create(CephContext* cct, std::string type, int64_t size,
 			   int64_t block_size, const std::string& name = "");
 private:
   class SocketHook;

@@ -101,6 +101,37 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 using namespace TOPNSPC::common;
+
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::ErasureCodeProfile;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
+
+
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
@@ -934,7 +965,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
       auto p = bl.cbegin();
       decode(fingerprint, p);
     }
-    catch (buffer::error& e) {
+    catch (ceph::buffer::error& e) {
       dout(10) << __func__ << " failed to decode cluster_fingerprint" << dendl;
     }
   } else {
@@ -5851,7 +5882,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
       OSDMap om;
       om.decode(osdmapbl);
     }
-    catch (buffer::error& e) {
+    catch (ceph::buffer::error& e) {
       derr << "error decoding provided osdmap: " << e.what() << dendl;
       return -EINVAL;
     }
@@ -5875,7 +5906,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	  auto i = bl.cbegin();
 	  keyring.decode_plaintext(i);
 	}
-	catch (const buffer::error& e) {
+	catch (const ceph::buffer::error& e) {
 	  derr << "error decoding keyring " << keyring_plaintext
 	       << ": " << e.what() << dendl;
 	  return -EINVAL;
@@ -6212,7 +6243,7 @@ int Monitor::handle_auth_request(
       assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
       decode(entity_name, p);
       decode(con->peer_global_id, p);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       dout(1) << __func__ << " failed to decode, " << e.what() << dendl;
       return -EACCES;
     }
@@ -6353,7 +6384,7 @@ int Monitor::ms_handle_authentication(Connection *con)
     string str;
     try {
       decode(str, p);
-    } catch (const buffer::error &err) {
+    } catch (const ceph::buffer::error &err) {
       derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
 	   << " in auth db" << dendl;
       str.clear();

@@ -19,6 +19,11 @@
 #include "include/ceph_assert.h"
 #include "mon/MonOpRequest.h"
 
+using std::ostream;
+using std::string;
+
+using ceph::bufferlist;
+
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
@@ -436,6 +441,7 @@ void PaxosService::load_health()
   mon->store->get("health", service_name, bl);
   if (bl.length()) {
     auto p = bl.cbegin();
+    using ceph::decode;
     decode(health_checks, p);
   }
 }

@@ -53,7 +53,7 @@ class Elector : public ElectionOwner {
     uint64_t cluster_features = 0;
     mon_feature_t mon_features;
     ceph_release_t mon_release{0};
-    map<string,string> metadata;
+    std::map<std::string,std::string> metadata;
   };
 
   /**
@@ -100,7 +100,7 @@ class Elector : public ElectionOwner {
    * Map containing info of all those that acked our proposal to become the Leader.
    * Note each peer's info.
    */
-  map<int, elector_info_t> peer_info;
+  std::map<int, elector_info_t> peer_info;
   /**
    * @}
    */

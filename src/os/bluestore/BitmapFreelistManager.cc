@@ -12,6 +12,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
 
+using std::string;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+
 void make_offset_key(uint64_t offset, std::string *key)
 {
   key->reserve(10);

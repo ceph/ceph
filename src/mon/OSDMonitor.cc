@@ -91,6 +91,29 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::ErasureCodePluginRegistry;
+using ceph::ErasureCodeProfile;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
@@ -281,7 +304,7 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
     auto p = caps_info.caps.cbegin();
     try {
       decode(caps_str, p);
-    } catch (const buffer::error &err) {
+    } catch (const ceph::buffer::error &err) {
       derr << "corrupt OSD cap data for " << entity_name << " in auth db"
            << dendl;
       return false;
@@ -1345,7 +1368,7 @@ void OSDMonitor::maybe_prime_pg_temp()
       osds.insert(p->first);
     }
   }
-  for (map<int32_t,uint32_t>::iterator p = pending_inc.new_weight.begin();
+  for (auto p = pending_inc.new_weight.begin();
        !all && p != pending_inc.new_weight.end();
        ++p) {
     if (p->second < osdmap.get_weight(p->first)) {
@@ -2019,7 +2042,7 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
     auto p = bl.cbegin();
     decode(m, p);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     if (err)
       *err << "osd." << osd << " metadata is corrupt";
     return -EIO;
@@ -4176,7 +4199,7 @@ bool OSDMonitor::preprocess_get_purged_snaps(MonOpRequestRef op)
       auto &v = r[epoch];
       try {
 	ceph::decode(v, p);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
 	derr << __func__ << " unable to parse value for key '" << it->key()
 	     << "': \n";
 	bl.hexdump(*_dout);
@@ -7265,7 +7288,7 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
     return -EINVAL;
   }
   check_legacy_ec_plugin(plugin->second, erasure_code_profile);
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  auto& instance = ErasureCodePluginRegistry::instance();
   return instance.factory(plugin->second,
 			  g_conf().get_val<std::string>("erasure_code_dir"),
 			  profile, erasure_code, ss);
@@ -11941,7 +11964,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (osdmap.exists(id)) {
       pending_inc.new_primary_affinity[id] = ww;
-      ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
+      ss << "set osd." << id << " primary-affinity to " << w << " (" << std::ios::hex << ww << std::ios::dec << ")";
       getline(ss, rs);
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                                 get_last_committed() + 1));

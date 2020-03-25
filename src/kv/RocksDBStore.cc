@@ -19,7 +19,6 @@
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/merge_operator.h"
 
-using std::string;
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "include/common_fwd.h"
@@ -35,6 +34,20 @@ using std::string;
 #define dout_subsys ceph_subsys_rocksdb
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
+
+using std::function;
+using std::list;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::unique_ptr;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
 
 static bufferlist to_bufferlist(rocksdb::Slice in) {
   bufferlist bl;
@@ -1235,7 +1248,7 @@ void RocksDBStore::compact_thread_entry()
   dout(10) << __func__ << " enter" << dendl;
   while (!compact_queue_stop) {
     if (!compact_queue.empty()) {
-      pair<string,string> range = compact_queue.front();
+      auto range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
       l.unlock();
