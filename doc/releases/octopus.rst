@@ -144,15 +144,19 @@ RGW object storage
   
 * New `Multisite Sync Policy`_ primitives for per-bucket replication. (EXPERIMENTAL)
 * S3 feature support:
-    - Bucket Replication (EXPERIMENTAL)
-    - `Bucket Notifications`_ via HTTP/S, AMQP and Kafka
-    - Bucket Tagging
-    - Object Lock
-    - Public Access Block for buckets
+
+  - Bucket Replication (EXPERIMENTAL)
+  - `Bucket Notifications`_ via HTTP/S, AMQP and Kafka
+  - Bucket Tagging
+  - Object Lock
+  - Public Access Block for buckets
+
 * Bucket sharding:
-    - Significantly improved listing performance on buckets with many shards.
-    - Dynamic resharding prefers prime shard counts for improved distribution.
-    - Raised the default number of bucket shards to 11.
+
+  - Significantly improved listing performance on buckets with many shards.
+  - Dynamic resharding prefers prime shard counts for improved distribution.
+  - Raised the default number of bucket shards to 11.
+
 * Added `HashiCorp Vault Integration`_ for SSE-KMS.
 * Added Keystone token cache for S3 requests.
 
