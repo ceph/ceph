@@ -206,18 +206,29 @@ services of a particular type via optional --type parameter
 
 ::
 
-    ceph orch ps
-    ceph orch service ls [--host host] [--svc_type type] [--refresh]
+    ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
 
 Discover the status of a particular service or daemons::
 
-    ceph orch service ls --svc_type type --svc_id <name> [--refresh]
+    ceph orch ls --service_type type --service_name <name> [--refresh]
+    
+Export the service specs known to the orchestrator as yaml in format
+that is compatible to ``ceph orch apply -i``::
+
+    ceph orch ls --export
 
 
+Daemon Status
+=============
+
+Print a list of all daemons known to the orchestrator::
+
+    ceph orch ps [--hostname host] [--daemon_type type] [--service_name name] [--daemon_id id] [--format f] [--refresh]
+    
 Query the status of a particular service instance (mon, osd, mds, rgw).  For OSDs
 the id is the numeric OSD ID, for MDS services it is the file system name::
 
-    ceph orch daemon status <type> <instance-name> [--refresh]
+    ceph orch ps --daemon_type osd --daemon_id 0
 
 
 .. _orchestrator-cli-cephfs:
