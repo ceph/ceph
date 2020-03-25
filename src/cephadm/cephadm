@@ -366,6 +366,8 @@ def check_ip_port(ip, port):
         logger.info('Verifying IP %s port %d ...' % (ip, port))
         if ip.startswith('[') or '::' in ip:
             s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            if ip.startswith('[') and ip.endswith(']'):
+                ip = ip[1:-1]
         else:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
