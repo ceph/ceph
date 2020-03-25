@@ -23,10 +23,10 @@ from nose.tools import eq_ as eq
 from nose.plugins.attrib import attr
 from nose.plugins.skip import SkipTest
 
-from tasks.rgw_multi.multisite import Zone, ZoneGroup, Credentials
+from .multisite import Zone, ZoneGroup, Credentials
 
-from tasks.rgw_multi.conn import get_gateway_connection
-from tasks.rgw_multi.tools import assert_raises
+from .conn import get_gateway_connection
+from .tools import assert_raises
 
 class Config:
     """ test configuration """

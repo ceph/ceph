@@ -10,9 +10,9 @@ import dateutil
 from nose.tools import eq_ as eq
 from six.moves import range
 
-from tasks.rgw_multi.multisite import *
-from tasks.rgw_multi.tests import *
-from tasks.rgw_multi.zone_es import *
+from .multisite import *
+from .tests import *
+from .zone_es import *
 
 log = logging.getLogger(__name__)
 
