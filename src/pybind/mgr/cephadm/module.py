@@ -2896,7 +2896,6 @@ datasources:
   cert_file = /etc/grafana/certs/cert_file
   cert_key = /etc/grafana/certs/cert_key
   http_port = 3000
-  http_addr = localhost
 [security]
   admin_user = admin
   admin_password = admin
