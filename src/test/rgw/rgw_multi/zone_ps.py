@@ -6,7 +6,7 @@ import hashlib
 import base64
 import xmltodict
 from six.moves import http_client
-from six.moves.urllib.parse import urlparse
+from six.moves.urllib import parse as urlparse
 from time import gmtime, strftime
 from tasks.rgw_multi.multisite import Zone
 import boto3
