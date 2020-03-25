@@ -86,6 +86,7 @@ class RocksDBStore : public KeyValueDB {
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
   friend class ShardMergeIteratorImpl;
+  friend class WholeMergeIteratorImpl;
   /*
    *  See RocksDB's definition of a column family(CF) and how to use it.
    *  The interfaces of KeyValueDB is extended, when a column family is created.
@@ -565,8 +566,8 @@ err:
   }
 
   WholeSpaceIterator get_wholespace_iterator() override;
+private:
+  WholeSpaceIterator get_default_cf_iterator();
 };
-
-
 
 #endif
