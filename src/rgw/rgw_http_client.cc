@@ -58,8 +58,13 @@ struct rgw_http_req_data : public RefCountedObject {
 
   void set_state(int bitmask);
 
-  void finish(int r) {
+  void finish(int r, long http_status = -1) {
     Mutex::Locker l(lock);
+    if (http_status != -1) {
+      if (client) {
+        client->set_http_status(http_status);
+      }
+    }
     ret = r;
     if (curl_handle)
       do_curl_easy_cleanup(curl_handle);
@@ -86,7 +91,7 @@ struct rgw_http_req_data : public RefCountedObject {
     Mutex::Locker l(lock);
     return ret;
   }
-
+  
   RGWHTTPManager *get_manager() {
     Mutex::Locker l(lock);
     return mgr;
@@ -829,9 +834,9 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
   req_data->put();
 }
 
-void RGWHTTPManager::finish_request(rgw_http_req_data *req_data, int ret)
+void RGWHTTPManager::finish_request(rgw_http_req_data *req_data, int ret, long http_status)
 {
-  req_data->finish(ret);
+  req_data->finish(ret, http_status);
   complete_request(req_data);
 }
 
@@ -1147,7 +1152,7 @@ void *RGWHTTPManager::reqs_thread_entry()
           status = -EAGAIN;
         }
         int id = req_data->id;
-	finish_request(req_data, status);
+	finish_request(req_data, status, http_status);
         switch (result) {
           case CURLE_OK:
             break;
