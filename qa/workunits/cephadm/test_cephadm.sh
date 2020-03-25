@@ -313,11 +313,24 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
     osd_fsid=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_fsid"? | select(.)')
 
     # deploy the osd
+    $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	     ceph auth get-or-create osd.$osd_id \
+	     mon 'allow profile osd' \
+	     mgr 'allow profile osd' \
+	     osd 'allow *' > $TMPDIR/keyring.osd.$osd_id
+    DEPLOY_CONFIG_JSON=`mktemp -p $TMPDIR`
+    cat <<EOF | python > $DEPLOY_CONFIG_JSON
+import json
+with open("$CONFIG", 'r') as f:
+    c = f.read()
+with open("$TMPDIR/keyring.osd.$osd_id", 'r') as f:
+    k = f.read()
+print(json.dumps({"config": c, "keyring": k}))
+EOF
     $CEPHADM deploy --name osd.$osd_id \
-          --fsid $FSID \
-          --keyring $TMPDIR/keyring.bootstrap.osd \
-          --config $CONFIG \
-          --osd-fsid $osd_fsid
+             --fsid $FSID \
+	     --config-json $DEPLOY_CONFIG_JSON \
+             --osd-fsid $osd_fsid
 done
 
 # add node-exporter
