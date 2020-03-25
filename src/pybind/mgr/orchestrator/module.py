@@ -327,10 +327,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         'orch ls',
         "name=service_type,type=CephString,req=false "
         "name=service_name,type=CephString,req=false "
+        "name=export,type=CephBool,req=false "
         "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false "
         "name=refresh,type=CephBool,req=false",
         'List services known to orchestrator')
-    def _list_services(self, host=None, service_type=None, service_name=None, format='plain', refresh=False):
+    def _list_services(self, host=None, service_type=None, service_name=None, export=False, format='plain', refresh=False):
+
+        if export and format == 'plain':
+            format = 'yaml'
+
         completion = self.describe_service(service_type,
                                            service_name,
                                            refresh=refresh)
@@ -347,7 +352,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         if len(services) == 0:
             return HandleCommandResult(stdout="No services reported")
         elif format != 'plain':
-            data = [s.to_json() for s in services]
+            if export:
+                data = [s.spec.to_json() for s in services]
+            else:
+                data = [s.to_json() for s in services]
             return HandleCommandResult(stdout=to_format(data, format))
         else:
             now = datetime.datetime.utcnow()
