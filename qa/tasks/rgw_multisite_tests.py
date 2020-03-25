@@ -9,7 +9,7 @@ from teuthology.exceptions import ConfigError
 from teuthology.task import Task
 from teuthology import misc
 
-from rgw_multi import multisite, tests, tests_ps
+from tasks.rgw_multi import multisite, tests, tests_ps
 
 log = logging.getLogger(__name__)
 

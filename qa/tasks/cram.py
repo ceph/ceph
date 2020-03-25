@@ -6,7 +6,7 @@ import os
 
 import six
 
-from util.workunit import get_refspec_after_overrides
+from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel

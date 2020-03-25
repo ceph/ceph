@@ -12,8 +12,8 @@ import json
 import re
 import uuid
 
-from ceph_manager import CephManager
 from tarfile import ReadError
+from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run

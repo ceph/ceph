@@ -3,7 +3,6 @@ Thrash mds by simulating failures
 """
 import logging
 import contextlib
-import ceph_manager
 import itertools
 import random
 import time
@@ -13,6 +12,7 @@ from gevent.greenlet import Greenlet
 from gevent.event import Event
 from teuthology import misc as teuthology
 
+from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.thrasher import Thrasher
 

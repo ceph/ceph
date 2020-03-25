@@ -3,10 +3,10 @@ Lost_unfound
 """
 import logging
 import time
-import ceph_manager
+from tasks import ceph_manager
+from tasks.util.rados import rados
 from teuthology import misc as teuthology
 from teuthology.orchestra import run
-from util.rados import rados
 
 log = logging.getLogger(__name__)
 

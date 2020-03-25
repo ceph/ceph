@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 import json
 
-from .helper import DashboardTestCase
+from tasks.mgr.dashboard.helper import DashboardTestCase
 
 
 test_data = {

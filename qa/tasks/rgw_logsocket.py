@@ -5,7 +5,7 @@ from io import BytesIO
 from configobj import ConfigObj
 import contextlib
 import logging
-import s3tests
+from tasks import s3tests
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
