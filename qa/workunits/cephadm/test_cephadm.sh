@@ -281,6 +281,17 @@ $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       ceph auth get client.bootstrap-osd > $TMPDIR/keyring.bootstrap.osd
 
+CV_CONFIG_JSON=`mktemp -p $TMPDIR`
+cat <<EOF | python > $CV_CONFIG_JSON
+import json
+with open("$CONFIG", 'r') as f:
+    c = f.read()
+with open("$TMPDIR/keyring.bootstrap.osd", 'r') as f:
+    k = f.read()
+print(json.dumps({'config': c, 'keyring': k}))
+EOF
+cat $CV_CONFIG_JSON
+
 # create lvs first so ceph-volume doesn't overlap with lv creation
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
@@ -290,13 +301,13 @@ for id in `seq 0 $((--OSD_TO_CREATE))`; do
     device_name=/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 
     # prepare the osd
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
+    $CEPHADM ceph-volume --config-json $CV_CONFIG_JSON -- \
             lvm prepare --bluestore --data $device_name --no-systemd
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
+    $CEPHADM ceph-volume --config-json $CV_CONFIG_JSON -- \
             lvm batch --no-auto $device_name --yes --no-systemd
 
     # osd id and osd fsid
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
+    $CEPHADM ceph-volume --config-json $CV_CONFIG_JSON -- \
             lvm list --format json $device_name > $TMPDIR/osd.map
     osd_id=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_id"? | select(.)')
     osd_fsid=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_fsid"? | select(.)')
