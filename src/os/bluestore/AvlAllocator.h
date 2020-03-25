@@ -214,6 +214,10 @@ private:
     ceph_assert(false);
   }
 protected:
+  // called when extent to be released/marked free
+  virtual void _add_to_tree(uint64_t start, uint64_t size);
+
+protected:
   CephContext* cct;
   std::mutex lock;
 
@@ -242,7 +246,6 @@ protected:
   void _release(const PExtentVector&  release_set);
   void _shutdown();
 
-  void _add_to_tree(uint64_t start, uint64_t size);
   void _process_range_removal(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
   void _remove_from_tree(uint64_t start, uint64_t size);
   void _try_remove_from_tree(uint64_t start, uint64_t size,
