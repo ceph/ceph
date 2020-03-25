@@ -78,7 +78,7 @@ class HealthTest(DashboardTestCase):
                         'mdsmap': self.__mdsmap_schema
                     }),
                 ),
-                'standbys': JList(JObj({})),
+                'standbys': JList(JObj({}, allow_unknown=True)),
             }),
             'health': JObj({
                 'checks': JList(str),
