@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, JAny, JLeaf, JList, JObj
+from tasks.mgr.dashboard.helper import DashboardTestCase, JAny, JLeaf, JList, JObj
 
 
 class HealthTest(DashboardTestCase):

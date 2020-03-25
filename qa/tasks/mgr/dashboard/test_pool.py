@@ -6,7 +6,7 @@ import six
 import time
 from contextlib import contextmanager
 
-from .helper import DashboardTestCase, JAny, JList, JObj
+from tasks.mgr.dashboard.helper import DashboardTestCase, JAny, JList, JObj
 
 log = logging.getLogger(__name__)
 

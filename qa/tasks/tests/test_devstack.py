@@ -1,6 +1,6 @@
 from textwrap import dedent
 
-from .. import devstack
+from tasks import devstack
 
 
 class TestDevstack(object):
