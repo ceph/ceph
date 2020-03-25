@@ -1470,6 +1470,7 @@ fi
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
 %{_mandir}/man8/ceph-dencoder.8*
+%{_mandir}/man8/ceph-diff-sorted.8*
 %{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-post-file.8*
@@ -1482,6 +1483,7 @@ fi
 %{_mandir}/man8/rbd-replay.8*
 %{_mandir}/man8/rbd-replay-many.8*
 %{_mandir}/man8/rbd-replay-prep.8*
+%{_mandir}/man8/rgw-orphan-list.8*
 %dir %{_datadir}/ceph/
 %{_datadir}/ceph/known_hosts_drop.ceph.com
 %{_datadir}/ceph/id_rsa_drop.ceph.com
