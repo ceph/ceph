@@ -149,35 +149,35 @@ TEST(HybridAllocator, basic)
     // we have at avl: 2M~2M, 8M~7M
     // and at bmap: 0~1M, 16M~1M, 18M~2M
 
-    // this will go to avl making 16M~4M span broken between both allocators
+    // this will be merged with neighbors from bmap and go to avl
     ha.init_add_free(17 * _1m, _1m);
-    ASSERT_EQ(_1m * 10, ha.get_avl_free());
-    ASSERT_EQ(_1m * 4, ha.get_bmap_free());
+    ASSERT_EQ(_1m * 1, ha.get_bmap_free());
+    ASSERT_EQ(_1m * 13, ha.get_avl_free());
 
-    // we have at avl: 2M~2M, 8M~7M, 17M~1M
-    // and at bmap: 0~1M, 16M~1M, 18M~2M
+    // we have at avl: 2M~2M, 8M~7M, 16M~4M
+    // and at bmap: 0~1M
 
-    // and now do some cutoffs from this "broken" 16M~4M span
+    // and now do some cutoffs from 0~1M span
 
     //cut off 4K from bmap
-    ha.init_rm_free(16 * _1m, 0x1000);
-    ASSERT_EQ(_1m * 10, ha.get_avl_free());
-    ASSERT_EQ(_1m * 4 - 0x1000, ha.get_bmap_free());
+    ha.init_rm_free(0 * _1m, 0x1000);
+    ASSERT_EQ(_1m * 13, ha.get_avl_free());
+    ASSERT_EQ(_1m * 1 - 0x1000, ha.get_bmap_free());
 
-    //cut off 1M-4K from bmap and 4K from avl
-    ha.init_rm_free(16 * _1m + 0x1000, _1m);
-    ASSERT_EQ(_1m * 10 - 0x1000, ha.get_avl_free());
-    ASSERT_EQ(_1m * 3, ha.get_bmap_free());
+    //cut off 1M-4K from bmap
+    ha.init_rm_free(0 * _1m + 0x1000, _1m - 0x1000);
+    ASSERT_EQ(_1m * 13, ha.get_avl_free());
+    ASSERT_EQ(0, ha.get_bmap_free());
 
     //cut off 512K avl
     ha.init_rm_free(17 * _1m + 0x1000, _1m / 2);
-    ASSERT_EQ(_1m * 10 - 0x1000 - _1m / 2, ha.get_avl_free());
-    ASSERT_EQ(_1m * 3, ha.get_bmap_free());
+    ASSERT_EQ(_1m * 13 - _1m / 2, ha.get_avl_free());
+    ASSERT_EQ(0, ha.get_bmap_free());
 
-    //cut off the rest from avl and 8K from bmap
-    ha.init_rm_free(17 * _1m + 0x1000 + _1m / 2, _1m / 2 + 0x1000);
-    ASSERT_EQ(_1m * 9, ha.get_avl_free());
-    ASSERT_EQ(_1m * 3 - 0x2000, ha.get_bmap_free());
+    //cut off the rest from avl
+    ha.init_rm_free(17 * _1m + 0x1000 + _1m / 2, _1m / 2);
+    ASSERT_EQ(_1m * 12, ha.get_avl_free());
+    ASSERT_EQ(0, ha.get_bmap_free());
   }
 
   {
