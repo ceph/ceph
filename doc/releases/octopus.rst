@@ -212,7 +212,7 @@ Instructions
 
    should report::
 
-     min_mon_release 15 (nautilus)
+     min_mon_release 15 (octopus)
 
    If it doesn't, that implies that one or more monitors hasn't been
    upgraded and restarted and/or the quorum does not include all monitors.
