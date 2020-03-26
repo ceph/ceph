@@ -6,7 +6,7 @@ import time
 
 from datetime import datetime, timedelta
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JObj, JLeaf
+from .helper import DashboardTestCase, JObj, JLeaf
 
 
 class UserTest(DashboardTestCase):

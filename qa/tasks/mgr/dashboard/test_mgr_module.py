@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import logging
 import requests
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JAny, JObj, JList, JLeaf
+from .helper import DashboardTestCase, JAny, JObj, JList, JLeaf
 
 logger = logging.getLogger(__name__)
 

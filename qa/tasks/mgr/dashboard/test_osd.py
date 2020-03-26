@@ -4,7 +4,7 @@ from __future__ import absolute_import
 
 import json
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
+from .helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
 
 
 class OsdTest(DashboardTestCase):
