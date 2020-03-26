@@ -2993,6 +2993,12 @@ datasources:
             cert, pkey = create_self_signed_cert('Ceph', 'cephadm')
             self.set_store('grafana_crt', cert)
             self.set_store('grafana_key', pkey)
+            self.mon_command({
+                'prefix': 'dashboard set-grafana-api-ssl-verify',
+                'value': 'false',
+            })
+
+
 
         config_file = {
             'files': {
