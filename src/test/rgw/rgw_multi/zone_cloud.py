@@ -18,8 +18,8 @@ except ImportError:
 
 from six.moves.urllib.parse import urlparse
 
-from tasks.rgw_multi.multisite import *
-from tasks.rgw_multi.tools import *
+from .multisite import *
+from .tools import *
 
 log = logging.getLogger(__name__)
 
