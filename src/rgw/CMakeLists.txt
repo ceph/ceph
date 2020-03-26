@@ -19,6 +19,9 @@ function(gperf_generate input output)
     )
 endfunction()
 
+include_directories(jwt-cpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(picojson PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 set(librgw_common_srcs
   services/svc_finisher.cc
   services/svc_bi_rados.cc
