@@ -3,7 +3,7 @@
 
 from __future__ import absolute_import
 
-from tasks.mgr.dashboard.helper import DashboardTestCase
+from .helper import DashboardTestCase
 
 
 class RbdMirroringTest(DashboardTestCase):
