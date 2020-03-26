@@ -192,11 +192,10 @@ or run multiple clusters on the same hardware, and it is recommended to always
 leave the cluster name as the default ("ceph").
 
 If you need to allow multiple clusters to exist on the same host, please use
-`cephadm`_, which uses containers to fully isolate each cluster.
+:ref:`cephadm`, which uses containers to fully isolate each cluster.
 
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
 .. _Network Configuration Reference: ../network-config-ref
 .. _OSD Config Reference: ../osd-config-ref
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
-.. _cephadm: ../../cephadm
