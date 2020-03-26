@@ -367,10 +367,15 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
   s->info.args.append("sub", token_claims.sub);
   s->info.args.append("aud", token_claims.aud);
   s->info.args.append("provider_id", token_claims.iss);
+  s->info.args.append("client_id", token_claims.client_id);
 
   string idp_url = get_idp_url();
   string condition = idp_url + ":app_id";
-  s->env.emplace(condition, token_claims.aud);
+  if (! token_claims.client_id.empty()) {
+    s->env.emplace(condition, token_claims.client_id);
+  } else {
+    s->env.emplace(condition, token_claims.aud);
+  }
 }
 
 bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
