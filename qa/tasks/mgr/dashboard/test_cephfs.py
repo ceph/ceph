@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 from contextlib import contextmanager
 
-from tasks.mgr.dashboard.helper import DashboardTestCase
+from .helper import DashboardTestCase
 
 
 class CephfsTest(DashboardTestCase):

@@ -5,7 +5,7 @@ import logging
 import urllib
 import six
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JObj, JList, JLeaf
+from .helper import DashboardTestCase, JObj, JList, JLeaf
 
 logger = logging.getLogger(__name__)
 

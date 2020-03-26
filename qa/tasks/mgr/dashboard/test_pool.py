@@ -6,7 +6,7 @@ import logging
 import six
 import time
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JAny, JList, JObj
+from .helper import DashboardTestCase, JAny, JList, JObj
 
 log = logging.getLogger(__name__)
 
