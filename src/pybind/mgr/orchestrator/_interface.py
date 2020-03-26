@@ -1323,6 +1323,10 @@ class DaemonDescription(object):
                 c[k] = datetime.datetime.strptime(c[k], DATEFMT)
         return cls(**c)
 
+    def __copy__(self):
+        # feel free to change this:
+        return DaemonDescription.from_json(self.to_json())
+
 class ServiceDescription(object):
     """
     For responding to queries about the status of a particular service,
