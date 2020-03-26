@@ -28,10 +28,8 @@ Make sure X (and, ideally, X+1) is defined:
 Scripts
 ~~~~~~~
 
-- [ ] src/script/backport-create-issue (releases())
-- [ ] src/script/backport-resolve-issue (releases(), ver_to_release().. but for X-1)
-- [ ] src/script/ceph-backport.sh (try_known_milestones())
-- [ ] src/script/ceph-release-notes (X-1)
+- [x] src/script/backport-resolve-issue (releases(), ver_to_release().. but for X-1)
+- [x] src/script/ceph-release-notes (X-1)
 
 Misc
 ~~~~
