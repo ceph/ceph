@@ -81,34 +81,10 @@ private:
   // use real_clock so it can be converted to utime_t
   using clock = ceph::coarse_real_clock;
 
-  struct reply_t {
-    clock::time_point deadline;
-    // one sent over front conn, another sent over back conn
-    uint8_t unacknowledged = 0;
-  };
-  struct PeerInfo {
-    /// peer connection (front)
-    crimson::net::ConnectionRef con_front;
-    /// peer connection (back)
-    crimson::net::ConnectionRef con_back;
-    /// time we sent our first ping request
-    clock::time_point first_tx;
-    /// last time we sent a ping request
-    clock::time_point last_tx;
-    /// last time we got a ping reply on the front side
-    clock::time_point last_rx_front;
-    /// last time we got a ping reply on the back side
-    clock::time_point last_rx_back;
-    /// most recent epoch we wanted this peer
-    epoch_t epoch;
-    /// history of inflight pings, arranging by timestamp we sent
-    std::map<utime_t, reply_t> ping_history;
-
-    bool is_unhealthy(clock::time_point now) const;
-    bool is_healthy(clock::time_point now) const;
-  };
-  using peers_map_t = std::map<osd_id_t, PeerInfo>;
+  class Peer;
+  using peers_map_t = std::map<osd_id_t, Peer>;
   peers_map_t peers;
+
   // osds which are considered failed
   // osd_id => when was the last time that both front and back pings were acked
   //           or sent.
@@ -132,3 +108,58 @@ inline std::ostream& operator<<(std::ostream& out, const Heartbeat& hb) {
   hb.print(out);
   return out;
 }
+
+class Heartbeat::Peer {
+ public:
+  Peer(Heartbeat&, osd_id_t);
+  ~Peer();
+  Peer(Peer&&) = delete;
+  Peer(const Peer&) = delete;
+  Peer& operator=(const Peer&) = delete;
+
+  void set_epoch(epoch_t epoch_) { epoch = epoch_; }
+  epoch_t get_epoch() const { return epoch; }
+
+  // if failure, return time_point since last active
+  // else, return clock::zero()
+  clock::time_point failed_since(clock::time_point now) const;
+  void send_heartbeat(clock::time_point now,
+                      ceph::signedspan mnow,
+                      std::vector<seastar::future<>>&);
+  seastar::future<> handle_reply(crimson::net::Connection*, Ref<MOSDPing>);
+  void handle_reset(crimson::net::ConnectionRef);
+
+ private:
+  bool is_unhealthy(clock::time_point now) const;
+  bool is_healthy(clock::time_point now) const;
+
+  void connect();
+  void disconnect();
+
+ private:
+  Heartbeat& heartbeat;
+  const osd_id_t peer;
+
+  /// peer connection (front)
+  crimson::net::ConnectionRef con_front;
+  /// peer connection (back)
+  crimson::net::ConnectionRef con_back;
+  /// time we sent our first ping request
+  clock::time_point first_tx;
+  /// last time we sent a ping request
+  clock::time_point last_tx;
+  /// last time we got a ping reply on the front side
+  clock::time_point last_rx_front;
+  /// last time we got a ping reply on the back side
+  clock::time_point last_rx_back;
+  /// most recent epoch we wanted this peer
+  epoch_t epoch;
+
+  struct reply_t {
+    clock::time_point deadline;
+    // one sent over front conn, another sent over back conn
+    uint8_t unacknowledged = 0;
+  };
+  /// history of inflight pings, arranging by timestamp we sent
+  std::map<utime_t, reply_t> ping_history;
+};
