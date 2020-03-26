@@ -59,8 +59,45 @@ configured to consume.  We recommend 1 GB as a minimum for most systems.  See
 OSDs (ceph-osd)
 ---------------
 
-By default, OSDs that use the BlueStore backend require 3-5 GB of RAM.  You can
-adjust the amount of memory the OSD consumes with the ``osd_memory_target`` configuration option when BlueStore is in use.  When using the legacy FileStore backend, the operating system page cache is used for caching data, so no tuning is normally needed, and the OSD memory consumption is generally related to the number of PGs per daemon in the system.
+Memory
+======
+
+Bluestore uses its own memory to cache data rather than relying on the
+operating system page cache.  In bluestore you can adjust the amount of memory
+the OSD attempts to consume with the ``osd_memory_target`` configuration
+option.
+
+- Setting the osd_memory_target below 2GB is typically not recommended (it may
+  fail to keep the memory that low and may also cause extremely slow performance.
+
+- Setting the memory target between 2GB and 4GB typically works but may result
+  in degraded performance as metadata may be read from disk during IO unless the
+  active data set is relatively small.
+
+- 4GB is the current default osd_memory_target size and was set that way to try
+  and balance memory requirements and OSD performance for typical use cases.
+
+- Setting the osd_memory_target higher than 4GB may improve performance when
+  there are many (small) objects or large (256GB/OSD or more) data sets being
+  processed.
+
+.. important:: The OSD memory autotuning is "best effort".  While the OSD may
+   unmap memory to allow the kernel to reclaim it, there is no guarantee that
+   the kernel will actually reclaim freed memory within any specific time
+   frame.  This is especially true in older versions of Ceph where transparent
+   huge pages can prevent the kernel from reclaiming memory freed from
+   fragmented huge pages. Modern versions of Ceph disable transparent huge
+   pages at the application level to avoid this, though that still does not
+   guarantee that the kernel will immediately reclaim unmapped memory.  The OSD
+   may still at times exceed it's memory target.  We recommend budgeting around
+   20% extra memory on your system to prevent OSDs from going OOM during
+   temporary spikes or due to any delay in reclaiming freed pages by the
+   kernel.  That value may be more or less than needed depending on the exact
+   configuration of the system.
+
+When using the legacy FileStore backend, the page cache is used for caching
+data, so no tuning is normally needed, and the OSD memory consumption is
+generally related to the number of PGs per daemon in the system.
 
 
 Data Storage
@@ -89,9 +126,6 @@ gigabyte (i.e., $75 / 1024 = 0.0732). By contrast, a 3 terabyte hard disk priced
 at $150.00 has a cost of $0.05 per gigabyte (i.e., $150 / 3072 = 0.0488). In the
 foregoing example, using the 1 terabyte disks would generally increase the cost
 per gigabyte by 40%--rendering your cluster substantially less cost efficient.
-Also, the larger the storage drive capacity, the more memory per Ceph OSD Daemon
-you will need, especially during rebalancing, backfilling and recovery. A 
-general rule of thumb is ~1GB of RAM for 1TB of storage space. 
 
 .. tip:: Running multiple OSDs on a single disk--irrespective of partitions--is 
    **NOT** a good idea.
@@ -209,31 +243,21 @@ multiple OSDs per host.
 Networks
 ========
 
-We recommend that each host has at least two 1Gbps network interface
-controllers (NICs). Since most commodity hard disk drives have a throughput of
-approximately 100MB/second, your NICs should be able to handle the traffic for
-the OSD disks on your host. We recommend a minimum of two NICs to account for a
-public (front-side) network and a cluster (back-side) network. A cluster network
-(preferably not connected to the internet) handles the additional load for data
-replication and helps stop denial of service attacks that prevent the cluster
-from achieving ``active + clean`` states for placement groups as OSDs replicate
-data across the cluster. Consider starting with a 10Gbps network in your racks.
-Replicating 1TB of data across a 1Gbps network takes 3 hours, and 3TBs (a
-typical drive configuration) takes 9 hours. By contrast, with a 10Gbps network,
-the  replication times would be 20 minutes and 1 hour respectively. In a
-petabyte-scale cluster, failure of an OSD disk should be an expectation, not an
-exception. System administrators will appreciate PGs recovering from a
-``degraded`` state to an ``active + clean`` state as rapidly as possible, with
-price / performance tradeoffs taken into consideration. Additionally, some
-deployment tools  (e.g., Dell's Crowbar) deploy with five different networks,
-but employ VLANs to make hardware and network cabling more manageable. VLANs
-using 802.1q protocol require VLAN-capable NICs and Switches. The added hardware
-expense may be offset by the operational cost savings for network setup and
-maintenance. When using VLANs to handle VM traffic between the cluster
-and compute stacks (e.g., OpenStack, CloudStack, etc.), it is also worth
-considering using 10G Ethernet. Top-of-rack routers for each network also need
-to be able to communicate with spine routers that have even faster
-throughput--e.g.,  40Gbps to 100Gbps.
+Consider starting with a 10Gbps+ network in your racks. Replicating 1TB of data
+across a 1Gbps network takes 3 hours, and 10TBs takes 30 hours! By contrast,
+with a 10Gbps network, the  replication times would be 20 minutes and 1 hour
+respectively. In a petabyte-scale cluster, failure of an OSD disk should be an
+expectation, not an exception. System administrators will appreciate PGs
+recovering from a ``degraded`` state to an ``active + clean`` state as rapidly
+as possible, with price / performance tradeoffs taken into consideration.
+Additionally, some deployment tools employ VLANs to make  hardware and network
+cabling more manageable. VLANs using 802.1q protocol require VLAN-capable NICs
+and Switches. The added hardware expense may be offset by the operational cost
+savings for network setup and maintenance. When using VLANs to handle VM
+traffic between the cluster and compute stacks (e.g., OpenStack, CloudStack,
+etc.), it is also worth considering using 10G Ethernet. Top-of-rack routers for
+each network also need to be able to communicate with spine routers that have
+even faster throughput--e.g.,  40Gbps to 100Gbps.
 
 Your server hardware should have a Baseboard Management Controller (BMC).
 Administration and deployment tools may also use BMCs extensively, so consider
@@ -266,34 +290,46 @@ and development clusters can run successfully with modest hardware.
 +--------------+----------------+-----------------------------------------+
 |  Process     | Criteria       | Minimum Recommended                     |
 +==============+================+=========================================+
-| ``ceph-osd`` | Processor      | - 1x 64-bit AMD-64                      |
-|              |                | - 1x 32-bit ARM dual-core or better     |
+| ``ceph-osd`` | Processor      | - 1 core minimum                        |
+|              |                | - 1 core per 200-500 MB/s               |
+|              |                | - 1 core per 1000-3000 IOPS             |
+|              |                |                                         |
+|              |                | * Results are before replication.       |
+|              |                | * Results may vary with different       |
+|              |                |   CPU models and Ceph features.         |
+|              |                |   (erasure coding, compression, etc)    |
+|              |                | * ARM processors specifically may       |
+|              |                |   require additional cores.             |
+|              |                | * Actual performance depends on many    |
+|              |                |   factors including disk, network, and  |
+|              |                |   client throughput and latency.        |
+|              |                |   Benchmarking is highly recommended.   |
 |              +----------------+-----------------------------------------+
-|              | RAM            |  ~1GB for 1TB of storage per daemon     |
+|              | RAM            | - 4GB+ per daemon (more is better)      |
+|              |                | - 2-4GB often functions (may be slow)   |
+|              |                | - Less than 2GB not recommended         |
 |              +----------------+-----------------------------------------+
 |              | Volume Storage |  1x storage drive per daemon            |
 |              +----------------+-----------------------------------------+
-|              | Journal        |  1x SSD partition per daemon (optional) |
+|              | DB/WAL         |  1x SSD partition per daemon (optional) |
 |              +----------------+-----------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs                   |
+|              | Network        |  1x 1GbE+ NICs (10GbE+ recommended)     |
 +--------------+----------------+-----------------------------------------+
-| ``ceph-mon`` | Processor      | - 1x 64-bit AMD-64                      |
-|              |                | - 1x 32-bit ARM dual-core or better     |
+| ``ceph-mon`` | Processor      | - 1 core minimum                        |
 |              +----------------+-----------------------------------------+
-|              | RAM            |  1 GB per daemon                        |
+|              | RAM            |  2GB+ per daemon                        |
 |              +----------------+-----------------------------------------+
 |              | Disk Space     |  10 GB per daemon                       |
 |              +----------------+-----------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs                   |
+|              | Network        |  1x 1GbE+ NICs                          |
 +--------------+----------------+-----------------------------------------+
-| ``ceph-mds`` | Processor      | - 1x 64-bit AMD-64 quad-core            |
-|              |                | - 1x 32-bit ARM quad-core               |
+| ``ceph-mds`` | Processor      | - 1 core minimum                        |
 |              +----------------+-----------------------------------------+
-|              | RAM            |  1 GB minimum per daemon                |
+|              | RAM            |  2GB+ per daemon                        |
 |              +----------------+-----------------------------------------+
 |              | Disk Space     |  1 MB per daemon                        |
 |              +----------------+-----------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs                   |
+|              | Network        |  1x 1GbE+ NICs                          |
 +--------------+----------------+-----------------------------------------+
 
 .. tip:: If you are running an OSD with a single disk, create a
