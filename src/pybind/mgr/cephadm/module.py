@@ -12,7 +12,7 @@ import string
 try:
     from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
         Any, NamedTuple, Iterator, Set, Sequence
-    from typing import TYPE_CHECKING
+    from typing import TYPE_CHECKING, cast
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
 
@@ -31,8 +31,8 @@ import uuid
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import selector
-from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec, \
-    assert_valid_host
+from ceph.deployment.service_spec import \
+    HostPlacementSpec, NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
 
 from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
@@ -40,6 +40,8 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
     CLICommandMeta
 
 from . import remotes
+from . import utils
+from .nfs import NFSGanesha
 from .osd import RemoveUtil, OSDRemoval
 
 
@@ -96,19 +98,6 @@ except ImportError:
             self.cleanup()
 
 
-def name_to_config_section(name):
-    """
-    Map from daemon names to ceph entity names (as seen in config)
-    """
-    daemon_type = name.split('.', 1)[0]
-    if daemon_type in ['rgw', 'rbd-mirror', 'crash']:
-        return 'client.' + name
-    elif daemon_type in ['mon', 'osd', 'mds', 'mgr', 'client']:
-        return name
-    else:
-        return 'mon'
-
-
 class SpecStore():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
@@ -160,6 +149,8 @@ class SpecStore():
                     sn == service_name or \
                     sn.startswith(service_name + '.'):
                 specs.append(spec)
+        self.mgr.log.debug('SpecStore: find spec for %s returned: %s' % (
+            service_name, specs))
         return specs
 
 class HostCache():
@@ -904,7 +895,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'prefix': 'config set',
                     'name': 'container_image',
                     'value': target_name,
-                    'who': name_to_config_section(daemon_type + '.' + d.daemon_id),
+                    'who': utils.name_to_config_section(daemon_type + '.' + d.daemon_id),
                 })
                 self._daemon_action(
                     d.daemon_type,
@@ -968,7 +959,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 })
             to_clean = []
             for section in image_settings.keys():
-                if section.startswith(name_to_config_section(daemon_type) + '.'):
+                if section.startswith(utils.name_to_config_section(daemon_type) + '.'):
                     to_clean.append(section)
             if to_clean:
                 self.log.debug('Upgrade: Cleaning up container_image for %s...' %
@@ -995,7 +986,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             ret, image, err = self.mon_command({
                 'prefix': 'config rm',
                 'name': 'container_image',
-                'who': name_to_config_section(daemon_type),
+                'who': utils.name_to_config_section(daemon_type),
             })
 
         self.log.info('Upgrade: Complete!')
@@ -1238,7 +1229,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Generate a unique random service name
         """
         suffix = daemon_type not in [
-            'mon', 'crash',
+            'mon', 'crash', 'nfs',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
         ]
         if forcename:
@@ -1263,6 +1254,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self.log.debug('name %s exists, trying again', name)
                 continue
             return name
+
+    def get_service_name(self, daemon_type, daemon_id, host):
+        # type: (str, str, str) -> (str)
+        """
+        Returns the generic service name
+        """
+        p = re.compile(r'(.*)\.%s.*' % (host))
+        p.sub(r'\1', daemon_id)
+        return '%s.%s' % (daemon_type, p.sub(r'\1', daemon_id))
 
     def _save_inventory(self):
         self.set_store('inventory', json.dumps(self.inventory))
@@ -1575,7 +1575,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     # get container image
                     ret, image, err = self.mon_command({
                         'prefix': 'config get',
-                        'who': name_to_config_section(entity),
+                        'who': utils.name_to_config_section(entity),
                         'key': 'container_image',
                     })
                     image = image.strip() # type: ignore
@@ -2208,6 +2208,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 deps.append(dd.name())
         return sorted(deps)
 
+    def _get_config_and_keyring(self, daemon_type, daemon_id,
+                                keyring=None,
+                                extra_config=None):
+        # type: (str, str, Optional[str], Optional[str]) -> Dict[str, Any]
+        # keyring
+        if not keyring:
+            if daemon_type == 'mon':
+                ename = 'mon.'
+            else:
+                ename = utils.name_to_config_section(daemon_type + '.' + daemon_id)
+            ret, keyring, err = self.mon_command({
+                'prefix': 'auth get',
+                'entity': ename,
+            })
+
+        # generate config
+        ret, config, err = self.mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+        if extra_config:
+            config += extra_config
+
+        return {
+            'config': config,
+            'keyring': keyring,
+        }
+
     def _create_daemon(self, daemon_type, daemon_id, host,
                        keyring=None,
                        extra_args=None, extra_config=None,
@@ -2219,39 +2246,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         start_time = datetime.datetime.utcnow()
         deps = []  # type: List[str]
-        cephadm_config = {}  # type: Dict[str, Any]
+        cephadm_config = {} # type: Dict[str, Any]
         if daemon_type == 'prometheus':
             cephadm_config, deps = self._generate_prometheus_config()
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'grafana':
             cephadm_config, deps = self._generate_grafana_config()
             extra_args.extend(['--config-json', '-'])
+        elif daemon_type == 'nfs':
+            cephadm_config, deps = \
+                    self._generate_nfs_config(daemon_type, daemon_id, host)
+            extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'alertmanager':
             cephadm_config, deps = self._generate_alertmanager_config()
             extra_args.extend(['--config-json', '-'])
         else:
-            # keyring
-            if not keyring:
-                if daemon_type == 'mon':
-                    ename = 'mon.'
-                else:
-                    ename = name_to_config_section(daemon_type + '.' + daemon_id)
-                ret, keyring, err = self.mon_command({
-                    'prefix': 'auth get',
-                    'entity': ename,
-                })
-
-            # generate config
-            ret, config, err = self.mon_command({
-                "prefix": "config generate-minimal-conf",
-            })
-            if extra_config:
-                config += extra_config
-
-            cephadm_config = {
-                'config': config,
-                'keyring': keyring,
-            }
+            # Ceph.daemons (mon, mgr, mds, osd, etc)
+            cephadm_config = self._get_config_and_keyring(
+                    daemon_type, daemon_id,
+                    keyring=keyring,
+                    extra_config=extra_config)
             extra_args.extend(['--config-json', '-'])
 
             # osd deployments needs an --osd-uuid arg
@@ -2344,6 +2358,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'mds': self._create_mds,
             'rgw': self._create_rgw,
             'rbd-mirror': self._create_rbd_mirror,
+            'nfs': self._create_nfs,
             'grafana': self._create_grafana,
             'alertmanager': self._create_alertmanager,
             'prometheus': self._create_prometheus,
@@ -2353,6 +2368,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         config_fns = {
             'mds': self._config_mds,
             'rgw': self._config_rgw,
+            'nfs': self._config_nfs,
         }
         create_func = create_fns.get(daemon_type, None)
         if not create_func:
@@ -2413,6 +2429,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     daemon_type, daemon_id, host))
                 if daemon_type == 'mon':
                     create_func(daemon_id, host, network)  # type: ignore
+                elif daemon_type == 'nfs':
+                    create_func(daemon_id, host, spec)  # type: ignore
                 else:
                     create_func(daemon_id, host)           # type: ignore
 
@@ -2552,6 +2570,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 daemon_type, daemon_id, host))
             if daemon_type == 'mon':
                 args.append((daemon_id, host, network))  # type: ignore
+            elif daemon_type == 'nfs':
+                args.append((daemon_id, host, spec)) # type: ignore
             else:
                 args.append((daemon_id, host))  # type: ignore
 
@@ -2646,6 +2666,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'mds': PlacementSpec(count=2),
                 'rgw': PlacementSpec(count=2),
                 'rbd-mirror': PlacementSpec(count=2),
+                'nfs': PlacementSpec(count=1),
                 'grafana': PlacementSpec(count=1),
                 'alertmanager': PlacementSpec(count=1),
                 'prometheus': PlacementSpec(count=1),
@@ -2764,6 +2785,58 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def apply_rbd_mirror(self, spec):
+        return self._apply(spec)
+
+    def _generate_nfs_config(self, daemon_type, daemon_id, host):
+        # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
+        deps = [] # type: List[str]
+
+        # find the matching NFSServiceSpec
+        # TODO: find the spec and pass via _create_daemon instead ??
+        service_name = self.get_service_name(daemon_type, daemon_id, host)
+        specs = self.spec_store.find(service_name)
+        if not specs:
+            raise OrchestratorError('Cannot find service spec %s' % (service_name))
+        elif len(specs) > 1:
+            raise OrchestratorError('Found multiple service specs for %s' % (service_name))
+        else:
+            # cast to keep mypy happy
+            spec = cast(NFSServiceSpec, specs[0])
+
+        nfs = NFSGanesha(self, daemon_id, spec)
+
+        # create the keyring
+        entity = nfs.get_keyring_entity()
+        keyring = nfs.get_or_create_keyring(entity=entity)
+
+        # update the caps after get-or-create, the keyring might already exist!
+        nfs.update_keyring_caps(entity=entity)
+
+        # create the rados config object
+        nfs.create_rados_config_obj()
+
+        # generate the cephadm config
+        cephadm_config = nfs.get_cephadm_config()
+        cephadm_config.update(
+                self._get_config_and_keyring(
+                    daemon_type, daemon_id,
+                    keyring=keyring))
+
+        return cephadm_config, deps
+
+    def add_nfs(self, spec):
+        return self._add_daemon('nfs', spec, self._create_nfs, self._config_nfs)
+
+    def _config_nfs(self, spec):
+        logger.info('Saving service %s spec with placement %s' % (
+            spec.service_name(), spec.placement.pretty_str()))
+        self.spec_store.save(spec)
+
+    def _create_nfs(self, daemon_id, host, spec):
+        return self._create_daemon('nfs', daemon_id, host)
+
+    @trivial_completion
+    def apply_nfs(self, spec):
         return self._apply(spec)
 
     def _generate_prometheus_config(self):

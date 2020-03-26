@@ -202,8 +202,9 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("config", MON_CAP_R | MON_CAP_W));
-    // cephadm orchestrator provisions new daemon keys
+    // cephadm orchestrator provisions new daemon keys and updates caps
     profile_grants.push_back(MonCapGrant("auth get-or-create"));
+    profile_grants.push_back(MonCapGrant("auth caps"));
     profile_grants.push_back(MonCapGrant("auth rm"));
     // tell commands (this is a bit of a kludge)
     profile_grants.push_back(MonCapGrant("smart"));
