@@ -2,8 +2,8 @@
 from __future__ import absolute_import
 import json
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JList, JObj
-from tasks.mgr.dashboard.test_orchestrator import test_data
+from .helper import DashboardTestCase, JList, JObj
+from .test_orchestrator import test_data
 
 
 class HostControllerTest(DashboardTestCase):

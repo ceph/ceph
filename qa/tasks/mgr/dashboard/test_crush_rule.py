@@ -4,7 +4,7 @@ from __future__ import absolute_import
 
 import six
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JObj, JList
+from .helper import DashboardTestCase, JObj, JList
 
 
 class CrushRuleTest(DashboardTestCase):
