@@ -785,13 +785,17 @@ Usage:
 
     @_cli_write_command(
         'orch apply nfs',
-        "name=svc_id,type=CephString "
+        'name=svc_id,type=CephString '
+        'name=pool,type=CephString '
+        'name=namespace,type=CephString,req=false '
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
-    def _apply_nfs(self, svc_id, placement=None, unmanaged=False):
+    def _apply_nfs(self, svc_id, pool, namespace=None, placement=None, unmanaged=False):
         spec = NFSServiceSpec(
             svc_id,
+            pool=pool,
+            namespace=namespace,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
         )
