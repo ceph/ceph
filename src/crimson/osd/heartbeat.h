@@ -111,6 +111,7 @@ private:
   peers_map_t peers;
   // osds which are considered failed
   // osd_id => when was the last time that both front and back pings were acked
+  //           or sent.
   //           use for calculating how long the OSD has been unresponsive
   using failure_queue_t = std::map<osd_id_t, clock::time_point>;
   seastar::future<> send_failures(failure_queue_t&& failure_queue);
