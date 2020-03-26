@@ -63,10 +63,13 @@ dict_templ = {
                     'debug mon': 20,
                     'debug ms': 1,
                     'debug paxos': 20},
+                'mgr': {
+                    'debug mgr': 20,
+                    'debug ms': 1},
                 'osd': {
                     'debug filestore': 20,
                     'debug journal': 20,
-                    'debug ms': 1,
+                    'debug ms': 20,
                     'debug osd': 25
                 }
             },
