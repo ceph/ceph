@@ -315,12 +315,22 @@ void Heartbeat::heartbeat_check()
     }
 
     if (peer_info.is_unhealthy(now)) {
-      logger().error(" heartbeat_check: no reply from osd.{} "
-		     "since back {} front {} (oldest deadline {})",
-		     osd, peer_info.last_rx_back, peer_info.last_rx_front,
-		     peer_info.ping_history.begin()->second.deadline);
-      failure_queue[osd] = std::min(peer_info.last_rx_back,
-				    peer_info.last_rx_front);
+      auto oldest_deadline = peer_info.ping_history.begin()->second.deadline;
+      auto failed_since = std::min(peer_info.last_rx_back,
+                                   peer_info.last_rx_front);
+      if (clock::is_zero(failed_since)) {
+        logger().error("heartbeat_check: no reply from osd.{} "
+                       "ever on either front or back, first ping sent {} "
+                       "(oldest deadline {})",
+                       osd, peer_info.first_tx, oldest_deadline);
+        failed_since = peer_info.first_tx;
+      } else {
+        logger().error("heartbeat_check: no reply from osd.{} "
+                       "since back {} front {} (oldest deadline {})",
+                       osd, peer_info.last_rx_back, peer_info.last_rx_front,
+                       oldest_deadline);
+      }
+      failure_queue.emplace(osd, failed_since);
     }
   }
   if (!failure_queue.empty()) {
