@@ -34,3 +34,19 @@ Scripts
 Misc
 ~~~~
 - [x] update src/ceph-volume/ceph_volume/__init__.py (__release__)
+
+Feature bits
+------------
+
+- [ ] ensure that SERVER_X is defined
+- [ ]
+
+
+Compatsets
+----------
+
+- [x] mon/Monitor.h (CEPH_MON_FEATURE_INCOMPAT_X)
+- [x] mon/Monitor.cc (include in get_supported_features)
+- [x] mon/Monitor.cc (apply_monmap_to_compatset_features())
+- [x] mon/Monitor.cc (calc_quorum_requirements())
+
