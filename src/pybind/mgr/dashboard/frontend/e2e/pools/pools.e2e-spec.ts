@@ -12,23 +12,25 @@ describe('Pools page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Pools');
-  });
+  describe('breadcrumb and tab tests', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
 
-  it('should show two tabs', () => {
-    page.navigateTo();
-    expect(Helper.getTabsCount()).toEqual(2);
-  });
+    it('should open and show breadcrumb', () => {
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Pools');
+    });
 
-  it('should show pools list tab at first', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(0)).toEqual('Pools List');
-  });
+    it('should show two tabs', () => {
+      expect(Helper.getTabsCount()).toEqual(2);
+    });
 
-  it('should show overall performance as a second tab', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(1)).toEqual('Overall Performance');
+    it('should show pools list tab at first', () => {
+      expect(Helper.getTabText(0)).toEqual('Pools List');
+    });
+
+    it('should show overall performance as a second tab', () => {
+      expect(Helper.getTabText(1)).toEqual('Overall Performance');
+    });
   });
 });

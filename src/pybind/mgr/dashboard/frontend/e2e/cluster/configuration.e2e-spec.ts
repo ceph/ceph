@@ -12,8 +12,13 @@ describe('Configuration page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Configuration');
+  describe('breadcrumb test', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Configuration');
+    });
   });
 });

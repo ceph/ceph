@@ -12,8 +12,13 @@ describe('Monitors page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Monitors');
+  describe('breadcrumb test', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Monitors');
+    });
   });
 });
