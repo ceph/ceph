@@ -1881,7 +1881,7 @@ int BlueFS::_read_random(
   FileReader *h,         ///< [in] read from here
   uint64_t off,          ///< [in] offset
   uint64_t len,          ///< [in] this many bytes
-  char *out)             ///< [out] optional: or copy it here
+  char *out)             ///< [out] copy it here
 {
   auto* buf = &h->buf;
 
@@ -1936,11 +1936,9 @@ int BlueFS::_read_random(
 	      << " 0x" << off << "~" << len << std::dec
 	      << dendl;
 
-      if (out) {
-	// NOTE: h->bl is normally a contiguous buffer so c_str() is free.
-	memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
-	out += r;
-      }
+      // NOTE: h->bl is normally a contiguous buffer so c_str() is free.
+      memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
+      out += r;
 
       dout(30) << __func__ << " result chunk (0x"
 	       << std::hex << r << std::dec << " bytes):\n";
