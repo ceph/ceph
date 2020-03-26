@@ -740,7 +740,7 @@
         "multi": false,
         "name": "osd_hosts",
         "options": [],
-        "query": "label_values(ceph_disk_occupation, instance)",
+        "query": "label_values(ceph_disk_occupation, exported_instance)",
         "refresh": 1,
         "regex": "([^.]*).*",
         "skipUrlSync": false,
