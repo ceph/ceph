@@ -386,10 +386,10 @@ bool Heartbeat::Peer::is_unhealthy(clock::time_point now) const
 
 bool Heartbeat::Peer::is_healthy(clock::time_point now) const
 {
-  if (con_front && clock::is_zero(last_rx_front)) {
+  if (clock::is_zero(last_rx_front)) {
     return false;
   }
-  if (con_back && clock::is_zero(last_rx_back)) {
+  if (clock::is_zero(last_rx_back)) {
     return false;
   }
   // only declare to be healthy until we have received the first
@@ -439,21 +439,19 @@ void Heartbeat::Peer::send_heartbeat(
   [[maybe_unused]] auto [reply, added] =
     ping_history.emplace(sent_stamp, reply_t{deadline, 0});
   for (auto& con : {con_front, con_back}) {
-    if (con) {
-      auto min_message = static_cast<uint32_t>(
-        local_conf()->osd_heartbeat_min_size);
-      auto ping = make_message<MOSDPing>(
-        heartbeat.monc.get_fsid(),
-        heartbeat.service.get_osdmap_service().get_map()->get_epoch(),
-        MOSDPing::PING,
-        sent_stamp,
-        mnow,
-        mnow,
-        heartbeat.service.get_osdmap_service().get_up_epoch(),
-        min_message);
-      reply->second.unacknowledged++;
-      futures.push_back(con->send(std::move(ping)));
-    }
+    auto min_message = static_cast<uint32_t>(
+      local_conf()->osd_heartbeat_min_size);
+    auto ping = make_message<MOSDPing>(
+      heartbeat.monc.get_fsid(),
+      heartbeat.service.get_osdmap_service().get_map()->get_epoch(),
+      MOSDPing::PING,
+      sent_stamp,
+      mnow,
+      mnow,
+      heartbeat.service.get_osdmap_service().get_up_epoch(),
+      min_message);
+    reply->second.unacknowledged++;
+    futures.push_back(con->send(std::move(ping)));
   }
 }
 
