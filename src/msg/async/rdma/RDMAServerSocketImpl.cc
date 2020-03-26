@@ -113,6 +113,13 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
   RDMAConnectedSocketImpl* server;
   //Worker* w = dispatcher->get_stack()->get_worker();
   server = new RDMAConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w));
+  if (!server->get_qp()) {
+    lderr(cct) << __func__ << " server->qp is null" << dendl;
+    // cann't use delete server here, destructor will fail.
+    server->cleanup();
+    ::close(sd);
+    return -1;
+  }
   server->set_accept_fd(sd);
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
