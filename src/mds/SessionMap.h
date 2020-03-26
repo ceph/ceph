@@ -97,11 +97,7 @@ public:
     set_connection(std::move(con));
   }
   ~Session() override {
-    if (state == STATE_CLOSED) {
-      item_session_list.remove_myself();
-    } else {
-      ceph_assert(!item_session_list.is_on_list());
-    }
+    ceph_assert(!item_session_list.is_on_list());
     preopen_out_queue.clear();
   }
 
