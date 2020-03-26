@@ -1901,7 +1901,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return [s for n, s in sm.items()]
 
     @trivial_completion
-    def list_daemons(self, daemon_type=None, daemon_id=None,
+    def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None,
                      host=None, refresh=False):
         if refresh:
             # ugly sync path, FIXME someday perhaps?
@@ -1915,9 +1915,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if host and h != host:
                 continue
             for name, dd in dm.items():
-                if daemon_type and daemon_type != dd.daemon_type:
+                if daemon_type is not None and daemon_type != dd.daemon_type:
                     continue
-                if daemon_id and daemon_id != dd.daemon_id:
+                if daemon_id is not None and daemon_id != dd.daemon_id:
+                    continue
+                if service_name is not None and service_name != dd.service_name():
                     continue
                 result.append(dd)
         return result
