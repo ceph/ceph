@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.twofactor.totp import TOTP
 from cryptography.hazmat.primitives.hashes import SHA1
 from six.moves.urllib import parse
 
-from tasks.mgr.dashboard.helper import DashboardTestCase, JObj, JList, JLeaf
+from .helper import DashboardTestCase, JObj, JList, JLeaf
 
 logger = logging.getLogger(__name__)
 
