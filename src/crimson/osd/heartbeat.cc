@@ -137,7 +137,7 @@ Heartbeat::osds_t Heartbeat::remove_down_peers()
     auto osdmap = service.get_osdmap_service().get_map();
     if (!osdmap->is_up(osd)) {
       remove_peer(osd);
-    } else if (peers[osd].epoch < osdmap->get_epoch()) {
+    } else if (peer.epoch < osdmap->get_epoch()) {
       osds.push_back(osd);
     }
   }
