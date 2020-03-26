@@ -1553,7 +1553,7 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 		     << " dne" << dendl;
       if (op->onfinish) {
 	num_in_flight--;
-	op->onfinish->complete(-ENOENT);
+	op->onfinish->complete(-EIO);
       }
 
       OSDSession *s = op->session;
