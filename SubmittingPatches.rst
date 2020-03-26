@@ -133,7 +133,7 @@ Some negative examples (how *not* to title a commit message)::
      bug fix for driver X
      fix issue 99999
 
-Further to the last negative example ("fix issue 99999"), see `Fixes line`_.
+Further to the last negative example ("fix issue 99999"), see `Fixes line(s)`_.
 
 Commit message
 ^^^^^^^^^^^^^^
@@ -148,8 +148,6 @@ body to explain not just the "what", but also the "why".
 For positive examples, peruse ``git log`` in the ``master`` branch. A negative
 example would be a commit message that merely states the obvious. For example:
 "this patch includes updates for subsystem X. Please apply."
-
-.. _`fixes line`:
 
 Fixes line(s)
 ^^^^^^^^^^^^^
