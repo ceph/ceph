@@ -13,3 +13,5 @@
   the upgrade::
 
     ceph osd pool set <pool-name> pg_autoscale_mode warn
+
+* The format of MDSs in `ceph fs dump` has changed.

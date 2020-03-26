@@ -75,8 +75,7 @@ class MMgrReport : public MessageInstance<MMgrReport> {
 public:
   friend factory;
 private:
-
-  static constexpr int HEAD_VERSION = 7;
+  static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -101,6 +100,7 @@ public:
 
   // for service registration
   boost::optional<std::map<std::string,std::string>> daemon_status;
+  boost::optional<std::map<std::string,std::string>> task_status;
 
   std::vector<DaemonHealthMetric> daemon_health_metrics;
 
@@ -130,6 +130,9 @@ public:
     if (header.version >= 7) {
       decode(osd_perf_metric_reports, p);
     }
+    if (header.version >= 8) {
+      decode(task_status, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -143,6 +146,7 @@ public:
     encode(daemon_health_metrics, payload);
     encode(config_bl, payload);
     encode(osd_perf_metric_reports, payload);
+    encode(task_status, payload);
   }
 
   std::string_view get_type_name() const override { return "mgrreport"; }
@@ -162,6 +166,9 @@ public:
     }
     if (!daemon_health_metrics.empty()) {
       out << " daemon_metrics=" << daemon_health_metrics.size();
+    }
+    if (task_status) {
+      out << " task_status=" << task_status->size();
     }
     out << ")";
   }

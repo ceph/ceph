@@ -154,7 +154,6 @@ protected:
       bool *need_reply);
   void handle_command(const MCommand::const_ref &m);
   void handle_mds_map(const MMDSMap::const_ref &m);
-  void _handle_mds_map(const MDSMap &oldmap);
 
 private:
   struct MDSCommand {

@@ -8168,6 +8168,11 @@ std::vector<Option> get_mds_options() {
      .set_flag(Option::FLAG_RUNTIME)
      .set_description("max snapshots per directory")
      .set_long_description("maximum number of snapshots that can be created per directory"),
+
+    Option("mds_task_status_update_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+     .set_default(2.0)
+     .set_description("task status update interval to manager")
+     .set_long_description("interval (in seconds) for sending mds task status to ceph manager"),
   });
 }
 

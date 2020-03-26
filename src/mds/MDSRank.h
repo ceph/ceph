@@ -119,6 +119,7 @@ class MDSTableClient;
 class Messenger;
 class Objecter;
 class MonClient;
+class MgrClient;
 class Finisher;
 class ScrubStack;
 class C_MDS_Send_Command_Reply;
@@ -339,6 +340,7 @@ class MDSRank {
         std::unique_ptr<MDSMap> & mdsmap_,
         Messenger *msgr,
         MonClient *monc_,
+        MgrClient *mgrc,
         Context *respawn_hook_,
         Context *suicide_hook_);
 
@@ -505,6 +507,7 @@ class MDSRank {
   protected:
     Messenger    *messenger;
     MonClient    *monc;
+    MgrClient    *mgrc;
 
     Context *respawn_hook;
     Context *suicide_hook;
@@ -576,6 +579,13 @@ class MDSRank {
     void set_mdsmap_multimds_snaps_allowed();
 private:
     mono_time starttime = mono_clock::zero();
+
+    // "task" string that gets displayed in ceph status
+    inline static const std::string SCRUB_STATUS_KEY = "scrub status";
+
+    void get_task_status(std::map<std::string, std::string> *status);
+    void schedule_update_timer_task();
+    void send_task_status();
 
 protected:
   Context *create_async_exec_context(C_ExecAndReply *ctx);
@@ -653,6 +663,7 @@ public:
       std::unique_ptr<MDSMap> &mdsmap_,
       Messenger *msgr,
       MonClient *monc_,
+      MgrClient *mgrc,
       Context *respawn_hook_,
       Context *suicide_hook_);
 };

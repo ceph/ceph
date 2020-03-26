@@ -3010,8 +3010,25 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
       ss << "\n";
       for (auto& p : service_map.services) {
+        const std::string &service = p.first;
+        // filter out normal ceph entity types
+        if (ServiceMap::is_normal_ceph_entity(service)) {
+          continue;
+        }
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
 	   << p.second.get_summary() << "\n";
+      }
+    }
+
+    {
+      auto& service_map = mgrstatmon()->get_service_map();
+      if (!service_map.services.empty()) {
+        ss << "\n \n  task status:\n";
+        {
+          for (auto &p : service_map.services) {
+            ss << p.second.get_task_summary(p.first);
+          }
+        }
       }
     }
 
@@ -3867,7 +3884,11 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->close_section();
 
     for (auto& p : mgrstatmon()->get_service_map().services) {
-      f->open_object_section(p.first.c_str());
+      auto &service = p.first;
+      if (ServiceMap::is_normal_ceph_entity(service)) {
+        continue;
+      }
+      f->open_object_section(service.c_str());
       map<string,int> m;
       p.second.count_metadata("ceph_version", &m);
       for (auto& q : m) {

@@ -138,7 +138,7 @@ public:
     }
     void decode(bufferlist::const_iterator& p);
     void dump(Formatter *f) const;
-    void print_summary(ostream &out) const;
+    void dump(std::ostream&) const;
 
     // The long form name for use in cluster log messages`
     std::string human_name() const;
@@ -320,8 +320,8 @@ public:
     return get_enabled() && (is_data_pool(poolid) || metadata_pool == poolid);
   }
 
-  const std::map<mds_gid_t,mds_info_t>& get_mds_info() const { return mds_info; }
-  const mds_info_t& get_mds_info_gid(mds_gid_t gid) const {
+  const auto& get_mds_info() const { return mds_info; }
+  const auto& get_mds_info_gid(mds_gid_t gid) const {
     return mds_info.at(gid);
   }
   const mds_info_t& get_mds_info(mds_rank_t m) const {
@@ -329,11 +329,9 @@ public:
     return mds_info.at(up.at(m));
   }
   mds_gid_t find_mds_gid_by_name(std::string_view s) const {
-    for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
-	 p != mds_info.end();
-	 ++p) {
-      if (p->second.name == s) {
-	return p->first;
+    for (const auto& [gid, info] : mds_info) {
+      if (info.name == s) {
+	return gid;
       }
     }
     return MDS_GID_NONE;
@@ -510,29 +508,29 @@ public:
   bool is_dne_gid(mds_gid_t gid) const     { return mds_info.count(gid) == 0; }
 
   /**
-   * Get MDS rank state if the rank is up, else STATE_NULL
+   * Get MDS daemon status by GID
    */
-  DaemonState get_state(mds_rank_t m) const {
-    std::map<mds_rank_t, mds_gid_t>::const_iterator u = up.find(m);
-    if (u == up.end())
+  auto get_state_gid(mds_gid_t gid) const {
+    auto it = mds_info.find(gid);
+    if (it == mds_info.end())
       return STATE_NULL;
-    return get_state_gid(u->second);
+    return it->second.state;
   }
 
   /**
-   * Get MDS daemon status by GID
+   * Get MDS rank state if the rank is up, else STATE_NULL
    */
-  DaemonState get_state_gid(mds_gid_t gid) const {
-    std::map<mds_gid_t,mds_info_t>::const_iterator i = mds_info.find(gid);
-    if (i == mds_info.end())
+  auto get_state(mds_rank_t m) const {
+    auto it = up.find(m);
+    if (it == up.end())
       return STATE_NULL;
-    return i->second.state;
+    return get_state_gid(it->second);
   }
 
-  const mds_info_t& get_info(const mds_rank_t m) const {
+  const auto& get_info(mds_rank_t m) const {
     return mds_info.at(up.at(m));
   }
-  const mds_info_t& get_info_gid(const mds_gid_t gid) const {
+  const auto& get_info_gid(mds_gid_t gid) const {
     return mds_info.at(gid);
   }
 
@@ -678,6 +676,11 @@ WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 inline ostream& operator<<(ostream &out, const MDSMap &m) {
   m.print_summary(NULL, &out);
   return out;
+}
+
+inline std::ostream& operator<<(std::ostream& o, const MDSMap::mds_info_t& info) {
+  info.dump(o);
+  return o;
 }
 
 #endif

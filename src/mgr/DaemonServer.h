@@ -122,6 +122,8 @@ private:
   OSDPerfMetricCollector osd_perf_metric_collector;
   void handle_osd_perf_metric_query_updated();
 
+  void update_task_status(DaemonKey key, MMgrReport *m);
+
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
   void shutdown();
