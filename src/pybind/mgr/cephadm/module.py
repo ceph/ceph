@@ -2,7 +2,7 @@ import json
 import errno
 import logging
 import time
-import yaml
+from copy import copy
 from threading import Event
 from functools import wraps
 
@@ -319,6 +319,18 @@ class HostCache():
             for name, dd in dm.items():
                 r.append(dd)
         return r
+
+    def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
+        for host, dm in self.daemons.items():
+            if host in self.mgr.offline_hosts:
+                def set_offline(dd: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
+                    ret = copy(dd)
+                    ret.status = -1
+                    ret.status_desc = 'host is offline'
+                    return ret
+                yield host, {name: set_offline(d) for name, d in dm.items()}
+            else:
+                yield host, dm
 
     def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
@@ -1854,7 +1866,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self._refresh_host_daemons(host)
         # <service_map>
         sm = {}  # type: Dict[str, orchestrator.ServiceDescription]
-        for h, dm in self.cache.daemons.items():
+        for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
                 if service_type and service_type != dd.daemon_type:
                     continue
@@ -1925,7 +1937,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 for hostname, hi in self.inventory.items():
                     self._refresh_host_daemons(hostname)
         result = []
-        for h, dm in self.cache.daemons.items():
+        for h, dm in self.cache.get_daemons_with_volatile_status():
             if host and h != host:
                 continue
             for name, dd in dm.items():

@@ -25,7 +25,7 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, IscsiServiceSpec
+    ServiceDescription, DaemonDescription, IscsiServiceSpec
 
 def nice_delta(now, t, suffix=''):
     if t:
@@ -410,7 +410,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                                        refresh=refresh)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
-        daemons = completion.result
+        daemons: List[DaemonDescription] = completion.result
 
         def ukn(s):
             return '<unknown>' if s is None else s
@@ -432,12 +432,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(daemons, key=lambda s: s.name()):
-                status = {
-                    -1: 'error',
-                    0: 'stopped',
-                    1: 'running',
-                    None: '<unknown>'
-                }[s.status]
+                if s.status_desc:
+                    status = s.status_desc
+                else:
+                    status = {
+                        -1: 'error',
+                        0: 'stopped',
+                        1: 'running',
+                        None: '<unknown>'
+                    }[s.status]
                 if s.status == 1 and s.started:
                     status += ' (%s)' % to_pretty_timedelta(now - s.started)
 
