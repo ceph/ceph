@@ -130,9 +130,13 @@ class Heartbeat::Peer {
   void handle_reset(crimson::net::ConnectionRef);
 
  private:
-  bool is_unhealthy(clock::time_point now) const;
-  bool is_healthy(clock::time_point now) const;
-
+  bool pinged() const;
+  enum class health_state {
+    UNKNOWN,
+    UNHEALTHY,
+    HEALTHY,
+  };
+  health_state do_health_screen(clock::time_point now) const;
   void connect();
   void disconnect();
 
