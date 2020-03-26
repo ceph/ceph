@@ -327,10 +327,12 @@ uint64_t BlueFS::get_block_device_size(unsigned id)
   return 0;
 }
 
-void BlueFS::_add_block_extent(unsigned id, uint64_t offset, uint64_t length)
+void BlueFS::_add_block_extent(unsigned id, uint64_t offset, uint64_t length,
+                               bool skip)
 {
   dout(1) << __func__ << " bdev " << id
 	  << " 0x" << std::hex << offset << "~" << length << std::dec
+	  << " skip " << skip
 	  << dendl;
 
   ceph_assert(id < bdev.size());
@@ -339,7 +341,9 @@ void BlueFS::_add_block_extent(unsigned id, uint64_t offset, uint64_t length)
   block_all[id].insert(offset, length);
 
   if (id < alloc.size() && alloc[id]) {
-    log_t.op_alloc_add(id, offset, length);
+    if (!skip)
+      log_t.op_alloc_add(id, offset, length);
+
     alloc[id]->init_add_free(offset, length);
   }
 
