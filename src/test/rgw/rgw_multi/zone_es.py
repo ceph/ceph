@@ -13,8 +13,8 @@ try:
 except ImportError:
     from itertools import zip_longest
 
-from tasks.rgw_multi.multisite import *
-from tasks.rgw_multi.tools import *
+from .multisite import *
+from .tools import *
 
 log = logging.getLogger(__name__)
 
