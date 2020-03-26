@@ -152,6 +152,27 @@ Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
+Fetch the metadata of a subvolume using::
+
+    $ ceph fs subvolume info <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+The output format is json and contains fields as follows.
+
+* atime: access time of subvolume path in the format "YYYY-MM-DD HH:MM:SS"
+* mtime: modification time of subvolume path in the format "YYYY-MM-DD HH:MM:SS"
+* ctime: change time of subvolume path in the format "YYYY-MM-DD HH:MM:SS"
+* uid: uid of subvolume path
+* gid: gid of subvolume path
+* mode: mode of subvolume path
+* mon_addrs: list of monitor addresses
+* bytes_pcent: quota used in percentage if quota is set, else displays "undefined"
+* bytes_quota: quota size in bytes if quota is set, else displays "infinite"
+* bytes_used: current used size of the subvolume in bytes
+* created_at: time of creation of subvolume in the format "YYYY-MM-DD HH:MM:SS"
+* data_pool: data pool the subvolume belongs to
+* path: absolute path of a subvolume
+* type: subvolume type indicating whether it's clone or subvolume
+
 List subvolumes using::
 
     $ ceph fs subvolume ls <vol_name> [--group_name <subvol_group_name>]
