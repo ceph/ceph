@@ -4,6 +4,7 @@
 #include "include/fs_types.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "common/ceph_json.h"
 
 void dump(const ceph_file_layout& l, ceph::Formatter *f)
 {
@@ -118,6 +119,15 @@ void file_layout_t::dump(ceph::Formatter *f) const
   f->dump_unsigned("object_size", object_size);
   f->dump_int("pool_id", pool_id);
   f->dump_string("pool_ns", pool_ns);
+}
+
+void file_layout_t::decode_json(JSONObj *obj){
+
+    JSONDecoder::decode_json("stripe_unit", stripe_unit, obj, true);
+    JSONDecoder::decode_json("stripe_count", stripe_count, obj, true);
+    JSONDecoder::decode_json("object_size", object_size, obj, true);
+    JSONDecoder::decode_json("pool_id", pool_id, obj, true);
+    JSONDecoder::decode_json("pool_ns", pool_ns, obj, true);
 }
 
 void file_layout_t::generate_test_instances(std::list<file_layout_t*>& o)

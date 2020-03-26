@@ -4,6 +4,7 @@
 #define CEPH_INCLUDE_FS_TYPES_H
 
 #include "types.h"
+class JSONObj;
 
 // --------------------------------------
 // ino
@@ -114,6 +115,7 @@ struct file_layout_t {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<file_layout_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(file_layout_t)
