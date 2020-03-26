@@ -60,10 +60,13 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SSH_CONFIG = ('Host *\n'
-                      'User root\n'
-                      'StrictHostKeyChecking no\n'
-                      'UserKnownHostsFile /dev/null\n')
+DEFAULT_SSH_CONFIG = """
+Host *
+  User root
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  ConnectTimeout=30
+"""
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
