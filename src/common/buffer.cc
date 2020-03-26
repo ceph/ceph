@@ -2165,15 +2165,15 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
 }
 
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::list& bl) {
-  out << "buffer::list(len=" << bl.length() << "," << std::endl;
+  out << "buffer::list(len=" << bl.length() << ",\n";
 
   for (const auto& node : bl.buffers()) {
     out << "\t" << node;
     if (&node != &bl.buffers().back()) {
-      out << "," << std::endl;
+      out << ",\n";
     }
   }
-  out << std::endl << ")";
+  out << "\n)";
   return out;
 }
 
