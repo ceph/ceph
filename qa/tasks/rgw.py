@@ -41,7 +41,7 @@ def start_rgw(ctx, config, clients):
     log.info('Starting rgw...')
     testdir = teuthology.get_testdir(ctx)
     for client in clients:
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
         client_with_id = daemon_type + '.' + client_id
         client_with_cluster = cluster_name + '.' + client_with_id
@@ -147,7 +147,7 @@ def start_rgw(ctx, config, clients):
         endpoint = ctx.rgw.role_endpoints[client]
         url = endpoint.url()
         log.info('Polling {client} until it starts accepting connections on {url}'.format(client=client, url=url))
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         wait_for_radosgw(url, remote)
 
     try:
@@ -207,7 +207,7 @@ def create_pools(ctx, clients):
     log.info('Creating data pools')
     for client in clients:
         log.debug("Obtaining remote for client {}".format(client))
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         data_pool = 'default.rgw.buckets.data'
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
 

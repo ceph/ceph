@@ -166,7 +166,7 @@ def ceph_log(ctx, config):
                 conf += f.read().format(daemon_type=daemon, max_size=size)
                 f.seek(0, 0)
 
-            for remote in ctx.cluster.remotes.iterkeys():
+            for remote in ctx.cluster.remotes.keys():
                 teuthology.write_file(remote=remote,
                                       path='{tdir}/logrotate.ceph-test.conf'.format(tdir=testdir),
                                       data=StringIO(conf)
@@ -237,8 +237,11 @@ def ceph_log(ctx, config):
 
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
-            os.makedirs(path)
-            for remote in ctx.cluster.remotes.iterkeys():
+            try:
+                os.makedirs(path)
+            except OSError as e:
+                pass
+            for remote in ctx.cluster.remotes.keys():
                 sub = os.path.join(path, remote.shortname)
                 os.makedirs(sub)
                 teuthology.pull_directory(remote, '/var/log/ceph',
@@ -271,7 +274,7 @@ def valgrind_post(ctx, config):
     finally:
         lookup_procs = list()
         log.info('Checking for errors in any valgrind logs...')
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             # look at valgrind logs for each node
             proc = remote.run(
                 args=[
@@ -321,7 +324,7 @@ def valgrind_post(ctx, config):
 def crush_setup(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
-    (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
 
     profile = config.get('crush_tunables', 'default')
     log.info('Setting crush tunables to %s', profile)
@@ -335,7 +338,7 @@ def crush_setup(ctx, config):
 def create_rbd_pool(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
-    (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
     log.info('Waiting for OSDs to come up')
     teuthology.wait_until_osds_up(
         ctx,
@@ -364,7 +367,7 @@ def cephfs_setup(ctx, config):
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
 
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
-    (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
     mdss = ctx.cluster.only(teuthology.is_type('mds', cluster_name))
     # If there are any MDSs, then create a filesystem for them to use
     # Do this last because requires mon cluster to be up and running
@@ -699,7 +702,7 @@ def cluster(ctx, config):
         path=monmap_path,
     )
 
-    for rem in ctx.cluster.remotes.iterkeys():
+    for rem in ctx.cluster.remotes.keys():
         # copy mon key and initial monmap
         log.info('Sending monmap to node {remote}'.format(remote=rem))
         teuthology.sudo_write_file(
@@ -1840,7 +1843,7 @@ def task(ctx, config):
 
     with contextutil.nested(*subtasks):
         first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
         if not hasattr(ctx, 'managers'):
             ctx.managers = {}
         ctx.managers[config['cluster']] = CephManager(
