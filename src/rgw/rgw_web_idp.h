@@ -16,7 +16,9 @@ struct WebTokenClaims {
   //Issuer of this token
   std::string iss;
   //Human-readable id for the resource owner
-  string user_name;
+  std::string user_name;
+  //Client Id
+  std::string client_id;
 };
 
 }; /* namespace web_idp */

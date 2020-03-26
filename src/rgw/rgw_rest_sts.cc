@@ -1,5 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
+#include <vector>
+#include <string>
+#include <array>
+#include <sstream>
+#include <memory>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/format.hpp>
@@ -8,7 +13,6 @@
 #include <boost/tokenizer.hpp>
 
 #include "ceph_ver.h"
-
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -16,6 +20,7 @@
 #include "rgw_rest.h"
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
+#include "jwt-cpp/jwt.h"
 #include "rgw_rest_sts.h"
 
 #include "rgw_formats.h"
@@ -27,10 +32,6 @@
 #include "rgw_iam_policy_keywords.h"
 
 #include "rgw_sts.h"
-
-#include <array>
-#include <sstream>
-#include <memory>
 
 #include <boost/utility/string_ref.hpp>
 
@@ -45,51 +46,169 @@ WebTokenEngine::is_applicable(const std::string& token) const noexcept
   return ! token.empty();
 }
 
+//Offline validation of incoming Web Token which is a signed JWT (JSON Web Token)
 boost::optional<WebTokenEngine::token_t>
-WebTokenEngine::get_from_idp(const DoutPrefixProvider* dpp, const std::string& token) const
+WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token) const
 {
-  //Access token conforming to OAuth2.0
-  if (! cct->_conf->rgw_sts_token_introspection_url.empty()) {
-    bufferlist introspect_resp;
-    RGWHTTPTransceiver introspect_req(cct, "POST", cct->_conf->rgw_sts_token_introspection_url, &introspect_resp);
-    //Headers
-    introspect_req.append_header("Content-Type", "application/x-www-form-urlencoded");
-    string base64_creds = "Basic " + rgw::to_base64(cct->_conf->rgw_sts_client_id + ":" + cct->_conf->rgw_sts_client_secret);
-    introspect_req.append_header("Authorization", base64_creds);
-    // POST data
-    string post_data = "token=" + token;
-    introspect_req.set_post_data(post_data);
-    introspect_req.set_send_length(post_data.length());
+  WebTokenEngine::token_t t;
+  try {
+    const auto& decoded = jwt::decode(token);
+  
+    auto& payload = decoded.get_payload();
+    ldpp_dout(dpp, 20) << " payload = " << payload << dendl;
+    if (decoded.has_issuer()) {
+      t.iss = decoded.get_issuer();
+    }
+    if (decoded.has_audience()) {
+      auto aud = decoded.get_audience();
+      t.aud = *(aud.begin());
+    }
+    if (decoded.has_subject()) {
+      t.sub = decoded.get_subject();
+    }
+    if (decoded.has_payload_claim("client_id")) {
+      t.client_id = decoded.get_payload_claim("client_id").as_string();
+    }
+    if (t.client_id.empty() && decoded.has_payload_claim("clientId")) {
+      t.client_id = decoded.get_payload_claim("clientId").as_string();
+    }
 
-    int res = introspect_req.process(null_yield);
+    //Validate signature
+    if (decoded.has_algorithm()) {
+      auto& algorithm = decoded.get_algorithm();
+      try {
+        validate_signature(dpp, decoded, algorithm, t.iss);
+      } catch (...) {
+        throw -EACCES;
+      }
+    } else {
+      return boost::none;
+    }
+  } catch (int error) {
+    if (error == -EACCES) {
+      throw -EACCES;
+    }
+    ldpp_dout(dpp, 5) << "Invalid JWT token" << dendl;
+    return boost::none;
+  }
+  catch (...) {
+    ldpp_dout(dpp, 5) << "Invalid JWT token" << dendl;
+    return boost::none;
+  }
+  return t;
+}
+
+void
+WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss) const
+{
+  if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
+    // Get certificate
+    string cert_url = iss + "/protocol/openid-connect/certs";
+    bufferlist cert_resp;
+    RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
+    //Headers
+    cert_req.append_header("Content-Type", "application/x-www-form-urlencoded");
+
+    int res = cert_req.process(null_yield);
     if (res < 0) {
       ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
       throw -EINVAL;
     }
     //Debug only
-    ldpp_dout(dpp, 20) << "HTTP status: " << introspect_req.get_http_status() << dendl;
-    ldpp_dout(dpp, 20) << "JSON Response is: " << introspect_resp.c_str() << dendl;
+    ldpp_dout(dpp, 20) << "HTTP status: " << cert_req.get_http_status() << dendl;
+    ldpp_dout(dpp, 20) << "JSON Response is: " << cert_resp.c_str() << dendl;
 
     JSONParser parser;
-    WebTokenEngine::token_t token;
-    if (!parser.parse(introspect_resp.c_str(), introspect_resp.length())) {
-      ldpp_dout(dpp, 2) << "Malformed json" << dendl;
-      throw -EINVAL;
+    if (parser.parse(cert_resp.c_str(), cert_resp.length())) {
+      JSONObj::data_val val;
+      if (parser.get_data("keys", &val)) {
+        if (val.str[0] == '[') {
+          val.str.erase(0, 1);
+        }
+        if (val.str[val.str.size() - 1] == ']') {
+          val.str = val.str.erase(val.str.size() - 1, 1);
+        }
+        if (parser.parse(val.str.c_str(), val.str.size())) {
+          vector<string> x5c;
+          if (JSONDecoder::decode_json("x5c", x5c, &parser)) {
+            string cert = "-----BEGIN CERTIFICATE-----\n" + x5c[0] + "\n-----END CERTIFICATE-----";
+            ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
+            try {
+              //verify method takes care of expired tokens also
+              if (algorithm == "RS256") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::rs256{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "RS384") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::rs384{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "RS512") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::rs512{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "ES256") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::es256{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "ES384") {
+                auto verifier = jwt::verify()
+                            .allow_algorithm(jwt::algorithm::es384{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "ES512") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::es512{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "PS256") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::ps256{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "PS384") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::ps384{cert});
+
+                verifier.verify(decoded);
+              } else if (algorithm == "PS512") {
+                auto verifier = jwt::verify()
+                              .allow_algorithm(jwt::algorithm::ps512{cert});
+
+                verifier.verify(decoded);
+              }
+            } catch (std::runtime_error& e) {
+              ldpp_dout(dpp, 0) << "Signature validation failed: " << e.what() << dendl;
+              throw;
+            }
+            catch (...) {
+              ldpp_dout(dpp, 0) << "Signature validation failed" << dendl;
+              throw;
+            }
+          } else {
+            ldpp_dout(dpp, 0) << "x5c not present" << dendl;
+            throw -EINVAL;
+          }
+        } else {
+          ldpp_dout(dpp, 0) << "Malformed JSON object for keys" << dendl;
+          throw -EINVAL;
+        }
+      } else {
+        ldpp_dout(dpp, 0) << "keys not present in JSON" << dendl;
+        throw -EINVAL;
+      } //if-else get-data
     } else {
-      bool is_active;
-      JSONDecoder::decode_json("active", is_active, &parser);
-      if (! is_active) {
-        ldpp_dout(dpp, 0) << "Active state is false"  << dendl;
-        throw -ERR_INVALID_IDENTITY_TOKEN;
-      }
-      JSONDecoder::decode_json("iss", token.iss, &parser);
-      JSONDecoder::decode_json("aud", token.aud, &parser);
-      JSONDecoder::decode_json("sub", token.sub, &parser);
-      JSONDecoder::decode_json("user_name", token.user_name, &parser);
-    }
-    return token;
+      ldpp_dout(dpp, 0) << "Malformed json returned while fetching cert" << dendl;
+      throw -EINVAL;
+    } //if-else parser cert_resp
+  } else {
+    ldpp_dout(dpp, 0) << "JWT signed by HMAC algos are currently not supported" << dendl;
+    throw -EINVAL;
   }
-  return boost::none;
 }
 
 WebTokenEngine::result_t
@@ -104,8 +223,9 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   }
 
   try {
-    t = get_from_idp(dpp, token);
-  } catch(...) {
+    t = get_from_jwt(dpp, token);
+  }
+  catch (...) {
     return result_t::deny(-EACCES);
   }
 
@@ -116,7 +236,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   return result_t::deny(-EACCES);
 }
 
-} // namespace rgw::auth::s3
+} // namespace rgw::auth::sts
 
 int RGWREST_STS::verify_permission()
 {

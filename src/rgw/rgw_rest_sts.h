@@ -7,6 +7,7 @@
 #include "rgw_auth_filters.h"
 #include "rgw_sts.h"
 #include "rgw_web_idp.h"
+#include "jwt-cpp/jwt.h"
 
 namespace rgw::auth::sts {
 
@@ -21,8 +22,10 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_applicable(const std::string& token) const noexcept;
 
-  boost::optional<token_t>
-  get_from_idp(const DoutPrefixProvider* dpp, const std::string& token) const;
+  boost::optional<WebTokenEngine::token_t>
+  get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token) const;
+
+  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
