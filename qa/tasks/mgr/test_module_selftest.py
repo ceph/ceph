@@ -5,7 +5,8 @@ import errno
 import logging
 from teuthology.exceptions import CommandFailedError
 
-from tasks.mgr.mgr_test_case import MgrTestCase
+from .mgr_test_case import MgrTestCase
+
 
 log = logging.getLogger(__name__)
 
