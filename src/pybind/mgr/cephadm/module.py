@@ -1514,7 +1514,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             addr = self.inventory[host].get('addr', host)
 
         try:
-            conn, connr = self._get_connection(addr)
+            try:
+                conn, connr = self._get_connection(addr)
+            except IOError as e:
+                if error_ok:
+                    self.log.exception('failed to establish ssh connection')
+                    return [], [str("Can't communicate with remote host, possibly because python3 is not installed there")], 1
+                raise
 
             assert image or entity
             if not image:
