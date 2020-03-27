@@ -59,8 +59,6 @@ private:
 				 Ref<MOSDPing> m);
   seastar::future<> handle_you_died();
 
-  seastar::future<> send_still_alive(osd_id_t, const entity_addrvec_t&);
-
   using osds_t = std::vector<osd_id_t>;
   /// remove down OSDs
   /// @return peers not needed in this epoch
@@ -94,14 +92,30 @@ private:
   seastar::future<> send_heartbeats();
   void heartbeat_check();
 
-  struct failure_info_t {
-    clock::time_point failed_since;
-    entity_addrvec_t addrs;
-  };
   // osds we've reported to monior as failed ones, but they are not marked down
   // yet
-  std::map<osd_id_t, failure_info_t> failure_pending;
   crimson::common::Gated gate;
+
+  class FailingPeers {
+   public:
+    FailingPeers(Heartbeat& heartbeat) : heartbeat(heartbeat) {}
+    bool add_pending(osd_id_t peer,
+                     clock::time_point failed_since,
+                     clock::time_point now,
+                     std::vector<seastar::future<>>& futures);
+    seastar::future<> cancel_one(osd_id_t peer);
+
+   private:
+    seastar::future<> send_still_alive(osd_id_t, const entity_addrvec_t&);
+
+    Heartbeat& heartbeat;
+
+    struct failure_info_t {
+      clock::time_point failed_since;
+      entity_addrvec_t addrs;
+    };
+    std::map<osd_id_t, failure_info_t> failure_pending;
+  } failing_peers;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Heartbeat& hb) {
