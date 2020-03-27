@@ -1,7 +1,6 @@
 """
 Run rgw s3 readwite tests
 """
-from cStringIO import StringIO
 import base64
 import contextlib
 import logging
@@ -194,16 +193,14 @@ def configure(ctx, config):
                 './bootstrap',
                 ],
             )
-        conf_fp = StringIO()
         conf = dict(
                         s3=s3tests_conf['s3'],
                         readwrite=s3tests_conf['readwrite'],
                     )
-        yaml.safe_dump(conf, conf_fp, default_flow_style=False)
         teuthology.write_file(
             remote=remote,
             path='{tdir}/archive/s3readwrite.{client}.config.yaml'.format(tdir=teuthology.get_testdir(ctx), client=client),
-            data=conf_fp.getvalue(),
+            data=yaml.safe_dump(conf, default_flow_style=False),
             )
     yield
 
