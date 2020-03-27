@@ -1010,9 +1010,9 @@ def get_image_version(remote, path):
     :param path: (rpm or deb) package path
     """
     if remote.os.package_type == 'rpm':
-        files = remote.run(args=['rpm', '-qlp', path])
+        files = remote.sh(['rpm', '-qlp', path])
     elif remote.os.package_type == 'deb':
-        files = remote.run(args=['dpkg-deb', '-c', path])
+        files = remote.sh(['dpkg-deb', '-c', path])
     else:
         raise UnsupportedPackageTypeError(remote)
 
