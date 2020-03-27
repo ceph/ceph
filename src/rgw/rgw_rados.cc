@@ -45,6 +45,7 @@
 #include "rgw_compression.h"
 #include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
+#include "rgw_notify.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
 
@@ -1073,6 +1074,8 @@ void RGWRados::finalize()
   }
   delete reshard;
   delete index_completion_manager;
+
+  rgw::notify::shutdown();
 }
 
 /** 
@@ -1165,6 +1168,10 @@ int RGWRados::init_complete()
     return ret;
 
   ret = open_reshard_pool_ctx();
+  if (ret < 0)
+    return ret;
+
+  ret = open_notif_pool_ctx();
   if (ret < 0)
     return ret;
 
@@ -1299,6 +1306,13 @@ int RGWRados::init_complete()
 
   index_completion_manager = new RGWIndexCompletionManager(this);
   ret = index_completion_manager->start();
+  if (ret < 0) {
+    return ret;
+  }
+  ret = rgw::notify::init(cct, store);
+  if (ret < 0 ) {
+    ldout(cct, 1) << "ERROR: failed to initialize notification manager" << dendl;
+  }
 
   return ret;
 }
@@ -1377,6 +1391,11 @@ int RGWRados::open_objexp_pool_ctx()
 int RGWRados::open_reshard_pool_ctx()
 {
   return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().reshard_pool, reshard_pool_ctx, true, true);
+}
+
+int RGWRados::open_notif_pool_ctx()
+{
+  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().notif_pool, notif_pool_ctx, true, true);
 }
 
 int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
