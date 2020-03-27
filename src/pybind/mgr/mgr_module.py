@@ -744,6 +744,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # Keep a librados instance for those that need it.
         self._rados = None
 
+        self.ops_in_progress = 0
+        self.stopping = threading.Event()
+        self.lock = threading.Lock()
+        self.cond = threading.Condition(self.lock)
+
 
     def __del__(self):
         self._unconfigure_logging()
@@ -863,6 +868,22 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         You *must* implement ``shutdown`` if you implement ``serve``
         """
         pass
+
+    def _stop(self):
+        self.stopping.set()
+        self.log.debug("waiting for {0} ops to finish".format(self.ops_in_progress))
+        while not self.ops_in_progress == 0:
+            self.cond.wait()
+
+    def stop(self):
+        """
+        Called by ceph-mgr service to request to not process any more
+        commands. Post this call CLI commands are returned with error
+        code -ESHUTDOWN. If this function is overridden, make sure to
+        call the base class function.
+        """
+        with self.lock:
+            self._stop()
 
     def shutdown(self):
         """
@@ -1167,10 +1188,20 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._ceph_set_health_checks(checks)
 
     def _handle_command(self, inbuf, cmd):
-        if cmd['prefix'] not in CLICommand.COMMANDS:
-            return self.handle_command(inbuf, cmd)
+        try:
+            with self.lock:
+                self.ops_in_progress += 1
+                if self.stopping.is_set():
+                    return -errno.ESHUTDOWN, "", "mgr shutdown in progress"
+            if cmd['prefix'] not in CLICommand.COMMANDS:
+                return self.handle_command(inbuf, cmd)
+            return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+        finally:
+            with self.lock:
+                self.ops_in_progress -= 1
+                if self.stopping.is_set() and self.ops_in_progress == 0:
+                    self.cond.notifyAll()
 
-        return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
 
     def handle_command(self, inbuf, cmd):
         """
