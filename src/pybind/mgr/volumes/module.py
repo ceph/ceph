@@ -272,6 +272,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def __del__(self):
         self.vc.shutdown()
 
+    def stop(self):
+        with self.lock:
+            self.vc.shutdown()
+            super(Module, self)._stop()
+
     def shutdown(self):
         self.vc.shutdown()
 
