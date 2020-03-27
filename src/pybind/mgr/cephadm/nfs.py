@@ -28,7 +28,7 @@ class NFSGanesha(object):
 
     def get_rados_config_name(self):
         # type: () -> str
-        return 'conf-' + self.get_rados_user()
+        return 'conf-' + self.spec.service_name()
 
     def get_rados_config_url(self):
         # type: () -> str
