@@ -22,7 +22,7 @@ export class MonitoringListComponent implements OnInit {
     private summaryService: SummaryService,
     private cephReleaseNamePipe: CephReleaseNamePipe
   ) {}
-  @ViewChild('tabs', { static: true })
+  @ViewChild('tabs')
   tabs: TabsetComponent;
 
   isPrometheusConfigured = false;

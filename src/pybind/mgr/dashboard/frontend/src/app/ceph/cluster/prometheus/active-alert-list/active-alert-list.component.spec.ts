@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -48,60 +49,157 @@ describe('ActiveAlertListComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should test all TableActions combinations', () => {
-    component.ngOnInit();
-    const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
-    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
-      component.tableActions
-    );
+  describe('show action buttons and drop down actions depending on permissions', () => {
+    let tableActions: TableActionsComponent;
+    let scenario: { fn; empty; single };
+    let permissionHelper: PermissionHelper;
 
-    expect(tableActions).toEqual({
-      'create,update,delete': {
-        actions: ['Create Silence'],
-        primary: {
-          multiple: 'Create Silence',
-          executing: 'Create Silence',
-          single: 'Create Silence',
-          no: 'Create Silence'
-        }
-      },
-      'create,update': {
-        actions: ['Create Silence'],
-        primary: {
-          multiple: 'Create Silence',
-          executing: 'Create Silence',
-          single: 'Create Silence',
-          no: 'Create Silence'
-        }
-      },
-      'create,delete': {
-        actions: ['Create Silence'],
-        primary: {
-          multiple: 'Create Silence',
-          executing: 'Create Silence',
-          single: 'Create Silence',
-          no: 'Create Silence'
-        }
-      },
-      create: {
-        actions: ['Create Silence'],
-        primary: {
-          multiple: 'Create Silence',
-          executing: 'Create Silence',
-          single: 'Create Silence',
-          no: 'Create Silence'
-        }
-      },
-      'update,delete': {
-        actions: [],
-        primary: { multiple: '', executing: '', single: '', no: '' }
-      },
-      update: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
-      delete: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
-      'no-permissions': {
-        actions: [],
-        primary: { multiple: '', executing: '', single: '', no: '' }
-      }
+    const getTableActionComponent = (): TableActionsComponent => {
+      fixture.detectChanges();
+      return fixture.debugElement.query(By.directive(TableActionsComponent)).componentInstance;
+    };
+
+    beforeEach(() => {
+      permissionHelper = new PermissionHelper(component.permission, () =>
+        getTableActionComponent()
+      );
+      scenario = {
+        fn: () => tableActions.getCurrentButton().name,
+        single: 'Create Silence',
+        empty: 'Create Silence'
+      };
+    });
+
+    describe('with all', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
+      });
+
+      it(`shows 'Create Silence' for single selection else 'Create Silence' as main action`, () =>
+        permissionHelper.testScenarios(scenario));
+
+      it('shows all actions', () => {
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual(component.tableActions);
+      });
+    });
+
+    describe('with read, create and update', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 0);
+      });
+
+      it(`shows 'Create Silence' for single selection else 'Create Silence' as main action`, () =>
+        permissionHelper.testScenarios(scenario));
+
+      it('shows all actions', () => {
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual(component.tableActions);
+      });
+    });
+
+    describe('with read, create and delete', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 1);
+      });
+
+      it(`shows 'Create Silence' for single selection else 'Create Silence' as main action`, () =>
+        permissionHelper.testScenarios(scenario));
+
+      it('shows all actions', () => {
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual(component.tableActions);
+      });
+    });
+
+    describe('with read, edit and delete', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 1);
+      });
+
+      it('shows no main action', () => {
+        permissionHelper.testScenarios({
+          fn: () => tableActions.getCurrentButton(),
+          single: undefined,
+          empty: undefined
+        });
+      });
+
+      it('shows no actions', () => {
+        expect(tableActions.tableActions.length).toBe(0);
+        expect(tableActions.tableActions).toEqual([]);
+      });
+    });
+
+    describe('with read and create', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 0);
+      });
+
+      it(`shows 'Create Silence' for single selection else 'Create Silence' as main action`, () =>
+        permissionHelper.testScenarios(scenario));
+
+      it('shows all actions', () => {
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual(component.tableActions);
+      });
+    });
+
+    describe('with read and update', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 0);
+      });
+
+      it('shows no main action', () => {
+        permissionHelper.testScenarios({
+          fn: () => tableActions.getCurrentButton(),
+          single: undefined,
+          empty: undefined
+        });
+      });
+
+      it('shows no actions', () => {
+        expect(tableActions.tableActions.length).toBe(0);
+        expect(tableActions.tableActions).toEqual([]);
+      });
+    });
+
+    describe('with read and delete', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 1);
+      });
+
+      it('shows no main action', () => {
+        permissionHelper.testScenarios({
+          fn: () => tableActions.getCurrentButton(),
+          single: undefined,
+          empty: undefined
+        });
+      });
+
+      it('shows no actions', () => {
+        expect(tableActions.tableActions.length).toBe(0);
+        expect(tableActions.tableActions).toEqual([]);
+      });
+    });
+
+    describe('with only read', () => {
+      beforeEach(() => {
+        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 0);
+      });
+
+      it('shows no main action', () => {
+        permissionHelper.testScenarios({
+          fn: () => tableActions.getCurrentButton(),
+          single: undefined,
+          empty: undefined
+        });
+      });
+
+      it('shows no actions', () => {
+        expect(tableActions.tableActions.length).toBe(0);
+        expect(tableActions.tableActions).toEqual([]);
+      });
     });
   });
 });
