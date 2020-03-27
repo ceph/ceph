@@ -1,10 +1,9 @@
-
-
-from tasks.mgr.mgr_test_case import MgrTestCase
-
 import json
 import logging
 import datetime
+
+from .mgr_test_case import MgrTestCase
+
 
 log = logging.getLogger(__name__)
 UUID = 'd5775432-0742-44a3-a435-45095e32e6b1'
