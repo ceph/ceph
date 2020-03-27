@@ -41,7 +41,7 @@ class Protocol {
   }
 
   virtual void start_connect(const entity_addr_t& peer_addr,
-                             const entity_type_t& peer_type) = 0;
+                             const entity_name_t& peer_name) = 0;
 
   virtual void start_accept(SocketRef&& socket,
                             const entity_addr_t& peer_addr) = 0;

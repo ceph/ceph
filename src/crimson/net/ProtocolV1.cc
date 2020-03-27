@@ -302,7 +302,7 @@ ProtocolV1::repeat_connect()
 }
 
 void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
-                               const entity_type_t& _peer_type)
+                               const entity_name_t& _peer_name)
 {
   ceph_assert(state == state_t::none);
   logger().trace("{} trigger connecting, was {}", conn, static_cast<int>(state));
@@ -312,8 +312,8 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
-  conn.set_peer_type(_peer_type);
-  conn.policy = messenger.get_policy(_peer_type);
+  conn.set_peer_name(_peer_name);
+  conn.policy = messenger.get_policy(_peer_name.type());
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   gated_dispatch("start_connect", [this] {
@@ -534,6 +534,13 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
     .then([this](bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(h.connect, p);
+      if (conn.get_peer_type() != 0 &&
+          conn.get_peer_type() != h.connect.host_type) {
+        logger().error("{} repeat_handle_connect(): my peer type does not match"
+                       " what peer advertises {} != {}",
+                       conn, conn.get_peer_type(), h.connect.host_type);
+        throw std::system_error(make_error_code(error::protocol_aborted));
+      }
       conn.set_peer_type(h.connect.host_type);
       conn.policy = messenger.get_policy(h.connect.host_type);
       if (!conn.policy.lossy && !conn.policy.server && conn.target_addr.get_port() <= 0) {

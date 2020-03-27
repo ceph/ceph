@@ -154,18 +154,18 @@ ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
 ProtocolV2::~ProtocolV2() {}
 
 void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
-                               const entity_type_t& _peer_type)
+                               const entity_name_t& _peer_name)
 {
   ceph_assert(state == state_t::NONE);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
-  conn.set_peer_type(_peer_type);
-  conn.policy = messenger.get_policy(_peer_type);
+  conn.set_peer_name(_peer_name);
+  conn.policy = messenger.get_policy(_peer_name.type());
   client_cookie = generate_client_cookie();
-  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_type={}, cc={}"
+  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_name={}, cc={}"
                 " policy(lossy={}, server={}, standby={}, resetcheck={})",
-                conn, _peer_addr, ceph_entity_type_name(_peer_type), client_cookie,
+                conn, _peer_addr, _peer_name, client_cookie,
                 conn.policy.lossy, conn.policy.server,
                 conn.policy.standby, conn.policy.resetcheck);
   messenger.register_conn(
@@ -744,6 +744,13 @@ ProtocolV2::client_connect()
             throw std::system_error(
                 make_error_code(crimson::net::error::bad_peer_address));
           }
+          if (conn.get_peer_id() != entity_name_t::NEW &&
+              conn.get_peer_id() != server_ident.gid()) {
+            logger().error("{} connection peer id ({}) does not match "
+                           "what it should be ({}) during connecting, close",
+                            conn, server_ident.gid(), conn.get_peer_id());
+            abort_in_close(*this, true);
+          }
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
@@ -1075,6 +1082,20 @@ seastar::future<> ProtocolV2::server_auth()
   });
 }
 
+bool ProtocolV2::validate_peer_name(const entity_name_t& peer_name) const
+{
+  auto my_peer_name = conn.get_peer_name();
+  if (my_peer_name.type() != peer_name.type()) {
+    return false;
+  }
+  if (my_peer_name.num() != entity_name_t::NEW &&
+      peer_name.num() != entity_name_t::NEW &&
+      my_peer_name.num() != peer_name.num()) {
+    return false;
+  }
+  return true;
+}
+
 seastar::future<ProtocolV2::next_step_t>
 ProtocolV2::send_wait()
 {
@@ -1130,6 +1151,12 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                  existing_proto->connect_seq,
                  existing_proto->client_cookie,
                  existing_proto->server_cookie);
+
+  if (!validate_peer_name(existing_conn->get_peer_name())) {
+    logger().error("{} server_connect: my peer_name doesn't match"
+                   " the existing connection {}, abort", conn, existing_conn);
+    abort_in_fault();
+  }
 
   if (existing_proto->state == state_t::REPLACING) {
     logger().warn("{} server_connect: racing replace happened while"
@@ -1252,6 +1279,13 @@ ProtocolV2::server_connect()
           make_error_code(crimson::net::error::bad_peer_address));
     }
 
+    if (conn.get_peer_id() != entity_name_t::NEW &&
+        conn.get_peer_id() != client_ident.gid()) {
+      logger().error("{} client_ident peer_id ({}) does not match"
+                     " what it should be ({}) during accepting, abort",
+                      conn, client_ident.gid(), conn.get_peer_id());
+      abort_in_fault();
+    }
     conn.set_peer_id(client_ident.gid());
     client_cookie = client_ident.cookie();
 
@@ -1408,6 +1442,12 @@ ProtocolV2::server_reconnect()
                    existing_proto->connect_seq,
                    existing_proto->client_cookie,
                    existing_proto->server_cookie);
+
+    if (!validate_peer_name(existing_conn->get_peer_name())) {
+      logger().error("{} server_reconnect: my peer_name doesn't match"
+                     " the existing connection {}, abort", conn, existing_conn);
+      abort_in_fault();
+    }
 
     if (existing_proto->state == state_t::REPLACING) {
       logger().warn("{} server_reconnect: racing replace happened while "
@@ -1763,7 +1803,10 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         return write_frame(reconnect_ok);
       } else {
         client_cookie = new_client_cookie;
-        conn.set_peer_name(new_peer_name);
+        assert(conn.get_peer_type() == new_peer_name.type());
+        if (conn.get_peer_id() == entity_name_t::NEW) {
+          conn.set_peer_id(new_peer_name.num());
+        }
         connection_features = new_conn_features;
         return send_server_ident();
       }
