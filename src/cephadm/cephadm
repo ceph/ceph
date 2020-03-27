@@ -131,6 +131,10 @@ class Monitoring(object):
             "memory": "1GB",
             "args": [
                 "--no-collector.timex",
+                "--path.rootfs=/rootfs",
+                "--path.sysfs=/host/sys",
+                "--path.procfs=/host/proc",
+                "'--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'"
             ],
         },
         "grafana": {
