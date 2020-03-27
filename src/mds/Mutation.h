@@ -24,6 +24,7 @@
 
 #include "SimpleLock.h"
 #include "Capability.h"
+#include "BatchOp.h"
 
 #include "common/TrackedOp.h"
 #include "messages/MClientRequest.h"
@@ -381,8 +382,13 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
-  bool is_batch_op();
   int compare_paths();
+
+  bool is_batch_op();
+  bool is_batch_head() {
+    return batch_op_map != nullptr;
+  }
+  std::unique_ptr<BatchOp> release_batch_op();
 
   void print(std::ostream &out) const override;
   void dump(ceph::Formatter *f) const override;
@@ -435,7 +441,7 @@ struct MDRequestImpl : public MutationImpl {
   // indicates how may retries of request have been made
   int retry = 0;
 
-  bool is_batch_head = false;
+  std::map<int, std::unique_ptr<BatchOp> > *batch_op_map = nullptr;
 
   // indicator for vxattr osdmap update
   bool waited_for_osdmap = false;
