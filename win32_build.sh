@@ -28,6 +28,24 @@ BUILD_ZIP=${BUILD_ZIP:-}
 # Unfortunately we cannot use pdb symbols when cross compiling. cv2pdb
 # well as llvm rely on mspdb*.dll in order to support this proprietary format.
 STRIP_ZIPPED=${STRIP_ZIPPED:-}
+# Allow for OS specific customizations through the OS flag.
+# Valid options are currently "ubuntu" and "suse".
+
+OS=${OS}
+if [[ -z $OS ]]; then
+    if [[ -f /etc/os-release ]] && \
+            $(grep -q "^NAME=\".*SUSE.*\"" /etc/os-release);  then
+        OS="suse"
+    elif [[ -f /etc/lsb-release ]] && \
+            $(grep -q "^DISTRIB_ID=Ubuntu" /etc/lsb-release);  then
+        OS="ubuntu"
+    else
+        echo "Unsupported Linux distro, only SUSE and Ubuntu are currently \
+supported. Set the OS variable to override"
+        exit 1
+    fi
+fi
+export OS="$OS"
 
 # We'll have to be explicit here since auto-detecting doesn't work
 # properly when cross compiling.
@@ -70,12 +88,18 @@ fi
 
 if [[ ! -f ${depsToolsetDir}/completed ]]; then
     echo "Preparing dependencies: $DEPS_DIR"
-    NUM_WORKERS=$NUM_WORKERS DEPS_DIR=$DEPS_DIR \
+    NUM_WORKERS=$NUM_WORKERS DEPS_DIR=$DEPS_DIR OS="$OS"\
         "$SCRIPT_DIR/win32_deps_build.sh"
 fi
 
 mkdir -p $BUILD_DIR
 cd $BUILD_DIR
+
+# Due to distribution specific mingw settings, the mingw.cmake file
+# must be built prior to running cmake.
+MINGW_CMAKE_FILE="$BUILD_DIR/mingw32.cmake"
+MINGW_POSIX_FLAGS=1
+source "$SCRIPT_DIR/mingw_conf.sh"
 
 if [[ -z $SKIP_CMAKE ]]; then
 # We'll need to cross compile Boost.Python before enabling
@@ -98,7 +122,7 @@ fi
 # symbols. Until we fix the dependencies (which are either unspecified
 # or circular), we'll have to stick to static linking.
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
-      -D CMAKE_TOOLCHAIN_FILE="$CEPH_DIR/cmake/toolchains/mingw32.cmake" \
+      -D CMAKE_TOOLCHAIN_FILE="$MINGW_CMAKE_FILE" \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
       -D WITH_GSSAPI=OFF -D WITH_FUSE=OFF -D WITH_XFS=OFF \
       -D WITH_BLUESTORE=OFF -D WITH_LEVELDB=OFF \
@@ -139,10 +163,7 @@ if [[ -z $SKIP_BUILD ]]; then
 fi
 
 if [[ -z $SKIP_DLL_COPY ]]; then
-    # Hopefully this path will be the same across distros.
-    # This depends on the thread library, we're currently using posix.
-    mingwVersion=`x86_64-w64-mingw32-c++-posix -dumpversion`
-    mingwTargetLibDir="/usr/lib/gcc/x86_64-w64-mingw32/$mingwVersion"
+    # To adjust mingw paths, see 'mingw_conf.sh'.
     required_dlls=(
         $zlibDir/zlib1.dll
         $lz4Dir/lib/dll/liblz4-1.dll
@@ -150,7 +171,7 @@ if [[ -z $SKIP_DLL_COPY ]]; then
         $sslDir/bin/libssl-1_1-x64.dll
         $mingwTargetLibDir/libstdc++-6.dll
         $mingwTargetLibDir/libgcc_s_seh-1.dll
-        /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll)
+        $mingwLibpthreadDir/libwinpthread-1.dll)
     echo "Copying required dlls to $binDir."
     cp ${required_dlls[@]} $binDir
 fi
@@ -160,8 +181,8 @@ if [[ -n $BUILD_ZIP ]]; then
         rm -rf $strippedBinDir
         cp -r $binDir $strippedBinDir
         echo "Stripping debug symbols from $strippedBinDir binaries."
-        x86_64-w64-mingw32-strip $strippedBinDir/*.exe \
-                                 $strippedBinDir/*.dll
+        $MINGW_STRIP $strippedBinDir/*.exe \
+                     $strippedBinDir/*.dll
     fi
     echo "Building zip archive $ZIP_DEST."
     zip -r $ZIP_DEST $strippedBinDir
