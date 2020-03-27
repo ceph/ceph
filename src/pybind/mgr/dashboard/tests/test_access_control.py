@@ -328,13 +328,9 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_create_duplicate_user(self):
         self.test_create_user()
-
-        with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('ac-user-create', username='admin', password='admin',
-                          force_password=True)
-
-        self.assertEqual(ctx.exception.retcode, -errno.EEXIST)
-        self.assertEqual(str(ctx.exception), "User 'admin' already exists")
+        ret = self.exec_cmd('ac-user-create', username='admin', password='admin',
+                            force_password=True)
+        self.assertEqual(ret, "User 'admin' already exists")
 
     def test_create_users_with_dne_role(self):
         # one time call to setup our persistent db
