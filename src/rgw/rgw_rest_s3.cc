@@ -283,6 +283,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       bool exists;
       string val = s->info.args.get(p->param, &exists);
       if (exists) {
+	/* reject unauthenticated response header manipulation, see
+	 * https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html */
+	if (s->auth.identity->is_anonymous()) {
+	  return -EPERM;
+	}
 	if (strcmp(p->param, "response-content-type") != 0) {
 	  response_attrs[p->http_attr] = val;
 	} else {
