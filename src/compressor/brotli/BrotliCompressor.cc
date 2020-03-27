@@ -5,7 +5,7 @@
 
 #define MAX_LEN (CEPH_PAGE_SIZE)
 
-int BrotliCompressor::compress(const bufferlist &in, bufferlist &out) 
+int BrotliCompressor::compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message) 
 {
   BrotliEncoderState* s = BrotliEncoderCreateInstance(nullptr,
                                                       nullptr,
@@ -49,7 +49,8 @@ int BrotliCompressor::compress(const bufferlist &in, bufferlist &out)
 
 int BrotliCompressor::decompress(bufferlist::const_iterator &p,
                                  size_t compressed_size,
-                                 bufferlist &out) 
+                                 bufferlist &out,
+				 boost::optional<int32_t> compressor_message) 
 {
   BrotliDecoderState* s = BrotliDecoderCreateInstance(nullptr,
                                                       nullptr,
@@ -88,8 +89,8 @@ int BrotliCompressor::decompress(bufferlist::const_iterator &p,
   return 0;
 }
 
-int BrotliCompressor::decompress(const bufferlist &in, bufferlist &out) 
+int BrotliCompressor::decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message) 
 {  
   auto i = std::cbegin(in);
-  return decompress(i, in.length(), out);
+  return decompress(i, in.length(), out, compressor_message);
 }
