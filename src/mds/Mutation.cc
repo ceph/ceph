@@ -426,6 +426,15 @@ bool MDRequestImpl::is_batch_op()
      client_request->get_filepath().depth() == 0);
 }
 
+std::unique_ptr<BatchOp> MDRequestImpl::release_batch_op()
+{
+  int mask = client_request->head.args.getattr.mask;
+  auto it = batch_op_map->find(mask);
+  std::unique_ptr<BatchOp> bop = std::move(it->second);
+  batch_op_map->erase(it);
+  return bop;
+}
+
 int MDRequestImpl::compare_paths()
 {
   if (dir_root[0] < dir_root[1])
