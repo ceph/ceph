@@ -529,20 +529,6 @@ def ceph_mons(ctx, config):
         )
         ctx.ceph[cluster_name].config_file = r.stdout.getvalue()
 
-        # refresh ceph.conf files for all mons + first mgr
-        for remote, roles in ctx.cluster.remotes.items():
-            for mon in [r for r in roles
-                        if teuthology.is_type('mon', cluster_name)(r)]:
-                c_, _, id_ = teuthology.split_role(mon)
-                _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'daemon', 'reconfig',
-                    'mon.' + id_,
-                ])
-        _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
-            'ceph', 'orch', 'daemon', 'reconfig',
-            'mgr.' + ctx.ceph[cluster_name].first_mgr,
-        ])
-
         yield
 
     finally:
