@@ -28,7 +28,7 @@ class TestMetaInjection(CephFSTestCase):
         # checkout meta_out after import it
         ori_mds5 = self.mount_a.run_shell(["md5sum", "/tmp/meta_obj"]).stdout.getvalue().strip().split()
         chg_mds5 = self.mount_a.run_shell(["md5sum", "/tmp/meta_obj_chg"]).stdout.getvalue().strip().split()
-        print ori_mds5," ==> ", chg_mds5
+        print(ori_mds5," ==> ", chg_mds5)
         self.assertEqual(len(ori_mds5), 2)
         self.assertEqual(len(chg_mds5), 2)
         self.assertEqual(ori_mds5[0], chg_mds5[0])
