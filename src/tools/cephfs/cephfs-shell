@@ -1357,7 +1357,6 @@ class CephFSShell(Cmd):
         else:
             self.perror("snapshot can only be created or deleted; check - "
                         "help snap")
-            self.exit_code = e.get_error_code()
 
     def do_help(self, line):
         """
