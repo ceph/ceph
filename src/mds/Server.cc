@@ -82,6 +82,7 @@ class Batch_Getattr_Lookup : public BatchOp {
 protected:
   Server* server;
   ceph::ref_t<MDRequestImpl> mdr;
+  std::vector<ceph::ref_t<MDRequestImpl>> batch_reqs;
   int res = 0;
 public:
   Batch_Getattr_Lookup(Server* s, const ceph::ref_t<MDRequestImpl>& r)
@@ -91,32 +92,43 @@ public:
     else
       mdr->batch_op_map = &mdr->in[0]->batch_ops;
   }
-  void add_request(const ceph::ref_t<MDRequestImpl>& m) override {
-    mdr->batch_reqs.push_back(m);
+  void add_request(const ceph::ref_t<MDRequestImpl>& r) override {
+    batch_reqs.push_back(r);
   }
-  void set_request(const ceph::ref_t<MDRequestImpl>& m) override {
-    mdr = m;
+  ceph::ref_t<MDRequestImpl> find_new_head() override {
+    while (!batch_reqs.empty()) {
+      auto r = std::move(batch_reqs.back());
+      batch_reqs.pop_back();
+      if (r->killed)
+	continue;
+
+      r->batch_op_map = mdr->batch_op_map;
+      mdr->batch_op_map = nullptr;
+      mdr = r;
+      return mdr;
+    }
+    return nullptr;
   }
   void _forward(mds_rank_t t) override {
     MDCache* mdcache = server->mdcache;
     mdcache->mds->forward_message_mds(mdr->release_client_request(), t);
     mdr->set_mds_stamp(ceph_clock_now());
-    for (auto& m : mdr->batch_reqs) {
+    for (auto& m : batch_reqs) {
       if (!m->killed)
 	mdcache->request_forward(m, t);
     }
-    mdr->batch_reqs.clear();
+    batch_reqs.clear();
   }
   void _respond(int r) override {
     mdr->set_mds_stamp(ceph_clock_now());
-    for (auto& m : mdr->batch_reqs) {
+    for (auto& m : batch_reqs) {
       if (!m->killed) {
 	m->tracei = mdr->tracei;
 	m->tracedn = mdr->tracedn;
 	server->respond_to_request(m, r);
       }
     }
-    mdr->batch_reqs.clear();
+    batch_reqs.clear();
     server->reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
   }
   void print(std::ostream& o) {
@@ -2429,31 +2441,12 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     if (mdr->is_batch_head()) {
       int mask = mdr->client_request->head.args.getattr.mask;
       auto it = mdr->batch_op_map->find(mask);
-
-      if (!mdr->batch_reqs.empty()) {
-	MDRequestRef new_batch_head;
-	for (auto itr = mdr->batch_reqs.cbegin(); itr != mdr->batch_reqs.cend();) {
-	  auto req = *itr;
-	  itr = mdr->batch_reqs.erase(itr);
-	  if (!req->killed) {
-	    new_batch_head = req;
-	    break;
-	  }
-	}
-	if (!new_batch_head) {
-	  mdr->batch_op_map->erase(it);
-	  return;
-	}
-
-	new_batch_head->batch_reqs = std::move(mdr->batch_reqs);
-	new_batch_head->batch_op_map = mdr->batch_op_map;
-	mdr->batch_op_map = nullptr;
-	it->second->set_request(new_batch_head);
-	mdr = new_batch_head;
-      } else {
+      auto new_batch_head = it->second->find_new_head();
+      if (!new_batch_head) {
 	mdr->batch_op_map->erase(it);
 	return;
       }
+      mdr = std::move(new_batch_head);
     } else {
       return;
     }
