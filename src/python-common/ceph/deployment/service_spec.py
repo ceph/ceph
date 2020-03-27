@@ -488,6 +488,18 @@ class NFSServiceSpec(ServiceSpec):
         if not self.pool:
             raise ServiceSpecValidationError('Cannot add NFS: No Pool specified')
 
+    def rados_config_name(self):
+        # type: () -> str
+        return 'conf-' + self.service_name()
+
+    def rados_config_location(self):
+        # type: () -> str
+        url = 'rados://' + self.pool + '/'
+        if self.namespace:
+            url += self.namespace + '/'
+        url += self.rados_config_name()
+        return url
+
 
 class RGWSpec(ServiceSpec):
     """

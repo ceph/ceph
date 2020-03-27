@@ -26,18 +26,6 @@ class NFSGanesha(object):
         # type: () -> str
         return '%s.%s' % (self.spec.service_type, self.daemon_id)
 
-    def get_rados_config_name(self):
-        # type: () -> str
-        return 'conf-' + self.spec.service_name()
-
-    def get_rados_config_url(self):
-        # type: () -> str
-        url = 'rados://' + self.spec.pool + '/'
-        if self.spec.namespace:
-            url += self.spec.namespace + '/'
-        url += self.get_rados_config_name()
-        return url
-
     def get_keyring_entity(self):
         # type: () -> str
         return utils.name_to_config_section(self.get_rados_user())
@@ -84,7 +72,7 @@ class NFSGanesha(object):
 
     def create_rados_config_obj(self, clobber=False):
         # type: (Optional[bool]) -> None
-        obj = self.get_rados_config_name()
+        obj = self.spec.rados_config_name()
 
         with self.mgr.rados.open_ioctx(self.spec.pool) as ioctx:
             if self.spec.namespace:
@@ -114,7 +102,7 @@ RADOS_URLS {{
 
 %url    {url}
 '''.format(user=self.get_rados_user(),
-           url=self.get_rados_config_url())
+           url=self.spec.rados_config_location())
 
     def get_cephadm_config(self):
         # type: () -> Dict
