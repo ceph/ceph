@@ -108,7 +108,7 @@ class Gateway(multisite.Gateway):
     def stop(self):
         """ stop the gateway """
         assert(self.cluster)
-        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', self.id]
+        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', str(self.port)]
         bash(cmd)
 
 def gen_access_key():
