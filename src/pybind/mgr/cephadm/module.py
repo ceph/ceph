@@ -1895,6 +1895,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if dd.service_name() in self.spec_store.specs:
                     sm[n].size = self._get_spec_size(spec)
                     sm[n].created = self.spec_store.spec_created[dd.service_name()]
+                    if service_type == 'nfs':
+                        spec = cast(NFSServiceSpec, spec)
+                        sm[n].rados_config_location = spec.rados_config_location()
                 else:
                     sm[n].size = 0
                 if dd.status == 1:
@@ -1917,6 +1920,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 size=self._get_spec_size(spec),
                 running=0,
             )
+            if service_type == 'nfs':
+                spec = cast(NFSServiceSpec, spec)
+                sm[n].rados_config_location = spec.rados_config_location()
         return list(sm.values())
 
     @trivial_completion
