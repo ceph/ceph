@@ -28,7 +28,7 @@ class ZstdCompressor : public Compressor {
  public:
   ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {}
 
-  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst) override {
+  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> &compressor_message) override {
     ZSTD_CStream *s = ZSTD_createCStream();
     ZSTD_initCStream_srcSize(s, COMPRESSION_LEVEL, src.length());
     auto p = src.begin();
@@ -63,14 +63,15 @@ class ZstdCompressor : public Compressor {
     return 0;
   }
 
-  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst) override {
+  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> compressor_message) override {
     auto i = std::cbegin(src);
-    return decompress(i, src.length(), dst);
+    return decompress(i, src.length(), dst, compressor_message);
   }
 
   int decompress(ceph::buffer::list::const_iterator &p,
 		 size_t compressed_len,
-		 ceph::buffer::list &dst) override {
+		 ceph::buffer::list &dst,
+		 boost::optional<int32_t> compressor_message) override {
     if (compressed_len < 4) {
       return -1;
     }
