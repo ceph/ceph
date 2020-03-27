@@ -3741,24 +3741,17 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   if (mask & CEPH_STAT_RSTAT)
     want_auth = true; // set want_auth for CEPH_STAT_RSTAT mask
 
-  CInode *ref = rdlock_path_pin_ref(mdr, want_auth, false);
-  if (!ref)
-    return;
+  if (!mdr->is_batch_head() && mdr->can_batch()) {
+    CF_MDS_MDRContextFactory cf(mdcache, mdr, false);
+    int r = mdcache->path_traverse(mdr, cf, mdr->get_filepath(),
+				   (want_auth ? MDS_TRAVERSE_WANT_AUTH : 0),
+				   &mdr->dn[0], &mdr->in[0]);
+    if (r > 0)
+      return; // delayed
 
-  mdr->getattr_caps = mask;
-
-  if (mdr->snapid == CEPH_NOSNAP && !mdr->is_batch_head() && mdr->is_batch_op()) {
-    if (!is_lookup) {
-      mdr->pin(ref);
-      auto em = ref->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
-      if (em.second) {
-	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
-      } else {
-	dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
-	em.first->second->add_request(mdr);
-	return;
-      }
-    } else {
+    if (r < 0) {
+      // fall-thru. let rdlock_path_pin_ref() check again.
+    } else if (is_lookup) {
       CDentry* dn = mdr->dn[0].back();
       mdr->pin(dn);
       auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
@@ -3769,8 +3762,25 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 	em.first->second->add_request(mdr);
 	return;
       }
+    } else {
+      CInode *in = mdr->in[0];
+      mdr->pin(in);
+      auto em = in->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
+      if (em.second) {
+	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
+      } else {
+	dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
+	em.first->second->add_request(mdr);
+	return;
+      }
     }
   }
+
+  CInode *ref = rdlock_path_pin_ref(mdr, want_auth, false);
+  if (!ref)
+    return;
+
+  mdr->getattr_caps = mask;
 
   /*
    * if client currently holds the EXCL cap on a field, do not rdlock
