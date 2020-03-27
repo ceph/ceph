@@ -1401,7 +1401,7 @@ class CephFSShell(Cmd):
 
                 poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n"
                         "Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: "
-                        "{:o}/{}\tUid: {:d}\tGid: {:d}\n\Access: {}\nModify: "
+                        "{:o}/{}\tUid: {:d}\tGid: {:d}\nAccess: {}\nModify: "
                         "{}\nChange: {}".format(path.decode('utf-8'),
                         stat.st_size, stat.st_blocks, stat.st_blksize,
                         stat.st_dev, stat.st_ino, stat.st_nlink, stat.st_mode,
