@@ -50,7 +50,7 @@ public:
 
   bool is_compressed() { return compressed; }
   vector<compression_block>& get_compression_blocks() { return blocks; }
-
+  int get_zlib_winsize(){ return cct->_conf->compressor_zlib_winsize; }
 }; /* RGWPutObj_Compress */
 
 #endif /* CEPH_RGW_COMPRESSION_H */

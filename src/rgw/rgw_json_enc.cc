@@ -2049,6 +2049,7 @@ void RGWCompressionInfo::dump(Formatter *f) const
 {
   f->dump_string("compression_type", compression_type);
   f->dump_unsigned("orig_size", orig_size);
+  f->dump_int("zlib_winsize", zlib_winsize);
   ::encode_json("blocks", blocks, f);
 }
 

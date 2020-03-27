@@ -73,6 +73,10 @@ public:
   QatAccel qat_accel;
 #endif
 
+  union {
+    int zlib_winsize = -15;
+  };
+
   static const char* get_comp_alg_name(int a);
   static boost::optional<CompressionAlgorithm> get_comp_alg_type(const std::string &s);
 

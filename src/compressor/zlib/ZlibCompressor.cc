@@ -64,7 +64,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
-  ret = deflateInit2(&strm, cct->_conf->compressor_zlib_level, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
+  ret = deflateInit2(&strm, cct->_conf->compressor_zlib_level, Z_DEFLATED, cct->_conf->compressor_zlib_winsize, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
   if (ret != Z_OK) {
     dout(1) << "Compression init error: init return "
          << ret << " instead of Z_OK" << dendl;
@@ -203,7 +203,7 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
   strm.next_in = Z_NULL;
 
   // choose the variation of compressor
-  ret = inflateInit2(&strm, ZLIB_DEFAULT_WIN_SIZE);
+  ret = inflateInit2(&strm, zlib_winsize);
   if (ret != Z_OK) {
     dout(1) << "Decompression init error: init return "
          << ret << " instead of Z_OK" << dendl;

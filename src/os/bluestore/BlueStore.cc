@@ -9968,6 +9968,9 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
     _set_compression_alert(false, alg_name);
     r = -EIO;
   } else {
+    if(alg == Compressor::COMP_ALG_ZLIB) {
+      cp->zlib_winsize = chdr.zlib_winsize;
+    }
     r = cp->decompress(i, chdr.length, *result);
     if (r < 0) {
       derr << __func__ << " decompression failed with exit code " << r << dendl;
@@ -13444,6 +13447,9 @@ int BlueStore::_do_alloc_write(
 	bluestore_compression_header_t chdr;
 	chdr.type = c->get_type();
 	chdr.length = t.length();
+	if(chdr.type == Compressor::COMP_ALG_ZLIB) {
+	  chdr.zlib_winsize = cct->_conf->compressor_zlib_winsize;
+	}
 	encode(chdr, wi.compressed_bl);
 	wi.compressed_bl.claim_append(t);
 

@@ -128,6 +128,9 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
       iter_in_bl.seek(ofs_in_bl);
     }
     iter_in_bl.copy(first_block->len, tmp);
+    if(cs_info->compression_type == "zlib"){
+      compressor->zlib_winsize = cs_info->zlib_winsize;
+    }
     int cr = compressor->decompress(tmp, out_bl);
     if (cr < 0) {
       lderr(cct) << "Decompression failed with exit code " << cr << dendl;

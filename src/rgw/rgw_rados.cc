@@ -3848,6 +3848,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = cb.get_data_len();
+    if(cs_info.compression_type == "zlib") {
+      cs_info.zlib_winsize = compressor->get_zlib_winsize();
+    }
     cs_info.blocks = move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;

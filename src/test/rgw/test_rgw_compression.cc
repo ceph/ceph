@@ -129,6 +129,9 @@ TEST(Compress, LimitedChunkSize)
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = s;
+    if(cs_info.compression_type == "zlib") {
+      cs_info.zlib_winsize = compressor.get_zlib_winsize();
+    }
     cs_info.blocks = move(compressor.get_compression_blocks());
 
     ut_get_sink_size d_sink;
@@ -167,6 +170,9 @@ TEST(Compress, BillionZeros)
   RGWCompressionInfo cs_info;
   cs_info.compression_type = plugin->get_type_name();
   cs_info.orig_size = size*1000;
+  if(cs_info.compression_type == "zlib") {
+    cs_info.zlib_winsize = compressor.get_zlib_winsize();
+  }
   cs_info.blocks = move(compressor.get_compression_blocks());
 
   ut_get_sink d_sink;
