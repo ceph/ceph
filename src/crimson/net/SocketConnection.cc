@@ -114,9 +114,9 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
 
 void
 SocketConnection::start_connect(const entity_addr_t& _peer_addr,
-                                const entity_type_t& _peer_type)
+                                const entity_name_t& _peer_name)
 {
-  protocol->start_connect(_peer_addr, _peer_type);
+  protocol->start_connect(_peer_addr, _peer_name);
 }
 
 void

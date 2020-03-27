@@ -78,7 +78,13 @@ public:
   /// or a new pending connection
   virtual ConnectionRef
   connect(const entity_addr_t& peer_addr,
-          const entity_type_t& peer_type) = 0;
+          const entity_name_t& peer_name) = 0;
+
+  ConnectionRef
+  connect(const entity_addr_t& peer_addr,
+          const entity_type_t& peer_type) {
+    return connect(peer_addr, entity_name_t(peer_type, -1));
+  }
 
   // wait for messenger shutdown
   virtual seastar::future<> wait() = 0;

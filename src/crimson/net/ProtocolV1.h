@@ -19,7 +19,7 @@ class ProtocolV1 final : public Protocol {
 
  private:
   void start_connect(const entity_addr_t& peer_addr,
-                     const entity_type_t& peer_type) override;
+                     const entity_name_t& peer_name) override;
 
   void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr) override;

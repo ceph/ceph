@@ -132,7 +132,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
 }
 
 crimson::net::ConnectionRef
-SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
+SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& peer_name)
 {
   assert(seastar::engine().cpu_id() == master_sid);
 
@@ -146,7 +146,7 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
   }
   SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
       *this, *dispatcher, peer_addr.is_msgr2());
-  conn->start_connect(peer_addr, peer_type);
+  conn->start_connect(peer_addr, peer_name);
   return conn->shared_from_this();
 }
 
