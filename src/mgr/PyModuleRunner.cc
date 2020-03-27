@@ -73,6 +73,26 @@ int PyModuleRunner::serve()
   return r;
 }
 
+void PyModuleRunner::stop()
+{
+  ceph_assert(pClassInstance != nullptr);
+
+  Gil gil(py_module->pMyThreadState, true);
+
+  auto pValue = PyObject_CallMethod(pClassInstance,
+      const_cast<char*>("stop"), nullptr);
+
+  if (pValue != NULL) {
+    Py_DECREF(pValue);
+  } else {
+    derr << "Failed to invoke stop() on " << get_name() << dendl;
+    derr << handle_pyerror() << dendl;
+  }
+
+  dead = true;
+}
+
+
 void PyModuleRunner::shutdown()
 {
   ceph_assert(pClassInstance != nullptr);

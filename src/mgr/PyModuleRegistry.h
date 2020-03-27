@@ -110,6 +110,7 @@ public:
   }
 
   void active_shutdown();
+  void stop();
   void shutdown();
 
   std::vector<MonCommand> get_commands() const;

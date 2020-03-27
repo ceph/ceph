@@ -178,6 +178,7 @@ public:
       std::string *err);
 
   int init();
+  void stop();
   void shutdown();
 
   void start_one(PyModuleRef py_module);

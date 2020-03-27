@@ -467,6 +467,24 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   }));
 }
 
+void ActivePyModules::stop()
+{
+  std::lock_guard locker(lock);
+
+  for (auto& [name, module] : modules) {
+    lock.unlock();
+    dout(10) << "calling module " << name << " stop()" << dendl;
+    module->stop();
+    dout(10) << "module " << name << " stop() returned" << dendl;
+    lock.lock();
+  }
+
+  cmd_finisher.wait_for_empty();
+  cmd_finisher.stop();
+
+  modules.clear();
+}
+
 void ActivePyModules::shutdown()
 {
   std::lock_guard locker(lock);

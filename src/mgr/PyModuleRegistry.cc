@@ -229,6 +229,16 @@ void PyModuleRegistry::active_shutdown()
   }
 }
 
+void PyModuleRegistry::stop()
+{
+  dout(10) << __func__ << dendl;
+
+  std::lock_guard locker(lock);
+  if (active_modules != nullptr) {
+    active_modules->stop();
+  }
+}
+
 void PyModuleRegistry::shutdown()
 {
   std::lock_guard locker(lock);

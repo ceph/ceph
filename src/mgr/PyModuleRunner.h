@@ -53,6 +53,7 @@ protected:
 
 public:
   int serve();
+  void stop();
   void shutdown();
   void log(const std::string &record);
 
