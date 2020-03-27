@@ -27,7 +27,7 @@ def substitute_placeholders(input_dict, values_dict):
     input_dict = copy.deepcopy(input_dict)
 
     def _substitute(input_dict, values_dict):
-        for key, value in input_dict.items():
+        for key, value in list(input_dict.items()):
             if isinstance(value, dict):
                 _substitute(value, values_dict)
             elif isinstance(value, Placeholder):

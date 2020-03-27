@@ -3,6 +3,9 @@ import os
 import re
 import shutil
 import subprocess
+
+from six import ensure_str
+
 import time
 
 from teuthology import misc
@@ -60,10 +63,12 @@ def ls_remote(url, ref):
 
     :returns: The sha1 if found; else None
     """
+    sha1 = None
     cmd = "git ls-remote {} {}".format(url, ref)
     result = subprocess.check_output(
         cmd, shell=True).split()
-    sha1 = result[0] if result else None
+    if result:
+        sha1 = ensure_str(result[0])
     log.debug("{} -> {}".format(cmd, sha1))
     return sha1
 
@@ -127,7 +132,7 @@ def clone_repo(repo_url, dest_path, branch, shallow=True):
         stderr=subprocess.STDOUT)
 
     not_found_str = "Remote branch %s not found" % branch
-    out = proc.stdout.read()
+    out = ensure_str(proc.stdout.read())
     result = proc.wait()
     # Newer git versions will bail if the branch is not found, but older ones
     # will not. Fortunately they both output similar text.
@@ -224,7 +229,7 @@ def fetch(repo_path):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
     if proc.wait() != 0:
-        out = proc.stdout.read()
+        out = ensure_str(proc.stdout.read())
         log.error(out)
         raise GitError("git fetch failed!")
 
@@ -252,7 +257,7 @@ def fetch_branch(repo_path, branch, shallow=True):
         stderr=subprocess.STDOUT)
     if proc.wait() != 0:
         not_found_str = "fatal: couldn't find remote ref %s" % branch
-        out = proc.stdout.read()
+        out = ensure_str(proc.stdout.read())
         log.error(out)
         if not_found_str in out.lower():
             raise BranchNotFoundError(branch)

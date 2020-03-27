@@ -1,5 +1,6 @@
 import logging
 from copy import deepcopy
+from six import string_types as basestring
 
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider as lc_Provider
@@ -7,7 +8,6 @@ from libcloud.compute.types import Provider as lc_Provider
 import teuthology.orchestra.remote
 import teuthology.provision.cloud
 from teuthology.misc import canonicalize_hostname, decanonicalize_hostname
-
 
 log = logging.getLogger(__name__)
 

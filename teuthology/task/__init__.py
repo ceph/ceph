@@ -1,5 +1,7 @@
 import logging
 
+from six import string_types as basestring
+
 from teuthology.misc import deep_merge
 from teuthology.orchestra.cluster import Cluster
 

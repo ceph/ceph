@@ -6,7 +6,13 @@ import contextlib
 
 from datetime import datetime
 from mock import patch, call, ANY, DEFAULT
-from StringIO import StringIO
+from teuthology.util.compat import PY3
+if PY3:
+    from io import StringIO
+    from io import BytesIO
+else:
+    from io import BytesIO as StringIO
+    from io import BytesIO
 
 from teuthology.config import config, YamlConfig
 from teuthology.exceptions import ScheduleFailError
@@ -201,7 +207,7 @@ class TestScheduleSuite(object):
     @patch('teuthology.suite.util.has_packages_for_distro')
     @patch('teuthology.suite.util.get_package_versions')
     @patch('teuthology.suite.util.get_install_task_flavor')
-    @patch('__builtin__.open')
+    @patch('teuthology.suite.run.open')
     @patch('teuthology.suite.run.build_matrix')
     @patch('teuthology.suite.util.git_ls_remote')
     @patch('teuthology.suite.util.package_version_for_hash')
@@ -236,7 +242,7 @@ class TestScheduleSuite(object):
         m_open.side_effect = [
             StringIO(frag1_read_output),
             StringIO(frag2_read_output),
-            contextlib.closing(StringIO())
+            contextlib.closing(BytesIO())
         ]
         m_get_install_task_flavor.return_value = 'basic'
         m_get_package_versions.return_value = dict()
@@ -277,7 +283,7 @@ class TestScheduleSuite(object):
     @patch('teuthology.suite.util.has_packages_for_distro')
     @patch('teuthology.suite.util.get_package_versions')
     @patch('teuthology.suite.util.get_install_task_flavor')
-    @patch('__builtin__.open', create=True)
+    @patch('teuthology.suite.run.open', create=True)
     @patch('teuthology.suite.run.build_matrix')
     @patch('teuthology.suite.util.git_ls_remote')
     @patch('teuthology.suite.util.package_version_for_hash')
@@ -332,7 +338,7 @@ class TestScheduleSuite(object):
     @patch('teuthology.suite.util.has_packages_for_distro')
     @patch('teuthology.suite.util.get_package_versions')
     @patch('teuthology.suite.util.get_install_task_flavor')
-    @patch('__builtin__.open', create=True)
+    @patch('teuthology.suite.run.open', create=True)
     @patch('teuthology.suite.run.build_matrix')
     @patch('teuthology.suite.util.git_ls_remote')
     @patch('teuthology.suite.util.package_version_for_hash')
@@ -369,7 +375,7 @@ class TestScheduleSuite(object):
         m_open.side_effect = [
             StringIO('field: val\n') for i in range(NUM_FAILS+1)
         ] + [
-            contextlib.closing(StringIO())
+            contextlib.closing(BytesIO())
         ] 
         m_get_install_task_flavor.return_value = 'basic'
         m_get_package_versions.return_value = dict()

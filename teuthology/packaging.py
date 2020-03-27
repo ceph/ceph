@@ -6,8 +6,11 @@ import requests
 from teuthology.util.compat import urljoin, urlencode
 
 from collections import OrderedDict
-from cStringIO import StringIO
-
+from teuthology.util.compat import PY3
+if PY3:
+    from io import StringIO
+else:
+    from io import BytesIO as StringIO
 from teuthology import repo_utils
 
 from teuthology.config import config
@@ -970,7 +973,7 @@ class ShamanProject(GitbuilderProject):
     def _get_repo(self):
         resp = requests.get(self.repo_url)
         resp.raise_for_status()
-        return resp.text
+        return str(resp.text)
 
     def _install_rpm_repo(self):
         dist_release = self.dist_release

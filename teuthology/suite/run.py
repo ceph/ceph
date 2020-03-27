@@ -361,7 +361,7 @@ class Run(object):
             base_frag_paths = [
                 util.strip_fragment_path(x) for x in fragment_paths
             ]
-            limit = self.args.limit
+            limit = self.args.limit or 0
             if limit > 0 and len(jobs_to_schedule) >= limit:
                 log.info(
                     'Stopped after {limit} jobs due to --limit={limit}'.format(
@@ -548,7 +548,7 @@ class Run(object):
             log.debug("Base job config:\n%s" % self.base_config)
 
         with open(base_yaml_path, 'w+b') as base_yaml:
-            base_yaml.write(str(self.base_config))
+            base_yaml.write(str(self.base_config).encode())
 
         if jobs_to_schedule:
             self.write_rerun_memo()

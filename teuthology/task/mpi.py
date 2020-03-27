@@ -6,6 +6,7 @@ import logging
 import re
 
 from teuthology import misc as teuthology
+from six import string_types as basestring
 
 log = logging.getLogger(__name__)
 

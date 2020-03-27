@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 export LC_ALL=C
 if [ $# -eq 0 ]; then
@@ -19,7 +19,13 @@ case "$(uname -s)" in
 Linux)
     case "$(lsb_release --id --short)" in
     Ubuntu|Debian)
-        for package in qemu-utils python-dev libssl-dev python-pip python-virtualenv libev-dev libvirt-dev libmysqlclient-dev libffi-dev libyaml-dev ; do
+        # Ensure setuptools is installed
+        if [[ "$PYTHON" =~ "python2" ]]; then
+            deps=(qemu-utils python-dev libssl-dev python-pip python-virtualenv libev-dev libvirt-dev libmysqlclient-dev libffi-dev libyaml-dev)
+        else
+            deps=(qemu-utils python3-dev libssl-dev python-pip python3-virtualenv libev-dev libvirt-dev libmysqlclient-dev libffi-dev libyaml-dev)
+        fi
+        for package in ${deps[@]}; do
             if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
                 # add a space after old values
                 missing="${missing:+$missing }$package"

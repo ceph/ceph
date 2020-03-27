@@ -29,7 +29,7 @@ from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.opsys import DEFAULT_OS_VERSION
 
-from six import reraise
+from six import (reraise, ensure_str)
 
 log = logging.getLogger(__name__)
 
@@ -647,7 +647,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
     on when the main site goes up and down.
     """
     # read in the specified file
-    in_data = get_file(remote, path, False)
+    in_data = ensure_str(get_file(remote, path, False))
     out_data = ""
 
     first_line = True
@@ -685,7 +685,7 @@ def append_lines_to_file(remote, path, lines, sudo=False):
 
     temp_file_path = remote.mktemp()
 
-    data = get_file(remote, path, sudo)
+    data = ensure_str(get_file(remote, path, sudo))
 
     # add the additional data and write it back out, using a temp file
     # in case of connectivity of loss, and then mv it to the
@@ -705,7 +705,7 @@ def prepend_lines_to_file(remote, path, lines, sudo=False):
 
     temp_file_path = remote.mktemp()
 
-    data = get_file(remote, path, sudo)
+    data = ensure_str(get_file(remote, path, sudo))
 
     # add the additional data and write it back out, using a temp file
     # in case of connectivity of loss, and then mv it to the
@@ -749,7 +749,7 @@ def get_file(remote, path, sudo=False, dest_dir='/tmp'):
     Remote.get_file() instead.
     """
     local_path = remote.get_file(path, sudo=sudo, dest_dir=dest_dir)
-    with open(local_path) as file_obj:
+    with open(local_path, 'rb') as file_obj:
         file_data = file_obj.read()
     os.remove(local_path)
     return file_data
@@ -810,7 +810,7 @@ def get_scratch_devices(remote):
     """
     devs = []
     try:
-        file_data = get_file(remote, "/scratch_devs")
+        file_data = ensure_str(get_file(remote, "/scratch_devs"))
         devs = file_data.split()
     except Exception:
         devs = remote.sh('ls /dev/[sv]d?').strip().split('\n')
@@ -1144,11 +1144,11 @@ def _ssh_keyscan(hostname):
     )
     p.wait()
     for line in p.stderr.readlines():
-        line = line.strip()
+        line = ensure_str(line.strip())
         if line and not line.startswith('#'):
             log.error(line)
     for line in p.stdout.readlines():
-        host, key = line.strip().split(' ', 1)
+        host, key = ensure_str(line.strip()).split(' ', 1)
         return key
 
 
@@ -1318,15 +1318,16 @@ def sh(command, log_limit=1024, cwd=None, env=None):
     truncated = False
     with proc.stdout:
         for line in iter(proc.stdout.readline, b''):
+            line = ensure_str(line)
             lines.append(line)
             line = line.strip()
             if len(line) > log_limit:
                 truncated = True
-                log.debug(str(line)[:log_limit] +
+                log.debug(line[:log_limit] +
                           "... (truncated to the first " + str(log_limit) +
                           " characters)")
             else:
-                log.debug(str(line))
+                log.debug(line)
     output = "".join(lines)
     if proc.wait() != 0:
         if truncated:
@@ -1339,4 +1340,4 @@ def sh(command, log_limit=1024, cwd=None, env=None):
             cmd=command,
             output=output
         )
-    return output.decode('utf-8')
+    return output

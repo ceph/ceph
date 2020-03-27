@@ -1,7 +1,7 @@
 import logging
 import os
 
-from cStringIO import StringIO
+from io import StringIO
 
 from teuthology.exceptions import SELinuxError
 from teuthology.misc import get_archive_dir
