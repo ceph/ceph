@@ -16,7 +16,7 @@ class TestScrubControls(CephFSTestCase):
     Test basic scrub control operations such as abort, pause and resume.
     """
 
-    MDSS_REQUIRED = 1
+    MDSS_REQUIRED = 2
     CLIENTS_REQUIRED = 1
 
     def _abort_scrub(self, expected):
@@ -128,6 +128,34 @@ class TestScrubControls(CephFSTestCase):
         # sleep enough to fetch updated task status
         time.sleep(10)
         self._check_task_status("idle")
+
+    def test_scrub_task_status_on_mds_failover(self):
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+
+        (original_active, ) = self.fs.get_active_names()
+        original_standbys = self.mds_cluster.get_standby_daemons()
+        self._check_task_status("idle")
+
+        # Kill the rank 0
+        self.fs.mds_stop(original_active)
+
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+
+        def promoted():
+            active = self.fs.get_active_names()
+            return active and active[0] in original_standbys
+
+        log.info("Waiting for promotion of one of the original standbys {0}".format(
+            original_standbys))
+        self.wait_until_true(promoted, timeout=grace*2)
+
+        mgr_beacon_grace = float(self.fs.get_config("mgr_service_beacon_grace", service_type="mon"))
+
+        def status_check():
+            task_status = self.fs.get_task_status("scrub status")
+            return original_active not in task_status
+        self.wait_until_true(status_check, timeout=mgr_beacon_grace*2)
 
 class TestScrubChecks(CephFSTestCase):
     """
