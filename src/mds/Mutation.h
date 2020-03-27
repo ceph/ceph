@@ -384,7 +384,7 @@ struct MDRequestImpl : public MutationImpl {
   bool is_queued_for_replay() const;
   int compare_paths();
 
-  bool is_batch_op();
+  bool can_batch();
   bool is_batch_head() {
     return batch_op_map != nullptr;
   }
