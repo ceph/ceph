@@ -356,6 +356,12 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   case NOTIFY_OP_SPARSIFY:
     payload.reset(new SparsifyPayload());
     break;
+  case NOTIFY_OP_QUIESCE:
+    payload.reset(new QuiescePayload());
+    break;
+  case NOTIFY_OP_UNQUIESCE:
+    payload.reset(new UnquiescePayload());
+    break;
   }
 
   payload->decode(struct_v, iter);
@@ -389,6 +395,8 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(new UpdateFeaturesPayload(1, true)));
   o.push_back(new NotifyMessage(new MigratePayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(new SparsifyPayload(AsyncRequestId(ClientId(0, 1), 2), 1)));
+  o.push_back(new NotifyMessage(new QuiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(new NotifyMessage(new UnquiescePayload(AsyncRequestId(ClientId(0, 1), 2))));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -469,6 +477,12 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_SPARSIFY:
     out << "Sparsify";
+    break;
+  case NOTIFY_OP_QUIESCE:
+    out << "Quiesce";
+    break;
+  case NOTIFY_OP_UNQUIESCE:
+    out << "Unquiesce";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

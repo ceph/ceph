@@ -334,6 +334,57 @@ void ImageWatcher<I>::notify_header_update(librados::IoCtx &io_ctx,
 }
 
 template <typename I>
+void ImageWatcher<I>::notify_quiesce(uint64_t request_id, Context *on_finish) {
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": request_id="
+                             << request_id << dendl;
+
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  auto attempts = m_image_ctx.config.template get_val<uint64_t>(
+    "rbd_quiesce_notification_attempts");
+
+  notify_quiesce(async_request_id, attempts, on_finish);
+}
+
+template <typename I>
+void ImageWatcher<I>::notify_quiesce(const AsyncRequestId &async_request_id,
+                                     size_t attempts, Context *on_finish) {
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": async_request_id="
+                             << async_request_id << " attempts=" << attempts
+                             << dendl;
+
+  ceph_assert(attempts > 0);
+  auto on_notify = new LambdaContext(
+    [this, async_request_id, on_finish, attempts=attempts-1](int r) {
+      if (r == -ETIMEDOUT) {
+        ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": async_request_id="
+                                   << async_request_id << " timed out" << dendl;
+        if (attempts > 0) {
+          notify_quiesce(async_request_id, attempts, on_finish);
+          return;
+        }
+      }
+      if (r < 0) {
+        lderr(m_image_ctx.cct) << this << " failed to notify quiesce: "
+                               << cpp_strerror(r) << dendl;
+      }
+      on_finish->complete(r);
+    });
+
+  send_notify(new QuiescePayload(async_request_id), on_notify);
+}
+
+template <typename I>
+void ImageWatcher<I>::notify_unquiesce(uint64_t request_id, Context *on_finish) {
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": request_id="
+                             << request_id << dendl;
+
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  send_notify(new UnquiescePayload(async_request_id), on_finish);
+}
+
+template <typename I>
 void ImageWatcher<I>::schedule_cancel_async_requests() {
   auto ctx = new LambdaContext(
     boost::bind(&ImageWatcher<I>::cancel_async_requests, this));
@@ -343,12 +394,15 @@ void ImageWatcher<I>::schedule_cancel_async_requests() {
 template <typename I>
 void ImageWatcher<I>::cancel_async_requests() {
   std::unique_lock l{m_async_request_lock};
-  for (std::map<AsyncRequestId, AsyncRequest>::iterator iter =
-	 m_async_requests.begin();
-       iter != m_async_requests.end(); ++iter) {
-    iter->second.first->complete(-ERESTART);
+  for (auto iter = m_async_requests.begin(); iter != m_async_requests.end(); ) {
+    if (iter->second.second == nullptr) {
+      // Quiesce notify request. Skip.
+      iter++;
+    } else {
+      iter->second.first->complete(-ERESTART);
+      iter = m_async_requests.erase(iter);
+    }
   }
-  m_async_requests.clear();
 }
 
 template <typename I>
@@ -575,6 +629,85 @@ int ImageWatcher<I>::prepare_async_request(const AsyncRequestId& async_request_i
     }
   }
   return 0;
+}
+
+template <typename I>
+Context *ImageWatcher<I>::prepare_quiesce_request(
+    const AsyncRequestId &request, C_NotifyAck *ack_ctx) {
+  std::unique_lock locker{m_async_request_lock};
+
+  auto timeout = 2 * watcher::Notifier::NOTIFY_TIMEOUT / 1000;
+
+  if (m_async_pending.count(request) != 0) {
+    auto it = m_async_requests.find(request);
+    if (it != m_async_requests.end()) {
+      delete it->second.first;
+      it->second.first = ack_ctx;
+    } else {
+      m_task_finisher->queue(new C_ResponseMessage(ack_ctx), -ESTALE);
+    }
+    locker.unlock();
+
+    m_task_finisher->reschedule_event_after(Task(TASK_CODE_QUIESCE, request),
+                                            timeout);
+    return nullptr;
+  }
+
+  m_async_pending.insert(request);
+  m_async_requests[request] = AsyncRequest(ack_ctx, nullptr);
+  m_async_op_tracker.start_op();
+
+  auto unquiesce_ctx = new LambdaContext(
+    [this, request](int r) {
+      if (r == 0) {
+        ldout(m_image_ctx.cct, 10) << this << " quiesce request " << request
+                                   << " timed out" << dendl;
+      }
+
+      auto on_finish = new LambdaContext(
+        [this, request](int r) {
+          std::unique_lock async_request_locker{m_async_request_lock};
+          m_async_pending.erase(request);
+        });
+
+      m_image_ctx.state->notify_unquiesce(on_finish);
+    });
+
+  return new LambdaContext(
+    [this, request, unquiesce_ctx, timeout](int r) {
+      ceph_assert(r == 0);
+
+      m_task_finisher->add_event_after(Task(TASK_CODE_QUIESCE, request),
+                                       timeout, unquiesce_ctx);
+
+      auto ctx = remove_async_request(request);
+      ceph_assert(ctx != nullptr);
+      ctx = new C_ResponseMessage(static_cast<C_NotifyAck *>(ctx));
+      ctx->complete(r);
+      m_async_op_tracker.finish_op();
+    });
+}
+
+template <typename I>
+Context *ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &request) {
+  {
+    std::unique_lock async_request_locker{m_async_request_lock};
+    bool found = m_async_pending.erase(request);
+    if (!found) {
+      return nullptr;
+    }
+  }
+
+  bool canceled = m_task_finisher->cancel(Task(TASK_CODE_QUIESCE, request));
+  if (!canceled) {
+    return nullptr;
+  }
+
+  m_async_op_tracker.start_op();
+  return new LambdaContext(
+    [this](int r) {
+      m_async_op_tracker.finish_op();
+    });
 }
 
 template <typename I>
@@ -1026,6 +1159,39 @@ bool ImageWatcher<I>::handle_payload(const SparsifyPayload &payload,
 }
 
 template <typename I>
+bool ImageWatcher<I>::handle_payload(const QuiescePayload &payload,
+				     C_NotifyAck *ack_ctx) {
+  auto on_finish = prepare_quiesce_request(payload.async_request_id, ack_ctx);
+  if (on_finish == nullptr) {
+    ldout(m_image_ctx.cct, 10) << this << " duplicate quiesce request: "
+                               << payload.async_request_id << dendl;
+    return false;
+  }
+
+  ldout(m_image_ctx.cct, 10) << this << " quiesce request: "
+                             << payload.async_request_id << dendl;
+  m_image_ctx.state->notify_quiesce(on_finish);
+  return false;
+}
+
+template <typename I>
+bool ImageWatcher<I>::handle_payload(const UnquiescePayload &payload,
+				     C_NotifyAck *ack_ctx) {
+  auto on_finish = prepare_unquiesce_request(payload.async_request_id);
+  if (on_finish == nullptr) {
+    ldout(m_image_ctx.cct, 10) << this
+                               << " duplicate or unknown unquiesce request: "
+                               << payload.async_request_id << dendl;
+    return true;
+  }
+
+  ldout(m_image_ctx.cct, 10) << this << " unquiesce request: "
+                             << payload.async_request_id << dendl;
+  m_image_ctx.state->notify_unquiesce(on_finish);
+  return true;
+}
+
+template <typename I>
 bool ImageWatcher<I>::handle_payload(const UnknownPayload &payload,
 			             C_NotifyAck *ack_ctx) {
   std::shared_lock l{m_image_ctx.owner_lock};
@@ -1113,6 +1279,12 @@ void ImageWatcher<I>::process_payload(uint64_t notify_id, uint64_t handle,
   case NOTIFY_OP_SPARSIFY:
     complete = handle_payload(*(static_cast<SparsifyPayload *>(payload)), ctx);
     break;
+  case NOTIFY_OP_QUIESCE:
+    complete = handle_payload(*(static_cast<QuiescePayload *>(payload)), ctx);
+    break;
+  case NOTIFY_OP_UNQUIESCE:
+    complete = handle_payload(*(static_cast<UnquiescePayload *>(payload)), ctx);
+    break;
   default:
     ceph_assert(payload->get_notify_op() == static_cast<NotifyOp>(-1));
     complete = handle_payload(*(static_cast<UnknownPayload *>(payload)), ctx);
@@ -1144,6 +1316,7 @@ void ImageWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
   // if an image refresh is required, refresh before processing the request
   if (notify_message.check_for_refresh() &&
       m_image_ctx.state->is_refresh_required()) {
+
     m_image_ctx.state->refresh(
       new C_ProcessPayload(this, notify_id, handle,
                            std::move(notify_message.payload)));
