@@ -64,6 +64,7 @@ shell = None    # holds instance of class CephFSShell
 #
 #######################################################################
 
+
 def poutput(s, end='\n'):
     shell.poutput(s, end=end)
 
