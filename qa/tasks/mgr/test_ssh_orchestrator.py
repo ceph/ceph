@@ -1,5 +1,5 @@
 import logging
-from mgr_test_case import MgrTestCase
+from tasks.mgr.mgr_test_case import MgrTestCase
 
 log = logging.getLogger(__name__)
 
