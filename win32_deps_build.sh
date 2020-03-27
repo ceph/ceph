@@ -5,7 +5,7 @@ set -e
 SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
 
-num_vcpus=$(( $(lscpu -p | tail -1 | cut -d "," -f 1) + 1 ))
+num_vcpus=$(nproc)
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
 
 DEPS_DIR="${DEPS_DIR:-$SCRIPT_DIR/build.deps}"
