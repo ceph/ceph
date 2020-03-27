@@ -727,7 +727,7 @@ def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
     except PasswordPolicyException as ex:
         return -errno.EINVAL, '', str(ex)
     except UserAlreadyExists as ex:
-        return -errno.EEXIST, '', str(ex)
+        return 0, str(ex), ''
 
     if role:
         user.set_roles([role])
