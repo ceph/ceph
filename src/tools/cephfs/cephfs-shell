@@ -119,6 +119,7 @@ def to_bytes(param):
     elif param is None:
         return None
 
+
 def ls(path, opts=''):
     # opts tries to be like /bin/ls opts
     almost_all = 'A' in opts
