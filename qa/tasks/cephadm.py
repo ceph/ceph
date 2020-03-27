@@ -421,7 +421,7 @@ def ceph_bootstrap(ctx, config):
         for remote in ctx.cluster.remotes.keys():
             if remote == bootstrap_remote:
                 continue
-            log.info('Writing conf and keyring to %s' % remote.shortname)
+            log.info('Writing (initial) conf and keyring to %s' % remote.shortname)
             teuthology.write_file(
                 remote=remote,
                 path='/etc/ceph/{}.conf'.format(cluster_name),
@@ -515,6 +515,19 @@ def ceph_mons(ctx, config):
                         j = json.loads(r.stdout.getvalue())
                         if len(j['mons']) == num_mons:
                             break
+
+        # refresh our (final) ceph.conf file
+        log.info('Generating final ceph.conf file...')
+        r = _shell(
+            ctx=ctx,
+            cluster_name=cluster_name,
+            remote=remote,
+            args=[
+                'ceph', 'config', 'generate-minimal-conf',
+            ],
+            stdout=BytesIO(),
+        )
+        ctx.ceph[cluster_name].config_file = r.stdout.getvalue()
 
         # refresh ceph.conf files for all mons + first mgr
         for remote, roles in ctx.cluster.remotes.items():
