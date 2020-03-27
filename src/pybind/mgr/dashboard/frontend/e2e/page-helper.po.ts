@@ -288,8 +288,8 @@ export abstract class PageHelper {
     return browser.wait(EC.not(EC.textToBePresentInElement(elem, text)), TIMEOUT, message);
   }
 
-  async waitFn(func: Function, message?: string) {
-    return browser.wait(func, TIMEOUT, message);
+  async waitFn(func: Function, message?: string, timeout: number = TIMEOUT) {
+    return browser.wait(func, timeout, message);
   }
 
   getFirstCell(): ElementFinder {
