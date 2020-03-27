@@ -144,7 +144,7 @@ def setup_venv(ctx, config):
     try:
         yield
     finally:
-	pass
+        pass
 
 @contextlib.contextmanager
 def configure_instance(ctx, config):

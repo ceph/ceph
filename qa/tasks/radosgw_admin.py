@@ -199,10 +199,10 @@ class requestlog_queue():
         self.adder = add
     def handle_request_data(self, request, response, error=False):
         now = datetime.datetime.now()
-	if error:
-	    pass
-	elif response.status < 200 or response.status >= 400:
-	    error = True
+        if error:
+            pass
+        elif response.status < 200 or response.status >= 400:
+            error = True
         self.q.put({'t': now, 'o': request, 'i': response, 'e': error})
     def clear(self):
         with self.q.mutex:
@@ -210,17 +210,17 @@ class requestlog_queue():
     def log_and_clear(self, cat, bucket, user, add_entry = None):
         while not self.q.empty():
             j = self.q.get()
-	    bytes_out = 0
+            bytes_out = 0
             if 'Content-Length' in j['o'].headers:
-		bytes_out = int(j['o'].headers['Content-Length'])
+                bytes_out = int(j['o'].headers['Content-Length'])
             bytes_in = 0
             if 'content-length' in j['i'].msg.dict:
-		bytes_in = int(j['i'].msg.dict['content-length'])
+                bytes_in = int(j['i'].msg.dict['content-length'])
             log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
-		% (cat, bucket, user, bytes_out, bytes_in, j['e']))
-	    if add_entry == None:
-		add_entry = self.adder
-	    add_entry(cat, bucket, user, bytes_out, bytes_in, j['e'])
+                     % (cat, bucket, user, bytes_out, bytes_in, j['e']))
+            if add_entry == None:
+                add_entry = self.adder
+            add_entry(cat, bucket, user, bytes_out, bytes_in, j['e'])
 
 def create_presigned_url(conn, method, bucket_name, key_name, expiration):
     return conn.generate_url(expires_in=expiration,
@@ -922,14 +922,14 @@ import argparse;
 
 def main():
     if len(sys.argv) == 3:
-	user = sys.argv[1] + "@"
-	host = sys.argv[2]
+        user = sys.argv[1] + "@"
+        host = sys.argv[2]
     elif len(sys.argv) == 2:
         user = ""
-	host = sys.argv[1]
+        host = sys.argv[1]
     else:
         sys.stderr.write("usage: radosgw_admin.py [user] host\n")
-	exit(1)
+        exit(1)
     client0 = remote.Remote(user + host)
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,
@@ -941,8 +941,8 @@ def main():
     ctx.rgw.role_endpoints = endpoints
     ctx.rgw.realm = None
     ctx.rgw.regions = {'region0': { 'api name': 'api1',
-	    'is master': True, 'master zone': 'r0z0',
-	    'zones': ['r0z0', 'r0z1'] }}
+                                    'is master': True, 'master zone': 'r0z0',
+	                            'zones': ['r0z0', 'r0z1'] }}
     ctx.rgw.config = {'ceph.client.rgw.%s' % host: {'system user': {'name': '%s-system-user' % host}}}
     task(config, None)
     exit()
