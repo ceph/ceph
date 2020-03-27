@@ -1366,6 +1366,38 @@ CEPH_RBD_API int rbd_pool_stats_option_add_uint64(rbd_pool_stats_t stats,
                                                   uint64_t* stat_val);
 CEPH_RBD_API int rbd_pool_stats_get(rados_ioctx_t io, rbd_pool_stats_t stats);
 
+/**
+ * Register a quiesce/unquiesce watcher.
+ *
+ * @param image the image to watch
+ * @param quiesce_cb what to do when librbd wants to quiesce
+ * @param unquiesce_cb what to do when librbd wants to unquiesce
+ * @param arg opaque value to pass to the callbacks
+ * @param handle where to store the internal id assigned to this watch
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_quiesce_watch(rbd_image_t image,
+                                   rbd_update_callback_t quiesce_cb,
+                                   rbd_update_callback_t unquiesce_cb,
+                                   void *arg, uint64_t *handle);
+
+/**
+ * Notify quiesce is complete
+ *
+ * @param image the image to notify
+ * @returns 0 on success
+ */
+CEPH_RADOS_API void rbd_quiesce_complete(rbd_image_t image);
+
+/**
+ * Unregister a quiesce/unquiesce watcher.
+ *
+ * @param image the image to unwatch
+ * @param handle which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RBD_API int rbd_quiesce_unwatch(rbd_image_t image, uint64_t handle);
+
 #if __GNUC__ >= 4
   #pragma GCC diagnostic pop
 #endif

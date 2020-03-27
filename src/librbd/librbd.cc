@@ -187,6 +187,24 @@ struct C_UpdateWatchCB : public librbd::UpdateWatchCtx {
   }
 };
 
+struct C_QuiesceWatchCB : public librbd::QuiesceWatchCtx {
+  rbd_update_callback_t quiesce_cb;
+  rbd_update_callback_t unquiesce_cb;
+  void *arg;
+  uint64_t handle = 0;
+
+  C_QuiesceWatchCB(rbd_update_callback_t quiesce_cb,
+                   rbd_update_callback_t unquiesce_cb, void *arg) :
+    quiesce_cb(quiesce_cb), unquiesce_cb(unquiesce_cb), arg(arg) {
+  }
+  void handle_quiesce() override {
+    quiesce_cb(arg);
+  }
+  void handle_unquiesce() override {
+    unquiesce_cb(arg);
+  }
+};
+
 void group_image_status_cpp_to_c(const librbd::group_image_info_t &cpp_info,
 				 rbd_group_image_info_t *c_info) {
   c_info->name = strdup(cpp_info.name.c_str());
@@ -3003,6 +3021,23 @@ namespace librbd {
   int Image::config_list(std::vector<config_option_t> *options) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     return librbd::api::Config<>::list(ictx, options);
+  }
+
+  int Image::quiesce_watch(QuiesceWatchCtx *wctx, uint64_t *handle) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    int r = ictx->state->register_quiesce_watcher(wctx, handle);
+    return r;
+  }
+
+  int Image::quiesce_unwatch(uint64_t handle) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    int r = ictx->state->unregister_quiesce_watcher(handle);
+    return r;
+  }
+
+  void Image::quiesce_complete() {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    ictx->state->quiesce_complete();
   }
 
 } // namespace librbd
@@ -7092,4 +7127,35 @@ extern "C" void rbd_config_image_list_cleanup(rbd_config_option_t *options,
   for (int i = 0; i < max_options; ++i) {
     config_option_cleanup(options[i]);
   }
+}
+
+extern "C" int rbd_quiesce_watch(rbd_image_t image,
+                                 rbd_update_callback_t quiesce_cb,
+                                 rbd_update_callback_t unquiesce_cb,
+                                 void *arg, uint64_t *handle)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  auto wctx = new C_QuiesceWatchCB(quiesce_cb, unquiesce_cb, arg);
+  int r = ictx->state->register_quiesce_watcher(wctx, &wctx->handle);
+  if (r < 0) {
+    delete wctx;
+    return r;
+  }
+  *handle = reinterpret_cast<uint64_t>(wctx);
+  return 0;
+}
+
+extern "C" int rbd_quiesce_unwatch(rbd_image_t image, uint64_t handle)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  auto *wctx = reinterpret_cast<C_QuiesceWatchCB *>(handle);
+  int r = ictx->state->unregister_quiesce_watcher(wctx->handle);
+  delete wctx;
+  return r;
+}
+
+extern "C" void rbd_quiesce_complete(rbd_image_t image)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  ictx->state->quiesce_complete();
 }

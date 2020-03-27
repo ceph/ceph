@@ -68,6 +68,8 @@ enum NotifyOp {
   NOTIFY_OP_UPDATE_FEATURES    = 15,
   NOTIFY_OP_MIGRATE            = 16,
   NOTIFY_OP_SPARSIFY           = 17,
+  NOTIFY_OP_QUIESCE            = 18,
+  NOTIFY_OP_UNQUIESCE          = 19,
 };
 
 struct Payload {
@@ -401,6 +403,30 @@ struct SparsifyPayload : public AsyncRequestPayloadBase {
   void encode(bufferlist &bl) const override;
   void decode(__u8 version, bufferlist::const_iterator &iter) override;
   void dump(Formatter *f) const override;
+};
+
+struct QuiescePayload : public AsyncRequestPayloadBase {
+  QuiescePayload() {}
+  QuiescePayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_QUIESCE;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
+};
+
+struct UnquiescePayload : public AsyncRequestPayloadBase {
+  UnquiescePayload() {}
+  UnquiescePayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_UNQUIESCE;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
 };
 
 struct UnknownPayload : public Payload {

@@ -23,7 +23,6 @@ template <typename> class TaskFinisher;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageWatcher : public Watcher {
-
 public:
   ImageWatcher(ImageCtxT& image_ctx);
   ~ImageWatcher() override;
@@ -71,13 +70,17 @@ public:
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
 
+  void notify_quiesce(uint64_t request_id, Context *on_finish);
+  void notify_unquiesce(uint64_t request_id, Context *on_finish);
+
 private:
   enum TaskCode {
     TASK_CODE_REQUEST_LOCK,
     TASK_CODE_CANCEL_ASYNC_REQUESTS,
     TASK_CODE_REREGISTER_WATCH,
     TASK_CODE_ASYNC_REQUEST,
-    TASK_CODE_ASYNC_PROGRESS
+    TASK_CODE_ASYNC_PROGRESS,
+    TASK_CODE_QUIESCE,
   };
 
   typedef std::pair<Context *, ProgressContext *> AsyncRequest;
@@ -198,6 +201,13 @@ private:
                             bool* new_request, Context** ctx,
                             ProgressContext** prog_ctx);
 
+  Context *prepare_quiesce_request(const watch_notify::AsyncRequestId &request,
+                                   C_NotifyAck *ack_ctx);
+  Context *prepare_unquiesce_request(const watch_notify::AsyncRequestId &request);
+
+  void notify_quiesce(const watch_notify::AsyncRequestId &async_request_id,
+                      size_t attempts, Context *on_finish);
+
   bool handle_payload(const watch_notify::HeaderUpdatePayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::AcquiredLockPayload& payload,
@@ -233,6 +243,10 @@ private:
   bool handle_payload(const watch_notify::MigratePayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::SparsifyPayload& payload,
+                      C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::QuiescePayload& payload,
+                      C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::UnquiescePayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
