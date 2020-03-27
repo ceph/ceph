@@ -54,6 +54,10 @@ using ceph::operator <<;
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
+//XXXAIO<<<<<<< HEAD
+//=======
+//    io_queue(cct->_conf->bdev_aio_max_queue_depth),
+//>>>>>>> bluestore: FreeBSD make `ceph-osd mkfs` use AIO.
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
@@ -528,8 +532,13 @@ void KernelDevice::_aio_thread()
     dout(40) << __func__ << " polling" << dendl;
     int max = cct->_conf->bdev_aio_reap_max;
     aio_t *aio[max];
+#if defined(HAVE_LIBAIO)
     int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
 					 aio, max);
+#elif defined(HAVE_POSIXAIO)
+    int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms, 
+                                         aio, max, choose_fd(false, 0));
+#endif
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
 #if defined(__linux__)

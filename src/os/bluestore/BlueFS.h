@@ -359,7 +359,7 @@ private:
   int _flush(FileWriter *h, bool force);
   int _fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l);
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   void _claim_completed_aios(FileWriter *h, std::list<aio_t> *ls);
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
 #endif

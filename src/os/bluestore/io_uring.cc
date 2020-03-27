@@ -189,7 +189,7 @@ int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
   return rc;
 }
 
-int ioring_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
+int ioring_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max, inf fd)
 {
 get_cqe:
   pthread_mutex_lock(&d->cq_mutex);
@@ -254,7 +254,7 @@ int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
   ceph_assert(0);
 }
 
-int ioring_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
+int ioring_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max, int fd)
 {
   ceph_assert(0);
 }

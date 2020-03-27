@@ -146,7 +146,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
 }
 
 #if defined(HAVE_LIBAIO)
-int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
+int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max, int fd)
 {
   io_event events[max];
   struct timespec t = {
@@ -172,7 +172,7 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 // or            zero if a timeout has occurred
 // or            any negative return will result in a assert upon return
 
-int aio_queue_t::get_next_completed(int fd, int timeout_ms, aio_t **paio, int max)
+int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max, int fd)
 {
   struct timespec t = {
     timeout_ms / 1000,
@@ -181,45 +181,45 @@ int aio_queue_t::get_next_completed(int fd, int timeout_ms, aio_t **paio, int ma
 
   struct kevent events[max];
   struct kevent ev;
-  dout(21) << __func__ << " kqueue registration"
-      << " on fd = " << fd
-      << " , with kqueue handle ctx = " << ctx
-      << dendl;
+//  dout(21) << __func__ << " kqueue registration"
+//      << " on fd = " << fd
+//      << " , with kqueue handle ctx = " << ctx
+//      << dendl;
 
   EV_SET(&ev, fd, 0, EV_ADD | EV_CLEAR, 0, 0, 0);
   int rev = kevent(ctx, &ev, 1, NULL, 0, 0 );
   if (rev < 0) {
-    dout(1) << __func__ << " kqueue registration error "
-        << " kevent return(" << errno << ") "
-        << cpp_strerror(errno)
-        << dendl;
+//    dout(1) << __func__ << " kqueue registration error "
+//        << " kevent return(" << errno << ") "
+//        << cpp_strerror(errno)
+//        << dendl;
     return -errno;
   }
   do {
-    dout(21) << __func__ << " running POSIX AIO" << dendl;
+//    dout(21) << __func__ << " running POSIX AIO" << dendl;
     memset(&events, 0, sizeof(events));
     rev = kevent(ctx, NULL, 0, events, max, &t);
-    dout(25) << __func__
-        << " on kqueue handle = " << ctx
-        << " kevent return = " << rev
-        << " max = " << max
-        << dendl;
+//    dout(25) << __func__
+//        << " on kqueue handle = " << ctx
+//        << " kevent return = " << rev
+//        << " max = " << max
+//        << dendl;
     if (rev < 0) {
-        dout(5) << __func__
-            << " error event " << cpp_strerror(errno)
-            << dendl;
+//        dout(5) << __func__
+//            << " error event " << cpp_strerror(errno)
+//            << dendl;
         return -errno;
     } else if (rev == 0) {
         // Got a timeout
         timeouts++;
-        dout(30) << __func__ << " return"
-            << " timeouts " << timeouts
-            << " rev = 0"
-            << dendl;
+//        dout(30) << __func__ << " return"
+//            << " timeouts " << timeouts
+//            << " rev = 0"
+//            << dendl;
         return rev;
       } else {
-        dout(25) << __func__ << " process " << rev << " events"
-            << dendl;
+//        dout(25) << __func__ << " process " << rev << " events"
+//            << dendl;
         // Process all the events posted
         // Emulate the return value of pwritev. I can't find any documentation
         // for what the value of io_event.res is supposed to be. I'm going to
@@ -227,27 +227,17 @@ int aio_queue_t::get_next_completed(int fd, int timeout_ms, aio_t **paio, int ma
         for(int i = 0; i < rev; i++) {
             struct aio_t* aio = (struct aio_t*)events[i].udata;
             struct aiocb* slot = &(aio->aio.aiocbp[i]);
-            dout(10) << __func__ << " slot = " << &slot << dendl;
+//            dout(10) << __func__ << " slot = " << &slot << dendl;
             int ree = aio_error(slot);
             if (ree < 0) {
-                dout(10) << __func__ << " aio_error" << cpp_strerror(errno)
-                    << dendl;
+//                dout(10) << __func__ << " aio_error" << cpp_strerror(errno)
+//                    << dendl;
             }
             int res = aio_return(slot);
             if (res < 0) {
                 // Most common error to be returned here is 22: Invalid argument
                 // Meaning that there was a problem submitting the aio in
                 // aio_{read/write}. Usually a coding problem in submit_batch
-                dout(1) << __func__
-                    << " error in processing event i = " << i
-                    << " aio_return"
-                    << cpp_strerror(errno)
-                    << dendl;
-                return -errno;
-            } else {
-                dout(10) << __func__ << " aio completed: "
-                    << res << " bytes."
-                    << dendl;
                 paio[i]         = aio;
                 paio[i]->rval   = res;
                 paio[i]->fd     = slot->aio_fildes;
@@ -255,22 +245,22 @@ int aio_queue_t::get_next_completed(int fd, int timeout_ms, aio_t **paio, int ma
                 paio[i]->length = slot->aio_nbytes;
                 paio[i]->cct    = cct;
                 paio[i]->priv   = aio->priv;
-                dout(25) << __func__
-                         << " processing event i = " << i
-                         << " ident = "  << events[i].ident
-                         << " flags = "  << events[i].flags
-                         << " fflags = " << events[i].fflags
-                         << " udata = "  << aio
-                         << " aiocbp = " << slot
-                         << dendl;
+//                dout(25) << __func__
+//                         << " processing event i = " << i
+//                         << " ident = "  << events[i].ident
+//                         << " flags = "  << events[i].flags
+//                         << " fflags = " << events[i].fflags
+//                         << " udata = "  << aio
+//                         << " aiocbp = " << slot
+//                         << dendl;
            }
         }
     }
   } while (rev == 0);
 
-  dout(21) << __func__
-           << " finished return = " << rev
-           << dendl;
+//  dout(21) << __func__
+//           << " finished return = " << rev
+//           << dendl;
   return rev;
 }
 #endif

@@ -105,7 +105,7 @@ struct io_queue_t {
   virtual void shutdown() = 0;
   virtual int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size,
 			   void *priv, int *retries) = 0;
-  virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
+  virtual int get_next_completed(int timeout_ms, aio_t **paio, int max, int fd = 0) = 0;
 };
 
 struct aio_queue_t final : public io_queue_t {
@@ -117,12 +117,19 @@ struct aio_queue_t final : public io_queue_t {
   int timeouts;
   int fd;
 #endif
-  CephContext *cct;
+//  CephContext *cct;
+
+  typedef list<aio_t>::iterator aio_iter;
 
   explicit aio_queue_t(unsigned max_iodepth)
     : max_iodepth(max_iodepth),
       ctx(0) {
   }
+//XXXAIO  explicit aio_queue_t(unsigned max_iodepth, CephContext *cct)
+//    : max_iodepth(max_iodepth),
+//      ctx(0),
+//      cct(cct) {
+//  }
   ~aio_queue_t() final {
     ceph_assert(ctx == 0);
   }
@@ -161,5 +168,5 @@ struct aio_queue_t final : public io_queue_t {
 
   int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size,
 		   void *priv, int *retries) final;
-  int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
+  int get_next_completed(int timeout_ms, aio_t **paio, int max, int fd = 0) final;
 };
