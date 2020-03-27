@@ -1407,7 +1407,8 @@ class CephFSShell(Cmd):
                             stat.st_size, stat.st_blocks, stat.st_blksize,
                             stat.st_dev, stat.st_ino, stat.st_nlink, stat.st_mode,
                             mode_notation(stat.st_mode), stat.st_uid, stat.st_gid,
-                        atime, mtime, ctime))
+                            atime, mtime, ctime),
+                        )
             except libcephfs.Error as e:
                 perror(e)
                 self.exit_code = e.get_error_code()
