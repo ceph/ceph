@@ -136,6 +136,7 @@ def ls(path, opts=''):
         perror(e)
         shell.exit_code = e.get_error_code()
 
+
 def glob(path, pattern):
     paths = []
     parent_dir = os.path.dirname(path)
@@ -1222,7 +1223,7 @@ class CephFSShell(Cmd):
                     if f[0] is ord('/'):
                         f = b'.' + f
                     poutput('{:10s} {}'.format(humansize(dusage),
-                        f.decode('utf-8')))
+                            f.decode('utf-8')))
                 except libcephfs.Error as e:
                     perror(e)
                     self.exit_code = e.get_error_code()
