@@ -1261,7 +1261,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Returns the generic service name
         """
         p = re.compile(r'(.*)\.%s.*' % (host))
-        p.sub(r'\1', daemon_id)
         return '%s.%s' % (daemon_type, p.sub(r'\1', daemon_id))
 
     def _save_inventory(self):
