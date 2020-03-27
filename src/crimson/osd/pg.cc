@@ -580,11 +580,20 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       obc->obs.oi.soid,
       e.value(),
       e.message());
-    auto reply = make_message<MOSDOpReply>(
-      m.get(), -e.value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-				     peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    // need to revert all modifications to ObjectState. let's just reload
+    // the data from store. evicting from the shared lru would be tricky
+    // as next MOSDOp (the one at `get_obc` phase) could actually already
+    // finished the lookup. fortunately, this is supposed to live on cold
+    // paths, so performance is not a concern -- simplicity won.
+    return reload_obc(*obc).safe_then([=] {
+      auto reply = make_message<MOSDOpReply>(
+        m.get(), -e.value(), get_osdmap_epoch(), 0, false);
+      reply->set_enoent_reply_versions(peering_state.get_info().last_update,
+                                       peering_state.get_info().last_user_version);
+      return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    }, load_obc_ertr::all_same_way([] {
+      ceph_assert_always("cannot reload obc" == nullptr);
+    }));
   })).handle_exception_type([=,&oid](const crimson::osd::error& e) {
     // we need this handler because throwing path which aren't errorated yet.
     logger().debug(
@@ -593,11 +602,15 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       obc->obs.oi.soid,
       e.code(),
       e.what());
-    auto reply = make_message<MOSDOpReply>(
-      m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
-    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-				     peering_state.get_info().last_user_version);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    return reload_obc(*obc).safe_then([=] {
+      auto reply = make_message<MOSDOpReply>(
+        m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
+      reply->set_enoent_reply_versions(peering_state.get_info().last_update,
+                                       peering_state.get_info().last_user_version);
+      return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    }, load_obc_ertr::all_same_way([] {
+      ceph_assert_always("cannot reload obc" == nullptr);
+    }));
   });
 }
 
@@ -799,6 +812,31 @@ PG::get_locked_obc(
       }
     });
 }
+
+PG::load_obc_ertr::future<>
+PG::reload_obc(crimson::osd::ObjectContext& obc)
+{
+  ceph_assert(obc.is_head());
+  return backend->load_metadata(obc.get_oid()).safe_then(
+    [&obc](auto md) -> load_obc_ertr::future<>
+    {
+      logger().debug(
+        "{}: reloaded obs {} for {}",
+        __func__,
+        md->os.oi,
+        obc.get_oid());
+      if (!md->ss) {
+        logger().error(
+          "{}: oid {} missing snapset",
+          __func__,
+          obc.get_oid());
+        return crimson::ct_error::object_corrupted::make();
+      }
+      obc.set_head_state(std::move(md->os), std::move(*(md->ss)));
+      return load_obc_ertr::now();
+    });
+}
+
 
 seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 {

@@ -227,6 +227,8 @@ bool PGBackend::maybe_create_new_object(
   ceph::os::Transaction& txn)
 {
   if (!os.exists) {
+    logger().debug("{} on non-existent obj={}",
+                   __func__, os.oi.soid);
     ceph_assert(!os.oi.is_whiteout());
     os.exists = true;
     os.oi.new_object();
@@ -235,6 +237,8 @@ bool PGBackend::maybe_create_new_object(
     // TODO: delta_stats.num_objects++
     return false;
   } else if (os.oi.is_whiteout()) {
+    logger().debug("{} on existing obj={}",
+                   __func__, os.oi.soid);
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     // TODO: delta_stats.num_whiteouts--
   }

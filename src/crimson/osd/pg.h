@@ -452,6 +452,9 @@ public:
     Operation *op,
     const hobject_t &oid,
     RWState::State type);
+  load_obc_ertr::future<> reload_obc(
+    crimson::osd::ObjectContext& obc);
+
 public:
   template <typename F>
   auto with_locked_obc(
