@@ -6,7 +6,7 @@ set -o pipefail
 SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
 
-num_vcpus=$(( $(lscpu -p | tail -1 | cut -d "," -f 1) + 1 ))
+num_vcpus=$(nproc)
 
 CEPH_DIR="${CEPH_DIR:-$SCRIPT_DIR}"
 BUILD_DIR="${BUILD_DIR:-${CEPH_DIR}/build}"
