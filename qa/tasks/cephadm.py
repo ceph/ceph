@@ -932,6 +932,31 @@ def restart(ctx, config):
     yield
 
 @contextlib.contextmanager
+def distribute_config_and_admin_keyring(ctx, config):
+    """
+    Distribute a sufficient config and keyring for clients
+    """
+    cluster_name = config['cluster']
+    log.info('Distributing (final) config and client.admin keyring...')
+    for remote, roles in ctx.cluster.remotes.items():
+        teuthology.sudo_write_file(
+            remote=remote,
+            path='/etc/ceph/{}.conf'.format(cluster_name),
+            data=ctx.ceph[cluster_name].config_file)
+        teuthology.sudo_write_file(
+            remote=remote,
+            path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+            data=ctx.ceph[cluster_name].admin_keyring)
+    try:
+        yield
+    finally:
+        ctx.cluster.run(args=[
+            'sudo', 'rm', '-f',
+            '/etc/ceph/{}.conf'.format(cluster_name),
+            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+        ])
+
+@contextlib.contextmanager
 def crush_setup(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
@@ -1028,6 +1053,7 @@ def task(ctx, config):
             lambda: ceph_bootstrap(ctx=ctx, config=config),
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
+            lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
