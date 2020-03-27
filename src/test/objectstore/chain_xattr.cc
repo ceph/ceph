@@ -122,8 +122,10 @@ TEST(chain_xattr, get_and_set) {
     int x;
     const string name = user + string(CHAIN_XATTR_MAX_NAME_LEN * 2, '@');
     PrCtl unset_dumpable;
+    ::testing::FLAGS_gtest_death_test_style = "threadsafe";
     ASSERT_DEATH(chain_setxattr(file, name.c_str(), &x, sizeof(x)), "");
     ASSERT_DEATH(chain_fsetxattr(fd, name.c_str(), &x, sizeof(x)), "");
+    ::testing::FLAGS_gtest_death_test_style = "fast";
   }
 
   {
