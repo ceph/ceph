@@ -446,7 +446,6 @@ struct MDRequestImpl : public MutationImpl {
   // indicator for vxattr osdmap update
   bool waited_for_osdmap = false;
 
-  std::vector<Ref> batch_reqs;
 protected:
   void _dump(Formatter *f) const override;
   void _dump_op_descriptor_unlocked(ostream& stream) const override;
