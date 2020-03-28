@@ -55,3 +55,12 @@ Compatsets
 - [x] mon/Monitor.cc (apply_monmap_to_compatset_features())
 - [x] mon/Monitor.cc (calc_quorum_requirements())
 
+Mon
+---
+
+- [x] common/options.cc define mon_debug_no_require_X
+- [x] common/options.cc remove mon_debug_no_require_X-2
+- [x] mon/OSDMonitor.cc create_initial: adjust new require_osd_release, and add associated mon_debug_no_require_X
+- [x] mon/OSDMonitor.cc preprocess_boot: adjust "disallow boot of " condition to disallow X if require_osd_release < X-2.
+- [x] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
+
