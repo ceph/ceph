@@ -51,7 +51,7 @@ Ceph's bucket notification API has the following extensions:
 
   - Filtering based on object tags
 
-- Each one of the additional filters extends the S3 API and using it will cause extension of the client SDK as well (unless you are using plain HTTP). 
+- Each one of the additional filters extends the S3 API and using it will require extension of the client SDK (unless you are using plain HTTP). 
 
 - Filtering overlapping is allowed, so that same event could be sent as different notification
 
