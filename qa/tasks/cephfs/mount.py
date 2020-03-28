@@ -191,7 +191,7 @@ class CephFSMount(object):
         return self.client_remote.run(
                args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',
                      py_version, '-c', pyscript], wait=False, stdin=run.PIPE,
-               stdout=BytesIO())
+               stdout=StringIO())
 
     def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
@@ -204,8 +204,8 @@ class CephFSMount(object):
             args = args.split()
 
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
-        return self.client_remote.run(args=args, stdout=BytesIO(),
-                                      stderr=BytesIO(), wait=wait,
+        return self.client_remote.run(args=args, stdout=StringIO(),
+                                      stderr=StringIO(), wait=wait,
                                       stdin=stdin, check_status=check_status,
                                       omit_sudo=omit_sudo)
 
