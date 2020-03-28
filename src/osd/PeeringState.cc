@@ -106,7 +106,6 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     updated = true;
   }
 
-  assert(map->require_osd_release >= ceph_release_t::mimic);
   if (info.is_pool_snaps_mode() && updated) {
     snapc = pi->get_snap_context();
   }
