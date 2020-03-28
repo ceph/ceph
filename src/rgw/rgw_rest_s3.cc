@@ -5220,7 +5220,11 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       s->op_type == RGW_OP_PUT_USER_POLICY ||
       s->op_type == RGW_OP_GET_USER_POLICY ||
       s->op_type == RGW_OP_LIST_USER_POLICIES ||
-      s->op_type == RGW_OP_DELETE_USER_POLICY) {
+      s->op_type == RGW_OP_DELETE_USER_POLICY ||
+      s->op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
+      s->op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
+      s->op_type == RGW_OP_GET_OIDC_PROVIDER ||
+      s->op_type == RGW_OP_LIST_OIDC_PROVIDERS) {
     is_non_s3_op = true;
   }
 
