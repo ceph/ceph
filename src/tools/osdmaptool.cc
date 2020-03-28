@@ -527,11 +527,12 @@ int main(int argc, const char **argv)
 
 	for (unsigned i=0; i<osds.size(); i++) {
 	  //cout << " rep " << i << " on " << osds[i] << std::endl;
+	  if (osds[i] == CRUSH_ITEM_NONE) continue;
 	  count[osds[i]]++;
 	}
-	if (osds.size())
+	if (osds.size() && osds[0] != CRUSH_ITEM_NONE)
 	  first_count[osds[0]]++;
-	if (primary >= 0)
+	if (primary >= 0 && primary != CRUSH_ITEM_NONE)
 	  primary_count[primary]++;
       }
     }
