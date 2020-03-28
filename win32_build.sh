@@ -185,12 +185,17 @@ if [[ -n $BUILD_ZIP ]]; then
     # Use a temp directory, in order to create a clean zip file
     ZIP_TMPDIR=$(mktemp -d win_binaries.XXXXX)
     if [[ -n $STRIP_ZIPPED ]]; then
-        rm -rf $strippedBinDir
-        echo "Copying binaries to $strippedBinDir."
-        cp -r $binDir $strippedBinDir
         echo "Stripping debug symbols from binaries."
-        $MINGW_STRIP $strippedBinDir/*.exe \
-                     $strippedBinDir/*.dll
+        rm -rf $strippedBinDir; mkdir $strippedBinDir
+        # Strip files individually, to save time and space
+        for file in $binDir/*.exe $binDir/*.dll; do
+            $MINGW_STRIP -o $strippedBinDir/$(basename $file) $file
+        done
+        # Copy any remaining files to the stripped directory
+        for file in $binDir/*; do
+            [[ ! -f $strippedBinDir/$(basename $file) ]] && \
+                cp $file $strippedBinDir
+        done
         ln -s $strippedBinDir $ZIP_TMPDIR/ceph
     else
         ln -s $binDir $ZIP_TMPDIR/ceph
