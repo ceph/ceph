@@ -154,8 +154,12 @@ rgw_http_errors rgw_http_sts_errors({
 });
 
 rgw_http_errors rgw_http_iam_errors({
+    { EINVAL, {400, "InvalidInput" }},
+    { ENOENT, {404, "NoSuchEntity"}},
     { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
     { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
+    { EEXIST, {409, "EntityAlreadyExists"}},
+    { ERR_INTERNAL_ERROR, {500, "ServiceFailure" }},
 });
 
 using namespace ceph::crypto;
@@ -1842,7 +1846,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "datalog",
                                     "roles",
                                     "user-policy",
-                                    "amz-cache"};
+                                    "amz-cache",
+                                    "oidc-provider"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
