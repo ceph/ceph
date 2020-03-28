@@ -1,4 +1,4 @@
-@import 'styles';
+@import 'defaults.scss';
 
 p {
   font-family: monospace;
@@ -45,15 +45,6 @@ p {
     font-size: 1rem;
     padding: 4px 6px;
   }
-}
-
-label {
-  @extend .mr-2;
-}
-
-.form-group {
-  @extend .mr-3;
-  @extend .mb-3;
 }
 
 .middle {

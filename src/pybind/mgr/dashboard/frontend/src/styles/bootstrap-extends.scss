@@ -1,0 +1,76 @@
+/*
+ * Include here all styles from components that extend from bootstrap.
+ * This removes the need to @import bootstrap into those componenet,
+ * thus reducing the final css size.
+*/
+
+cd-info-card {
+  .card {
+    @extend .pb-2;
+
+    .card-body {
+      .card-text {
+        @extend .pt-2;
+      }
+    }
+  }
+}
+
+.btn-toolbar cd-table-actions.btn-group {
+  @extend .mr-2;
+}
+
+cd-table {
+  .cd-datatable {
+    .datatable-footer {
+      @extend .p-2;
+
+      .datatable-pager {
+        ul {
+          @extend .pagination;
+
+          li {
+            @extend .page-item;
+
+            a {
+              @extend .page-link;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+cd-health {
+  cd-info-card {
+    @extend .d-flex;
+    @extend .flex-column;
+    @extend .mb-4;
+
+    @extend .col-12;
+    @extend .col-sm-12;
+    @extend .col-md-6;
+    @extend .col-lg-4;
+
+    &.cd-status-card {
+      @extend .col-xl-3;
+    }
+
+    &.cd-performance-card,
+    &.cd-capacity-card {
+      @extend .col-xl;
+    }
+  }
+}
+
+cd-logs {
+  label {
+    @extend .mr-2;
+  }
+
+  .form-inline > .form-group {
+    @extend .mr-3;
+    @extend .mb-3;
+  }
+}
