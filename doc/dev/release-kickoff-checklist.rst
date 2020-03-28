@@ -26,7 +26,7 @@ Make sure X (and, ideally, X+1) is defined:
 - [x] src/common/ceph_releases.h (ceph_release_t)
 - [x] src/common/ceph_strings.cc (ceph_release_name())
 - [x] src/include/rados.h (CEPH_RELEASE_* and MAX)
-- [ ] src/mon/mon_types.h (ceph::features::mon::FEATURE_* and related structs and helpers; note that monmaptool CLI test output will need adjustment)
+- [x] src/mon/mon_types.h (ceph::features::mon::FEATURE_* and related structs and helpers; note that monmaptool CLI test output will need adjustment)
 
 Scripts
 ~~~~~~~
