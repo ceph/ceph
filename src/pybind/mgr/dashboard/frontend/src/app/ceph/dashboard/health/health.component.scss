@@ -1,10 +1,7 @@
-@import 'styles';
+@import 'defaults.scss';
 
 cd-info-card {
   padding: 0 0.5vw 0 0.5vw;
-  @extend .d-flex;
-  @extend .flex-column;
-  @extend .mb-4;
 }
 
 ::ng-deep .pg-status-popover-wrapper {
@@ -41,20 +38,4 @@ cd-info-card {
 
 .popover-info:hover {
   cursor: pointer;
-}
-
-::ng-deep cd-info-card {
-  @extend .col-12;
-  @extend .col-sm-12;
-  @extend .col-md-6;
-  @extend .col-lg-4;
-
-  &.cd-status-card {
-    @extend .col-xl-3;
-  }
-
-  &.cd-performance-card,
-  &.cd-capacity-card {
-    @extend .col-xl;
-  }
 }
