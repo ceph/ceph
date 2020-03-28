@@ -168,6 +168,7 @@ public:
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
 
+  void fetch_missing_metadata(const DaemonKey& key, const entity_addr_t& addr);
   bool handle_open(const ceph::ref_t<MMgrOpen>& m);
   bool handle_close(const ceph::ref_t<MMgrClose>& m);
   bool handle_report(const ceph::ref_t<MMgrReport>& m);
