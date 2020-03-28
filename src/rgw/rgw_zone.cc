@@ -1557,6 +1557,7 @@ int get_zones_pool_set(CephContext* cct,
         }
 	pool_names.insert(iter.second.data_extra_pool);
       }
+      pool_names.insert(zone.oidc_pool);
     }
   }
   return 0;
@@ -1621,6 +1622,7 @@ int RGWZoneParams::fix_pool_names()
   roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
   reshard_pool = fix_zone_pool_dup(pools, name, ".rgw.log:reshard", reshard_pool);
   otp_pool = fix_zone_pool_dup(pools, name, ".rgw.otp", otp_pool);
+  oidc_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:oidc", oidc_pool);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
