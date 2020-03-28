@@ -6,6 +6,9 @@ These steps should be taken when starting a new major release, just after
 the previous release has been tagged (vX.2.0) and that tag has been merged
 back into master.
 
+X is the release we are just starting development on.  X-1 is the one
+that was just released (X-1).2.0.
+
 Versions and tags
 -----------------
 
@@ -38,8 +41,10 @@ Misc
 Feature bits
 ------------
 
-- [ ] ensure that SERVER_X is defined
-- [ ]
+- [x] ensure that SERVER_X is defined
+- [x] change any features DEPRECATED in release X-3 are now marked RETIRED.
+- [ ] look for features that (1) were present in X-2 and (2) have no
+  client dependency and mark them DEPRECATED as of X.
 
 
 Compatsets
