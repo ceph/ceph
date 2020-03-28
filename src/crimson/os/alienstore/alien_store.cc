@@ -380,4 +380,121 @@ unsigned AlienStore::get_max_attr_name_length() const
   return 256;
 }
 
+seastar::future<struct stat> AlienStore::stat(
+  CollectionRef ch,
+  const ghobject_t& oid)
+{
+  return seastar::do_with((struct stat){}, [this, ch, oid](auto& st) {
+    return tp->submit([this, ch, oid, &st] {
+      auto c = static_cast<AlienCollection*>(ch.get());
+      store->stat(c->collection, oid, &st);
+      return st;
+    });
+  });
+}
+
+seastar::future<ceph::bufferlist> AlienStore::omap_get_header(
+  CollectionRef ch,
+  const ghobject_t& oid)
+{
+  return seastar::do_with(ceph::bufferlist(), [=](auto& bl) {
+    return tp->submit([=, &bl] {
+      auto c = static_cast<AlienCollection*>(ch.get());
+      return store->omap_get_header(c->collection, oid, &bl);
+    }).then([&bl] (int i) {
+      return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+    });
+  });
+}
+
+seastar::future<std::map<uint64_t, uint64_t>> AlienStore::fiemap(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  uint64_t off,
+  uint64_t len)
+{
+  return seastar::do_with(std::map<uint64_t, uint64_t>(), [=](auto& destmap) {
+    return tp->submit([=, &destmap] {
+      auto c = static_cast<AlienCollection*>(ch.get());
+      return store->fiemap(c->collection, oid, off, len, destmap);
+    }).then([&destmap] (int i) {
+      return seastar::make_ready_future
+	  <std::map<uint64_t, uint64_t>>
+	  (std::move(destmap));
+    });
+  });
+}
+
+seastar::future<FuturizedStore::OmapIteratorRef> AlienStore::get_omap_iterator(
+  CollectionRef ch,
+  const ghobject_t& oid)
+{
+  return tp->submit([=] {
+    auto c = static_cast<AlienCollection*>(ch.get());
+    auto iter = store->get_omap_iterator(c->collection, oid);
+    return FuturizedStore::OmapIteratorRef(
+	      new AlienStore::AlienOmapIterator(iter,
+						this));
+  });
+}
+
+//TODO: each iterator op needs one submit, this is not efficient,
+//      needs further optimization.
+seastar::future<int> AlienStore::AlienOmapIterator::seek_to_first()
+{
+  return store->tp->submit([=] {
+    return iter->seek_to_first();
+  });
+}
+
+seastar::future<int> AlienStore::AlienOmapIterator::upper_bound(
+  const std::string& after)
+{
+  return store->tp->submit([this, after] {
+    return iter->upper_bound(after);
+  });
+}
+
+seastar::future<int> AlienStore::AlienOmapIterator::lower_bound(
+  const std::string& to)
+{
+  return store->tp->submit([this, to] {
+    return iter->lower_bound(to);
+  });
+}
+
+seastar::future<int> AlienStore::AlienOmapIterator::next()
+{
+  return store->tp->submit([this] {
+    return iter->next();
+  });
+}
+
+bool AlienStore::AlienOmapIterator::valid() const
+{
+  return iter->valid();
+}
+
+std::string AlienStore::AlienOmapIterator::key()
+{
+  return iter->key();
+}
+
+seastar::future<std::string> AlienStore::AlienOmapIterator::tail_key()
+{
+  return store->tp->submit([this] {
+    return iter->tail_key();
+  });
+}
+
+ceph::buffer::list AlienStore::AlienOmapIterator::value()
+{
+  return iter->value();
+}
+
+int AlienStore::AlienOmapIterator::status() const
+{
+  return iter->status();
+}
+
 }
