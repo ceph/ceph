@@ -12,8 +12,8 @@ that was just released (X-1).2.0.
 Versions and tags
 -----------------
 
-- [ ] Update CMakeLists.txt VERSION (right at the top to X.0.0)
-- [ ] Update src/ceph_release with the new release name, number, and type ('dev')
+- [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
+- [x] Update src/ceph_release with the new release name, number, and type ('dev')
 - [ ] Initial tag vX.0.0 (so that we can distinguish from (and sort
   after) the backported (X-1).2.Z versions.
 
@@ -64,3 +64,12 @@ Mon
 - [x] mon/OSDMonitor.cc preprocess_boot: adjust "disallow boot of " condition to disallow X if require_osd_release < X-2.
 - [x] mon/OSDMonitor.cc: adjust "osd require-osd-release" to (1) allow setting X, and (2) check that all mons *and* OSDs have X
 
+
+Code cleanup
+------------
+
+- [ ] search code for "after X-1" or "X" for conditional checks
+- [ ] search code for X-2 and X-3 (CEPH_FEATURE_SERVER_* and
+  ceph_release_t::*)
+- [ ] search code for require_osd_release
+- [ ] search code for min_mon_release
