@@ -18,7 +18,7 @@ VENV=${VENV:-"virtualenv"}
 case "$(uname -s)" in
 Linux)
     case "$(lsb_release --id --short)" in
-    Ubuntu|Debian)
+    Ubuntu|Debian|LinuxMint)
         # Ensure setuptools is installed
         if [[ "$PYTHON" =~ "python2" ]]; then
             deps=(qemu-utils python-dev libssl-dev python-pip python-virtualenv libev-dev libvirt-dev libmysqlclient-dev libffi-dev libyaml-dev)
