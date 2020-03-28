@@ -126,7 +126,7 @@ Then provide the zone placement info for that target:
 Adding a Storage Class
 ----------------------
 
-To add a new storage class named ``COLD`` to the ``default-placement`` target,
+To add a new storage class named ``GLACIER`` to the ``default-placement`` target,
 start by adding it to the zonegroup:
 
 ::
@@ -134,7 +134,7 @@ start by adding it to the zonegroup:
   $ radosgw-admin zonegroup placement add \
         --rgw-zonegroup default \
         --placement-id default-placement \
-        --storage-class COLD
+        --storage-class GLACIER
 
 Then provide the zone placement info for that storage class:
 
@@ -143,8 +143,8 @@ Then provide the zone placement info for that storage class:
   $ radosgw-admin zone placement add \
         --rgw-zone default \
         --placement-id default-placement \
-        --storage-class COLD \
-        --data-pool default.rgw.cold.data \
+        --storage-class GLACIER \
+        --data-pool default.rgw.glacier.data \
         --compression lz4
 
 Customizing Placement
@@ -238,6 +238,10 @@ To create an object in a non-default storage class, provide that storage class
 name in an HTTP header with the request. The S3 protocol uses the
 ``X-Amz-Storage-Class`` header, while the Swift protocol uses the
 ``X-Object-Storage-Class`` header.
+
+When using AWS S3 SDKs such as python boto3, it is important that the non-default
+storage class will be called as one on of the AWS S3 allowed storage classes, or else the SDK
+will drop the request and raise an exception.
 
 S3 Object Lifecycle Management can then be used to move object data between
 storage classes using ``Transition`` actions.
