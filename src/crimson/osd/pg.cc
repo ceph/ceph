@@ -364,8 +364,9 @@ void PG::init(
 
 seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 {
-  return PGMeta{store, pgid}.load(
-  ).then([this, store](pg_info_t pg_info, PastIntervals past_intervals) {
+  return seastar::do_with(PGMeta(store, pgid), [this, store] (auto& pg_meta) {
+    return pg_meta.load();
+  }).then([this, store](pg_info_t pg_info, PastIntervals past_intervals) {
     return peering_state.init_from_disk_state(
 	std::move(pg_info),
 	std::move(past_intervals),

@@ -549,13 +549,15 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
 
 seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 {
-  return PGMeta{store.get(), pgid}.get_epoch().then([this](epoch_t e) {
+  return seastar::do_with(PGMeta(store.get(), pgid), [this, pgid] (auto& pg_meta) {
+    return pg_meta.get_epoch();
+  }).then([this](epoch_t e) {
     return get_map(e);
   }).then([pgid, this] (auto&& create_map) {
     return make_pg(std::move(create_map), pgid, false);
-  }).then([this, pgid](Ref<PG> pg) {
+  }).then([this](Ref<PG> pg) {
     return pg->read_state(store.get()).then([pg] {
-      return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+	return seastar::make_ready_future<Ref<PG>>(std::move(pg));
     });
   }).handle_exception([pgid](auto ep) {
     logger().info("pg {} saw exception on load {}", pgid, ep);
