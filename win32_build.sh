@@ -19,6 +19,7 @@ SKIP_BUILD=${SKIP_BUILD:-}
 SKIP_CMAKE=${SKIP_CMAKE:-}
 SKIP_DLL_COPY=${SKIP_DLL_COPY:-}
 SKIP_TESTS=${SKIP_TESTS:-}
+SKIP_BINDIR_CLEAN=${SKIP_BINDIR_CLEAN:-}
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
 DEV_BUILD=${DEV_BUILD:-}
 BUILD_ZIP=${BUILD_ZIP:-}
@@ -84,6 +85,10 @@ if [[ -n $CLEAN_BUILD ]]; then
     echo "Cleaning up build dir: $BUILD_DIR"
     rm -rf $BUILD_DIR
     rm -rf $DEPS_DIR
+fi
+if [[ -z $SKIP_BINDIR_CLEAN ]]; then
+    echo "Cleaning up bin dir: $binDir"
+    rm -rf $binDir
 fi
 
 if [[ ! -f ${depsToolsetDir}/completed ]]; then
@@ -177,13 +182,26 @@ if [[ -z $SKIP_DLL_COPY ]]; then
 fi
 
 if [[ -n $BUILD_ZIP ]]; then
+    # Use a temp directory, in order to create a clean zip file
+    ZIP_TMPDIR=$(mktemp -d win_binaries.XXXXX)
     if [[ -n $STRIP_ZIPPED ]]; then
         rm -rf $strippedBinDir
+        echo "Copying binaries to $strippedBinDir."
         cp -r $binDir $strippedBinDir
-        echo "Stripping debug symbols from $strippedBinDir binaries."
+        echo "Stripping debug symbols from binaries."
         $MINGW_STRIP $strippedBinDir/*.exe \
                      $strippedBinDir/*.dll
+        ln -s $strippedBinDir $ZIP_TMPDIR/ceph
+    else
+        ln -s $binDir $ZIP_TMPDIR/ceph
     fi
     echo "Building zip archive $ZIP_DEST."
-    zip -r $ZIP_DEST $strippedBinDir
+    # Include the README file in the archive
+    ln -s $CEPH_DIR/README.windows.rst $ZIP_TMPDIR/ceph/README.windows.rst
+    cd $ZIP_TMPDIR
+    [[ -f $ZIP_DEST ]] && rm $ZIP_DEST
+    zip -r $ZIP_DEST ceph
+    cd -
+    rm -rf $ZIP_TMPDIR/ceph/README.windows.rst $ZIP_TMPDIR
+    echo -e '\n  WIN32 files zipped to: '$ZIP_DEST'\n'
 fi
