@@ -12,6 +12,8 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <boost/tokenizer.hpp>
 
+
+
 #include "ceph_ver.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
@@ -32,7 +34,7 @@
 #include "rgw_iam_policy_keywords.h"
 
 #include "rgw_sts.h"
-
+#include "rgw_rest_oidc_provider.h"
 #include <boost/utility/string_ref.hpp>
 
 #define dout_context g_ceph_context
@@ -46,9 +48,82 @@ WebTokenEngine::is_applicable(const std::string& token) const noexcept
   return ! token.empty();
 }
 
+boost::optional<RGWOIDCProvider>
+WebTokenEngine::get_provider(const string& role_arn, const string& iss) const
+{
+  string tenant;
+  auto r_arn = rgw::ARN::parse(role_arn);
+  if (r_arn) {
+    tenant = r_arn->account;
+  }
+  string idp_url = iss;
+  auto pos = idp_url.find("http://");
+  if (pos == std::string::npos) {
+    pos = idp_url.find("https://");
+    if (pos != std::string::npos) {
+      idp_url.erase(pos, 8);
+    } else {
+      pos = idp_url.find("www.");
+      if (pos != std::string::npos) {
+        idp_url.erase(pos, 4);
+      }
+    }
+  } else {
+    idp_url.erase(pos, 7);
+  }
+  auto provider_arn = rgw::ARN(idp_url, "oidc-provider", tenant);
+  string p_arn = provider_arn.to_string();
+  RGWOIDCProvider provider(cct, ctl, p_arn, tenant);
+  auto ret = provider.get();
+  if (ret < 0) {
+    return boost::none;
+  }
+  return provider;
+}
+
+bool
+WebTokenEngine::is_client_id_valid(vector<string>& client_ids, const string& client_id) const
+{
+  for (auto it : client_ids) {
+    if (it == client_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool
+WebTokenEngine::is_cert_valid(const vector<string>& thumbprints, const string& cert) const
+{
+  //calculate thumbprint of cert
+  std::unique_ptr<BIO, decltype(&BIO_free_all)> certbio(BIO_new_mem_buf(cert.data(), cert.size()), BIO_free_all);
+  std::unique_ptr<BIO, decltype(&BIO_free_all)> keybio(BIO_new(BIO_s_mem()), BIO_free_all);
+  string pw="";
+  std::unique_ptr<X509, decltype(&X509_free)> x_509cert(PEM_read_bio_X509(certbio.get(), nullptr, nullptr, const_cast<char*>(pw.c_str())), X509_free);
+  const EVP_MD* fprint_type = EVP_sha1();
+  unsigned int fprint_size;
+  unsigned char fprint[EVP_MAX_MD_SIZE];
+
+  if (!X509_digest(x_509cert.get(), fprint_type, fprint, &fprint_size)) {
+    return false;
+  }
+  stringstream ss;
+  for (unsigned int i = 0; i < fprint_size; i++) {
+    ss << std::setfill('0') << std::setw(2) << std::hex << (0xFF & (unsigned int)fprint[i]);
+  }
+  std::string digest = ss.str();
+
+  for (auto& it : thumbprints) {
+    if (boost::iequals(it,digest)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 //Offline validation of incoming Web Token which is a signed JWT (JSON Web Token)
 boost::optional<WebTokenEngine::token_t>
-WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token) const
+WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s) const
 {
   WebTokenEngine::token_t t;
   try {
@@ -72,12 +147,23 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (t.client_id.empty() && decoded.has_payload_claim("clientId")) {
       t.client_id = decoded.get_payload_claim("clientId").as_string();
     }
-
+    string role_arn = s->info.args.get("RoleArn");
+    auto provider = get_provider(role_arn, t.iss);
+    if (! provider) {
+      throw -EACCES;
+    }
+    vector<string> client_ids = provider->get_client_ids();
+    vector<string> thumbprints = provider->get_thumbprints();
+    if (! client_ids.empty()) {
+      if (! is_client_id_valid(client_ids, t.client_id) && ! is_client_id_valid(client_ids, t.aud)) {
+        throw -EACCES;
+      }
+    }
     //Validate signature
     if (decoded.has_algorithm()) {
       auto& algorithm = decoded.get_algorithm();
       try {
-        validate_signature(dpp, decoded, algorithm, t.iss);
+        validate_signature(dpp, decoded, algorithm, t.iss, thumbprints);
       } catch (...) {
         throw -EACCES;
       }
@@ -99,7 +185,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
 }
 
 void
-WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss) const
+WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
     // Get certificate
@@ -131,8 +217,20 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
         if (parser.parse(val.str.c_str(), val.str.size())) {
           vector<string> x5c;
           if (JSONDecoder::decode_json("x5c", x5c, &parser)) {
-            string cert = "-----BEGIN CERTIFICATE-----\n" + x5c[0] + "\n-----END CERTIFICATE-----";
-            ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
+            string cert;
+            bool found_valid_cert = false;
+            for (auto& it : x5c) {
+              cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
+              ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
+              if (is_cert_valid(thumbprints, cert)) {
+               found_valid_cert = true;
+               break;
+              }
+              found_valid_cert = true;
+            }
+            if (! found_valid_cert) {
+              throw -EINVAL;
+            }
             try {
               //verify method takes care of expired tokens also
               if (algorithm == "RS256") {
@@ -223,7 +321,7 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   }
 
   try {
-    t = get_from_jwt(dpp, token);
+    t = get_from_jwt(dpp, token, s);
   }
   catch (...) {
     return result_t::deny(-EACCES);
