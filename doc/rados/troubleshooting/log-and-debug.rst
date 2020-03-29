@@ -330,12 +330,20 @@ settings:
 :Default: ``10000``
 
 
+``log to file``
+
+:Description: Determines if logging messages should appear in a file.
+:Type: Boolean
+:Required: No
+:Default: ``true``
+
+
 ``log to stderr``
 
 :Description: Determines if logging messages should appear in ``stderr``.
 :Type: Boolean
 :Required: No
-:Default: ``true``
+:Default: ``false``
 
 
 ``err to stderr``
@@ -367,7 +375,7 @@ settings:
 :Description: Determines if Ceph should flush the log files after exit.
 :Type: Boolean
 :Required: No
-:Default: ``true``
+:Default: ``false``
 
 
 ``clog to monitors``
