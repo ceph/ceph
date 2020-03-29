@@ -74,3 +74,10 @@ Code cleanup
   ceph_release_t::*)
 - [ ] search code for require_osd_release
 - [ ] search code for min_mon_release
+
+QA suite
+--------
+
+- [ ] create qa/suites/upgrade/(X-1)-x
+- [ ] remove qa/suites/upgrade/(X-3)-x
+- [x] create qa/releases/X.yaml
