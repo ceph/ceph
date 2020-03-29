@@ -79,21 +79,7 @@ int RGWCreateOIDCProvider::verify_permission()
     return ret;
   }
 
-  string idp_url = provider_url;
-  auto pos = idp_url.find("http://");
-  if (pos == std::string::npos) {
-    pos = idp_url.find("https://");
-    if (pos != std::string::npos) {
-      idp_url.erase(pos, 8);
-    } else {
-      pos = idp_url.find("www.");
-      if (pos != std::string::npos) {
-        idp_url.erase(pos, 4);
-      }
-    }
-  } else {
-    idp_url.erase(pos, 7);
-  }
+  string idp_url = url_remove_prefix(provider_url);
   if (!verify_user_permission(this,
                               s,
                               rgw::ARN(idp_url,

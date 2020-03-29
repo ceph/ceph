@@ -1594,6 +1594,27 @@ std::string url_encode(const std::string& src, bool encode_slash)
   return dst;
 }
 
+std::string url_remove_prefix(const std::string& url)
+{
+  std::string dst = url;
+  auto pos = dst.find("http://");
+  if (pos == std::string::npos) {
+    pos = dst.find("https://");
+    if (pos != std::string::npos) {
+      dst.erase(pos, 8);
+    } else {
+      pos = dst.find("www.");
+      if (pos != std::string::npos) {
+        dst.erase(pos, 4);
+      }
+    }
+  } else {
+    dst.erase(pos, 7);
+  }
+
+  return dst;
+}
+
 string rgw_trim_whitespace(const string& src)
 {
   if (src.empty()) {
