@@ -640,6 +640,12 @@ def call(command,  # type: List[str]
                     message = message_b.decode('utf-8')
                 if isinstance(message_b, str):
                     message = message_b
+                if stop and message:
+                    # process has terminated, but have more to read still, so not stopping yet
+                    # (os.read returns '' when it encounters EOF)
+                    stop = False
+                if not message:
+                    continue
                 if fd == process.stdout.fileno():
                     out += message
                     message = out_buffer + message
