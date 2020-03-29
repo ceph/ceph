@@ -46,7 +46,7 @@ public:
   // Dispatcher methods
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				MessageRef m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
 private:
   seastar::future<> handle_osd_ping(crimson::net::Connection* conn,

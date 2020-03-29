@@ -100,7 +100,7 @@ class OSD final : public crimson::net::Dispatcher,
   // Dispatcher methods
   seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m) final;
   seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) final;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) final;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
   seastar::future<> ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
 
   // mgr::WithStats methods
