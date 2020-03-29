@@ -350,15 +350,7 @@ void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
 string rgw::auth::WebIdentityApplier::get_idp_url() const
 {
   string idp_url = token_claims.iss;
-  auto pos = idp_url.find("http://");
-  if (pos == std::string::npos) {
-      pos = idp_url.find("https://");
-      if (pos != std::string::npos) {
-        idp_url.erase(pos, 8);
-    }
-  } else {
-    idp_url.erase(pos, 7);
-  }
+  idp_url = url_remove_prefix(idp_url);
   return idp_url;
 }
 
