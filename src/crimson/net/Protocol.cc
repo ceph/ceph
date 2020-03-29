@@ -48,9 +48,10 @@ void Protocol::close(bool dispatch_reset,
     return;
   }
 
+  bool is_replace = f_accept_new ? true : false;
   logger().info("{} closing: reset {}, replace {}", conn,
                 dispatch_reset ? "yes" : "no",
-                f_accept_new ? "yes" : "no");
+                is_replace ? "yes" : "no");
 
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn_ref = conn.shared_from_this(), this] {
@@ -74,10 +75,11 @@ void Protocol::close(bool dispatch_reset,
   }
   set_write_state(write_state_t::drop);
   auto gate_closed = pending_dispatch.close();
-  auto reset_dispatched = seastar::futurize_apply([this, dispatch_reset] {
+  auto reset_dispatched = seastar::futurize_apply([this, dispatch_reset, is_replace] {
     if (dispatch_reset) {
       return dispatcher.ms_handle_reset(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
+          is_replace);
     }
     return seastar::now();
   }).handle_exception([this] (std::exception_ptr eptr) {

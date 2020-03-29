@@ -39,7 +39,11 @@ class Dispatcher {
     return seastar::make_ready_future<>();
   }
 
-  virtual seastar::future<> ms_handle_reset(ConnectionRef conn) {
+  // a reset event is dispatched when the connection is closed unexpectedly.
+  // is_replace=true means the reset connection is going to be replaced by
+  // another accepting connection with the same peer_addr, which currently only
+  // happens under lossy policy when both sides wish to connect to each other.
+  virtual seastar::future<> ms_handle_reset(ConnectionRef conn, bool is_replace) {
     return seastar::make_ready_future<>();
   }
 

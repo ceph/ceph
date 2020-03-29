@@ -1311,7 +1311,6 @@ ProtocolV2::server_connect()
 
     SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
 
-    bool dispatch_reset = true;
     if (existing_conn) {
       if (existing_conn->protocol->proto_type != proto_t::v2) {
         logger().warn("{} existing connection {} proto version is {}, close existing",
@@ -1319,14 +1318,15 @@ ProtocolV2::server_connect()
                       static_cast<int>(existing_conn->protocol->proto_type));
         // should unregister the existing from msgr atomically
         // NOTE: this is following async messenger logic, but we may miss the reset event.
-        dispatch_reset = false;
+        execute_establishing(existing_conn, false);
+        return seastar::make_ready_future<next_step_t>(next_step_t::ready);
       } else {
         return handle_existing_connection(existing_conn);
       }
+    } else {
+      execute_establishing(nullptr, true);
+      return seastar::make_ready_future<next_step_t>(next_step_t::ready);
     }
-
-    execute_establishing(existing_conn, dispatch_reset);
-    return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   });
 }
 
