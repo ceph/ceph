@@ -13260,7 +13260,10 @@ void BlueStore::_do_write_small(
   uint64_t b_off0 = b_off;
   _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-  wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length, true, true);
+  wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
+    min_alloc_size != block_size, // use 'unused' bitmap when alloc granularity
+                                  // doesn't match disk one only
+    true);
 
   return;
 }
@@ -13600,12 +13603,14 @@ int BlueStore::_do_alloc_write(
     }
 
     if (wi.mark_unused) {
+      ceph_assert(!dblob.is_compressed());
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
         dblob.add_unused(0, b_off);
       }
-      if (b_end < wi.blob_length) {
-        dblob.add_unused(b_end, wi.blob_length - b_end);
+      uint64_t llen = dblob.get_logical_length();
+      if (b_end < llen) {
+        dblob.add_unused(b_end, llen - b_end);
       }
     }
 
