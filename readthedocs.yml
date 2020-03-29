@@ -1,6 +1,6 @@
 --- 
 configuration: doc/conf.py
 formats: all
-sphinx: ~
+sphinx: sphinx.builders.html
 version: 2
 
