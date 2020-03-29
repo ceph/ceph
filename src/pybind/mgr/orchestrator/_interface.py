@@ -889,13 +889,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def list_specs(self, service_name=None):
-        # type: (Optional[str]) -> Completion
-        """
-        Lists saved service specs
-        """
-        raise NotImplementedError()
-
     def remove_service(self, service_name):
         # type: (str) -> Completion
         """
@@ -1274,14 +1267,17 @@ class DaemonDescription(object):
             return self.name().startswith(service_name + '.')
         return False
 
-    def service_name(self):
+    def service_id(self):
         if self.daemon_type == 'rgw':
             v = self.daemon_id.split('.')
-            s_name = '.'.join(v[0:2])
-            return 'rgw.%s' % s_name
+            return '.'.join(v[0:2])
         if self.daemon_type in ['mds', 'nfs']:
-            _s_name = self.daemon_id.split('.')[0]
-            return '%s.%s' % (self.daemon_type, _s_name)
+            return self.daemon_id.split('.')[0]
+        return self.daemon_type
+
+    def service_name(self):
+        if self.daemon_type in ['rgw', 'mds', 'nfs']:
+            return f'{self.daemon_type}.{self.service_id()}'
         return self.daemon_type
 
     def __repr__(self):
@@ -1330,25 +1326,20 @@ class ServiceDescription(object):
     """
 
     def __init__(self,
+                 spec: ServiceSpec,
                  container_image_id=None,
                  container_image_name=None,
-                 service_name=None,
                  rados_config_location=None,
                  service_url=None,
                  last_refresh=None,
                  created=None,
                  size=0,
-                 running=0,
-                 spec=None):
+                 running=0):
         # Not everyone runs in containers, but enough people do to
         # justify having the container_image_id (image hash) and container_image
         # (image name)
         self.container_image_id = container_image_id      # image hash
         self.container_image_name = container_image_name  # image friendly name
-
-        # The service_name is either a bare type (e.g., 'mgr') or
-        # type.id combination (e.g., 'mds.fsname' or 'rgw.realm.zone').
-        self.service_name = service_name
 
         # Location of the service configuration when stored in rados
         # object. Format: "rados://<pool>/[<namespace/>]<object>"
@@ -1368,40 +1359,45 @@ class ServiceDescription(object):
         self.last_refresh = last_refresh   # type: Optional[datetime.datetime]
         self.created = created   # type: Optional[datetime.datetime]
 
-        self.spec = spec
+        self.spec: ServiceSpec = spec
 
     def service_type(self):
-        if self.service_name:
-            return self.service_name.split('.')[0]
-        return None
+        return self.spec.service_type
 
     def __repr__(self):
-        return "<ServiceDescription>({name})".format(name=self.service_name)
+        return f"<ServiceDescription of {self.spec.one_line_str()}>"
 
     def to_json(self):
-        out = {
+        out = self.spec.to_json()
+        status = {
             'container_image_id': self.container_image_id,
             'container_image_name': self.container_image_name,
-            'service_name': self.service_name,
             'rados_config_location': self.rados_config_location,
             'service_url': self.service_url,
             'size': self.size,
             'running': self.running,
-            'spec': self.spec.to_json() if self.spec is not None else None
+            'last_refresh': self.last_refresh,
+            'created': self.created
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):
-                out[k] = getattr(self, k).strftime(DATEFMT)
-        return {k: v for (k, v) in out.items() if v is not None}
+                status[k] = getattr(self, k).strftime(DATEFMT)
+        status = {k: v for (k, v) in status.items() if v is not None}
+        out['status'] = status
+        return out
 
     @classmethod
     @handle_type_error
-    def from_json(cls, data):
+    def from_json(cls, data: dict):
         c = data.copy()
+        status = c.pop('status', {})
+        spec = ServiceSpec.from_json(c)
+
+        c_status = status.copy()
         for k in ['last_refresh', 'created']:
             if k in c:
-                c[k] = datetime.datetime.strptime(c[k], DATEFMT)
-        return cls(**c)
+                c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
+        return cls(spec=spec, **c_status)
 
 
 class InventoryFilter(object):

@@ -282,6 +282,7 @@ class DriveGroupSpec(ServiceSpec):
             c['db_devices'] = self.db_devices.to_json()
         if self.wal_devices:
             c['wal_devices'] = self.wal_devices.to_json()
+        c['service_name'] = self.service_name()
         return c
 
     def __eq__(self, other):

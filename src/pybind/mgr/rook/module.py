@@ -266,7 +266,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         spec = {}
         spec['mon'] = orchestrator.ServiceDescription(
-            service_name='mon',
             spec=ServiceSpec(
                 'mon',
                 placement=PlacementSpec(
@@ -278,7 +277,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             last_refresh=now,
         )
         spec['mgr'] = orchestrator.ServiceDescription(
-            service_name='mgr',
             spec=ServiceSpec(
                 'mgr',
                 placement=PlacementSpec.from_string('count:1'),
@@ -289,7 +287,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
         if not cl['spec'].get('crashCollector', {}).get('disable', False):
             spec['crash'] = orchestrator.ServiceDescription(
-                service_name='crash',
                 spec=ServiceSpec(
                     'crash',
                     placement=PlacementSpec.from_string('*'),
@@ -313,9 +310,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
                 total_mds = active * 2
             spec[svc] = orchestrator.ServiceDescription(
-                service_name=svc,
                 spec=ServiceSpec(
-                    svc,
+                    service_type='mds',
+                    service_id=fs['metadata']['name'],
                     placement=PlacementSpec(count=active),
                 ),
                 size=total_mds,
@@ -341,8 +338,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 ssl = False
                 port = zone['spec']['gateway']['port'] or 80
             spec[svc] = orchestrator.ServiceDescription(
-                service_name=svc,
                 spec=RGWSpec(
+                    service_id=rgw_realm + '.' + rgw_zone,
                     rgw_realm=rgw_realm,
                     rgw_zone=rgw_zone,
                     ssl=ssl,

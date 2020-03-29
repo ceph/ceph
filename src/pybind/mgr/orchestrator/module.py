@@ -24,13 +24,24 @@ from mgr_module import MgrModule, HandleCommandResult
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
-    RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta
+    RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
+    ServiceDescription
 
 def nice_delta(now, t, suffix=''):
     if t:
         return to_pretty_timedelta(now - t) + suffix
     else:
         return '-'
+
+
+def to_format(what, format):
+    if format == 'json':
+        return json.dumps(what, sort_keys=True)
+    elif format == 'json-pretty':
+        return json.dumps(what, indent=2, sort_keys=True)
+    elif format == 'yaml':
+        return yaml.safe_dump_all(what, default_flow_style=False)
+
 
 @six.add_metaclass(CLICommandMeta)
 class OrchestratorCli(OrchestratorClientMixin, MgrModule):
@@ -202,16 +213,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @_cli_read_command(
         'orch host ls',
-        'name=format,type=CephChoices,strings=json|plain,req=false',
+        'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false',
         'List hosts')
     def _get_hosts(self, format='plain'):
         completion = self.get_hosts()
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
-        if format == 'json':
+        if format != 'plain':
             hosts = [host.to_json()
                      for host in completion.result]
-            output = json.dumps(hosts, sort_keys=True)
+            output = to_format(hosts, format)
         else:
             table = PrettyTable(
                 ['HOST', 'ADDR', 'LABELS', 'STATUS'],
@@ -249,7 +260,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
     @_cli_read_command(
         'orch device ls',
         "name=hostname,type=CephString,n=N,req=false "
-        "name=format,type=CephChoices,strings=json|plain,req=false "
+        "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false "
         "name=refresh,type=CephBool,req=false",
         'List devices on a host')
     def _list_devices(self, hostname=None, format='plain', refresh=False):
@@ -268,9 +279,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
 
-        if format == 'json':
+        if format != 'plain':
             data = [n.to_json() for n in completion.result]
-            return HandleCommandResult(stdout=json.dumps(data))
+            return HandleCommandResult(stdout=to_format(data, format))
         else:
             out = []
 
@@ -316,28 +327,36 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         'orch ls',
         "name=service_type,type=CephString,req=false "
         "name=service_name,type=CephString,req=false "
-        "name=format,type=CephChoices,strings=json|plain,req=false "
+        "name=export,type=CephBool,req=false "
+        "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false "
         "name=refresh,type=CephBool,req=false",
         'List services known to orchestrator')
-    def _list_services(self, host=None, service_type=None, service_name=None, format='plain', refresh=False):
+    def _list_services(self, host=None, service_type=None, service_name=None, export=False, format='plain', refresh=False):
+
+        if export and format == 'plain':
+            format = 'yaml'
+
         completion = self.describe_service(service_type,
                                            service_name,
                                            refresh=refresh)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
-        services = completion.result
+        services: List[ServiceDescription] = completion.result
 
         def ukn(s):
             return '<unknown>' if s is None else s
 
         # Sort the list for display
-        services.sort(key=lambda s: (ukn(s.service_name)))
+        services.sort(key=lambda s: (ukn(s.spec.service_name())))
 
         if len(services) == 0:
             return HandleCommandResult(stdout="No services reported")
-        elif format == 'json':
-            data = [s.to_json() for s in services]
-            return HandleCommandResult(stdout=json.dumps(data))
+        elif format != 'plain':
+            if export:
+                data = [s.spec.to_json() for s in services]
+            else:
+                data = [s.to_json() for s in services]
+            return HandleCommandResult(stdout=to_format(data, format))
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
@@ -355,7 +374,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.align['PLACEMENT'] = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for s in sorted(services, key=lambda s: s.service_name):
+            for s in services:
                 if not s.spec:
                     pl = '<no spec>'
                 elif s.spec.unmanaged:
@@ -363,7 +382,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 else:
                     pl = s.spec.placement.pretty_str()
                 table.add_row((
-                    s.service_name,
+                    s.spec.service_name(),
                     '%d/%d' % (s.running, s.size),
                     nice_delta(now, s.last_refresh, ' ago'),
                     nice_delta(now, s.created),
@@ -380,7 +399,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         "name=service_name,type=CephString,req=false "
         "name=daemon_type,type=CephString,req=false "
         "name=daemon_id,type=CephString,req=false "
-        "name=format,type=CephChoices,strings=json|plain,req=false "
+        "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false "
         "name=refresh,type=CephBool,req=false",
         'List daemons known to orchestrator')
     def _list_daemons(self, hostname=None, service_name=None, daemon_type=None, daemon_id=None, format='plain', refresh=False):
@@ -400,9 +419,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
         if len(daemons) == 0:
             return HandleCommandResult(stdout="No daemons reported")
-        elif format == 'json':
+        elif format != 'plain':
             data = [s.to_json() for s in daemons]
-            return HandleCommandResult(stdout=json.dumps(data))
+            return HandleCommandResult(stdout=to_format(data, format))
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
@@ -696,17 +715,6 @@ Usage:
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch spec dump',
-        'name=service_name,type=CephString,req=false',
-        desc='List all Service specs')
-    def _get_service_specs(self, service_name=None):
-        completion = self.list_specs(service_name=service_name)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        specs = completion.result
-        return HandleCommandResult(stdout=yaml.safe_dump_all(specs))
 
     @_cli_write_command(
         'orch apply',

@@ -210,7 +210,10 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                     continue
                 daemon_size = len(list(daemons))
                 services.append(orchestrator.ServiceDescription(
-                    service_name=daemon_type, size=daemon_size, running=daemon_size))
+                    spec=ServiceSpec(
+                        service_type=service_type,
+                    ),
+                    size=daemon_size, running=daemon_size))
         
         def _filter_func(svc):
             if service_name is not None and service_name != svc.service_name:

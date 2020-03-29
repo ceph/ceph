@@ -4,7 +4,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { Daemon } from '../models/daemon.interface';
-import { CephService } from '../models/service.interface';
+import { CephServiceSpec } from '../models/service.interface';
 import { ApiModule } from './api.module';
 
 @Injectable({
@@ -15,11 +15,11 @@ export class CephServiceService {
 
   constructor(private http: HttpClient) {}
 
-  list(serviceName?: string): Observable<CephService[]> {
+  list(serviceName?: string): Observable<CephServiceSpec[]> {
     const options = serviceName
       ? { params: new HttpParams().set('service_name', serviceName) }
       : {};
-    return this.http.get<CephService[]>(this.url, options);
+    return this.http.get<CephServiceSpec[]>(this.url, options);
   }
 
   getDaemons(serviceName?: string): Observable<Daemon[]> {

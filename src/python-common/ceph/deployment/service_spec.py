@@ -1,6 +1,7 @@
 import fnmatch
 import re
 from collections import namedtuple
+from functools import wraps
 from typing import Optional, Dict, Any, List, Union
 
 import six
@@ -28,6 +29,17 @@ def assert_valid_host(name):
         raise ServiceSpecValidationError(e)
 
 
+def handle_type_error(method):
+    @wraps(method)
+    def inner(cls, *args, **kwargs):
+        try:
+            return method(cls, *args, **kwargs)
+        except (TypeError, AttributeError) as e:
+            error_msg = '{}: {}'.format(cls.__name__, e)
+        raise ServiceSpecValidationError(error_msg)
+    return inner
+
+
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
     def __str__(self):
         res = ''
@@ -39,6 +51,7 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         return res
 
     @classmethod
+    @handle_type_error
     def from_json(cls, data):
         return cls(**data)
 
@@ -189,11 +202,13 @@ class PlacementSpec(object):
         return "PlacementSpec(%s)" % ', '.join(kv)
 
     @classmethod
+    @handle_type_error
     def from_json(cls, data):
-        hosts = data.get('hosts', [])
+        c = data.copy()
+        hosts = c.get('hosts', [])
         if hosts:
-            data['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
-        _cls = cls(**data)
+            c['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
+        _cls = cls(**c)
         _cls.validate()
         return _cls
 
@@ -326,6 +341,34 @@ class ServiceSpec(object):
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw'.split()
 
+    @classmethod
+    def _cls(cls, service_type):
+        from ceph.deployment.drive_group import DriveGroupSpec
+
+        ret = {
+            'rgw': RGWSpec,
+            'nfs': NFSServiceSpec,
+            'osd': DriveGroupSpec
+        }.get(service_type, cls)
+        if ret == ServiceSpec and not service_type:
+            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+        return ret
+
+    def __new__(cls, *args, **kwargs):
+        """
+        Some Python foo to make sure, we don't have an object
+        like `ServiceSpec('rgw')` of type `ServiceSpec`. Now we have:
+
+        >>> type(ServiceSpec('rgw')) == type(RGWSpec('rgw'))
+        True
+
+        """
+        if cls != ServiceSpec:
+            return object.__new__(cls)
+        service_type = kwargs.get('service_type', args[0] if args else None)
+        sub_cls = cls._cls(service_type)
+        return object.__new__(sub_cls)
+
     def __init__(self,
                  service_type,     # type: str
                  service_id=None,  # type: Optional[str]
@@ -341,6 +384,7 @@ class ServiceSpec(object):
         self.unmanaged = unmanaged
 
     @classmethod
+    @handle_type_error
     def from_json(cls, json_spec):
         # type: (dict) -> Any
         # Python 3:
@@ -350,19 +394,27 @@ class ServiceSpec(object):
         Initialize 'ServiceSpec' object data from a json structure
         :param json_spec: A valid dict with ServiceSpec
         """
-        from ceph.deployment.drive_group import DriveGroupSpec
 
-        service_type = json_spec.get('service_type', '')
-        _cls = {
-            'rgw': RGWSpec,
-            'nfs': NFSServiceSpec,
-            'osd': DriveGroupSpec
-        }.get(service_type, cls)
+        c = json_spec.copy()
 
-        if _cls == ServiceSpec and not service_type:
-            raise ServiceSpecValidationError('Spec needs a "service_type" key.')
+        # kludge to make `from_json` compatible to `Orchestrator.describe_service`
+        # Open question: Remove `service_id` form to_json?
+        if c.get('service_name', ''):
+            service_type_id = c['service_name'].split('.', 1)
 
-        return _cls._from_json_impl(json_spec)  # type: ignore
+            if not c.get('service_type', ''):
+                c['service_type'] = service_type_id[0]
+            if not c.get('service_id', '') and len(service_type_id) > 1:
+                c['service_id'] = service_type_id[1]
+            del c['service_name']
+
+        service_type = c.get('service_type', '')
+        _cls = cls._cls(service_type)
+
+        if 'status' in c:
+            del c['status']  # kludge to make us compatible to `ServiceDescription.to_json()`
+
+        return _cls._from_json_impl(c)  # type: ignore
 
     @classmethod
     def _from_json_impl(cls, json_spec):
@@ -390,6 +442,8 @@ class ServiceSpec(object):
                 val = val.to_json()
             if val:
                 c[key] = val
+
+        c['service_name'] = self.service_name()
         return c
 
     def validate(self):
@@ -415,7 +469,7 @@ def servicespec_validate_add(self: ServiceSpec):
 
 
 class NFSServiceSpec(ServiceSpec):
-    def __init__(self, service_id, pool=None, namespace=None, placement=None,
+    def __init__(self, service_id=None, pool=None, namespace=None, placement=None,
                  service_type='nfs', unmanaged=False):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -441,17 +495,17 @@ class RGWSpec(ServiceSpec):
 
     """
     def __init__(self,
+                 service_type='rgw',
+                 service_id=None,  # type: Optional[str]
+                 placement=None,
                  rgw_realm=None,  # type: Optional[str]
                  rgw_zone=None,  # type: Optional[str]
                  subcluster=None,  # type: Optional[str]
-                 service_id=None,  # type: Optional[str]
-                 placement=None,
-                 service_type='rgw',
                  rgw_frontend_port=None,  # type: Optional[int]
                  unmanaged=False,  # type: bool
                  ssl=False,   # type: bool
                  ):
-        assert service_type == 'rgw'
+        assert service_type == 'rgw', service_type
         if service_id:
             a = service_id.split('.', 2)
             rgw_realm = a[0]
