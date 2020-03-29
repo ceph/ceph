@@ -1,6 +1,9 @@
-===============
-Release kickoff
-===============
+==================
+Release checklists
+==================
+
+Dev Kickoff
+===========
 
 These steps should be taken when starting a new major release, just after
 the previous release has been tagged (vX.2.0) and that tag has been merged
@@ -83,3 +86,15 @@ QA suite
 - [x] create qa/releases/X.yaml
 - [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
 
+
+
+First release candidate
+=======================
+
+- [ ] src/ceph_release: change type to `rc`
+
+
+First stable release
+====================
+
+- [ ] src/ceph_release: change type `stable`
