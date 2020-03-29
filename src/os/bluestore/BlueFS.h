@@ -236,9 +236,6 @@ public:
     void skip(size_t n) {
       pos += n;
     }
-    void seek(uint64_t offset) {
-      pos = offset;
-    }
   };
 
   struct FileReader {
