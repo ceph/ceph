@@ -12,7 +12,8 @@ try:
 except ImportError:
     pass
 
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
+    NFSServiceSpec
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
@@ -258,6 +259,15 @@ class TestCephadm(object):
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed rbd-mirror.* on host 'test'")
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
+    def test_nfs(self, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            ps = PlacementSpec(hosts=['test'], count=1)
+            spec = NFSServiceSpec('name', pool='pool', namespace='namespace', placement=ps)
+            c = cephadm_module.add_nfs(spec)
+            [out] = wait(cephadm_module, c)
+            match_glob(out, "Deployed nfs.name.* on host 'test'")
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_prometheus(self, cephadm_module):
@@ -335,6 +345,15 @@ class TestCephadm(object):
             spec = ServiceSpec('rbd-mirror', placement=ps)
             c = cephadm_module.apply_rbd_mirror(spec)
             assert wait(cephadm_module, c) == 'Scheduled rbd-mirror update...'
+            assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_apply_nfs_save(self, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            ps = PlacementSpec(hosts=['test'], count=1)
+            spec = NFSServiceSpec('name', pool='pool', namespace='namespace', placement=ps)
+            c = cephadm_module.apply_nfs(spec)
+            assert wait(cephadm_module, c) == 'Scheduled nfs update...'
             assert wait(cephadm_module, cephadm_module.list_specs()) == [spec]
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))

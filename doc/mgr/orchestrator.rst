@@ -395,7 +395,7 @@ This is an overview of the current implementation status of the orchestrators.
  apply mds                           ✔      ✔
  apply mgr                           ⚪      ✔
  apply mon                           ✔      ✔
- apply nfs                           ✔      ⚪
+ apply nfs                           ✔      ✔
  apply osd                           ✔      ✔
  apply rbd-mirror                    ✔      ✔
  apply rgw                           ⚪      ✔
@@ -408,7 +408,7 @@ This is an overview of the current implementation status of the orchestrators.
  device ls                           ✔      ✔
  iscsi add                           ⚪      ⚪
  mds add                             ✔      ✔
- nfs add                             ✔      ⚪
+ nfs add                             ✔      ✔
  ps                                  ⚪      ✔
  rbd-mirror add                      ⚪      ✔
  rgw add                             ✔      ✔
