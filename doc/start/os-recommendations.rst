@@ -89,15 +89,16 @@ Notes
 -----
 
 - **1**: The default kernel has an older version of ``btrfs`` that we do not
-  recommend for ``ceph-osd`` storage nodes.  We recommend using ``XFS``.
+  recommend for ``ceph-osd`` storage nodes.  We recommend using ``bluestore``
+  starting from Mimic, and ``XFS`` for previous releases with ``filestore``.
 
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
 
 - **3**: The default kernel regularly fails in QA when the ``btrfs``
-  file system is used.  We do not recommend using ``btrfs`` for
-  backing Ceph OSDs.
+  file system is used.  We recommend using ``bluestore`` starting from
+  Mimic, and ``XFS`` for previous releases with ``filestore``.
 
 
 Testing
