@@ -15527,7 +15527,7 @@ void BlueStore::_record_allocation_stats()
 
   ++ probe_count;
 
-  for (size_t i = alloc_stats_history.size() - 1 ; i > 0 ; --i) {
+  for (ssize_t i = alloc_stats_history.size() - 1 ; i > 0 ; --i) {
     if ((probe_count % (1 << i)) == 0) {
       alloc_stats_history[i] = alloc_stats_history[i - 1];
     }
