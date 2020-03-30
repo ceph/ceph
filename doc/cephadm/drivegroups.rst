@@ -1,10 +1,10 @@
 .. _drivegroups:
 
-===========
-DriveGroups
-===========
+=========================
+OSD Service Specification
+=========================
 
-DriveGroups are a way to describe a cluster layout using the properties of disks.
+:ref:`orchestrator-cli-service-spec` of type ``osd`` are a way to describe a cluster layout using the properties of disks.
 It gives the user an abstract way tell ceph which disks should turn into an OSD
 with which configuration without knowing the specifics of device names and paths.
 
@@ -15,7 +15,7 @@ Instead of doing this::
 for each device and each host, we can define a yaml|json file that allows us to describe
 the layout. Here's the most basic example.
 
-Create a file called i.e. drivegroups.yml
+Create a file called i.e. osd_spec.yml
 
 .. code-block:: yaml
 
@@ -34,7 +34,7 @@ There will be a more detailed section on host_pattern down below.
 
 and pass it to `osd create` like so::
 
-  [monitor 1] # ceph orchestrator osd create -i /path/to/drivegroup.yml
+  [monitor 1] # ceph orch apply osd -i /path/to/osd_spec.yml
 
 This will go out on all the matching hosts and deploy these OSDs.
 
@@ -168,7 +168,7 @@ This example would deploy all OSDs with encryption enabled.
 .. code-block:: yaml
 
     service_type: osd
-    service_id: example_drive_group
+    service_id: example_osd_spec
     placement:
       host_pattern: '*'
     data_devices:
@@ -206,7 +206,7 @@ This is a common setup and can be described quite easily:
 .. code-block:: yaml
 
     service_type: osd
-    service_id: drive_group_default
+    service_id: osd_spec_default
     placement:
       host_pattern: '*'
     data_devices:
@@ -219,7 +219,7 @@ However, we can improve it by reducing the filters on core properties of the dri
 .. code-block:: yaml
 
     service_type: osd
-    service_id: drive_group_default
+    service_id: osd_spec_default
     placement:
       host_pattern: '*'
     data_devices:
@@ -234,7 +234,7 @@ If you know that drives with more than 2TB will always be the slower data device
 .. code-block:: yaml
 
     service_type: osd
-    service_id: drive_group_default
+    service_id: osd_spec_default
     placement:
       host_pattern: '*'
     data_devices:
@@ -274,7 +274,7 @@ This can be described with two layouts.
 .. code-block:: yaml
 
     service_type: osd
-    service_id: drive_group_hdd
+    service_id: osd_spec_hdd
     placement:
       host_pattern: '*'
     data_devices:
@@ -284,7 +284,7 @@ This can be described with two layouts.
       limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
       
     service_type: osd
-    service_id: drive_group_ssd
+    service_id: osd_spec_ssd
     placement:
       host_pattern: '*'
     data_devices:
@@ -328,7 +328,7 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
 .. code-block:: yaml
 
     service_type: osd
-    service_id: drive_group_node_one_to_five
+    service_id: osd_spec_node_one_to_five
     placement:
       host_pattern: 'node[1-5]'
     data_devices:
@@ -338,7 +338,7 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
       
       
     service_type: osd
-    service_id: drive_group_six_to_ten
+    service_id: osd_spec_six_to_ten
     placement:
       host_pattern: 'node[6-10]'
     data_devices:
@@ -346,7 +346,7 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
     db_devices:
       model: SSD-123-foo
 
-This will apply different drive groups to different hosts depending on the `host_pattern` key.
+This applies different OSD specs to different hosts depending on the `host_pattern` key.
 
 Dedicated wal + db
 ------------------
@@ -372,12 +372,12 @@ It's however possible to deploy the WAL on a dedicated device as well, if it mak
     Size: 256GB
 
 
-The drivegroup for this case would look like this (using the `model` filter)
+The OSD spec for this case would look like the following (using the `model` filter):
 
 .. code-block:: yaml
 
     service_type: osd
-    service_id: drive_group_default
+    service_id: osd_spec_default
     placement:
       host_pattern: '*'
     data_devices:
