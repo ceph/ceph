@@ -19,10 +19,12 @@ Create a file called i.e. drivegroups.yml
 
 .. code-block:: yaml
 
-    default_drive_group:    <- name of the drive_group (name can be custom)
-      host_pattern: '*'     <- which hosts to target, currently only supports globs
-      data_devices:         <- the type of devices you are applying specs to
-        all: true           <- a filter, check below for a full list
+    service_type: osd
+    service_id: default_drive_group  <- name of the drive_group (name can be custom)
+    placement:
+      host_pattern: '*'              <- which hosts to target, currently only supports globs
+    data_devices:                    <- the type of devices you are applying specs to
+      all: true                      <- a filter, check below for a full list
 
 This would translate to:
 
@@ -165,9 +167,12 @@ This example would deploy all OSDs with encryption enabled.
 
 .. code-block:: yaml
 
-    example_drive_group:
-      data_devices:
-        all: true
+    service_type: osd
+    service_id: example_drive_group
+    placement:
+      host_pattern: '*'
+    data_devices:
+      all: true
       encrypted: true
 
 See a full list in the DriveGroupSpecs
@@ -200,23 +205,27 @@ This is a common setup and can be described quite easily:
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: drive_group_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        model: HDD-123-foo <- note that HDD-123 would also be valid
-      db_devices:
-        model: MC-55-44-XZ <- same here, MC-55-44 is valid
+    data_devices:
+      model: HDD-123-foo <- note that HDD-123 would also be valid
+    db_devices:
+      model: MC-55-44-XZ <- same here, MC-55-44 is valid
 
 However, we can improve it by reducing the filters on core properties of the drives:
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: drive_group_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        rotational: 1
-      db_devices:
-        rotational: 0
+    data_devices:
+      rotational: 1
+    db_devices:
+      rotational: 0
 
 Now, we enforce all rotating devices to be declared as 'data devices' and all non-rotating devices will be used as shared_devices (wal, db)
 
@@ -224,12 +233,14 @@ If you know that drives with more than 2TB will always be the slower data device
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: drive_group_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        size: '2TB:'
-      db_devices:
-        size: ':2TB'
+    data_devices:
+      size: '2TB:'
+    db_devices:
+      size: ':2TB'
 
 Note: All of the above DriveGroups are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
 
@@ -262,20 +273,24 @@ This can be described with two layouts.
 
 .. code-block:: yaml
 
-    drive_group_hdd:
+    service_type: osd
+    service_id: drive_group_hdd
+    placement:
       host_pattern: '*'
-      data_devices:
-        rotational: 0
-      db_devices:
-        model: MC-55-44-XZ
-        limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
-
-    drive_group_ssd:
+    data_devices:
+      rotational: 0
+    db_devices:
+      model: MC-55-44-XZ
+      limit: 2 (db_slots is actually to be favoured here, but it's not implemented yet)
+      
+    service_type: osd
+    service_id: drive_group_ssd
+    placement:
       host_pattern: '*'
-      data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        vendor: VendorC
+    data_devices:
+      model: MC-55-44-XZ
+    db_devices:
+      vendor: VendorC
 
 This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
 The remaining SSDs(8) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
@@ -312,19 +327,24 @@ You can use the 'host_pattern' key in the layout to target certain nodes. Salt t
 
 .. code-block:: yaml
 
-    drive_group_node_one_to_five:
+    service_type: osd
+    service_id: drive_group_node_one_to_five
+    placement:
       host_pattern: 'node[1-5]'
-      data_devices:
-        rotational: 1
-      db_devices:
-        rotational: 0
-
-    drive_group_six_to_ten:
+    data_devices:
+      rotational: 1
+    db_devices:
+      rotational: 0
+      
+      
+    service_type: osd
+    service_id: drive_group_six_to_ten
+    placement:
       host_pattern: 'node[6-10]'
-      data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        model: SSD-123-foo
+    data_devices:
+      model: MC-55-44-XZ
+    db_devices:
+      model: SSD-123-foo
 
 This will apply different drive groups to different hosts depending on the `host_pattern` key.
 
@@ -356,14 +376,16 @@ The drivegroup for this case would look like this (using the `model` filter)
 
 .. code-block:: yaml
 
-    drive_group_default:
+    service_type: osd
+    service_id: drive_group_default
+    placement:
       host_pattern: '*'
-      data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        model: SSD-123-foo
-      wal_devices:
-        model: NVME-QQQQ-987
+    data_devices:
+      model: MC-55-44-XZ
+    db_devices:
+      model: SSD-123-foo
+    wal_devices:
+      model: NVME-QQQQ-987
 
 
 This can easily be done with other filters, like `size` or `vendor` as well.
