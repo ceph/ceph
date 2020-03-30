@@ -145,6 +145,10 @@ static const actpair actpairs[] =
  { "iam:GetRolePolicy", iamGetRolePolicy},
  { "iam:ListRolePolicies", iamListRolePolicies},
  { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
+ { "iam:CreateOIDCProvider", iamCreateOIDCProvider},
+ { "iam:DeleteOIDCProvider", iamDeleteOIDCProvider},
+ { "iam:GetOIDCProvider", iamGetOIDCProvider},
+ { "iam:ListOIDCProviders", iamListOIDCProviders},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -1254,6 +1258,18 @@ const char* action_bit_string(uint64_t action) {
 
   case iamDeleteRolePolicy:
     return "iam:DeleteRolePolicy";
+
+  case iamCreateOIDCProvider:
+    return "iam:CreateOIDCProvider";
+
+  case iamDeleteOIDCProvider:
+    return "iam:DeleteOIDCProvider";
+
+  case iamGetOIDCProvider:
+    return "iam:GetOIDCProvider";
+
+  case iamListOIDCProviders:
+    return "iam:ListOIDCProviders";
 
   case stsAssumeRole:
     return "sts:AssumeRole";
