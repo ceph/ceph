@@ -1230,43 +1230,39 @@ inline namespace v15_2_0 {
     }
   };
 
-inline bool operator>(const bufferlist& l, const bufferlist& r) {
-  for (unsigned p = 0; ; p++) {
-    if (l.length() > p && r.length() == p) return true;
-    if (l.length() == p) return false;
-    if (l[p] > r[p]) return true;
-    if (l[p] < r[p]) return false;
-  }
-}
-inline bool operator>=(const bufferlist& l, const bufferlist& r) {
-  for (unsigned p = 0; ; p++) {
-    if (l.length() > p && r.length() == p) return true;
-    if (r.length() == p && l.length() == p) return true;
-    if (l.length() == p && r.length() > p) return false;
-    if (l[p] > r[p]) return true;
-    if (l[p] < r[p]) return false;
-  }
+inline bool operator==(const bufferlist &lhs, const bufferlist &rhs) {
+  if (lhs.length() != rhs.length())
+    return false;
+  return std::equal(lhs.begin(), lhs.end(), rhs.begin());
 }
 
-inline bool operator==(const bufferlist &l, const bufferlist &r) {
-  if (l.length() != r.length())
-    return false;
-  for (unsigned p = 0; p < l.length(); p++) {
-    if (l[p] != r[p])
-      return false;
+inline bool operator<(const bufferlist& lhs, const bufferlist& rhs) {
+  auto l = lhs.begin(), r = rhs.begin();
+  for (; l != lhs.end() && r != rhs.end(); ++l, ++r) {
+    if (*l < *r) return true;
+    if (*l > *r) return false;
   }
-  return true;
+  return (l == lhs.end()) && (r != rhs.end()); // lhs.length() < rhs.length()
 }
+
+inline bool operator<=(const bufferlist& lhs, const bufferlist& rhs) {
+  auto l = lhs.begin(), r = rhs.begin();
+  for (; l != lhs.end() && r != rhs.end(); ++l, ++r) {
+    if (*l < *r) return true;
+    if (*l > *r) return false;
+  }
+  return l == lhs.end(); // lhs.length() <= rhs.length()
+}
+
 inline bool operator!=(const bufferlist &l, const bufferlist &r) {
   return !(l == r);
 }
-inline bool operator<(const bufferlist& l, const bufferlist& r) {
-  return r > l;
+inline bool operator>(const bufferlist& lhs, const bufferlist& rhs) {
+  return rhs < lhs;
 }
-inline bool operator<=(const bufferlist& l, const bufferlist& r) {
-  return r >= l;
+inline bool operator>=(const bufferlist& lhs, const bufferlist& rhs) {
+  return rhs <= lhs;
 }
-
 
 std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
