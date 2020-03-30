@@ -378,15 +378,23 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   }
 
   std::vector<const char*>::iterator arg = argv.begin();
+  bool dry_run = false;
+
   std::string command = *(arg++);
   if (command != "get" && command != "splice" && command != "recover_dentries") {
     derr << "Unknown argument '" << command << "'" << dendl;
     return -EINVAL;
   }
 
-  if (command == "recover_dentries" && type != "mdlog") {
-    derr << "journaler for " << type << " can't do \"recover_dentries\"." << dendl;
-    return -EINVAL;
+  if (command == "recover_dentries") {
+    if (type != "mdlog") {
+      derr << "journaler for " << type << " can't do \"recover_dentries\"." << dendl;
+      return -EINVAL;
+    } else {
+      if (arg != argv.end() && ceph_argparse_flag(argv, arg, "--dry_run", (char*)NULL)) {
+        dry_run = true;
+      }
+    }
   }
 
   if (arg == argv.end()) {
@@ -448,11 +456,6 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     if (r) {
       derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
       return r;
-    }
-
-    bool dry_run = false;
-    if (arg != argv.end() && ceph_argparse_flag(argv, arg, "--dry_run", (char*)NULL)) {
-      dry_run = true;
     }
 
     /**
