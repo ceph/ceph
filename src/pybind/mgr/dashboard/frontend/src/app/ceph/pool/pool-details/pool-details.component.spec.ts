@@ -1,11 +1,14 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { AppModule } from '../../../app.module';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../shared/models/permissions';
+import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
 import { PoolDetailsComponent } from './pool-details.component';
 
@@ -14,7 +17,13 @@ describe('PoolDetailsComponent', () => {
   let fixture: ComponentFixture<PoolDetailsComponent>;
 
   configureTestBed({
-    imports: [TabsModule.forRoot(), AppModule],
+    imports: [
+      BrowserAnimationsModule,
+      TabsModule.forRoot(),
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule
+    ],
     declarations: [PoolDetailsComponent, RbdConfigurationListComponent],
     providers: [i18nProviders]
   });
