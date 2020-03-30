@@ -421,7 +421,7 @@ def ceph_bootstrap(ctx, config):
         for remote in ctx.cluster.remotes.keys():
             if remote == bootstrap_remote:
                 continue
-            log.info('Writing conf and keyring to %s' % remote.shortname)
+            log.info('Writing (initial) conf and keyring to %s' % remote.shortname)
             teuthology.write_file(
                 remote=remote,
                 path='/etc/ceph/{}.conf'.format(cluster_name),
@@ -516,19 +516,18 @@ def ceph_mons(ctx, config):
                         if len(j['mons']) == num_mons:
                             break
 
-        # refresh ceph.conf files for all mons + first mgr
-        for remote, roles in ctx.cluster.remotes.items():
-            for mon in [r for r in roles
-                        if teuthology.is_type('mon', cluster_name)(r)]:
-                c_, _, id_ = teuthology.split_role(mon)
-                _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'daemon', 'reconfig',
-                    'mon.' + id_,
-                ])
-        _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote, [
-            'ceph', 'orch', 'daemon', 'reconfig',
-            'mgr.' + ctx.ceph[cluster_name].first_mgr,
-        ])
+        # refresh our (final) ceph.conf file
+        log.info('Generating final ceph.conf file...')
+        r = _shell(
+            ctx=ctx,
+            cluster_name=cluster_name,
+            remote=remote,
+            args=[
+                'ceph', 'config', 'generate-minimal-conf',
+            ],
+            stdout=BytesIO(),
+        )
+        ctx.ceph[cluster_name].config_file = r.stdout.getvalue()
 
         yield
 
@@ -932,6 +931,31 @@ def restart(ctx, config):
     yield
 
 @contextlib.contextmanager
+def distribute_config_and_admin_keyring(ctx, config):
+    """
+    Distribute a sufficient config and keyring for clients
+    """
+    cluster_name = config['cluster']
+    log.info('Distributing (final) config and client.admin keyring...')
+    for remote, roles in ctx.cluster.remotes.items():
+        teuthology.sudo_write_file(
+            remote=remote,
+            path='/etc/ceph/{}.conf'.format(cluster_name),
+            data=ctx.ceph[cluster_name].config_file)
+        teuthology.sudo_write_file(
+            remote=remote,
+            path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+            data=ctx.ceph[cluster_name].admin_keyring)
+    try:
+        yield
+    finally:
+        ctx.cluster.run(args=[
+            'sudo', 'rm', '-f',
+            '/etc/ceph/{}.conf'.format(cluster_name),
+            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+        ])
+
+@contextlib.contextmanager
 def crush_setup(ctx, config):
     cluster_name = config['cluster']
     first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
@@ -1028,6 +1052,7 @@ def task(ctx, config):
             lambda: ceph_bootstrap(ctx=ctx, config=config),
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
+            lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
