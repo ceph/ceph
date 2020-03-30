@@ -524,9 +524,9 @@ bool RocksDBStore::is_column_family(const std::string& prefix) {
 
 rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& prefix, const std::string& key) {
   auto iter = cf_handles.find(prefix);
-  if (iter == cf_handles.end())
+  if (iter == cf_handles.end()) {
     return nullptr;
-  else {
+  } else {
     if (iter->second.handles.size() == 1) {
       return iter->second.handles[0];
     } else {
@@ -540,9 +540,9 @@ rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& pref
 
 rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& prefix, const char* key, size_t keylen) {
   auto iter = cf_handles.find(prefix);
-  if (iter == cf_handles.end())
+  if (iter == cf_handles.end()) {
     return nullptr;
-  else {
+  } else {
     if (iter->second.handles.size() == 1) {
       return iter->second.handles[0];
     } else {

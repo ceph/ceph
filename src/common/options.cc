@@ -4417,12 +4417,14 @@ std::vector<Option> get_global_options() {
     .set_description("Enable use of rocksdb column families for bluestore metadata"),
 
     Option("bluestore_rocksdb_cfs", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("m(5,0-8) O(7,0-13) L")
+    .set_default("m(5) O(7,0-13) L")
     .set_description("Definition of column families and their sharding")
     .set_long_description("Space separated list of elements: column_def [ '=' rocksdb_options ]. "
 			  "column_def := column_name [ '(' shard_count [ ',' hash_begin '-' [ hash_end ] ] ')' ]. "
 			  "Example: 'I=write_buffer_size=1048576 O(6) m(7,10-)'. "
-			  "Interval [hash_begin..hash_end) defines characters to use for hash calculation."),
+			  "Interval [hash_begin..hash_end) defines characters to use for hash calculation. "
+			  "Recommended hash ranges: O(0-13) P(0-8) m(0-16). "
+			  "Sharding of S,T,C,M,B prefixes is inadvised"),
 
     Option("bluestore_fsck_on_mount", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)

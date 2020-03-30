@@ -312,6 +312,43 @@ TEST_P(KVTest, RMRange) {
   fini();
 }
 
+TEST_P(KVTest, ShardingRMRange) {
+  if(string(GetParam()) != "rocksdb")
+    return;
+  std::string cfs("O(7)=");
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (size_t i = 0; i < 1000; i++) {
+      bufferlist value;
+      char* a;
+      ASSERT_EQ(asprintf(&a, "key%3.3ld", i), 6);
+      value.append(a);
+      t->set("O", a, value);
+      free(a);
+    }
+    db->submit_transaction_sync(t);
+  }
+
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    t->rm_range_keys("O", "key277", "key467");
+    db->submit_transaction_sync(t);
+  }
+
+  for (size_t i = 0; i < 1000; i++) {
+    char* key;
+    ASSERT_EQ(asprintf(&key, "key%3.3ld", i), 6);
+    bufferlist value;
+    int r = db->get("O", key, &value);
+    ASSERT_EQ(r, (i >= 277 && i < 467 ? -ENOENT : 0));
+    free(key);
+  }
+
+  fini();
+}
+
+
 TEST_P(KVTest, RocksDBColumnFamilyTest) {
   if(string(GetParam()) != "rocksdb")
     return;
