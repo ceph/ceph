@@ -267,7 +267,7 @@ class GaneshaConf(object):
                         "export-{}".format(ex.export_id))
                 })
         for daemon_id, conf_blocks in daemon_map.items():
-            self._write_raw_config(conf_blocks, "conf-{}".format(daemon_id))
+            self._write_raw_config(conf_blocks, "conf-nfs")
 
     def _delete_export(self, export_id):
         self._persist_daemon_configuration()
@@ -337,50 +337,13 @@ class NFSConfig(object):
             if ret!= 0:
                 return ret, out, err
 
-    def create_common_config(self, nodeid):
-        # TODO change rados url to "%url rados://{}/{}/{}".format(self.pool_name, self.pool_ns, nodeid)
-        result = """NFS_CORE_PARAM {{
-        Enable_NLM = false;
-        Enable_RQUOTA = false;
-        Protocols = 4;
-        }}
-
-        CACHEINODE {{
-        Dir_Chunk = 0;
-        NParts = 1;
-        Cache_Size = 1;
-        }}
-
-        NFSv4 {{
-        RecoveryBackend = rados_cluster;
-        Minor_Versions = 1, 2;
-        }}
-
-        RADOS_URLS {{
-        userid = {2};
-        }}
-
-        %url rados://{0}/{1}/export-1
-
-        RADOS_KV {{
-        pool = {0};
-        namespace = {1};
-        UserId = {2};
-        nodeid = {3};
-        }}""".format(self.pool_name, self.pool_ns, self.cluster_id, nodeid)
-        #self.ganeshaconf._write_raw_config(result, nodeid)
-
-        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
-            if self.pool_ns:
-                ioctx.set_namespace(self.pool_ns)
-            ioctx.write_full(nodeid, result.encode('utf-8'))
-            log.debug(
-                    "write configuration into rados object %s/%s/%s:\n%s",
-                    self.pool_name, self.pool_ns, nodeid, result)
-
     def create_instance(self):
-        assert self.ganeshaconf is not None
         self.ganeshaconf = GaneshaConf(self)
+        ret, out, err = self.mgr.mon_command({'prefix': 'auth get','entity': "client.%s" % (self.cluster_id), 'format': 'json',})
+
+        if not out:
+            json_res = json.loads(out)
+            self.key = json_res[0]['key']
 
     def create_export(self):
         assert self.ganeshaconf is not None
@@ -412,6 +375,17 @@ class NFSConfig(object):
         return [{'id': fs['id'], 'name': fs['mdsmap']['fs_name']}
                 for fs in fs_map['filesystems']]
 
+    def create_empty_rados_obj(self):
+        common_conf = 'conf-nfs'
+        result = ''
+        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
+            if self.pool_ns:
+                ioctx.set_namespace(self.pool_ns)
+            ioctx.write_full(common_conf, result.encode('utf-8'))
+            log.debug(
+                    "write configuration into rados object %s/%s/%s\n",
+                    self.pool_name, self.pool_ns, common_conf)
+
     def create_nfs_cluster(self, size):
         pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
         client = 'client.%s' % self.cluster_id
@@ -428,27 +402,8 @@ class NFSConfig(object):
             if r != 0:
                 return r, out, err
 
-        ret, out, err = self.mgr.mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': client,
-            'caps' : ['mon', 'allow r', 'osd', 'allow rw pool=%s namespace=%s, allow rw tag cephfs data=a' % (self.pool_name, self.pool_ns), 'mds', 'allow rw path=/'],
-            'format': 'json',
-            })
-
-        if ret!= 0:
-            return ret, out, err
-
-        json_res = json.loads(out)
-        self.key = json_res[0]['key']
-        log.info("The user created is {}".format(json_res[0]['entity']))
-
-        """
-        Not required, this just gives mgr keyring location.
-        keyring = self.mgr.rados.conf_get("keyring")
-        log.info("The keyring location is {}".format(keyring))
-        """
-
-        log.info("Calling up common config")
-        self.create_common_config("a")
+        self.create_empty_rados_obj()
+        #TODO Check if cluster exists
+        #TODO Call Orchestrator to deploy cluster
 
         return 0, "", "NFS Cluster Created Successfully"
