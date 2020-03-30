@@ -1,11 +1,14 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
+
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
-import { CoreModule } from '../../../../core/core.module';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { SummaryService } from '../../../../shared/services/summary.service';
 import { SharedModule } from '../../../../shared/shared.module';
-import { CephModule } from '../../../ceph.module';
+import { ServiceDaemonListComponent } from '../service-daemon-list/service-daemon-list.component';
 import { ServiceDetailsComponent } from './service-details.component';
 
 describe('ServiceDetailsComponent', () => {
@@ -13,19 +16,19 @@ describe('ServiceDetailsComponent', () => {
   let fixture: ComponentFixture<ServiceDetailsComponent>;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, CephModule, CoreModule, SharedModule],
-    declarations: [],
-    providers: [i18nProviders]
+    imports: [HttpClientTestingModule, RouterTestingModule, TabsModule.forRoot(), SharedModule],
+    declarations: [ServiceDetailsComponent, ServiceDaemonListComponent],
+    providers: [i18nProviders, { provide: SummaryService, useValue: { subscribe: jest.fn() } }]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(ServiceDetailsComponent);
     component = fixture.componentInstance;
     component.selection = new CdTableSelection();
-    fixture.detectChanges();
   });
 
   it('should create', () => {
+    fixture.detectChanges();
     expect(component).toBeTruthy();
   });
 
