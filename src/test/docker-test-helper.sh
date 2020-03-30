@@ -24,8 +24,8 @@ function get_image_name() {
 function setup_container() {
     local os_type=$1
     local os_version=$2
-    local opts="$3"
-    local dockercmd=$4
+    local dockercmd=$3
+    local opts="$4"
 
     local image=$(get_image_name $os_type $os_version)
     local build=true
@@ -108,14 +108,14 @@ function run_in_docker() {
     shift
     local ref=$1
     shift
+    local dockercmd=$1
+    shift
     local opts="$1"
     shift
     local script=$1
-    shift
-    local dockercmd=$1
 
     setup_downstream $os_type $os_version $ref || return 1
-    setup_container $os_type $os_version "$opts" $dockercmd || return 1
+    setup_container $os_type $os_version $dockercmd "$opts" || return 1
     local downstream=$(get_downstream $os_type $os_version)
     local image=$(get_image_name $os_type $os_version)
     local upstream=$(get_upstream)
@@ -327,9 +327,9 @@ function main_docker() {
             if $remove ; then
                 remove_all $os_type $os_version $dockercmd || return 1
             elif $shell ; then
-                run_in_docker $os_type $os_version $ref "$opts" SHELL $dockercmd || return 1
+                run_in_docker $os_type $os_version $ref $dockercmd "$opts" SHELL || return 1
             else
-                run_in_docker $os_type $os_version $ref "$opts" "$@" $dockercmd || return 1
+                run_in_docker $os_type $os_version $ref $dockercmd "$opts" "$@" || return 1
             fi
         done
     done
