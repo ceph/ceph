@@ -107,6 +107,7 @@ virtualenv==15.1.0        # via tox
 warlock==1.2.0            # via python-glanceclient
 wrapt==1.10.10            # via debtcollector, positional, python-glanceclient
 xmltodict==0.12.0
+ipy==1.0
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

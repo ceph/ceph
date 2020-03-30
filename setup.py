@@ -101,6 +101,7 @@ setup(
             'xmltodict',
             'boto3',
             'PyJWT',            # for qa/tasks/mgr/dashboard/test_auth.py
+            'ipy',              # for qa/tasks/cephfs/mount.py
         ]
     },
 
