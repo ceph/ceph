@@ -265,6 +265,76 @@ Start/stop/reload::
 
     ceph orch daemon {start,stop,reload} <type> <daemon-id>
     
+.. _orchestrator-cli-service-spec:
+    
+Service Specification
+=====================
+
+As *Service Specification* is a data structure often represented as YAML 
+to specify the deployment of services. For example::
+
+    service_type: rgw
+    service_id: realm.zone
+    placement: 
+      hosts: 
+        - host1
+        - host2
+        - host3
+    spec: ...
+        
+Where the properties of a service specification are the following:
+
+* ``service_type`` is the type of the service. Needs to be either a Ceph
+   service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or 
+   ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), or part of the
+   monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
+   ``prometheus``).
+* ``service_id`` is the name of the service. Omit the service time
+* ``placement`` is a :ref:`orchestrator-cli-placement-spec`
+* ``spec``: additional specifications for a specific service.
+
+Each service type can have different requirements for the spec.
+
+Service specifications of type ``mon``, ``mgr``, and the monitoring
+types do not require a ``service_id``
+
+A service of type ``nfs`` requires a pool name and contain
+an optional namespace::
+
+    service_type: nfs
+    service_id: realm.zone
+    placement: 
+      hosts: 
+        - host1
+        - host2
+    spec:
+      pool: mypool
+      namespace: mynamespace
+
+Where ``pool`` is a RADOS pool where NFS client recovery data is stored
+and ``namespace`` is a RADOS namespace where NFS client recovery
+data is stored in the pool.
+
+A service of type ``osd`` is in detail described in :ref:`drivegroups`
+
+Many service specifications can then be applied at once using
+``ceph orch apply -i`` by submitting a multi-document YAML file::
+
+    cat <<EOF | ceph orch apply -i -
+    service_type: mon
+    placement:
+      host_pattern: "mon*"
+    ---
+    service_type: mgr
+    placement:
+      host_pattern: "mgr*"
+    ---
+    service_type: osd
+    placement:
+      host_pattern: "osd*"
+    data_devices:
+      all: true
+    EOF
 
 .. _orchestrator-cli-placement-spec:
     
