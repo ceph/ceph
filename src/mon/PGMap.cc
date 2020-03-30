@@ -1214,6 +1214,13 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     bool pool_erased = false;
     if (s != pg_stat.end()) {
       pool_erased = stat_pg_sub(removed_pg, s->second);
+
+      // decrease pool stats if pg was removed
+      auto pool_stats_it = pg_pool_sum.find(removed_pg.pool());
+      if (pool_stats_it != pg_pool_sum.end()) {
+        pool_stats_it->second.sub(s->second);
+      }
+
       pg_stat.erase(s);
       if (pool_erased) {
         deleted_pools.insert(removed_pg.pool());
