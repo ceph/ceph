@@ -40,12 +40,14 @@ export class NavigationComponent implements OnInit {
       }
       this.summaryData = data;
     });
-    this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.isAlertmanagerConfigured = true;
-    });
-    this.prometheusService.ifPrometheusConfigured(() => {
-      this.isPrometheusConfigured = true;
-    });
+    if (this.permissions.configOpt.read) {
+      this.prometheusService.ifAlertmanagerConfigured(() => {
+        this.isAlertmanagerConfigured = true;
+      });
+      this.prometheusService.ifPrometheusConfigured(() => {
+        this.isPrometheusConfigured = true;
+      });
+    }
   }
 
   blockHealthColor() {
