@@ -2358,6 +2358,7 @@ def command_bootstrap():
         ssh_pub = cli(['cephadm', 'get-pub-key'])
 
         with open(args.output_pub_ssh_key, 'w') as f:
+            os.fchmod(f.fileno(), 0o600)
             f.write(ssh_pub)
         logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
