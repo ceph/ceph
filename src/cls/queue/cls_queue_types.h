@@ -11,6 +11,7 @@
 
 constexpr unsigned int QUEUE_HEAD_START = 0xDEAD;
 constexpr unsigned int QUEUE_ENTRY_START = 0xBEEF;
+constexpr unsigned int QUEUE_ENTRY_OVERHEAD = sizeof(uint16_t) + sizeof(uint64_t);
 
 struct cls_queue_entry
 {
