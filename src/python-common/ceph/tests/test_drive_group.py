@@ -1,5 +1,6 @@
 # flake8: noqa
 import pytest
+import yaml
 
 from ceph.deployment import drive_selection, translate
 from ceph.deployment.inventory import Device
@@ -28,10 +29,26 @@ def test_DriveGroup(test_input):
     assert all([isinstance(x, Device) for x in dg.data_devices.paths])
     assert dg.data_devices.paths[0].path == '/dev/sda'
 
-
-def test_DriveGroup_fail():
+@pytest.mark.parametrize("test_input",
+[
+    (
+        {}
+    ),
+    (
+        yaml.safe_load("""
+service_type: osd
+service_id: mydg
+placement:
+  host_pattern: '*'
+data_devices:
+  limit: 1
+""")
+    )
+])
+def test_DriveGroup_fail(test_input):
     with pytest.raises(ServiceSpecValidationError):
-        DriveGroupSpec.from_json({})
+        DriveGroupSpec.from_json(test_input)
+
 
 
 def test_drivegroup_pattern():
