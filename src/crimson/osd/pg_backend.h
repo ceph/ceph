@@ -76,11 +76,13 @@ public:
   seastar::future<> write(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
   seastar::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
   seastar::future<crimson::osd::acked_peers_t> mutate_object(
     std::set<pg_shard_t> pg_shards,
     crimson::osd::ObjectContextRef &&obc,
@@ -125,7 +127,8 @@ public:
   seastar::future<> omap_set_vals(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    osd_op_params_t& osd_op_params);
   seastar::future<ceph::bufferlist> omap_get_header(
     crimson::os::CollectionRef& c,
     const ghobject_t& oid);
