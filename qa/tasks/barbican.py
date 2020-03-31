@@ -172,7 +172,7 @@ def configure_barbican(ctx, config):
     Configure barbican paste-api and barbican-api.
     """
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     keystone_role = cconfig.get('use-keystone-role', None)
     if keystone_role is None:
@@ -239,7 +239,7 @@ def create_secrets(ctx, config):
     Create a main and an alternate s3 user.
     """
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     rgw_user = cconfig['rgw_user']
 
