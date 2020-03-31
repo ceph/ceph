@@ -520,6 +520,7 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
     logger().debug("{} op_returns: {}",
                    __func__, log_entries.back().op_returns);
   }
+  log_entries.back().clean_regions = std::move(osd_op_p.clean_regions);
   peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
 						txn, true, false);
 

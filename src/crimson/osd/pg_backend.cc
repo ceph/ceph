@@ -245,7 +245,8 @@ bool PGBackend::maybe_create_new_object(
 seastar::future<> PGBackend::write(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& txn)
+    ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params)
 {
   const ceph_osd_op& op = osd_op.op;
   uint64_t offset = op.extent.offset;
@@ -274,6 +275,13 @@ seastar::future<> PGBackend::write(
       if (op.extent.truncate_size != os.oi.size) {
         os.oi.size = length;
         // TODO: truncate_update_size_and_usage()
+	if (op.extent.truncate_size > os.oi.size) {
+	  osd_op_params.clean_regions.mark_data_region_dirty(os.oi.size,
+	      op.extent.truncate_size - os.oi.size);
+	} else {
+	  osd_op_params.clean_regions.mark_data_region_dirty(op.extent.truncate_size,
+	      os.oi.size - op.extent.truncate_size);
+	}
       }
     }
     os.oi.truncate_seq = op.extent.truncate_seq;
@@ -291,13 +299,17 @@ seastar::future<> PGBackend::write(
 	      offset, length, std::move(buf), op.flags);
     os.oi.size = std::max(offset + length, os.oi.size);
   }
+  osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
+						     op.extent.length);
+
   return seastar::now();
 }
 
 seastar::future<> PGBackend::writefull(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
 {
   const ceph_osd_op& op = osd_op.op;
   if (op.extent.length != osd_op.indata.length()) {
@@ -307,11 +319,15 @@ seastar::future<> PGBackend::writefull(
   const bool existing = maybe_create_new_object(os, txn);
   if (existing && op.extent.length < os.oi.size) {
     txn.truncate(coll->get_cid(), ghobject_t{os.oi.soid}, op.extent.length);
+    osd_op_params.clean_regions.mark_data_region_dirty(op.extent.length,
+	os.oi.size - op.extent.length);
   }
   if (op.extent.length) {
     txn.write(coll->get_cid(), ghobject_t{os.oi.soid}, 0, op.extent.length,
               osd_op.indata, op.flags);
     os.oi.size = op.extent.length;
+    osd_op_params.clean_regions.mark_data_region_dirty(0,
+	std::max((uint64_t) op.extent.length, os.oi.size));
   }
   return seastar::now();
 }
@@ -606,7 +622,8 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
 seastar::future<> PGBackend::omap_set_vals(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  osd_op_params_t& osd_op_params)
 {
   maybe_create_new_object(os, txn);
 
@@ -628,6 +645,7 @@ seastar::future<> PGBackend::omap_set_vals(
   //ctx->delta_stats.num_wr_kb += shift_round_up(to_set_bl.length(), 10);
   os.oi.set_flag(object_info_t::FLAG_OMAP);
   os.oi.clear_omap_digest();
+  osd_op_params.clean_regions.mark_omap_dirty();
   return seastar::now();
 }
 
