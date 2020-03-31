@@ -7,7 +7,7 @@ from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
-from .fs.nfs import NFSConfig
+from .fs.nfs import NFSConfig, NFSCluster, FSExport
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -257,25 +257,25 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs nfs export create '
-                   'name=fs-name,type=CephString '
-                   'name=read-only,type=CephBool,req=false '
-                   'name=path,type=CephString,req=false '
-                   'name=attach,type=CephString,req=false '
-                   'name=binding,type=CephString,req=false ',
-            'desc': "Create cephfs export",
+            'name=fsname,type=CephString '
+            'name=binding,type=CephString '
+            'name=readonly,type=CephBool,req=false '
+            'name=path,type=CephString,req=false '
+            'name=attach,type=CephString,req=false ',
+            'desc': "Create a cephfs export",
             'perm': 'rw'
         },
         {
             'cmd': 'fs nfs export delete '
                    'name=export_id,type=CephInt,req=true ',
-            'desc': "Delete cephfs exports",
+            'desc': "Delete a cephfs export",
             'perm': 'rw'
         },
         {
             'cmd': 'fs nfs cluster create '
                    'name=size,type=CephInt,req=false '
                    'name=cluster_id,type=CephString ',
-            'desc': "Creates NFS Cluster",
+            'desc': "Create an NFS Cluster",
             'perm': 'rw'
         },
         # volume ls [recursive]
@@ -299,6 +299,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
         self.nfs_obj = None # type: Optional[NFSConfig]
+        self.fs_export = FSExport(self)
 
     def __del__(self):
         self.vc.shutdown()
@@ -467,14 +468,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
     def _cmd_fs_nfs_export_create(self, inbuf, cmd):
+        """
         if self.nfs_obj and self.nfs_obj.check_fsal_valid():
             self.nfs_obj.create_instance()
             return self.nfs_obj.create_export()
+        """
+
+        return self.fs_export.create_export(fs_name=cmd['fsname'],
+                pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False),
+                path=cmd.get('path', '/'), cluster_id=cmd.get('attach','None'))
 
     def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
         if self.nfs_obj:
             return self.nfs_obj.delete_export(cmd['export_id'])
 
     def _cmd_fs_nfs_cluster_create(self, inbuf, cmd):
-            self.nfs_obj = NFSConfig(self, cmd['cluster_id'])
-            return self.nfs_obj.create_nfs_cluster(size=cmd.get('size', 1))
+            #self.nfs_obj = NFSConfig(self, cmd['cluster_id'])
+            #return self.nfs_obj.create_nfs_cluster(size=cmd.get('size', 1))
+            nfs_cluster_obj = NFSCluster(self, cmd['cluster_id'])
+            return nfs_cluster_obj.create_nfs_cluster(size=cmd.get('size', 1))
