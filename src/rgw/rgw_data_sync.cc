@@ -1658,7 +1658,7 @@ public:
         for (modified_iter = current_modified.begin(); modified_iter != current_modified.end(); ++modified_iter) {
           yield {
             tn->log(20, SSTR("received async update notification: " << *modified_iter));
-            spawn(new RGWDataSyncSingleEntryCR(sc, *modified_iter, string(), marker_tracker, error_repo, false, tn), false);
+            spawn(new RGWDataSyncSingleEntryCR(sc, *modified_iter, string(), marker_tracker, nullptr, false, tn), false);
           }
         }
 
