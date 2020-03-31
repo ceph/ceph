@@ -524,13 +524,14 @@ seastar::future<> PG::submit_transaction(ObjectContextRef&& obc,
 
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   Ref<MOSDOp> m,
-  ObjectContextRef obc)
+  ObjectContextRef obc,
+  const OpInfo &op_info)
 {
   using osd_op_errorator = OpsExecuter::osd_op_errorator;
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
   auto ox =
-    std::make_unique<OpsExecuter>(obc, *this/* as const& */, m);
+    std::make_unique<OpsExecuter>(obc, &op_info, *this/* as const& */, m);
 
   return crimson::do_for_each(
     m->ops, [obc, m, ox = ox.get()](OSDOp& osd_op) {
@@ -563,9 +564,17 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
 				    std::move(osd_op_p));
 	 }
       });
-  }).safe_then([m, obc, this, ox_deleter = std::move(ox)] {
-    auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
-                                           0, false);
+  }).safe_then([this,
+                m,
+                obc,
+                ox_deleter = std::move(ox),
+                rvec = op_info.allows_returnvec()] {
+    auto result = m->ops.empty() || !rvec ? 0 : m->ops.back().rval.code;
+    auto reply = make_message<MOSDOpReply>(m.get(),
+                                           result,
+                                           get_osdmap_epoch(),
+                                           0,
+                                           false);
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     logger().debug(
       "do_osd_ops: {} - object {} sending reply",
