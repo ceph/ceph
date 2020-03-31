@@ -18,6 +18,7 @@ import { CephServiceService } from '../../../../shared/api/ceph-service.service'
 import { HostService } from '../../../../shared/api/host.service';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
+import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
 import { Daemon } from '../../../../shared/models/daemon.interface';
@@ -76,7 +77,11 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         name: this.i18n('Container ID'),
         prop: 'container_id',
         flexGrow: 3,
-        filterable: true
+        filterable: true,
+        cellTransformation: CellTemplate.truncate,
+        customTemplateConfig: {
+          length: 12
+        }
       },
       {
         name: this.i18n('Container Image name'),
@@ -88,7 +93,11 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
         name: this.i18n('Container Image ID'),
         prop: 'container_image_id',
         flexGrow: 3,
-        filterable: true
+        filterable: true,
+        cellTransformation: CellTemplate.truncate,
+        customTemplateConfig: {
+          length: 12
+        }
       },
       {
         name: this.i18n('Version'),
