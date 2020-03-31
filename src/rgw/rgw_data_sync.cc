@@ -3408,11 +3408,12 @@ public:
 
   RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.position = new_marker;
+    sync_marker.timestamp = timestamp;
 
     map<string, bufferlist> attrs;
     sync_marker.encode_attr(attrs);
 
-    tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker));
+    tn->log(20, SSTR("updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " timestamp=" << timestamp));
     return new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados,
                                           sync_env->svc->sysobj,
                                           rgw_raw_obj(sync_env->svc->zone->get_zone_params().log_pool, marker_oid),
