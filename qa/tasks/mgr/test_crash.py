@@ -74,7 +74,7 @@ class TestCrash(MgrTestCase):
             self.assertIn(crash['crash_id'], retstr)
 
     def test_rm(self):
-        crashid = self.crashes.keys()[0]
+        crashid = next(iter(self.crashes.keys()))
         self.assertEqual(
             0,
             self.mgr_cluster.mon_manager.raw_cluster_cmd_result(

@@ -240,7 +240,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                          REP_NAME, DATALINECOUNT)
     allremote = []
     allremote.append(cli_remote)
-    allremote += osds.remotes.keys()
+    allremote += list(osds.remotes.keys())
     allremote = list(set(allremote))
     for remote in allremote:
         cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR,

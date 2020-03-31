@@ -58,8 +58,8 @@ def install(ctx, config):
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
-    an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
+    an_osd_node = next(iter(ctx.cluster.only(is_osd_node).remotes.keys()))
 
     devstack_branch = config.get("branch", "master")
     install_devstack(devstack_node, devstack_branch)
@@ -305,7 +305,7 @@ def exercise(ctx, config):
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
 
     # TODO: save the log *and* preserve failures
     #devstack_archive_dir = create_devstack_archive(ctx, devstack_node)
@@ -332,8 +332,8 @@ def create_devstack_archive(ctx, devstack_node):
 def smoke(ctx, config):
     log.info("Running a basic smoketest...")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
-    an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
+    an_osd_node = next(iter(ctx.cluster.only(is_osd_node).remotes.keys()))
 
     try:
         create_volume(devstack_node, an_osd_node, 'smoke0', 1)
