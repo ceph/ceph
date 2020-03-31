@@ -8953,18 +8953,18 @@ int RGWRados::check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
   return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 1, obj_size);
 }
 
-int RGWRados::get_target_shard_id(const RGWBucketInfo& bucket_info, const string& obj_key,
+int RGWRados::get_target_shard_id(const rgw::bucket_index_normal_layout& layout, const string& obj_key,
                                   int *shard_id)
 {
   int r = 0;
-  switch (bucket_info.layout.current_index.layout.normal.hash_type) {
+  switch (layout.hash_type) {
     case rgw::BucketHashType::Mod:
-      if (!bucket_info.layout.current_index.layout.normal.num_shards) {
+      if (!layout.num_shards) {
         if (shard_id) {
           *shard_id = -1;
         }
       } else {
-        uint32_t sid = svc.bi_rados->bucket_shard_index(obj_key, bucket_info.layout.current_index.layout.normal.num_shards);
+        uint32_t sid = svc.bi_rados->bucket_shard_index(obj_key, layout.num_shards);
         if (shard_id) {
           *shard_id = (int)sid;
         }
