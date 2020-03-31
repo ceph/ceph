@@ -123,7 +123,7 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletio
 int RGWSimpleRadosReadAttrsCR::send_request()
 {
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
-			         svc, nullptr, obj, true, raw_attrs);
+			         svc, objv_tracker, obj, true, raw_attrs);
   async_rados->queue(req);
   return 0;
 }
@@ -132,6 +132,9 @@ int RGWSimpleRadosReadAttrsCR::request_complete()
 {
   if (pattrs) {
     *pattrs = std::move(req->attrs);
+  }
+  if (objv_tracker) {
+    *objv_tracker = req->objv_tracker;
   }
   return req->get_ret_status();
 }
