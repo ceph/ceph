@@ -1479,8 +1479,9 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release octopus
+  ceph osd require-osd-release pacific
   # can't lower
+  expect_false ceph osd require-osd-release octopus
   expect_false ceph osd require-osd-release nautilus
   expect_false ceph osd require-osd-release mimic
   expect_false ceph osd require-osd-release luminous
