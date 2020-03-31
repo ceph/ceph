@@ -94,6 +94,21 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "pg_autoscaler",
       "telemetry",
     }
+  },
+  {
+    CEPH_RELEASE_PACIFIC, {
+      "crash",
+      "status",
+      "progress",
+      "balancer",
+      "devicehealth",
+      "orchestrator",
+      "rbd_support",
+      "osd_support",
+      "volumes",
+      "pg_autoscaler",
+      "telemetry",
+    }
   }
 };
 
