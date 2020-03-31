@@ -30,6 +30,18 @@ enum class BucketHashType : uint8_t {
   Mod, // rjenkins hash of object name, modulo num_shards
 };
 
+inline std::ostream& operator<<(std::ostream& out, const rgw::BucketIndexType &index_type)
+{
+  switch (index_type) {
+    case rgw::BucketIndexType::Normal:
+      return out << "Normal";
+    case rgw::BucketIndexType::Indexless:
+      return out << "Indexless";
+    default:
+      return out << "Unknown";
+  }
+}
+
 struct bucket_index_normal_layout {
   uint32_t num_shards = 1;
 
