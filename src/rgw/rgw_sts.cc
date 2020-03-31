@@ -44,6 +44,7 @@ int Credentials::generateCredentials(CephContext* cct,
                           const uint64_t& duration,
                           const boost::optional<string>& policy,
                           const boost::optional<string>& roleId,
+                          const boost::optional<string>& role_session,
                           boost::optional<rgw_user> user,
                           rgw::auth::Identity* identity)
 {
@@ -117,6 +118,7 @@ int Credentials::generateCredentials(CephContext* cct,
     token.perm_mask = 0;
     token.is_admin = 0;
     token.acct_type = TYPE_ROLE;
+    token.role_session = role_session.get();
   }
 
   buffer::list input, enc_output;
@@ -335,6 +337,7 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRo
   //Role and Policy provide the authorization info, user id and applier info are not needed
   response.assumeRoleResp.retCode = response.assumeRoleResp.creds.generateCredentials(cct, req.getDuration(),
                                                                                       req.getPolicy(), roleId,
+                                                                                      req.getRoleSessionName(),
                                                                                       user_id, nullptr);
   if (response.assumeRoleResp.retCode < 0) {
     return response;
@@ -380,6 +383,7 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   //Role and Policy provide the authorization info, user id and applier info are not needed
   response.retCode = response.creds.generateCredentials(cct, req.getDuration(),
                                               req.getPolicy(), roleId,
+                                              req.getRoleSessionName(),
                                               user_id, nullptr);
   if (response.retCode < 0) {
     return response;
@@ -415,6 +419,7 @@ GetSessionTokenResponse STSService::getSessionToken(GetSessionTokenRequest& req)
   //Generate Credentials
   if (ret = cred.generateCredentials(cct,
                                       req.getDuration(),
+                                      boost::none,
                                       boost::none,
                                       boost::none,
                                       user_id,

@@ -328,7 +328,11 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
   }
 
   if (t) {
-    auto apl = apl_factory->create_apl_web_identity(cct, s, *t);
+    string role_session = s->info.args.get("RoleSessionName");
+    if (role_session.empty()) {
+      return result_t::deny(-EACCES);
+    }
+    auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, *t);
     return result_t::grant(std::move(apl));
   }
   return result_t::deny(-EACCES);
