@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SimpleChange, SimpleChanges } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import * as _ from 'lodash';
 import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
@@ -80,7 +81,7 @@ describe('OsdSmartListComponent', () => {
 
   configureTestBed({
     declarations: [SmartListComponent],
-    imports: [TabsModule, SharedModule, HttpClientTestingModule],
+    imports: [BrowserAnimationsModule, TabsModule, SharedModule, HttpClientTestingModule],
     providers: [i18nProviders, TabsetComponent, TabsetConfig]
   });
 
