@@ -77,9 +77,10 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
+                                    const string& role_session,
                                     const rgw::web_idp::WebTokenClaims& token) const override {
     auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::WebIdentityApplier(cct, ctl, token));
+      rgw::auth::WebIdentityApplier(cct, ctl, role_session, token));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
