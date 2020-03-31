@@ -92,6 +92,11 @@ public:
     uint64_t offset,
     size_t len,
     uint32_t op_flags = 0) = 0;
+  virtual read_errorator::future<ceph::bufferlist> readv(
+    CollectionRef c,
+    const ghobject_t& oid,
+    interval_set<uint64_t>& m,
+    uint32_t op_flags = 0) = 0;
 
   using get_attr_errorator = crimson::errorator<
     crimson::ct_error::enoent,
