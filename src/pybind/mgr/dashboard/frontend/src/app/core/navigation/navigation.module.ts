@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterModule } from '@angular/router';
 
 import { CollapseModule } from 'ngx-bootstrap/collapse';
@@ -25,7 +24,6 @@ import { NotificationsComponent } from './notifications/notifications.component'
   imports: [
     CommonModule,
     AuthModule,
-    BrowserAnimationsModule,
     CollapseModule.forRoot(),
     BsDropdownModule.forRoot(),
     PopoverModule.forRoot(),
