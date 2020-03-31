@@ -61,7 +61,7 @@ function encodeMethod(target: any, propertyKey: string, descriptor: PropertyDesc
   }
   const originalMethod = descriptor.value;
 
-  descriptor.value = function() {
+  descriptor.value = function () {
     const metadataKey = `__ignore_${propertyKey}`;
     const indices: number[] = target[metadataKey] || [];
     const args = [];

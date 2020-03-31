@@ -4,10 +4,10 @@ import { Validators } from '@angular/forms';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import {
   ITreeOptions,
-  TREE_ACTIONS,
   TreeComponent,
   TreeModel,
-  TreeNode
+  TreeNode,
+  TREE_ACTIONS
 } from 'angular-tree-component';
 import * as _ from 'lodash';
 import * as moment from 'moment';
