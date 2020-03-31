@@ -1262,9 +1262,7 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   const string cookie;
 
   int interval;
-
-  ceph::mutex lock = ceph::make_mutex("RGWContinuousLeaseCR");
-  std::atomic<bool> going_down = { false };
+  bool going_down{ false };
   bool locked{false};
 
   RGWCoroutine *caller;
@@ -1284,12 +1282,10 @@ public:
   int operate() override;
 
   bool is_locked() {
-    std::lock_guard l{lock};
     return locked;
   }
 
   void set_locked(bool status) {
-    std::lock_guard l{lock};
     locked = status;
   }
 
