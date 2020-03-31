@@ -643,7 +643,7 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
     auto it = m_out_bl.cbegin();
     cls_client::image_group_get_finish(&it, &m_group_spec);
   }
-  if (*result < 0) {
+  if (*result < 0 && *result != -EOPNOTSUPP) {
     lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
@@ -670,11 +670,13 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
 
   librados::ObjectReadOperation op;
   for (auto snap_id : m_snapc.snaps) {
-    if (m_legacy_snapshot) {
+    if (m_legacy_snapshot != LEGACY_SNAPSHOT_DISABLED) {
       /// NOTE: remove after Luminous is retired
       cls_client::get_snapshot_name_start(&op, snap_id);
       cls_client::get_size_start(&op, snap_id);
-      cls_client::get_snapshot_timestamp_start(&op, snap_id);
+      if (m_legacy_snapshot != LEGACY_SNAPSHOT_ENABLED_NO_TIMESTAMP) {
+        cls_client::get_snapshot_timestamp_start(&op, snap_id);
+      }
     } else {
       cls_client::snapshot_get_start(&op, snap_id);
     }
@@ -706,7 +708,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
 
   auto it = m_out_bl.cbegin();
   for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
-    if (m_legacy_snapshot) {
+    if (m_legacy_snapshot != LEGACY_SNAPSHOT_DISABLED) {
       /// NOTE: remove after Luminous is retired
       std::string snap_name;
       if (*result >= 0) {
@@ -720,7 +722,9 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
       }
 
       utime_t snap_timestamp;
-      if (*result >= 0) {
+      if (*result >= 0 &&
+          m_legacy_snapshot != LEGACY_SNAPSHOT_ENABLED_NO_TIMESTAMP) {
+        /// NOTE: remove after Jewel is retired
         *result = cls_client::get_snapshot_timestamp_finish(&it,
                                                             &snap_timestamp);
       }
@@ -766,9 +770,16 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
     ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
     send_v2_get_mutable_metadata();
     return nullptr;
-  } else if (!m_legacy_snapshot && *result == -EOPNOTSUPP) {
+  } else if (m_legacy_snapshot == LEGACY_SNAPSHOT_DISABLED &&
+             *result == -EOPNOTSUPP) {
     ldout(cct, 10) << "retrying using legacy snapshot methods" << dendl;
-    m_legacy_snapshot = true;
+    m_legacy_snapshot = LEGACY_SNAPSHOT_ENABLED;
+    send_v2_get_snapshots();
+    return nullptr;
+  } else if (m_legacy_snapshot == LEGACY_SNAPSHOT_ENABLED &&
+             *result == -EOPNOTSUPP) {
+    ldout(cct, 10) << "retrying using legacy snapshot methods (jewel)" << dendl;
+    m_legacy_snapshot = LEGACY_SNAPSHOT_ENABLED_NO_TIMESTAMP;
     send_v2_get_snapshots();
     return nullptr;
   } else if (*result < 0) {
