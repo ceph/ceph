@@ -28,12 +28,7 @@ describe('Monitors page', () => {
 
     it('should check status table is present', async () => {
       // check for table header 'Status'
-      await expect(
-        monitors
-          .getLegends()
-          .get(0)
-          .getText()
-      ).toMatch('Status');
+      await expect(monitors.getLegends().get(0).getText()).toMatch('Status');
 
       // check for fields in table
       await expect(monitors.getStatusTables().getText()).toMatch('Cluster ID');
@@ -50,66 +45,21 @@ describe('Monitors page', () => {
       await expect(monitors.getDataTables().count()).toEqual(2);
 
       // check for table header 'In Quorum'
-      await expect(
-        monitors
-          .getLegends()
-          .get(1)
-          .getText()
-      ).toMatch('In Quorum');
+      await expect(monitors.getLegends().get(1).getText()).toMatch('In Quorum');
 
       // check for table header 'Not In Quorum'
-      await expect(
-        monitors
-          .getLegends()
-          .get(2)
-          .getText()
-      ).toMatch('Not In Quorum');
+      await expect(monitors.getLegends().get(2).getText()).toMatch('Not In Quorum');
 
       // verify correct columns on In Quorum table
-      await expect(
-        monitors
-          .getDataTableHeaders()
-          .get(0)
-          .getText()
-      ).toMatch('Name');
-      await expect(
-        monitors
-          .getDataTableHeaders()
-          .get(0)
-          .getText()
-      ).toMatch('Rank');
-      await expect(
-        monitors
-          .getDataTableHeaders()
-          .get(0)
-          .getText()
-      ).toMatch('Public Address');
-      await expect(
-        monitors
-          .getDataTableHeaders()
-          .get(0)
-          .getText()
-      ).toMatch('Open Sessions');
+      await expect(monitors.getDataTableHeaders().get(0).getText()).toMatch('Name');
+      await expect(monitors.getDataTableHeaders().get(0).getText()).toMatch('Rank');
+      await expect(monitors.getDataTableHeaders().get(0).getText()).toMatch('Public Address');
+      await expect(monitors.getDataTableHeaders().get(0).getText()).toMatch('Open Sessions');
 
       // verify correct columns on Not In Quorum table
-      await expect(
-        monitors
-          .getDataTableHeaders()
-          .get(1)
-          .getText()
-      ).toMatch('Name');
-      await expect(
-        monitors
-          .getDataTableHeaders()
-          .get(1)
-          .getText()
-      ).toMatch('Rank');
-      await expect(
-        monitors
-          .getDataTableHeaders()
-          .get(1)
-          .getText()
-      ).toMatch('Public Address');
+      await expect(monitors.getDataTableHeaders().get(1).getText()).toMatch('Name');
+      await expect(monitors.getDataTableHeaders().get(1).getText()).toMatch('Rank');
+      await expect(monitors.getDataTableHeaders().get(1).getText()).toMatch('Public Address');
     });
   });
 });

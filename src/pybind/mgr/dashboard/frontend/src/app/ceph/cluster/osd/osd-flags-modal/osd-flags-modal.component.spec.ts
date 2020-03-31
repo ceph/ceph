@@ -60,7 +60,7 @@ describe('OsdFlagsModalComponent', () => {
     expect(component.unknownFlags).toEqual(['foo']);
   });
 
-  describe('test submitAction', function() {
+  describe('test submitAction', function () {
     let notificationType: NotificationType;
     let notificationService: NotificationService;
     let bsModalRef: BsModalRef;

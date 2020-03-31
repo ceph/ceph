@@ -50,10 +50,7 @@ export class ImagesPageHelper extends PageHelper {
     await this.navigateTo();
     await this.waitClickableAndClick(this.getFirstTableCellWithText(newName));
     await expect(
-      element
-        .all(by.css('.table.table-striped.table-bordered'))
-        .first()
-        .getText()
+      element.all(by.css('.table.table-striped.table-bordered')).first().getText()
     ).toMatch(newSize);
   }
 
@@ -65,9 +62,7 @@ export class ImagesPageHelper extends PageHelper {
     await this.waitTextNotPresent($$('.datatable-body').first(), '(Creating...)');
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     // click on the drop down and selects the move to trash option
-    await $$('.table-actions button.dropdown-toggle')
-      .first()
-      .click();
+    await $$('.table-actions button.dropdown-toggle').first().click();
     await $('li.move-to-trash').click();
     await this.waitVisibility(element(by.cssContainingText('button', 'Move Image')));
     await element(by.cssContainingText('button', 'Move Image')).click();

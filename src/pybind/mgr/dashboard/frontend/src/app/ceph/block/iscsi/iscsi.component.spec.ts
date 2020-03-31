@@ -21,7 +21,7 @@ describe('IscsiComponent', () => {
 
   const fakeService = {
     overview: () => {
-      return new Promise(function() {
+      return new Promise(function () {
         return;
       });
     }

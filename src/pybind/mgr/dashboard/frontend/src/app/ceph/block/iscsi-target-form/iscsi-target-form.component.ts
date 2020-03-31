@@ -429,7 +429,7 @@ export class IscsiTargetFormComponent implements OnInit {
         validators: [
           Validators.required,
           CdValidators.custom('notUnique', (client_iqn: string) => {
-            const flattened = this.initiators.controls.reduce(function(accumulator, currentValue) {
+            const flattened = this.initiators.controls.reduce(function (accumulator, currentValue) {
               return accumulator.concat(currentValue.value.client_iqn);
             }, []);
 

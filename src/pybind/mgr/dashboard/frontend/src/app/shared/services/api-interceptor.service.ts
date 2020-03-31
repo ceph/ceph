@@ -80,7 +80,7 @@ export class ApiInterceptorService implements HttpInterceptor {
            * If called, it will prevent a notification for the specific status code.
            * @param {number} status The status code to be ignored.
            */
-          resp.ignoreStatusCode = function(status: number) {
+          resp.ignoreStatusCode = function (status: number) {
             if (this.status === status) {
               this.preventDefault();
             }
