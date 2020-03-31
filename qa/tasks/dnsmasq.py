@@ -83,7 +83,7 @@ def setup_dnsmasq(remote, testdir, cnames):
     # restart dnsmasq
     remote.run(args=['sudo', 'systemctl', 'restart', 'dnsmasq'])
     # verify dns name is set
-    remote.run(args=['ping', '-c', '4', cnames.keys()[0]])
+    remote.run(args=['ping', '-c', '4', next(iter(cnames.keys()))])
 
     try:
         yield

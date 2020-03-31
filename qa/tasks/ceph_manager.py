@@ -1239,8 +1239,8 @@ class ObjectStoreTool:
             self.pgid = self.manager.get_object_pg_with_shard(self.pool,
                                                               self.object_name,
                                                               self.osd)
-        self.remote = self.manager.ctx.\
-            cluster.only('osd.{o}'.format(o=self.osd)).remotes.keys()[0]
+        self.remote = next(iter(self.manager.ctx.\
+            cluster.only('osd.{o}'.format(o=self.osd)).remotes.keys()))
         path = self.manager.get_filepath().format(id=self.osd)
         self.paths = ("--data-path {path} --journal-path {path}/journal".
                       format(path=path))
