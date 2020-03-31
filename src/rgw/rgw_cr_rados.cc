@@ -323,6 +323,44 @@ int RGWRadosGetOmapKeysCR::request_complete()
   return r;
 }
 
+RGWRadosGetOmapValsCR::RGWRadosGetOmapValsCR(rgw::sal::RGWRadosStore *_store,
+                      const rgw_raw_obj& _obj,
+                      const string& _marker,
+                      int _max_entries,
+                      ResultPtr _result)
+  : RGWSimpleCoroutine(_store->ctx()), store(_store), obj(_obj),
+    marker(_marker), max_entries(_max_entries),
+    result(std::move(_result))
+{
+  ceph_assert(result); // must be allocated
+  set_description() << "get omap keys dest=" << obj << " marker=" << marker;
+}
+
+int RGWRadosGetOmapValsCR::send_request() {
+  int r = store->getRados()->get_raw_obj_ref(obj, &result->ref);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
+  set_status() << "send request";
+
+  librados::ObjectReadOperation op;
+  op.omap_get_vals2(marker, max_entries, &result->entries, &result->more, nullptr);
+
+  cn = stack->create_completion_notifier(result);
+  return result->ref.pool.ioctx().aio_operate(result->ref.obj.oid, cn->completion(), &op, NULL);
+}
+
+int RGWRadosGetOmapValsCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
 RGWRadosRemoveOmapKeysCR::RGWRadosRemoveOmapKeysCR(rgw::sal::RGWRadosStore *_store,
                       const rgw_raw_obj& _obj,
                       const set<string>& _keys) : RGWSimpleCoroutine(_store->ctx()),
