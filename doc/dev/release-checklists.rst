@@ -62,6 +62,7 @@ Compatsets
 Mon
 ---
 
+- [x] mon/MgrMonitor.cc adjust `always_on_modules`
 - [x] common/options.cc define `mon_debug_no_require_X`
 - [x] common/options.cc remove `mon_debug_no_require_X-2`
 - [x] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
