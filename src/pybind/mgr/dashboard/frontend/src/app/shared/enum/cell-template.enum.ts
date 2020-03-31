@@ -29,5 +29,16 @@ export enum CellTemplate {
   //     [key: any]: any
   //   }
   // }
-  map = 'map'
+  map = 'map',
+  // Truncates string if it's longer than the given maximum
+  // string length.
+  // {
+  //   ...
+  //   cellTransformation: CellTemplate.truncate,
+  //   customTemplateConfig: {
+  //     length?: number;   // Defaults to 30.
+  //     omission?: string; // Defaults to empty string.
+  //   }
+  // }
+  truncate = 'truncate'
 }
