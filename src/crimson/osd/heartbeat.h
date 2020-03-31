@@ -26,7 +26,8 @@ class Heartbeat : public crimson::net::Dispatcher {
 public:
   using osd_id_t = int;
 
-  Heartbeat(const crimson::osd::ShardServices& service,
+  Heartbeat(osd_id_t whoami,
+            const crimson::osd::ShardServices& service,
 	    crimson::mon::Client& monc,
 	    crimson::net::MessengerRef front_msgr,
 	    crimson::net::MessengerRef back_msgr);
@@ -48,6 +49,8 @@ public:
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				MessageRef m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
+  void ms_handle_connect(crimson::net::ConnectionRef conn) override;
+  void ms_handle_accept(crimson::net::ConnectionRef conn) override;
 
   void print(std::ostream&) const;
 private:
@@ -70,6 +73,7 @@ private:
 				    const entity_addrvec_t& addrs,
 				    ChainedDispatchersRef);
 private:
+  const osd_id_t whoami;
   const crimson::osd::ShardServices& service;
   crimson::mon::Client& monc;
   crimson::net::MessengerRef front_msgr;
@@ -141,7 +145,9 @@ class Heartbeat::Peer {
                       ceph::signedspan mnow,
                       std::vector<seastar::future<>>&);
   seastar::future<> handle_reply(crimson::net::Connection*, Ref<MOSDPing>);
-  void handle_reset(crimson::net::ConnectionRef);
+  void handle_reset(crimson::net::ConnectionRef, bool is_replace);
+  void handle_connect(crimson::net::ConnectionRef);
+  void handle_accept(crimson::net::ConnectionRef);
 
  private:
   bool pinged() const;
@@ -151,33 +157,56 @@ class Heartbeat::Peer {
     HEALTHY,
   };
   health_state do_health_screen(clock::time_point now) const;
-  void connect();
-  void disconnect();
+
+  // a session starts when con_front and con_back are both connected
+  void start_session();
+  // a session resets when either con_front or con_back is reset
+  void reset_session();
+  // notify when con_front becomes ready, possibly start session
+  void notify_front_ready();
+  void connect_front();
+  // notify when con_back becomes ready, possibly start session
+  void notify_back_ready();
+  void connect_back();
+
+  void do_send_heartbeat(clock::time_point now,
+                         ceph::signedspan mnow,
+                         std::vector<seastar::future<>>*);
 
  private:
   Heartbeat& heartbeat;
   const osd_id_t peer;
 
-  /// peer connection (front)
-  crimson::net::ConnectionRef con_front;
-  /// peer connection (back)
-  crimson::net::ConnectionRef con_back;
-  /// time we sent our first ping request
+  // time we sent our first ping request
   clock::time_point first_tx;
-  /// last time we sent a ping request
+  // last time we sent a ping request
   clock::time_point last_tx;
-  /// last time we got a ping reply on the front side
+  // last time we got a ping reply on the front side
   clock::time_point last_rx_front;
-  /// last time we got a ping reply on the back side
+  // last time we got a ping reply on the back side
   clock::time_point last_rx_back;
-  /// most recent epoch we wanted this peer
+  // most recent epoch we wanted this peer
   epoch_t epoch;
+
+  // if racing happened
+  bool has_racing = false;
+  // peer connection (front)
+  crimson::net::ConnectionRef con_front;
+  bool front_ready = false;
+  // peer connection (back)
+  crimson::net::ConnectionRef con_back;
+  bool back_ready = false;
+
+  // start to send pings and track ping_history
+  bool session_started = false;
+  // if need to send heartbeat when session started
+  bool pending_send = false;
 
   struct reply_t {
     clock::time_point deadline;
     // one sent over front conn, another sent over back conn
     uint8_t unacknowledged = 0;
   };
-  /// history of inflight pings, arranging by timestamp we sent
+  // history of inflight pings, arranging by timestamp we sent
   std::map<utime_t, reply_t> ping_history;
 };
