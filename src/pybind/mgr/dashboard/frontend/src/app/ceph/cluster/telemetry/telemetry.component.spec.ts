@@ -111,7 +111,7 @@ describe('TelemetryComponent', () => {
 
     it('should disable the Telemetry module', () => {
       const message = 'Module disabled message.';
-      const followUpFunc = function() {
+      const followUpFunc = function () {
         return 'followUp';
       };
       component.disableModule(message, followUpFunc);

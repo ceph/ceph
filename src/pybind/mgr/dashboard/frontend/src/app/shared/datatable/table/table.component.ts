@@ -697,10 +697,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (currentSearch.length === 0 || data.length === 0) {
       return data;
     }
-    const searchTerms: string[] = currentSearch
-      .pop()
-      .replace(/\+/g, ' ')
-      .split(':');
+    const searchTerms: string[] = currentSearch.pop().replace(/\+/g, ' ').split(':');
     const columnsClone = [...columns];
     if (searchTerms.length === 2) {
       columns = columnsClone.filter((c) => c.name.toLowerCase().indexOf(searchTerms[0]) !== -1);
