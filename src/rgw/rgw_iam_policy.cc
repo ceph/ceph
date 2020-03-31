@@ -466,6 +466,9 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
         if (match[1] == "oidc-provider") {
                 return Principal::oidc_provider(std::move(match[2]));
         }
+   if (match[1] == "assumed-role") {
+     return Principal::assumed_role(std::move(a->account), match[2]);
+   }
       }
     } else {
       if (std::none_of(s.begin(), s.end(),

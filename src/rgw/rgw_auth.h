@@ -365,6 +365,7 @@ class WebIdentityApplier : public IdentityApplier {
 protected:
   CephContext* const cct;
   RGWCtl* const ctl;
+  string role_session;
   rgw::web_idp::WebTokenClaims token_claims;
 
   string get_idp_url() const;
@@ -372,9 +373,11 @@ protected:
 public:
   WebIdentityApplier( CephContext* const cct,
                       RGWCtl* const ctl,
+                      const string& role_session,
                       const rgw::web_idp::WebTokenClaims& token_claims)
     : cct(cct),
       ctl(ctl),
+      role_session(role_session),
       token_claims(token_claims) {
   }
 
@@ -422,6 +425,7 @@ public:
 
     virtual aplptr_t create_apl_web_identity( CephContext* cct,
                                               const req_state* s,
+                                              const string& role_session,
                                               const rgw::web_idp::WebTokenClaims& token) const = 0;
   };
 };
@@ -624,20 +628,29 @@ public:
 };
 
 class RoleApplier : public IdentityApplier {
+public:
+  struct Role {
+    string id;
+    string name;
+    string tenant;
+    vector<string> role_policies;
+  } role;
 protected:
-  const string role_name;
   const rgw_user user_id;
-  vector<std::string> role_policies;
+  string token_policy;
+  string role_session_name;
 
 public:
 
   RoleApplier(CephContext* const cct,
-               const string& role_name,
+               const Role& role,
                const rgw_user& user_id,
-               const vector<std::string>& role_policies)
-    : role_name(role_name),
+               const string& token_policy,
+               const string& role_session_name)
+    : role(role),
       user_id(user_id),
-      role_policies(role_policies) {}
+      token_policy(token_policy),
+      role_session_name(role_session_name) {}
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
@@ -663,9 +676,10 @@ public:
     virtual ~Factory() {}
     virtual aplptr_t create_apl_role( CephContext* cct,
                                       const req_state* s,
-                                      const string& role_name,
+                                      const rgw::auth::RoleApplier::Role& role_name,
                                       const rgw_user& user_id,
-                                      const vector<std::string>& role_policies) const = 0;
+                                      const std::string& token_policy,
+                                      const std::string& role_session) const = 0;
     };
 };
 
