@@ -6,6 +6,7 @@
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
 #include <include/ceph_fs.h>
+#include "common/ceph_time.h"
 
 #include "json_spirit/json_spirit.h"
 
@@ -169,6 +170,9 @@ void decode_json_obj(ceph::buffer::list& val, JSONObj *obj);
 class utime_t;
 void decode_json_obj(utime_t& val, JSONObj *obj);
 void decode_json_obj(ceph_dir_layout& i, JSONObj *obj);
+
+void decode_json_obj(ceph::real_time& val, JSONObj *obj);
+void decode_json_obj(ceph::coarse_real_time& val, JSONObj *obj);
 
 template<class T>
 void decode_json_obj(std::list<T>& l, JSONObj *obj)
@@ -486,6 +490,9 @@ void encode_json(const char *name, long long val, ceph::Formatter *f);
 void encode_json(const char *name, const utime_t& val, ceph::Formatter *f);
 void encode_json(const char *name, const ceph::buffer::list& bl, ceph::Formatter *f);
 void encode_json(const char *name, long long unsigned val, ceph::Formatter *f);
+
+void encode_json(const char *name, const ceph::real_time& val, ceph::Formatter *f);
+void encode_json(const char *name, const ceph::coarse_real_time& val, ceph::Formatter *f);
 
 template<class T>
 static void encode_json(const char *name, const std::list<T>& l, ceph::Formatter *f)
