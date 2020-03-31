@@ -37,6 +37,7 @@ Scripts
 
 - [x] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`... but for X-1)
 - [x] src/script/ceph-release-notes (X-1)
+- [x] ceph-build.git scripts/build_utils.sh `release_from_version()`
 
 Misc
 ~~~~
