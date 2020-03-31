@@ -474,29 +474,28 @@ WRITE_CLASS_ENCODER(rgw_bucket_shard_full_sync_marker)
 
 struct rgw_bucket_shard_inc_sync_marker {
   string position;
-
-  rgw_bucket_shard_inc_sync_marker() {}
+  ceph::real_time timestamp;
 
   void encode_attr(map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(position, bl);
+    encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(position, bl);
-     DECODE_FINISH(bl);
+    if (struct_v >= 2) {
+      decode(timestamp, bl);
+    }
+    DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-
-  bool operator<(const rgw_bucket_shard_inc_sync_marker& m) const {
-    return (position < m.position);
-  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_inc_sync_marker)
 
