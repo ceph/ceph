@@ -337,6 +337,9 @@ int RGWSI_SysObj_Core::set_attrs(const rgw_raw_obj& obj,
   if (r < 0)
     return r;
 
+  if (objv_tracker) {
+    objv_tracker->apply_write();
+  }
   return 0;
 }
 
