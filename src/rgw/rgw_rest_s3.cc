@@ -5856,26 +5856,26 @@ rgw::auth::s3::STSEngine::authenticate(
   // Get all the authorization info
   RGWUserInfo user_info;
   rgw_user user_id;
-  vector<string> role_policies;
-  string role_name;
+  string role_id;
+  rgw::auth::RoleApplier::Role r;
   if (! token.roleId.empty()) {
     RGWRole role(s->cct, ctl, token.roleId);
     if (role.get_by_id() < 0) {
       return result_t::deny(-EPERM);
     }
+    r.id = token.roleId;
+    r.name = role.get_name();
+    r.tenant = role.get_tenant();
+
     vector<string> role_policy_names = role.get_role_policy_names();
     for (auto& policy_name : role_policy_names) {
       string perm_policy;
       if (int ret = role.get_role_policy(policy_name, perm_policy); ret == 0) {
-        role_policies.push_back(std::move(perm_policy));
+        r.role_policies.push_back(std::move(perm_policy));
       }
-    }
-    if (! token.policy.empty()) {
-      role_policies.push_back(std::move(token.policy));
     }
     // This is mostly needed to assign the owner of a bucket during its creation
     user_id = token.user;
-    role_name = role.get_name();
   }
 
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
@@ -5892,7 +5892,7 @@ rgw::auth::s3::STSEngine::authenticate(
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
   } else if (token.acct_type == TYPE_ROLE) {
-    auto apl = role_apl_factory->create_apl_role(cct, s, role_name, user_id, role_policies);
+    auto apl = role_apl_factory->create_apl_role(cct, s, r, user_id, token.policy, token.role_session);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;
