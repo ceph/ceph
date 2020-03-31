@@ -35,11 +35,6 @@ Protocol::~Protocol()
   assert(!exit_open);
 }
 
-bool Protocol::is_connected() const
-{
-  return write_state == write_state_t::open;
-}
-
 void Protocol::close(bool dispatch_reset,
                      std::optional<std::function<void()>> f_accept_new)
 {

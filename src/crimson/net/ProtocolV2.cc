@@ -153,6 +153,12 @@ ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
 
 ProtocolV2::~ProtocolV2() {}
 
+bool ProtocolV2::is_connected() const {
+  return state == state_t::READY ||
+         state == state_t::ESTABLISHING ||
+         state == state_t::REPLACING;
+}
+
 void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
                                const entity_name_t& _peer_name)
 {
@@ -937,17 +943,13 @@ void ProtocolV2::execute_connecting()
           }
           switch (next) {
            case next_step_t::ready: {
-            gated_dispatch("ms_handle_connect", [this] {
-              return dispatcher.ms_handle_connect(
-                  seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-            });
             logger().info("{} connected:"
                           " gs={}, pgs={}, cs={}, client_cookie={},"
                           " server_cookie={}, in_seq={}, out_seq={}, out_q={}",
                           conn, global_seq, peer_global_seq, connect_seq,
                           client_cookie, server_cookie, conn.in_seq,
                           conn.out_seq, conn.out_q.size());
-            execute_ready();
+            execute_ready(true);
             break;
            }
            case next_step_t::wait: {
@@ -1669,7 +1671,7 @@ void ProtocolV2::execute_establishing(
                     conn, global_seq, peer_global_seq, connect_seq,
                     client_cookie, server_cookie, conn.in_seq,
                     conn.out_seq, conn.out_q.size());
-      execute_ready();
+      execute_ready(false);
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::ESTABLISHING) {
         logger().info("{} execute_establishing() protocol aborted at {} -- {}",
@@ -1822,7 +1824,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                     conn, reconnect ? "reconnected" : "connected",
                     global_seq, peer_global_seq, connect_seq, client_cookie,
                     server_cookie, conn.in_seq, conn.out_seq, conn.out_q.size());
-      execute_ready();
+      execute_ready(false);
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::REPLACING) {
         logger().info("{} trigger_replacing(): protocol aborted at {} -- {}",
@@ -1985,10 +1987,16 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
   });
 }
 
-void ProtocolV2::execute_ready()
+void ProtocolV2::execute_ready(bool dispatch_connect)
 {
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
+  if (dispatch_connect) {
+    gated_dispatch("ms_handle_connect", [this] {
+      return dispatcher.ms_handle_connect(
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    });
+  }
 #ifdef UNIT_TESTS_BUILT
   if (conn.interceptor) {
     conn.interceptor->register_conn_ready(conn);

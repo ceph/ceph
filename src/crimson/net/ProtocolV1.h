@@ -18,6 +18,8 @@ class ProtocolV1 final : public Protocol {
   ~ProtocolV1() override;
 
  private:
+  bool is_connected() const override;
+
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_name_t& peer_name) override;
 
@@ -110,7 +112,12 @@ class ProtocolV1 final : public Protocol {
   seastar::future<> maybe_throttle();
   seastar::future<> read_message();
   seastar::future<> handle_tags();
-  void execute_open();
+
+  enum class open_t {
+    connected,
+    accepted
+  };
+  void execute_open(open_t type);
 
   // replacing
   // the number of connections initiated in this session, increment when a

@@ -131,6 +131,11 @@ ProtocolV1::ProtocolV1(Dispatcher& dispatcher,
 
 ProtocolV1::~ProtocolV1() {}
 
+bool ProtocolV1::is_connected() const
+{
+  return state == state_t::open;
+}
+
 // connecting state
 
 void ProtocolV1::reset_session()
@@ -368,12 +373,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
             return repeat_connect();
           });
         }).then([this] {
-          // notify the dispatcher and allow them to reject the connection
-          return dispatcher.ms_handle_connect(
-            seastar::static_pointer_cast<SocketConnection>(
-              conn.shared_from_this()));
-        }).then([this] {
-          execute_open();
+          execute_open(open_t::connected);
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", conn, eptr);
@@ -657,15 +657,11 @@ void ProtocolV1::start_accept(SocketRef&& sock,
             return repeat_handle_connect();
           });
         }).then([this] {
-          // notify the dispatcher and allow them to reject the connection
-          return dispatcher.ms_handle_accept(
-            seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-        }).then([this] {
           messenger.register_conn(
             seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
           messenger.unaccept_conn(
             seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-          execute_open();
+          execute_open(open_t::accepted);
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
           logger().warn("{} accepting fault: {}", conn, eptr);
@@ -890,11 +886,23 @@ seastar::future<> ProtocolV1::handle_tags()
     });
 }
 
-void ProtocolV1::execute_open()
+void ProtocolV1::execute_open(open_t type)
 {
   logger().trace("{} trigger open, was {}", conn, static_cast<int>(state));
   state = state_t::open;
   set_write_state(write_state_t::open);
+
+  if (type == open_t::connected) {
+    gated_dispatch("ms_handle_connect", [this] {
+      return dispatcher.ms_handle_connect(
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    });
+  } else { // type == open_t::accepted
+    gated_dispatch("ms_handle_accept", [this] {
+      return dispatcher.ms_handle_accept(
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    });
+  }
 
   gated_dispatch("execute_open", [this] {
       // start background processing of tags
