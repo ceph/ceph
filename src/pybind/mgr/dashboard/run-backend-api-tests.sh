@@ -74,7 +74,7 @@ pyparsing==2.2.0
 python-dateutil==2.6.1
 PyYAML==3.12
 requests==2.18.4
-six==1.10.0
+six==1.14.0
 urllib3==1.22
 "
 

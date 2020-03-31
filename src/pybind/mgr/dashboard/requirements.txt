@@ -27,7 +27,7 @@ pytz==2017.3
 requests==2.20.0
 Routes==2.4.1
 singledispatch==3.4.0.3
-six==1.11.0
+six==1.14.0
 tempora==1.10
 tox==2.9.1
 virtualenv==15.1.0
