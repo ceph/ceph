@@ -1091,18 +1091,6 @@ enum RGWBucketFlags {
   BUCKET_OBJ_LOCK_ENABLED = 0X20,
 };
 
-inline ostream& operator<<(ostream& out, const rgw::BucketIndexType &index_type)
-{
-  switch (index_type) {
-    case rgw::BucketIndexType::Normal:
-      return out << "Normal";
-    case rgw::BucketIndexType::Indexless:
-      return out << "Indexless";
-    default:
-      return out << "Unknown";
-  }
-}
-
 class RGWSI_Zone;
 
 struct RGWBucketInfo {
