@@ -190,6 +190,7 @@ class NFSGanesha(object):
         # config-json options
         self.pool = json_get('pool', require=True)
         self.namespace = json_get('namespace')
+        self.extra_args = json_get('extra_args', [])
         self.files = json_get('files', {})
 
         # validate the supplied args
@@ -263,6 +264,10 @@ class NFSGanesha(object):
         if desc:
             cname = '%s-%s' % (cname, desc)
         return cname
+
+    def get_daemon_args(self):
+        # type: () -> List[str]
+        return self.daemon_args + self.extra_args
 
     def get_file_content(self, fname):
         # type: (str) -> str
@@ -1276,7 +1281,8 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
             for peer in peers:
                 r += ["--cluster.peer={}".format(peer)]
     elif daemon_type == NFSGanesha.daemon_type:
-        r += NFSGanesha.daemon_args
+        nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
+        r += nfs_ganesha.get_daemon_args()
 
     return r
 
