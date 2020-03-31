@@ -19,6 +19,8 @@ class ProtocolV2 final : public Protocol {
   ~ProtocolV2() override;
 
  private:
+  bool is_connected() const override;
+
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_name_t& peer_name) override;
 
@@ -204,7 +206,7 @@ class ProtocolV2 final : public Protocol {
 
   // READY
   seastar::future<> read_message(utime_t throttle_stamp);
-  void execute_ready();
+  void execute_ready(bool dispatch_connect);
 
   // STANDBY
   void execute_standby();

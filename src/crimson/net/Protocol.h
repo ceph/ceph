@@ -23,7 +23,7 @@ class Protocol {
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
-  bool is_connected() const;
+  virtual bool is_connected() const = 0;
 
 #ifdef UNIT_TESTS_BUILT
   bool is_closed_clean = false;
