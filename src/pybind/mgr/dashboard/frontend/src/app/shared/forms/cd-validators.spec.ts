@@ -321,7 +321,10 @@ describe('CdValidators', () => {
   describe('custom validation', () => {
     beforeEach(() => {
       form = new CdFormGroup({
-        x: new FormControl(3, CdValidators.custom('odd', (x: number) => x % 2 === 1)),
+        x: new FormControl(
+          3,
+          CdValidators.custom('odd', (x: number) => x % 2 === 1)
+        ),
         y: new FormControl(
           5,
           CdValidators.custom('not-dividable-by-x', (y: number) => {

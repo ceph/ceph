@@ -107,7 +107,8 @@ export class PoolFormComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().pool;
     if (
       !this.permission.read ||
-      ((!this.permission.update && this.editing) || (!this.permission.create && !this.editing))
+      (!this.permission.update && this.editing) ||
+      (!this.permission.create && !this.editing)
     ) {
       this.router.navigate(['/404']);
     }

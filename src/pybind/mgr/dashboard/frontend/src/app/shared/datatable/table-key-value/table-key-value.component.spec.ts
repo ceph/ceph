@@ -41,7 +41,11 @@ describe('TableKeyValueComponent', () => {
   });
 
   it('should make key value object pairs out of arrays with length two', () => {
-    component.data = [['someKey', 0], ['arrayKey', [1, 2, 3]], [3, 'something']];
+    component.data = [
+      ['someKey', 0],
+      ['arrayKey', [1, 2, 3]],
+      [3, 'something']
+    ];
     component.ngOnInit();
     const expected: any = [
       { key: 'arrayKey', value: '1, 2, 3' },
@@ -52,14 +56,20 @@ describe('TableKeyValueComponent', () => {
   });
 
   it('should not show data supposed to be have hidden by key', () => {
-    component.data = [['a', 1], ['b', 2]];
+    component.data = [
+      ['a', 1],
+      ['b', 2]
+    ];
     component.hideKeys = ['a'];
     component.ngOnInit();
     expect(component.tableData).toEqual([{ key: 'b', value: 2 }]);
   });
 
   it('should remove items with objects as values', () => {
-    component.data = [[3, 'something'], ['will be removed', { a: 3, b: 4, c: 5 }]];
+    component.data = [
+      [3, 'something'],
+      ['will be removed', { a: 3, b: 4, c: 5 }]
+    ];
     component.ngOnInit();
     expect(component.tableData).toEqual(<any>[{ key: 3, value: 'something' }]);
   });
@@ -74,7 +84,10 @@ describe('TableKeyValueComponent', () => {
   });
 
   it('does nothing if data does not need to be converted', () => {
-    component.data = [{ key: 3, value: 'something' }, { key: 'someKey', value: 0 }];
+    component.data = [
+      { key: 3, value: 'something' },
+      { key: 'someKey', value: 0 }
+    ];
     component.ngOnInit();
     expect(component.tableData).toEqual(component.data);
   });
@@ -91,8 +104,14 @@ describe('TableKeyValueComponent', () => {
   it('tests makePairs()', () => {
     const makePairs = (data: any) => component['makePairs'](data);
     expect(makePairs([['dash', 'board']])).toEqual([{ key: 'dash', value: 'board' }]);
-    const pair = [{ key: 'dash', value: 'board' }, { key: 'ceph', value: 'mimic' }];
-    const pairInverse = [{ key: 'ceph', value: 'mimic' }, { key: 'dash', value: 'board' }];
+    const pair = [
+      { key: 'dash', value: 'board' },
+      { key: 'ceph', value: 'mimic' }
+    ];
+    const pairInverse = [
+      { key: 'ceph', value: 'mimic' },
+      { key: 'dash', value: 'board' }
+    ];
     expect(makePairs(pair)).toEqual(pairInverse);
     expect(makePairs({ dash: 'board' })).toEqual([{ key: 'dash', value: 'board' }]);
     expect(makePairs({ dash: 'board', ceph: 'mimic' })).toEqual(pairInverse);
@@ -101,7 +120,10 @@ describe('TableKeyValueComponent', () => {
   it('tests makePairsFromArray()', () => {
     const makePairsFromArray = (data: any[]) => component['makePairsFromArray'](data);
     expect(makePairsFromArray([['dash', 'board']])).toEqual([{ key: 'dash', value: 'board' }]);
-    const pair = [{ key: 'dash', value: 'board' }, { key: 'ceph', value: 'mimic' }];
+    const pair = [
+      { key: 'dash', value: 'board' },
+      { key: 'ceph', value: 'mimic' }
+    ];
     expect(makePairsFromArray(pair)).toEqual(pair);
   });
 
