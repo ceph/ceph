@@ -2811,6 +2811,7 @@ public:
             status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
           }
           write_status = true;
+          status.inc_marker.timestamp = ceph::real_clock::now();
         }
 
         if (write_status) {
