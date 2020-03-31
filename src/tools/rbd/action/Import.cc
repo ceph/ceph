@@ -945,8 +945,8 @@ void get_arguments(po::options_description *positional,
 
   // TODO legacy rbd allowed import to accept both 'image'/'dest' and
   //      'pool'/'dest-pool'
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE, " (deprecated)");
-  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE, " (deprecated)");
+  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE, " deprecated[:dest-pool]");
+  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE, " deprecated[:dest]");
 }
 
 int execute(const po::variables_map &vm,
@@ -962,15 +962,11 @@ int execute(const po::variables_map &vm,
   std::string deprecated_pool_name;
   if (vm.count(at::POOL_NAME)) {
     deprecated_pool_name = vm[at::POOL_NAME].as<std::string>();
-    std::cerr << "rbd: --pool is deprecated for import, use --dest-pool"
-              << std::endl;
   }
 
   std::string deprecated_image_name;
   if (vm.count(at::IMAGE_NAME)) {
     deprecated_image_name = vm[at::IMAGE_NAME].as<std::string>();
-    std::cerr << "rbd: --image is deprecated for import, use --dest"
-              << std::endl;
   } else {
     deprecated_image_name = path.substr(path.find_last_of("/") + 1);
   }

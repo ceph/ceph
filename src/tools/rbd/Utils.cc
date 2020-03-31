@@ -439,8 +439,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
 
   if (vm.count(at::IMAGE_ORDER)) {
     order = vm[at::IMAGE_ORDER].as<uint64_t>();
-    std::cerr << "rbd: --order is deprecated, use --object-size"
-	      << std::endl;
   } else if (vm.count(at::IMAGE_OBJECT_SIZE)) {
     object_size = vm[at::IMAGE_OBJECT_SIZE].as<uint64_t>();
     order = std::round(std::log2(object_size));
