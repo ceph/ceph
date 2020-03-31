@@ -84,6 +84,12 @@ public:
     uint64_t offset,
     size_t len,
     uint32_t op_flags = 0) final;
+  read_errorator::future<ceph::bufferlist> readv(
+    CollectionRef c,
+    const ghobject_t& oid,
+    interval_set<uint64_t>& m,
+    uint32_t op_flags = 0) final;
+
   get_attr_errorator::future<ceph::bufferptr> get_attr(
     CollectionRef c,
     const ghobject_t& oid,
