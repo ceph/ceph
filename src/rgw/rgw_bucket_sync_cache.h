@@ -26,6 +26,8 @@ struct State {
   rgw_bucket_shard key;
   // current sync obligation being processed by DataSyncSingleEntry
   std::optional<rgw_data_sync_obligation> obligation;
+  // incremented with each new obligation
+  uint32_t counter = 0;
   // highest timestamp applied by all sources
   ceph::real_time progress_timestamp;
 
