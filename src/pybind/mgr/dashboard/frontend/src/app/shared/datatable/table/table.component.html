@@ -290,3 +290,10 @@
              let-value="value">
   <span>{{ value | map:column?.customTemplateConfig }}</span>
 </ng-template>
+
+<ng-template #truncateTpl
+             let-column="column"
+             let-value="value">
+  <span data-toggle="tooltip"
+        [title]="value">{{ value | truncate:column?.customTemplateConfig?.length:column?.customTemplateConfig?.omission }}</span>
+</ng-template>
