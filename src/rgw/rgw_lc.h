@@ -468,12 +468,16 @@ public:
     CephContext *cct;
     RGWLC *lc;
     int ix;
-    ceph::mutex lock = ceph::make_mutex("LCWorker");
-    ceph::condition_variable cond;
+    std::mutex lock;
+    std::condition_variable cond;
     WorkPool* workpool{nullptr};
 
   public:
-    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc);
+    using lock_guard = std::lock_guard<std::mutex>;
+    using unique_lock = std::unique_lock<std::mutex>;
+
+    LCWorker(const DoutPrefixProvider* dpp, CephContext *_cct, RGWLC *_lc,
+	     int ix);
     RGWLC* get_lc() { return lc; }
     void *entry() override;
     void stop();
@@ -483,6 +487,7 @@ public:
 
     friend class RGWRados;
     friend class RGWLC;
+    friend class WorkQ;
   }; /* LCWorker */
 
   friend class RGWRados;
@@ -497,11 +502,13 @@ public:
 
   int process(LCWorker* worker);
   int process(int index, int max_secs, LCWorker* worker);
-  bool if_already_run_today(time_t& start_date);
+  bool if_already_run_today(time_t start_date);
+  bool expired_session(time_t started);
+  time_t thread_stop_at();
   int list_lc_progress(const string& marker, uint32_t max_entries,
 		       vector<cls_rgw_lc_entry>&);
   int bucket_lc_prepare(int index, LCWorker* worker);
-  int bucket_lc_process(string& shard_id, LCWorker* worker);
+  int bucket_lc_process(string& shard_id, LCWorker* worker, time_t stop_at);
   int bucket_lc_post(int index, int max_lock_sec,
 		     cls_rgw_lc_entry& entry, int& result, LCWorker* worker);
   bool going_down();
@@ -521,7 +528,8 @@ public:
 
   int handle_multipart_expiration(RGWRados::Bucket *target,
 				  const multimap<string, lc_op>& prefix_map,
-				  LCWorker* worker);
+				  LCWorker* worker,
+				  time_t stop_at);
 };
 
 namespace rgw::lc {
