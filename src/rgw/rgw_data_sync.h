@@ -603,7 +603,7 @@ public:
             const rgw_bucket& dest_bucket);
 
   RGWCoroutine *read_sync_status_cr(int num, rgw_bucket_shard_sync_info *sync_status);
-  RGWCoroutine *init_sync_status_cr(int num);
+  RGWCoroutine *init_sync_status_cr(int num, RGWObjVersionTracker& objv_tracker);
   RGWCoroutine *run_sync_cr(int num);
 
   int num_pipes() {
