@@ -2635,6 +2635,9 @@ def command_ceph_volume():
     if args.fsid:
         make_log_dir(args.fsid)
 
+    l = FileLock(args.fsid)
+    l.acquire()
+
     (uid, gid) = (0, 0) # ceph-volume runs as root
     mounts = get_container_mounts(args.fsid, 'osd', None)
 
