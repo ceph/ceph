@@ -1425,7 +1425,7 @@ public:
                              uint64_t end_epoch);
   int cls_obj_usage_log_clear(string& oid);
 
-  int get_target_shard_id(const RGWBucketInfo& bucket_info, const string& obj_key, int *shard_id);
+  int get_target_shard_id(const rgw::bucket_index_normal_layout& layout, const string& obj_key, int *shard_id);
 
   int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, rgw_zone_id& zone_id, string& owner_id);
   int unlock(const rgw_pool& pool, const string& oid, rgw_zone_id& zone_id, string& owner_id);

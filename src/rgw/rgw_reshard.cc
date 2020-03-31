@@ -525,6 +525,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 				 Formatter *formatter)
 {
   rgw_bucket& bucket = bucket_info.bucket;
+  rgw::bucket_index_normal_layout layout;
 
   int ret = 0;
 
@@ -611,7 +612,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  // place the multipart .meta object on the same shard as its head object
 	  obj.index_hash_source = mp.get_key();
 	}
-	int ret = store->getRados()->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
+	int ret = store->getRados()->get_target_shard_id(layout, obj.get_hash_object(), &target_shard_id);
 	if (ret < 0) {
 	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
 	  return ret;
