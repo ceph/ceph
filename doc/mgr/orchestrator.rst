@@ -282,7 +282,9 @@ Service Specification
 =====================
 
 As *Service Specification* is a data structure often represented as YAML 
-to specify the deployment of services. For example::
+to specify the deployment of services. For example:
+
+.. code-block:: yaml
 
     service_type: rgw
     service_id: realm.zone
@@ -310,10 +312,12 @@ Service specifications of type ``mon``, ``mgr``, and the monitoring
 types do not require a ``service_id``
 
 A service of type ``nfs`` requires a pool name and contain
-an optional namespace::
+an optional namespace:
+
+.. code-block:: yaml
 
     service_type: nfs
-    service_id: realm.zone
+    service_id: mynfs
     placement: 
       hosts: 
         - host1
@@ -363,7 +367,9 @@ Daemons can be explictly placed on hosts by simply specifying them::
 
     orch apply prometheus "host1 host2 host3"
     
-Or in yaml::
+Or in yaml:
+
+.. code-block:: yaml
   
     service_type: prometheus
     placement:
@@ -386,7 +392,9 @@ Daemons can be explictly placed on hosts that match a specifc label::
 
     orch apply prometheus label:mylabel
 
-Or in yaml::
+Or in yaml:
+
+.. code-block:: yaml
 
     service_type: prometheus
     placement:
@@ -400,7 +408,9 @@ Daemons can be placed on hosts as well::
 
     orch apply prometheus '*'
 
-Or in yaml::
+Or in yaml:
+
+.. code-block:: yaml
 
     service_type: prometheus
     placement:
@@ -422,13 +432,17 @@ If the count is bigger than the amount of hosts, cephadm still deploys two daemo
 
     orch apply prometheus "3 host1 host2"
 
-Or in yaml::
+Or in yaml:
+
+.. code-block:: yaml
 
     service_type: prometheus
     placement:
       count: 3
       
-Or with hosts::
+Or with hosts:
+
+.. code-block:: yaml
 
     service_type: prometheus
     placement:
