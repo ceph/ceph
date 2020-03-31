@@ -19,6 +19,28 @@
 
 #include "rgw_bucket_sync.h"
 
+// represents an obligation to sync an entry up a given time
+struct rgw_data_sync_obligation {
+  std::string key;
+  std::string marker;
+  ceph::real_time timestamp;
+  bool retry = false;
+};
+
+inline std::ostream& operator<<(std::ostream& out, const rgw_data_sync_obligation& o) {
+  out << "key=" << o.key;
+  if (!o.marker.empty()) {
+    out << " marker=" << o.marker;
+  }
+  if (o.timestamp != ceph::real_time{}) {
+    out << " timestamp=" << o.timestamp;
+  }
+  if (o.retry) {
+    out << " retry";
+  }
+  return out;
+}
+
 class JSONObj;
 struct rgw_sync_bucket_pipe;
 
