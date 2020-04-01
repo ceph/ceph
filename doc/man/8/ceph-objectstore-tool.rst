@@ -7,10 +7,59 @@ ceph-objectstore-tool - modify the state of OSD
 Synopsis
 ========
 
-| **ceph-objectstore-tool** [--data-path *path to osd* ][--op *list* ]
-| **ceph-objectstore-tool** [--data-path *path to osd* ][--op *list-lost* ]
-| **ceph-objectstore-tool** [--data-path *path to osd* ][--pgid *$PG_ID* ][--op *list-lost*]
-| **ceph-objectstore-tool** [--data-path *path to osd* ][ --op *list $OBJECT_ID*]
+**ceph-objectstore-tool** provides two main modes: (1) a mode that specifies the "--op" argument (for example, **ceph-objectstore-tool** --data-path $PATH_TO_OSD --op $SELECT_OPERATION [--pgid $PGID] [--dry-run]), and (2) a mode for positional object operations. If the second mode is used, the object can be specified by ID or by the JSON output of the --op list. 
+
+| **ceph-objectstore-tool** --data-path *path to osd* [--op *list* ]
+
+Possible -op specifications:
+
+* info
+* log
+* remove
+* mkfs
+* fsck
+* repair
+* fuse
+* dup
+* export
+* export-remove
+* import
+* list
+* list-slow-omap
+* fix-lost
+* list-pgs
+* dump-journal
+* dump-super
+* meta-list
+* get-osdmap
+* set-osdmap
+* get-inc-osdmap
+* set-inc-osdmap
+* mark-complete
+* reset-last-complete
+* apply-layour-settings
+* update-mon-db
+* dump-export
+* trim-pg-log
+
+| **ceph-objectstore-tool** --data-path *path to osd* [--pgid *$PG_ID* ][--op *list-lost*]
+| **ceph-objectstore-tool** --data-path *path to osd* [ --op *list $OBJECT_ID*]
+
+Possible object operations:
+
+* (get|set)-bytes [file]
+* set-(attr|omap) [file]
+* (get|rm)-attr|omap)
+* get-omaphdr
+* set-omaphdr [file]
+* list-attrs
+* list-omap
+* remove|removeall
+* dump
+* set-size
+* clear-data-digest
+* remove-clone-metadata 
+
 
 Description
 ===========
@@ -32,6 +81,10 @@ These commands modify state of an OSD. The OSD must not be running when ceph-obj
 
 Listing Objects and Placement Groups
 ------------------------------------
+
+Make sure that the target OSD is down::
+
+   systemctl status ceph-osd@$OSD_NUMBER
 
 List objects with ceph-objectstore-tool::
 
@@ -71,6 +124,11 @@ List a lost object by its identifier::
 
    ceph-objectstore-tool --data-path $PATH_TO_OSD --op list-lost $OBJECT_ID
 
+List legacy lost objects::
+ 
+   ceph-objectstore-tool --data-path $PATH_TO_OSD --op fix-lost --dry-run
+
+
 
 Fixing Lost Objects   
 -------------------
@@ -90,6 +148,10 @@ Fix all the lost objects within a specified placement group::
 Fix a lost object by its identifier::
 
    ceph-objectstore-tool --data-path $PATH_TO_OSD --op fix-lost $OBJECT_ID
+
+Fix legacy lost objects::
+
+   ceph-objectstore-tool --data-path $PATH_TO_OSD --op fix-lost
 
 
 Manipulating an object's content
@@ -260,10 +322,10 @@ Procedure
 Listing an Object's Attributes
 -------------------------------
 
-Use the **ceph-objectstore-tool** utility to list an object’s attributes. The output provides you with the object’s keys and values.
+Use the **ceph-objectstore-tool** utility to list an object's attributes. The output provides you with the object’s keys and values.
 Note
 
-If using FileStore as the OSD backend object store, then add the `--journal-path $PATH_TO_JOURNAL` argument when listing an object’s attributes, where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal; for example `/var/lib/ceph/osd/ceph-0/journal`.
+If you are using FileStore as the OSD backend object store and the journal is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` argument when listing an object’s attributes, where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal; for example `/var/lib/ceph/osd/ceph-0/journal`.
 
 Prerequisites
 ^^^^^^^^^^^^^
@@ -301,7 +363,7 @@ MANIPULATING THE OBJECT ATTRIBUTE KEY
 Use the ceph-objectstore-tool utility to change an object’s attributes. To manipulate the object’s attributes you need the data and journal paths, the placement group identifier (PG ID), the object, and the key in the object’s attribute.
 Note
 
-If using FileStore as the OSD backend object store, then add the `--journal-path $PATH_TO_JOURNAL` argument when getting, setting or removing the object’s attributes. Where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal, for example `/var/lib/ceph/osd/ceph-0/journal`.
+If you are using FileStore as the OSD backend object store and the journal is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` argument when getting, setting or removing the object’s attributes. Where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal, for example `/var/lib/ceph/osd/ceph-0/journal`.
 
 Prerequisites
 
@@ -360,7 +422,7 @@ Options
 
 .. option:: --type arg        
 
-   Arg is one of [bluestore (default), filestore, memstore]
+   Arg is one of [bluestore (default), filestore, memstore]. This option is needed only if the tool can't tell the type from --data-path.
  
 .. option:: --data-path arg
 
@@ -465,6 +527,10 @@ Positional Syntax
 `<object>` can be the empty string ('') which, with a provided pgid, specifies the pgmeta object
 
 The optional [file] argument will read stdin or write stdout if not specified or if '-' is specified.
+
+Error Codes
+===========
+"Mount failed with '(11) Resource temporarily unavailable" - This might mean that you have attempted to run **ceph-objectstore-tool** on a running OSD.
 
 Availability
 ============
