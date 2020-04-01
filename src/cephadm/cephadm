@@ -1593,9 +1593,7 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
             mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
             mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
         elif daemon_type == 'node-exporter':
-            mounts['/proc'] = '/host/proc:ro'
-            mounts['/sys'] = '/host/sys:ro'
-            mounts['/'] = '/rootfs:ro'
+            mounts['/'] = '/host:ro,rslave'
         elif daemon_type == "grafana":
             mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
             mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
