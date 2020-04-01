@@ -162,15 +162,20 @@ class Remote(object):
     def is_online(self):
         if self.ssh is None:
             return False
+        if self.ssh.get_transport() is None:
+            return False
         try:
-            self.run(args="true")
+            self._runner(args="true", client=self.ssh, name=self.shortname)
         except Exception:
             return False
         return self.ssh.get_transport().is_active()
 
     def ensure_online(self):
+        if self.is_online:
+            return
+        self.connect()
         if not self.is_online:
-            return self.connect()
+            raise Exception('unable to connect')
 
     @property
     def system_type(self):
@@ -194,10 +199,7 @@ class Remote(object):
 
         TODO refactor to move run.run here?
         """
-        if not self.ssh or \
-           not self.ssh.get_transport() or \
-           not self.ssh.get_transport().is_active():
-            self.reconnect()
+        self.ensure_online()
         r = self._runner(client=self.ssh, name=self.shortname, **kwargs)
         r.remote = self
         return r
