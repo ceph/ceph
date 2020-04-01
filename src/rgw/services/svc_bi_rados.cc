@@ -187,15 +187,21 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
 void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base,
                                                       uint32_t num_shards,
                                                       int shard_id,
+                                                      uint64_t gen_id,
                                                       string *bucket_obj)
 {
   if (!num_shards) {
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
   } else {
-    char buf[bucket_oid_base.size() + 32];
-    snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
-    (*bucket_obj) = buf;
+    char buf[bucket_oid_base.size() + 64];
+    if (gen_id != 0) {
+      snprintf(buf, sizeof(buf), "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
+      (*bucket_obj) = buf;
+    } else {
+      snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
+      (*bucket_obj) = buf;
+    }
   }
 }
 
@@ -260,6 +266,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket_info,
                                                      int shard_id,
+                                                     uint64_t gen_id,
                                                      RGWSI_RADOS::Obj *bucket_obj)
 {
   RGWSI_RADOS::Pool index_pool;
@@ -274,7 +281,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   string oid;
 
   get_bucket_index_object(bucket_oid_base, bucket_info.layout.current_index.layout.normal.num_shards,
-                          shard_id, &oid);
+                          shard_id, gen_id, &oid);
 
   *bucket_obj = svc.rados->obj(index_pool, oid);
 
