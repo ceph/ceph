@@ -27,6 +27,10 @@ using librbd::util::unique_lock_name;
 
 namespace {
 
+double round_to_two_places(double value) {
+  return abs(round(value * 100) / 100);
+}
+
 json_spirit::mObject to_json_object(
     const cls::journal::ObjectPosition& position) {
   json_spirit::mObject object;
@@ -46,6 +50,14 @@ ReplayStatusFormatter<I>::ReplayStatusFormatter(Journaler *journaler,
   : m_journaler(journaler),
     m_mirror_uuid(mirror_uuid),
     m_lock(ceph::make_mutex(unique_lock_name("ReplayStatusFormatter::m_lock", this))) {
+}
+
+template <typename I>
+void ReplayStatusFormatter<I>::handle_entry_processed(uint32_t bytes) {
+  dout(20) << dendl;
+
+  m_bytes_per_second(bytes);
+  m_entries_per_second(1);
 }
 
 template <typename I>
@@ -232,7 +244,6 @@ void ReplayStatusFormatter<I>::handle_update_tag_cache(uint64_t master_tag_tid,
 
 template <typename I>
 void ReplayStatusFormatter<I>::format(std::string *description) {
-
   dout(20) << "m_master_position=" << m_master_position
 	   << ", m_mirror_position=" << m_mirror_position
 	   << ", m_entries_behind_master=" << m_entries_behind_master << dendl;
@@ -242,7 +253,28 @@ void ReplayStatusFormatter<I>::format(std::string *description) {
   root_obj["non_primary_position"] = to_json_object(m_mirror_position);
   root_obj["entries_behind_primary"] = (
     m_entries_behind_master > 0 ? m_entries_behind_master : 0);
-  *description = json_spirit::write(root_obj);
+
+  m_bytes_per_second(0);
+  root_obj["bytes_per_second"] = round_to_two_places(
+    m_bytes_per_second.get_average());
+
+  m_entries_per_second(0);
+  auto entries_per_second = m_entries_per_second.get_average();
+  root_obj["entries_per_second"] = round_to_two_places(entries_per_second);
+
+  if (m_entries_behind_master > 0 && entries_per_second > 0) {
+    auto seconds_until_synced = round_to_two_places(
+      m_entries_behind_master / entries_per_second);
+    if (seconds_until_synced >= std::numeric_limits<uint64_t>::max()) {
+      seconds_until_synced = std::numeric_limits<uint64_t>::max();
+    }
+
+    root_obj["seconds_until_synced"] = static_cast<uint64_t>(
+      seconds_until_synced);
+  }
+
+  *description = json_spirit::write(
+    root_obj, json_spirit::remove_trailing_zeros);
 }
 
 } // namespace journal
