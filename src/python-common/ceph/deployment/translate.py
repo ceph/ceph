@@ -1,7 +1,7 @@
 import logging
 
 try:
-    from typing import Optional
+    from typing import Optional, List
 except ImportError:
     pass
 
@@ -17,11 +17,13 @@ class to_ceph_volume(object):
                  spec,  # type: DriveGroupSpec
                  selection,  # type: DriveSelection
                  preview=False
+                 host  # type: str
                  ):
 
         self.spec = spec
         self.selection = selection
         self.preview = preview
+        self.host = host
 
     def run(self):
         # type: () -> Optional[str]
@@ -30,10 +32,12 @@ class to_ceph_volume(object):
         db_devices = [x.path for x in self.selection.db_devices()]
         wal_devices = [x.path for x in self.selection.wal_devices()]
         journal_devices = [x.path for x in self.selection.journal_devices()]
+        reclaimed_ids: List[str] = self.spec.osd_id_claims.get(self.host, [])
 
         if not data_devices:
             return None
 
+        cmd = ""
         if self.spec.objectstore == 'filestore':
             cmd = "lvm batch --no-auto"
 
@@ -85,6 +89,9 @@ class to_ceph_volume(object):
 
         if self.spec.osds_per_device:
             cmd += " --osds-per-device {}".format(self.spec.osds_per_device)
+
+        if reclaimed_ids:
+            cmd += " --osd-id {}".format(" ".join(reclaimed_ids))
 
         cmd += " --yes"
         cmd += " --no-systemd"

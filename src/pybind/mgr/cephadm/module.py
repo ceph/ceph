@@ -2099,6 +2099,29 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_drivegroups(self, specs: List[DriveGroupSpec]):
         return [self._apply(spec) for spec in specs]
 
+    def find_destroyed_osds(self) -> Dict[str, List[str]]:
+        osd_host_map: Dict[str, List[str]] = dict()
+        ret, out, err = self.mon_command({
+            'prefix': 'osd tree',
+            'states': ['destroyed'],
+            'format': 'json'
+        })
+        if ret != 0:
+            raise OrchestratorError(f"Caught error on calling 'osd tree destroyed' -> {err}")
+        try:
+            tree = json.loads(out)
+        except json.decoder.JSONDecodeError:
+            self.log.error(f"Could not decode json -> {out}")
+            return osd_host_map
+
+        nodes = tree.get('nodes', {})
+        for node in nodes:
+            if node.get('type') == 'host':
+                osd_host_map.update(
+                    {node.get('name'): [str(_id) for _id in node.get('children', list())]}
+                )
+        return osd_host_map
+
     @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
         self.log.debug(f"Processing DriveGroup {drive_group}")
@@ -2118,6 +2141,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         matching_hosts = drive_group.placement.pattern_matches_hosts([x for x in self.cache.get_hosts()])
         # 2) Map the inventory to the InventoryHost object
         host_ds_map = []
+
+        # set osd_id_claims
+        drive_group.osd_id_claims = self.find_destroyed_osds()
+        self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
 
         def _find_inv_for_host(hostname: str, inventory_dict: dict):
             # This is stupid and needs to be loaded with the host
