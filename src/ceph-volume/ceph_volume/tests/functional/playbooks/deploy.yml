@@ -91,6 +91,8 @@
     - import_role:
         name: ceph-defaults
     - import_role:
+        name: ceph-facts
+    - import_role:
         name: ceph-validate
 
 - hosts:
