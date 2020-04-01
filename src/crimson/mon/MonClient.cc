@@ -556,7 +556,6 @@ seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn)
     active_con.reset();
     return reopen_session(-1);
   } else {
-    logger().error("unknown reset from {}", conn->get_peer_addr());
     return seastar::now();
   }
 }

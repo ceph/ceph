@@ -305,7 +305,7 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
 {
   logger().info("osd.{}: _preboot", whoami);
   if (osdmap->get_epoch() == 0) {
-    logger().warn("waiting for initial osdmap");
+    logger().info("waiting for initial osdmap");
   } else if (osdmap->is_destroyed(whoami)) {
     logger().warn("osdmap says I am destroyed");
     // provide a small margin so we don't livelock seeing if we
