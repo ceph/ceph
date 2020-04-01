@@ -1859,10 +1859,13 @@ class TestExclusiveLock(object):
                 rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
                 with Image(ioctx2, image_name) as image, \
                      Image(blacklist_ioctx, image_name) as blacklist_image:
+
+                    lock_owners = list(image.lock_get_owners())
+                    eq(0, len(lock_owners))
+
                     blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
                     assert_raises(ReadOnlyImage, image.lock_acquire,
                                   RBD_LOCK_MODE_EXCLUSIVE)
-
                     lock_owners = list(image.lock_get_owners())
                     eq(1, len(lock_owners))
                     eq(RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]['mode'])
