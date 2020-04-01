@@ -247,6 +247,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return list(filter(_filter_func, daemons))
 
+    def preview_drivegroups(self, drive_group_name=None, dg_specs=None):
+        return [{}]
+
     def create_osds(self, drive_group):
         # type: (DriveGroupSpec) -> TestCompletion
         """ Creates OSDs from a drive group specification.
