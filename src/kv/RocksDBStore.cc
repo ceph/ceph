@@ -760,7 +760,13 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
   //check if sharding_def matches stored_sharding_def
   std::vector<ColumnFamily> sharding_def;
   std::vector<ColumnFamily> stored_sharding_def;
-  parse_sharding_def(sharding_text, sharding_def);
+  if (!sharding_text.empty()) {
+    parse_sharding_def(sharding_text, sharding_def);
+  } else {
+    //if sharding requested is empty, assume that it agrees with stored
+    //this is necessary for ceph-bluestore-tool fsck
+    parse_sharding_def(stored_sharding_text, sharding_def);
+  }
   parse_sharding_def(stored_sharding_text, stored_sharding_def);
 
   std::sort(sharding_def.begin(), sharding_def.end(),
