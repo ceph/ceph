@@ -30,7 +30,7 @@ import uuid
 
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.drive_selection import selector
+from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.service_spec import \
     HostPlacementSpec, NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
 
@@ -144,8 +144,7 @@ class SpecStore():
             del self.spec_created[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
-    def find(self, service_name=None):
-        # type: (Optional[str]) -> List[ServiceSpec]
+    def find(self, service_name: Optional[str] = None) -> List[ServiceSpec]:
         specs = []
         for sn, spec in self.specs.items():
             if not service_name or \
@@ -2102,10 +2101,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
-        self.log.debug("Processing DriveGroup {}".format(drive_group))
+        self.log.debug(f"Processing DriveGroup {drive_group}")
+        ret = []
+        for host, drive_selection in self.prepare_drivegroup(drive_group):
+            self.log.info('Applying %s on host %s...' % (drive_group.service_id, host))
+            cmd = self.driveselection_to_ceph_volume(drive_group, drive_selection)
+            if not cmd:
+                self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
+                continue
+            ret_msg = self._create_osd(host, cmd)
+            ret.append(ret_msg)
+        return ", ".join(ret)
+
+    def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
         # 1) use fn_filter to determine matching_hosts
         matching_hosts = drive_group.placement.pattern_matches_hosts([x for x in self.cache.get_hosts()])
         # 2) Map the inventory to the InventoryHost object
+        host_ds_map = []
 
         def _find_inv_for_host(hostname: str, inventory_dict: dict):
             # This is stupid and needs to be loaded with the host
@@ -2114,27 +2126,49 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     return _inventory
             raise OrchestratorError("No inventory found for host: {}".format(hostname))
 
-        ret = []
-        # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
+        # 3) iterate over matching_host and call DriveSelection
         self.log.debug(f"Checking matching hosts -> {matching_hosts}")
         for host in matching_hosts:
             inventory_for_host = _find_inv_for_host(host, self.cache.devices)
             self.log.debug(f"Found inventory for host {inventory_for_host}")
-            drive_selection = selector.DriveSelection(drive_group, inventory_for_host)
+            drive_selection = DriveSelection(drive_group, inventory_for_host)
             self.log.debug(f"Found drive selection {drive_selection}")
-            cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
-            self.log.debug(f"translated to cmd {cmd}")
-            if not cmd:
-                self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
-                continue
-            self.log.info('Applying %s on host %s...' % (
-                drive_group.service_name(), host))
-            ret_msg = self._create_osd(host, cmd)
-            ret.append(ret_msg)
-        return ", ".join(ret)
+            host_ds_map.append((host, drive_selection))
+        return host_ds_map
 
-    def _create_osd(self, host, cmd):
+    def driveselection_to_ceph_volume(self, drive_group: DriveGroupSpec,
+                                      drive_selection: DriveSelection,
+                                      preview: bool = False) -> Optional[str]:
+        self.log.debug(f"Translating DriveGroup <{drive_group}> to ceph-volume command")
+        cmd: Optional[str] = translate.to_ceph_volume(drive_group, drive_selection, preview=preview).run()
+        self.log.debug(f"Resulting ceph-volume cmd: {cmd}")
+        return cmd
 
+    def preview_drivegroups(self, drive_group_name: Optional[str] = None,
+                            dg_specs: Optional[List[DriveGroupSpec]] = None) -> List[Dict[str, Dict[Any, Any]]]:
+        # find drivegroups
+        if drive_group_name:
+            drive_groups = cast(List[DriveGroupSpec],
+                                self.spec_store.find(service_name=drive_group_name))
+        elif dg_specs:
+            drive_groups = dg_specs
+        else:
+            drive_groups = []
+        ret_all = []
+        for drive_group in drive_groups:
+            # prepare driveselection
+            for host, ds in self.prepare_drivegroup(drive_group):
+                cmd = self.driveselection_to_ceph_volume(drive_group, ds, preview=True)
+                if not cmd:
+                    self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
+                    continue
+                out, err, code = self._run_ceph_volume_command(host, cmd)
+                if out:
+                    concat_out = json.loads(" ".join(out))
+                    ret_all.append({'data': concat_out, 'drivegroup': drive_group.service_id, 'host': host})
+        return ret_all
+
+    def _run_ceph_volume_command(self, host: str, cmd: str) -> Tuple[List[str], List[str], int]:
         self._require_hosts(host)
 
         # get bootstrap key
@@ -2153,8 +2187,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'keyring': keyring,
         })
 
-        before_osd_uuid_map = self.get_osd_uuid_map(only_up=True)
-
         split_cmd = cmd.split(' ')
         _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
@@ -2163,6 +2195,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             _cmd,
             stdin=j,
             error_ok=True)
+        return out, err, code
+
+    def _create_osd(self, host, cmd):
+        out, err, code = self._run_ceph_volume_command(host, cmd)
+
         if code == 1 and ', it is already prepared' in '\n'.join(err):
             # HACK: when we create against an existing LV, ceph-volume
             # returns an error and the above message.  To make this
@@ -2182,6 +2219,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'lvm', 'list',
                 '--format', 'json',
             ])
+        before_osd_uuid_map = self.get_osd_uuid_map(only_up=True)
         osds_elems = json.loads('\n'.join(out))
         fsid = self._cluster_fsid
         osd_uuid_map = self.get_osd_uuid_map()

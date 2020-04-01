@@ -149,10 +149,12 @@ class DriveGroupSpec(ServiceSpec):
                  block_wal_size=None,  # type: Optional[int]
                  journal_size=None,  # type: Optional[int]
                  service_type=None,  # type: Optional[str]
-                 unmanaged=None,  # type: Optional[bool]
+                 unmanaged=False,  # type: bool
                  ):
         assert service_type is None or service_type == 'osd'
-        super(DriveGroupSpec, self).__init__('osd', service_id=service_id, placement=placement)
+        super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
+                                             placement=placement,
+                                             unmanaged=unmanaged)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
