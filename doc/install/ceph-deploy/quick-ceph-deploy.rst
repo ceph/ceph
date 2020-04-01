@@ -205,7 +205,7 @@ Odd numbers of monitors tend to be better, although this is not required.
    it now and then push it out to each node with
    ``ceph-deploy --overwrite-conf config push {ceph-nodes}``.
 
-Add two Ceph Monitors to your cluster using the command::
+Add two Ceph Monitors to your cluster::
 
   ceph-deploy mon add {ceph-node}
 
