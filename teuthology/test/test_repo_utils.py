@@ -192,6 +192,7 @@ class TestRepoUtils(object):
                 pass
 
     URLS_AND_DIRNAMES = [
+        ('git@git.ceph.com/ceph-qa-suite.git', 'git.ceph.com_ceph-qa-suite'),
         ('git://git.ceph.com/ceph-qa-suite.git', 'git.ceph.com_ceph-qa-suite'),
         ('https://github.com/ceph/ceph', 'github.com_ceph_ceph'),
         ('https://github.com/liewegas/ceph.git', 'github.com_liewegas_ceph'),

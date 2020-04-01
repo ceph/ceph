@@ -352,13 +352,14 @@ def url_to_dirname(url):
     Given a URL, returns a string that's safe to use as a directory name.
     Examples:
 
+        git@git.ceph.com/ceph-qa-suite.git -> git.ceph.com_ceph-qa-suite
         git://git.ceph.com/ceph-qa-suite.git -> git.ceph.com_ceph-qa-suite
         https://github.com/ceph/ceph -> github.com_ceph_ceph
         https://github.com/liewegas/ceph.git -> github.com_liewegas_ceph
         file:///my/dir/has/ceph.git -> my_dir_has_ceph
     """
     # Strip protocol from left-hand side
-    string = re.match('.*://(.*)', url).groups()[0]
+    string = re.match('(?:.*://|.*@)(.*)', url).groups()[0]
     # Strip '.git' from the right-hand side
     string = string.rstrip('.git')
     # Replace certain characters with underscores
