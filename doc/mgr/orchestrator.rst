@@ -395,7 +395,7 @@ Placement by pattern matching
 
 Daemons can be placed on hosts as well::
 
-    orch apply prometheus '*'
+    orch apply prometheus 'myhost[1-3]'
 
 Or in yaml:
 
@@ -403,9 +403,21 @@ Or in yaml:
 
     service_type: prometheus
     placement:
-      all_hosts: true
+      host_pattern: "myhost[1-3]"
 
+To place a service on *all* hosts, use ``"*"``::
 
+    orch apply crash '*'
+
+Or in yaml:
+
+.. code-block:: yaml
+
+    service_type: node-exporter
+    placement:
+      host_pattern: "*"
+
+    
 Setting a limit
 ---------------
 
