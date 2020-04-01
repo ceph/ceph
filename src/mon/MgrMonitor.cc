@@ -831,6 +831,15 @@ void MgrMonitor::tick()
     propose = true;
   }
 
+  // obsolete modules?
+  if (mon->monmap->min_mon_release >= ceph_release_t::octopus &&
+      pending_map.module_enabled("orchestrator_cli")) {
+    dout(10) << " disabling obsolete/renamed 'orchestrator_cli'" << dendl;
+    // we don't need to enable 'orchestrator' because it's now always-on
+    pending_map.modules.erase("orchestrator_cli");
+    propose = true;
+  }
+
   if (propose) {
     propose_pending();
   }
