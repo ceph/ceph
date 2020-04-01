@@ -1086,7 +1086,7 @@ start_ganesha() {
             osd "allow rw pool=$pool_name namespace=$namespace, allow rw tag cephfs data=a" \
             mds "allow rw path=/" \
             >> "$keyring_fn"
-        prun ceph_adm fs nfs cluster create $name
+        prun ceph_adm nfs cluster create cephfs $name
 
         echo "NFS_CORE_PARAM {
             Enable_NLM = false;
@@ -1127,7 +1127,7 @@ start_ganesha() {
         pid file = $ganesha_dir/ganesha.pid
 EOF
 
-        prun ceph_adm fs nfs export create "a" "/cephfs" --attach=$name
+        prun ceph_adm nfs export create cephfs "a" "/cephfs" --attach=$name
         prun ganesha-rados-grace -p $pool_name -n $namespace add $name
         prun ganesha-rados-grace -p $pool_name -n $namespace
 

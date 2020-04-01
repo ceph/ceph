@@ -17,12 +17,13 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph fs nfs cluster create [--size=1] <cluster_id>
+    $ ceph nfs cluster create <type=cephfs> [--size=1] <clusterid>
 
 This creates a common recovery pool for all Ganesha daemons, new user based on
 cluster_id and common ganesha config rados object.
 
-Here size denotes the number of ganesha daemons within a cluster.
+Here size denotes the number of ganesha daemons within a cluster and type is
+export type. Currently only CephFS is supported.
 
 .. note:: This does not setup ganesha recovery database and start the daemons.
           It needs to be done manually if not using vstart for creating
@@ -34,10 +35,11 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph fs nfs export create <fsname> <binding> [--readonly] [--path=/path/in/cephfs] [--attach=<cluster_id>]
+    $ ceph nfs export create <type=cephfs> <fsname> <binding> [--readonly] [--path=/path/in/cephfs] [--attach=<clusterid>]
 
 It creates export rados objects containing the export block. Here binding is
-the pseudo root name.
+the pseudo root name and type is export type. Currently only CephFS is
+supported.
 
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================
