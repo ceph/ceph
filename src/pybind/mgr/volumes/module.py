@@ -7,7 +7,7 @@ from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
-from .fs.nfs import NFSConfig, NFSCluster, FSExport
+from .fs.nfs import NFSCluster, FSExport
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -298,7 +298,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
-        self.nfs_obj = None # type: Optional[NFSConfig]
         self.fs_export = FSExport(self)
 
     def __del__(self):
@@ -468,22 +467,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
     def _cmd_fs_nfs_export_create(self, inbuf, cmd):
-        """
-        if self.nfs_obj and self.nfs_obj.check_fsal_valid():
-            self.nfs_obj.create_instance()
-            return self.nfs_obj.create_export()
-        """
-
         return self.fs_export.create_export(fs_name=cmd['fsname'],
                 pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False),
                 path=cmd.get('path', '/'), cluster_id=cmd.get('attach','None'))
 
     def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
-        if self.nfs_obj:
-            return self.nfs_obj.delete_export(cmd['export_id'])
+            return self.fs_export.delete_export(cmd['export_id'])
 
     def _cmd_fs_nfs_cluster_create(self, inbuf, cmd):
-            #self.nfs_obj = NFSConfig(self, cmd['cluster_id'])
-            #return self.nfs_obj.create_nfs_cluster(size=cmd.get('size', 1))
             nfs_cluster_obj = NFSCluster(self, cmd['cluster_id'])
             return nfs_cluster_obj.create_nfs_cluster(size=cmd.get('size', 1))
