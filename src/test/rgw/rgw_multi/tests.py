@@ -12,6 +12,7 @@ except ImportError:
     from itertools import zip_longest
 from itertools import combinations
 from six import StringIO
+from six.moves import range
 
 import boto
 import boto.s3.connection
@@ -503,7 +504,7 @@ def create_bucket_per_zone(zonegroup_conns, buckets_per_zone = 1):
     buckets = []
     zone_bucket = []
     for zone in zonegroup_conns.rw_zones:
-        for i in xrange(buckets_per_zone):
+        for i in range(buckets_per_zone):
             bucket_name = gen_bucket_name()
             log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
             bucket = zone.create_bucket(bucket_name)
