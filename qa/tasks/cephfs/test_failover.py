@@ -3,6 +3,7 @@ import signal
 import logging
 import operator
 from random import randint
+from six.moves import range
 
 from cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -24,7 +25,7 @@ class TestClusterAffinity(CephFSTestCase):
         current = sorted(current, key=operator.itemgetter('name'))
         log.info("current = %s", current)
         self.assertEqual(len(current), len(target))
-        for i in xrange(len(current)):
+        for i in range(len(current)):
             for attr in target[i]:
                 self.assertIn(attr, current[i])
                 self.assertEqual(target[i][attr], current[i][attr])
