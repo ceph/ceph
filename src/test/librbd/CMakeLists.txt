@@ -147,6 +147,11 @@ target_link_libraries(unittest_librbd
   global
   ${UNITTEST_LIBS})
 
+if(WITH_RBD_RWL)
+  target_link_libraries(unittest_librbd
+    pmem::pmemobj)
+endif()
+
 add_executable(ceph_test_librbd
   test_main.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
