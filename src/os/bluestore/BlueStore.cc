@@ -13054,6 +13054,7 @@ void BlueStore::_do_write_small(
 						 b,
 						 &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
+
 	  txc->statfs_delta.stored() += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
 	  logger->inc(l_bluestore_write_small_unused);
@@ -13114,9 +13115,7 @@ void BlueStore::_do_write_small(
 	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-	  if (b->get_blob().csum_type) {
-	    b->dirty_blob().calc_csum(b_off, bl);
-	  }
+	  b->dirty_blob().calc_csum(b_off, bl);
 
 	  if (!g_conf()->bluestore_debug_omit_block_device_write) {
 	    bluestore_deferred_op_t *op = _get_deferred_op(txc);
@@ -13331,27 +13330,24 @@ void BlueStore::_do_write_big_apply_deferred(
     bufferlist::iterator& blp,
     WriteContext* wctx)
 {
-  bluestore_deferred_op_t* op = _get_deferred_op(txc);
-  op->op = bluestore_deferred_op_t::OP_WRITE;
-  op->extents.swap(dctx.res_extents);
-
+  bufferlist bl;
   dout(20) << __func__ << "  reading head 0x" << std::hex << dctx.head_read
     << " and tail 0x" << dctx.tail_read << std::dec << dendl;
   if (dctx.head_read) {
     int r = _do_read(c.get(), o,
       dctx.off - dctx.head_read,
       dctx.head_read,
-      op->data,
+      bl,
       0);
     ceph_assert(r >= 0 && r <= (int)dctx.head_read);
     size_t zlen = dctx.head_read - r;
     if (zlen) {
-      op->data.append_zero(zlen);
+      bl.append_zero(zlen);
       logger->inc(l_bluestore_write_pad_bytes, zlen);
     }
     logger->inc(l_bluestore_write_penalty_read_ops);
   }
-  blp.copy(dctx.used, op->data);
+  blp.copy(dctx.used, bl);
 
   if (dctx.tail_read) {
     bufferlist tail_bl;
@@ -13364,19 +13360,29 @@ void BlueStore::_do_write_big_apply_deferred(
       tail_bl.append_zero(zlen);
       logger->inc(l_bluestore_write_pad_bytes, zlen);
     }
-    op->data.claim_append(tail_bl);
+    bl.claim_append(tail_bl);
     logger->inc(l_bluestore_write_penalty_read_ops);
   }
   auto b0 = ep->blob;
-  _buffer_cache_write(txc, b0, dctx.b_off, op->data,
+  _buffer_cache_write(txc, b0, dctx.b_off, bl,
     wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-  if (b0->get_blob().csum_type) {
-    b0->dirty_blob().calc_csum(dctx.b_off, op->data);
-  }
+  b0->dirty_blob().calc_csum(dctx.b_off, bl);
+
   Extent* le = o->extent_map.set_lextent(c, dctx.off,
     dctx.off - ep->blob_start(), dctx.used, b0, &wctx->old_extents);
+
+  // in fact this is a no-op for big writes but left here to maintain
+  // uniformity and avoid missing after some refactor.
+  b0->dirty_blob().mark_used(le->blob_offset, le->length);
   txc->statfs_delta.stored() += le->length;
+
+  if (!g_conf()->bluestore_debug_omit_block_device_write) {
+    bluestore_deferred_op_t* op = _get_deferred_op(txc);
+    op->op = bluestore_deferred_op_t::OP_WRITE;
+    op->extents.swap(dctx.res_extents);
+    op->data.claim(bl);
+  }
 }
 
 void BlueStore::_do_write_big(
