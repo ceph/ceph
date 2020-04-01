@@ -607,14 +607,14 @@ int cls_rgw_gc_list(librados::IoCtx& io_ctx, string& oid, string& marker, uint32
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_rgw_lc_get_head(librados::IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& head);
 int cls_rgw_lc_put_head(librados::IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& head);
-int cls_rgw_lc_get_next_entry(librados::IoCtx& io_ctx, const string& oid, string& marker, pair<string, int>& entry);
-int cls_rgw_lc_rm_entry(librados::IoCtx& io_ctx, const string& oid, const pair<string, int>& entry);
-int cls_rgw_lc_set_entry(librados::IoCtx& io_ctx, const string& oid, const pair<string, int>& entry);
-int cls_rgw_lc_get_entry(librados::IoCtx& io_ctx, const string& oid, const std::string& marker, rgw_lc_entry_t& entry);
+int cls_rgw_lc_get_next_entry(librados::IoCtx& io_ctx, const string& oid, string& marker, cls_rgw_lc_entry& entry);
+int cls_rgw_lc_rm_entry(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_lc_entry& entry);
+int cls_rgw_lc_set_entry(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_lc_entry& entry);
+int cls_rgw_lc_get_entry(librados::IoCtx& io_ctx, const string& oid, const std::string& marker, cls_rgw_lc_entry& entry);
 int cls_rgw_lc_list(librados::IoCtx& io_ctx, const string& oid,
                     const string& marker,
                     uint32_t max_entries,
-                    map<string, int>& entries);
+                    vector<cls_rgw_lc_entry>& entries);
 #endif
 
 /* resharding */

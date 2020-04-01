@@ -7224,27 +7224,35 @@ next:
 
   if (opt_cmd == OPT::LC_LIST) {
     formatter->open_array_section("lifecycle_list");
-    map<string, int> bucket_lc_map;
+    vector<cls_rgw_lc_entry> bucket_lc_map;
     string marker;
 #define MAX_LC_LIST_ENTRIES 100
     if (max_entries < 0) {
       max_entries = MAX_LC_LIST_ENTRIES;
     }
     do {
-      int ret = store->getRados()->list_lc_progress(marker, max_entries, &bucket_lc_map);
+      int ret = store->getRados()->list_lc_progress(marker, max_entries,
+						    bucket_lc_map);
       if (ret < 0) {
-        cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret)
+	     << std::endl;
         return 1;
       }
-      map<string, int>::iterator iter;
-      for (iter = bucket_lc_map.begin(); iter != bucket_lc_map.end(); ++iter) {
+      for (const auto& entry : bucket_lc_map) {
         formatter->open_object_section("bucket_lc_info");
-        formatter->dump_string("bucket", iter->first);
-        string lc_status = LC_STATUS[iter->second];
+        formatter->dump_string("bucket", entry.bucket);
+	char exp_buf[100];
+	time_t t{time_t(entry.start_time)};
+	if (std::strftime(
+	      exp_buf, sizeof(exp_buf),
+	      "%a, %d %b %Y %T %Z", std::gmtime(&t))) {
+	  formatter->dump_string("started", exp_buf);
+	}
+        string lc_status = LC_STATUS[entry.status];
         formatter->dump_string("status", lc_status);
         formatter->close_section(); // objs
         formatter->flush(cout);
-        marker = iter->first;
+        marker = entry.bucket;
       }
     } while (!bucket_lc_map.empty());
 

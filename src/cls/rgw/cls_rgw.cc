@@ -3660,7 +3660,7 @@ static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, buffe
     return -EINVAL;
   }
 
-  rgw_lc_entry_t lc_entry;
+  cls_rgw_lc_entry lc_entry;
   int ret = read_omap_entry(hctx, op.marker, &lc_entry);
   if (ret < 0)
     return ret;
@@ -3686,7 +3686,7 @@ static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   bufferlist bl;
   encode(op.entry, bl);
 
-  int ret = cls_cxx_map_set_val(hctx, op.entry.first, &bl);
+  int ret = cls_cxx_map_set_val(hctx, op.entry.bucket, &bl);
   return ret;
 }
 
@@ -3702,7 +3702,7 @@ static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  int ret = cls_cxx_map_remove_key(hctx, op.entry.first);
+  int ret = cls_cxx_map_remove_key(hctx, op.entry.bucket);
   return ret;
 }
 
@@ -3725,7 +3725,7 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
   if (ret < 0)
     return ret;
   map<string, bufferlist>::iterator it;
-  pair<string, int> entry;
+  cls_rgw_lc_entry entry;
   if (!vals.empty()) {
     it=vals.begin();
     in_iter = it->second.begin();
@@ -3741,7 +3741,8 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
   return 0;
 }
 
-static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in,
+				   bufferlist *out)
 {
   cls_rgw_lc_list_entries_op op;
   auto in_iter = in->cbegin();
@@ -3752,24 +3753,33 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in, bu
     return -EINVAL;
   }
 
-  cls_rgw_lc_list_entries_ret op_ret;
+  cls_rgw_lc_list_entries_ret op_ret(op.compat_v);
   bufferlist::const_iterator iter;
   map<string, bufferlist> vals;
   string filter_prefix;
-  int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, op.max_entries, &vals, &op_ret.is_truncated);
+  int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, op.max_entries,
+				 &vals, &op_ret.is_truncated);
   if (ret < 0)
     return ret;
   map<string, bufferlist>::iterator it;
-  pair<string, int> entry;
-  for (it = vals.begin(); it != vals.end(); ++it) {
+  for (auto it = vals.begin(); it != vals.end(); ++it) {
+    cls_rgw_lc_entry entry;
     iter = it->second.cbegin();
     try {
-    decode(entry, iter);
+      decode(entry, iter);
     } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_lc_list_entries(): failed to decode entry\n");
-    return -EIO;
-   }
-   op_ret.entries.insert(entry);
+      /* try backward compat */
+      pair<string, int> oe;
+      try {
+	decode(oe, iter);
+	entry = {oe.first, 0 /* start */, uint32_t(oe.second)};
+      } catch(buffer::error& err) {
+	CLS_LOG(
+	  1, "ERROR: rgw_cls_lc_list_entries(): failed to decode entry\n");
+      }
+      return -EIO;
+    }
+   op_ret.entries.push_back(entry);
   }
   encode(op_ret, *out);
   return 0;

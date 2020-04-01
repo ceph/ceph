@@ -26,6 +26,7 @@
 #include "rgw_zone.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
+#include "rgw_sal.h"
 
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
@@ -288,8 +289,7 @@ bool RGWLC::if_already_run_today(time_t& start_date)
 
 int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
 {
-  map<string, int > entries;
-
+  vector<cls_rgw_lc_entry> entries;
   string marker;
 
 #define MAX_LC_LIST_ENTRIES 100
@@ -298,20 +298,22 @@ int RGWLC::bucket_lc_prepare(int index, LCWorker* worker)
 			      marker, MAX_LC_LIST_ENTRIES, entries);
     if (ret < 0)
       return ret;
-    map<string, int>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      pair<string, int > entry(iter->first, lc_uninitial);
+
+    for (auto& entry : entries) {
+      entry.start_time = ceph_clock_now();
+      entry.status = lc_uninitial; // lc_uninitial? really?
       ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx,
-				 obj_names[index],  entry);
+				 obj_names[index], entry);
       if (ret < 0) {
-        ldpp_dout(this, 0) << "RGWLC::bucket_lc_prepare() failed to set entry on "
-            << obj_names[index] << dendl;
+        ldpp_dout(this, 0)
+	  << "RGWLC::bucket_lc_prepare() failed to set entry on "
+	  << obj_names[index] << dendl;
         return ret;
       }
     }
 
-    if (!entries.empty()) {
-      marker = std::move(entries.rbegin()->first);
+    if (! entries.empty()) {
+      marker = std::move(entries.back().bucket);
     }
   } while (!entries.empty());
 
@@ -1334,7 +1336,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker)
 }
 
 int RGWLC::bucket_lc_post(int index, int max_lock_sec,
-			  pair<string, int>& entry, int& result,
+			  cls_rgw_lc_entry& entry, int& result,
 			  LCWorker* worker)
 {
   utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
@@ -1342,6 +1344,10 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
   rados::cls::lock::Lock l(lc_index_lock_name);
   l.set_cookie(cookie);
   l.set_duration(lock_duration);
+
+  dout(5) << "RGWLC::bucket_lc_post(): POST " << entry
+	  << " index: " << index << " worker ix: " << worker->ix
+	  << dendl;
 
   do {
     int ret = l.lock_exclusive(
@@ -1364,9 +1370,9 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       }
       goto clean;
     } else if (result < 0) {
-      entry.second = lc_failed;
+      entry.status = lc_failed;
     } else {
-      entry.second = lc_complete;
+      entry.status = lc_complete;
     }
 
     ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx,
@@ -1383,15 +1389,13 @@ clean:
 }
 
 int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries,
-			    map<string, int>* progress_map)
+			    vector<cls_rgw_lc_entry>& progress_map)
 {
   int index = 0;
-  progress_map->clear();
   for(; index <max_objs; index++) {
-    map<string, int > entries;
     int ret =
       cls_rgw_lc_list(store->getRados()->lc_pool_ctx, obj_names[index], marker,
-		      max_entries, entries);
+		      max_entries, progress_map);
     if (ret < 0) {
       if (ret == -ENOENT) {
         ldpp_dout(this, 10) << __func__ << "() ignoring unfound lc object="
@@ -1400,10 +1404,6 @@ int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries,
       } else {
         return ret;
       }
-    }
-    map<string, int>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      progress_map->insert(*iter);
     }
   }
   return 0;
@@ -1441,7 +1441,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker)
   rados::cls::lock::Lock l(lc_index_lock_name);
   do {
     utime_t now = ceph_clock_now();
-    pair<string, int > entry;//string = bucket_name:bucket_id ,int = LC_BUCKET_STATUS
+    //string = bucket_name:bucket_id ,int = LC_BUCKET_STATUS
+    cls_rgw_lc_entry entry;
     if (max_lock_secs <= 0)
       return -EAGAIN;
 
@@ -1468,6 +1469,18 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker)
       goto exit;
     }
 
+    if (! (cct->_conf->rgw_lc_lock_max_time == 9969)) {
+      ret = cls_rgw_lc_get_entry(store->getRados()->lc_pool_ctx,
+				 obj_names[index], head.marker, entry);
+      if ((entry.status == lc_processing) &&
+	  (true /* XXXX expired epoch! */)) {
+	dout(5) << "RGWLC::process(): ACTIVE entry: " << entry
+		<< " index: " << index << " worker ix: " << worker->ix
+		<< dendl;
+	goto exit;
+      }
+    }
+
     if(!if_already_run_today(head.start_date)) {
       head.start_date = now;
       head.marker.clear();
@@ -1490,32 +1503,38 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker)
     }
 
     /* termination condition (eof) */
-    if (entry.first.empty())
+    if (entry.bucket.empty())
       goto exit;
 
-    entry.second = lc_processing;
+    ldpp_dout(this, 5) << "RGWLC::process(): START entry 1: " << entry
+	    << " index: " << index << " worker ix: " << worker->ix
+	    << dendl;
+
+    entry.status = lc_processing;
     ret = cls_rgw_lc_set_entry(store->getRados()->lc_pool_ctx,
-			       obj_names[index],  entry);
+			       obj_names[index], entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to set obj entry "
-			 << obj_names[index]
-			 << " (" << entry.first << ","
-			 << entry.second << ")"
-			 << dendl;
+	      << obj_names[index] << entry.bucket << entry.status << dendl;
       goto exit;
     }
 
-    head.marker = entry.first;
-    ret = cls_rgw_lc_put_head(store->getRados()->lc_pool_ctx, obj_names[index],
-			      head);
+    head.marker = entry.bucket;
+    ret = cls_rgw_lc_put_head(store->getRados()->lc_pool_ctx,
+			      obj_names[index],  head);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
 			 << obj_names[index]
-			 << dendl;
+	      << dendl;
       goto exit;
     }
+
+    ldpp_dout(this, 5) << "RGWLC::process(): START entry 2: " << entry
+	    << " index: " << index << " worker ix: " << worker->ix
+	    << dendl;
+
     l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
-    ret = bucket_lc_process(entry.first, worker);
+    ret = bucket_lc_process(entry.bucket, worker);
     bucket_lc_post(index, max_lock_secs, entry, ret, worker);
   } while(1);
 
@@ -1655,9 +1674,9 @@ static std::string get_lc_shard_name(const rgw_bucket& bucket){
 }
 
 template<typename F>
-static int guard_lc_modify(
-  rgw::sal::RGWRadosStore* store, const rgw_bucket& bucket,
-  const string& cookie, const F& f) {
+static int guard_lc_modify(rgw::sal::RGWRadosStore* store,
+			   const rgw_bucket& bucket, const string& cookie,
+			   const F& f) {
   CephContext *cct = store->ctx();
 
   string shard_id = get_lc_shard_name(bucket);
@@ -1665,7 +1684,10 @@ static int guard_lc_modify(
   string oid; 
   get_lc_oid(cct, shard_id, &oid);
 
-  pair<string, int> entry(shard_id, lc_uninitial);
+  /* XXX it makes sense to take shard_id for a bucket_id? */
+  cls_rgw_lc_entry entry;
+  entry.bucket = shard_id;
+  entry.status = lc_uninitial;
   int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
 
   rados::cls::lock::Lock l(lc_index_lock_name); 
@@ -1718,9 +1740,10 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
 
   rgw_bucket& bucket = bucket_info.bucket;
 
+
   ret = guard_lc_modify(store, bucket, cookie,
 			[&](librados::IoCtx *ctx, const string& oid,
-			    const pair<string, int>& entry) {
+			    const cls_rgw_lc_entry& entry) {
     return cls_rgw_lc_set_entry(*ctx, oid, entry);
   });
 
@@ -1747,7 +1770,7 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
 
   ret = guard_lc_modify(store, bucket, cookie,
 			[&](librados::IoCtx *ctx, const string& oid,
-			    const pair<string, int>& entry) {
+			    const cls_rgw_lc_entry& entry) {
     return cls_rgw_lc_rm_entry(*ctx, oid, entry);
   });
 
@@ -1775,7 +1798,7 @@ int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
   std::string lc_oid;
   get_lc_oid(store->ctx(), shard_name, &lc_oid);
 
-  rgw_lc_entry_t entry;
+  cls_rgw_lc_entry entry;
   // There are multiple cases we need to encounter here
   // 1. entry exists and is already set to marker, happens in plain buckets & newly resharded buckets
   // 2. entry doesn't exist, which usually happens when reshard has happened prior to update and next LC process has already dropped the update
@@ -1799,8 +1822,9 @@ int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
 
     ret = guard_lc_modify(
       store, bucket_info.bucket, cookie,
-      [&lc_pool_ctx, &lc_oid](librados::IoCtx *ctx, const string& oid,
-			      const pair<string, int>& entry) {
+      [&lc_pool_ctx, &lc_oid](librados::IoCtx* ctx,
+			      const string& oid,
+			      const cls_rgw_lc_entry& entry) {
 	return cls_rgw_lc_set_entry(*lc_pool_ctx, lc_oid, entry);
       });
 

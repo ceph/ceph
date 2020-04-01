@@ -467,6 +467,7 @@ public:
     const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
+    int ix;
     ceph::mutex lock = ceph::make_mutex("LCWorker");
     ceph::condition_variable cond;
     WorkPool* workpool{nullptr};
@@ -497,10 +498,12 @@ public:
   int process(LCWorker* worker);
   int process(int index, int max_secs, LCWorker* worker);
   bool if_already_run_today(time_t& start_date);
-  int list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
+  int list_lc_progress(const string& marker, uint32_t max_entries,
+		       vector<cls_rgw_lc_entry>&);
   int bucket_lc_prepare(int index, LCWorker* worker);
   int bucket_lc_process(string& shard_id, LCWorker* worker);
-  int bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry, int& result, LCWorker* worker);
+  int bucket_lc_post(int index, int max_lock_sec,
+		     cls_rgw_lc_entry& entry, int& result, LCWorker* worker);
   bool going_down();
   void start_processor();
   void stop_processor();

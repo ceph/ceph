@@ -8035,7 +8035,8 @@ int RGWRados::process_gc(bool expired_only)
   return gc->process(expired_only);
 }
 
-int RGWRados::list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)
+int RGWRados::list_lc_progress(const string& marker, uint32_t max_entries,
+			       vector<cls_rgw_lc_entry>& progress_map)
 {
   return lc->list_lc_progress(marker, max_entries, progress_map);
 }

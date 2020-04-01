@@ -839,7 +839,8 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
   return r;
 }
 
-int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker, pair<string, int>& entry)
+int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker,
+			      cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_get_next_entry_op call;
@@ -861,7 +862,8 @@ int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, string& marker, 
  return r;
 }
 
-int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid, const pair<string, int>& entry)
+int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid,
+			const cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_rm_entry_op call;
@@ -871,7 +873,8 @@ int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid, const pair<string, int
  return r;
 }
 
-int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid, const pair<string, int>& entry)
+int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid,
+			 const cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_set_entry_op call;
@@ -881,7 +884,8 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid, const pair<string, in
   return r;
 }
 
-int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid, const std::string& marker, rgw_lc_entry_t& entry)
+int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid,
+			 const std::string& marker, cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_get_entry_op call{marker};;
@@ -907,7 +911,7 @@ int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid, const std::string& ma
 int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
                     const string& marker,
                     uint32_t max_entries,
-                    map<string, int>& entries)
+                    vector<cls_rgw_lc_entry>& entries)
 {
   bufferlist in, out;
   cls_rgw_lc_list_entries_op op;
@@ -930,8 +934,11 @@ int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
   } catch (buffer::error& err) {
     return -EIO;
   }
-  entries.insert(ret.entries.begin(),ret.entries.end());
 
+  std::sort(std::begin(ret.entries), std::end(ret.entries),
+	    [](const cls_rgw_lc_entry& a, const cls_rgw_lc_entry& b)
+	      { return a.bucket < b.bucket; });
+  entries = std::move(ret.entries);
  return r;
 }
 
