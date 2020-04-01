@@ -180,4 +180,4 @@ def test_ceph_volume_command_7():
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(spec, sel, 'host1').run()
-    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --osd-id 0 1 --yes --no-systemd'
+    assert cmd == 'lvm batch --no-auto /dev/sda /dev/sdb --osd-ids 0 1 --yes --no-systemd'
