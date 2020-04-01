@@ -1071,6 +1071,8 @@ void Replayer<I>::handle_process_entry_ready(int r) {
     }
   }
 
+  m_replay_status_formatter->handle_entry_processed(m_replay_bytes);
+
   if (update_status) {
     unregister_perf_counters();
     register_perf_counters();
