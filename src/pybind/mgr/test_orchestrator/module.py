@@ -178,7 +178,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 raise AssertionError('Fail to determine daemon type from {}'.format(p))
 
             # parse daemon ID. Possible options: `-i <id>`, `--id=<id>`, `--id <id>`
-            patterns = ['-i\s(\w+)', '--id[\s=](\w+)']
+            patterns = [r'-i\s(\w+)', r'--id[\s=](\w+)']
             daemon_id = None
             for pattern in patterns:
                 m = re.search(pattern, p)
