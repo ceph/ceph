@@ -43,7 +43,7 @@ private:
   Context *m_on_finish = nullptr;
   cls::journal::ObjectPosition m_master_position;
   cls::journal::ObjectPosition m_mirror_position;
-  int m_entries_behind_master = 0;
+  int64_t m_entries_behind_master = 0;
   cls::journal::Tag m_tag;
   std::map<uint64_t, librbd::journal::TagData> m_tag_cache;
 
