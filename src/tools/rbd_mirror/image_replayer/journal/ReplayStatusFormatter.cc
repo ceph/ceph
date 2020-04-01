@@ -6,6 +6,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
+#include "json_spirit/json_spirit.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
@@ -23,6 +24,21 @@ namespace image_replayer {
 namespace journal {
 
 using librbd::util::unique_lock_name;
+
+namespace {
+
+json_spirit::mObject to_json_object(
+    const cls::journal::ObjectPosition& position) {
+  json_spirit::mObject object;
+  if (position != cls::journal::ObjectPosition{}) {
+    object["object_number"] = position.object_number;
+    object["tag_tid"] = position.tag_tid;
+    object["entry_tid"] = position.entry_tid;
+  }
+  return object;
+}
+
+} // anonymous namespace
 
 template <typename I>
 ReplayStatusFormatter<I>::ReplayStatusFormatter(Journaler *journaler,
@@ -221,23 +237,12 @@ void ReplayStatusFormatter<I>::format(std::string *description) {
 	   << ", m_mirror_position=" << m_mirror_position
 	   << ", m_entries_behind_master=" << m_entries_behind_master << dendl;
 
-  std::stringstream ss;
-  ss << "master_position=";
-  if (m_master_position == cls::journal::ObjectPosition()) {
-    ss << "[]";
-  } else {
-    ss << m_master_position;
-  }
-  ss << ", mirror_position=";
-  if (m_mirror_position == cls::journal::ObjectPosition()) {
-    ss << "[]";
-  } else {
-    ss << m_mirror_position;
-  }
-  ss << ", entries_behind_master="
-     << (m_entries_behind_master > 0 ? m_entries_behind_master : 0);
-
-  *description = ss.str();
+  json_spirit::mObject root_obj;
+  root_obj["primary_position"] = to_json_object(m_master_position);
+  root_obj["non_primary_position"] = to_json_object(m_mirror_position);
+  root_obj["entries_behind_primary"] = (
+    m_entries_behind_master > 0 ? m_entries_behind_master : 0);
+  *description = json_spirit::write(root_obj);
 }
 
 } // namespace journal
