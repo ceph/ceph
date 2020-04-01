@@ -91,7 +91,7 @@ class to_ceph_volume(object):
             cmd += " --osds-per-device {}".format(self.spec.osds_per_device)
 
         if reclaimed_ids:
-            cmd += " --osd-id {}".format(" ".join(reclaimed_ids))
+            cmd += " --osd-ids {}".format(" ".join(reclaimed_ids))
 
         cmd += " --yes"
         cmd += " --no-systemd"
