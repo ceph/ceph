@@ -273,7 +273,9 @@ class FSExport(object):
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
         self._update_common_conf(export.export_id)
 
-    def create_export(self, fs_name, pseudo_path, read_only, path, cluster_id):
+    def create_export(self, export_type, fs_name, pseudo_path, read_only, path, cluster_id):
+        if export_type != 'cephfs':
+            return -errno.EINVAL,"", f"Invalid export type: {export_type}"
         #TODO Check if valid cluster
         if cluster_id not in self.exports:
             self.exports[cluster_id] = []
@@ -339,7 +341,10 @@ class NFSCluster:
                     "write configuration into rados object %s/%s/nfs-conf\n",
                     self.pool_name, self.pool_ns)
 
-    def create_nfs_cluster(self, size):
+    def create_nfs_cluster(self, export_type, size):
+        if export_type != 'cephfs':
+            return -errno.EINVAL,"", f"Invalid export type: {export_type}"
+
         pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
         client = 'client.%s' % self.cluster_id
 
