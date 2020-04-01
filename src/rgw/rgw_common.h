@@ -24,6 +24,7 @@
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "rgw_acl.h"
+#include "rgw_bucket_layout.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
 #include "rgw_quota.h"
@@ -1090,23 +1091,6 @@ enum RGWBucketFlags {
   BUCKET_OBJ_LOCK_ENABLED = 0X20,
 };
 
-enum RGWBucketIndexType {
-  RGWBIType_Normal = 0,
-  RGWBIType_Indexless = 1,
-};
-
-inline ostream& operator<<(ostream& out, const RGWBucketIndexType &index_type) 
-{
-  switch (index_type) {
-    case RGWBIType_Normal:
-      return out << "Normal";
-    case RGWBIType_Indexless:
-      return out << "Indexless";
-    default:
-      return out << "Unknown";
-  }
-}
-
 class RGWSI_Zone;
 
 struct RGWBucketInfo {
@@ -1124,14 +1108,13 @@ struct RGWBucketInfo {
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   RGWQuotaInfo quota;
 
+  // layout of bucket index objects
+  rgw::BucketLayout layout;
+
   // Represents the number of bucket index object shards:
   //   - value of 0 indicates there is no sharding (this is by default
   //     before this feature is implemented).
   //   - value of UINT32_T::MAX indicates this is a blind bucket.
-  uint32_t num_shards{0};
-
-  // Represents the bucket index shard hash type.
-  uint8_t bucket_index_shard_hash_type{MOD};
 
   // Represents the shard number for blind bucket.
   const static uint32_t NUM_SHARDS_BLIND_BUCKET;
@@ -1140,8 +1123,6 @@ struct RGWBucketInfo {
 
   bool has_website{false};
   RGWBucketWebsiteConf website_conf;
-
-  RGWBucketIndexType index_type = RGWBIType_Normal;
 
   bool swift_versioning{false};
   string swift_ver_location;

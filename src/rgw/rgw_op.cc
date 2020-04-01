@@ -3286,7 +3286,7 @@ void RGWCreateBucket::execute()
     ldpp_dout(this, 20) << "got creation time: << " << master_info.creation_time << dendl;
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.num_shards;
+    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
     pobjv = &objv;
     obj_lock_enabled = master_info.obj_lock_enabled();
   } else {
@@ -7022,7 +7022,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.num_shards;
+    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
     pobjv = &objv;
   } else {
     pmaster_bucket = nullptr;

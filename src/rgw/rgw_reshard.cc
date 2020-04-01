@@ -107,7 +107,7 @@ public:
     store(_store), bucket_info(_bucket_info), bs(store->getRados()),
     aio_completions(_completions)
   {
-    num_shard = (bucket_info.num_shards > 0 ? _num_shard : -1);
+    num_shard = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? _num_shard : -1);
     bs.init(bucket_info.bucket, num_shard, nullptr /* no RGWBucketInfo */);
 
     max_aio_completions =
@@ -304,7 +304,7 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RGWRadosStore* store,
 int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
 						       const RGWBucketInfo& bucket_info)
 {
-  uint32_t num_shards = bucket_info.num_shards;
+  uint32_t num_shards = bucket_info.layout.current_index.layout.normal.num_shards;
 
   if (num_shards < std::numeric_limits<uint32_t>::max()) {
     int ret = set_resharding_status(store, bucket_info,
@@ -332,7 +332,7 @@ static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
 
   store->getRados()->create_bucket_id(&new_bucket_info.bucket.bucket_id);
 
-  new_bucket_info.num_shards = new_num_shards;
+  new_bucket_info.layout.current_index.layout.normal.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
 
   new_bucket_info.new_bucket_instance_id.clear();
@@ -525,6 +525,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 				 Formatter *formatter)
 {
   rgw_bucket& bucket = bucket_info.bucket;
+  rgw::bucket_index_normal_layout layout;
 
   int ret = 0;
 
@@ -556,7 +557,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
     return ret;
   }
 
-  int num_target_shards = (new_bucket_info.num_shards > 0 ? new_bucket_info.num_shards : 1);
+  int num_target_shards = (new_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? new_bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
   BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
 
@@ -573,7 +574,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   const int num_source_shards =
-    (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+    (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
   string marker;
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
@@ -611,7 +612,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	  // place the multipart .meta object on the same shard as its head object
 	  obj.index_hash_source = mp.get_key();
 	}
-	int ret = store->getRados()->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
+	int ret = store->getRados()->get_target_shard_id(layout, obj.get_hash_object(), &target_shard_id);
 	if (ret < 0) {
 	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
 	  return ret;
