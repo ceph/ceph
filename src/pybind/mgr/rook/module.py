@@ -358,11 +358,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return [v for k, v in spec.items()]
 
     @deferred_read
-    def list_daemons(self, daemon_type=None, daemon_id=None, host=None,
+    def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None,
                      refresh=False):
         return self._list_daemons(daemon_type, daemon_id, host, refresh)
 
-    def _list_daemons(self, daemon_type=None, daemon_id=None, host=None,
+    def _list_daemons(self, service_name=None, daemon_type=None, daemon_id=None, host=None,
                       refresh=False):
         pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host)
         self.log.debug('pods %s' % pods)
@@ -390,8 +390,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 # Unknown type -- skip it
                 continue
 
+            if service_name is not None and service_name != sd.service_name():
+                continue
             sd.container_image_name = p['container_image_name']
-
             sd.created = p['created']
             sd.last_configured = p['created']
             sd.last_deployed = p['created']

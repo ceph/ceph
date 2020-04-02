@@ -34,7 +34,7 @@ from ceph.deployment.drive_selection import selector
 from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec, PlacementSpec, \
     assert_valid_host
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta
@@ -630,6 +630,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                          'can allow debugging daemons that encounter problems '
                          'at runtime.',
         },
+        {
+            'name': 'prometheus_alerts_path',
+            'type': 'str',
+            'default': '/etc/prometheus/ceph/ceph_default_alerts.yml',
+            'desc': 'location of alerts to include in prometheus deployments',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -657,6 +663,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
             self.allow_ptrace = False
+            self.prometheus_alerts_path = ''
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
@@ -1280,9 +1287,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             temp_files += [f]
             ssh_config_fname = f.name
         if ssh_config_fname:
-            if not os.path.isfile(ssh_config_fname):
-                raise Exception("ssh_config \"{}\" does not exist".format(
-                    ssh_config_fname))
+            self.validate_ssh_config_fname(ssh_config_fname)
             ssh_options += ['-F', ssh_config_fname]
 
         # identity
@@ -1314,6 +1319,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.ssh_user = 'cephadm'
 
         self._reset_cons()
+
+    def validate_ssh_config_fname(self, ssh_config_fname):
+        if not os.path.isfile(ssh_config_fname):
+            raise OrchestratorValidationError("ssh_config \"{}\" does not exist".format(
+                ssh_config_fname))
 
     def _reset_con(self, host):
         conn, r = self._cons.get(host, (None, None))
@@ -1394,6 +1404,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.ssh_config_tmp = None
         self.log.info('Cleared ssh_config')
         return 0, "", ""
+
+    @orchestrator._cli_read_command(
+        prefix='cephadm get-ssh-config',
+        desc='Returns the ssh config as used by cephadm'
+    )
+    def _get_ssh_config(self):
+        if self.ssh_config_file:
+            self.validate_ssh_config_fname(self.ssh_config_file)
+            with open(self.ssh_config_file) as f:
+                return HandleCommandResult(stdout=f.read())
+        ssh_config = self.get_store("ssh_config")
+        if ssh_config:
+            return HandleCommandResult(stdout=ssh_config)
+        return HandleCommandResult(stdout=DEFAULT_SSH_CONFIG)
+
 
     @orchestrator._cli_write_command(
         'cephadm generate-key',
@@ -1617,7 +1642,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # this is a misleading exception as it seems to be thrown for
             # any sort of connection failure, even those having nothing to
             # do with "host not found" (e.g., ssh key permission denied).
-            raise OrchestratorError('Failed to connect to %s (%s).  Check that the host is reachable and accepts connections using the cephadm SSH key' % (host, addr)) from e
+            user = 'root' if self.mode == 'root' else 'cephadm'
+            msg = f'Failed to connect to {host} ({addr}).  ' \
+                  f'Check that the host is reachable and accepts connections using the cephadm SSH key\n' \
+                  f'you may want to run: \n' \
+                  f'> ssh -F =(ceph cephadm get-ssh-config) -i =(ceph config-key get mgr/cephadm/ssh_identity_key) {user}@{host}'
+            raise OrchestratorError(msg) from e
         except Exception as ex:
             self.log.exception(ex)
             raise
@@ -1878,7 +1908,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return [s for n, s in sm.items()]
 
     @trivial_completion
-    def list_daemons(self, daemon_type=None, daemon_id=None,
+    def list_daemons(self, service_name=None, daemon_type=None, daemon_id=None,
                      host=None, refresh=False):
         if refresh:
             # ugly sync path, FIXME someday perhaps?
@@ -1892,9 +1922,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if host and h != host:
                 continue
             for name, dd in dm.items():
-                if daemon_type and daemon_type != dd.daemon_type:
+                if daemon_type is not None and daemon_type != dd.daemon_type:
                     continue
-                if daemon_id and daemon_id != dd.daemon_id:
+                if daemon_id is not None and daemon_id != dd.daemon_id:
+                    continue
+                if service_name is not None and service_name != dd.service_name():
                     continue
                 result.append(dd)
         return result
@@ -2168,7 +2200,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         need = {
             'prometheus': ['mgr', 'alertmanager', 'node-exporter'],
             'grafana': ['prometheus'],
-            'alertmanager': ['alertmanager'],
+            'alertmanager': ['mgr', 'alertmanager'],
         }
         deps = []
         for dep_type in need.get(daemon_type, []):
@@ -2798,7 +2830,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 """.format(", ".join(alertmgr_targets))
 
         # generate the prometheus configuration
-        return {
+        r = {
             'files': {
                 'prometheus.yml': """# generated by cephadm
 global:
@@ -2820,7 +2852,15 @@ scrape_configs:
     alertmgr_configs=str(alertmgr_configs)
     ),
             },
-        }, sorted(deps)
+        }
+
+        # include alerts, if present in the container
+        if os.path.exists(self.prometheus_alerts_path):
+            with open(self.prometheus_alerts_path, "r") as f:
+                alerts = f.read()
+            r['files']['/etc/prometheus/alerting/ceph_alerts.yml'] = alerts
+
+        return r, sorted(deps)
 
     def _generate_grafana_config(self):
         # type: () -> Tuple[Dict[str, Any], List[str]]
@@ -2916,6 +2956,32 @@ datasources:
     def _generate_alertmanager_config(self):
         # type: () -> Tuple[Dict[str, Any], List[str]]
         deps = [] # type: List[str]
+
+        # dashboard(s)
+        dashboard_urls = []
+        mgr_map = self.get('mgr_map')
+        port = None
+        proto = None  # http: or https:
+        url = mgr_map.get('services', {}).get('dashboard', None)
+        if url:
+            dashboard_urls.append(url)
+            proto = url.split('/')[0]
+            port = url.split('/')[2].split(':')[1]
+        # scan all mgrs to generate deps and to get standbys too.
+        # assume that they are all on the same port as the active mgr.
+        for dd in self.cache.get_daemons_by_service('mgr'):
+            # we consider mgr a dep even if the dashboard is disabled
+            # in order to be consistent with _calc_daemon_deps().
+            deps.append(dd.name())
+            if not port:
+                continue
+            if dd.daemon_id == self.get_mgr_id():
+                continue
+            hi = self.inventory.get(dd.hostname, {})
+            addr = hi.get('addr', dd.hostname)
+            dashboard_urls.append('%s//%s:%s/' % (proto, addr.split(':')[0],
+                                                 port))
+
         yml = """# generated by cephadm
 # See https://prometheus.io/docs/alerting/configuration/ for documentation.
 
@@ -2931,8 +2997,12 @@ route:
 receivers:
 - name: 'ceph-dashboard'
   webhook_configs:
-  - url: '{url}/api/prometheus_receiver'
-        """.format(url=self._get_dashboard_url())
+{urls}
+""".format(
+    urls='\n'.join(
+        ["  - url: '{}api/prometheus_receiver'".format(u)
+         for u in dashboard_urls]
+    ))
         peers = []
         port = '9094'
         for dd in self.cache.get_daemons_by_service('alertmanager'):
