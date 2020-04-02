@@ -880,6 +880,7 @@ namespace ct_error {
     ct_error_code<std::errc::operation_not_supported>;
   using not_connected = ct_error_code<std::errc::not_connected>;
   using timed_out = ct_error_code<std::errc::timed_out>;
+  using value_too_large = ct_error_code<std::errc::value_too_large>;
 
   struct pass_further_all {
     template <class ErrorT>

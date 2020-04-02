@@ -89,29 +89,48 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
     [this, prev_rd, prev_wr, &osd_op, flags]
     (auto outcome) -> call_errorator::future<> {
       auto& [ret, outdata] = outcome;
+      osd_op.rval = ret;
+
       logger().debug("do_op_call: method returned ret={}, outdata.length()={}"
                      " while num_read={}, num_write={}",
                      ret, outdata.length(), num_read, num_write);
       if (num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
         logger().error("method tried to read object but is not marked RD");
+        osd_op.rval = -EIO;
         return crimson::ct_error::input_output_error::make();
       }
       if (num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
         logger().error("method tried to update object but is not marked WR");
+        osd_op.rval = -EIO;
         return crimson::ct_error::input_output_error::make();
       }
-
-      // for write calls we never return data expect errors. For details refer
-      // to cls/cls_hello.cc.
-      if (ret < 0 || (flags & CLS_METHOD_WR) == 0) {
-        logger().debug("method called response length={}", outdata.length());
+      // ceph-osd has this implemented in `PrimaryLogPG::execute_ctx`,
+      // grep for `ignore_out_data`.
+      using crimson::common::local_conf;
+      if (op_info->allows_returnvec() &&
+          op_info->may_write() &&
+          ret >= 0 &&
+          outdata.length() > local_conf()->osd_max_write_op_reply_len) {
+        // the justification of this limit it to not inflate the pg log.
+        // that's the reason why we don't worry about pure reads.
+        logger().error("outdata overflow due to .length()={}, limit={}",
+                       outdata.length(),
+                       local_conf()->osd_max_write_op_reply_len);
+        osd_op.rval = -EOVERFLOW;
+        return crimson::ct_error::value_too_large::make();
+      }
+      // for write calls we never return data expect errors or RETURNVEC.
+      // please refer cls/cls_hello.cc to details.
+      if (!op_info->may_write() || op_info->allows_returnvec() || ret < 0) {
         osd_op.op.extent.length = outdata.length();
         osd_op.outdata.claim_append(outdata);
       }
       if (ret < 0) {
-        return crimson::stateful_ec{ std::error_code(-ret, std::generic_category()) };
+        return crimson::stateful_ec{
+          std::error_code(-ret, std::generic_category()) };
+      } else {
+        return seastar::now();
       }
-      return seastar::now();
     }
   );
 }
