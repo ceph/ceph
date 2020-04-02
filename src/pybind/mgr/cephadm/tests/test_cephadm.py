@@ -12,6 +12,8 @@ try:
 except ImportError:
     pass
 
+from execnet.gateway_bootstrap import HostNotFound
+
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
     NFSServiceSpec, IscsiServiceSpec
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
@@ -48,6 +50,7 @@ class TestCephadm(object):
         new_mgr = cephadm_module.get_unique_name('mgr', 'myhost', existing)
         match_glob(new_mgr, 'myhost.*')
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_host(self, cephadm_module):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with self._with_host(cephadm_module, 'test'):
@@ -66,6 +69,7 @@ class TestCephadm(object):
             assert wait(cephadm_module, cephadm_module.get_hosts()) == [HostSpec('test', 'test')]
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
@@ -123,6 +127,7 @@ class TestCephadm(object):
             assert out == expected
             assert [ServiceDescription.from_json(o).to_json() for o in expected] == expected
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_device_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.get_inventory()
@@ -153,6 +158,7 @@ class TestCephadm(object):
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
 
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_mon_add(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
@@ -164,6 +170,7 @@ class TestCephadm(object):
                 c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
                 wait(cephadm_module, c)
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_mgr_update(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
@@ -444,3 +451,22 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled node-exporter update...'
             assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
             assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service(service_name='node-exporter.my_exporter'))] == [spec]
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
+    @mock.patch("remoto.process.check")
+    def test_offline(self, _check, _get_connection, cephadm_module):
+        _check.return_value = '{}', '', 0
+        _get_connection.return_value = mock.Mock(), mock.Mock()
+        with self._with_host(cephadm_module, 'test'):
+            _get_connection.side_effect = HostNotFound
+            code, out, err = cephadm_module.check_host('test')
+            assert out == ''
+            assert 'Failed to connect to test (test)' in err
+
+            out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
+            assert out == HostSpec('test', 'test', status='Offline').to_json()
+
+            _get_connection.side_effect = None
+            assert cephadm_module._check_host('test') is None
+            out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
+            assert out == HostSpec('test', 'test').to_json()
