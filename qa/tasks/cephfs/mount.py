@@ -200,7 +200,8 @@ class CephFSMount(object):
 
         return self.client_remote.run(args=args, stdin=stdin, wait=wait,
                                       stdout=BytesIO(), stderr=BytesIO(),
-                                      cwd=cwd, check_status=check_status)
+                                      cwd=cwd, check_status=check_status,
+                                      omit_sudo=omit_sudo)
 
     def run_as_user(self, args, user, wait=True, stdin=None,
                     check_status=True, cwd=None):
