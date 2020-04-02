@@ -288,7 +288,7 @@ class TestCephadm(object):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
-            out = cephadm_module.driveselection_to_ceph_volume(dg, ds, preview)
+            out = cephadm_module.driveselection_to_ceph_volume(dg, ds, [], preview)
             assert out in exp_command
 
     @mock.patch("cephadm.module.SpecStore.find")
