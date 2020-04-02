@@ -141,7 +141,7 @@ void ceph_heap_profiler_dump(const char *reason)
 #define HEAP_PROFILER_STATS_SIZE 2048
 
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
-                                       ostream& out)
+                                       std::ostream& out)
 {
 #ifdef HAVE_LIBTCMALLOC
   if (cmd.size() == 1 && cmd[0] == "dump") {
