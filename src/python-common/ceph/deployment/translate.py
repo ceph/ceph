@@ -16,14 +16,14 @@ class to_ceph_volume(object):
     def __init__(self,
                  spec,  # type: DriveGroupSpec
                  selection,  # type: DriveSelection
-                 preview=False
-                 host  # type: str
+                 osd_id_claims=None,  # type: Optional[List[str]]
+                 preview=False  # type: bool
                  ):
 
         self.spec = spec
         self.selection = selection
         self.preview = preview
-        self.host = host
+        self.osd_id_claims = osd_id_claims
 
     def run(self):
         # type: () -> Optional[str]
@@ -32,7 +32,6 @@ class to_ceph_volume(object):
         db_devices = [x.path for x in self.selection.db_devices()]
         wal_devices = [x.path for x in self.selection.wal_devices()]
         journal_devices = [x.path for x in self.selection.journal_devices()]
-        reclaimed_ids: List[str] = self.spec.osd_id_claims.get(self.host, [])
 
         if not data_devices:
             return None
@@ -60,6 +59,8 @@ class to_ceph_volume(object):
            not db_devices and \
            not wal_devices:
             cmd = "lvm prepare --bluestore --data %s --no-systemd" % (' '.join(data_devices))
+            if self.osd_id_claims:
+                cmd += " --osd-id {}".format(str(self.osd_id_claims[0]))
             if self.preview:
                 # Like every horrible hack, this has sideffects on other features.
                 # In this case, 'lvm prepare' has neither a '--report' nor a '--format json' option
@@ -90,8 +91,8 @@ class to_ceph_volume(object):
         if self.spec.osds_per_device:
             cmd += " --osds-per-device {}".format(self.spec.osds_per_device)
 
-        if reclaimed_ids:
-            cmd += " --osd-ids {}".format(" ".join(reclaimed_ids))
+        if self.osd_id_claims:
+            cmd += " --osd-ids {}".format(" ".join(self.osd_id_claims))
 
         cmd += " --yes"
         cmd += " --no-systemd"
