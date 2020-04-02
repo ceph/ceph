@@ -1,4 +1,4 @@
-@import 'styles';
+@import 'defaults.scss';
 
 .dataTables_wrapper {
   margin-bottom: 25px;
@@ -13,14 +13,8 @@
 
   .widget-toolbar {
     float: right;
-    // width: auto;
-    // height: 30px;
-    // line-height: 28px;
-    // position: relative;
     border-left: 1px solid $color-table-seperator-border;
-    // cursor: pointer;
     padding: 0 8px;
-    // text-align: center;
 
     .form-check {
       padding-left: 0;
@@ -237,26 +231,10 @@
     }
   }
   .datatable-footer {
-    @extend .p-2;
-
     .selected-count,
     .page-count {
       font-style: italic;
       padding-left: 5px;
-    }
-    .datatable-pager {
-      // .pager
-      ul {
-        @extend .pagination;
-
-        li {
-          @extend .page-item;
-
-          a {
-            @extend .page-link;
-          }
-        }
-      }
     }
   }
 
