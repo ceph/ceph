@@ -7,13 +7,13 @@
 #include "cls_user_types.h"
 
 struct cls_user_set_buckets_op {
-  list<cls_user_bucket_entry> entries;
+  std::list<cls_user_bucket_entry> entries;
   bool add;
-  real_time time; /* op time */
+  ceph::real_time time; /* op time */
 
   cls_user_set_buckets_op() : add(false) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(entries, bl);
     encode(add, bl);
@@ -21,7 +21,7 @@ struct cls_user_set_buckets_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(add, bl);
@@ -29,8 +29,8 @@ struct cls_user_set_buckets_op {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_set_buckets_op*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_set_buckets_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_set_buckets_op)
 
@@ -39,33 +39,33 @@ struct cls_user_remove_bucket_op {
 
   cls_user_remove_bucket_op() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(bucket, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(bucket, bl);
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_remove_bucket_op*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_remove_bucket_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_remove_bucket_op)
 
 struct cls_user_list_buckets_op {
-  string marker;
-  string end_marker;
+  std::string marker;
+  std::string end_marker;
   int max_entries; /* upperbound to returned num of entries
                       might return less than that and still be truncated */
 
   cls_user_list_buckets_op()
     : max_entries(0) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
     encode(marker, bl);
     encode(max_entries, bl);
@@ -73,7 +73,7 @@ struct cls_user_list_buckets_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(marker, bl);
     decode(max_entries, bl);
@@ -83,19 +83,19 @@ struct cls_user_list_buckets_op {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_list_buckets_op*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_list_buckets_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_list_buckets_op)
 
 struct cls_user_list_buckets_ret {
-  list<cls_user_bucket_entry> entries;
-  string marker;
+  std::list<cls_user_bucket_entry> entries;
+  std::string marker;
   bool truncated;
 
   cls_user_list_buckets_ret() : truncated(false) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(entries, bl);
     encode(marker, bl);
@@ -103,7 +103,7 @@ struct cls_user_list_buckets_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(marker, bl);
@@ -111,8 +111,8 @@ struct cls_user_list_buckets_ret {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_list_buckets_ret*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_list_buckets_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_list_buckets_ret)
 
@@ -120,39 +120,39 @@ WRITE_CLASS_ENCODER(cls_user_list_buckets_ret)
 struct cls_user_get_header_op {
   cls_user_get_header_op() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_get_header_op*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_get_header_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_get_header_op)
 
 struct cls_user_reset_stats_op {
-  real_time time;
+  ceph::real_time time;
   cls_user_reset_stats_op() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(time, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(time, bl);
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_reset_stats_op*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_reset_stats_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_reset_stats_op);
 
@@ -161,42 +161,42 @@ struct cls_user_get_header_ret {
 
   cls_user_get_header_ret() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(header, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(header, bl);
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_get_header_ret*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_get_header_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_get_header_ret)
 
 struct cls_user_complete_stats_sync_op {
-  real_time time;
+  ceph::real_time time;
 
   cls_user_complete_stats_sync_op() {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(time, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(time, bl);
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_complete_stats_sync_op*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_complete_stats_sync_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_complete_stats_sync_op)
 
