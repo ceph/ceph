@@ -69,8 +69,6 @@ public:
   Interceptor *interceptor;
 #endif
 
-  friend class PipeConnection;
-
 public:
   void set_priv(const RefCountedPtr& o) {
     std::lock_guard l{lock};
