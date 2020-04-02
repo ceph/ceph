@@ -21,6 +21,7 @@
 #include <boost/range/algorithm_ext/copy_n.hpp>
 #include "common/weighted_shuffle.h"
 
+#include "include/random.h"
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 
@@ -792,7 +793,7 @@ void MonClient::_add_conns(uint64_t global_id)
       auto rank_name = monmap.get_name(i);
       weights.push_back(monmap.get_weight(rank_name));
     }
-    std::random_device rd;
+    random_device_t rd;
     if (std::accumulate(begin(weights), end(weights), 0u) == 0) {
       std::shuffle(begin(ranks), end(ranks), std::mt19937{rd()});
     } else {

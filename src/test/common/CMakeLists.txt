@@ -134,6 +134,7 @@ add_executable(unittest_random
   test_random.cc
   )
 add_ceph_unittest(unittest_random)
+target_link_libraries(unittest_random Boost::random)
 
 # unittest_throttle
 add_executable(unittest_throttle
