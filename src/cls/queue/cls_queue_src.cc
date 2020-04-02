@@ -9,6 +9,10 @@
 #include "cls/queue/cls_queue_const.h"
 #include "cls/queue/cls_queue_src.h"
 
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 int queue_write_head(cls_method_context_t hctx, cls_queue_head& head)
 {
   bufferlist bl;
@@ -52,7 +56,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
   uint16_t queue_head_start;
   try {
     decode(queue_head_start, it);
-  } catch (buffer::error& err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: queue_read_head: failed to decode queue start: %s", err.what());
     return -EINVAL;
   }
@@ -64,7 +68,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
   uint64_t encoded_len;
   try {
     decode(encoded_len, it);
-  } catch (buffer::error& err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: queue_read_head: failed to decode encoded head size: %s", err.what());
     return -EINVAL;
   }
@@ -83,7 +87,7 @@ int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
 
   try {
     decode(head, it);
-  } catch (buffer::error& err) {
+  } catch (const ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: queue_read_head: failed to decode head: %s", err.what());
     return -EINVAL;
   }
@@ -345,7 +349,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
           // Decode magic number at start
           try {
             decode(entry_start, it);
-          } catch (buffer::error& err) {
+          } catch (const ceph::buffer::error& err) {
             CLS_LOG(10, "ERROR: queue_list_entries: failed to decode entry start: %s", err.what());
             return -EINVAL;
           }
@@ -358,7 +362,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
           // Decode data size
           try {
             decode(data_size, it);
-          } catch (buffer::error& err) {
+          } catch (const ceph::buffer::error& err) {
             CLS_LOG(10, "ERROR: queue_list_entries: failed to decode data size: %s", err.what());
             return -EINVAL;
           }
