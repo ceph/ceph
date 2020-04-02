@@ -112,7 +112,7 @@ fi
 cd $sslSrcDir
 mkdir -p $sslDir
 CROSS_COMPILE="${MINGW_PREFIX}" ./Configure \
-    mingw64 shared --prefix=$sslDir
+    mingw64 shared --prefix=$sslDir --libdir="$sslDir/lib"
 _make depend
 _make
 _make install
@@ -125,7 +125,7 @@ fi
 cd $curlSrcDir
 ./buildconf
 ./configure --prefix=$curlDir --with-ssl=$sslDir --with-zlib=$zlibDir \
-            --host=${MINGW_BASE}
+            --host=${MINGW_BASE} --libdir="$curlDir/lib"
 _make
 _make install
 
@@ -275,10 +275,10 @@ fi
 mkdir -p $backtraceSrcDir/build
 cd $backtraceSrcDir/build
 ../configure --prefix=$backtraceDir --exec-prefix=$backtraceDir \
-             --host ${MINGW_BASE} --enable-host-shared
+             --host ${MINGW_BASE} --enable-host-shared \
+             --libdir="$backtraceDir/lib"
 _make LDFLAGS="-no-undefined"
 _make install
-cp $backtraceDir/lib/libbacktrace.a $backtraceDir/lib/libbacktrace.dll.a
 
 cd $depsSrcDir
 if [[ ! -d $snappySrcDir ]]; then
