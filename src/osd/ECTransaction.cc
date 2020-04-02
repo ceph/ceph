@@ -21,6 +21,17 @@
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
 
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
 
 void encode_and_write(
   pg_t pgid,
@@ -190,14 +201,14 @@ void ECTransaction::generate_transactions(
       bufferlist old_hinfo;
       encode(*hinfo, old_hinfo);
       xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
-      
+
       if (op.is_none() && op.truncate && op.truncate->first == 0) {
 	ceph_assert(op.truncate->first == 0);
 	ceph_assert(op.truncate->first ==
 	       op.truncate->second);
 	ceph_assert(entry);
 	ceph_assert(obc);
-	
+
 	if (op.truncate->first != op.truncate->second) {
 	  op.truncate->first = op.truncate->second;
 	} else {

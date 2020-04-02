@@ -20,8 +20,8 @@
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {
   struct RPGHandle : public PGBackend::RecoveryHandle {
-    map<pg_shard_t, vector<PushOp> > pushes;
-    map<pg_shard_t, vector<PullOp> > pulls;
+    std::map<pg_shard_t, std::vector<PushOp> > pushes;
+    std::map<pg_shard_t, std::vector<PullOp> > pulls;
   };
   friend struct C_ReplicatedBackend_OnPullComplete;
 public:
@@ -68,7 +68,7 @@ public:
 
   class RPCRecPred : public IsPGRecoverablePredicate {
   public:
-    bool operator()(const set<pg_shard_t> &have) const override {
+    bool operator()(const std::set<pg_shard_t> &have) const override {
       return !have.empty();
     }
   };
@@ -80,7 +80,7 @@ public:
     pg_shard_t whoami;
   public:
     explicit RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
-    bool operator()(const set<pg_shard_t> &have) const override {
+    bool operator()(const std::set<pg_shard_t> &have) const override {
       return have.count(whoami);
     }
   };
@@ -88,17 +88,17 @@ public:
     return new RPCReadPred(get_parent()->whoami_shard());
   }
 
-  void dump_recovery_info(Formatter *f) const override {
+  void dump_recovery_info(ceph::Formatter *f) const override {
     {
       f->open_array_section("pull_from_peer");
-      for (map<pg_shard_t, set<hobject_t> >::const_iterator i = pull_from_peer.begin();
+      for (std::map<pg_shard_t, std::set<hobject_t> >::const_iterator i = pull_from_peer.begin();
 	   i != pull_from_peer.end();
 	   ++i) {
 	f->open_object_section("pulling_from");
 	f->dump_stream("pull_from") << i->first;
 	{
 	  f->open_array_section("pulls");
-	  for (set<hobject_t>::const_iterator j = i->second.begin();
+	  for (std::set<hobject_t>::const_iterator j = i->second.begin();
 	       j != i->second.end();
 	       ++j) {
 	    f->open_object_section("pull_info");
@@ -114,7 +114,7 @@ public:
     }
     {
       f->open_array_section("pushing");
-      for (map<hobject_t, map<pg_shard_t, PushInfo>>::const_iterator i =
+      for (std::map<hobject_t, std::map<pg_shard_t, PushInfo>>::const_iterator i =
 	     pushing.begin();
 	   i != pushing.end();
 	   ++i) {
@@ -122,7 +122,7 @@ public:
 	f->dump_stream("pushing") << i->first;
 	{
 	  f->open_array_section("pushing_to");
-	  for (map<pg_shard_t, PushInfo>::const_iterator j = i->second.begin();
+	  for (std::map<pg_shard_t, PushInfo>::const_iterator j = i->second.begin();
 	       j != i->second.end();
 	       ++j) {
 	    f->open_object_section("push_progress");
@@ -147,18 +147,18 @@ public:
     uint64_t off,
     uint64_t len,
     uint32_t op_flags,
-    bufferlist *bl) override;
+    ceph::buffer::list *bl) override;
 
   int objects_readv_sync(
     const hobject_t &hoid,
-    map<uint64_t, uint64_t>&& m,
+    std::map<uint64_t, uint64_t>&& m,
     uint32_t op_flags,
-    bufferlist *bl) override;
+    ceph::buffer::list *bl) override;
 
   void objects_read_async(
     const hobject_t &hoid,
-    const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-	       pair<bufferlist*, Context*> > > &to_read,
+    const std::list<std::pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
                Context *on_complete,
                bool fast_read = false) override;
 
@@ -171,7 +171,7 @@ private:
     object_stat_sum_t stat;
     ObcLockManager lock_manager;
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       {
 	f->open_object_section("recovery_progress");
 	recovery_progress.dump(f);
@@ -184,7 +184,7 @@ private:
       }
     }
   };
-  map<hobject_t, map<pg_shard_t, PushInfo>> pushing;
+  std::map<hobject_t, std::map<pg_shard_t, PushInfo>> pushing;
 
   // pull
   struct PullInfo {
@@ -198,7 +198,7 @@ private:
     bool cache_dont_need;
     ObcLockManager lock_manager;
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       {
 	f->open_object_section("recovery_progress");
 	recovery_progress.dump(f);
@@ -216,15 +216,15 @@ private:
     }
   };
 
-  map<hobject_t, PullInfo> pulling;
+  std::map<hobject_t, PullInfo> pulling;
 
   // Reverse mapping from osd peer to objects being pulled from that peer
-  map<pg_shard_t, set<hobject_t> > pull_from_peer;
+  std::map<pg_shard_t, std::set<hobject_t> > pull_from_peer;
   void clear_pull(
-    map<hobject_t, PullInfo>::iterator piter,
+    std::map<hobject_t, PullInfo>::iterator piter,
     bool clear_pull_from_peer = true);
   void clear_pull_from(
-    map<hobject_t, PullInfo>::iterator piter);
+    std::map<hobject_t, PullInfo>::iterator piter);
 
   void _do_push(OpRequestRef op);
   void _do_pull_response(OpRequestRef op);
@@ -247,23 +247,23 @@ private:
   };
   bool handle_pull_response(
     pg_shard_t from, const PushOp &op, PullOp *response,
-    list<pull_complete_info> *to_continue,
+    std::list<pull_complete_info> *to_continue,
     ObjectStore::Transaction *t);
   void handle_push(pg_shard_t from, const PushOp &op, PushReplyOp *response,
 		   ObjectStore::Transaction *t, bool is_repair);
 
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
 			       const interval_set<uint64_t> &intervals_received,
-			       bufferlist data_received,
+			       ceph::buffer::list data_received,
 			       interval_set<uint64_t> *intervals_usable,
-			       bufferlist *data_usable);
+			       ceph::buffer::list *data_usable);
   void _failed_pull(pg_shard_t from, const hobject_t &soid);
 
-  void send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &pushes);
+  void send_pushes(int prio, std::map<pg_shard_t, std::vector<PushOp> > &pushes);
   void prep_push_op_blank(const hobject_t& soid, PushOp *op);
   void send_pulls(
     int priority,
-    map<pg_shard_t, vector<PullOp> > &pulls);
+    std::map<pg_shard_t, std::vector<PullOp> > &pulls);
 
   int build_push_op(const ObjectRecoveryInfo &recovery_info,
 		    const ObjectRecoveryProgress &progress,
@@ -278,10 +278,10 @@ private:
 			bool cache_dont_need,
 			interval_set<uint64_t> &data_zeros,
 			const interval_set<uint64_t> &intervals_included,
-			bufferlist data_included,
-			bufferlist omap_header,
-			const map<string, bufferlist> &attrs,
-			const map<string, bufferlist> &omap_entries,
+			ceph::buffer::list data_included,
+			ceph::buffer::list omap_header,
+			const std::map<std::string, ceph::buffer::list> &attrs,
+			const std::map<std::string, ceph::buffer::list> &omap_entries,
 			ObjectStore::Transaction *t);
   void submit_push_complete(const ObjectRecoveryInfo &recovery_info,
 			    ObjectStore::Transaction *t);
@@ -290,7 +290,7 @@ private:
     SnapSet& snapset, const hobject_t& poid, const pg_missing_t& missing,
     const hobject_t &last_backfill,
     interval_set<uint64_t>& data_subset,
-    map<hobject_t, interval_set<uint64_t>>& clone_subsets,
+    std::map<hobject_t, interval_set<uint64_t>>& clone_subsets,
     ObcLockManager &lock_manager);
   void prepare_pull(
     eversion_t v,
@@ -314,7 +314,7 @@ private:
     const hobject_t& soid, pg_shard_t peer,
     eversion_t version,
     interval_set<uint64_t> &data_subset,
-    map<hobject_t, interval_set<uint64_t>>& clone_subsets,
+    std::map<hobject_t, interval_set<uint64_t>>& clone_subsets,
     PushOp *op,
     bool cache,
     ObcLockManager &&lock_manager);
@@ -323,7 +323,7 @@ private:
     const pg_missing_t& missing,
     const hobject_t &last_backfill,
     interval_set<uint64_t>& data_subset,
-    map<hobject_t, interval_set<uint64_t>>& clone_subsets,
+    std::map<hobject_t, interval_set<uint64_t>>& clone_subsets,
     ObcLockManager &lock_manager);
   ObjectRecoveryInfo recalc_subsets(
     const ObjectRecoveryInfo& recovery_info,
@@ -335,7 +335,7 @@ private:
    */
   struct InProgressOp : public RefCountedObject {
     ceph_tid_t tid;
-    set<pg_shard_t> waiting_for_commit;
+    std::set<pg_shard_t> waiting_for_commit;
     Context *on_commit;
     OpRequestRef op;
     eversion_t v;
@@ -349,7 +349,7 @@ private:
 	tid(tid), on_commit(on_commit),
 	op(op), v(v) {}
   };
-  map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
+  std::map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
 public:
   friend class C_OSD_OnOpCommit;
 
@@ -366,7 +366,7 @@ public:
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,
     const eversion_t &min_last_complete_ondisk,
-    vector<pg_log_entry_t>&& log_entries,
+    std::vector<pg_log_entry_t>&& log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     Context *on_all_commit,
     ceph_tid_t tid,
@@ -384,7 +384,7 @@ private:
     eversion_t min_last_complete_ondisk,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
-    const bufferlist &log_entries,
+    const ceph::buffer::list &log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
@@ -398,7 +398,7 @@ private:
     eversion_t min_last_complete_ondisk,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
-    const vector<pg_log_entry_t> &log_entries,
+    const std::vector<pg_log_entry_t> &log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
