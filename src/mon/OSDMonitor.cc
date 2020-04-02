@@ -11036,7 +11036,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!sure) {
       FeatureMap m;
       mon->get_combined_feature_map(&m);
-      uint64_t features = ceph_release_features(ceph::to_integer<int>(vno));
+      uint64_t features = ceph_release_features(to_integer<int>(vno));
       bool first = true;
       bool ok = true;
       for (int type : {
