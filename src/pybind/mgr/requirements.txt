@@ -7,3 +7,5 @@ requests-mock
 pyyaml
 prettytable
 pyOpenSSL
+execnet
+remoto

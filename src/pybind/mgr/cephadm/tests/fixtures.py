@@ -56,7 +56,6 @@ def cephadm_module():
             mock.patch("cephadm.module.CephadmOrchestrator.remote"),\
             mock.patch("cephadm.module.CephadmOrchestrator.set_store", set_store), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_store", get_store),\
-            mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]')), \
             mock.patch("cephadm.module.HostCache.save_host"), \
             mock.patch("cephadm.module.HostCache.rm_host"), \
             mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
@@ -76,6 +75,7 @@ def cephadm_module():
         }
         m.__init__('cephadm', 0, 0)
         m._cluster_fsid = "fsid"
+        m.mode = "root"
         yield m
 
 
