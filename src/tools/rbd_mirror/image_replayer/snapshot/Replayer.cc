@@ -8,6 +8,7 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "json_spirit/json_spirit.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
@@ -240,11 +241,9 @@ bool Replayer<I>::get_replay_status(std::string* description,
     replay_state = "syncing";
   }
 
-  *description =
-    "{"
-      "\"replay_state\": \"" + replay_state + "\", " +
-      "\"remote_snapshot_timestamp\": " +
-        stringify(remote_snap_info->timestamp.sec());
+  json_spirit::mObject root_obj;
+  root_obj["replay_state"] = replay_state;
+  root_obj["remote_snapshot_timestamp"] = remote_snap_info->timestamp.sec();
 
   auto matching_remote_snap_id = util::compute_remote_snap_id(
     m_state_builder->local_image_ctx->image_lock,
@@ -258,9 +257,8 @@ bool Replayer<I>::get_replay_status(std::string* description,
     // use the timestamp from the matching remote image since
     // the local snapshot would just be the time the snapshot was
     // synced and not the consistency point in time.
-    *description += ", "
-      "\"local_snapshot_timestamp\": " +
-        stringify(matching_remote_snap_it->second.timestamp.sec());
+    root_obj["local_snapshot_timestamp"] =
+      matching_remote_snap_it->second.timestamp.sec();
   }
 
   matching_remote_snap_it = m_state_builder->remote_image_ctx->snap_info.find(
@@ -268,16 +266,14 @@ bool Replayer<I>::get_replay_status(std::string* description,
   if (m_remote_snap_id_end != CEPH_NOSNAP &&
       matching_remote_snap_it !=
         m_state_builder->remote_image_ctx->snap_info.end()) {
-    *description += ", "
-      "\"syncing_snapshot_timestamp\": " +
-        stringify(remote_snap_info->timestamp.sec()) + ", " +
-      "\"syncing_percent\": " + stringify(static_cast<uint32_t>(
+    root_obj["syncing_snapshot_timestamp"] = remote_snap_info->timestamp.sec();
+    root_obj["syncing_percent"] = static_cast<uint64_t>(
         100 * m_local_mirror_snap_ns.last_copied_object_number /
-        static_cast<float>(std::max<uint64_t>(1U, m_local_object_count))));
+        static_cast<float>(std::max<uint64_t>(1U, m_local_object_count)));
   }
 
-  *description +=
-    "}";
+  *description = json_spirit::write(
+    root_obj, json_spirit::remove_trailing_zeros);
 
   local_image_locker.unlock();
   remote_image_locker.unlock();
