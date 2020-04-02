@@ -1965,7 +1965,7 @@ class CephManager:
         """
         with self.lock:
             if self.pools:
-                return random.choice(self.pools.keys())
+                return random.sample(self.pools.keys(), 1)[0]
 
     def get_pool_pg_num(self, pool_name):
         """
