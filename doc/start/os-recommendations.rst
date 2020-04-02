@@ -117,4 +117,4 @@ Testing
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
 
-.. _CephFS best practices: ../../cephfs/best-practices
+.. _CephFS best practices: ../../cephfs/mount-using-kernel-driver
