@@ -150,7 +150,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("root", root);
   f->dump_int("session_timeout", session_timeout);
   f->dump_int("session_autoclose", session_autoclose);
-  f->dump_stream("min_compat_client") << ceph::to_integer<int>(min_compat_client) << " ("
+  f->dump_stream("min_compat_client") << to_integer<int>(min_compat_client) << " ("
 				      << min_compat_client << ")";
   f->dump_int("max_file_size", max_file_size);
   f->dump_int("last_failure", last_failure);
@@ -230,7 +230,7 @@ void MDSMap::print(ostream& out) const
   out << "session_timeout\t" << session_timeout << "\n"
       << "session_autoclose\t" << session_autoclose << "\n";
   out << "max_file_size\t" << max_file_size << "\n";
-  out << "min_compat_client\t" << ceph::to_integer<int>(min_compat_client) << " ("
+  out << "min_compat_client\t" << to_integer<int>(min_compat_client) << " ("
 			       << min_compat_client << ")\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";

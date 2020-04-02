@@ -208,7 +208,7 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features,
   }
   if (min_mon_release > pending_map.min_mon_release) {
     dout(1) << __func__ << " increasing min_mon_release to "
-	    << ceph::to_integer<int>(min_mon_release) << " (" << min_mon_release
+	    << to_integer<int>(min_mon_release) << " (" << min_mon_release
 	    << ")" << dendl;
     pending_map.min_mon_release = min_mon_release;
   }

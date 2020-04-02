@@ -352,7 +352,7 @@ public:
   }
 
   std::set<std::string> get_always_on_modules() const {
-    auto it = always_on_modules.find(ceph::to_integer<uint32_t>(ceph_release()));
+    auto it = always_on_modules.find(to_integer<uint32_t>(ceph_release()));
     if (it == always_on_modules.end())
       return {};
     return it->second;

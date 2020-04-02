@@ -18,7 +18,7 @@ ceph_release_t ceph_release_from_name(std::string_view s)
 {
   ceph_release_t r = ceph_release_t::max;
   while (--r != ceph_release_t::unknown) {
-    if (s == ceph::to_string(r)) {
+    if (s == to_string(r)) {
       return r;
     }
   }
@@ -37,14 +37,14 @@ bool can_upgrade_from(ceph_release_t from_release,
   const auto to_release = ceph_release();
   if (cutoff < to_release) {
     err << "recorded " << from_release_name << " "
-        << ceph::to_integer<int>(from_release) << " (" << from_release << ") "
+        << to_integer<int>(from_release) << " (" << from_release << ") "
         << "is >2 releases older than installed "
-        << ceph::to_integer<int>(to_release) << " (" << to_release << "); "
+        << to_integer<int>(to_release) << " (" << to_release << "); "
         << "you can only upgrade 2 releases at a time\n"
         << "you should first upgrade to ";
     auto release = from_release;
     while (++release <= cutoff) {
-      err << ceph::to_integer<int>(release) << " (" << release << ")";
+      err << to_integer<int>(release) << " (" << release << ")";
       if (release < cutoff) {
         err << " or ";
       } else {
