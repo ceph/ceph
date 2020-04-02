@@ -7,6 +7,7 @@
  */
 
 #include "encoding.h"
+#include "random.h"
 
 #include <ostream>
 #include <random>
@@ -32,7 +33,7 @@ struct uuid_d {
   }
 
   void generate_random() {
-    std::random_device rng;
+    random_device_t rng;
     boost::uuids::basic_random_generator gen(rng);
     uuid = gen();
   }
