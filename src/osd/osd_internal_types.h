@@ -25,7 +25,7 @@ struct SnapSetContext {
   explicit SnapSetContext(const hobject_t& o) :
     oid(o), ref(0), registered(false), exists(true) { }
 };
-class ObjectContext;
+struct ObjectContext;
 typedef std::shared_ptr<ObjectContext> ObjectContextRef;
 
 struct ObjectContext {
@@ -38,10 +38,10 @@ struct ObjectContext {
 public:
 
   // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
-  map<pair<uint64_t, entity_name_t>, WatchRef> watchers;
+  std::map<std::pair<uint64_t, entity_name_t>, WatchRef> watchers;
 
   // attr cache
-  map<string, bufferlist> attr_cache;
+  std::map<std::string, ceph::buffer::list> attr_cache;
 
   RWState rwstate;
   std::list<OpRequestRef> waiters;  ///< ops waiting on state change
@@ -74,21 +74,21 @@ public:
     }
     return false;
   }
-  void wake(list<OpRequestRef> *requeue) {
+  void wake(std::list<OpRequestRef> *requeue) {
     rwstate.release_waiters();
     requeue->splice(requeue->end(), waiters);
   }
-  void put_read(list<OpRequestRef> *requeue) {
+  void put_read(std::list<OpRequestRef> *requeue) {
     if (rwstate.put_read()) {
       wake(requeue);
     }
   }
-  void put_write(list<OpRequestRef> *requeue) {
+  void put_write(std::list<OpRequestRef> *requeue) {
     if (rwstate.put_write()) {
       wake(requeue);
     }
   }
-  void put_excl(list<OpRequestRef> *requeue) {
+  void put_excl(std::list<OpRequestRef> *requeue) {
     if (rwstate.put_excl()) {
       wake(requeue);
     }
@@ -120,14 +120,14 @@ public:
   bool try_get_read_lock() {
     return rwstate.get_read_lock();
   }
-  void drop_recovery_read(list<OpRequestRef> *ls) {
+  void drop_recovery_read(std::list<OpRequestRef> *ls) {
     ceph_assert(rwstate.recovery_read_marker);
     put_read(ls);
     rwstate.recovery_read_marker = false;
   }
   void put_lock_type(
     RWState::State type,
-    list<OpRequestRef> *to_wake,
+    std::list<OpRequestRef> *to_wake,
     bool *requeue_recovery,
     bool *requeue_snaptrimmer) {
     switch (type) {
@@ -185,7 +185,7 @@ public:
 
 };
 
-inline ostream& operator<<(ostream& out, const ObjectState& obs)
+inline std::ostream& operator<<(std::ostream& out, const ObjectState& obs)
 {
   out << obs.oi.soid;
   if (!obs.exists)
@@ -193,7 +193,7 @@ inline ostream& operator<<(ostream& out, const ObjectState& obs)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, const ObjectContext& obc)
+inline std::ostream& operator<<(std::ostream& out, const ObjectContext& obc)
 {
   return out << "obc(" << obc.obs << " " << obc.rwstate << ")";
 }
@@ -207,7 +207,7 @@ class ObcLockManager {
       RWState::State type)
       : obc(std::move(obc)), type(type) {}
   };
-  map<hobject_t, ObjectLockState> locks;
+  std::map<hobject_t, ObjectLockState> locks;
 public:
   ObcLockManager() = default;
   ObcLockManager(ObcLockManager &&) = default;
@@ -223,7 +223,7 @@ public:
     OpRequestRef& op) {
     ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_lock_type(op, type)) {
-      locks.insert(make_pair(hoid, ObjectLockState(obc, type)));
+      locks.insert(std::make_pair(hoid, ObjectLockState(obc, type)));
       return true;
     } else {
       return false;
@@ -236,7 +236,7 @@ public:
     ceph_assert(locks.find(hoid) == locks.end());
     if (obc->rwstate.take_write_lock()) {
       locks.insert(
-	make_pair(
+	std::make_pair(
 	  hoid, ObjectLockState(obc, RWState::RWWRITE)));
       return true;
     } else {
@@ -251,7 +251,7 @@ public:
     ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_snaptrimmer_write(mark_if_unsuccessful)) {
       locks.insert(
-	make_pair(
+	std::make_pair(
 	  hoid, ObjectLockState(obc, RWState::RWWRITE)));
       return true;
     } else {
@@ -266,7 +266,7 @@ public:
     ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_write_greedy(op)) {
       locks.insert(
-	make_pair(
+	std::make_pair(
 	  hoid, ObjectLockState(obc, RWState::RWWRITE)));
       return true;
     } else {
@@ -281,7 +281,7 @@ public:
     ceph_assert(locks.find(hoid) == locks.end());
     if (obc->try_get_read_lock()) {
       locks.insert(
-	make_pair(
+	std::make_pair(
 	  hoid,
 	  ObjectLockState(obc, RWState::RWREAD)));
       return true;
@@ -291,11 +291,11 @@ public:
   }
 
   void put_locks(
-    list<pair<ObjectContextRef, list<OpRequestRef> > > *to_requeue,
+    std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > *to_requeue,
     bool *requeue_recovery,
     bool *requeue_snaptrimmer) {
     for (auto& p: locks) {
-      list<OpRequestRef> _to_requeue;
+      std::list<OpRequestRef> _to_requeue;
       p.second.obc->put_lock_type(
 	p.second.type,
 	&_to_requeue,

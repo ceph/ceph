@@ -13,14 +13,25 @@
 
 #include "common/config.h"
 
-struct CancelableContext : public Context {
-  virtual void cancel() = 0;
-};
-
 #define dout_context osd->cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+
+using std::list;
+using std::make_pair;
+using std::pair;
+using std::ostream;
+using std::set;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
+struct CancelableContext : public Context {
+  virtual void cancel() = 0;
+};
+
 
 static ostream& _prefix(
   std::ostream* _dout,
@@ -106,9 +117,7 @@ void Notify::do_timeout()
   _watchers.swap(watchers);
   lock.unlock();
 
-  for (set<WatchRef>::iterator i = _watchers.begin();
-       i != _watchers.end();
-       ++i) {
+  for (auto i = _watchers.begin(); i != _watchers.end(); ++i) {
     boost::intrusive_ptr<PrimaryLogPG> pg((*i)->get_pg());
     pg->lock();
     if (!(*i)->is_discarded()) {
@@ -185,7 +194,7 @@ void Notify::maybe_complete_notify()
     bufferlist bl;
     encode(notify_replies, bl);
     list<pair<uint64_t,uint64_t> > missed;
-    for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
+    for (auto p = watchers.begin(); p != watchers.end(); ++p) {
       missed.push_back(make_pair((*p)->get_watcher_gid(),
 				 (*p)->get_cookie()));
     }
@@ -372,7 +381,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
     auto sessionref = static_cast<Session*>(priv.get());
     sessionref->wstate.addWatch(self.lock());
     priv.reset();
-    for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
+    for (auto i = in_progress_notifies.begin();
 	 i != in_progress_notifies.end();
 	 ++i) {
       send_notify(i->second);
@@ -397,7 +406,7 @@ void Watch::disconnect()
 void Watch::discard()
 {
   dout(10) << "discard" << dendl;
-  for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
+  for (auto i = in_progress_notifies.begin();
        i != in_progress_notifies.end();
        ++i) {
     i->second->discard();
@@ -437,7 +446,7 @@ void Watch::remove(bool send_disconnect)
 					 CEPH_WATCH_EVENT_DISCONNECT, empty));
     conn->send_message(reply);
   }
-  for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
+  for (auto i = in_progress_notifies.begin();
        i != in_progress_notifies.end();
        ++i) {
     i->second->complete_watcher_remove(self.lock());
@@ -489,7 +498,7 @@ void Watch::send_notify(NotifyRef notif)
 void Watch::notify_ack(uint64_t notify_id, bufferlist& reply_bl)
 {
   dout(10) << "notify_ack" << dendl;
-  map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.find(notify_id);
+  auto i = in_progress_notifies.find(notify_id);
   if (i != in_progress_notifies.end()) {
     i->second->complete_watcher(self.lock(), reply_bl);
     in_progress_notifies.erase(i);

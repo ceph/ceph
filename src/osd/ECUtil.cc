@@ -5,6 +5,9 @@
 #include "ECUtil.h"
 
 using namespace std;
+using ceph::bufferlist;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::Formatter;
 
 int ECUtil::decode(
   const stripe_info_t &sinfo,

@@ -6,6 +6,12 @@
 #include "common/scrub_types.h"
 #include "include/rados/rados_types.hpp"
 
+using std::ostringstream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
 namespace {
 ghobject_t make_scrub_object(const spg_t& pgid)
 {
