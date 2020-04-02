@@ -30,7 +30,7 @@ bool init(CephContext* cct);
 void shutdown();
 
 // connect to an amqp endpoint
-connection_ptr_t connect(const std::string& url, const std::string& exchange);
+connection_ptr_t connect(const std::string& url, const std::string& exchange, bool mandatory_delivery);
 
 // publish a message over a connection that was already created
 int publish(connection_ptr_t& conn,
