@@ -15,9 +15,9 @@ depsToolsetDir="$DEPS_DIR/mingw"
 lz4SrcDir="${depsSrcDir}/lz4"
 lz4Dir="${depsToolsetDir}/lz4"
 lz4Tag="v1.9.2"
-sslVersion="1.1.1c"
+sslTag="OpenSSL_1_1_1c"
 sslDir="${depsToolsetDir}/openssl"
-sslSrcDir="${depsSrcDir}/openssl-${sslVersion}"
+sslSrcDir="${depsSrcDir}/openssl"
 
 curlTag="curl-7_66_0"
 curlSrcDir="${depsSrcDir}/curl"
@@ -106,7 +106,8 @@ _make BUILD_STATIC=no CC=${MINGW_CC%-posix*} \
 
 cd $depsSrcDir
 if [[ ! -d $sslSrcDir ]]; then
-    curl "https://www.openssl.org/source/openssl-${sslVersion}.tar.gz" | tar xz
+    git clone https://github.com/openssl/openssl
+    cd $sslSrcDir; git checkout $sslTag
 fi
 cd $sslSrcDir
 mkdir -p $sslDir
