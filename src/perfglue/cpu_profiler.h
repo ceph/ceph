@@ -20,6 +20,6 @@
 #include <vector>
 
 void cpu_profiler_handle_command(const std::vector<std::string> &cmd,
-				 ostream& out);
+				 std::ostream& out);
 
 #endif
