@@ -1696,7 +1696,7 @@ class CephManager:
         Pick a random pool
         """
         with self.lock:
-            return random.choice(self.pools.keys())
+            return random.sample(self.pools.keys(), 1)[0]
 
     def get_pool_pg_num(self, pool_name):
         """
