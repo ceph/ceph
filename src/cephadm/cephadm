@@ -3349,7 +3349,7 @@ def command_check_host():
         errors.append('No time synchronization is active')
 
     if 'expect_hostname' in args and args.expect_hostname:
-        if get_hostname() != args.expect_hostname:
+        if get_hostname().lower() != args.expect_hostname.lower():
             errors.append('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), args.expect_hostname))
         logger.info('Hostname "%s" matches what is expected.',
