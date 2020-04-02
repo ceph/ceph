@@ -14038,6 +14038,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	    const auto& conf = cct->_conf;
 	    if (conf->client_reconnect_stale) {
 	      ldout(cct, 1) << "reset from mds we were open; close mds session for reconnect" << dendl;
+	      trim_cache_for_reconnect(s);
 	      _closed_mds_session(s);
 	    } else {
 	      ldout(cct, 1) << "reset from mds we were open; mark session as stale" << dendl;
