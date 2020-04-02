@@ -1,10 +1,12 @@
 # flake8: noqa
 import json
+import yaml
 
 import pytest
 
-from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, RGWSpec, \
-    servicespec_validate_add, ServiceSpecValidationError
+from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, RGWSpec, NFSServiceSpec, \
+    servicespec_validate_add, ServiceSpec, ServiceSpecValidationError
+from ceph.deployment.drive_group import DriveGroupSpec
 
 
 @pytest.mark.parametrize("test_input,expected, require_network",
@@ -23,6 +25,7 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
     ret = HostPlacementSpec.parse(test_input, require_network=require_network)
     assert ret == expected
     assert str(ret) == test_input
+
 
 @pytest.mark.parametrize(
     "test_input,expected",
@@ -66,23 +69,36 @@ def test_parse_placement_specs_raises(test_input):
                          [("myhost:1.1.1.1/24"),
                           # wrong ip format
                           ("myhost:1"),
-                          # empty string
-                          ("myhost=1"),
                           ])
-def test_parse_host_placement_specs_raises(test_input):
+def test_parse_host_placement_specs_raises_wrong_format(test_input):
     with pytest.raises(ValueError):
-        ret = HostPlacementSpec.parse(test_input)
+        HostPlacementSpec.parse(test_input)
 
 
-def test_rgwspec():
-    """
-    {
-        "rgw_zone": "zonename",
-        "service_type": "rgw",
-        "rgw_frontend_port": 8080,
-        "rgw_realm": "realm"
+@pytest.mark.parametrize(
+    "s_type,o_spec,s_id",
+    [
+        ("mgr", ServiceSpec, 'test'),
+        ("mon", ServiceSpec, 'test'),
+        ("mds", ServiceSpec, 'test'),
+        ("rgw", RGWSpec, 'realm.zone'),
+        ("nfs", NFSServiceSpec, 'test'),
+        ("osd", DriveGroupSpec, 'test'),
+    ])
+def test_servicespec_map_test(s_type, o_spec, s_id):
+    dict_spec = {
+        "service_id": s_id,
+        "service_type": s_type,
+        "placement":
+            dict(hosts=["host1:1.1.1.1"])
     }
-    """
-    example = json.loads(test_rgwspec.__doc__.strip())
-    spec = RGWSpec.from_json(example)
+    spec = ServiceSpec.from_json(dict_spec)
+    assert isinstance(spec, o_spec)
+    assert isinstance(spec.placement, PlacementSpec)
+    assert isinstance(spec.placement.hosts[0], HostPlacementSpec)
+    assert spec.placement.hosts[0].hostname == 'host1'
+    assert spec.placement.hosts[0].network == '1.1.1.1'
+    assert spec.placement.hosts[0].name == ''
     assert servicespec_validate_add(spec) is None
+    ServiceSpec.from_json(spec.to_json())
+
