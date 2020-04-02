@@ -190,6 +190,7 @@ class NFSGanesha(object):
         # config-json options
         self.pool = json_get('pool', require=True)
         self.namespace = json_get('namespace')
+        self.userid = json_get('userid')
         self.extra_args = json_get('extra_args', [])
         self.files = json_get('files', {})
 
@@ -308,6 +309,8 @@ class NFSGanesha(object):
         args=['--pool', self.pool]
         if self.namespace:
             args += ['--ns', self.namespace]
+        if self.userid:
+            args += ['--userid', self.userid]
         args += [action, self.get_daemon_name()]
 
         data_dir = get_data_dir(self.fsid, self.daemon_type, self.daemon_id)

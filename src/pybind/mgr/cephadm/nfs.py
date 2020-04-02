@@ -109,6 +109,7 @@ RADOS_URLS {{
         config = {'pool' : self.spec.pool} # type: Dict
         if self.spec.namespace:
             config['namespace'] = self.spec.namespace
+        config['userid'] = self.get_rados_user()
         config['extra_args'] = ['-N', 'NIV_EVENT']
         config['files'] = {
             'ganesha.conf' : self.get_ganesha_conf(),
