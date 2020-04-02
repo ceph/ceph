@@ -43,23 +43,53 @@ const struct sockaddr *find_ip_in_subnet_list(
   unsigned ipv,
   const std::string &networks,
   const std::string &interfaces,
+  const std::string &excl_interfaces,
+  const std::string &excl_interface_prefixes,
   int numa_node)
 {
   std::list<string> nets;
   get_str_list(networks, nets);
   std::list<string> ifs;
   get_str_list(interfaces, ifs);
+  std::list<string> excl_ifs;
+  get_str_list(excl_interfaces, excl_ifs);
+  std::list<string> excl_if_prefixes;
+  get_str_list(excl_interface_prefixes, excl_if_prefixes);
 
   // filter interfaces by name
+  const struct ifaddrs *filtered_0 = nullptr;
+  struct ifaddrs *tmp_head_0 = nullptr;
   const struct ifaddrs *filtered = nullptr;
+  for (const struct ifaddrs *p = ifa; p; p = p->ifa_next) {
+    bool excluded = false;
+    for (auto& s : excl_ifs) {
+      if (strcmp(s.c_str(), p->ifa_name) == 0) {
+        excluded = true;
+        break;
+      }
+    }
+    if (excluded) continue;
+    for (auto& s : excl_if_prefixes) {
+     if (strncmp(s.c_str(), p->ifa_name, s.length()) == 0) {
+       excluded = true;
+       break;
+     }
+    }
+    if (excluded) continue;
+    struct ifaddrs *n = new ifaddrs;
+    memcpy(n, p, sizeof(*p));
+    n->ifa_next = tmp_head_0;
+    tmp_head_0 = n;
+  }
+  filtered_0 = tmp_head_0;
   if (ifs.empty()) {
-    filtered = ifa;
+    filtered = filtered_0;
   } else {
     if (nets.empty()) {
       lderr(cct) << "interface names specified but not network names" << dendl;
       exit(1);
     }
-    const struct ifaddrs *t = ifa;
+    const struct ifaddrs *t = filtered_0;
     struct ifaddrs *head = 0;
     while (t) {
       bool match = false;
@@ -116,12 +146,17 @@ const struct sockaddr *find_ip_in_subnet_list(
     }
   }
 
-  if (filtered != ifa) {
+  if (filtered != filtered_0) {
     while (filtered) {
       struct ifaddrs *t = filtered->ifa_next;
       delete filtered;
       filtered = t;
     }
+  }
+  while (filtered_0) {
+    struct ifaddrs *t = filtered_0->ifa_next;
+    delete filtered_0;
+    filtered_0 = t;
   }
 
   return r;
@@ -150,6 +185,8 @@ static void fill_in_one_address(CephContext *cct,
 				const string networks,
 				const string interfaces,
 				const char *conf_var,
+				const string& excluded_ifs,
+				const string& excluded_if_prefixes,
 				int numa_node = -1)
 {
   const struct sockaddr *found = find_ip_in_subnet_list(
@@ -158,6 +195,8 @@ static void fill_in_one_address(CephContext *cct,
     CEPH_PICK_ADDRESS_IPV4|CEPH_PICK_ADDRESS_IPV6,
     networks,
     interfaces,
+    excluded_ifs,
+    excluded_if_prefixes,
     numa_node);
   if (!found) {
     lderr(cct) << "unable to find any IP address in networks '" << networks
@@ -203,6 +242,10 @@ void pick_addresses(CephContext *cct, int needs)
   auto cluster_network = cct->_conf.get_val<std::string>("cluster_network");
   auto cluster_network_interface =
     cct->_conf.get_val<std::string>("cluster_network_interface");
+  auto excluded_network_interfaces =
+    cct->_conf.get_val<std::string>("excluded_network_interfaces");
+  auto excluded_network_interface_prefixes =
+    cct->_conf.get_val<std::string>("excluded_network_interface_prefixes");
 
   if (r < 0) {
     string err = cpp_strerror(errno);
@@ -213,19 +256,25 @@ void pick_addresses(CephContext *cct, int needs)
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC) &&
     public_addr.is_blank_ip() && !public_network.empty()) {
     fill_in_one_address(cct, ifa, public_network, public_network_interface,
-      "public_addr");
+                        "public_addr",
+                        excluded_network_interfaces,
+                        excluded_network_interface_prefixes);
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER) && cluster_addr.is_blank_ip()) {
     if (!cluster_network.empty()) {
       fill_in_one_address(cct, ifa, cluster_network, cluster_network_interface,
-	"cluster_addr");
+                          "cluster_addr",
+                          excluded_network_interfaces,
+                          excluded_network_interface_prefixes);
     } else {
       if (!public_network.empty()) {
         lderr(cct) << "Public network was set, but cluster network was not set " << dendl;
         lderr(cct) << "    Using public network also for cluster network" << dendl;
         fill_in_one_address(cct, ifa, public_network, public_network_interface,
-          "cluster_addr");
+                            "cluster_addr",
+                            excluded_network_interfaces,
+                            excluded_network_interface_prefixes);
       }
     }
   }
@@ -240,11 +289,14 @@ static int fill_in_one_address(
   unsigned ipv,
   const string networks,
   const string interfaces,
+  const string& excluded_ifs,
+  const string& excluded_if_prefixes,
   entity_addrvec_t *addrs,
   int numa_node = -1)
 {
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, ipv, networks,
-							interfaces, numa_node);
+    interfaces, excluded_ifs, excluded_if_prefixes,
+    numa_node);
   if (!found) {
     std::string ip_type = "";
     if ((ipv & CEPH_PICK_ADDRESS_IPV4) && (ipv & CEPH_PICK_ADDRESS_IPV6)) {
@@ -354,6 +406,10 @@ int pick_addresses(
 	cct->_conf.get_val<std::string>("public_network_interface");
     }
   }
+  auto excluded_network_interfaces =
+    cct->_conf.get_val<std::string>("excluded_network_interfaces");
+  auto excluded_network_interface_prefixes =
+    cct->_conf.get_val<std::string>("excluded_network_interface_prefixes");
   if (addr.is_blank_ip() &&
       !networks.empty()) {
     int ipv4_r = !(ipv & CEPH_PICK_ADDRESS_IPV4) ? 0 : -1;
@@ -364,18 +420,27 @@ int pick_addresses(
       if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	  (flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
 	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-                                     networks, interfaces, addrs,
+                                     networks, interfaces,
+                                     excluded_network_interfaces,
+                                     excluded_network_interface_prefixes,
+                                     addrs,
                                      preferred_numa_node);
       }
       if (ipv & CEPH_PICK_ADDRESS_IPV6) {
 	ipv6_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6,
-                                     networks, interfaces, addrs,
+                                     networks, interfaces,
+                                     excluded_network_interfaces,
+                                     excluded_network_interface_prefixes,
+                                     addrs,
                                      preferred_numa_node);
       }
       if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	  !(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
 	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
-                                     networks, interfaces, addrs,
+                                     networks, interfaces,
+                                     excluded_network_interfaces,
+                                     excluded_network_interface_prefixes,
+                                     addrs,
                                      preferred_numa_node);
       }
       if (ipv4_r >= 0 && ipv6_r >= 0) {

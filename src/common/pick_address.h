@@ -74,6 +74,8 @@ const struct sockaddr *find_ip_in_subnet_list(
   unsigned ipv,
   const std::string &networks,
   const std::string &interfaces,
+  const std::string &excl_interfaces,
+  const std::string &excl_interface_prefixes,
   int numa_node=-1);
 
 int get_iface_numa_node(

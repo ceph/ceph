@@ -416,6 +416,20 @@ std::vector<Option> get_global_options() {
     .set_description("Interface name(s) from which to choose an address from a cluster_network to bind to; cluster_network must also be specified.")
     .add_see_also("cluster_network"),
 
+    Option("excluded_network_interfaces", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .add_service({"mon", "mds", "osd", "mgr"})
+    .set_flag(Option::FLAG_STARTUP)
+    .add_tag("network")
+    .set_description("Interface name(s) that should not be considered for public_network or cluster_network")
+    .set_default("lo"),
+
+    Option("excluded_network_interface_prefixes", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .add_service({"mon", "mds", "osd", "mgr"})
+    .set_flag(Option::FLAG_STARTUP)
+    .add_tag("network")
+    .set_description("Interface name(s) that should not be considered for public_network or cluster_network")
+    .set_default("lo:"),
+
     Option("monmap", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("path to MonMap file")
     .set_long_description("This option is normally used during mkfs, but can also "
