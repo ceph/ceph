@@ -36,4 +36,3 @@ if 'UNITTEST' in os.environ:
     cm.BaseMgrModule = M
     cm.BaseMgrStandbyModule = M
     sys.modules['ceph_module'] = cm
-    sys.modules['rados'] = mock.Mock()
