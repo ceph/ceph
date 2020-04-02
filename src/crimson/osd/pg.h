@@ -481,7 +481,8 @@ private:
     PeeringCtx &rctx);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(
     Ref<MOSDOp> m,
-    ObjectContextRef obc);
+    ObjectContextRef obc,
+    const OpInfo &op_info);
   seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,

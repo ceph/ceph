@@ -42,7 +42,8 @@ class OpsExecuter {
     crimson::ct_error::invarg,
     crimson::ct_error::permission_denied,
     crimson::ct_error::operation_not_supported,
-    crimson::ct_error::input_output_error>;
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::value_too_large>;
   using read_errorator = PGBackend::read_errorator;
   using get_attr_errorator = PGBackend::get_attr_errorator;
   using watch_errorator = crimson::errorator<
@@ -79,6 +80,7 @@ private:
   };
 
   ObjectContextRef obc;
+  const OpInfo* op_info;
   PG& pg;
   PGBackend& backend;
   Ref<MOSDOp> msg;
@@ -163,14 +165,15 @@ private:
   }
 
 public:
-  OpsExecuter(ObjectContextRef obc, PG& pg, Ref<MOSDOp> msg)
+  OpsExecuter(ObjectContextRef obc, const OpInfo* op_info, PG& pg, Ref<MOSDOp> msg)
     : obc(std::move(obc)),
+      op_info(op_info),
       pg(pg),
       backend(pg.get_backend()),
       msg(std::move(msg)) {
   }
   OpsExecuter(PG& pg, Ref<MOSDOp> msg)
-    : OpsExecuter{ObjectContextRef(), pg, std::move(msg)}
+    : OpsExecuter{ObjectContextRef(), nullptr, pg, std::move(msg)}
   {}
 
   osd_op_errorator::future<> execute_osd_op(class OSDOp& osd_op);
