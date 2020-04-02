@@ -139,7 +139,7 @@ cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D WITH_MGR_DASHBOARD_FRONTEND=OFF -D WITH_SYSTEMD=OFF -D WITH_TESTS=OFF \
       -D LZ4_INCLUDE_DIR=$lz4Include -D LZ4_LIBRARY=$lz4Lib \
       -D Backtrace_INCLUDE_DIR="$backtraceDir/include" \
-      -D Backtrace_LIBRARY="$backtraceDir/lib/libbacktrace.dll.a" \
+      -D Backtrace_LIBRARY="$backtraceDir/lib/libbacktrace.a" \
       -D ENABLE_GIT_VERSION=$ENABLE_GIT_VERSION \
       -D ALLOCATOR="$ALLOCATOR" -D CMAKE_BUILD_TYPE=$CMAKE_BUILD_TYPE \
       -D WNBD_INCLUDE_DIRS="$wnbdSrcDir/include" \
