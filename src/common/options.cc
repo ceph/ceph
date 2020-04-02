@@ -6846,6 +6846,11 @@ std::vector<Option> get_rgw_options() {
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
 
+Option("rgw_fastfail_homeless_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+.set_default(0.01)
+.set_description("Fastfail homeless session : Duration (in millisecondss) after which the op is cancelled")
+.set_long_description("It will cancel the op associated with a homeless session after the specified  duration. This will unblock the radosgw thread to take new client requests."),
+
     Option("rgw_inject_notify_timeout_probability", Option::TYPE_FLOAT,
 	   Option::LEVEL_DEV)
     .set_default(0)

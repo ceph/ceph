@@ -1553,3 +1553,6 @@ OPTION(debug_allow_any_pool_priority, OPT_BOOL)
 OPTION(rgw_gc_max_deferred_entries_size, OPT_U64) // GC deferred entries size in queue head
 OPTION(rgw_gc_max_queue_size, OPT_U64) // GC max queue size
 OPTION(rgw_gc_max_deferred, OPT_U64) // GC max number of deferred entries
+
+/* Fastfail tunables */
+OPTION(rgw_fastfail_homeless_timeout, OPT_FLOAT)
