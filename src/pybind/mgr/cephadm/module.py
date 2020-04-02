@@ -2084,15 +2084,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return blink(locs)
 
     def get_osd_uuid_map(self, only_up=False):
-        # type: (bool) -> Dict[str,str]
+        # type: (bool) -> Dict[str, str]
         osd_map = self.get('osd_map')
         r = {}
         for o in osd_map['osds']:
             # only include OSDs that have ever started in this map.  this way
             # an interrupted osd create can be repeated and succeed the second
             # time around.
-            if not only_up or o['up_from'] > 0:
-                r[str(o['osd'])] = o['uuid']
+            osd_id = o.get('osd')
+            if osd_id is None:
+                raise OrchestratorError("Could not retrieve osd_id from osd_map")
+            if not only_up or (o['up_from'] > 0):
+                r[str(osd_id)] = o.get('uuid', '')
         return r
 
     @trivial_completion
@@ -2126,13 +2129,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def create_osds(self, drive_group: DriveGroupSpec):
         self.log.debug(f"Processing DriveGroup {drive_group}")
         ret = []
+        drive_group.osd_id_claims = self.find_destroyed_osds()
+        self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
         for host, drive_selection in self.prepare_drivegroup(drive_group):
             self.log.info('Applying %s on host %s...' % (drive_group.service_id, host))
-            cmd = self.driveselection_to_ceph_volume(drive_group, drive_selection)
+            cmd = self.driveselection_to_ceph_volume(drive_group, drive_selection,
+                                                     drive_group.osd_id_claims.get(host, []))
             if not cmd:
                 self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
                 continue
-            ret_msg = self._create_osd(host, cmd)
+            ret_msg = self._create_osd(host, cmd,
+                                       replace_osd_ids=drive_group.osd_id_claims.get(host, []))
             ret.append(ret_msg)
         return ", ".join(ret)
 
@@ -2143,8 +2150,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         host_ds_map = []
 
         # set osd_id_claims
-        drive_group.osd_id_claims = self.find_destroyed_osds()
-        self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
 
         def _find_inv_for_host(hostname: str, inventory_dict: dict):
             # This is stupid and needs to be loaded with the host
@@ -2165,9 +2170,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def driveselection_to_ceph_volume(self, drive_group: DriveGroupSpec,
                                       drive_selection: DriveSelection,
+                                      osd_id_claims: Optional[List[str]] = None,
                                       preview: bool = False) -> Optional[str]:
         self.log.debug(f"Translating DriveGroup <{drive_group}> to ceph-volume command")
-        cmd: Optional[str] = translate.to_ceph_volume(drive_group, drive_selection, preview=preview).run()
+        cmd: Optional[str] = translate.to_ceph_volume(drive_group, drive_selection, osd_id_claims, preview=preview).run()
         self.log.debug(f"Resulting ceph-volume cmd: {cmd}")
         return cmd
 
@@ -2183,9 +2189,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             drive_groups = []
         ret_all = []
         for drive_group in drive_groups:
+            drive_group.osd_id_claims = self.find_destroyed_osds()
+            self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
             # prepare driveselection
             for host, ds in self.prepare_drivegroup(drive_group):
-                cmd = self.driveselection_to_ceph_volume(drive_group, ds, preview=True)
+                cmd = self.driveselection_to_ceph_volume(drive_group, ds,
+                                                         drive_group.osd_id_claims.get(host, []), preview=True)
                 if not cmd:
                     self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
                     continue
@@ -2224,7 +2233,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             error_ok=True)
         return out, err, code
 
-    def _create_osd(self, host, cmd):
+    def _create_osd(self, host, cmd, replace_osd_ids=None):
         out, err, code = self._run_ceph_volume_command(host, cmd)
 
         if code == 1 and ', it is already prepared' in '\n'.join(err):
@@ -2256,16 +2265,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     self.log.debug('mismatched fsid, skipping %s' % osd)
                     continue
-                if osd_id in before_osd_uuid_map:
-                    # this osd existed before we ran prepare
+                if osd_id in before_osd_uuid_map and osd_id not in replace_osd_ids:
+                    # if it exists but is part of the replacement operation, don't skip
                     continue
                 if osd_id not in osd_uuid_map:
-                    self.log.debug('osd id %d does not exist in cluster' % osd_id)
+                    self.log.debug('osd id {} does not exist in cluster'.format(osd_id))
                     continue
-                if osd_uuid_map[osd_id] != osd['tags']['ceph.osd_fsid']:
+                if osd_uuid_map.get(osd_id) != osd['tags']['ceph.osd_fsid']:
                     self.log.debug('mismatched osd uuid (cluster has %s, osd '
                                    'has %s)' % (
-                                       osd_uuid_map[osd_id],
+                                       osd_uuid_map.get(osd_id),
                                        osd['tags']['ceph.osd_fsid']))
                     continue
 
@@ -2360,7 +2369,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if daemon_type == 'osd':
                 if not osd_uuid_map:
                     osd_uuid_map = self.get_osd_uuid_map()
-                osd_uuid = osd_uuid_map.get(daemon_id, None)
+                osd_uuid = osd_uuid_map.get(daemon_id)
                 if not osd_uuid:
                     raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
                 extra_args.extend(['--osd-fsid', osd_uuid])
