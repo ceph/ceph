@@ -144,7 +144,7 @@ class Device(object):
             self.disk_api = dev
             device_type = dev.get('TYPE', '')
             # always check is this is an lvm member
-            if device_type in ['part', 'disk']:
+            if device_type in ['part', 'disk', 'crypt']:
                 self._set_lvm_membership()
 
         self.ceph_disk = CephDiskDevice(self)
@@ -345,7 +345,8 @@ class Device(object):
         if self.disk_api:
             is_device = self.disk_api['TYPE'] == 'device'
             is_disk = self.disk_api['TYPE'] == 'disk'
-            if is_device or is_disk:
+            is_crypt = self.disk_api['TYPE'] == 'crypt'
+            if is_device or is_disk or is_crypt:
                 return True
         return False
 

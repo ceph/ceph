@@ -330,7 +330,7 @@ def is_device(dev):
     # use lsblk first, fall back to using stat
     TYPE = lsblk(dev).get('TYPE')
     if TYPE:
-        return TYPE == 'disk'
+        return TYPE == 'disk' or TYPE == 'crypt'
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
@@ -747,7 +747,7 @@ def get_devices(_sys_block_path='/sys/block'):
     for block in block_devs:
         devname = os.path.basename(block[0])
         diskname = block[1]
-        if block[2] != 'disk':
+        if block[2] != 'disk' and block[2] != 'crypt':
             continue
         sysdir = os.path.join(_sys_block_path, devname)
         metadata = {}
