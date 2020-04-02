@@ -2836,7 +2836,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         return cephadm_config, deps
 
-    @trivial_completion
     def add_nfs(self, spec):
         return self._add_daemon('nfs', spec, self._create_nfs, self._config_nfs)
 
