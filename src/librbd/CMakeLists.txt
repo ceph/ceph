@@ -193,9 +193,9 @@ target_link_libraries(rbd_internal PRIVATE
   osdc)
 
 if(WITH_RBD_RWL)
-  target_link_libraries(rbd_internal PRIVATE
-    pmem::pmemobj
-    pmem::pmem)
+  target_link_libraries(rbd_internal
+    PUBLIC pmem::pmemobj
+    PRIVATE pmem::pmem)
 endif()
 
 add_library(librbd ${CEPH_SHARED}
