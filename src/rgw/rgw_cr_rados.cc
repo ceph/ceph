@@ -602,7 +602,7 @@ RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(rgw::sal::RGWRadosStore *store,
     start_marker(BucketIndexShardsManager::get_shard_marker(start_marker)),
     end_marker(BucketIndexShardsManager::get_shard_marker(end_marker))
 {
-  bs.init(bucket_info, shard_id);
+  bs.init(bucket_info, bucket_info.layout.current_index, shard_id);
 }
 
 int RGWRadosBILogTrimCR::send_request()

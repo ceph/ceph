@@ -115,7 +115,8 @@ public:
                               int *shard_id);
 
   int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
-                              int shard_id, uint64_t gen_id,
+                              int shard_id,
+                              const rgw::bucket_index_layout_generation& idx_layout,
                               RGWSI_RADOS::Obj *bucket_obj);
 
   int open_bucket_index(const RGWBucketInfo& bucket_info,
