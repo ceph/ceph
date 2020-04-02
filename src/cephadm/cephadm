@@ -2342,7 +2342,7 @@ def command_bootstrap():
             except Exception as e:
                 logger.debug('tell mgr mgr_status failed: %s' % e)
                 return False
-        is_available('Mgr epoch %d' % epoch, mgr_has_latest_epoch)
+        is_available('mgr epoch %d' % epoch, mgr_has_latest_epoch)
 
     # ssh
     if not args.skip_ssh:
