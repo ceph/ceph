@@ -16,6 +16,7 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Trash.h"
+#include "librbd/deep_copy/Handler.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/image/PreRemoveRequest.h"
@@ -679,9 +680,10 @@ int Image<I>::deep_copy(I *src, I *dest, bool flatten,
 
   C_SaferCond cond;
   SnapSeqs snap_seqs;
-  auto req = DeepCopyRequest<I>::create(src, dest, snap_id_start, snap_id_end,
-                                        0U, flatten, boost::none, op_work_queue,
-                                        &snap_seqs, &prog_ctx, &cond);
+  deep_copy::ProgressHandler progress_handler{&prog_ctx};
+  auto req = DeepCopyRequest<I>::create(
+    src, dest, snap_id_start, snap_id_end, 0U, flatten, boost::none, op_work_queue,
+    &snap_seqs, &progress_handler, &cond);
   req->send();
   int r = cond.wait();
   if (r < 0) {
