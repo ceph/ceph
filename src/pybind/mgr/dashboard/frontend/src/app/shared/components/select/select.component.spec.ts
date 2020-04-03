@@ -258,7 +258,7 @@ describe('SelectComponent', () => {
     });
   });
 
-  describe('if the selection limit is reached', function() {
+  describe('if the selection limit is reached', function () {
     beforeEach(() => {
       component.selectionLimit = 2;
       component.triggerSelection(component.options[0]);

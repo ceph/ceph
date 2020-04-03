@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import * as _ from 'lodash';
@@ -89,6 +90,7 @@ describe('OsdListComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       PerformanceCounterModule,
       TabsModule.forRoot(),
