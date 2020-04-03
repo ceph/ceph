@@ -159,13 +159,13 @@ Manipulating an object's content
 
 1. Make sure that the target OSD is down::
    
-   systemctl status ceph-osd@$OSD_NUMBER
+    systemctl status ceph-osd@$OSD_NUMBER
 
 2. Find the object by listing the objects of the OSD or placement group.
 
 3. Before setting the bytes on the object, make a backup and a working copy of the object. Here is the syntactic form of that command::
-
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-bytes > $OBJECT_FILE_NAME
+   
+    ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-bytes > $OBJECT_FILE_NAME
 
 For example::
 
@@ -178,8 +178,8 @@ The first command creates the back-up copy, and the second command creates the w
 4. Edit the working copy object file.
 
 5. Set the bytes of the object::
-
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT set-bytes < $OBJECT_FILE_NAME
+     
+     ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT set-bytes < $OBJECT_FILE_NAME
 
 For example::
 
@@ -291,8 +291,8 @@ Procedure
     Get the object map key:
 
     Syntax::
-
-    ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-omap $KEY > $OBJECT_MAP_FILE_NAME
+     
+       ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-omap $KEY > $OBJECT_MAP_FILE_NAME
 
    Example::
 
