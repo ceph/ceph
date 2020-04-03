@@ -193,55 +193,15 @@ class CephFSMount(object):
         return six.ensure_str(p.stdout.getvalue().strip())
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
-                  cwd=None, omit_sudo=True):
-        args = args.split() if isinstance(args, str) else args
-        if not cwd:
-            cwd = self.mountpoint
-
-        return self.client_remote.run(args=args, stdin=stdin, wait=wait,
-                                      stdout=BytesIO(), stderr=BytesIO(),
-                                      cwd=cwd, check_status=check_status)
-
-    def run_as_user(self, args, user, wait=True, stdin=None,
-                    check_status=True, cwd=None):
+                  omit_sudo=True):
         if isinstance(args, str):
-            args = 'sudo -u %s -s /bin/bash -c %s' % (user, args)
-        elif isinstance(args, list):
-            cmdlist = args
-            cmd = ''
-            for i in cmdlist:
-                cmd = cmd + i + ' '
-            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c']
-            args.append(cmd)
-        if not cwd:
-            cwd = self.mountpoint
+            args = args.split()
 
-        return self.client_remote.run(args=args, wait=wait, stdin=stdin,
-                                      stdout=BytesIO(), stderr=BytesIO(),
-                                      check_status=check_status, cwd=cwd)
-
-    def run_as_root(self, args, wait=True, stdin=None, check_status=True,
-                    cwd=None):
-        if isinstance(args, str):
-            args = 'sudo ' + args
-        if isinstance(args, list):
-            args.insert(0, 'sudo')
-        if not cwd:
-            cwd = self.mountpoint
-
-        return self.client_remote.run(args=args, wait=wait, stdin=stdin,
-                                      stdout=BytesIO(), stderr=BytesIO(),
-                                      check_status=check_status, cwd=cwd)
-
-    def testcmd(self, args, wait=True, stdin=None, cwd=None, omit_sudo=True):
-        return self.run_shell(args=args, wait=wait, stdin=stdin, cwd=cwd)
-
-    def testcmd_as_user(self, args, user, wait=True, stdin=None, cwd=None):
-        return self.run_as_user(args=args, user=user, wait=wait, stdin=stdin,
-                                cwd=cwd)
-
-    def testcmd_as_root(self, args, wait=True, stdin=None, cwd=None):
-        return self.run_as_root(args=args, wait=wait, stdin=stdin, cwd=cwd)
+        args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
+        return self.client_remote.run(args=args, stdout=BytesIO(),
+                                      stderr=BytesIO(), wait=wait,
+                                      stdin=stdin, check_status=check_status,
+                                      omit_sudo=omit_sudo)
 
     def open_no_data(self, basename):
         """
