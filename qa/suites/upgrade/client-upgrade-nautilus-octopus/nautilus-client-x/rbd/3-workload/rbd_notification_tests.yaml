@@ -1,0 +1,33 @@
+tasks:
+- parallel:
+  - workunit:
+      branch: nautilus
+      clients:
+        client.0:
+          - rbd/notify_master.sh
+      env:
+        RBD_FEATURES: "61"
+  - workunit:
+      branch: octopus
+      clients:
+        client.1:
+          - rbd/notify_slave.sh
+      env:
+        RBD_FEATURES: "61"
+- print: "**** done rbd: old librbd -> new librbd"
+- parallel:
+  - workunit:
+      branch: nautilus
+      clients:
+        client.0:
+          - rbd/notify_slave.sh
+      env:
+        RBD_FEATURES: "61"
+  - workunit:
+      branch: octopus
+      clients:
+        client.1:
+          - rbd/notify_master.sh
+      env:
+        RBD_FEATURES: "61"
+- print: "**** done rbd: new librbd -> old librbd"
