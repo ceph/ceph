@@ -4,6 +4,7 @@ Copyright (C) 2019 SUSE
 LGPL2.1.  See file COPYING.
 """
 import errno
+import json
 import sqlite3
 from .fs.schedule import SnapSchedClient, Schedule
 from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand
@@ -26,7 +27,7 @@ class Module(MgrModule):
         rc, subvol_path, err = self.remote('fs', 'subvolume', 'getpath',
                                            fs, subvol)
         if rc != 0:
-            # TODO custom exception
+            # TODO custom exception?
             raise Exception(f'Could not resolve {path} in {fs}, {subvol}')
         return subvol_path + path
 
@@ -47,35 +48,37 @@ class Module(MgrModule):
         self._initialized.wait()
         return -errno.EINVAL, "", "Unknown command"
 
-    @CLIReadCommand('fs snap-schedule dump',
+    @CLIReadCommand('fs snap-schedule status',
                     'name=path,type=CephString,req=false '
                     'name=subvol,type=CephString,req=false '
                     'name=fs,type=CephString,req=false',
                     'List current snapshot schedules')
-    def snap_schedule_dump(self, path='/', subvol=None, fs=None):
+    def snap_schedule_get(self, path='/', subvol=None, fs=None):
         use_fs = fs if fs else self.default_fs
         try:
-            ret_scheds = self.client.dump_snap_schedule(use_fs, path)
+            ret_scheds = self.client.get_snap_schedules(use_fs, path)
         except CephfsConnectionException as e:
             return e.to_tuple()
-        return 0, ' '.join(str(ret_scheds)), ''
+        return 0, '\n===\n'.join([ret_sched.report() for ret_sched in ret_scheds]), ''
 
     @CLIReadCommand('fs snap-schedule list',
                     'name=path,type=CephString '
+                    'name=recursive,type=CephString,req=false '
                     'name=subvol,type=CephString,req=false '
                     'name=fs,type=CephString,req=false',
                     'Get current snapshot schedule for <path>')
-    def snap_schedule_list(self, path, subvol=None, fs=None):
+    def snap_schedule_list(self, path, subvol=None, recursive=False, fs=None):
         try:
             use_fs = fs if fs else self.default_fs
-            scheds = self.client.list_snap_schedules(use_fs, path)
+            scheds = self.client.list_snap_schedules(use_fs, path, recursive)
+            self.log.debug(f'recursive is {recursive}')
         except CephfsConnectionException as e:
             return e.to_tuple()
         if not scheds:
-            return -1, '', f'SnapSchedule for {path} not found'
-        return 0, str([str(sched) for sched in scheds]), ''
+            return errno.ENOENT, '', f'SnapSchedule for {path} not found'
+        return 0, json.dumps([[sched[1], sched[2]] for sched in scheds]), ''
 
-    @CLIWriteCommand('fs snap-schedule set',
+    @CLIWriteCommand('fs snap-schedule add',
                      'name=path,type=CephString '
                      'name=snap-schedule,type=CephString '
                      'name=retention-policy,type=CephString,req=false '
@@ -83,11 +86,11 @@ class Module(MgrModule):
                      'name=fs,type=CephString,req=false '
                      'name=subvol,type=CephString,req=false',
                      'Set a snapshot schedule for <path>')
-    def snap_schedule_set(self,
+    def snap_schedule_add(self,
                           path,
                           snap_schedule,
                           retention_policy='',
-                          start='00:00',
+                          start=None,
                           fs=None,
                           subvol=None):
         try:
@@ -95,30 +98,37 @@ class Module(MgrModule):
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
             sched = Schedule(abs_path, snap_schedule, retention_policy,
                              start, use_fs, subvol, path)
-            # TODO allow schedules on non-existent paths?
-            # self.client.validate_schedule(fs, sched)
             self.client.store_snap_schedule(use_fs, sched)
             suc_msg = f'Schedule set for path {path}'
         except sqlite3.IntegrityError:
-            existing_sched = self.client.list_snap_schedule(use_fs, path)
-            error_msg = f'Found existing schedule {existing_sched}'
+            existing_scheds = self.client.get_snap_schedules(use_fs, path)
+            report = [s.report() for s in existing_scheds]
+            error_msg = f'Found existing schedule {report}'
             self.log.error(error_msg)
-            return 1, '', error_msg
+            return errno.EEXISTS, '', error_msg
         except CephfsConnectionException as e:
             return e.to_tuple()
         return 0, suc_msg, ''
 
     @CLIWriteCommand('fs snap-schedule remove',
                      'name=path,type=CephString '
+                     'name=repeat,type=CephString,req=false '
+                     'name=start,type=CephString,req=false '
                      'name=subvol,type=CephString,req=false '
                      'name=fs,type=CephString,req=false',
                      'Remove a snapshot schedule for <path>')
-    def snap_schedule_rm(self, path, subvol=None, fs=None):
+    def snap_schedule_rm(self,
+                         path,
+                         repeat=None,
+                         start=None,
+                         subvol=None,
+                         fs=None):
         try:
             use_fs = fs if fs else self.default_fs
-            self.client.rm_snap_schedule(use_fs, path)
+            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            self.client.rm_snap_schedule(use_fs, abs_path, repeat, start)
         except CephfsConnectionException as e:
             return e.to_tuple()
-        except ObjectNotFound as e:
-            return e.errno, '', 'SnapSchedule for {} not found'.format(path)
+        except ValueError as e:
+            return errno.ENOENT, '', str(e)
         return 0, 'Schedule removed for path {}'.format(path), ''
