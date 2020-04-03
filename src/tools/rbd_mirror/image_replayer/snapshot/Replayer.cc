@@ -45,6 +45,10 @@ namespace snapshot {
 
 namespace {
 
+double round_to_two_places(double value) {
+  return abs(round(value * 100) / 100);
+}
+
 template<typename I>
 std::pair<uint64_t, librbd::SnapInfo*> get_newest_mirror_snapshot(
     I* image_ctx) {
@@ -105,6 +109,7 @@ struct Replayer<I>::DeepCopyHandler : public librbd::deep_copy::Handler {
   }
 
   void handle_read(uint64_t bytes_read) override {
+    replayer->handle_copy_image_read(bytes_read);
   }
 
   int update_progress(uint64_t object_number, uint64_t object_count) override {
@@ -270,6 +275,26 @@ bool Replayer<I>::get_replay_status(std::string* description,
     root_obj["syncing_percent"] = static_cast<uint64_t>(
         100 * m_local_mirror_snap_ns.last_copied_object_number /
         static_cast<float>(std::max<uint64_t>(1U, m_local_object_count)));
+  }
+
+  m_bytes_per_second(0);
+  auto bytes_per_second = m_bytes_per_second.get_average();
+  root_obj["bytes_per_second"] = round_to_two_places(bytes_per_second);
+
+  auto bytes_per_snapshot = boost::accumulators::rolling_mean(
+    m_bytes_per_snapshot);
+  root_obj["bytes_per_snapshot"] = round_to_two_places(bytes_per_snapshot);
+
+  auto pending_bytes = bytes_per_snapshot * m_pending_snapshots;
+  if (bytes_per_second > 0 && m_pending_snapshots > 0) {
+    auto seconds_until_synced = round_to_two_places(
+      pending_bytes / bytes_per_second);
+    if (seconds_until_synced >= std::numeric_limits<uint64_t>::max()) {
+      seconds_until_synced = std::numeric_limits<uint64_t>::max();
+    }
+
+    root_obj["seconds_until_synced"] = static_cast<uint64_t>(
+      seconds_until_synced);
   }
 
   *description = json_spirit::write(
@@ -474,6 +499,8 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     std::unique_lock<ceph::mutex>* locker) {
   dout(10) << dendl;
 
+  m_pending_snapshots = 0;
+
   bool split_brain = false;
   bool remote_demoted = false;
   auto remote_image_ctx = m_state_builder->remote_image_ctx;
@@ -559,9 +586,14 @@ void Replayer<I>::scan_remote_mirror_snapshots(
       continue;
     }
 
+    // found candidate snapshot to sync
+    ++m_pending_snapshots;
+    if (m_remote_snap_id_end != CEPH_NOSNAP) {
+      continue;
+    }
+
     m_remote_snap_id_end = remote_snap_id;
     m_remote_mirror_snap_ns = *mirror_ns;
-    break;
   }
   image_locker.unlock();
 
@@ -791,6 +823,7 @@ void Replayer<I>::copy_image() {
            << m_local_mirror_snap_ns.last_copied_object_number << ", "
            << "snap_seqs=" << m_local_mirror_snap_ns.snap_seqs << dendl;
 
+  m_snapshot_bytes = 0;
   m_deep_copy_handler = new DeepCopyHandler(this);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_image>(this);
@@ -819,6 +852,12 @@ void Replayer<I>::handle_copy_image(int r) {
     return;
   }
 
+  {
+    std::unique_lock locker{m_lock};
+    m_bytes_per_snapshot(m_snapshot_bytes);
+    m_snapshot_bytes = 0;
+  }
+
   apply_image_state();
 }
 
@@ -834,6 +873,15 @@ void Replayer<I>::handle_copy_image_progress(uint64_t object_number,
   m_local_object_count = object_count;
 
   update_non_primary_snapshot(false);
+}
+
+template <typename I>
+void Replayer<I>::handle_copy_image_read(uint64_t bytes_read) {
+  dout(20) << "bytes_read=" << bytes_read << dendl;
+
+  std::unique_lock locker{m_lock};
+  m_bytes_per_second(bytes_read);
+  m_snapshot_bytes += bytes_read;
 }
 
 template <typename I>
