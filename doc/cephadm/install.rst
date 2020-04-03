@@ -150,12 +150,12 @@ To add each new host to the cluster, perform two steps:
 #. Install the cluster's public SSH key in the new host's root user's
    ``authorized_keys`` file::
 
-     # ssh-copy-id -f -i ceph.pub root@*<new-host>*
+     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@*<new-host>*
 
    For example::
 
-     # ssh-copy-id -f -i ceph.pub root@host2
-     # ssh-copy-id -f -i ceph.pub root@host3
+     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@host2
+     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@host3
 
 #. Tell Ceph that the new node is part of the cluster::
 
