@@ -171,7 +171,7 @@ def configure(ctx, config, hadoops):
         hadoop_dir = "{tdir}/hadoop/".format(tdir=testdir)
         masters = ctx.cluster.only(is_hadoop_type('master'))
         assert len(masters.remotes) == 1
-        master = masters.remotes.keys()[0]
+        master = next(iter(masters.remotes.keys()))
         master.run(
             args = [
                 hadoop_dir + "bin/hadoop",
@@ -340,7 +340,7 @@ def start_hadoop(ctx, config):
     hadoop_dir = "{tdir}/hadoop/".format(tdir=testdir)
     masters = ctx.cluster.only(is_hadoop_type('master'))
     assert len(masters.remotes) == 1
-    master = masters.remotes.keys()[0]
+    master = next(iter(masters.remotes.keys()))
 
     log.info("Stopping Hadoop daemons")
     master.run(

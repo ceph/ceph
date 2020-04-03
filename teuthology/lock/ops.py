@@ -143,7 +143,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                             p.spawn(teuthology.provision.reimage, ctx,
                                     machine, machine_type)
                             reimaged[machine] = machines[machine]
-                reimaged = do_update_keys(reimaged.keys())[1]
+                reimaged = do_update_keys(list(reimaged.keys()))[1]
                 update_nodes(reimaged)
                 return reimaged
             return machines
