@@ -373,7 +373,7 @@ class TestStrays(CephFSTestCase):
         self.fs.mds_asok(['flush', 'journal'])
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # Unlink file_a
         self.mount_a.run_shell(["rm", "-f", "dir_1/file_a"])
@@ -628,7 +628,7 @@ class TestStrays(CephFSTestCase):
         rank_0_id = active_mds_names[0]
         rank_1_id = active_mds_names[1]
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
         self.mount_a.umount_wait()
@@ -772,7 +772,7 @@ class TestStrays(CephFSTestCase):
         # zero, but there's actually still a stray, so at the very
         # least the StrayManager stats code is slightly off
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # See that the data from the snapshotted revision of the file is still present
         # and correct
@@ -873,8 +873,7 @@ class TestStrays(CephFSTestCase):
         # remount+flush (release client caps)
         self.mount_a.umount_wait()
         self.fs.mds_asok(["flush", "journal"], mds_id)
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # Create 50% more files than the current fragment limit
         self.mount_a.run_python(dedent("""

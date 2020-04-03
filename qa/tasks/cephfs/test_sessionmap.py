@@ -62,8 +62,7 @@ class TestSessionMap(CephFSTestCase):
 
         status = self.fs.status()
         s = self._get_connection_count(status=status)
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.assertGreater(self._get_connection_count(status=status), s)
         self.mount_a.umount_wait()
         e = self._get_connection_count(status=status)
@@ -85,8 +84,8 @@ class TestSessionMap(CephFSTestCase):
         status = self.fs.wait_for_daemons()
 
         # Bring the clients back
-        self.mount_a.mount()
-        self.mount_b.mount()
+        self.mount_a.mount_wait()
+        self.mount_b.mount_wait()
 
         # See that they've got sessions
         self.assert_session_count(2, mds_id=self.fs.get_rank(status=status)['name'])
@@ -178,8 +177,7 @@ class TestSessionMap(CephFSTestCase):
         # Configure a client that is limited to /foo/bar
         self._configure_auth(self.mount_b, "badguy", "allow rw path=/foo/bar")
         # Check he can mount that dir and do IO
-        self.mount_b.mount(mount_path="/foo/bar")
-        self.mount_b.wait_until_mounted()
+        self.mount_b.mount_wait(mount_path="/foo/bar")
         self.mount_b.create_destroy()
         self.mount_b.umount_wait()
 
@@ -225,5 +223,4 @@ class TestSessionMap(CephFSTestCase):
         self.assert_session_count(1, mds_id=self.fs.get_rank(rank=1, status=status)['name'])
 
         self.mount_a.kill_cleanup()
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
