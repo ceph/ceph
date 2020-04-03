@@ -11,6 +11,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
@@ -96,10 +97,10 @@ struct Replayer<I>::C_TrackedOp : public Context {
 };
 
 template <typename I>
-struct Replayer<I>::ProgressContext : public librbd::ProgressContext {
+struct Replayer<I>::DeepCopyHandler : public librbd::deep_copy::Handler {
   Replayer *replayer;
 
-  ProgressContext(Replayer* replayer) : replayer(replayer) {
+  DeepCopyHandler(Replayer* replayer) : replayer(replayer) {
   }
 
   int update_progress(uint64_t object_number, uint64_t object_count) override {
@@ -132,7 +133,7 @@ Replayer<I>::~Replayer() {
   dout(10) << dendl;
   ceph_assert(m_state == STATE_COMPLETE);
   ceph_assert(m_update_watch_ctx == nullptr);
-  ceph_assert(m_progress_ctx == nullptr);
+  ceph_assert(m_deep_copy_handler == nullptr);
 }
 
 template <typename I>
@@ -791,7 +792,7 @@ void Replayer<I>::copy_image() {
            << m_local_mirror_snap_ns.last_copied_object_number << ", "
            << "snap_seqs=" << m_local_mirror_snap_ns.snap_seqs << dendl;
 
-  m_progress_ctx = new ProgressContext(this);
+  m_deep_copy_handler = new DeepCopyHandler(this);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_image>(this);
   auto req = librbd::deep_copy::ImageCopyRequest<I>::create(
@@ -801,7 +802,7 @@ void Replayer<I>::copy_image() {
       librbd::deep_copy::ObjectNumber{
         m_local_mirror_snap_ns.last_copied_object_number} :
       librbd::deep_copy::ObjectNumber{}),
-    m_local_mirror_snap_ns.snap_seqs, m_progress_ctx, ctx);
+    m_local_mirror_snap_ns.snap_seqs, m_deep_copy_handler, ctx);
   req->send();
 }
 
@@ -809,8 +810,8 @@ template <typename I>
 void Replayer<I>::handle_copy_image(int r) {
   dout(10) << "r=" << r << dendl;
 
-  delete m_progress_ctx;
-  m_progress_ctx = nullptr;
+  delete m_deep_copy_handler;
+  m_deep_copy_handler = nullptr;
 
   if (r < 0) {
     derr << "failed to copy remote image to local image: " << cpp_strerror(r)
