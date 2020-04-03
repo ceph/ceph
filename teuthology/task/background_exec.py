@@ -73,4 +73,4 @@ def task(ctx, config):
         for name, task in tasks.items():
             log.info('Stopping background command on %s', name)
             task.stdin.close()
-        run.wait(tasks.itervalues())
+        run.wait(tasks.values())
