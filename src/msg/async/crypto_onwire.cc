@@ -69,11 +69,6 @@ public:
     ::ceph::crypto::zeroize_for_security(&initial_nonce, sizeof(initial_nonce));
   }
 
-  std::uint32_t calculate_segment_size(std::uint32_t size) override
-  {
-    return size;
-  }
-
   void reset_tx_handler(const uint32_t* first, const uint32_t* last) override;
 
   void authenticated_encrypt_update(const ceph::bufferlist& plaintext) override;
