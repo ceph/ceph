@@ -95,6 +95,7 @@ void AES128GCM_OnWireTxHandler::reset_tx_handler(const uint32_t* first,
     throw std::runtime_error("EVP_EncryptInit_ex failed");
   }
 
+  ceph_assert(buffer.get_append_buffer_unused_tail_length() == 0);
   buffer.reserve(std::accumulate(first, last, AESGCM_TAG_LEN));
 
   nonce.random_seq = nonce.random_seq + 1;
@@ -103,6 +104,8 @@ void AES128GCM_OnWireTxHandler::reset_tx_handler(const uint32_t* first,
 void AES128GCM_OnWireTxHandler::authenticated_encrypt_update(
   const ceph::bufferlist& plaintext)
 {
+  ceph_assert(buffer.get_append_buffer_unused_tail_length() >=
+              plaintext.length());
   auto filler = buffer.append_hole(plaintext.length());
 
   for (const auto& plainbuf : plaintext.buffers()) {
@@ -129,6 +132,8 @@ void AES128GCM_OnWireTxHandler::authenticated_encrypt_update(
 ceph::bufferlist AES128GCM_OnWireTxHandler::authenticated_encrypt_final()
 {
   int final_len = 0;
+  ceph_assert(buffer.get_append_buffer_unused_tail_length() ==
+              AESGCM_BLOCK_LEN);
   auto filler = buffer.append_hole(AESGCM_BLOCK_LEN);
   if(1 != EVP_EncryptFinal_ex(ectx.get(),
 	reinterpret_cast<unsigned char*>(filler.c_str()),
