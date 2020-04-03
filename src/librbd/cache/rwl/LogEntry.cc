@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include "LogEntry.h"
+#include "librbd/cache/ImageWriteback.h"
 
 #define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
@@ -46,6 +47,13 @@ std::ostream &operator<<(std::ostream &os,
   return entry.format(os);
 }
 
+bool GenericWriteLogEntry::can_writeback() {
+  return (this->completed &&
+          (ram_entry.sequenced ||
+           (sync_point_entry &&
+            sync_point_entry->completed)));
+}
+
 std::ostream& GenericWriteLogEntry::format(std::ostream &os) const {
   GenericLogEntry::format(os);
   os << ", "
@@ -56,9 +64,7 @@ std::ostream& GenericWriteLogEntry::format(std::ostream &os) const {
     os << "nullptr";
   }
   os << "], "
-     << "referring_map_entries=" << referring_map_entries << ", "
-     << "flushing=" << flushing << ", "
-     << "flushed=" << flushed;
+     << "referring_map_entries=" << referring_map_entries;
   return os;
 };
 
@@ -128,6 +134,17 @@ void WriteLogEntry::copy_pmem_bl(bufferlist *out_bl) {
   buffer::ptr cloned_bp(pmem_bp.clone());
   out_bl->clear();
   this->init_bl(cloned_bp, *out_bl);
+}
+
+void WriteLogEntry::writeback(librbd::cache::ImageWritebackInterface &image_writeback,
+                              Context *ctx) {
+  /* Pass a copy of the pmem buffer to ImageWriteback (which may hang on to the bl even after flush()). */
+  bufferlist entry_bl;
+  buffer::list entry_bl_copy;
+  copy_pmem_bl(&entry_bl_copy);
+  entry_bl_copy.begin(0).copy(write_bytes(), entry_bl);
+  image_writeback.aio_write({{ram_entry.image_offset_bytes, ram_entry.write_bytes}},
+                            std::move(entry_bl), 0, ctx);
 }
 
 std::ostream& WriteLogEntry::format(std::ostream &os) const {
