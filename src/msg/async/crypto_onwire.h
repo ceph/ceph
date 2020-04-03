@@ -67,8 +67,17 @@ struct TxHandler {
   // It's undefined what will happen if client doesn't follow the order.
   //
   // TODO: switch to always_aligned_t
-  virtual void reset_tx_handler(
-    std::initializer_list<std::uint32_t> update_size_sequence) = 0;
+  virtual void reset_tx_handler(const uint32_t* first,
+                                const uint32_t* last) = 0;
+
+  void reset_tx_handler(std::initializer_list<uint32_t> update_size_sequence) {
+    if (update_size_sequence.size() > 0) {
+      const uint32_t* first = &*update_size_sequence.begin();
+      reset_tx_handler(first, first + update_size_sequence.size());
+    } else {
+      reset_tx_handler(nullptr, nullptr);
+    }
+  }
 
   // Perform encryption. Client gives full ownership right to provided
   // bufferlist. The method MUST NOT be called after _final() if there

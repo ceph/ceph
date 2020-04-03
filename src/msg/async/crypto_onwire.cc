@@ -74,15 +74,14 @@ public:
     return size;
   }
 
-  void reset_tx_handler(
-    std::initializer_list<std::uint32_t> update_size_sequence) override;
+  void reset_tx_handler(const uint32_t* first, const uint32_t* last) override;
 
   void authenticated_encrypt_update(const ceph::bufferlist& plaintext) override;
   ceph::bufferlist authenticated_encrypt_final() override;
 };
 
-void AES128GCM_OnWireTxHandler::reset_tx_handler(
-  std::initializer_list<std::uint32_t> update_size_sequence)
+void AES128GCM_OnWireTxHandler::reset_tx_handler(const uint32_t* first,
+                                                 const uint32_t* last)
 {
   if (nonce == initial_nonce) {
     if (used_initial_nonce) {
@@ -96,8 +95,7 @@ void AES128GCM_OnWireTxHandler::reset_tx_handler(
     throw std::runtime_error("EVP_EncryptInit_ex failed");
   }
 
-  buffer.reserve(std::accumulate(std::begin(update_size_sequence),
-    std::end(update_size_sequence), AESGCM_TAG_LEN));
+  buffer.reserve(std::accumulate(first, last, AESGCM_TAG_LEN));
 
   nonce.random_seq = nonce.random_seq + 1;
 }
