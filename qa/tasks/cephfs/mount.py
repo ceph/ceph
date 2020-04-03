@@ -62,6 +62,11 @@ class CephFSMount(object):
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         raise NotImplementedError()
 
+    def mount_wait(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
+        self.mount(mount_path=mount_path, mount_fs_name=mount_fs_name, mountpoint=mountpoint,
+                   mount_options=mount_options)
+        self.wait_until_mounted()
+
     def umount(self):
         raise NotImplementedError()
 

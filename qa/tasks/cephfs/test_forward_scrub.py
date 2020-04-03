@@ -136,7 +136,7 @@ class TestForwardScrub(CephFSTestCase):
         # Create a new inode that's just in the log, i.e. would
         # look orphaned to backward scan if backward scan wisnae
         # respectin' tha scrub_tag xattr.
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["mkdir", "parent/unflushed"])
         self.mount_a.run_shell(["dd", "if=/dev/urandom",
                                 "of=./parent/unflushed/jfile",
@@ -159,7 +159,7 @@ class TestForwardScrub(CephFSTestCase):
         self.fs.wait_for_daemons()
 
         # See that the orphaned file is indeed missing from a client's POV
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         damaged_state = self._get_paths_to_ino()
         self.assertNotIn("./parent/flushed/bravo", damaged_state)
         self.mount_a.umount_wait()
@@ -196,7 +196,7 @@ class TestForwardScrub(CephFSTestCase):
         # and no lost+found, and no extra inodes!
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self._validate_linkage(inos)
 
     def _stash_inotable(self):
@@ -222,7 +222,7 @@ class TestForwardScrub(CephFSTestCase):
 
         inotable_copy = self._stash_inotable()
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         self.mount_a.write_n_mb("file2_sixmegs", 6)
         self.mount_a.write_n_mb("file3_sixmegs", 6)
