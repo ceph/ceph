@@ -1,8 +1,4 @@
 function(do_build_dpdk dpdk_dir)
-  find_program(MAKE_EXECUTABLE NAMES gmake make)
-  if(NOT MAKE_EXECUTABLE)
-    message(FATAL_ERROR "Can't find make")
-  endif()
   # mk/machine/native/rte.vars.mk
   # rte_cflags are extracted from mk/machine/${machine}/rte.vars.mk
   # only 3 of them have -march=<arch> defined, so copying them here.
@@ -62,6 +58,8 @@ function(do_build_dpdk dpdk_dir)
 
   set(target "${arch}-${machine_tmpl}-${execenv}-${toolchain}")
 
+  include(FindMake)
+  find_make("MAKE_EXECUTABLE" "make_cmd")
   execute_process(
     COMMAND ${MAKE_EXECUTABLE} showconfigs
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
@@ -73,13 +71,6 @@ function(do_build_dpdk dpdk_dir)
     message(FATAL_ERROR "not able to build DPDK support: "
       "unsupported target. "
       "\"${target}\" not listed in ${supported_targets}")
-  endif()
-
-  if(CMAKE_MAKE_PROGRAM MATCHES "make")
-    # try to inherit command line arguments passed by parent "make" job
-    set(make_cmd "$(MAKE)")
-  else()
-    set(make_cmd "${MAKE_EXECUTABLE}")
   endif()
 
   if(Seastar_DPDK AND WITH_SPDK)
