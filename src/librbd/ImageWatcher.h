@@ -18,18 +18,11 @@ class entity_name_t;
 
 namespace librbd {
 
-namespace watcher {
-namespace util {
-template <typename> struct HandlePayloadVisitor;
-}
-}
-
 class ImageCtx;
 template <typename> class TaskFinisher;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageWatcher : public Watcher {
-  friend struct watcher::util::HandlePayloadVisitor<ImageWatcher<ImageCtxT>>;
 
 public:
   ImageWatcher(ImageCtxT& image_ctx);
@@ -182,14 +175,13 @@ private:
   void handle_request_lock(int r);
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
 
-  void notify_lock_owner(const watch_notify::Payload& payload,
-                         Context *on_finish);
+  void notify_lock_owner(watch_notify::Payload *payload, Context *on_finish);
 
   Context *remove_async_request(const watch_notify::AsyncRequestId &id);
   void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void notify_async_request(const watch_notify::AsyncRequestId &id,
-                            const watch_notify::Payload &payload,
+                            watch_notify::Payload *payload,
                             ProgressContext& prog_ctx,
                             Context *on_finish);
 
@@ -245,15 +237,14 @@ private:
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
   void process_payload(uint64_t notify_id, uint64_t handle,
-                       const watch_notify::Payload &payload);
+                       watch_notify::Payload *payload);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;
   void handle_error(uint64_t cookie, int err) override;
   void handle_rewatch_complete(int r) override;
 
-  void send_notify(const watch_notify::Payload& payload,
-                   Context *ctx = nullptr);
+  void send_notify(watch_notify::Payload *payload, Context *ctx = nullptr);
 
 };
 
