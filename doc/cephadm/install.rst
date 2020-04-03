@@ -123,7 +123,7 @@ command.  There are several ways to do this:
 
 * It may be helpful to create an alias::
 
-    # alias ceph='cephadm shell --'
+    # alias ceph='cephadm shell -- ceph'
 
 * You can install the ``ceph-common`` package, which contains all of the
   ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
