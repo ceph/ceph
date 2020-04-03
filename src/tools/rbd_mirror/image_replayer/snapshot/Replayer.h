@@ -9,6 +9,10 @@
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/mirror/snapshot/Types.h"
+#include "tools/rbd_mirror/image_replayer/TimeRollingMean.h"
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/rolling_mean.hpp>
 #include <string>
 #include <type_traits>
 
@@ -222,6 +226,16 @@ private:
   librbd::mirror::snapshot::ImageState m_image_state;
   DeepCopyHandler* m_deep_copy_handler = nullptr;
 
+  TimeRollingMean m_bytes_per_second;
+
+  uint64_t m_snapshot_bytes = 0;
+  boost::accumulators::accumulator_set<
+    uint64_t, boost::accumulators::stats<
+      boost::accumulators::tag::rolling_mean>> m_bytes_per_snapshot{
+    boost::accumulators::tag::rolling_window::window_size = 2};
+
+  uint32_t m_pending_snapshots = 0;
+
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
   bool m_sync_in_progress = false;
@@ -257,6 +271,7 @@ private:
   void handle_copy_image(int r);
   void handle_copy_image_progress(uint64_t object_number,
                                   uint64_t object_count);
+  void handle_copy_image_read(uint64_t bytes_read);
 
   void apply_image_state();
   void handle_apply_image_state(int r);
