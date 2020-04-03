@@ -20,6 +20,7 @@
 #include <map>
 #include <vector>
 
+#undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::ReplicatedWriteLog: " << this << " " \
