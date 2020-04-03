@@ -162,9 +162,9 @@ int ImageCopyRequest<I>::send_next_object_copy() {
     [this, ono](int r) {
       handle_object_copy(ono, r);
     });
-  ObjectCopyRequest<I> *req = ObjectCopyRequest<I>::create(
+  auto req = ObjectCopyRequest<I>::create(
     m_src_image_ctx, m_dst_image_ctx, m_src_snap_id_start, m_dst_snap_id_start,
-    m_snap_map, ono, m_flatten, ctx);
+    m_snap_map, ono, m_flatten, m_handler, ctx);
   req->send();
   return 0;
 }

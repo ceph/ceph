@@ -13,11 +13,16 @@ namespace deep_copy {
 struct Handler {
   virtual ~Handler() {}
 
+  virtual void handle_read(uint64_t bytes_read) = 0;
+
   virtual int update_progress(uint64_t object_number,
                               uint64_t object_count) = 0;
 };
 
 struct NoOpHandler : public Handler {
+  void handle_read(uint64_t bytes_read) override {
+  }
+
   int update_progress(uint64_t object_number,
                       uint64_t object_count) override {
     return 0;

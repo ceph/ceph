@@ -103,6 +103,9 @@ struct Replayer<I>::DeepCopyHandler : public librbd::deep_copy::Handler {
   DeepCopyHandler(Replayer* replayer) : replayer(replayer) {
   }
 
+  void handle_read(uint64_t bytes_read) override {
+  }
+
   int update_progress(uint64_t object_number, uint64_t object_count) override {
     replayer->handle_copy_image_progress(object_number, object_count);
     return 0;
