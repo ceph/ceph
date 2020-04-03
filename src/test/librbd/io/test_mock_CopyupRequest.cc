@@ -51,7 +51,7 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
                                    librados::snap_t dst_snap_id_start,
                                    const SnapMap &snap_map,
                                    uint64_t object_number, bool flatten,
-                                   Context *on_finish) {
+                                   Handler*, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->object_number = object_number;
     s_instance->flatten = flatten;

@@ -211,7 +211,7 @@ public:
     expect_get_object_name(mock_dst_image_ctx);
     return new MockObjectCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
                                      src_snap_id_start, dst_snap_id_start,
-                                     m_snap_map, 0, false, on_finish);
+                                     m_snap_map, 0, false, nullptr, on_finish);
   }
 
   void expect_set_snap_read(librados::MockTestMemIoCtxImpl &mock_io_ctx,
