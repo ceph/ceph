@@ -183,7 +183,7 @@ private:
 
   struct C_UpdateWatchCtx;
   struct C_TrackedOp;
-  struct ProgressContext;
+  struct DeepCopyHandler;
 
   Threads<ImageCtxT>* m_threads;
   InstanceWatcher<ImageCtxT>* m_instance_watcher;
@@ -220,7 +220,7 @@ private:
   cls::rbd::MirrorSnapshotNamespace m_remote_mirror_snap_ns;
 
   librbd::mirror::snapshot::ImageState m_image_state;
-  ProgressContext* m_progress_ctx = nullptr;
+  DeepCopyHandler* m_deep_copy_handler = nullptr;
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
