@@ -541,7 +541,7 @@ Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
   }
 }
 
-seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn)
+seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
   auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
                             [peer_addr = conn->get_peer_addr()](auto& mc) {

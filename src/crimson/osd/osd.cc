@@ -616,7 +616,7 @@ seastar::future<> OSD::ms_handle_connect(crimson::net::ConnectionRef conn)
   }
 }
 
-seastar::future<> OSD::ms_handle_reset(crimson::net::ConnectionRef conn)
+seastar::future<> OSD::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
   // TODO: cleanup the session attached to this connection
   logger().warn("ms_handle_reset");

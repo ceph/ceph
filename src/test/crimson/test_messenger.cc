@@ -846,7 +846,7 @@ class FailoverSuite : public Dispatcher {
     return seastar::now();
   }
 
-  seastar::future<> ms_handle_reset(ConnectionRef conn) override {
+  seastar::future<> ms_handle_reset(ConnectionRef conn, bool is_replace) override {
     auto result = interceptor.find_result(conn);
     if (result == nullptr) {
       logger().error("Untracked reset connection: {}", *conn);
@@ -1384,7 +1384,7 @@ class FailoverSuitePeer : public Dispatcher {
     return flush_pending_send();
   }
 
-  seastar::future<> ms_handle_reset(ConnectionRef conn) override {
+  seastar::future<> ms_handle_reset(ConnectionRef conn, bool is_replace) override {
     logger().info("[TestPeer] got reset from Test");
     ceph_assert(tracked_conn == conn);
     tracked_conn = nullptr;

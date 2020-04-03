@@ -83,7 +83,7 @@ class SocketConnection : public Connection {
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
   void start_connect(const entity_addr_t& peer_addr,
-                     const entity_type_t& peer_type);
+                     const entity_name_t& peer_name);
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
   void start_accept(SocketRef&& socket,

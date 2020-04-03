@@ -70,7 +70,7 @@ seastar::future<> Client::ms_handle_connect(crimson::net::ConnectionRef c)
   }
 }
 
-seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
+seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c, bool is_replace)
 {
   if (conn == c) {
     report_timer.cancel();

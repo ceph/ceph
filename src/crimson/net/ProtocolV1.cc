@@ -131,6 +131,11 @@ ProtocolV1::ProtocolV1(Dispatcher& dispatcher,
 
 ProtocolV1::~ProtocolV1() {}
 
+bool ProtocolV1::is_connected() const
+{
+  return state == state_t::open;
+}
+
 // connecting state
 
 void ProtocolV1::reset_session()
@@ -302,7 +307,7 @@ ProtocolV1::repeat_connect()
 }
 
 void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
-                               const entity_type_t& _peer_type)
+                               const entity_name_t& _peer_name)
 {
   ceph_assert(state == state_t::none);
   logger().trace("{} trigger connecting, was {}", conn, static_cast<int>(state));
@@ -312,8 +317,8 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
-  conn.set_peer_type(_peer_type);
-  conn.policy = messenger.get_policy(_peer_type);
+  conn.set_peer_name(_peer_name);
+  conn.policy = messenger.get_policy(_peer_name.type());
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   gated_dispatch("start_connect", [this] {
@@ -368,12 +373,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
             return repeat_connect();
           });
         }).then([this] {
-          // notify the dispatcher and allow them to reject the connection
-          return dispatcher.ms_handle_connect(
-            seastar::static_pointer_cast<SocketConnection>(
-              conn.shared_from_this()));
-        }).then([this] {
-          execute_open();
+          execute_open(open_t::connected);
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", conn, eptr);
@@ -534,6 +534,13 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
     .then([this](bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(h.connect, p);
+      if (conn.get_peer_type() != 0 &&
+          conn.get_peer_type() != h.connect.host_type) {
+        logger().error("{} repeat_handle_connect(): my peer type does not match"
+                       " what peer advertises {} != {}",
+                       conn, conn.get_peer_type(), h.connect.host_type);
+        throw std::system_error(make_error_code(error::protocol_aborted));
+      }
       conn.set_peer_type(h.connect.host_type);
       conn.policy = messenger.get_policy(h.connect.host_type);
       if (!conn.policy.lossy && !conn.policy.server && conn.target_addr.get_port() <= 0) {
@@ -650,15 +657,11 @@ void ProtocolV1::start_accept(SocketRef&& sock,
             return repeat_handle_connect();
           });
         }).then([this] {
-          // notify the dispatcher and allow them to reject the connection
-          return dispatcher.ms_handle_accept(
-            seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-        }).then([this] {
           messenger.register_conn(
             seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
           messenger.unaccept_conn(
             seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-          execute_open();
+          execute_open(open_t::accepted);
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
           logger().warn("{} accepting fault: {}", conn, eptr);
@@ -883,11 +886,23 @@ seastar::future<> ProtocolV1::handle_tags()
     });
 }
 
-void ProtocolV1::execute_open()
+void ProtocolV1::execute_open(open_t type)
 {
   logger().trace("{} trigger open, was {}", conn, static_cast<int>(state));
   state = state_t::open;
   set_write_state(write_state_t::open);
+
+  if (type == open_t::connected) {
+    gated_dispatch("ms_handle_connect", [this] {
+      return dispatcher.ms_handle_connect(
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    });
+  } else { // type == open_t::accepted
+    gated_dispatch("ms_handle_accept", [this] {
+      return dispatcher.ms_handle_accept(
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    });
+  }
 
   gated_dispatch("execute_open", [this] {
       // start background processing of tags

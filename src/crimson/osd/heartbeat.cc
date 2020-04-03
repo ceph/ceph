@@ -195,7 +195,7 @@ seastar::future<> Heartbeat::ms_dispatch(crimson::net::Connection* conn,
   }
 }
 
-seastar::future<> Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn)
+seastar::future<> Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
   auto found = std::find_if(peers.begin(), peers.end(),
                             [conn](const peers_map_t::value_type& peer) {
