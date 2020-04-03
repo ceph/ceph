@@ -303,9 +303,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age,
 				  true));
-  objecter_finisher.start();
-  filer.reset(new Filer(objecter, &objecter_finisher));
-  objecter->enable_blacklist_events();
 }
 
 
@@ -473,10 +470,20 @@ void Client::dump_status(Formatter *f)
   }
 }
 
-int Client::init()
+void Client::_pre_init()
 {
   timer.init();
+
+  objecter_finisher.start();
+  filer.reset(new Filer(objecter, &objecter_finisher));
+  objecter->enable_blacklist_events();
+
   objectcacher->start();
+}
+
+int Client::init()
+{
+  _pre_init();
   {
     std::lock_guard l{client_lock};
     ceph_assert(!initialized);
@@ -14603,8 +14610,7 @@ StandaloneClient::~StandaloneClient()
 
 int StandaloneClient::init()
 {
-  timer.init();
-  objectcacher->start();
+  _pre_init();
   objecter->init();
 
   client_lock.lock();
