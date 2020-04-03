@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -18,7 +19,7 @@ describe('CephfsListComponent', () => {
   let fixture: ComponentFixture<CephfsListComponent>;
 
   configureTestBed({
-    imports: [SharedModule, HttpClientTestingModule],
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule],
     declarations: [CephfsListComponent, CephfsTabsStubComponent],
     providers: i18nProviders
   });

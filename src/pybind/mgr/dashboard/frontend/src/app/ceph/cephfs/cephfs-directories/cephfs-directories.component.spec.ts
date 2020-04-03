@@ -4,7 +4,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { Validators } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TREE_ACTIONS, TreeComponent, TreeModule } from 'angular-tree-component';
+import { TreeComponent, TreeModule, TREE_ACTIONS } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';

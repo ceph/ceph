@@ -1,5 +1,6 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -36,6 +37,7 @@ describe('NfsListComponent', () => {
     {
       declarations: [NfsListComponent, NfsDetailsComponent],
       imports: [
+        BrowserAnimationsModule,
         HttpClientTestingModule,
         RouterTestingModule,
         SharedModule,

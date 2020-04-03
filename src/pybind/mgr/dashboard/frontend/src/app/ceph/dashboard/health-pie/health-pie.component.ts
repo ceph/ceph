@@ -75,7 +75,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
     // An extension to Chart.js to enable rendering some
     // text in the middle of a doughnut
     Chart.pluginService.register({
-      beforeDraw: function(chart: any) {
+      beforeDraw: function (chart: any) {
         if (!chart.options.center_text) {
           return;
         }
@@ -162,7 +162,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
   private setChartSliceBorderWidth() {
     let nonZeroValueSlices = 0;
-    _.forEach(this.chartConfig.dataset[0].data, function(slice) {
+    _.forEach(this.chartConfig.dataset[0].data, function (slice) {
       if (slice > 0) {
         nonZeroValueSlices += 1;
       }

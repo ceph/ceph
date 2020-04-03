@@ -7,15 +7,11 @@ export class DashboardPageHelper extends PageHelper {
   };
 
   async infoGroupTitle(index: number): Promise<string> {
-    return $$('.info-group-title')
-      .get(index)
-      .getText();
+    return $$('.info-group-title').get(index).getText();
   }
 
   async clickInfoCardLink(cardName: string): Promise<void> {
-    await $(`cd-info-card[cardtitle="${cardName}"]`)
-      .element(by.linkText(cardName))
-      .click();
+    await $(`cd-info-card[cardtitle="${cardName}"]`).element(by.linkText(cardName)).click();
   }
 
   async infoCard(indexOrTitle: number | string): Promise<ElementFinder> {

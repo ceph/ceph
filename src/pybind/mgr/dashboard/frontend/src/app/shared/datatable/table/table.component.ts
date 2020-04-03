@@ -17,11 +17,11 @@ import {
 
 import {
   DatatableComponent,
+  getterForProp,
   SortDirection,
   SortPropDir,
   TableColumnProp
 } from '@swimlane/ngx-datatable';
-import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
 import * as _ from 'lodash';
 import { Observable, Subject, Subscription, timer as observableTimer } from 'rxjs';
 
@@ -693,10 +693,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (currentSearch.length === 0 || data.length === 0) {
       return data;
     }
-    const searchTerms: string[] = currentSearch
-      .pop()
-      .replace(/\+/g, ' ')
-      .split(':');
+    const searchTerms: string[] = currentSearch.pop().replace(/\+/g, ' ').split(':');
     const columnsClone = [...columns];
     if (searchTerms.length === 2) {
       columns = columnsClone.filter((c) => c.name.toLowerCase().indexOf(searchTerms[0]) !== -1);

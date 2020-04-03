@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import * as _ from 'lodash';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -18,7 +19,7 @@ describe('NfsDetailsComponent', () => {
 
   configureTestBed({
     declarations: [NfsDetailsComponent],
-    imports: [SharedModule, TabsModule.forRoot(), HttpClientTestingModule],
+    imports: [BrowserAnimationsModule, SharedModule, TabsModule.forRoot(), HttpClientTestingModule],
     providers: i18nProviders
   });
 

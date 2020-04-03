@@ -8,9 +8,7 @@ export class DaemonsPageHelper extends PageHelper {
     await this.navigateTo();
 
     // click on a daemon so details table appears
-    await $$('.datatable-body-cell-label')
-      .first()
-      .click();
+    await $$('.datatable-body-cell-label').first().click();
 
     const tab_container = $$('.tab-container').last();
     const details_table = tab_container.all(by.css('cd-table')).get(0);

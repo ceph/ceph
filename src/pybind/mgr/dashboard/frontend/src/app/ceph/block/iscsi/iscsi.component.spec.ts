@@ -1,5 +1,6 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { of } from 'rxjs';
 
@@ -21,14 +22,14 @@ describe('IscsiComponent', () => {
 
   const fakeService = {
     overview: () => {
-      return new Promise(function() {
+      return new Promise(function () {
         return;
       });
     }
   };
 
   configureTestBed({
-    imports: [SharedModule],
+    imports: [BrowserAnimationsModule, SharedModule],
     declarations: [IscsiComponent],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [

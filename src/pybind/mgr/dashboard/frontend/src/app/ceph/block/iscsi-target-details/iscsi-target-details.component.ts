@@ -3,10 +3,10 @@ import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@an
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import {
   ITreeOptions,
-  TREE_ACTIONS,
   TreeComponent,
   TreeModel,
-  TreeNode
+  TreeNode,
+  TREE_ACTIONS
 } from 'angular-tree-component';
 import * as _ from 'lodash';
 
