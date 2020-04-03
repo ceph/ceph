@@ -24,3 +24,7 @@
 #ceph-volume
 /src/ceph-volume                                @ceph/ceph-volume
 /doc/ceph-volume                                @ceph/ceph-volume
+
+# crimson
+/src/crimson                                    @ceph/crimson
+/src/test/crimson                               @ceph/crimson
