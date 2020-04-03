@@ -109,11 +109,12 @@ struct CapSnap {
 };
 
 // inode flags
-#define I_COMPLETE	1
-#define I_DIR_ORDERED	2
-#define I_CAP_DROPPED	4
-#define I_SNAPDIR_OPEN	8
-#define I_KICK_FLUSH	16
+#define I_COMPLETE		(1 << 0)
+#define I_DIR_ORDERED		(1 << 1)
+#define I_SNAPDIR_OPEN		(1 << 2)
+#define I_KICK_FLUSH		(1 << 3)
+#define I_CAP_DROPPED		(1 << 4)
+#define I_ERROR_FILELOCK	(1 << 5)
 
 struct Inode {
   Client *client;
@@ -257,6 +258,12 @@ struct Inode {
   // file locks
   std::unique_ptr<ceph_lock_state_t> fcntl_locks;
   std::unique_ptr<ceph_lock_state_t> flock_locks;
+
+  bool has_any_filelocks() {
+    return
+      (fcntl_locks && !fcntl_locks->empty()) ||
+      (flock_locks && !flock_locks->empty());
+  }
 
   list<Delegation> delegations;
 

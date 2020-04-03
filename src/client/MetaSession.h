@@ -33,6 +33,7 @@ struct MetaSession {
     STATE_CLOSING,
     STATE_CLOSED,
     STATE_STALE,
+    STATE_REJECTED,
   } state;
 
   enum {
