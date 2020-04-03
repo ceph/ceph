@@ -19,8 +19,10 @@ class ProtocolV2 final : public Protocol {
   ~ProtocolV2() override;
 
  private:
+  bool is_connected() const override;
+
   void start_connect(const entity_addr_t& peer_addr,
-                     const entity_type_t& peer_type) override;
+                     const entity_name_t& peer_name) override;
 
   void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr) override;
@@ -159,6 +161,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> _handle_auth_request(bufferlist& auth_payload, bool more);
   seastar::future<> server_auth();
 
+  bool validate_peer_name(const entity_name_t& peer_name) const;
   seastar::future<next_step_t> send_wait();
   seastar::future<next_step_t> reuse_connection(ProtocolV2* existing_proto,
                                                 bool do_reset=false,
@@ -203,7 +206,7 @@ class ProtocolV2 final : public Protocol {
 
   // READY
   seastar::future<> read_message(utime_t throttle_stamp);
-  void execute_ready();
+  void execute_ready(bool dispatch_connect);
 
   // STANDBY
   void execute_standby();

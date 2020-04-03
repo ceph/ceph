@@ -29,7 +29,7 @@ class Interceptor;
 using seq_num_t = uint64_t;
 
 class Connection : public seastar::enable_shared_from_this<Connection> {
-  entity_name_t peer_name = {0, -1};
+  entity_name_t peer_name = {0, entity_name_t::NEW};
 
  protected:
   entity_addr_t peer_addr;
@@ -42,9 +42,34 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   clock_t::time_point last_keepalive;
   clock_t::time_point last_keepalive_ack;
 
-  void set_peer_type(entity_type_t peer_type) { peer_name._type = peer_type; }
-  void set_peer_id(int64_t peer_id) { peer_name._num = peer_id; }
-  void set_peer_name(entity_name_t name) { peer_name = name; }
+  void set_peer_type(entity_type_t peer_type) {
+    // it is not allowed to assign an unknown value when the current
+    // value is known
+    assert(!(peer_type == 0 &&
+             peer_name.type() != 0));
+    // it is not allowed to assign a different known value when the
+    // current value is also known.
+    assert(!(peer_type != 0 &&
+             peer_name.type() != 0 &&
+             peer_type != peer_name.type()));
+    peer_name._type = peer_type;
+  }
+  void set_peer_id(int64_t peer_id) {
+    // it is not allowed to assign an unknown value when the current
+    // value is known
+    assert(!(peer_id == entity_name_t::NEW &&
+             peer_name.num() != entity_name_t::NEW));
+    // it is not allowed to assign a different known value when the
+    // current value is also known.
+    assert(!(peer_id != entity_name_t::NEW &&
+             peer_name.num() != entity_name_t::NEW &&
+             peer_id != peer_name.num()));
+    peer_name._num = peer_id;
+  }
+  void set_peer_name(entity_name_t name) {
+    set_peer_type(name.type());
+    set_peer_id(name.num());
+  }
 
  public:
   uint64_t peer_global_id = 0;

@@ -153,19 +153,25 @@ ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
 
 ProtocolV2::~ProtocolV2() {}
 
+bool ProtocolV2::is_connected() const {
+  return state == state_t::READY ||
+         state == state_t::ESTABLISHING ||
+         state == state_t::REPLACING;
+}
+
 void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
-                               const entity_type_t& _peer_type)
+                               const entity_name_t& _peer_name)
 {
   ceph_assert(state == state_t::NONE);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
-  conn.set_peer_type(_peer_type);
-  conn.policy = messenger.get_policy(_peer_type);
+  conn.set_peer_name(_peer_name);
+  conn.policy = messenger.get_policy(_peer_name.type());
   client_cookie = generate_client_cookie();
-  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_type={}, cc={}"
+  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_name={}, cc={}"
                 " policy(lossy={}, server={}, standby={}, resetcheck={})",
-                conn, _peer_addr, ceph_entity_type_name(_peer_type), client_cookie,
+                conn, _peer_addr, _peer_name, client_cookie,
                 conn.policy.lossy, conn.policy.server,
                 conn.policy.standby, conn.policy.resetcheck);
   messenger.register_conn(
@@ -744,6 +750,13 @@ ProtocolV2::client_connect()
             throw std::system_error(
                 make_error_code(crimson::net::error::bad_peer_address));
           }
+          if (conn.get_peer_id() != entity_name_t::NEW &&
+              conn.get_peer_id() != server_ident.gid()) {
+            logger().error("{} connection peer id ({}) does not match "
+                           "what it should be ({}) during connecting, close",
+                            conn, server_ident.gid(), conn.get_peer_id());
+            abort_in_close(*this, true);
+          }
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
@@ -930,17 +943,13 @@ void ProtocolV2::execute_connecting()
           }
           switch (next) {
            case next_step_t::ready: {
-            gated_dispatch("ms_handle_connect", [this] {
-              return dispatcher.ms_handle_connect(
-                  seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-            });
             logger().info("{} connected:"
                           " gs={}, pgs={}, cs={}, client_cookie={},"
                           " server_cookie={}, in_seq={}, out_seq={}, out_q={}",
                           conn, global_seq, peer_global_seq, connect_seq,
                           client_cookie, server_cookie, conn.in_seq,
                           conn.out_seq, conn.out_q.size());
-            execute_ready();
+            execute_ready(true);
             break;
            }
            case next_step_t::wait: {
@@ -1075,6 +1084,20 @@ seastar::future<> ProtocolV2::server_auth()
   });
 }
 
+bool ProtocolV2::validate_peer_name(const entity_name_t& peer_name) const
+{
+  auto my_peer_name = conn.get_peer_name();
+  if (my_peer_name.type() != peer_name.type()) {
+    return false;
+  }
+  if (my_peer_name.num() != entity_name_t::NEW &&
+      peer_name.num() != entity_name_t::NEW &&
+      my_peer_name.num() != peer_name.num()) {
+    return false;
+  }
+  return true;
+}
+
 seastar::future<ProtocolV2::next_step_t>
 ProtocolV2::send_wait()
 {
@@ -1130,6 +1153,12 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                  existing_proto->connect_seq,
                  existing_proto->client_cookie,
                  existing_proto->server_cookie);
+
+  if (!validate_peer_name(existing_conn->get_peer_name())) {
+    logger().error("{} server_connect: my peer_name doesn't match"
+                   " the existing connection {}, abort", conn, existing_conn);
+    abort_in_fault();
+  }
 
   if (existing_proto->state == state_t::REPLACING) {
     logger().warn("{} server_connect: racing replace happened while"
@@ -1252,6 +1281,13 @@ ProtocolV2::server_connect()
           make_error_code(crimson::net::error::bad_peer_address));
     }
 
+    if (conn.get_peer_id() != entity_name_t::NEW &&
+        conn.get_peer_id() != client_ident.gid()) {
+      logger().error("{} client_ident peer_id ({}) does not match"
+                     " what it should be ({}) during accepting, abort",
+                      conn, client_ident.gid(), conn.get_peer_id());
+      abort_in_fault();
+    }
     conn.set_peer_id(client_ident.gid());
     client_cookie = client_ident.cookie();
 
@@ -1277,7 +1313,6 @@ ProtocolV2::server_connect()
 
     SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
 
-    bool dispatch_reset = true;
     if (existing_conn) {
       if (existing_conn->protocol->proto_type != proto_t::v2) {
         logger().warn("{} existing connection {} proto version is {}, close existing",
@@ -1285,14 +1320,15 @@ ProtocolV2::server_connect()
                       static_cast<int>(existing_conn->protocol->proto_type));
         // should unregister the existing from msgr atomically
         // NOTE: this is following async messenger logic, but we may miss the reset event.
-        dispatch_reset = false;
+        execute_establishing(existing_conn, false);
+        return seastar::make_ready_future<next_step_t>(next_step_t::ready);
       } else {
         return handle_existing_connection(existing_conn);
       }
+    } else {
+      execute_establishing(nullptr, true);
+      return seastar::make_ready_future<next_step_t>(next_step_t::ready);
     }
-
-    execute_establishing(existing_conn, dispatch_reset);
-    return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   });
 }
 
@@ -1408,6 +1444,12 @@ ProtocolV2::server_reconnect()
                    existing_proto->connect_seq,
                    existing_proto->client_cookie,
                    existing_proto->server_cookie);
+
+    if (!validate_peer_name(existing_conn->get_peer_name())) {
+      logger().error("{} server_reconnect: my peer_name doesn't match"
+                     " the existing connection {}, abort", conn, existing_conn);
+      abort_in_fault();
+    }
 
     if (existing_proto->state == state_t::REPLACING) {
       logger().warn("{} server_reconnect: racing replace happened while "
@@ -1629,7 +1671,7 @@ void ProtocolV2::execute_establishing(
                     conn, global_seq, peer_global_seq, connect_seq,
                     client_cookie, server_cookie, conn.in_seq,
                     conn.out_seq, conn.out_q.size());
-      execute_ready();
+      execute_ready(false);
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::ESTABLISHING) {
         logger().info("{} execute_establishing() protocol aborted at {} -- {}",
@@ -1763,7 +1805,10 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         return write_frame(reconnect_ok);
       } else {
         client_cookie = new_client_cookie;
-        conn.set_peer_name(new_peer_name);
+        assert(conn.get_peer_type() == new_peer_name.type());
+        if (conn.get_peer_id() == entity_name_t::NEW) {
+          conn.set_peer_id(new_peer_name.num());
+        }
         connection_features = new_conn_features;
         return send_server_ident();
       }
@@ -1779,7 +1824,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                     conn, reconnect ? "reconnected" : "connected",
                     global_seq, peer_global_seq, connect_seq, client_cookie,
                     server_cookie, conn.in_seq, conn.out_seq, conn.out_q.size());
-      execute_ready();
+      execute_ready(false);
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::REPLACING) {
         logger().info("{} trigger_replacing(): protocol aborted at {} -- {}",
@@ -1942,10 +1987,16 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
   });
 }
 
-void ProtocolV2::execute_ready()
+void ProtocolV2::execute_ready(bool dispatch_connect)
 {
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
+  if (dispatch_connect) {
+    gated_dispatch("ms_handle_connect", [this] {
+      return dispatcher.ms_handle_connect(
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    });
+  }
 #ifdef UNIT_TESTS_BUILT
   if (conn.interceptor) {
     conn.interceptor->register_conn_ready(conn);
