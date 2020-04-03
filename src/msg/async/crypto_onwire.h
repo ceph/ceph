@@ -53,8 +53,6 @@ struct TxHandlerError : public std::runtime_error {
 struct TxHandler {
   virtual ~TxHandler() = default;
 
-  virtual std::uint32_t calculate_segment_size(std::uint32_t size) = 0;
-
   // Instance of TxHandler must be reset before doing any encrypt-update
   // step. This applies also to situation when encrypt-final was already
   // called and another round of update-...-update-final will take place.
