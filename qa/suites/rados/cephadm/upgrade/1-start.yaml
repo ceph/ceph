@@ -1,4 +1,4 @@
 tasks:
 - cephadm:
-    image: quay.io/ceph-ci/ceph:wip-sage4-testing-2020-03-19-1456
-    cephadm_branch: wip-sage4-testing-2020-03-19-1456
+    image: docker.io/ceph/ceph:v15.2.0
+    cephadm_branch: v15.2.0
