@@ -233,45 +233,15 @@ class CephFSMount(object):
                                       stdout=BytesIO(), stderr=BytesIO(),
                                       check_status=check_status, cwd=cwd)
 
-    def _verify(self, proc, retval=None, errmsg=None):
-        if retval:
-            msg = ('expected return value: {}\nreceived return value: '
-                   '{}\n'.format(retval, proc.returncode))
-            assert proc.returncode == retval, msg
+    def testcmd(self, args, wait=True, stdin=None, cwd=None, omit_sudo=True):
+        return self.run_shell(args=args, wait=wait, stdin=stdin, cwd=cwd)
 
-        if errmsg:
-            stderr = proc.stderr.getvalue().lower()
-            msg = ('didn\'t find given string in stderr -\nexpected string: '
-                   '{}\nreceived error message: {}\nnote: received error '
-                   'message is converted to lowercase'.format(errmsg, stderr))
-            assert errmsg in stderr, msg
+    def testcmd_as_user(self, args, user, wait=True, stdin=None, cwd=None):
+        return self.run_as_user(args=args, user=user, wait=wait, stdin=stdin,
+                                cwd=cwd)
 
-    def negtestcmd(self, args, retval=None, errmsg=None, stdin=None,
-                   cwd=None, wait=True):
-        """
-        Conduct a negative test for the given command.
-
-        retval and errmsg are parameters to confirm the cause of command
-        failure.
-        """
-        proc = self.run_shell(args=args, wait=wait, stdin=stdin, cwd=cwd,
-                              check_status=False)
-        self._verify(proc, retval, errmsg)
-        return proc
-
-    def negtestcmd_as_user(self, args, user, retval=None, errmsg=None,
-                           stdin=None, cwd=None, wait=True):
-        proc = self.run_as_user(args=args, user=user, wait=wait, stdin=stdin,
-                                cwd=cwd, check_status=False)
-        self._verify(proc, retval, errmsg)
-        return proc
-
-    def negtestcmd_as_root(self, args, retval=None, errmsg=None, stdin=None,
-                           cwd=None, wait=True):
-        proc = self.run_as_root(args=args, wait=wait, stdin=stdin, cwd=cwd,
-                                check_status=False)
-        self._verify(proc, retval, errmsg)
-        return proc
+    def testcmd_as_root(self, args, wait=True, stdin=None, cwd=None):
+        return self.run_as_root(args=args, wait=wait, stdin=stdin, cwd=cwd)
 
     def open_no_data(self, basename):
         """
