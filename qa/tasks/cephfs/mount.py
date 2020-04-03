@@ -491,7 +491,7 @@ class CephFSMount(object):
         return "/etc/ceph/ceph.conf"
 
     @contextmanager
-    def mounted(self):
+    def mounted_wait(self):
         """
         A context manager, from an initially unmounted state, to mount
         this, yield, and then unmount and clean up.
