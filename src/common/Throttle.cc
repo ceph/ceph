@@ -194,25 +194,29 @@ bool Throttle::get_or_fail(int64_t c)
   }
 
   assert (c >= 0);
-  std::lock_guard l(lock);
-  if (_should_wait(c) || !conds.empty()) {
-    ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
-    if (logger) {
-      logger->inc(l_throttle_get_or_fail_fail);
+  bool waited = false;
+  {
+    std::lock_guard l(lock);
+    if (_should_wait(c) || !conds.empty()) {
+      ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
+    } else {
+      ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
+	<< " -> " << (count.load() + c) << ")" << dendl;
+      count += c;
+      waited = true;
     }
-    return false;
-  } else {
-    ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
-		   << " -> " << (count.load() + c) << ")" << dendl;
-    count += c;
-    if (logger) {
+  }
+  if (logger) {
+    if (waited) {
       logger->inc(l_throttle_get_or_fail_success);
       logger->inc(l_throttle_get);
       logger->inc(l_throttle_get_sum, c);
       logger->set(l_throttle_val, count);
+    } else {
+      logger->inc(l_throttle_get_or_fail_fail);
     }
-    return true;
   }
+  return waited;
 }
 
 int64_t Throttle::put(int64_t c)
@@ -225,28 +229,33 @@ int64_t Throttle::put(int64_t c)
   ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
-  std::lock_guard l(lock);
-  if (c) {
-    if (!conds.empty())
-      conds.front().notify_one();
-    // if count goes negative, we failed somewhere!
-    ceph_assert(count >= c);
-    count -= c;
-    if (logger) {
+  {
+    std::lock_guard l(lock);
+    if (c) {
+      if (!conds.empty())
+	conds.front().notify_one();
+      // if count goes negative, we failed somewhere!
+      ceph_assert(count >= c);
+      count -= c;
+    }
+  }
+  if (logger) {
       logger->inc(l_throttle_put);
       logger->inc(l_throttle_put_sum, c);
       logger->set(l_throttle_val, count);
     }
-  }
+
   return count;
 }
 
 void Throttle::reset()
 {
-  std::lock_guard l(lock);
-  if (!conds.empty())
-    conds.front().notify_one();
-  count = 0;
+  {
+    std::lock_guard l(lock);
+    if (!conds.empty())
+      conds.front().notify_one();
+    count = 0;
+  }
   if (logger) {
     logger->set(l_throttle_val, 0);
   }
