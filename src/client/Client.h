@@ -953,6 +953,8 @@ protected:
 
   void _close_sessions();
 
+  void _pre_init();
+
   /**
    * The basic housekeeping parts of init (perf counters, admin socket)
    * that is independent of how objecters/monclient/messengers are
