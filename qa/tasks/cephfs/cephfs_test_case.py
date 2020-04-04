@@ -292,7 +292,7 @@ class CephFSTestCase(CephTestCase):
         timeout = 30
         pause = 2
         test = sorted(test)
-        for i in range(timeout/pause):
+        for i in range(timeout // pause):
             subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
             subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
             filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])

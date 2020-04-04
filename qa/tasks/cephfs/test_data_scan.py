@@ -146,13 +146,13 @@ class StripedStashedLayout(Workload):
             # Exactly stripe_count objects will exist
             self.os * self.sc,
             # Fewer than stripe_count objects will exist
-            self.os * self.sc / 2,
-            self.os * (self.sc - 1) + self.os / 2,
-            self.os * (self.sc - 1) + self.os / 2 - 1,
-            self.os * (self.sc + 1) + self.os / 2,
-            self.os * (self.sc + 1) + self.os / 2 + 1,
+            self.os * self.sc // 2,
+            self.os * (self.sc - 1) + self.os // 2,
+            self.os * (self.sc - 1) + self.os // 2 - 1,
+            self.os * (self.sc + 1) + self.os // 2,
+            self.os * (self.sc + 1) + self.os // 2 + 1,
             # More than stripe_count objects will exist
-            self.os * self.sc + self.os * self.sc / 2
+            self.os * self.sc + self.os * self.sc // 2
         ]
 
     def write(self):

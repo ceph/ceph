@@ -2120,7 +2120,7 @@ class TestVolumes(CephFSTestCase):
 
         pool_capacity = 32 * 1024 * 1024
         # number of files required to fill up 99% of the pool
-        nr_files = int((pool_capacity * 0.99) / (TestVolumes.DEFAULT_FILE_SIZE * 1024 * 1024))
+        nr_files = int((pool_capacity * 0.99) // (TestVolumes.DEFAULT_FILE_SIZE * 1024 * 1024))
 
         # create subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
@@ -2139,7 +2139,7 @@ class TestVolumes(CephFSTestCase):
         self.fs.add_data_pool(new_pool)
 
         self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", new_pool,
-                                            "max_bytes", "{0}".format(pool_capacity / 4))
+                                            "max_bytes", "{0}".format(pool_capacity // 4))
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1, "--pool_layout", new_pool)

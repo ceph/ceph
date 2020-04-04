@@ -381,7 +381,7 @@ vc.disconnect()
         for p in osd_map['pools']:
             existing_pg_count += p['pg_num']
 
-        expected_pg_num = (max_overall - existing_pg_count) / 10
+        expected_pg_num = (max_overall - existing_pg_count) // 10
         log.info("max_per_osd {0}".format(max_per_osd))
         log.info("osd_count {0}".format(osd_count))
         log.info("max_overall {0}".format(max_overall))
