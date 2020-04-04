@@ -871,7 +871,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   if (new_version ||
       (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
-    in->layout = st->layout;
+    if(st->layout.is_valid()){
+      in->layout = st->layout;
+    } else {
+      ldout(cct, 10) << " bad layout " << dendl;
+    }  
     update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
   }
 
@@ -5253,9 +5257,13 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   }
 
   if (new_caps & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR)) {
-    in->layout = m->get_layout();
-    update_inode_file_size(in, issued, m->get_size(),
-			   m->get_truncate_seq(), m->get_truncate_size());
+    if((m->get_layout()).is_valid()){
+      in->layout = m->get_layout();
+      update_inode_file_size(in, issued, m->get_size(),
+      			     m->get_truncate_seq(), m->get_truncate_size());
+    } else{
+      ldout(cct, 10) << "bad layout" << dendl;
+    }
   }
 
   if (m->inline_version > in->inline_version) {
