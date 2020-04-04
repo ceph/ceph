@@ -61,7 +61,7 @@ def check_object_eq(k1, k2, check_extra = True):
 
 def make_request(conn, method, bucket, key, query_args, headers):
     result = conn.make_request(method, bucket=bucket, key=key, query_args=query_args, headers=headers)
-    if result.status / 100 != 2:
+    if result.status // 100 != 2:
         raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
     return result
 
