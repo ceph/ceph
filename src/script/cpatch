@@ -173,13 +173,13 @@ if [ $core -eq 1 ] || [ $all -eq 1 ]; then
 
     ECLIBS="libec_*.so*"
     mkdir -p $TMP/eclib
-    for f in $ECLIBS; do cp lib/$f $TMP/eclib ; done
+    for f in lib/$ECLIBS; do cp $f $TMP/eclib ; done
     [ $strip -eq 1 ] && strip $TMP/eclib/*
     dockerfile+=$'ADD eclib /usr/lib64/ceph/erasure-code\n'
 
     CLSLIBS="libcls_*.so*"
     mkdir -p $TMP/clslib
-    for f in $CLSLIBS; do cp lib/$f $TMP/clslib ; done
+    for f in lib/$CLSLIBS; do cp $f $TMP/clslib ; done
     [ $strip -eq 1 ] && strip $TMP/clslib/*
     dockerfile+=$'ADD clslib /usr/lib64/rados-classes\n'
 
@@ -197,7 +197,7 @@ if [ $rgw -eq 1 ] || [ $all -eq 1 ]; then
 
     RGWLIBS="libradosgw.so*"
     mkdir -p $TMP/rgwlib
-    for f in $RGWLIBS; do cp lib/$f $TMP/rgwlib ; done
+    for f in lib/$RGWLIBS; do cp $f $TMP/rgwlib ; done
     [ $strip -eq 1 ] && strip $TMP/rgwlib/*
     dockerfile+=$'ADD rgwlib /usr/lib64\n'
 fi
@@ -212,7 +212,7 @@ if [ $cephfs -eq 1 ] || [ $all -eq 1 ]; then
 
     FSLIBS="libcephfs.so*"
     mkdir -p $TMP/fslib
-    for f in $FSLIBS; do cp lib/$f $TMP/fslib ; done
+    for f in lib/$FSLIBS; do cp $f $TMP/fslib ; done
     [ $strip -eq 1 ] && strip $TMP/fslib/*
     dockerfile+=$'ADD fslib /usr/lib64\n'
 fi
@@ -227,7 +227,7 @@ if [ $rbd -eq 1 ] || [ $all -eq 1 ]; then
 
     RBDLIBS="librbd.so*"
     mkdir -p $TMP/rbdlib
-    for f in $RBDLIBS; do cp lib/$f $TMP/rbdlib ; done
+    for f in lib/$RBDLIBS; do cp $f $TMP/rbdlib ; done
     [ $strip -eq 1 ] && strip $TMP/rbdlib/*
     dockerfile+=$'ADD rbdlib /usr/lib64\n'
 fi
