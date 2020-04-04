@@ -160,7 +160,7 @@ class TestClientRecovery(CephFSTestCase):
         in_reconnect_for = self.fs.wait_for_state('up:active', timeout=self.mds_reconnect_timeout * 2)
         # Check that the period we waited to enter active is within a factor
         # of two of the reconnect timeout.
-        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout / 2,
+        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout // 2,
                            "Should have been in reconnect phase for {0} but only took {1}".format(
                                self.mds_reconnect_timeout, in_reconnect_for
                            ))
