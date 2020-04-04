@@ -321,3 +321,6 @@
   by default. However, if enabled, user now have to pass the
   ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really
   sure of configuring pool size 1.
+
+* librbd now inherits the stripe unit and count from its parent image upon creation.
+  This can be overridden by specifying different stripe settings during clone creation.
