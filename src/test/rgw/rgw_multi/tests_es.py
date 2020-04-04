@@ -227,16 +227,16 @@ def test_es_object_search_custom():
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-date > ' + sval, lambda k: date_from_str(k.get_metadata('foo-date')) > val)
 
             # 'or' query
-            for i in range(len(src_keys) / 2):
+            for i in range(len(src_keys) // 2):
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str <= ' + str_vals[i] + ' or x-amz-meta-foo-str >= ' + str_vals[-i],
                         lambda k: k.get_metadata('foo-str') <= str_vals[i] or k.get_metadata('foo-str') >= str_vals[-i] )
 
             # 'and' query
-            for i in range(len(src_keys) / 2):
+            for i in range(len(src_keys) // 2):
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str >= ' + str_vals[i] + ' and x-amz-meta-foo-str <= ' + str_vals[i + 1],
                         lambda k: k.get_metadata('foo-str') >= str_vals[i] and k.get_metadata('foo-str') <= str_vals[i + 1] )
             # more complicated query
-            for i in range(len(src_keys) / 2):
+            for i in range(len(src_keys) // 2):
                 do_check_mdsearch(target_conn.conn, None, src_keys , 'bucket == ' + bucket.name + ' and x-amz-meta-foo-str >= ' + str_vals[i] +
                                                                      ' and (x-amz-meta-foo-str <= ' + str_vals[i + 1] + ')',
                         lambda k: k.bucket.name == bucket.name and (k.get_metadata('foo-str') >= str_vals[i] and
