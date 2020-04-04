@@ -176,7 +176,7 @@ class TestClientLimits(CephFSTestCase):
         self.mount_a.create_n_files("testdir/file2", 5, True)
 
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
-        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests / 10)
+        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests // 10)
 
     def _test_client_cache_size(self, mount_subdir):
         """
@@ -217,7 +217,7 @@ class TestClientLimits(CephFSTestCase):
         self.assertGreaterEqual(dentry_count, num_dirs)
         self.assertGreaterEqual(dentry_pinned_count, num_dirs)
 
-        cache_size = num_dirs / 10
+        cache_size = num_dirs // 10
         self.mount_a.set_cache_size(cache_size)
 
         def trimmed():
