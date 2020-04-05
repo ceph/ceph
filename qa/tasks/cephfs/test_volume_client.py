@@ -658,10 +658,10 @@ vc.disconnect()
         # Check the list of authorized IDs and their access levels.
         if self.py_version == 'python3':
             expected_result = [('guest1', 'rw'), ('guest2', 'r')]
+            self.assertCountEqual(str(expected_result), auths)
         else:
             expected_result = [(u'guest1', u'rw'), (u'guest2', u'r')]
-
-        self.assertItemsEqual(str(expected_result), auths)
+            self.assertItemsEqual(str(expected_result), auths)
 
         # Disallow both the auth IDs' access to the volume.
         auths = self._volume_client_python(volumeclient_mount, dedent("""
