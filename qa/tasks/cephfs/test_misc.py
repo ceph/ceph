@@ -47,7 +47,7 @@ class TestMisc(CephFSTestCase):
         t = time.time()
         rctime = self.mount_a.getfattr(".", "ceph.dir.rctime")
         log.info("rctime = {}".format(rctime))
-        self.assertGreaterEqual(rctime, t-10)
+        self.assertGreaterEqual(float(rctime), t - 10)
 
     def test_fs_new(self):
         self.mount_a.umount_wait()
