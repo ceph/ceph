@@ -2,7 +2,7 @@
 """
 watch_notify_same_primary task
 """
-from io import BytesIO
+from six import StringIO
 import contextlib
 import logging
 
@@ -68,8 +68,8 @@ def task(ctx, config):
                 "watch",
                 obj(n)],
             stdin=run.PIPE,
-            stdout=BytesIO(),
-            stderr=BytesIO(),
+            stdout=StringIO(),
+            stderr=StringIO(),
             wait=False)
         return proc
 

@@ -16,6 +16,7 @@ import os
 import six
 
 from io import BytesIO
+from six import StringIO
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from tasks.util.rados import cmd_erasure_code_profile
@@ -1409,7 +1410,7 @@ class CephManager:
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        return self.controller.run(args=args, wait=False, stdout=BytesIO(), stdin=run.PIPE)
+        return self.controller.run(args=args, wait=False, stdout=StringIO(), stdin=run.PIPE)
 
     def get_mon_socks(self):
         """
@@ -1592,7 +1593,7 @@ class CephManager:
 
     def osd_admin_socket(self, osd_id, command, check_status=True, timeout=0, stdout=None):
         if stdout is None:
-            stdout = BytesIO()
+            stdout = StringIO()
         return self.admin_socket('osd', osd_id, command, check_status, timeout, stdout)
 
     def find_remote(self, service_type, service_id):
@@ -1616,7 +1617,7 @@ class CephManager:
                         to the admin socket
         """
         if stdout is None:
-            stdout = BytesIO()
+            stdout = StringIO()
 
         remote = self.find_remote(service_type, service_id)
 
@@ -1745,7 +1746,7 @@ class CephManager:
         five seconds and try again.
         """
         if stdout is None:
-            stdout = BytesIO()
+            stdout = StringIO()
         tries = 0
         while True:
             proc = self.admin_socket(service_type, service_id,
