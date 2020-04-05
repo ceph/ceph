@@ -491,7 +491,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + regfilename)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -513,7 +513,7 @@ class TestDU(TestCephFSShell):
         sleep(10)
         du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -529,7 +529,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -550,7 +550,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + hlinkname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -569,7 +569,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -588,7 +588,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -679,7 +679,7 @@ class TestDU(TestCephFSShell):
 
         for expected_output in expected_patterns_in_output:
             if sys_version_info.major >= 3:
-                self.assertRegex(expected_output, du_output)
+                self.assertRegex(du_output, expected_output)
             elif sys_version_info.major < 3:
                 assert re_search(expected_output, du_output) != None, "\n" + \
                        "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -696,7 +696,7 @@ class TestDU(TestCephFSShell):
 
         for expected_output in expected_patterns_in_output:
             if sys_version_info.major >= 3:
-                self.assertRegex(expected_output, du_output)
+                self.assertRegex(du_output, expected_output)
             elif sys_version_info.major < 3:
                 assert re_search(expected_output, du_output) != None, "\n" +\
                        "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -712,7 +712,7 @@ class TestDU(TestCephFSShell):
             # CWD in DU report.
             if expected_output.find('/') == len(expected_output) - 1:
                 if sys_version_info.major >= 3:
-                    self.assertRegex(expected_output, du_output)
+                    self.assertRegex(du_output, expected_output)
                 elif sys_version_info.major < 3:
                     assert re_search(expected_output, du_output) != None, "\n" + \
                         "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -930,7 +930,7 @@ class TestMisc(TestCephFSShell):
         ]).strip()
 
         if sys_version_info.major >= 3:
-            self.assertRegex(dirname, output)
+            self.assertRegex(output, dirname)
         elif sys_version_info.major < 3:
             assert re_search(dirname, output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
