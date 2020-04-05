@@ -48,7 +48,7 @@ class TestClientLimits(CephFSTestCase):
         self.fs.wait_for_daemons()
 
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
-        mds_recall_warning_decay_rate = self.fs.get_config("mds_recall_warning_decay_rate")
+        mds_recall_warning_decay_rate = float(self.fs.get_config("mds_recall_warning_decay_rate"))
         self.assertTrue(open_files >= mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
