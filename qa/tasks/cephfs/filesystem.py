@@ -11,6 +11,7 @@ import random
 import traceback
 
 from io import BytesIO
+from six import StringIO
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -1230,7 +1231,8 @@ class Filesystem(MDSCluster):
             return True
 
     def rados(self, args, pool=None, namespace=None, stdin_data=None,
-              stdin_file=None):
+              stdin_file=None,
+              stdout_data=None):
         """
         Call into the `rados` CLI from an MDS
         """
@@ -1251,9 +1253,13 @@ class Filesystem(MDSCluster):
 
         if stdin_file is not None:
             args = ["bash", "-c", "cat " + stdin_file + " | " + " ".join(args)]
+        if stdout_data is None:
+            stdout_data = StringIO()
 
-        output = remote.sh(args, stdin=stdin_data)
-        return output.strip()
+        p = remote.run(args=args,
+                       stdin=stdin_data,
+                       stdout=stdout_data)
+        return p.stdout.getvalue().strip()
 
     def list_dirfrag(self, dir_ino):
         """
