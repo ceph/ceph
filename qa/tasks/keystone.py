@@ -297,7 +297,7 @@ def run_section_cmds(ctx, cclient, section_cmd, special,
     for section_item in section_config_list:
         run_in_keystone_venv(ctx, cclient,
             [ 'openstack' ] + section_cmd.split() +
-            dict_to_args(special, auth_section + section_item.items()) +
+            dict_to_args(special, auth_section + list(section_item.items())) +
             [ '--debug' ])
 
 def create_endpoint(ctx, cclient, service, url, adminurl=None):
