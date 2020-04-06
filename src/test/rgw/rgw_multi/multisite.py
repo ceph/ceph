@@ -72,8 +72,7 @@ class SystemObject:
         data and retcode """
         s, r = self.command(cluster, cmd, args or [], **kwargs)
         if r == 0:
-            output = s.decode('utf-8')
-            output = output[output.find('{'):] # trim extra output before json
+            output = s[s.find('{'):] # trim extra output before json
             data = json.loads(output)
             self.load_from_json(data)
             self.data = data
