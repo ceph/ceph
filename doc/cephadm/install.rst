@@ -123,7 +123,7 @@ command.  There are several ways to do this:
 
 * It may be helpful to create an alias::
 
-    # alias ceph='cephadm shell -- ceph'
+    # alias ceph='cephadm shell --'
 
 * You can install the ``ceph-common`` package, which contains all of the
   ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
@@ -150,12 +150,12 @@ To add each new host to the cluster, perform two steps:
 #. Install the cluster's public SSH key in the new host's root user's
    ``authorized_keys`` file::
 
-     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@*<new-host>*
+     # ssh-copy-id -f -i ceph.pub root@*<new-host>*
 
    For example::
 
-     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@host2
-     # ssh-copy-id -f -i /etc/ceph/ceph.pub root@host3
+     # ssh-copy-id -f -i ceph.pub root@host2
+     # ssh-copy-id -f -i ceph.pub root@host3
 
 #. Tell Ceph that the new node is part of the cluster::
 
