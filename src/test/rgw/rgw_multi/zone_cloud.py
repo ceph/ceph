@@ -129,8 +129,8 @@ class CloudKey:
         self.content_language = k.content_language
 
 
-    def get_contents_as_string(self):
-        r = self.key.get_contents_as_string()
+    def get_contents_as_string(self, encoding=None):
+        r = self.key.get_contents_as_string(encoding=encoding)
 
         # the previous call changed the status of the source object, as it loaded
         # its metadata
