@@ -84,7 +84,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
         string_to_sign += url_params
     signature = base64.b64encode(hmac.new(conn.aws_secret_access_key.encode('utf-8'),
                                           string_to_sign.encode('utf-8'),
-                                          hashlib.sha1).digest())
+                                          hashlib.sha1).digest()).decode('ascii')
     headers = {'Authorization': 'AWS '+conn.aws_access_key_id+':'+signature,
                'Date': string_date,
                'Host': conn.host+':'+str(conn.port)}
@@ -221,7 +221,7 @@ class PSTopicS3:
         log.debug('StringTosign: %s', string_to_sign) 
         signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
-                                     hashlib.sha1).digest())
+                                     hashlib.sha1).digest()).decode('ascii')
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
                    'Date': string_date,
                    'Host': self.conn.host+':'+str(self.conn.port),
@@ -263,7 +263,7 @@ class PSTopicS3:
         log.debug('StringTosign: %s', string_to_sign) 
         signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
-                                     hashlib.sha1).digest())
+                                     hashlib.sha1).digest()).decode('ascii')
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
                    'Date': string_date,
                    'Host': self.conn.host+':'+str(self.conn.port),

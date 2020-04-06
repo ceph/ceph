@@ -8,6 +8,7 @@ import contextlib
 import logging
 import os
 import random
+import six
 import string
 
 from teuthology import misc as teuthology
@@ -101,7 +102,7 @@ def _config_user(ragweed_conf, section, user):
     ragweed_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     ragweed_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
     ragweed_conf[section].setdefault('access_key', ''.join(random.choice(string.ascii_uppercase) for i in range(20)))
-    ragweed_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
+    ragweed_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)).decode('ascii'))
 
 
 @contextlib.contextmanager
