@@ -11,6 +11,7 @@
 #include "json_spirit/json_spirit.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
@@ -29,6 +30,7 @@
 #include "tools/rbd_mirror/image_replayer/snapshot/ApplyImageStateRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/Utils.h"
+#include <set>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -416,6 +418,8 @@ void Replayer<I>::scan_local_mirror_snapshots(
   m_remote_snap_id_end = CEPH_NOSNAP;
   m_remote_mirror_snap_ns = {};
 
+  std::set<uint64_t> prune_snap_ids;
+
   auto local_image_ctx = m_state_builder->local_image_ctx;
   std::shared_lock image_locker{local_image_ctx->image_lock};
   for (auto snap_info_it = local_image_ctx->snap_info.begin();
@@ -437,10 +441,24 @@ void Replayer<I>::scan_local_mirror_snapshots(
         // if remote has new snapshots, we would sync from here
         m_local_snap_id_start = local_snap_id;
         m_local_snap_id_end = CEPH_NOSNAP;
+
+        if (mirror_ns->mirror_peer_uuids.empty()) {
+          // no other peer will attempt to sync to this snapshot so store as
+          // a candidate for removal
+          prune_snap_ids.insert(local_snap_id);
+        }
       } else {
         // start snap will be last complete mirror snapshot or initial
         // image revision
         m_local_snap_id_end = local_snap_id;
+
+        if (mirror_ns->last_copied_object_number == 0) {
+          // snapshot might be missing image state, object-map, etc, so just
+          // delete and re-create it if we haven't started copying data
+          // objects
+          prune_snap_ids.insert(local_snap_id);
+          break;
+        }
       }
     } else if (mirror_ns->is_primary()) {
       if (mirror_ns->complete) {
@@ -460,6 +478,19 @@ void Replayer<I>::scan_local_mirror_snapshots(
     }
   }
   image_locker.unlock();
+
+  if (m_local_snap_id_start > 0 && m_local_snap_id_end == CEPH_NOSNAP) {
+    // remove candidate that is required for delta snapshot sync
+    prune_snap_ids.erase(m_local_snap_id_start);
+  }
+  if (!prune_snap_ids.empty()) {
+    locker->unlock();
+
+    auto prune_snap_id = *prune_snap_ids.begin();
+    dout(5) << "pruning unused non-primary snapshot " << prune_snap_id << dendl;
+    prune_non_primary_snapshot(prune_snap_id);
+    return;
+  }
 
   if (m_local_snap_id_start > 0 || m_local_snap_id_end != CEPH_NOSNAP) {
     if (m_local_mirror_snap_ns.is_non_primary() &&
@@ -654,6 +685,56 @@ void Replayer<I>::scan_remote_mirror_snapshots(
   m_state = STATE_IDLE;
 
   notify_status_updated();
+}
+
+template <typename I>
+void Replayer<I>::prune_non_primary_snapshot(uint64_t snap_id) {
+  dout(10) << "snap_id=" << snap_id << dendl;
+
+  auto local_image_ctx = m_state_builder->local_image_ctx;
+  bool snap_valid = false;
+  cls::rbd::SnapshotNamespace snap_namespace;
+  std::string snap_name;
+
+  {
+    std::shared_lock image_locker{local_image_ctx->image_lock};
+    auto snap_info = local_image_ctx->get_snap_info(snap_id);
+    if (snap_info != nullptr) {
+      snap_valid = true;
+      snap_namespace = snap_info->snap_namespace;
+      snap_name = snap_info->name;
+
+      ceph_assert(boost::get<cls::rbd::MirrorSnapshotNamespace>(
+        &snap_namespace) != nullptr);
+    }
+  }
+
+  if (!snap_valid) {
+    load_local_image_meta();
+    return;
+  }
+
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_prune_non_primary_snapshot>(this);
+  local_image_ctx->operations->snap_remove(snap_namespace, snap_name, ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_prune_non_primary_snapshot(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to prune non-primary snapshot: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(r, "failed to prune non-primary snapshot");
+    return;
+  }
+
+  if (is_replay_interrupted()) {
+    return;
+  }
+
+  load_local_image_meta();
 }
 
 template <typename I>

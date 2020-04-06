@@ -18,6 +18,7 @@
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockOperations.h"
 #include "test/rbd_mirror/mock/MockContextWQ.h"
 #include "test/rbd_mirror/mock/MockSafeTimer.h"
 
@@ -456,6 +457,22 @@ public:
       }));
   }
 
+  void expect_prune_non_primary_snapshot(librbd::MockTestImageCtx& mock_image_ctx,
+                                         uint64_t snap_id, int r) {
+    EXPECT_CALL(mock_image_ctx, get_snap_info(snap_id))
+      .WillOnce(Invoke([&mock_image_ctx](uint64_t snap_id) -> librbd::SnapInfo* {
+        auto it = mock_image_ctx.snap_info.find(snap_id);
+        if (it == mock_image_ctx.snap_info.end()) {
+          return nullptr;
+        }
+        return &it->second;
+      }));
+    EXPECT_CALL(*mock_image_ctx.operations, snap_remove(_, _, _))
+      .WillOnce(WithArg<2>(Invoke([this, r](Context* ctx) {
+        m_threads->work_queue->queue(ctx, r);
+      })));
+  }
+
   void expect_snapshot_copy(MockSnapshotCopyRequest& mock_snapshot_copy_request,
                             uint64_t src_snap_id_start,
                             uint64_t src_snap_id_end,
@@ -786,7 +803,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
                      0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
-  // idle
+  // prune non-primary snap1
   expect_load_image_meta(mock_image_meta, false, 0);
   expect_is_refresh_required(mock_local_image_ctx, true);
   expect_refresh(
@@ -797,6 +814,19 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
        0, {}, 0, 0, {}}},
       {12U, librbd::SnapInfo{"snap2", cls::rbd::UserSnapshotNamespace{},
        0, {}, 0, 0, {}}},
+      {14U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
+         cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, "remote mirror uuid",
+         4, true, 0, {}},
+       0, {}, 0, 0, {}}},
+    }, 0);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  expect_prune_non_primary_snapshot(mock_local_image_ctx, 11, 0);
+
+  // idle
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_local_image_ctx, true);
+  expect_refresh(
+    mock_local_image_ctx, {
       {14U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
          cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, "remote mirror uuid",
          4, true, 0, {}},
