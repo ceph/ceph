@@ -1127,7 +1127,7 @@ start_ganesha() {
         pid file = $ganesha_dir/ganesha.pid
 EOF
 
-        prun ceph_adm nfs export create cephfs "a" "/cephfs" --attach=$name
+        prun ceph_adm nfs export create cephfs "a" "/cephfs" $name
         prun ganesha-rados-grace -p $pool_name -n $namespace add $name
         prun ganesha-rados-grace -p $pool_name -n $namespace
 

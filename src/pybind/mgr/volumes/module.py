@@ -260,9 +260,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'name=type,type=CephString '
             'name=fsname,type=CephString '
             'name=binding,type=CephString '
+            'name=attach,type=CephString '
             'name=readonly,type=CephBool,req=false '
-            'name=path,type=CephString,req=false '
-            'name=attach,type=CephString,req=false ',
+            'name=path,type=CephString,req=false ',
             'desc': "Create a cephfs export",
             'perm': 'rw'
         },
@@ -472,7 +472,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         #TODO Extend export creation for rgw.
         return self.fs_export.create_export(export_type=cmd['type'], fs_name=cmd['fsname'],
                 pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False),
-                path=cmd.get('path', '/'), cluster_id=cmd.get('attach','None'))
+                path=cmd.get('path', '/'), cluster_id=cmd.get('attach'))
 
     def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
             return self.fs_export.delete_export(cmd['export_id'])
