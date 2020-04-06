@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/mimic latest
+   install ceph/nautilus latest
 tasks:
 - install:
-    branch: mimic #tag: v13.2.8
+    branch: nautilus #tag: v13.2.8
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -13,7 +13,7 @@ tasks:
       - ceph-mgr-cephadm
       - cephadm
     extra_packages: ['librados2']
-- print: "**** done installing mimic"
+- print: "**** done installing nautilus"
 - ceph:
     mon_bind_addrvec: false
     mon_bind_msgr2: false
@@ -37,6 +37,6 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd require-osd-release mimic
-      - ceph osd set-require-min-compat-client mimic
+      - ceph osd require-osd-release nautilus
+      - ceph osd set-require-min-compat-client nautilus
 - print: "**** done ceph"
