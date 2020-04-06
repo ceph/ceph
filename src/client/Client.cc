@@ -3615,15 +3615,17 @@ void Client::check_caps(Inode *in, unsigned flags)
     }
 
     int flushing;
+    int msg_flags = 0;
     ceph_tid_t flush_tid;
     if (in->auth_cap == &cap && in->dirty_caps) {
       flushing = mark_caps_flushing(in, &flush_tid);
+      if (flags & CHECK_CAPS_SYNCHRONOUS)
+	msg_flags |= MClientCaps::FLAG_SYNC;
     } else {
       flushing = 0;
       flush_tid = 0;
     }
 
-    int msg_flags = (flags & CHECK_CAPS_SYNCHRONOUS) ? MClientCaps::FLAG_SYNC : 0;
     send_cap(in, session, &cap, msg_flags, cap_used, wanted, retain,
 	     flushing, flush_tid);
   }
