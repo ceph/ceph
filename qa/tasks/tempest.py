@@ -4,6 +4,8 @@ Deploy and configure Tempest for Teuthology
 import contextlib
 import logging
 
+from six.moves import configparser
+
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.exceptions import ConfigError
@@ -108,7 +110,6 @@ def configure_instance(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring Tempest')
 
-    import ConfigParser
     for (client, cconfig) in config.items():
         run_in_tempest_venv(ctx, client,
             [
@@ -135,7 +136,7 @@ def configure_instance(ctx, config):
             'keystone_public_port': str(public_port),
         }
 
-        cpar = ConfigParser.ConfigParser()
+        cpar = configparser.ConfigParser()
         cpar.read(local_conf)
         setup_logging(ctx, cpar)
         to_config(cconfig, params, 'auth', cpar)
