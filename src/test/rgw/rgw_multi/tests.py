@@ -1004,14 +1004,14 @@ def test_multi_zone_redirect():
 
     key2 = bucket2.get_key(obj)
 
-    eq(data, key2.get_contents_as_string())
+    eq(data, key2.get_contents_as_string(encoding='ascii'))
 
     key = bucket.new_key(obj)
 
     for x in ['a', 'b', 'c', 'd']:
         data = x*512
         key.set_contents_from_string(data)
-        eq(data, key2.get_contents_as_string())
+        eq(data, key2.get_contents_as_string(encoding='ascii'))
 
     # revert config changes
     set_sync_from_all(z2, True)
@@ -1245,10 +1245,10 @@ def test_encrypted_object_sync():
     # read the encrypted objects from the second zone
     bucket2 = get_bucket(zone2, bucket_name)
     key = bucket2.get_key('testobj-sse-c', headers=sse_c_headers)
-    eq(data, key.get_contents_as_string(headers=sse_c_headers))
+    eq(data, key.get_contents_as_string(headers=sse_c_headers, encoding='ascii'))
 
     key = bucket2.get_key('testobj-sse-kms')
-    eq(data, key.get_contents_as_string())
+    eq(data, key.get_contents_as_string(encoding='ascii'))
 
 def test_bucket_index_log_trim():
     zonegroup = realm.master_zonegroup()
