@@ -875,6 +875,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSync) {
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 11, true, 123, 0);
   expect_notify_update(mock_local_image_ctx);
+  expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // idle
   expect_load_image_meta(mock_image_meta, false, 0);
@@ -960,6 +961,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 11, true, 0, 0);
   expect_notify_update(mock_local_image_ctx);
+  expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // idle
   expect_load_image_meta(mock_image_meta, false, 0);
@@ -1704,6 +1706,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopyImageError) {
   MockImageCopyRequest mock_image_copy_request;
   expect_image_copy(mock_image_copy_request, 0, 1, 0, {},
                     {{1, CEPH_NOSNAP}}, -EINVAL);
+  expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // wake-up replayer
   update_watch_ctx->handle_notify();
@@ -1778,6 +1781,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
   expect_apply_image_state(mock_apply_state_request, 0);
   expect_mirror_image_snapshot_set_copy_progress(
     mock_local_image_ctx, 11, true, 0, -EINVAL);
+  expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // wake-up replayer
   update_watch_ctx->handle_notify();
