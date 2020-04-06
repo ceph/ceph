@@ -35,7 +35,7 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create <type=cephfs> <fsname> <binding> [--readonly] [--path=/path/in/cephfs] [--attach=<clusterid>]
+    $ ceph nfs export create <type=cephfs> <fsname> <binding> <clusterid> [--readonly] [--path=/path/in/cephfs]
 
 It creates export rados objects containing the export block. Here binding is
 the pseudo root name and type is export type. Currently only CephFS is
