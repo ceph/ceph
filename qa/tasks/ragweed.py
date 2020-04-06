@@ -211,7 +211,7 @@ def configure(ctx, config, run_stages):
     log.info('Configuring boto...')
     boto_src = os.path.join(os.path.dirname(__file__), 'boto.cfg.template')
     for client, properties in config['clients'].items():
-        with open(boto_src, 'rb') as f:
+        with open(boto_src, 'r') as f:
             (remote,) = ctx.cluster.only(client).remotes.keys()
             conf = f.read().format(
                 idle_timeout=config.get('idle_timeout', 30)
