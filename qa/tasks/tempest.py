@@ -101,8 +101,12 @@ def setup_logging(ctx, cpar):
 
 def to_config(config, params, section, cpar):
     for (k, v) in config[section].items():
-        if (isinstance(v, str)):
+        if isinstance(v, str):
             v = v.format(**params)
+        elif isinstance(v, bool):
+            v = 'true' if v else 'false'
+        else:
+            v = str(v)
         cpar.set(section, k, v)
 
 @contextlib.contextmanager
