@@ -610,7 +610,7 @@ def task(ctx, config):
     rl.log_and_clear("put_obj", bucket_name, user1)
 
     # fetch it too (for usage stats presently)
-    s = key.get_contents_as_string()
+    s = key.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name, user1)
     assert s == object_name
     # list bucket too (for usage stats presently)
