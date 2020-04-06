@@ -1280,8 +1280,16 @@ class DaemonDescription(object):
 
     def service_id(self):
         if self.daemon_type == 'rgw':
-            v = self.daemon_id.split('.')
-            return '.'.join(v[0:2])
+            if self.hostname and self.hostname in self.daemon_id:
+                pre, post_ = self.daemon_id.split(self.hostname)
+                return pre[:-1]
+            else:
+                # daemon_id == "realm.zone.host.random"
+                v = self.daemon_id.split('.')
+                if len(v) == 4:
+                    return '.'.join(v[0:2])
+                # subcluster or fqdn? undecidable.
+                raise OrchestratorError(f"DaemonDescription: Cannot calculate service_id: {v}")
         if self.daemon_type in ['mds', 'nfs', 'iscsi']:
             return self.daemon_id.split('.')[0]
         return self.daemon_type
