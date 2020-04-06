@@ -196,7 +196,7 @@ class S3tests_java(Task):
                 '/home/{local}/s3tests.teuth.config.yaml'.format(local=local_user))
             log.debug("S3 Tests Java: s3tests_conf is {s3cfg}".format(
                 s3cfg=s3tests_conf))
-            for section, user in self.users.items():
+            for section, user in list(self.users.items()):
                 if section in s3tests_conf:
                     s3_user_id = '{user}.{client}'.format(
                         user=user, client=client)
