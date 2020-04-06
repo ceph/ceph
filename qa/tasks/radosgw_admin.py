@@ -662,7 +662,7 @@ def task(ctx, config):
     rl.log_and_clear("put_obj", bucket_name, user1)
 
     # fetch it too (for usage stats presently)
-    s = key.get_contents_as_string()
+    s = key.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name, user1)
     assert s == object_name
     # list bucket too (for usage stats presently)
@@ -941,7 +941,7 @@ def task(ctx, config):
 
     # get bucket and object to test if user keys are preserved
     bucket = connection3.get_bucket(bucket_name + '6')
-    s = key1.get_contents_as_string()
+    s = key1.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name + '6', user4)
     assert s == object_name1
 
@@ -973,12 +973,12 @@ def task(ctx, config):
 
     # test if user 2 and user4 can still access their bucket and objects after rename fails
     bucket = connection3.get_bucket(bucket_name + '6')
-    s = key1.get_contents_as_string()
+    s = key1.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name + '6', user4)
     assert s == object_name1
 
     bucket = connection2.get_bucket(bucket_name + '7')
-    s = key2.get_contents_as_string()
+    s = key2.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name + '7', user2)
     assert s == object_name2
 
