@@ -1099,7 +1099,7 @@ def test_set_bucket_policy():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
     for _, bucket in zone_bucket:
         bucket.set_policy(policy)
-        assert(bucket.get_policy() == policy)
+        assert(bucket.get_policy().decode('ascii') == policy)
 
 def test_bucket_sync_disable():
     zonegroup = realm.master_zonegroup()
