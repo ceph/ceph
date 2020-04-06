@@ -97,7 +97,7 @@ class usage_acc:
     def update(self, c, cat, user, out, b_in, err):
         x = self.c2x(c, cat)
         usage_acc_update2(x, out, b_in, err)
-        if not err and cat == 'create_bucket' and not x.has_key('owner'):
+        if not err and cat == 'create_bucket' and 'owner' not in x:
             x['owner'] = user
     def make_entry(self, cat, bucket, user, out, b_in, err):
         if cat == 'create_bucket' and err:
@@ -115,7 +115,7 @@ class usage_acc:
     def get_usage(self):
         return self.results
     def compare_results(self, results):
-        if not results.has_key('entries') or not results.has_key('summary'):
+        if 'entries' not in results or 'summary' not in results:
             return ['Missing entries or summary']
         r = []
         for e in self.results['entries']:
