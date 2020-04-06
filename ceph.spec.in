@@ -2252,8 +2252,7 @@ if [ $1 -eq 0 ]; then
     fi
 fi
 exit 0
-
-%endif # with selinux
+%endif
 
 %if 0%{with python2}
 %files -n python-ceph-compat
