@@ -752,12 +752,83 @@ void Replayer<I>::handle_get_local_image_state(int r) {
 
 template <typename I>
 void Replayer<I>::create_non_primary_snapshot() {
-  dout(10) << dendl;
+  auto local_image_ctx = m_state_builder->local_image_ctx;
+
+  if (m_local_snap_id_start > 0) {
+    std::shared_lock local_image_locker{local_image_ctx->image_lock};
+
+    auto local_snap_info_it = local_image_ctx->snap_info.find(
+      m_local_snap_id_start);
+    if (local_snap_info_it == local_image_ctx->snap_info.end()) {
+      local_image_locker.unlock();
+
+      derr << "failed to locate local snapshot " << m_local_snap_id_start
+           << dendl;
+      handle_replay_complete(-ENOENT, "failed to locate local start snapshot");
+      return;
+    }
+
+    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+      &local_snap_info_it->second.snap_namespace);
+    ceph_assert(mirror_ns != nullptr);
+
+    auto remote_image_ctx = m_state_builder->remote_image_ctx;
+    std::shared_lock remote_image_locker{remote_image_ctx->image_lock};
+
+    // (re)build a full mapping from remote to local snap ids for all user
+    // snapshots to support applying image state in the future
+    for (auto remote_snap_info_it = remote_image_ctx->snap_info.begin();
+         remote_snap_info_it != remote_image_ctx->snap_info.end();
+         ++remote_snap_info_it) {
+      auto remote_snap_id = remote_snap_info_it->first;
+      if (remote_snap_id >= m_remote_snap_id_end) {
+        break;
+      }
+
+      // we can ignore all non-user snapshots since image state only includes
+      // user snapshots
+      auto& remote_snap_info = remote_snap_info_it->second;
+      if (boost::get<cls::rbd::UserSnapshotNamespace>(
+            &remote_snap_info.snap_namespace) == nullptr) {
+        continue;
+      }
+
+      uint64_t local_snap_id = CEPH_NOSNAP;
+      if (mirror_ns->is_demoted() && !m_remote_mirror_snap_ns.is_demoted()) {
+        // if we are creating a non-primary snapshot following a demotion,
+        // re-build the full snapshot sequence since we don't have a valid
+        // snapshot mapping
+        auto local_snap_id_it = local_image_ctx->snap_ids.find(
+          {remote_snap_info.snap_namespace, remote_snap_info.name});
+        if (local_snap_id_it != local_image_ctx->snap_ids.end()) {
+          local_snap_id = local_snap_id_it->second;
+        }
+      } else {
+        auto snap_seq_it = mirror_ns->snap_seqs.find(remote_snap_id);
+        if (snap_seq_it != mirror_ns->snap_seqs.end()) {
+          local_snap_id = snap_seq_it->second;
+        }
+      }
+
+      if (m_local_mirror_snap_ns.snap_seqs.count(remote_snap_id) == 0 &&
+          local_snap_id != CEPH_NOSNAP) {
+        dout(15) << "mapping remote snapshot " << remote_snap_id << " to "
+                 << "local snapshot " << local_snap_id << dendl;
+        m_local_mirror_snap_ns.snap_seqs[remote_snap_id] = local_snap_id;
+      }
+    }
+  }
+
+  dout(10) << "demoted=" << m_remote_mirror_snap_ns.is_demoted() << ", "
+           << "primary_mirror_uuid="
+           << m_state_builder->remote_mirror_uuid << ", "
+           << "primary_snap_id=" << m_remote_snap_id_end << ", "
+           << "snap_seqs=" << m_local_mirror_snap_ns.snap_seqs << dendl;
 
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_create_non_primary_snapshot>(this);
   auto req = librbd::mirror::snapshot::CreateNonPrimaryRequest<I>::create(
-    m_state_builder->local_image_ctx, m_remote_mirror_snap_ns.is_demoted(),
+    local_image_ctx, m_remote_mirror_snap_ns.is_demoted(),
     m_state_builder->remote_mirror_uuid, m_remote_snap_id_end,
     m_local_mirror_snap_ns.snap_seqs, m_image_state, &m_local_snap_id_end, ctx);
   req->send();
