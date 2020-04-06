@@ -78,7 +78,6 @@ def mdlog_list(zone, period = None):
     if period:
         cmd += ['--period', period]
     (mdlog_json, _) = zone.cluster.admin(cmd, read_only=True)
-    mdlog_json = mdlog_json.decode('utf-8')
     return json.loads(mdlog_json)
 
 def mdlog_autotrim(zone):
@@ -87,7 +86,6 @@ def mdlog_autotrim(zone):
 def datalog_list(zone, period = None):
     cmd = ['datalog', 'list']
     (datalog_json, _) = zone.cluster.admin(cmd, read_only=True)
-    datalog_json = datalog_json.decode('utf-8')
     return json.loads(datalog_json)
 
 def datalog_autotrim(zone):
@@ -97,14 +95,12 @@ def bilog_list(zone, bucket, args = None):
     cmd = ['bilog', 'list', '--bucket', bucket] + (args or [])
     cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
     bilog, _ = zone.cluster.admin(cmd, read_only=True)
-    bilog = bilog.decode('utf-8')
     return json.loads(bilog)
 
 def bilog_autotrim(zone, args = None):
     zone.cluster.admin(['bilog', 'autotrim'] + (args or []))
 
 def parse_meta_sync_status(meta_sync_status_json):
-    meta_sync_status_json = meta_sync_status_json.decode('utf-8')
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
 
@@ -142,7 +138,7 @@ def meta_sync_status(zone):
 def meta_master_log_status(master_zone):
     cmd = ['mdlog', 'status'] + master_zone.zone_args()
     mdlog_status_json, retcode = master_zone.cluster.admin(cmd, read_only=True)
-    mdlog_status = json.loads(mdlog_status_json.decode('utf-8'))
+    mdlog_status = json.loads(mdlog_status_json)
 
     markers = {i: s['marker'] for i, s in enumerate(mdlog_status)}
     log.debug('master meta markers=%s', markers)
@@ -212,7 +208,6 @@ def realm_meta_checkpoint(realm):
         zonegroup_meta_checkpoint(zonegroup, meta_master_zone, master_status)
 
 def parse_data_sync_status(data_sync_status_json):
-    data_sync_status_json = data_sync_status_json.decode('utf-8')
     log.debug('current data sync status=%s', data_sync_status_json)
     sync_status = json.loads(data_sync_status_json)
 
@@ -261,7 +256,6 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
 
         assert(retcode == 2) # ENOENT
 
-    bucket_sync_status_json = bucket_sync_status_json.decode('utf-8')
     sync_status = json.loads(bucket_sync_status_json)
 
     markers={}
@@ -276,7 +270,7 @@ def data_source_log_status(source_zone):
     source_cluster = source_zone.cluster
     cmd = ['datalog', 'status'] + source_zone.zone_args()
     datalog_status_json, retcode = source_cluster.admin(cmd, read_only=True)
-    datalog_status = json.loads(datalog_status_json.decode('utf-8'))
+    datalog_status = json.loads(datalog_status_json)
 
     markers = {i: s['marker'] for i, s in enumerate(datalog_status)}
     log.debug('data markers for zone=%s markers=%s', source_zone.name, markers)
@@ -288,7 +282,7 @@ def bucket_source_log_status(source_zone, bucket_name):
     cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
     source_cluster = source_zone.cluster
     bilog_status_json, retcode = source_cluster.admin(cmd, read_only=True)
-    bilog_status = json.loads(bilog_status_json.decode('utf-8'))
+    bilog_status = json.loads(bilog_status_json)
 
     m={}
     markers={}
