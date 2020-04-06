@@ -2333,8 +2333,7 @@ if [ $1 -eq 0 ]; then
     fi
 fi
 exit 0
-
-%endif # with selinux
+%endif
 
 %files grafana-dashboards
 %if 0%{?suse_version}
