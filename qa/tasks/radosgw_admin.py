@@ -214,8 +214,9 @@ class requestlog_queue():
             if 'Content-Length' in j['o'].headers:
                 bytes_out = int(j['o'].headers['Content-Length'])
             bytes_in = 0
-            if 'content-length' in j['i'].msg.dict:
-                bytes_in = int(j['i'].msg.dict['content-length'])
+            msg = j['i'].msg if six.PY3 else j['i'].msg.dict
+            if 'content-length'in msg:
+                bytes_in = int(msg['content-length'])
             log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
                      % (cat, bucket, user, bytes_out, bytes_in, j['e']))
             if add_entry == None:
