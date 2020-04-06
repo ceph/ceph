@@ -4,6 +4,7 @@ Deploy and configure Barbican for Teuthology
 import argparse
 import contextlib
 import logging
+import six
 from six.moves import http_client
 from six.moves.urllib.parse import urlparse
 import json
@@ -357,7 +358,7 @@ def create_secrets(ctx, config):
             if not (barbican_sec_resp.status >= 200 and
                     barbican_sec_resp.status < 300):
                 raise Exception("Cannot create secret")
-            barbican_data = json.loads(barbican_sec_resp.read())
+            barbican_data = json.loads(six.ensure_str(barbican_sec_resp.read()))
             if 'secret_ref' not in barbican_data:
                 raise ValueError("Malformed secret creation response")
             secret_ref = barbican_data["secret_ref"]
