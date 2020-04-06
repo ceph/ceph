@@ -239,7 +239,7 @@ class S3tests_java(Task):
         """
         access_key = ''.join(random.choice(string.ascii_uppercase)
                              for i in range(20))
-        access_secret = base64.b64encode(os.urandom(40))
+        access_secret = base64.b64encode(os.urandom(40)).decode('ascii')
         endpoint = self.ctx.rgw.role_endpoints.get(client)
 
         self._set_cfg_entry(
