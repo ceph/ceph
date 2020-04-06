@@ -115,6 +115,9 @@ private:
    *    v (skip if not needed)                          |
    * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
+   *    | (unused non-primary snapshot)                 |
+   *    |\--------------> PRUNE_NON_PRIMARY_SNAPSHOT---/|
+   *    |                                               |
    *    | (interrupted sync)                            |
    *    |\--------------> GET_LOCAL_IMAGE_STATE ------\ |
    *    |                                             | |
@@ -251,6 +254,9 @@ private:
 
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
+
+  void prune_non_primary_snapshot(uint64_t snap_id);
+  void handle_prune_non_primary_snapshot(int r);
 
   void copy_snapshots();
   void handle_copy_snapshots(int r);
