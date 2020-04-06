@@ -244,7 +244,7 @@ def get_acl(key):
     Helper function to get the xml acl from a key, ensuring that the xml
     version tag is removed from the acl response
     """
-    raw_acl = key.get_xml_acl()
+    raw_acl = six.ensure_str(key.get_xml_acl())
 
     def remove_version(string):
         return string.split(
@@ -799,7 +799,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key],
+        ['policy', '--bucket', bucket.name, '--object', six.ensure_str(key.key)],
         check_status=True, format='xml')
 
     acl = get_acl(key)
@@ -812,7 +812,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key],
+        ['policy', '--bucket', bucket.name, '--object', six.ensure_str(key.key)],
         check_status=True, format='xml')
 
     acl = get_acl(key)
