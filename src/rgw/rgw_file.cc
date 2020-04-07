@@ -1766,7 +1766,7 @@ void rgwfile_version(int *major, int *minor, int *extra)
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
     delete new_fs;
-    return -EINVAL;
+    return rc;
   }
 
   /* register fs for shared gc */
@@ -1797,7 +1797,7 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
     delete new_fs;
-    return -EINVAL;
+    return rc;
   }
 
   /* register fs for shared gc */
