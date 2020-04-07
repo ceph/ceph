@@ -1819,9 +1819,9 @@ class CephManager:
         """
         Get osd statuses sorted by states that the osds are in.
         """
-        osd_lines = filter(
+        osd_lines = list(filter(
             lambda x: x.startswith('osd.') and (("up" in x) or ("down" in x)),
-            self.raw_osd_status().split('\n'))
+            self.raw_osd_status().split('\n')))
         self.log(osd_lines)
         in_osds = [int(i[4:].split()[0])
                    for i in filter(lambda x: " in " in x, osd_lines)]
