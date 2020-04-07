@@ -199,8 +199,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
                       << "peer_uuids:[" << mirror_snap.mirror_peer_uuids << "]";
           if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
               mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED) {
-            oss  << mirror_snap.primary_mirror_uuid << ":"
-                 << mirror_snap.primary_snap_id << " ";
+            oss << " " << mirror_snap.primary_mirror_uuid << ":"
+                << mirror_snap.primary_snap_id << " ";
             if (!mirror_snap.complete) {
               if (info.num_objs > 0) {
                 auto progress = std::min<uint64_t>(
