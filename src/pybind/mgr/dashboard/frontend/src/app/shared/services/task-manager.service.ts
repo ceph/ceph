@@ -25,8 +25,8 @@ class TaskSubscription {
 export class TaskManagerService {
   subscriptions: Array<TaskSubscription> = [];
 
-  constructor(summaryService: SummaryService) {
-    summaryService.subscribe((data: any) => {
+  init(summaryService: SummaryService) {
+    return summaryService.subscribe((data: any) => {
       if (!data) {
         return;
       }
@@ -51,7 +51,7 @@ export class TaskManagerService {
     this.subscriptions.push(new TaskSubscription(name, metadata, onTaskFinished));
   }
 
-  _getTask(subscription: TaskSubscription, tasks: Array<Task>): Task {
+  private _getTask(subscription: TaskSubscription, tasks: Array<Task>): Task {
     for (const task of tasks) {
       if (task.name === subscription.name && _.isEqual(task.metadata, subscription.metadata)) {
         return task;

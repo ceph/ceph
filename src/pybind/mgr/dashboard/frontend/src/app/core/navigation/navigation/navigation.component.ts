@@ -1,4 +1,6 @@
-import { Component, HostBinding, OnInit } from '@angular/core';
+import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
+
+import { Subscription } from 'rxjs';
 
 import { Icons } from '../../../shared/enum/icons.enum';
 import { Permissions } from '../../../shared/models/permissions';
@@ -14,7 +16,7 @@ import { SummaryService } from '../../../shared/services/summary.service';
   templateUrl: './navigation.component.html',
   styleUrls: ['./navigation.component.scss']
 })
-export class NavigationComponent implements OnInit {
+export class NavigationComponent implements OnInit, OnDestroy {
   @HostBinding('class.isPwdDisplayed') isPwdDisplayed = false;
 
   permissions: Permissions;
@@ -29,6 +31,7 @@ export class NavigationComponent implements OnInit {
   simplebar = {
     autoHide: false
   };
+  private subs = new Subscription();
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -40,15 +43,23 @@ export class NavigationComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.summaryService.subscribe((data: any) => {
-      if (!data) {
-        return;
-      }
-      this.summaryData = data;
-    });
-    this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
-      this.isPwdDisplayed = isDisplayed;
-    });
+    this.subs.add(
+      this.summaryService.subscribe((data: any) => {
+        if (!data) {
+          return;
+        }
+        this.summaryData = data;
+      })
+    );
+    this.subs.add(
+      this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
+        this.isPwdDisplayed = isDisplayed;
+      })
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subs.unsubscribe();
   }
 
   blockHealthColor() {

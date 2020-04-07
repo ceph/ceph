@@ -5,8 +5,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
-import { AsyncSubject, forkJoin, Observable } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { forkJoin, Observable, ReplaySubject } from 'rxjs';
+import { first, switchMap } from 'rxjs/operators';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -89,7 +89,7 @@ export class RbdFormComponent implements OnInit {
   ];
   action: string;
   resource: string;
-  private rbdImage = new AsyncSubject();
+  private rbdImage = new ReplaySubject(1);
 
   icons = Icons;
 
@@ -701,9 +701,9 @@ export class RbdFormComponent implements OnInit {
     if (!this.mode) {
       this.rbdImage.next('create');
     }
-    this.rbdImage.complete();
     this.rbdImage
       .pipe(
+        first(),
         switchMap(() => {
           if (this.mode === this.rbdFormMode.editing) {
             return this.editAction();
