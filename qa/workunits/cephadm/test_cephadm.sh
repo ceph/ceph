@@ -288,16 +288,17 @@ done
 
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     device_name=/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
+    CEPH_VOLUME="$CEPHADM ceph-volume \
+                       --fsid $FSID \
+                       --config $CONFIG \
+                       --keyring $TMPDIR/keyring.bootstrap.osd --"
 
     # prepare the osd
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
-            lvm prepare --bluestore --data $device_name --no-systemd
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
-            lvm batch --no-auto $device_name --yes --no-systemd
+    $CEPH_VOLUME lvm prepare --bluestore --data $device_name --no-systemd
+    $CEPH_VOLUME lvm batch --no-auto $device_name --yes --no-systemd
 
     # osd id and osd fsid
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
-            lvm list --format json $device_name > $TMPDIR/osd.map
+    $CEPH_VOLUME lvm list --format json $device_name > $TMPDIR/osd.map
     osd_id=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_id"? | select(.)')
     osd_fsid=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_fsid"? | select(.)')
 
