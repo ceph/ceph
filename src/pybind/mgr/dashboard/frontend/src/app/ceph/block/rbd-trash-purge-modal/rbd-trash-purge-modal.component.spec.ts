@@ -66,7 +66,6 @@ describe('RbdTrashPurgeModalComponent', () => {
   it('should call ngOnInit without pool permissions', () => {
     component.poolPermission = new Permission([]);
     component.ngOnInit();
-    httpTesting.expectOne('api/summary');
     httpTesting.verify();
   });
 

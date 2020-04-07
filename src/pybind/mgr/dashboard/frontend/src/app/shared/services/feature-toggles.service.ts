@@ -1,10 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, timer } from 'rxjs';
-import { observeOn, shareReplay, switchMap } from 'rxjs/operators';
+import { Observable } from 'rxjs';
 
-import { NgZoneSchedulerService } from './ngzone-scheduler.service';
+import { TimerService } from './timer.service';
 
 export class FeatureTogglesMap {
   rbd = true;
@@ -25,11 +24,10 @@ export class FeatureTogglesService {
   readonly REFRESH_INTERVAL: number = 30000;
   private featureToggleMap$: FeatureTogglesMap$;
 
-  constructor(private http: HttpClient, protected ngZone: NgZoneSchedulerService) {
-    this.featureToggleMap$ = timer(0, this.REFRESH_INTERVAL, ngZone.leave).pipe(
-      switchMap(() => this.http.get<FeatureTogglesMap>(this.API_URL)),
-      shareReplay(1),
-      observeOn(ngZone.enter)
+  constructor(private http: HttpClient, private timerService: TimerService) {
+    this.featureToggleMap$ = this.timerService.get(
+      () => this.http.get<FeatureTogglesMap>(this.API_URL),
+      this.REFRESH_INTERVAL
     );
   }
 
