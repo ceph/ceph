@@ -480,7 +480,7 @@ function TEST_auto_repair_bluestore_failed() {
     grep scrub_finish $dir/osd.${primary}.log
     grep -q "scrub_finish.*still present after re-scrub" $dir/osd.${primary}.log || return 1
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).*+failed_repair" || return 1
+    ceph pg dump pgs | grep -q "^${pgid}.*+failed_repair" || return 1
 
     # Verify - obj1 should be back
     # Restarted osd get $ceph_osd_args passed
@@ -551,7 +551,7 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     flush_pg_stats
     grep -q "scrub_finish.*present with no repair possible" $dir/osd.${primary}.log || return 1
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).*+failed_repair" || return 1
+    ceph pg dump pgs | grep -q "^${pgid}.*+failed_repair" || return 1
 
     # Tear down
     teardown $dir || return 1
