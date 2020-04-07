@@ -4981,12 +4981,12 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
 
 int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info)
 {
-  std::vector<rgw_bucket_dir_entry> ent_list;
   rgw_obj_index_key marker;
   string prefix;
   bool is_truncated;
 
   do {
+    std::vector<rgw_bucket_dir_entry> ent_list;
     constexpr uint NUM_ENTRIES = 1000u;
     int r = cls_bucket_list_unordered(bucket_info,
 				      RGW_NO_SHARD,
