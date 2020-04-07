@@ -236,6 +236,10 @@
                   <button class="btn btn-light"
                           type="button"
                           *ngIf="!editing"
+                          tooltip="This profile can't be deleted as it is in use."
+                          i18n-tooltip
+                          triggers=""
+                          #ecpDeletionBtn="bs-tooltip"
                           (click)="deleteErasureCodeProfile()">
                     <i [ngClass]="[icons.trash]"
                        aria-hidden="true"></i>
@@ -245,10 +249,28 @@
               <span class="form-text text-muted"
                     id="ecp-info-block"
                     *ngIf="data.erasureInfo && form.getValue('erasureProfile')">
-                <cd-table-key-value [renderObjects]="true"
-                                    [data]="form.getValue('erasureProfile')"
-                                    [autoReload]="false">
-                </cd-table-key-value>
+                <tabset #ecpInfoTabs>
+                  <tab i18n-heading
+                       heading="Profile"
+                       class="ecp-info">
+                    <cd-table-key-value [renderObjects]="true"
+                                        [data]="form.getValue('erasureProfile')"
+                                        [autoReload]="false">
+                    </cd-table-key-value>
+                  </tab>
+                  <tab i18n-heading
+                       heading="Used by pools"
+                       class="used-by-pools">
+                    <ng-template #ecpIsNotUsed>
+                      <span i18n>Profile is not in use.</span>
+                    </ng-template>
+                    <ul *ngIf="ecpUsage; else ecpIsNotUsed">
+                      <li *ngFor="let pool of ecpUsage">
+                        {{ pool }}
+                      </li>
+                    </ul>
+                  </tab>
+                </tabset>
               </span>
             </div>
           </div>

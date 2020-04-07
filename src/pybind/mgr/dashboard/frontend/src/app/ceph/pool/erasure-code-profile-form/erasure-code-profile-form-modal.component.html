@@ -168,9 +168,9 @@
               <option *ngIf="!failureDomains"
                       ngValue=""
                       i18n>Loading...</option>
-              <option *ngFor="let domain of failureDomains"
+              <option *ngFor="let domain of failureDomainKeys"
                       [ngValue]="domain">
-                {{ domain }}
+                {{ domain }} ( {{failureDomains[domain].length}} )
               </option>
             </select>
           </div>
@@ -192,12 +192,12 @@
               <option *ngIf="!failureDomains"
                       ngValue=""
                       i18n>Loading...</option>
-              <option *ngIf="failureDomains && failureDomains.length > 0"
+              <option *ngIf="failureDomainKeys.length > 0"
                       ngValue=""
                       i18n>None</option>
-              <option *ngFor="let domain of failureDomains"
+              <option *ngFor="let domain of failureDomainKeys"
                       [ngValue]="domain">
-                {{ domain }}
+                {{ domain }} ( {{failureDomains[domain].length}} )
               </option>
             </select>
           </div>
@@ -253,12 +253,18 @@
             </cd-helper>
           </label>
           <div class="cd-col-form-input">
-            <input type="text"
-                   id="crushRoot"
-                   name="crushRoot"
-                   class="form-control"
-                   placeholder="root..."
-                   formControlName="crushRoot">
+            <select class="form-control custom-select"
+                    id="crushRoot"
+                    name="crushRoot"
+                    formControlName="crushRoot">
+              <option *ngIf="!buckets"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngFor="let bucket of buckets"
+                      [ngValue]="bucket">
+                {{ bucket.name }}
+              </option>
+            </select>
           </div>
         </div>
 
@@ -275,12 +281,14 @@
                     name="crushDeviceClass"
                     formControlName="crushDeviceClass">
               <option ngValue=""
-                      i18n>any</option>
+                      i18n>Let Ceph decide</option>
               <option *ngFor="let deviceClass of devices"
                       [ngValue]="deviceClass">
                 {{ deviceClass }}
               </option>
             </select>
+            <span class="form-text text-muted"
+                  i18n>Available OSDs: {{deviceCount}}</span>
           </div>
         </div>
 

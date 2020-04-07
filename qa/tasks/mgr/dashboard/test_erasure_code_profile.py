@@ -102,9 +102,8 @@ class ECPTest(DashboardTestCase):
         self._get('/ui-api/erasure_code_profile/info')
         self.assertSchemaBody(JObj({
             'names': JList(six.string_types),
-            'failure_domains': JList(six.string_types),
             'plugins': JList(six.string_types),
-            'devices': JList(six.string_types),
             'directory': six.string_types,
+            'nodes': JList(JObj({}, allow_unknown=True))
         }))
 
