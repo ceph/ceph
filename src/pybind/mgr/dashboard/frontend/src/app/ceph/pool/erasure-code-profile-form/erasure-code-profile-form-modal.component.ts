@@ -40,6 +40,8 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
   techniques: string[];
   action: string;
   resource: string;
+  lrcGroups: number;
+  lrcMultiK: number;
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -70,26 +72,115 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
         ]
       ],
       plugin: [this.PLUGIN.JERASURE, [Validators.required]],
-      k: [1], // Will be replaced by plugin defaults
-      m: [1], // Will be replaced by plugin defaults
-      crushFailureDomain: ['host'],
-      crushRoot: ['default'], // default for all - is a list possible???
-      crushDeviceClass: [''], // set none to empty at submit - get list from configs?
-      directory: [''],
+      k: [
+        4, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(2),
+          CdValidators.custom('max', () => this.baseValueValidation(true)),
+          CdValidators.custom('unequal', (v: number) => this.lrcDataValidation(v)),
+          CdValidators.custom('kLowerM', (v: number) => this.shecDataValidation(v))
+        ]
+      ],
+      m: [
+        2, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(1),
+          CdValidators.custom('max', () => this.baseValueValidation())
+        ]
+      ],
+      crushFailureDomain: '', // Will be preselected
+      crushRoot: null, // Will be preselected
+      crushDeviceClass: '', // Will be preselected
+      directory: '',
       // Only for 'jerasure' and 'isa' use
-      technique: ['reed_sol_van'],
+      technique: 'reed_sol_van',
       // Only for 'jerasure' use
       packetSize: [2048, [Validators.min(1)]],
       // Only for 'lrc' use
-      l: [1, [Validators.required, Validators.min(1)]],
-      crushLocality: [''], // set to none at the end (same list as for failure domains)
+      l: [
+        3, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(1),
+          CdValidators.custom('unequal', (v: number) => this.lrcLocalityValidation(v))
+        ]
+      ],
+      crushLocality: '', // set to none at the end (same list as for failure domains)
       // Only for 'shec' use
-      c: [1, [Validators.required, Validators.min(1)]]
+      c: [
+        2, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(1),
+          CdValidators.custom('cGreaterM', (v: number) => this.shecDurabilityValidation(v))
+        ]
+      ]
     });
+    this.form.get('k').valueChanges.subscribe(() => this.updateValidityOnChange(['m', 'l']));
+    this.form.get('m').valueChanges.subscribe(() => this.updateValidityOnChange(['k', 'l', 'c']));
+    this.form.get('l').valueChanges.subscribe(() => this.updateValidityOnChange(['k', 'm']));
     this.form.get('plugin').valueChanges.subscribe((plugin) => this.onPluginChange(plugin));
   }
 
-  onPluginChange(plugin: string) {
+  private baseValueValidation(dataChunk: boolean = false): boolean {
+    return this.validValidation(() => {
+      return (
+        this.getKMSum() > this.deviceCount &&
+        this.form.getValue('k') > this.form.getValue('m') === dataChunk
+      );
+    });
+  }
+
+  private validValidation(fn: () => boolean, plugin?: string): boolean {
+    if (!this.form || plugin ? this.plugin !== plugin : false) {
+      return false;
+    }
+    return fn();
+  }
+
+  private getKMSum(): number {
+    return this.form.getValue('k') + this.form.getValue('m');
+  }
+
+  private lrcDataValidation(k: number): boolean {
+    return this.validValidation(() => {
+      const m = this.form.getValue('m');
+      const l = this.form.getValue('l');
+      const km = k + m;
+      this.lrcMultiK = k / (km / l);
+      return k % (km / l) !== 0;
+    }, 'lrc');
+  }
+
+  private shecDataValidation(k: number): boolean {
+    return this.validValidation(() => {
+      const m = this.form.getValue('m');
+      return m > k;
+    }, 'shec');
+  }
+
+  private lrcLocalityValidation(l: number) {
+    return this.validValidation(() => {
+      const value = this.getKMSum();
+      this.lrcGroups = l > 0 ? value / l : 0;
+      return l > 0 && value % l !== 0;
+    }, 'lrc');
+  }
+
+  private shecDurabilityValidation(c: number): boolean {
+    return this.validValidation(() => {
+      const m = this.form.getValue('m');
+      return c > m;
+    }, 'shec');
+  }
+
+  private updateValidityOnChange(names: string[]) {
+    names.forEach((name) => this.form.get(name).updateValueAndValidity({ emitEvent: false }));
+  }
+
+  private onPluginChange(plugin: string) {
     this.plugin = plugin;
     if (plugin === this.PLUGIN.JERASURE) {
       this.setJerasureDefaults();
@@ -100,27 +191,14 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
     } else if (plugin === this.PLUGIN.SHEC) {
       this.setShecDefaults();
     }
-  }
-
-  private setNumberValidators(name: string, required: boolean) {
-    const validators = [Validators.min(1)];
-    if (required) {
-      validators.push(Validators.required);
-    }
-    this.form.get(name).setValidators(validators);
-  }
-
-  private setKMValidators(required: boolean) {
-    ['k', 'm'].forEach((name) => this.setNumberValidators(name, required));
+    this.updateValidityOnChange(['m']); // Triggers k, m, c and l
   }
 
   private setJerasureDefaults() {
-    this.requiredControls = ['k', 'm'];
     this.setDefaults({
       k: 4,
       m: 2
     });
-    this.setKMValidators(true);
     this.techniques = [
       'reed_sol_van',
       'reed_sol_r6_op',
@@ -133,9 +211,6 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
   }
 
   private setLrcDefaults() {
-    this.requiredControls = ['k', 'm', 'l'];
-    this.setKMValidators(true);
-    this.setNumberValidators('l', true);
     this.setDefaults({
       k: 4,
       m: 2,
@@ -144,8 +219,11 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
   }
 
   private setIsaDefaults() {
-    this.requiredControls = [];
-    this.setKMValidators(false);
+    /**
+     * Actually k and m are not required - but they will be set to the default values in case
+     * if they are not set, therefore it's fine to mark them as required in order to get
+     * strange values that weren't set.
+     */
     this.setDefaults({
       k: 7,
       m: 3
@@ -154,8 +232,11 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
   }
 
   private setShecDefaults() {
-    this.requiredControls = [];
-    this.setKMValidators(false);
+    /**
+     * Actually k, c and m are not required - but they will be set to the default values in case
+     * if they are not set, therefore it's fine to mark them as required in order to get
+     * strange values that weren't set.
+     */
     this.setDefaults({
       k: 4,
       m: 3,
@@ -165,8 +246,22 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
 
   private setDefaults(defaults: object) {
     Object.keys(defaults).forEach((controlName) => {
-      if (this.form.get(controlName).pristine) {
-        this.form.silentSet(controlName, defaults[controlName]);
+      const control = this.form.get(controlName);
+      const value = control.value;
+      let overwrite = control.pristine;
+      /**
+       * As k, m, c and l are now set touched and dirty on the beginning, plugin change will
+       * overwrite their values as we can't determine if the user has changed anything.
+       * k and m can have two default values where as l and c can only have one,
+       * so there is no need to overwrite them.
+       */
+      if ('k' === controlName) {
+        overwrite = [4, 7].includes(value);
+      } else if ('m' === controlName) {
+        overwrite = [2, 3].includes(value);
+      }
+      if (overwrite) {
+        this.form.get(controlName).setValue(defaults[controlName]);
       }
     });
   }
@@ -195,8 +290,22 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
           this.plugins = plugins;
           this.names = names;
           this.form.silentSet('directory', directory);
+          this.preValidateNumericInputFields();
         }
       );
+  }
+
+  /**
+   * This allows k, m, l and c to be validated instantly on change, before the
+   * fields got changed before by the user.
+   */
+  private preValidateNumericInputFields() {
+    const kml = ['k', 'm', 'l', 'c'].map((name) => this.form.get(name));
+    kml.forEach((control) => {
+      control.markAsTouched();
+      control.markAsDirty();
+    });
+    kml[1].updateValueAndValidity(); // Update validity of k, m, c and l
   }
 
   onSubmit() {

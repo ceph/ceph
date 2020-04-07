@@ -128,7 +128,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     });
 
     it('sets k to min error', () => {
-      formHelper.expectErrorChange('k', 0, 'min');
+      formHelper.expectErrorChange('k', 1, 'min');
     });
 
     it('sets m to min error', () => {
@@ -171,6 +171,14 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       it(`should not show any other plugin specific form control`, () => {
         fixtureHelper.expectIdElementsVisible(['c', 'l', 'crushLocality'], false);
       });
+
+      it('should not allow "k" to be changed more than possible', () => {
+        formHelper.expectErrorChange('k', 10, 'max');
+      });
+
+      it('should not allow "m" to be changed more than possible', () => {
+        formHelper.expectErrorChange('m', 10, 'max');
+      });
     });
 
     describe(`for 'isa' plugin`, () => {
@@ -178,10 +186,9 @@ describe('ErasureCodeProfileFormModalComponent', () => {
         formHelper.setValue('plugin', 'isa');
       });
 
-      it(`does not require 'm' and 'k'`, () => {
-        formHelper.setValue('k', null);
-        formHelper.expectValidChange('k', null);
-        formHelper.expectValidChange('m', null);
+      it(`does require 'm' and 'k'`, () => {
+        formHelper.expectErrorChange('k', null, 'required');
+        formHelper.expectErrorChange('m', null, 'required');
       });
 
       it(`should show 'technique'`, () => {
@@ -192,16 +199,28 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       it(`should not show any other plugin specific form control`, () => {
         fixtureHelper.expectIdElementsVisible(['c', 'l', 'crushLocality', 'packetSize'], false);
       });
+
+      it('should not allow "k" to be changed more than possible', () => {
+        formHelper.expectErrorChange('k', 10, 'max');
+      });
+
+      it('should not allow "m" to be changed more than possible', () => {
+        formHelper.expectErrorChange('m', 10, 'max');
+      });
     });
 
     describe(`for 'lrc' plugin`, () => {
       beforeEach(() => {
         formHelper.setValue('plugin', 'lrc');
+        formHelper.expectValid('k');
+        formHelper.expectValid('l');
+        formHelper.expectValid('m');
       });
 
       it(`requires 'm', 'l' and 'k'`, () => {
         formHelper.expectErrorChange('k', null, 'required');
         formHelper.expectErrorChange('m', null, 'required');
+        formHelper.expectErrorChange('l', null, 'required');
       });
 
       it(`should show 'l' and 'crushLocality'`, () => {
@@ -211,16 +230,118 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       it(`should not show any other plugin specific form control`, () => {
         fixtureHelper.expectIdElementsVisible(['c', 'packetSize', 'technique'], false);
       });
+
+      it('should not allow "k" to be changed more than possible', () => {
+        formHelper.expectErrorChange('k', 10, 'max');
+      });
+
+      it('should not allow "m" to be changed more than possible', () => {
+        formHelper.expectErrorChange('m', 10, 'max');
+      });
+
+      it('should not allow "l" to be changed so that (k+m) is not a multiple of "l"', () => {
+        formHelper.expectErrorChange('l', 4, 'unequal');
+      });
+
+      it('should update validity of k and l on m change', () => {
+        formHelper.expectValidChange('m', 3);
+        formHelper.expectError('k', 'unequal');
+        formHelper.expectError('l', 'unequal');
+      });
+
+      describe('lrc calculation', () => {
+        const expectCorrectCalculation = (
+          k: number,
+          m: number,
+          l: number,
+          failedControl: string[] = []
+        ) => {
+          formHelper.setValue('k', k);
+          formHelper.setValue('m', m);
+          formHelper.setValue('l', l);
+          ['k', 'l'].forEach((name) => {
+            if (failedControl.includes(name)) {
+              formHelper.expectError(name, 'unequal');
+            } else {
+              formHelper.expectValid(name);
+            }
+          });
+        };
+
+        const tests = {
+          kFails: [
+            [2, 1, 1],
+            [2, 2, 1],
+            [3, 1, 1],
+            [3, 2, 1],
+            [3, 1, 2],
+            [3, 3, 1],
+            [3, 3, 3],
+            [4, 1, 1],
+            [4, 2, 1],
+            [4, 2, 2],
+            [4, 3, 1],
+            [4, 4, 1]
+          ],
+          lFails: [
+            [2, 1, 2],
+            [3, 2, 2],
+            [3, 1, 3],
+            [3, 2, 3],
+            [4, 1, 2],
+            [4, 3, 2],
+            [4, 3, 3],
+            [4, 1, 3],
+            [4, 4, 3],
+            [4, 1, 4],
+            [4, 2, 4],
+            [4, 3, 4]
+          ],
+          success: [
+            [2, 2, 2],
+            [2, 2, 4],
+            [3, 3, 2],
+            [3, 3, 6],
+            [4, 2, 3],
+            [4, 2, 6],
+            [4, 4, 2],
+            [4, 4, 8],
+            [4, 4, 4]
+          ]
+        };
+
+        it('tests all cases where k fails', () => {
+          tests.kFails.forEach((testCase) => {
+            expectCorrectCalculation(testCase[0], testCase[1], testCase[2], ['k']);
+          });
+        });
+
+        it('tests all cases where l fails', () => {
+          tests.lFails.forEach((testCase) => {
+            expectCorrectCalculation(testCase[0], testCase[1], testCase[2], ['k', 'l']);
+          });
+        });
+
+        it('tests all cases where everything is valid', () => {
+          tests.success.forEach((testCase) => {
+            expectCorrectCalculation(testCase[0], testCase[1], testCase[2]);
+          });
+        });
+      });
     });
 
     describe(`for 'shec' plugin`, () => {
       beforeEach(() => {
         formHelper.setValue('plugin', 'shec');
+        formHelper.expectValid('c');
+        formHelper.expectValid('m');
+        formHelper.expectValid('k');
       });
 
-      it(`does not require 'm' and 'k'`, () => {
-        formHelper.expectValidChange('k', null);
-        formHelper.expectValidChange('m', null);
+      it(`does require 'm', 'c' and 'k'`, () => {
+        formHelper.expectErrorChange('k', null, 'required');
+        formHelper.expectErrorChange('m', null, 'required');
+        formHelper.expectErrorChange('c', null, 'required');
       });
 
       it(`should show 'c'`, () => {
@@ -232,6 +353,26 @@ describe('ErasureCodeProfileFormModalComponent', () => {
           ['l', 'crushLocality', 'packetSize', 'technique'],
           false
         );
+      });
+
+      it('should make sure that k has to be equal or greater than m', () => {
+        formHelper.expectValidChange('k', 3);
+        formHelper.expectErrorChange('k', 2, 'kLowerM');
+      });
+
+      it('should make sure that c has to be equal or less than m', () => {
+        formHelper.expectValidChange('c', 3);
+        formHelper.expectErrorChange('c', 4, 'cGreaterM');
+      });
+
+      it('should update validity of k and c on m change', () => {
+        formHelper.expectValidChange('m', 5);
+        formHelper.expectError('k', 'kLowerM');
+        formHelper.expectValid('c');
+
+        formHelper.expectValidChange('m', 1);
+        formHelper.expectError('c', 'cGreaterM');
+        formHelper.expectValid('k');
       });
     });
   });
