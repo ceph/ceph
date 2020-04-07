@@ -15,6 +15,7 @@ import {
   i18nProviders
 } from '../../../../testing/unit-test-helper';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
+import { CrushNode } from '../../../shared/models/crush-node';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { PoolModule } from '../pool.module';
@@ -27,6 +28,20 @@ describe('ErasureCodeProfileFormModalComponent', () => {
   let formHelper: FormHelper;
   let fixtureHelper: FixtureHelper;
   let data: {};
+
+  // Object contains mock functions
+  const mock = {
+    node: (
+      name: string,
+      id: number,
+      type: string,
+      type_id: number,
+      children?: number[],
+      device_class?: string
+    ): CrushNode => {
+      return { name, type, type_id, id, children, device_class };
+    }
+  };
 
   configureTestBed({
     imports: [
@@ -46,10 +61,44 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     formHelper = new FormHelper(component.form);
     ecpService = TestBed.get(ErasureCodeProfileService);
     data = {
-      failure_domains: ['host', 'osd'],
       plugins: ['isa', 'jerasure', 'shec', 'lrc'],
       names: ['ecp1', 'ecp2'],
-      devices: ['ssd', 'hdd']
+      /**
+       * Create the following test crush map:
+       * > default
+       * --> ssd-host
+       * ----> 3x osd with ssd
+       * --> mix-host
+       * ----> hdd-rack
+       * ------> 2x osd-rack with hdd
+       * ----> ssd-rack
+       * ------> 2x osd-rack with ssd
+       */
+      nodes: [
+        // Root node
+        mock.node('default', -1, 'root', 11, [-2, -3]),
+        // SSD host
+        mock.node('ssd-host', -2, 'host', 1, [1, 0, 2]),
+        mock.node('osd.0', 0, 'osd', 0, undefined, 'ssd'),
+        mock.node('osd.1', 1, 'osd', 0, undefined, 'ssd'),
+        mock.node('osd.2', 2, 'osd', 0, undefined, 'ssd'),
+        // SSD and HDD mixed devices host
+        mock.node('mix-host', -3, 'host', 1, [-4, -5]),
+        // HDD rack
+        mock.node('hdd-rack', -4, 'rack', 3, [3, 4, 5, 6, 7]),
+        mock.node('osd2.0', 3, 'osd-rack', 0, undefined, 'hdd'),
+        mock.node('osd2.1', 4, 'osd-rack', 0, undefined, 'hdd'),
+        mock.node('osd2.2', 5, 'osd-rack', 0, undefined, 'hdd'),
+        mock.node('osd2.3', 6, 'osd-rack', 0, undefined, 'hdd'),
+        mock.node('osd2.4', 7, 'osd-rack', 0, undefined, 'hdd'),
+        // SSD rack
+        mock.node('ssd-rack', -5, 'rack', 3, [8, 9, 10, 11, 12]),
+        mock.node('osd3.0', 8, 'osd-rack', 0, undefined, 'ssd'),
+        mock.node('osd3.1', 9, 'osd-rack', 0, undefined, 'ssd'),
+        mock.node('osd3.2', 10, 'osd-rack', 0, undefined, 'ssd'),
+        mock.node('osd3.3', 11, 'osd-rack', 0, undefined, 'ssd'),
+        mock.node('osd3.4', 12, 'osd-rack', 0, undefined, 'ssd')
+      ]
     };
     spyOn(ecpService, 'getInfo').and.callFake(() => of(data));
     fixture.detectChanges();
@@ -189,15 +238,27 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
   describe('submission', () => {
     let ecp: ErasureCodeProfile;
+    let submittedEcp: ErasureCodeProfile;
 
     const testCreation = () => {
       fixture.detectChanges();
       component.onSubmit();
-      expect(ecpService.create).toHaveBeenCalledWith(ecp);
+      expect(ecpService.create).toHaveBeenCalledWith(submittedEcp);
+    };
+
+    const ecpChange = (attribute: string, value: string | number) => {
+      ecp[attribute] = value;
+      submittedEcp[attribute] = value;
     };
 
     beforeEach(() => {
       ecp = new ErasureCodeProfile();
+      submittedEcp = new ErasureCodeProfile();
+      submittedEcp['crush-root'] = 'default';
+      submittedEcp['crush-failure-domain'] = 'osd-rack';
+      submittedEcp['packetsize'] = 2048;
+      submittedEcp['technique'] = 'reed_sol_van';
+
       const taskWrapper = TestBed.get(TaskWrapperService);
       spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
       spyOn(ecpService, 'create').and.stub();
@@ -205,37 +266,35 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
     describe(`'jerasure' usage`, () => {
       beforeEach(() => {
-        ecp.name = 'jerasureProfile';
+        submittedEcp['plugin'] = 'jerasure';
+        ecpChange('name', 'jerasureProfile');
+        submittedEcp.k = 4;
+        submittedEcp.m = 2;
       });
 
       it('should be able to create a profile with only required fields', () => {
         formHelper.setMultipleValues(ecp, true);
-        ecp.k = 4;
-        ecp.m = 2;
         testCreation();
       });
 
       it(`does not create with missing 'k' or invalid form`, () => {
-        ecp.k = 0;
+        ecpChange('k', 0);
         formHelper.setMultipleValues(ecp, true);
         component.onSubmit();
         expect(ecpService.create).not.toHaveBeenCalled();
       });
 
       it('should be able to create a profile with m, k, name, directory and packetSize', () => {
-        ecp.m = 3;
-        ecp.directory = '/different/ecp/path';
+        ecpChange('m', 3);
+        ecpChange('directory', '/different/ecp/path');
         formHelper.setMultipleValues(ecp, true);
-        ecp.k = 4;
         formHelper.setValue('packetSize', 8192, true);
-        ecp.packetsize = 8192;
+        ecpChange('packetsize', 8192);
         testCreation();
       });
 
       it('should not send the profile with unsupported fields', () => {
         formHelper.setMultipleValues(ecp, true);
-        ecp.k = 4;
-        ecp.m = 2;
         formHelper.setValue('crushLocality', 'osd', true);
         testCreation();
       });
@@ -243,8 +302,11 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
     describe(`'isa' usage`, () => {
       beforeEach(() => {
-        ecp.name = 'isaProfile';
-        ecp.plugin = 'isa';
+        ecpChange('name', 'isaProfile');
+        ecpChange('plugin', 'isa');
+        submittedEcp.k = 7;
+        submittedEcp.m = 3;
+        delete submittedEcp.packetsize;
       });
 
       it('should be able to create a profile with only plugin and name', () => {
@@ -253,10 +315,11 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it('should send profile with plugin, name, failure domain and technique only', () => {
-        ecp.technique = 'cauchy';
+        ecpChange('technique', 'cauchy');
         formHelper.setMultipleValues(ecp, true);
         formHelper.setValue('crushFailureDomain', 'osd', true);
-        ecp['crush-failure-domain'] = 'osd';
+        submittedEcp['crush-failure-domain'] = 'osd';
+        submittedEcp['crush-device-class'] = 'ssd';
         testCreation();
       });
 
@@ -269,35 +332,32 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
     describe(`'lrc' usage`, () => {
       beforeEach(() => {
-        ecp.name = 'lreProfile';
-        ecp.plugin = 'lrc';
+        ecpChange('name', 'lrcProfile');
+        ecpChange('plugin', 'lrc');
+        submittedEcp.k = 4;
+        submittedEcp.m = 2;
+        submittedEcp.l = 3;
+        delete submittedEcp.packetsize;
+        delete submittedEcp.technique;
       });
 
       it('should be able to create a profile with only required fields', () => {
         formHelper.setMultipleValues(ecp, true);
-        ecp.k = 4;
-        ecp.m = 2;
-        ecp.l = 3;
         testCreation();
       });
 
       it('should send profile with all required fields and crush root and locality', () => {
-        ecp.l = 8;
+        ecpChange('l', '6');
         formHelper.setMultipleValues(ecp, true);
-        ecp.k = 4;
-        ecp.m = 2;
-        formHelper.setValue('crushLocality', 'osd', true);
-        formHelper.setValue('crushRoot', 'rack', true);
-        ecp['crush-locality'] = 'osd';
-        ecp['crush-root'] = 'rack';
+        formHelper.setValue('crushRoot', component.buckets[2], true);
+        submittedEcp['crush-root'] = 'mix-host';
+        formHelper.setValue('crushLocality', 'osd-rack', true);
+        submittedEcp['crush-locality'] = 'osd-rack';
         testCreation();
       });
 
       it('should not send the profile with unsupported fields', () => {
         formHelper.setMultipleValues(ecp, true);
-        ecp.k = 4;
-        ecp.m = 2;
-        ecp.l = 3;
         formHelper.setValue('c', 4, true);
         testCreation();
       });
@@ -305,8 +365,13 @@ describe('ErasureCodeProfileFormModalComponent', () => {
 
     describe(`'shec' usage`, () => {
       beforeEach(() => {
-        ecp.name = 'shecProfile';
-        ecp.plugin = 'shec';
+        ecpChange('name', 'shecProfile');
+        ecpChange('plugin', 'shec');
+        submittedEcp.k = 4;
+        submittedEcp.m = 3;
+        submittedEcp.c = 2;
+        delete submittedEcp.packetsize;
+        delete submittedEcp.technique;
       });
 
       it('should be able to create a profile with only plugin and name', () => {
@@ -315,10 +380,10 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       });
 
       it('should send profile with plugin, name, c and crush device class only', () => {
-        ecp.c = 4;
+        ecpChange('c', '3');
         formHelper.setMultipleValues(ecp, true);
         formHelper.setValue('crushDeviceClass', 'ssd', true);
-        ecp['crush-device-class'] = 'ssd';
+        submittedEcp['crush-device-class'] = 'ssd';
         testCreation();
       });
 
