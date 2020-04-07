@@ -327,10 +327,135 @@ class NFSGanesha(object):
 
 ##################################
 
+class CephIscsi(object):
+    """Defines a Ceph-Iscsi container"""
+
+    daemon_type = 'iscsi'
+    entrypoint = '/usr/bin/rbd-target-api'
+
+    required_files = ['iscsi-gateway.cfg']
+
+    def __init__(self,
+                 fsid,
+                 daemon_id,
+                 config_json,
+                 image=DEFAULT_IMAGE):
+        # type: (str, Union[int, str], Dict, str) -> None
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.image = image
+
+        def json_get(key, default=None, require=False):
+            if require and not key in config_json.keys():
+                raise Error('{} missing from config-json'.format(key))
+            return config_json.get(key, default)
+
+        # config-json options
+        self.files = json_get('files', {})
+
+        # validate the supplied args
+        self.validate()
+
+    @classmethod
+    def init(cls, fsid, daemon_id):
+        # type: (str, Union[int, str]) -> CephIscsi
+        return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
+
+    @staticmethod
+    def get_container_mounts(data_dir, log_dir):
+        # type: (str, str) -> Dict[str, str]
+        mounts = dict()
+        mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
+        mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
+        mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
+        mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config:z'
+        mounts[log_dir] = '/var/log/rbd-target-api:z'
+        mounts['/dev/log'] = '/dev/log:z'
+        return mounts
+
+    @staticmethod
+    def get_version(container_id):
+        # type(str) -> Optional[str]
+        version = None
+        out, err, code = call(
+            [container_path, 'exec', container_id,
+             '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"])
+        if code == 0:
+            version = out
+        return version
+
+    def validate(self):
+        # type () -> None
+        if not is_fsid(self.fsid):
+            raise Error('not an fsid: %s' % self.fsid)
+        if not self.daemon_id:
+            raise Error('invalid daemon_id: %s' % self.daemon_id)
+        if not self.image:
+            raise Error('invalid image: %s' % self.image)
+
+        # check for the required files
+        if self.required_files:
+            for fname in self.required_files:
+                if fname not in self.files:
+                    raise Error('required file missing from config-json: %s' % fname)
+
+    def get_daemon_name(self):
+        # type: () -> str
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def get_container_name(self, desc=None):
+        # type: (Optional[str]) -> str
+        cname = 'ceph-%s-%s' % (self.fsid, self.get_daemon_name())
+        if desc:
+            cname = '%s-%s' % (cname, desc)
+        return cname
+
+    def get_file_content(self, fname):
+        # type: (str) -> str
+        """Normalize the json file content into a string"""
+        content = self.files.get(fname)
+        if isinstance(content, list):
+            content = '\n'.join(content)
+        return content
+
+    def create_daemon_dirs(self, data_dir, uid, gid):
+        # type: (str, int, int) -> None
+        """Create files under the container data dir"""
+        if not os.path.isdir(data_dir):
+            raise OSError('data_dir is not a directory: %s' % (data_dir))
+
+        logger.info('Creating ceph-iscsi config...')
+        configfs_dir = os.path.join(data_dir, 'configfs')
+        makedirs(configfs_dir, uid, gid, 0o755)
+
+        # populate files from the config-json
+        for fname in self.files:
+            config_file = os.path.join(data_dir, fname)
+            config_content = self.get_file_content(fname)
+            logger.info('Write file: %s' % (config_file))
+            with open(config_file, 'w') as f:
+                os.fchown(f.fileno(), uid, gid)
+                os.fchmod(f.fileno(), 0o600)
+                f.write(config_content)
+
+    @staticmethod
+    def configfs_mount_umount(data_dir, mount=True):
+        mount_path = os.path.join(data_dir, 'configfs')
+        if mount:
+            cmd = "if ! grep -qs {0} /proc/mounts; then " \
+                  "mount -t configfs none {0}; fi".format(mount_path)
+        else:
+            cmd = "if grep -qs {0} /proc/mounts; then " \
+                  "umount {0}; fi".format(mount_path)
+        return cmd.split()
+
+##################################
+
 def get_supported_daemons():
     supported_daemons = list(Ceph.daemons)
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
+    supported_daemons.append(CephIscsi.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -1287,8 +1412,7 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
-                       config=None, keyring=None,
-                       reconfig=False):
+                       config=None, keyring=None, reconfig=False):
     # type: (str, str, Union[int, str], int, int, Optional[str], Optional[str], Optional[bool]) ->  None
     data_dir = make_data_dir(fsid, daemon_type, daemon_id, uid=uid, gid=gid)
     make_log_dir(fsid, uid=uid, gid=gid)
@@ -1348,6 +1472,10 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
     if daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
         nfs_ganesha.create_daemon_dirs(data_dir, uid, gid)
+
+    if daemon_type == CephIscsi.daemon_type:
+        ceph_iscsi = CephIscsi.init(fsid, daemon_id)
+        ceph_iscsi.create_daemon_dirs(data_dir, uid, gid)
 
 def get_parm(option):
     # type: (str) -> Dict[str, str]
@@ -1464,6 +1592,12 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
         mounts.update(NFSGanesha.get_container_mounts(data_dir))
 
+    if daemon_type == CephIscsi.daemon_type:
+        assert daemon_id
+        data_dir = get_data_dir(fsid, daemon_type, daemon_id)
+        log_dir = get_log_dir(fsid)
+        mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
+
     return mounts
 
 def get_container(fsid, daemon_type, daemon_id,
@@ -1491,6 +1625,9 @@ def get_container(fsid, daemon_type, daemon_id,
         name = ''
     elif daemon_type == NFSGanesha.daemon_type:
         entrypoint = NFSGanesha.entrypoint
+        name = '%s.%s' % (daemon_type, daemon_id)
+    elif daemon_type == CephIscsi.daemon_type:
+        entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
     else:
         entrypoint = ''
@@ -1651,6 +1788,8 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
             prestart = nfs_ganesha.get_rados_grace_container('add')
             f.write(' '.join(prestart.run_cmd()) + '\n')
+        elif daemon_type == CephIscsi.daemon_type:
+            f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
 
         if daemon_type in Ceph.daemons:
             install_path = find_program('install')
@@ -1684,6 +1823,8 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             nfs_ganesha = NFSGanesha.init(fsid, daemon_id)
             poststop = nfs_ganesha.get_rados_grace_container('remove')
             f.write(' '.join(poststop.run_cmd()) + '\n')
+        elif daemon_type == CephIscsi.daemon_type:
+            f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.poststop.new',
                   data_dir + '/unit.poststop')
@@ -2422,7 +2563,7 @@ def command_bootstrap():
         cmd = ['dashboard', 'ac-user-create', args.initial_dashboard_user, password, 'administrator', '--force-password']
         if not args.dashboard_password_noupdate:
             cmd.append('--pwd-update-required')
-        cli(cmd)   
+        cli(cmd)
         logger.info('Fetching dashboard port number...')
         out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
         port = int(out)
@@ -2523,6 +2664,13 @@ def command_deploy():
         NFSGanesha.port_in_use()
         (config, keyring) = get_config_and_keyring()
         # TODO: extract ganesha uid/gid (997, 994) ?
+        (uid, gid) = extract_uid_gid()
+        c = get_container(args.fsid, daemon_type, daemon_id)
+        deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
+                      config=config, keyring=keyring,
+                      reconfig=args.reconfig)
+    elif daemon_type == CephIscsi.daemon_type:
+        (config, keyring) = get_config_and_keyring()
         (uid, gid) = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
@@ -2838,6 +2986,8 @@ def list_daemons(detail=True, legacy_dir=None):
                                 version = seen_versions.get(image_id, None)
                             if daemon_type == NFSGanesha.daemon_type:
                                 version = NFSGanesha.get_version(container_id)
+                            if daemon_type == CephIscsi.daemon_type:
+                                version = CephIscsi.get_version(container_id)
                             elif not version:
                                 if daemon_type in Ceph.daemons:
                                     out, err, code = call(
@@ -3359,7 +3509,7 @@ def command_check_host():
                 get_hostname(), args.expect_hostname))
         logger.info('Hostname "%s" matches what is expected.',
                     args.expect_hostname)
-    
+
     if errors:
         raise Error('\n'.join(errors))
 
