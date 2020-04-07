@@ -74,7 +74,7 @@ public:
   void aio_discard(uint64_t offset, uint64_t length,
                    uint32_t discard_granularity_bytes,
                    Context *on_finish) override;
-  void aio_flush(Context *on_finish) override;
+  void aio_flush(io::FlushSource flush_source, Context *on_finish) override;
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,
                      int fadvise_flags, Context *on_finish) override;
@@ -131,7 +131,9 @@ private:
 
   BlockGuardCell* detain_guarded_request_helper(rwl::GuardedRequest &req);
   BlockGuardCell* detain_guarded_request_barrier_helper(rwl::GuardedRequest &req);
-  void detain_guarded_request(C_BlockIORequestT *request, rwl::GuardedRequestFunctionContext *guarded_ctx);
+  void detain_guarded_request(C_BlockIORequestT *request,
+                              rwl::GuardedRequestFunctionContext *guarded_ctx,
+                              bool is_barrier);
 
   librbd::cache::rwl::ImageCacheState<ImageCtxT>* m_cache_state = nullptr;
 
@@ -177,7 +179,6 @@ private:
   uint64_t m_flushed_sync_gen = 0;
 
   bool m_persist_on_write_until_flush = true;
-  bool m_flush_seen = false;
 
   AsyncOpTracker m_async_op_tracker;
   /* Debug counters for the places m_async_op_tracker is used */
