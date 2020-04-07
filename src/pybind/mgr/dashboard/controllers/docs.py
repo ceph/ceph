@@ -333,12 +333,7 @@ class Docs(BaseController):
         spec = {
             'openapi': "3.0.0",
             'info': {
-                'description': "Please note that this API is not an official "
-                               "Ceph REST API to be used by third-party "
-                               "applications. It's primary purpose is to serve"
-                               " the requirements of the Ceph Dashboard and is"
-                               " subject to change at any time. Use at your "
-                               "own risk.",
+                'description': "This API is the official Ceph REST API.",
                 'version': "v1",
                 'title': "Ceph-Dashboard REST API"
             },
