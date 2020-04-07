@@ -173,7 +173,7 @@ This example would deploy all OSDs with encryption enabled.
       host_pattern: '*'
     data_devices:
       all: true
-      encrypted: true
+    encrypted: true
 
 See a full list in the DriveGroupSpecs
 
