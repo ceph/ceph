@@ -176,6 +176,11 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
+            "cmd": "telemetry show-all",
+            "desc": "Show report of all channels",
+            "perm": "r"
+        },
+        {
             "cmd": "telemetry on name=license,type=CephString,req=false",
             "desc": "Enable telemetry reports from this cluster",
             "perm": "rw",
@@ -740,12 +745,10 @@ class Module(MgrModule):
         elif command['prefix'] == 'telemetry on':
             if command.get('license') != LICENSE:
                 return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '--license " + LICENSE + "' to the 'ceph telemetry on' command."
-            self.set_module_option('enabled', True)
-            self.set_module_option('last_opt_revision', REVISION)
+            self.on()
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
-            self.set_module_option('enabled', False)
-            self.set_module_option('last_opt_revision', 1)
+            self.off()
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             if self.last_opt_revision < LAST_REVISION_RE_OPT_IN and command.get('license') != LICENSE:
@@ -755,18 +758,36 @@ class Module(MgrModule):
             return self.send(self.last_report, command.get('endpoint'))
 
         elif command['prefix'] == 'telemetry show':
-            report = self.compile_report(
-                channels=command.get('channels', None)
-            )
+            report = self.get_report(channels=command.get('channels', None))
             report = json.dumps(report, indent=4, sort_keys=True)
             if self.channel_device:
-               report += '\n \nDevice report is generated separately. To see it run \'ceph telemetry show-device\'.'
+                report += '\n \nDevice report is generated separately. To see it run \'ceph telemetry show-device\'.'
             return 0, report, ''
         elif command['prefix'] == 'telemetry show-device':
-            return 0, json.dumps(self.gather_device_report(), indent=4, sort_keys=True), ''
+            return 0, json.dumps(self.get_report('device'), indent=4, sort_keys=True), ''
+        elif command['prefix'] == 'telemetry show-all':
+            return 0, json.dumps(self.get_report('all'), indent=4, sort_keys=True), ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
+
+    def on(self):
+        self.set_module_option('enabled', True)
+        self.set_module_option('last_opt_revision', REVISION)
+
+    def off(self):
+        self.set_module_option('enabled', False)
+        self.set_module_option('last_opt_revision', 1)
+
+    def get_report(self, report_type='default', channels=None):
+        if report_type == 'default':
+            return self.compile_report(channels=channels)
+        elif report_type == 'device':
+            return self.gather_device_report()
+        elif report_type == 'all':
+            return {'report': self.compile_report(channels=channels),
+                    'device_report': self.gather_device_report()}
+        return {}
 
     def self_test(self):
         report = self.compile_report()
