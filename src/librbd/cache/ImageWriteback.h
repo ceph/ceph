@@ -6,6 +6,7 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
+#include "librbd/io/Types.h"
 #include <vector>
 
 class Context;
@@ -27,7 +28,7 @@ public:
                          int fadvise_flags, Context *on_finish) = 0;
   virtual void aio_discard(uint64_t offset, uint64_t length,
                            uint32_t discard_granularity_bytes, Context *on_finish) = 0;
-  virtual void aio_flush(Context *on_finish) = 0 ;
+  virtual void aio_flush(io::FlushSource flush_source, Context *on_finish) = 0 ;
   virtual void aio_writesame(uint64_t offset, uint64_t length,
                              ceph::bufferlist&& bl,
                              int fadvise_flags, Context *on_finish) = 0;
@@ -54,7 +55,7 @@ public:
                  int fadvise_flags, Context *on_finish);
   void aio_discard(uint64_t offset, uint64_t length,
                    uint32_t discard_granularity_bytes, Context *on_finish);
-  void aio_flush(Context *on_finish);
+  void aio_flush(io::FlushSource flush_source, Context *on_finish);
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,
                      int fadvise_flags, Context *on_finish);

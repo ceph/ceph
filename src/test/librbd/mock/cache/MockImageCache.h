@@ -5,6 +5,7 @@
 #define CEPH_TEST_LIBRBD_CACHE_MOCK_IMAGE_CACHE_H
 
 #include "gmock/gmock.h"
+#include "librbd/io/Types.h"
 #include <vector>
 
 namespace librbd {
@@ -30,6 +31,7 @@ struct MockImageCache {
 
   MOCK_METHOD4(aio_discard, void(uint64_t, uint64_t, uint32_t, Context *));
   MOCK_METHOD1(aio_flush, void(Context *));
+  MOCK_METHOD2(aio_flush, void(librbd::io::FlushSource, Context *));
   MOCK_METHOD5(aio_writesame_mock, void(uint64_t, uint64_t, ceph::bufferlist& bl,
                                         int, Context *));
   void aio_writesame(uint64_t off, uint64_t len, ceph::bufferlist&& bl,

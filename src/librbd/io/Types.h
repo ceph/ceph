@@ -42,7 +42,8 @@ typedef enum {
 enum FlushSource {
   FLUSH_SOURCE_USER,
   FLUSH_SOURCE_INTERNAL,
-  FLUSH_SOURCE_SHUTDOWN
+  FLUSH_SOURCE_SHUTDOWN,
+  FLUSH_SOURCE_WRITEBACK
 };
 
 enum Direction {
