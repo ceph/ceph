@@ -131,8 +131,7 @@
                        id="versioning"
                        name="versioning"
                        formControlName="versioning"
-                       [checked]="isVersioningEnabled"
-                       (change)="updateVersioning()">
+                       (change)="setMfaDeleteValidators()">
                 <label class="custom-control-label"
                        for="versioning"
                        i18n>Enabled</label>
@@ -158,8 +157,7 @@
                        id="mfa-delete"
                        name="mfa-delete"
                        formControlName="mfa-delete"
-                       [checked]="isMfaDeleteEnabled"
-                       (change)="updateMfaDelete()">
+                       (change)="setMfaDeleteValidators()">
                 <label class="custom-control-label"
                        for="mfa-delete"
                        i18n>Delete enabled</label>

@@ -227,8 +227,10 @@ describe('RgwBucketFormComponent', () => {
       component.editing = true;
       rgwBucketServiceGetSpy.and.returnValue(observableOf(fakeResponse));
       component.ngOnInit();
-      component.isVersioningEnabled = versioningChecked;
-      component.isMfaDeleteEnabled = mfaDeleteChecked;
+      component.bucketForm.patchValue({
+        versioning: versioningChecked,
+        'mfa-delete': mfaDeleteChecked
+      });
       fixture.detectChanges();
 
       const mfaTokenSerial = fixture.debugElement.nativeElement.querySelector('#mfa-token-serial');
