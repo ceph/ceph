@@ -216,7 +216,7 @@ class Module(MgrModule):
         {
             'name': 'active',
             'type': 'bool',
-            'default': False,
+            'default': True,
             'desc': 'automatically balance PGs across cluster',
             'runtime': True,
         },
@@ -293,7 +293,7 @@ class Module(MgrModule):
         {
             'name': 'mode',
             'desc': 'Balancer mode',
-            'default': 'none',
+            'default': 'upmap',
             'enum_allowed': ['none', 'crush-compat', 'upmap'],
             'runtime': True,
         },
