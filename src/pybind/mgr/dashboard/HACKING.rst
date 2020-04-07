@@ -138,7 +138,7 @@ possibly previously created cluster isn't re-used. ``-d`` enables debug
 messages in log files. There are several more options to chose from. You can
 get a list using the ``--help`` argument.
 
-At the end of the output of vstart, there should be information about the 
+At the end of the output of vstart, there should be information about the
 dashboard and its URLs::
 
   vstart cluster complete. Use stop.sh to stop. See out/* (e.g. 'tail -f out/????') for debug output.
@@ -198,7 +198,7 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 8.9.0 or higher
+ * Node 10.0.0 or higher
  * NPM 5.7.0 or higher
 
 nodeenv:
@@ -220,8 +220,20 @@ Angular CLI:
 Package installation
 ~~~~~~~~~~~~~~~~~~~~
 
-Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
+Run ``npm ci`` in directory ``src/pybind/mgr/dashboard/frontend`` to
 install the required packages locally.
+
+Adding or updating packages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run the following commands to add/update a package::
+
+  npm install <PACKAGE_NAME>
+  npm run fix:audit
+  npm ci
+
+``fix:audit`` is required because we have some packages that need to be fixed
+to a specific version and npm install tends to overwrite this.
 
 Setting up a Development Server
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -263,6 +275,7 @@ HTML files:
 
 - `codelyzer <http://codelyzer.com/>`_
 - `html-linter <https://github.com/chinchiheather/html-linter>`_
+- `htmllint-cli <https://github.com/htmllint/htmllint-cli>`_
 - `Prettier <https://prettier.io/>`_
 - `TSLint <https://palantir.github.io/tslint/>`_
 
@@ -516,7 +529,7 @@ what it expects to happen.
 Differences between Frontend Unit Tests and End-to-End (E2E) Tests / FAQ
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-General introduction about testing and E2E/unit tests 
+General introduction about testing and E2E/unit tests
 
 
 What are E2E/unit tests designed for?
