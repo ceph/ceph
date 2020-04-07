@@ -294,6 +294,7 @@ class Prepare(object):
             'ceph.cluster_fsid': cluster_fsid,
             'ceph.cluster_name': conf.cluster,
             'ceph.crush_device_class': crush_device_class,
+            'ceph.osdspec_affinity': prepare_utils.get_osdspec_affinity()
         }
         if self.args.filestore:
             #TODO: allow auto creation of journal on passed device, only works
