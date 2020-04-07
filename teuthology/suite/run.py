@@ -6,6 +6,9 @@ import re
 import time
 import yaml
 
+from six.moves import input
+from humanfriendly import format_timespan
+
 from datetime import datetime
 from tempfile import NamedTemporaryFile
 
@@ -356,14 +359,13 @@ class Run(object):
         if num_jobs:
             self.write_result()
 
-    def collect_jobs(self, arch, configs, newest=False):
+    def collect_jobs(self, arch, configs, newest=False, limit=0):
         jobs_to_schedule = []
         jobs_missing_packages = []
         for description, fragment_paths in configs:
             base_frag_paths = [
                 util.strip_fragment_path(x) for x in fragment_paths
             ]
-            limit = self.args.limit or 0
             if limit > 0 and len(jobs_to_schedule) >= limit:
                 log.info(
                     'Stopped after {limit} jobs due to --limit={limit}'.format(
@@ -518,13 +520,46 @@ class Run(object):
         ).name
         self.base_yaml_paths.insert(0, base_yaml_path)
 
+        # compute job limit in respect of --sleep-before-teardown
+        job_limit = self.args.limit or 0
+        sleep_before_teardown = int(self.args.sleep_before_teardown or 0)
+        if sleep_before_teardown:
+            if job_limit == 0:
+                log.warning('The --sleep-before-teardown option was provided: '
+                            'only 1 job will be scheduled. '
+                            'Use --limit to run more jobs')
+                # give user a moment to read this warning
+                time.sleep(5)
+                job_limit = 1
+            elif self.args.non_interactive:
+                log.warning(
+                    'The --sleep-before-teardown option is active. '
+                    'There will be a maximum {} jobs running '
+                    'which will fall asleep for {}'
+                    .format(job_limit, format_timespan(sleep_before_teardown)))
+            elif job_limit > 4:
+                are_you_insane=(
+                    'There are {total} configs and {maximum} job limit is used. '
+                    'Do you really want to lock all machines needed for '
+                    'this run for {that_long}? (y/N):'
+                    .format(
+                        that_long=format_timespan(sleep_before_teardown),
+                        total=len(configs),
+                        maximum=job_limit))
+                while True:
+                    insane=(input(are_you_insane) or 'n').lower()
+                    if insane == 'y':
+                        break
+                    elif insane == 'n':
+                        exit(0)
+
         # if newest, do this until there are no missing packages
         # if not, do it once
         backtrack = 0
         limit = self.args.newest
         while backtrack <= limit:
             jobs_missing_packages, jobs_to_schedule = \
-                self.collect_jobs(arch, configs, self.args.newest)
+                self.collect_jobs(arch, configs, self.args.newest, job_limit)
             if jobs_missing_packages and self.args.newest:
                 new_sha1 = \
                     util.find_git_parent('ceph', self.base_config.sha1)

@@ -189,7 +189,7 @@ def get_suite_parser():
     )
     parser.add_argument(
         '--sleep-before-teardown',
-        help='Number of seconds to sleep before tearing down the target VMs',
+        help='Number of seconds to sleep before the teardown',
         default=0
     )
     return parser

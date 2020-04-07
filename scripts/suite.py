@@ -80,9 +80,14 @@ Standard arguments:
                               Validate that git SHA1s passed to -S exist.
                               [default: true]
   --sleep-before-teardown <seconds>
-                              Number of seconds to sleep before tearing down
-                              the test cluster(s). Use with care, as this
-                              applies to all jobs in the run.
+                              Number of seconds to sleep before teardown.
+                              Use with care, as this applies to all jobs in the
+                              run. This option is used along with --limit one.
+                              If the --limit ommitted then it's forced to 1.
+                              If the --limit is greater than 4, then user must
+                              confirm it interactively to avoid massive lock
+                              of resources, however --non-interactive option
+                              can be used to skip user input.
                               [default: 0]
 
 Scheduler arguments:
