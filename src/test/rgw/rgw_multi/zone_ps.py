@@ -96,7 +96,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     data = response.read()
     status = response.status
     http_conn.close()
-    return data, status
+    return data.decode('utf-8'), status
 
 
 def print_connection_info(conn):
