@@ -12,6 +12,7 @@ require {
 	type urandom_device_t;
 	type setfiles_t;
 	type nvme_device_t;
+	type httpd_config_t;
 	class sock_file unlink;
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
@@ -146,6 +147,8 @@ allow ceph_t var_run_t:dir { write create add_name };
 allow ceph_t var_run_t:file { read write create open getattr };
 allow ceph_t init_var_run_t:file getattr;
 allow init_t ceph_t:process2 { nnp_transition nosuid_transition };
+
+allow ceph_t httpd_config_t:dir search;
 
 fsadm_manage_pid(ceph_t)
 
