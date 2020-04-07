@@ -5,10 +5,12 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
+import { CrushNodeSelectionClass } from '../../../shared/classes/crush.node.selection.class';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
+import { CrushNode } from '../../../shared/models/crush-node';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -18,19 +20,12 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   templateUrl: './erasure-code-profile-form-modal.component.html',
   styleUrls: ['./erasure-code-profile-form-modal.component.scss']
 })
-export class ErasureCodeProfileFormModalComponent implements OnInit {
+export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClass
+  implements OnInit {
   @Output()
   submitAction = new EventEmitter();
 
-  form: CdFormGroup;
-  failureDomains: string[];
-  plugins: string[];
-  names: string[];
-  techniques: string[];
-  requiredControls: string[] = [];
-  devices: string[] = [];
   tooltips = this.ecpService.formTooltips;
-
   PLUGIN = {
     LRC: 'lrc', // Locally Repairable Erasure Code
     SHEC: 'shec', // Shingled Erasure Code
@@ -38,6 +33,11 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
     ISA: 'isa' // Intel Storage Acceleration
   };
   plugin = this.PLUGIN.JERASURE;
+
+  form: CdFormGroup;
+  plugins: string[];
+  names: string[];
+  techniques: string[];
   action: string;
   resource: string;
 
@@ -49,6 +49,7 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.action = this.actionLabels.CREATE;
     this.resource = this.i18n('EC Profile');
     this.createForm();
@@ -175,63 +176,27 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
       .getInfo()
       .subscribe(
         ({
-          failure_domains,
           plugins,
           names,
           directory,
-          devices
+          nodes
         }: {
-          failure_domains: string[];
           plugins: string[];
           names: string[];
           directory: string;
-          devices: string[];
+          nodes: CrushNode[];
         }) => {
-          this.failureDomains = failure_domains;
+          this.initCrushNodeSelection(
+            nodes,
+            this.form.get('crushRoot'),
+            this.form.get('crushFailureDomain'),
+            this.form.get('crushDeviceClass')
+          );
           this.plugins = plugins;
           this.names = names;
-          this.devices = devices;
           this.form.silentSet('directory', directory);
         }
       );
-  }
-
-  private createJson() {
-    const pluginControls = {
-      technique: [this.PLUGIN.ISA, this.PLUGIN.JERASURE],
-      packetSize: [this.PLUGIN.JERASURE],
-      l: [this.PLUGIN.LRC],
-      crushLocality: [this.PLUGIN.LRC],
-      c: [this.PLUGIN.SHEC]
-    };
-    const ecp = new ErasureCodeProfile();
-    const plugin = this.form.getValue('plugin');
-    Object.keys(this.form.controls)
-      .filter((name) => {
-        const pluginControl = pluginControls[name];
-        const control = this.form.get(name);
-        const usable = (pluginControl && pluginControl.includes(plugin)) || !pluginControl;
-        return (
-          usable &&
-          (control.dirty || this.requiredControls.includes(name)) &&
-          this.form.getValue(name)
-        );
-      })
-      .forEach((name) => {
-        this.extendJson(name, ecp);
-      });
-    return ecp;
-  }
-
-  private extendJson(name: string, ecp: ErasureCodeProfile) {
-    const differentApiAttributes = {
-      crushFailureDomain: 'crush-failure-domain',
-      crushRoot: 'crush-root',
-      crushDeviceClass: 'crush-device-class',
-      packetSize: 'packetsize',
-      crushLocality: 'crush-locality'
-    };
-    ecp[differentApiAttributes[name] || name] = this.form.getValue(name);
   }
 
   onSubmit() {
@@ -255,5 +220,40 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
           this.submitAction.emit(profile);
         }
       );
+  }
+
+  private createJson() {
+    const pluginControls = {
+      technique: [this.PLUGIN.ISA, this.PLUGIN.JERASURE],
+      packetSize: [this.PLUGIN.JERASURE],
+      l: [this.PLUGIN.LRC],
+      crushLocality: [this.PLUGIN.LRC],
+      c: [this.PLUGIN.SHEC]
+    };
+    const ecp = new ErasureCodeProfile();
+    const plugin = this.form.getValue('plugin');
+    Object.keys(this.form.controls)
+      .filter((name) => {
+        const pluginControl = pluginControls[name];
+        const value = this.form.getValue(name);
+        const usable = (pluginControl && pluginControl.includes(plugin)) || !pluginControl;
+        return usable && value && value !== '';
+      })
+      .forEach((name) => {
+        this.extendJson(name, ecp);
+      });
+    return ecp;
+  }
+
+  private extendJson(name: string, ecp: ErasureCodeProfile) {
+    const differentApiAttributes = {
+      crushFailureDomain: 'crush-failure-domain',
+      crushRoot: 'crush-root',
+      crushDeviceClass: 'crush-device-class',
+      packetSize: 'packetsize',
+      crushLocality: 'crush-locality'
+    };
+    const value = this.form.getValue(name);
+    ecp[differentApiAttributes[name] || name] = name === 'crushRoot' ? value.name : value;
   }
 }
