@@ -77,6 +77,12 @@ Adoption process
      # ceph cephadm generate-key
      # ceph cephadm get-pub-key > ceph.pub
 
+#. Or import an existing SSH key::
+
+     # ceph config-key set mgr/cephadm/ssh_identity_key -i /root/.ssh/id_rsa
+     # ceph config-key set mgr/cephadm/ssh_identity_pub -i /root/.ssh/id_rsa.pub
+     # ceph cephadm get-pub-key > ceph.pub
+
 #. Install the cluster SSH key on each host in the cluster::
 
      # ssh-copy-id -f -i ceph.pub root@<host>
