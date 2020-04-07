@@ -82,7 +82,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     string_to_sign = method + '\n\n\n' + string_date + '\n' + resource
     if sign_parameters:
         string_to_sign += url_params
-    signature = base64.b64encode(hmac.new(conn.aws_secret_access_key,
+    signature = base64.b64encode(hmac.new(conn.aws_secret_access_key.encode('utf-8'),
                                           string_to_sign.encode('utf-8'),
                                           hashlib.sha1).digest())
     headers = {'Authorization': 'AWS '+conn.aws_access_key_id+':'+signature,
@@ -219,7 +219,7 @@ class PSTopicS3:
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
         log.debug('StringTosign: %s', string_to_sign) 
-        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
                                      hashlib.sha1).digest())
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
@@ -261,7 +261,7 @@ class PSTopicS3:
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
         log.debug('StringTosign: %s', string_to_sign) 
-        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
                                      hashlib.sha1).digest())
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
