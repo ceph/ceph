@@ -257,6 +257,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   // If the system is not caching the file contents, then this is a noop.
   // This call has no effect on dirty pages in the cache.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    fs->fsync(h);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
