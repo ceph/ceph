@@ -784,6 +784,10 @@ void Replayer<I>::request_sync() {
   dout(10) << dendl;
 
   std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
+
   auto ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<
       Replayer<I>, &Replayer<I>::handle_request_sync>(this));
