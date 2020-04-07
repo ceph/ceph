@@ -398,7 +398,7 @@ def ceph_bootstrap(ctx, config):
         ssh_pub_key = teuthology.get_file(
             remote=bootstrap_remote,
             path='{}/{}.pub'.format(testdir, cluster_name)
-        ).strip()
+        ).decode('ascii').strip()
 
         log.info('Installing pub ssh key for root users...')
         ctx.cluster.run(args=[
