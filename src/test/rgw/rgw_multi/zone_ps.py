@@ -72,7 +72,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     """
     url_params = ''
     if parameters is not None:
-        url_params = urllib.urlencode(parameters)
+        url_params = urlparse.urlencode(parameters)
         # remove 'None' from keys with no values
         url_params = url_params.replace('=None', '')
         url_params = '?' + url_params
@@ -212,7 +212,7 @@ class PSTopicS3:
     def get_config(self):
         """get topic info"""
         parameters = {'Action': 'GetTopic', 'TopicArn': self.topic_arn}
-        body = urllib.urlencode(parameters)
+        body = urlparse.urlencode(parameters)
         string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
         content_type = 'application/x-www-form-urlencoded; charset=utf-8'
         resource = '/'
@@ -254,7 +254,7 @@ class PSTopicS3:
         """list all topics"""
         # note that boto3 supports list_topics(), however, the result only show ARNs
         parameters = {'Action': 'ListTopics'}
-        body = urllib.urlencode(parameters)
+        body = urlparse.urlencode(parameters)
         string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
         content_type = 'application/x-www-form-urlencoded; charset=utf-8'
         resource = '/'
