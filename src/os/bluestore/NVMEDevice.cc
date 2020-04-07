@@ -28,6 +28,7 @@
 #include <functional>
 #include <map>
 #include <thread>
+#include <boost/intrusive/slist.hpp>
 
 #include <spdk/nvme.h>
 
@@ -77,6 +78,10 @@ struct IORequest {
   void *inline_segs[inline_segment_num];
   void **extra_segs = nullptr;
 };
+
+namespace bi = boost::intrusive;
+struct data_cache_buf : public bi::slist_base_hook<bi::link_mode<bi::normal_link>>
+{};
 
 struct Task;
 
@@ -143,7 +148,7 @@ class SharedDriverQueueData {
   public:
     uint32_t current_queue_depth = 0;
     std::atomic_ulong completed_op_seq, queue_op_seq;
-    std::vector<void*> data_buf_mempool;
+    bi::slist<data_cache_buf, bi::constant_time_size<true>> data_buf_list;
     PerfCounters *logger = nullptr;
     void _aio_handle(Task *t, IOContext *ioc);
 
@@ -169,7 +174,7 @@ class SharedDriverQueueData {
         derr << __func__ << " failed to create memory pool for nvme data buffer" << dendl;
         ceph_assert(b);
       }
-      data_buf_mempool.push_back(b);
+      data_buf_list.push_front(*reinterpret_cast<data_cache_buf *>(b));
     }
 
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
@@ -197,15 +202,7 @@ class SharedDriverQueueData {
       bdev->queue_number--;
     }
 
-    // free all spdk dma memory;
-    if (!data_buf_mempool.empty()) {
-      for (uint16_t i = 0; i < data_buffer_default_num; i++) {
-        void *b = data_buf_mempool[i];
-        ceph_assert(b);
-        spdk_dma_free(b);
-      }
-      data_buf_mempool.clear();
-    }
+    data_buf_list.clear_and_dispose(spdk_dma_free);
 
     delete logger;
   }
@@ -246,12 +243,16 @@ struct Task {
   }
   void release_segs(SharedDriverQueueData *queue_data) {
     if (io_request.extra_segs) {
-      for (uint16_t i = 0; i < io_request.nseg; i++)
-        queue_data->data_buf_mempool.push_back(io_request.extra_segs[i]);
+      for (uint16_t i = 0; i < io_request.nseg; i++) {
+        auto buf = reinterpret_cast<data_cache_buf *>(io_request.extra_segs[i]);
+        queue_data->data_buf_list.push_front(*buf);
+      }
       delete io_request.extra_segs;
     } else if (io_request.nseg) {
-      for (uint16_t i = 0; i < io_request.nseg; i++)
-        queue_data->data_buf_mempool.push_back(io_request.inline_segs[i]);
+      for (uint16_t i = 0; i < io_request.nseg; i++) {
+        auto buf = reinterpret_cast<data_cache_buf *>(io_request.inline_segs[i]);
+        queue_data->data_buf_list.push_front(*buf);
+      }
     }
     ctx->total_nseg -= io_request.nseg;
     io_request.nseg = 0;
@@ -334,7 +335,7 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
   if (t->len % data_buffer_size)
     ++count;
   void **segs;
-  if (count > data_buf_mempool.size())
+  if (count > data_buf_list.size())
     return -ENOMEM;
   if (count <= inline_segment_num) {
     segs = t->io_request.inline_segs;
@@ -343,8 +344,10 @@ int SharedDriverQueueData::alloc_buf_from_pool(Task *t, bool write)
     segs = t->io_request.extra_segs;
   }
   for (uint16_t i = 0; i < count; i++) {
-    segs[i] = data_buf_mempool.back();
-    data_buf_mempool.pop_back();
+    ceph_assert(!data_buf_list.empty());
+    segs[i] = &data_buf_list.front();
+    ceph_assert(segs[i] != nullptr);
+    data_buf_list.pop_front();
   }
   t->io_request.nseg = count;
   t->ctx->total_nseg += count;
