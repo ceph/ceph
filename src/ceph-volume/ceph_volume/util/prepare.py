@@ -457,6 +457,10 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
         raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
 
 
+def get_osdspec_affinity():
+    return os.environ.get('CEPH_VOLUME_OSDSPEC_AFFINITY', '')
+
+
 def osd_mkfs_filestore(osd_id, fsid, keyring):
     """
     Create the files for the OSD to function. A normal call will look like:
