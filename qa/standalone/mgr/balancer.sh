@@ -49,12 +49,11 @@ function TEST_balancer() {
     wait_for_clean || return 1
 
     ceph pg dump pgs
-    ceph osd set-require-min-compat-client luminous
     ceph balancer status || return 1
     eval MODE=$(ceph balancer status | jq '.mode')
-    test $MODE = "none" || return 1
+    test $MODE = "upmap" || return 1
     ACTIVE=$(ceph balancer status | jq '.active')
-    test $ACTIVE = "false" || return 1
+    test $ACTIVE = "true" || return 1
 
     ceph balancer ls || return 1
     PLANS=$(ceph balancer ls)
@@ -80,6 +79,7 @@ function TEST_balancer() {
     ceph balancer status || return 1
     eval MODE=$(ceph balancer status | jq '.mode')
     test $MODE = "crush-compat" || return 1
+    ceph balancer off || return 1
     ! ceph balancer optimize plan_crush $TEST_POOL1 || return 1
     ceph balancer status || return 1
     eval RESULT=$(ceph balancer status | jq '.optimize_result')
