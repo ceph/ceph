@@ -33,7 +33,7 @@ describe('HealthComponent', () => {
     mgr_map: { standbys: [] },
     hosts: 0,
     rgw: 0,
-    fs_map: { filesystems: [] },
+    fs_map: { filesystems: [], standbys: [] },
     iscsi_daemons: 0,
     client_perf: {},
     scrub_status: 'Inactive',
