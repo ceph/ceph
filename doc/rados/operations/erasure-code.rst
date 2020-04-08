@@ -24,9 +24,6 @@ requires at least three hosts::
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI
 
-.. note:: the 12 in *pool create* stands for 
-          `the number of placement groups <../pools>`_.
-
 Erasure code profiles
 ---------------------
 
