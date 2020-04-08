@@ -87,6 +87,10 @@ transform_old_authinfo(const req_state* const s)
       return {};
     }
 
+    string get_subuser() const override {
+      return {};
+    }
+
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", perm_mask=" << perm_mask
