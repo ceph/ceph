@@ -1,10 +1,6 @@
 import json
 import errno
 import logging
-try:
-    from typing import Dict, List, Optional
-except ImportError:
-    pass
 
 import cephfs
 import orchestrator
