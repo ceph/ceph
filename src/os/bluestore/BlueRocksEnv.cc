@@ -47,7 +47,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   //
   // REQUIRES: External synchronization
   rocksdb::Status Read(size_t n, rocksdb::Slice* result, char* scratch) override {
-    int r = fs->read(h, h->buf.pos, n, NULL, scratch);
+    int64_t r = fs->read(h, h->buf.pos, n, NULL, scratch);
     ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
@@ -96,7 +96,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
 		       char* scratch) const override {
-    int r = fs->read_random(h, offset, n, scratch);
+    int64_t r = fs->read_random(h, offset, n, scratch);
     ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
