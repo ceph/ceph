@@ -106,9 +106,12 @@ def filter_devices(args):
     if len(unused_devices) == 1:
         last_device = unused_devices[0]
         if not last_device.rotational and last_device.is_lvm_member:
-            reason = "Used by ceph as a %s already and there are no devices left for data/block" % (
-                last_device.lvs[0].tags.get("ceph.type"),
-            )
+            if last_device.lvs:
+                reason = "Used by ceph as a %s already and there are no devices left for data/block" % (
+                    last_device.lvs[0].tags.get("ceph.type"),
+                )
+            else:
+                reason = "Disk is an LVM member already, skipping"
             filtered_devices[last_device.abspath] = {"reasons": [reason]}
             logger.info(reason + ": %s" % last_device.abspath)
             unused_devices = []
