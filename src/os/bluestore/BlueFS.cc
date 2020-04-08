@@ -1882,7 +1882,7 @@ void BlueFS::_drop_link(FileRef file)
   }
 }
 
-int BlueFS::_read_random(
+int64_t BlueFS::_read_random(
   FileReader *h,         ///< [in] read from here
   uint64_t off,          ///< [in] offset
   uint64_t len,          ///< [in] this many bytes
@@ -1890,7 +1890,7 @@ int BlueFS::_read_random(
 {
   auto* buf = &h->buf;
 
-  int ret = 0;
+  int64_t ret = 0;
   dout(10) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
@@ -1918,6 +1918,8 @@ int BlueFS::_read_random(
       auto p = h->file->fnode.seek(off, &x_off);
       ceph_assert(p != h->file->fnode.extents.end());
       uint64_t l = std::min(p->length - x_off, len);
+      //hard cap to 1GB
+      l = std::min(l, uint64_t(1) << 30);
       dout(20) << __func__ << " read random 0x"
 	       << std::hex << x_off << "~" << l << std::dec
 	       << " of " << *p << dendl;
@@ -1936,7 +1938,7 @@ int BlueFS::_read_random(
       }
     } else {
       auto left = buf->get_buf_remaining(off);
-      int r = std::min(len, left);
+      int64_t r = std::min(len, left);
       logger->inc(l_bluefs_read_random_buffer_count, 1);
       logger->inc(l_bluefs_read_random_buffer_bytes, r);
       dout(20) << __func__ << " left 0x" << std::hex << left
@@ -1967,7 +1969,7 @@ int BlueFS::_read_random(
   return ret;
 }
 
-int BlueFS::_read(
+int64_t BlueFS::_read(
   FileReader *h,         ///< [in] read from here
   FileReaderBuffer *buf, ///< [in] reader state
   uint64_t off,          ///< [in] offset
@@ -2003,7 +2005,7 @@ int BlueFS::_read(
   if (outbl)
     outbl->clear();
 
-  int ret = 0;
+  int64_t ret = 0;
   std::shared_lock s_lock(h->lock);
   while (len > 0) {
     size_t left;
@@ -2027,6 +2029,8 @@ int BlueFS::_read(
 				    super.block_size);
         want = std::max(want, buf->max_prefetch);
         uint64_t l = std::min(p->length - x_off, want);
+        //hard cap to 1GB
+	l = std::min(l, uint64_t(1) << 30);
         uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
         if (!h->ignore_eof &&
 	    buf->bl_off + l > eof_offset) {
@@ -2048,7 +2052,7 @@ int BlueFS::_read(
     dout(20) << __func__ << " left 0x" << std::hex << left
              << " len 0x" << len << std::dec << dendl;
 
-    int r = std::min(len, left);
+    int64_t r = std::min(len, left);
     if (outbl) {
       bufferlist t;
       t.substr_of(buf->bl, off - buf->bl_off, r);
@@ -2072,7 +2076,6 @@ int BlueFS::_read(
     ret += r;
     buf->pos += r;
   }
-
   dout(20) << __func__ << " got " << ret << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
   --h->file->num_reading;
