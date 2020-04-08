@@ -485,6 +485,7 @@ class TestDataScan(CephFSTestCase):
         # by checking the omap now has the dentry's key again
         self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
         self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_links"])
         self.assertIn(victim_key, self._dirfrag_keys(frag_obj_id))
 
         # Start the filesystem and check that the dentry we deleted is now once again visible
