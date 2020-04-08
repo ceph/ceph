@@ -166,7 +166,6 @@ describe('IscsiTargetFormComponent', () => {
     httpTesting.expectOne('ui-api/iscsi/settings').flush(SETTINGS);
     httpTesting.expectOne('ui-api/iscsi/portals').flush(PORTALS);
     httpTesting.expectOne('ui-api/iscsi/version').flush(VERSION);
-    httpTesting.expectOne('api/summary').flush({});
     httpTesting.expectOne('api/block/image').flush(RBD_LIST);
     httpTesting.expectOne('api/iscsi/target').flush(LIST_TARGET);
     httpTesting.verify();

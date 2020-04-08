@@ -25,14 +25,11 @@ export class OverviewComponent implements OnInit, OnDestroy {
   permission: Permission;
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
-
-  subs: Subscription;
-
   modalRef: BsModalRef;
-
   peersExist = true;
   siteName: any;
   status: ViewCacheStatus;
+  private subs = new Subscription();
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -68,15 +65,18 @@ export class OverviewComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
-      if (!data) {
-        return;
-      }
-      this.status = data.content_data.status;
-      this.siteName = data.site_name;
+    this.subs.add(this.rbdMirroringService.startPolling());
+    this.subs.add(
+      this.rbdMirroringService.subscribeSummary((data: any) => {
+        if (!data) {
+          return;
+        }
+        this.status = data.content_data.status;
+        this.siteName = data.site_name;
 
-      this.peersExist = !!data.content_data.pools.find((o: Pool) => o['peer_uuids'].length > 0);
-    });
+        this.peersExist = !!data.content_data.pools.find((o: Pool) => o['peer_uuids'].length > 0);
+      })
+    );
   }
 
   ngOnDestroy(): void {
