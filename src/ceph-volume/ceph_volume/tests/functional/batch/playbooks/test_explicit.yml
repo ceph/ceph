@@ -9,7 +9,6 @@
         state: stopped
       with_items: "{{ osd_ids }}"
 
-
 - hosts: mons
   become: yes
   tasks:
@@ -20,7 +19,6 @@
     - name: purge osds
       command: "ceph --cluster {{ cluster }} osd purge osd.{{ item }} --yes-i-really-mean-it"
       with_items: "{{ osd_ids }}"
-
 
 - hosts: osds
   become: yes
@@ -37,7 +35,7 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
-    - name: ensure batch create is idempotent
+    - name: ensure batch create is idempotent when all data devices are filtered
       command: "ceph-volume --cluster {{ cluster }} lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} --db-devices {{ devices[2:] | join(' ') }}"
       register: batch_cmd
       failed_when: false
@@ -49,7 +47,6 @@
         msg: "lvm batch failed idempotency check"
       when:
          - batch_cmd.rc != 0
-         - "'strategy changed' not in batch_cmd.stderr"
 
     - name: run batch --report to see if devices get filtered
       command: "ceph-volume --cluster {{ cluster }} lvm batch --report --format=json --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} --db-devices {{ devices[2:] | join(' ') }}"
@@ -63,4 +60,3 @@
         msg: "lvm batch --report failed idempotency check"
       when:
          - report_cmd.rc != 0
-         - "'strategy changed' not in report_cmd.stderr"
