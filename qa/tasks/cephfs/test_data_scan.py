@@ -503,6 +503,9 @@ class TestDataScan(CephFSTestCase):
         keys = self._dirfrag_keys(frag_obj_id)
         self.assertListEqual(sorted(keys), sorted(["%s_head" % f for f in file_names]))
 
+        # Remove the whole 'sudbdir' directory, to avoid the bug tracker#44380
+        self.mount_a.run_shell(["rm", "-rf", "subdir/"])
+
     @for_teuthology
     def test_parallel_execution(self):
         self._rebuild_metadata(ManyFilesWorkload(self.fs, self.mount_a, 25), workers=7)
