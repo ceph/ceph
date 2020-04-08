@@ -1,8 +1,6 @@
 import errno
 import json
 
-from typing import Optional
-
 from mgr_module import MgrModule
 import orchestrator
 
