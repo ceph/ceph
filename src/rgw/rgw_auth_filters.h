@@ -88,6 +88,10 @@ public:
     return get_decoratee().get_acct_name();
   }
 
+  string get_subuser() const override {
+    return get_decoratee().get_subuser();
+  }
+
   bool is_identity(
     const boost::container::flat_set<Principal>& ids) const override {
     return get_decoratee().is_identity(ids);
