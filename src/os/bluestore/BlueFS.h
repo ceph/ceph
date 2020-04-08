@@ -428,7 +428,8 @@ private:
     return 4096;
   }
 
-  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
+  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
+                         bool skip=false);
 
 public:
   BlueFS(CephContext* cct);
@@ -531,9 +532,10 @@ public:
   uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space
-  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len) {
+  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
+                        bool skip=false) {
     std::unique_lock l(lock);
-    _add_block_extent(bdev, offset, len);
+    _add_block_extent(bdev, offset, len, skip);
     int r = _flush_and_sync_log(l);
     ceph_assert(r == 0);
   }
