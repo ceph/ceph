@@ -10,8 +10,6 @@ from teuthology import misc as teuthology
 import time
 import os
 import six
-import string
-from teuthology.orchestra import run
 import sys
 import tempfile
 import json
@@ -288,7 +286,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
         log.debug(remote)
         log.debug(osds.remotes[remote])
         for role in osds.remotes[remote]:
-            if string.find(role, "osd.") != 0:
+            if not role.startswith("osd."):
                 continue
             osdid = int(role.split('.')[1])
             log.info("process osd.{id} on {remote}".
@@ -325,7 +323,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
             for remote in osds.remotes.keys():
                 for role in osds.remotes[remote]:
-                    if string.find(role, "osd.") != 0:
+                    if not role.startswith("osd."):
                         continue
                     osdid = int(role.split('.')[1])
                     if osdid not in pgs:
@@ -415,7 +413,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
         for remote in osds.remotes.keys():
             for role in osds.remotes[remote]:
-                if string.find(role, "osd.") != 0:
+                if not role.startswith("osd."):
                     continue
                 osdid = int(role.split('.')[1])
                 if osdid not in pgs:
@@ -500,7 +498,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     log.info("Test pg info")
     for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
-            if string.find(role, "osd.") != 0:
+            if not role.startswith("osd."):
                 continue
             osdid = int(role.split('.')[1])
             if osdid not in pgs:
@@ -523,7 +521,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     log.info("Test pg logging")
     for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
-            if string.find(role, "osd.") != 0:
+            if not role.startswith("osd."):
                 continue
             osdid = int(role.split('.')[1])
             if osdid not in pgs:
@@ -554,7 +552,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     EXP_ERRORS = 0
     for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
-            if string.find(role, "osd.") != 0:
+            if not role.startswith("osd."):
                 continue
             osdid = int(role.split('.')[1])
             if osdid not in pgs:
@@ -580,7 +578,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     RM_ERRORS = 0
     for remote in osds.remotes.keys():
         for role in osds.remotes[remote]:
-            if string.find(role, "osd.") != 0:
+            if not role.startswith("osd."):
                 continue
             osdid = int(role.split('.')[1])
             if osdid not in pgs:
@@ -605,7 +603,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
         for remote in osds.remotes.keys():
             for role in osds.remotes[remote]:
-                if string.find(role, "osd.") != 0:
+                if not role.startswith("osd."):
                     continue
                 osdid = int(role.split('.')[1])
                 if osdid not in pgs:
