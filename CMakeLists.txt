@@ -667,4 +667,4 @@ add_custom_target(tags DEPENDS ctags)
 
 find_package(CppCheck)
 find_package(IWYU)
-set(VERSION 15.2.0)
+set(VERSION 15.2.1)
