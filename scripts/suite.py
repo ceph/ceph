@@ -25,6 +25,8 @@ Miscellaneous arguments:
   --dry-run                   Do a dry run; do not schedule anything. In
                               combination with -vv, also call
                               teuthology-schedule with --dry-run.
+  -y, --non-interactive       Do not ask question and say yes when
+                              it is possible.
 
 Standard arguments:
   <config_yaml>               Optional extra job yaml to include
