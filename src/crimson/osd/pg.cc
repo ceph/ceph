@@ -490,7 +490,9 @@ blocking_future<> PG::WaitForActiveBlocker::wait()
   }
 }
 
-seastar::future<> PG::submit_transaction(ObjectContextRef&& obc,
+seastar::future<> PG::submit_transaction(const OpInfo& op_info,
+					 const std::vector<OSDOp>& ops,
+					 ObjectContextRef&& obc,
 					 ceph::os::Transaction&& txn,
 					 const osd_op_params_t& osd_op_p)
 {
@@ -501,7 +503,15 @@ seastar::future<> PG::submit_transaction(ObjectContextRef&& obc,
 		      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
 		    obc->obs.oi.soid, osd_op_p.at_version, obc->obs.oi.version,
 		    osd_op_p.user_modify ? osd_op_p.at_version.version : 0,
-		    osd_op_p.req->get_reqid(), osd_op_p.req->get_mtime(), 0);
+		    osd_op_p.req->get_reqid(), osd_op_p.req->get_mtime(),
+                    op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
+  // TODO: refactor the submit_transaction
+  if (op_info.allows_returnvec()) {
+    // also the per-op values are recorded in the pg log
+    log_entries.back().set_op_returns(ops);
+    logger().debug("{} op_returns: {}",
+                   __func__, log_entries.back().op_returns);
+  }
   peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
 						txn, true, false);
 
@@ -542,12 +552,12 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       obc->obs.oi.soid,
       ceph_osd_op_name(osd_op.op.op));
     return ox->execute_osd_op(osd_op);
-  }).safe_then([this, obc, m, ox = ox.get()] {
+  }).safe_then([this, obc, m, ox = ox.get(), &op_info] {
     logger().debug(
       "do_osd_ops: {} - object {} all operations successful",
       *m,
       obc->obs.oi.soid);
-    return std::move(*ox).submit_changes([this, m]
+    return std::move(*ox).submit_changes([this, m, &op_info]
       (auto&& txn, auto&& obc, auto&& osd_op_p) -> osd_op_errorator::future<> {
 	// XXX: the entire lambda could be scheduled conditionally. ::if_then()?
 	if (txn.empty()) {
@@ -561,8 +571,11 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
 	    "do_osd_ops: {} - object {} submitting txn",
 	    *m,
 	    obc->obs.oi.soid);
-	   return submit_transaction(std::move(obc), std::move(txn),
-				    std::move(osd_op_p));
+	   return submit_transaction(op_info,
+                                     m->ops,
+                                     std::move(obc),
+                                     std::move(txn),
+                                     std::move(osd_op_p));
 	 }
       });
   }).safe_then([this,
