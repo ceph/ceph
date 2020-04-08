@@ -174,10 +174,9 @@
 #include <sanitizer/asan_interface.h>
 #endif
 
-#include "absl/meta/type_traits.h"
-#include "absl/strings/str_cat.h"
-#include "absl/types/span.h"
-#include "absl/utility/utility.h"
+// for C++20 std::span
+#include <boost/beast/core/span.hpp>
+#include <fmt/format.h>
 
 #if defined(__GXX_RTTI)
 #define ABSL_INTERNAL_HAS_CXA_DEMANGLE
@@ -188,7 +187,6 @@
 #endif
 
 namespace absl {
-ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // A type wrapper that instructs `Layout` to use the specific alignment for the
@@ -248,16 +246,16 @@ struct AlignOf<Aligned<T, N>> {
 
 // Does `Ts...` contain `T`?
 template <class T, class... Ts>
-using Contains = absl::disjunction<std::is_same<T, Ts>...>;
+using Contains = std::disjunction<std::is_same<T, Ts>...>;
 
 template <class From, class To>
 using CopyConst =
-    typename std::conditional<std::is_const<From>::value, const To, To>::type;
+    typename std::conditional_t<std::is_const_v<From>, const To, To>;
 
 // Note: We're not qualifying this with absl:: because it doesn't compile under
 // MSVC.
 template <class T>
-using SliceType = Span<T>;
+using SliceType = boost::beast::span<T>;
 
 // This namespace contains no types. It prevents functions defined in it from
 // being found by ADL.
@@ -298,11 +296,11 @@ std::string TypeName() {
   demangled = abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, &status);
 #endif
   if (status == 0 && demangled != nullptr) {  // Demangling succeeded.
-    absl::StrAppend(&out, "<", demangled, ">");
+    out = fmt::format("<{}>", demangled);
     free(demangled);
   } else {
 #if defined(__GXX_RTTI) || defined(_CPPRTTI)
-    absl::StrAppend(&out, "<", typeid(T).name(), ">");
+    out = fmt::format("<{}>", typeid(T).name());
 #endif
   }
   return out;
@@ -311,14 +309,14 @@ std::string TypeName() {
 }  // namespace adl_barrier
 
 template <bool C>
-using EnableIf = typename std::enable_if<C, int>::type;
+using EnableIf = typename std::enable_if_t<C, int>;
 
 // Can `T` be a template argument of `Layout`?
 template <class T>
 using IsLegalElementType = std::integral_constant<
-    bool, !std::is_reference<T>::value && !std::is_volatile<T>::value &&
-              !std::is_reference<typename Type<T>::type>::value &&
-              !std::is_volatile<typename Type<T>::type>::value &&
+    bool, !std::is_reference_v<T> && !std::is_volatile_v<T> &&
+              !std::is_reference_v<typename Type<T>::type> &&
+              !std::is_volatile_v<typename Type<T>::type> &&
               adl_barrier::IsPow2(AlignOf<T>::value)>;
 
 template <class Elements, class SizeSeq, class OffsetSeq>
@@ -336,11 +334,11 @@ class LayoutImpl;
 // `Min(sizeof...(Elements), NumSizes + 1)` (the number of arrays for which we
 // can compute offsets).
 template <class... Elements, size_t... SizeSeq, size_t... OffsetSeq>
-class LayoutImpl<std::tuple<Elements...>, absl::index_sequence<SizeSeq...>,
-                 absl::index_sequence<OffsetSeq...>> {
+class LayoutImpl<std::tuple<Elements...>, std::index_sequence<SizeSeq...>,
+                 std::index_sequence<OffsetSeq...>> {
  private:
   static_assert(sizeof...(Elements) > 0, "At least one field is required");
-  static_assert(absl::conjunction<IsLegalElementType<Elements>...>::value,
+  static_assert(std::conjunction_v<IsLegalElementType<Elements>...>,
                 "Invalid element type (see IsLegalElementType)");
 
   enum {
@@ -646,16 +644,15 @@ class LayoutImpl<std::tuple<Elements...>, absl::index_sequence<SizeSeq...>,
     const size_t sizes[] = {SizeOf<ElementType<OffsetSeq>>()...};
     const std::string types[] = {
         adl_barrier::TypeName<ElementType<OffsetSeq>>()...};
-    std::string res = absl::StrCat("@0", types[0], "(", sizes[0], ")");
+    std::string res = fmt::format("@0{}({})", types[0], sizes[0]);
     for (size_t i = 0; i != NumOffsets - 1; ++i) {
-      absl::StrAppend(&res, "[", size_[i], "]; @", offsets[i + 1], types[i + 1],
-                      "(", sizes[i + 1], ")");
+      res += fmt::format("[{}]; @({})", size_[i], offsets[i + 1], types[i + 1], sizes[i + 1]);
     }
     // NumSizes is a constant that may be zero. Some compilers cannot see that
     // inside the if statement "size_[NumSizes - 1]" must be valid.
     int last = static_cast<int>(NumSizes) - 1;
     if (NumTypes == NumSizes && last >= 0) {
-      absl::StrAppend(&res, "[", size_[last], "]");
+      res += fmt::format("[{}]", size_[last]);
     }
     return res;
   }
@@ -667,8 +664,8 @@ class LayoutImpl<std::tuple<Elements...>, absl::index_sequence<SizeSeq...>,
 
 template <size_t NumSizes, class... Ts>
 using LayoutType = LayoutImpl<
-    std::tuple<Ts...>, absl::make_index_sequence<NumSizes>,
-    absl::make_index_sequence<adl_barrier::Min(sizeof...(Ts), NumSizes + 1)>>;
+    std::tuple<Ts...>, std::make_index_sequence<NumSizes>,
+    std::make_index_sequence<adl_barrier::Min(sizeof...(Ts), NumSizes + 1)>>;
 
 }  // namespace internal_layout
 
@@ -683,7 +680,7 @@ class Layout : public internal_layout::LayoutType<sizeof...(Ts), Ts...> {
  public:
   static_assert(sizeof...(Ts) > 0, "At least one field is required");
   static_assert(
-      absl::conjunction<internal_layout::IsLegalElementType<Ts>...>::value,
+      std::conjunction_v<internal_layout::IsLegalElementType<Ts>...>,
       "Invalid element type (see IsLegalElementType)");
 
   // The result type of `Partial()` with `NumSizes` arguments.
@@ -718,8 +715,8 @@ class Layout : public internal_layout::LayoutType<sizeof...(Ts), Ts...> {
   // Requires: all arguments are convertible to `size_t`.
   template <class... Sizes>
   static constexpr PartialType<sizeof...(Sizes)> Partial(Sizes&&... sizes) {
-    static_assert(sizeof...(Sizes) <= sizeof...(Ts), "");
-    return PartialType<sizeof...(Sizes)>(absl::forward<Sizes>(sizes)...);
+    static_assert(sizeof...(Sizes) <= sizeof...(Ts));
+    return PartialType<sizeof...(Sizes)>(std::forward<Sizes>(sizes)...);
   }
 
   // Creates a layout with the sizes of all arrays specified. If you know
@@ -735,7 +732,6 @@ class Layout : public internal_layout::LayoutType<sizeof...(Ts), Ts...> {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_LAYOUT_H_
