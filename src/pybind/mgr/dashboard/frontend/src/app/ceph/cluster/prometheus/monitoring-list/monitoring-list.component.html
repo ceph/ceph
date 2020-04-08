@@ -1,0 +1,35 @@
+<tabset #tabs>
+  <tab id="active-alerts"
+       heading="Active Alerts"
+       (selectTab)="setFragment($event)"
+       i18n-heading>
+    <cd-active-alert-list *ngIf="isAlertmanagerConfigured"></cd-active-alert-list>
+    <cd-info-panel i18n
+                   *ngIf="!isAlertmanagerConfigured">To see all active Prometheus alerts, please
+      provide the URL to the API of Prometheus' Alertmanager as described in the
+  <a href="{{docsUrl}}"
+     target="_blank">documentation</a>.</cd-info-panel>
+  </tab>
+  <tab id="all-alerts"
+       heading="All Alerts"
+       (selectTab)="setFragment($event)"
+       i18n-heading>
+    <cd-rules-list *ngIf="isPrometheusConfigured"
+                   [data]="prometheusAlertService.rules"></cd-rules-list>
+    <cd-info-panel *ngIf="!isPrometheusConfigured">To see all configured Prometheus alerts, please provide the URL to
+      the API of Prometheus as described in the
+  <a href="{{docsUrl}}"
+     target="_blank">documentation</a>.</cd-info-panel>
+  </tab>
+  <tab id="silences"
+       heading="Silences"
+       (selectTab)="setFragment($event)"
+       i18n-heading>
+    <cd-silences-list *ngIf="isAlertmanagerConfigured"></cd-silences-list>
+    <cd-info-panel *ngIf="!isAlertmanagerConfigured"
+                   i18n>To enable Silences, please provide the URL to the API of the Prometheus' Alertmanager as
+      described in the
+  <a href="{{docsUrl}}"
+     target="_blank">documentation</a>.</cd-info-panel>
+  </tab>
+</tabset>

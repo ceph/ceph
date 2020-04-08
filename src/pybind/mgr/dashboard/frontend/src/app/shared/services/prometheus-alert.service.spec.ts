@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import { ToastrModule } from 'ngx-toastr';
-import { of } from 'rxjs';
+import { Observable, of } from 'rxjs';
 
 import {
   configureTestBed,
@@ -38,30 +38,72 @@ describe('PrometheusAlertService', () => {
     expect(TestBed.get(PrometheusAlertService)).toBeTruthy();
   });
 
-  describe('test error cases', () => {
-    const expectDisabling = (status, expectation) => {
-      let disabledSetting = false;
-      const resp = { status: status, error: {} };
-      service = new PrometheusAlertService(null, ({
-        ifAlertmanagerConfigured: (fn) => fn(),
-        getAlerts: () => ({ subscribe: (_fn, err) => err(resp) }),
-        disableAlertmanagerConfig: () => (disabledSetting = true)
-      } as object) as PrometheusService);
-      service.refresh();
-      expect(disabledSetting).toBe(expectation);
+  describe('test failing status codes and verify disabling of the alertmanager', () => {
+    const isDisabledByStatusCode = (statusCode: number, expectedStatus: boolean, done) => {
+      service = TestBed.get(PrometheusAlertService);
+      prometheusService = TestBed.get(PrometheusService);
+      spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(prometheusService, 'getAlerts').and.returnValue(
+        Observable.create((observer) => observer.error({ status: statusCode, error: {} }))
+      );
+      const disableFn = spyOn(prometheusService, 'disableAlertmanagerConfig').and.callFake(() => {
+        expect(expectedStatus).toBe(true);
+        done();
+      });
+
+      if (!expectedStatus) {
+        expect(disableFn).not.toHaveBeenCalled();
+        done();
+      }
+
+      service.getAlerts();
     };
 
-    it('disables on 504 error which is thrown if the mgr failed', () => {
-      expectDisabling(504, true);
+    it('disables on 504 error which is thrown if the mgr failed', (done) => {
+      isDisabledByStatusCode(504, true, done);
     });
 
-    it('disables on 404 error which is thrown if the external api cannot be reached', () => {
-      expectDisabling(404, true);
+    it('disables on 404 error which is thrown if the external api cannot be reached', (done) => {
+      isDisabledByStatusCode(404, true, done);
     });
 
-    it('does not disable on 400 error which is thrown if the external api receives unexpected data', () => {
-      expectDisabling(400, false);
+    it('does not disable on 400 error which is thrown if the external api receives unexpected data', (done) => {
+      isDisabledByStatusCode(400, false, done);
     });
+  });
+
+  it('should flatten the response of getRules()', () => {
+    service = TestBed.get(PrometheusAlertService);
+    prometheusService = TestBed.get(PrometheusService);
+
+    spyOn(service['prometheusService'], 'ifPrometheusConfigured').and.callFake((fn) => fn());
+    spyOn(prometheusService, 'getRules').and.returnValue(
+      of({
+        groups: [
+          {
+            name: 'group1',
+            rules: [{ name: 'nearly_full', type: 'alerting' }]
+          },
+          {
+            name: 'test',
+            rules: [
+              { name: 'load_0', type: 'alerting' },
+              { name: 'load_1', type: 'alerting' },
+              { name: 'load_2', type: 'alerting' }
+            ]
+          }
+        ]
+      })
+    );
+
+    service.getRules();
+
+    expect(service.rules as any).toEqual([
+      { name: 'nearly_full', type: 'alerting', group: 'group1' },
+      { name: 'load_0', type: 'alerting', group: 'test' },
+      { name: 'load_1', type: 'alerting', group: 'test' },
+      { name: 'load_2', type: 'alerting', group: 'test' }
+    ]);
   });
 
   describe('refresh', () => {

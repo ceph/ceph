@@ -14,12 +14,12 @@ import { URLBuilderService } from '../../../../shared/services/url-builder.servi
 const BASE_URL = 'silence'; // as only silence actions can be used
 
 @Component({
-  selector: 'cd-prometheus-list',
+  selector: 'cd-active-alert-list',
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
-  templateUrl: './alert-list.component.html',
-  styleUrls: ['./alert-list.component.scss']
+  templateUrl: './active-alert-list.component.html',
+  styleUrls: ['./active-alert-list.component.scss']
 })
-export class AlertListComponent implements OnInit {
+export class ActiveAlertListComponent implements OnInit {
   @ViewChild('externalLinkTpl')
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
@@ -49,8 +49,9 @@ export class AlertListComponent implements OnInit {
         disable: (selection: CdTableSelection) =>
           !selection.hasSingleSelection || selection.first().cdExecuting,
         icon: Icons.add,
-        routerLink: () => this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
-        name: this.i18n('Create silence')
+        routerLink: () =>
+          '/monitoring' + this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
+        name: this.i18n('Create Silence')
       }
     ];
   }

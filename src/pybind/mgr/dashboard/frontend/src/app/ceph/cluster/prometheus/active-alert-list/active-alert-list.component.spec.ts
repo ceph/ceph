@@ -11,14 +11,17 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../../testing/unit-test-helper';
+import { CoreModule } from '../../../../core/core.module';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../../shared/shared.module';
-import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
-import { AlertListComponent } from './alert-list.component';
+import { CephModule } from '../../../ceph.module';
+import { DashboardModule } from '../../../dashboard/dashboard.module';
+import { ClusterModule } from '../../cluster.module';
+import { ActiveAlertListComponent } from './active-alert-list.component';
 
-describe('PrometheusListComponent', () => {
-  let component: AlertListComponent;
-  let fixture: ComponentFixture<AlertListComponent>;
+describe('ActiveAlertListComponent', () => {
+  let component: ActiveAlertListComponent;
+  let fixture: ComponentFixture<ActiveAlertListComponent>;
 
   configureTestBed({
     imports: [
@@ -26,14 +29,18 @@ describe('PrometheusListComponent', () => {
       TabsModule.forRoot(),
       RouterTestingModule,
       ToastrModule.forRoot(),
-      SharedModule
+      SharedModule,
+      ClusterModule,
+      DashboardModule,
+      CephModule,
+      CoreModule
     ],
-    declarations: [AlertListComponent, PrometheusTabsComponent],
+    declarations: [],
     providers: [i18nProviders]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(AlertListComponent);
+    fixture = TestBed.createComponent(ActiveAlertListComponent);
     component = fixture.componentInstance;
   });
 
@@ -59,8 +66,8 @@ describe('PrometheusListComponent', () => {
       );
       scenario = {
         fn: () => tableActions.getCurrentButton().name,
-        single: 'Create silence',
-        empty: 'Create silence'
+        single: 'Create Silence',
+        empty: 'Create Silence'
       };
       tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
     });

@@ -4,7 +4,8 @@
       [ngClass]="{ 'active': last }"
       class="breadcrumb-item">
     <a *ngIf="!last && crumb.path !== null"
-       [routerLink]="crumb.path">{{ crumb.text }}</a>
+       [routerLink]="crumb.path"
+       preserveFragment>{{ crumb.text }}</a>
     <span *ngIf="last || crumb.path === null">{{ crumb.text }}</span>
   </li>
 </ol>
