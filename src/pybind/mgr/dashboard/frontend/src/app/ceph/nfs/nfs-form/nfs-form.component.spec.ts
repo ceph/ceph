@@ -60,7 +60,6 @@ describe('NfsFormComponent', () => {
     activatedRoute = TestBed.get(ActivatedRoute);
     fixture.detectChanges();
 
-    httpTesting.expectOne('api/summary').flush([]);
     httpTesting.expectOne('api/nfs-ganesha/daemon').flush([
       { daemon_id: 'node1', cluster_id: 'cluster1' },
       { daemon_id: 'node2', cluster_id: 'cluster1' },

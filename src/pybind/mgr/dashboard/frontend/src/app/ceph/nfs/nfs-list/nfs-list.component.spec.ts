@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
-import { BehaviorSubject, of } from 'rxjs';
+import { of } from 'rxjs';
 
 import {
   configureTestBed,
@@ -55,10 +55,6 @@ describe('NfsListComponent', () => {
     summaryService = TestBed.get(SummaryService);
     nfsService = TestBed.get(NfsService);
     httpTesting = TestBed.get(HttpTestingController);
-
-    // this is needed because summaryService isn't being reset after each test.
-    summaryService['summaryDataSource'] = new BehaviorSubject(null);
-    summaryService['summaryData$'] = summaryService['summaryDataSource'].asObservable();
   });
 
   it('should create', () => {
@@ -70,7 +66,6 @@ describe('NfsListComponent', () => {
       fixture.detectChanges();
       spyOn(nfsService, 'list').and.callThrough();
       httpTesting.expectOne('api/nfs-ganesha/daemon').flush([]);
-      httpTesting.expectOne('api/summary');
     });
 
     afterEach(() => {
