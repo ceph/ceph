@@ -141,10 +141,7 @@ int64_t Throttle::take(int64_t c)
   }
   ceph_assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
-  {
-    std::lock_guard l(lock);
-    count += c;
-  }
+  count += c;
   if (logger) {
     logger->inc(l_throttle_take);
     logger->inc(l_throttle_take_sum, c);
