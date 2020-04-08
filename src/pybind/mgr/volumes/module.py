@@ -473,8 +473,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 path=cmd.get('path', '/'), cluster_id=cmd.get('attach'))
 
     def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
-            return self.fs_export.delete_export(cmd['export_id'])
+        return self.fs_export.delete_export(cmd['export_id'])
 
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
-            nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
-            return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'], size=cmd.get('size', 1))
+        #TODO add placement option
+        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
+        return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'], size=cmd.get('size', 1))
