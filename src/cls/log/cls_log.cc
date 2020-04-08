@@ -11,6 +11,11 @@
 #include "global/global_context.h"
 #include "include/compat.h"
 
+using std::map;
+using std::string;
+
+using ceph::bufferlist;
+
 CLS_VER(1,0)
 CLS_NAME(log)
 
@@ -53,7 +58,7 @@ static int read_header(cls_method_context_t hctx, cls_log_header& header)
   auto iter = header_bl.cbegin();
   try {
     decode(header, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: read_header(): failed to decode header");
   }
 
@@ -90,7 +95,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   cls_log_add_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_log_add_op(): failed to decode op");
     return -EINVAL;
   }
@@ -101,8 +106,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   if (ret < 0)
     return ret;
 
-  for (list<cls_log_entry>::iterator iter = op.entries.begin();
-       iter != op.entries.end(); ++iter) {
+  for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_log_entry& entry = *iter;
 
     string index;
@@ -145,7 +149,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   cls_log_list_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_log_list_op(): failed to decode op");
     return -EINVAL;
   }
@@ -176,8 +180,8 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   if (rc < 0)
     return rc;
 
-  list<cls_log_entry>& entries = ret.entries;
-  map<string, bufferlist>::iterator iter = keys.begin();
+  auto& entries = ret.entries;
+  auto iter = keys.begin();
 
   string marker;
 
@@ -195,7 +199,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
       cls_log_entry e;
       decode(e, biter);
       entries.push_back(e);
-    } catch (buffer::error& err) {
+    } catch (ceph::buffer::error& err) {
       CLS_LOG(0, "ERROR: cls_log_list: could not decode entry, index=%s", index.c_str());
     }
   }
@@ -215,7 +219,7 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   cls_log_trim_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: cls_log_trim(): failed to decode entry");
     return -EINVAL;
   }
@@ -280,7 +284,7 @@ static int cls_log_info(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   cls_log_info_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_log_add_op(): failed to decode op");
     return -EINVAL;
   }

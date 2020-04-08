@@ -72,7 +72,7 @@ public:
     pi = nullptr;
   }
 
-  void dump(Formatter* f) const;
+  void dump(ceph::Formatter* f) const;
 
   const char *get_current_state() const {
     if (pi == nullptr) return "unknown";

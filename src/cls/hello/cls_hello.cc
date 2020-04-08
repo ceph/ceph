@@ -37,8 +37,12 @@
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
 
-using ceph::bufferlist;
 using std::string;
+using std::ostringstream;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
 
 CLS_VER(1,0)
 CLS_NAME(hello)
@@ -278,7 +282,7 @@ public:
     try {
       decode(xattr, params);
       decode(val, params);
-    } catch (buffer::error &e) {
+    } catch (ceph::buffer::error &e) {
       return -EINVAL;
     }
     return 0;

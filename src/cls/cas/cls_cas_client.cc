@@ -1,10 +1,18 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <errno.h>
 
 #include "cls/cas/cls_cas_client.h"
 #include "cls/cas/cls_cas_ops.h"
 #include "include/rados/librados.hpp"
 
-using namespace librados;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
 
 void cls_chunk_refcount_get(librados::ObjectWriteOperation& op, const hobject_t& soid)
 {
@@ -44,7 +52,7 @@ int cls_chunk_refcount_read(librados::IoCtx& io_ctx, string& oid, set<hobject_t>
   try {
     auto iter = out.cbegin();
     decode(ret, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
