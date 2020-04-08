@@ -43,12 +43,7 @@ public:
                           uint64_t primary_snap_id,
                           const SnapSeqs& snap_seqs,
                           const ImageState &image_state, uint64_t *snap_id,
-                          Context *on_finish)
-    : m_image_ctx(image_ctx), m_demoted(demoted),
-      m_primary_mirror_uuid(primary_mirror_uuid),
-      m_primary_snap_id(primary_snap_id), m_snap_seqs(snap_seqs),
-      m_image_state(image_state), m_snap_id(snap_id), m_on_finish(on_finish) {
-  }
+                          Context *on_finish);
 
   void send();
 
@@ -63,6 +58,9 @@ private:
    *    |
    *    v
    * GET_MIRROR_IMAGE
+   *    |
+   *    v (skip if not needed)
+   * GET_MIRROR_PEERS
    *    |
    *    v
    * CREATE_SNAPSHOT
@@ -84,6 +82,9 @@ private:
   ImageState m_image_state;
   uint64_t *m_snap_id;
   Context *m_on_finish;
+
+  librados::IoCtx m_default_ns_ctx;
+  std::set<std::string> m_mirror_peer_uuids;
 
   std::string m_snap_name;
 
