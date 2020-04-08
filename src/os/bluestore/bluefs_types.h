@@ -33,12 +33,11 @@ WRITE_CLASS_DENC(bluefs_extent_t)
 
 ostream& operator<<(ostream& out, const bluefs_extent_t& e);
 
-
 struct bluefs_fnode_t {
   uint64_t ino;
   uint64_t size;
   utime_t mtime;
-  uint8_t prefer_bdev;
+  uint8_t __unused__; // was prefer_bdev
   mempool::bluefs::vector<bluefs_extent_t> extents;
 
   // precalculated logical offsets for extents vector entries
@@ -47,7 +46,7 @@ struct bluefs_fnode_t {
 
   uint64_t allocated;
 
-  bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0), allocated(0) {}
+  bluefs_fnode_t() : ino(0), size(0), __unused__(0), allocated(0) {}
 
   uint64_t get_allocated() const {
     return allocated;
@@ -82,7 +81,7 @@ struct bluefs_fnode_t {
     denc_varint(v.ino, p);
     denc_varint(v.size, p);
     denc(v.mtime, p);
-    denc(v.prefer_bdev, p);
+    denc(v.__unused__, p);
     denc(v.extents, p);
     DENC_FINISH(p);
   }

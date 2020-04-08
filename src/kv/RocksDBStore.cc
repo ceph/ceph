@@ -242,24 +242,37 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
 
 int RocksDBStore::ParseOptionsFromString(const string &opt_str, rocksdb::Options &opt)
 {
+  return ParseOptionsFromStringStatic(cct, opt_str, opt,
+    [&](const string& k, const string& v, rocksdb::Options& o) {
+      return tryInterpret(k, v, o);
+    }
+  );
+}
+
+int RocksDBStore::ParseOptionsFromStringStatic(
+  CephContext *cct,
+  const string& opt_str,
+  rocksdb::Options& opt,
+  function<int(const string&, const string&, rocksdb::Options&)> interp)
+{
   map<string, string> str_map;
   int r = get_str_map(opt_str, &str_map, ",\n;");
   if (r < 0)
     return r;
   map<string, string>::iterator it;
-  for(it = str_map.begin(); it != str_map.end(); ++it) {
+  for (it = str_map.begin(); it != str_map.end(); ++it) {
     string this_opt = it->first + "=" + it->second;
-    rocksdb::Status status = rocksdb::GetOptionsFromString(opt, this_opt , &opt); 
+    rocksdb::Status status =
+      rocksdb::GetOptionsFromString(opt, this_opt, &opt);
     if (!status.ok()) {
-      //unrecognized by rocksdb, try to interpret by ourselves.
-      r = tryInterpret(it->first, it->second, opt);
+      r = interp != nullptr ? interp(it->first, it->second, opt) : -1;
       if (r < 0) {
-	derr << status.ToString() << dendl;
-	return -EINVAL;
+        derr << status.ToString() << dendl;
+        return -EINVAL;
       }
     }
     lgeneric_dout(cct, 0) << " set rocksdb option " << it->first
-			  << " = " << it->second << dendl;
+      << " = " << it->second << dendl;
   }
   return 0;
 }

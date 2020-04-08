@@ -115,7 +115,6 @@ void bluefs_fnode_t::dump(Formatter *f) const
   f->dump_unsigned("ino", ino);
   f->dump_unsigned("size", size);
   f->dump_stream("mtime") << mtime;
-  f->dump_unsigned("prefer_bdev", prefer_bdev);
   f->open_array_section("extents");
   for (auto& p : extents)
     f->dump_object("extent", p);
@@ -130,7 +129,7 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
   ls.back()->size = 1048576;
   ls.back()->mtime = utime_t(123,45);
   ls.back()->extents.push_back(bluefs_extent_t(0, 1048576, 4096));
-  ls.back()->prefer_bdev = 1;
+  ls.back()->__unused__ = 1;
 }
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
@@ -138,7 +137,6 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
   return out << "file(ino " << file.ino
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
-	     << " bdev " << (int)file.prefer_bdev
 	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " extents " << file.extents
 	     << ")";
