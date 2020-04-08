@@ -408,14 +408,14 @@ private:
   int _preallocate(FileRef f, uint64_t off, uint64_t len);
   int _truncate(FileWriter *h, uint64_t off);
 
-  int _read(
+  int64_t _read(
     FileReader *h,   ///< [in] read from here
     FileReaderBuffer *buf, ///< [in] reader state
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     bufferlist *outbl,   ///< [out] optional: reference the result here
     char *out);      ///< [out] optional: or copy it here
-  int _read_random(
+  int64_t _read_random(
     FileReader *h,   ///< [in] read from here
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
@@ -593,14 +593,14 @@ public:
     _maybe_compact_log(l);
     return r;
   }
-  int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
+  int64_t read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
 	   bufferlist *outbl, char *out) {
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
     return _read(h, buf, offset, len, outbl, out);
   }
-  int read_random(FileReader *h, uint64_t offset, size_t len,
+  int64_t read_random(FileReader *h, uint64_t offset, size_t len,
 		  char *out) {
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
