@@ -26,6 +26,13 @@
 #include "cls/otp/cls_otp_ops.h"
 #include "cls/otp/cls_otp_types.h"
 
+using std::list;
+using std::string;
+using std::set;
+
+using ceph::bufferlist;
+using ceph::encode;
+using ceph::real_clock;
 
 using namespace rados::cls::otp;
 
@@ -147,7 +154,7 @@ bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
 
 void otp_instance::find(const string& token, otp_check_t *result)
 {
-  ceph::real_time now = real_clock::now();
+  auto now = real_clock::now();
   trim_expired(now);
 
   for (auto& entry : boost::adaptors::reverse(last_checks)) {
@@ -177,7 +184,7 @@ static int get_otp_instance(cls_method_context_t hctx, const string& id, otp_ins
   try {
     auto it = bl.cbegin();
     decode(*instance, it);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: failed to decode %s", key.c_str());
     return -EIO;
   }
@@ -236,7 +243,7 @@ static int read_header(cls_method_context_t hctx, otp_header *h)
   auto iter = bl.cbegin();
   try {
     decode(*h, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_ERR("failed to decode otp_header");
     return -EIO;
   }
@@ -299,7 +306,7 @@ static int otp_set_op(cls_method_context_t hctx,
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
@@ -348,7 +355,7 @@ static int otp_remove_op(cls_method_context_t hctx,
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
@@ -394,7 +401,7 @@ static int otp_get_op(cls_method_context_t hctx,
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
@@ -445,7 +452,7 @@ static int otp_check_op(cls_method_context_t hctx,
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
@@ -481,7 +488,7 @@ static int otp_get_result(cls_method_context_t hctx,
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }
@@ -511,7 +518,7 @@ static int otp_get_current_time_op(cls_method_context_t hctx,
   try {
     auto iter = in->cbegin();
     decode(op, iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
   }

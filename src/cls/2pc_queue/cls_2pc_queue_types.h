@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #pragma once
 
 #include "include/types.h"
@@ -14,14 +16,14 @@ struct cls_2pc_reservation
 
   cls_2pc_reservation() = default;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(size, bl);
     encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(size, bl);
     decode(timestamp, bl);
@@ -39,7 +41,7 @@ struct cls_2pc_urgent_data
   cls_2pc_reservations reservations; // reservation list (keyed by id)
   bool has_xattrs{false};
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(reserved_size, bl);
     encode(last_id, bl);
@@ -48,7 +50,7 @@ struct cls_2pc_urgent_data
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(reserved_size, bl);
     decode(last_id, bl);
@@ -58,4 +60,3 @@ struct cls_2pc_urgent_data
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_urgent_data)
-

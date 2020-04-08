@@ -19,6 +19,9 @@
 
 #include "cls_cephfs_client.h"
 
+using ceph::bufferlist;
+using ceph::decode;
+
 #define XATTR_CEILING "scan_ceiling"
 #define XATTR_MAX_MTIME "scan_max_mtime"
 #define XATTR_MAX_SIZE "scan_max_size"
@@ -114,7 +117,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
     ceiling.decode(scan_ceiling_bl_iter);
     result->ceiling_obj_index = ceiling.id;
     result->ceiling_obj_size = ceiling.size;
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
   }
@@ -123,7 +126,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   try {
     auto scan_max_size_bl_iter = scan_max_size_bl.cbegin();
     decode(result->max_obj_size, scan_max_size_bl_iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
   }
@@ -132,7 +135,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   try {
     auto scan_max_mtime_bl_iter = scan_max_mtime_bl.cbegin();
     decode(result->max_mtime, scan_max_mtime_bl_iter);
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
   }
@@ -142,7 +145,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
     try {
       auto q = parent_bl.cbegin();
       backtrace->decode(q);
-    } catch (buffer::error &e) {
+    } catch (ceph::buffer::error &e) {
       //dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
       return -EINVAL;
     }
@@ -153,7 +156,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
     try {
       auto q = layout_bl.cbegin();
       decode(*layout, q);
-    } catch (buffer::error &e) {
+    } catch (ceph::buffer::error &e) {
       return -EINVAL;
     }
   }

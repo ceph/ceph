@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
@@ -8,6 +8,9 @@
 
 #include "include/compat.h"
 #include "osd/osd_types.h"
+
+using ceph::bufferlist;
+using ceph::decode;
 
 CLS_VER(1,0)
 CLS_NAME(cas)
@@ -28,7 +31,7 @@ static int chunk_read_refcount(cls_method_context_t hctx, chunk_obj_refcount *ob
   try {
     auto iter = bl.cbegin();
     decode(*objr, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: chunk_read_refcount(): failed to decode refcount entry\n");
     return -EIO;
   }
@@ -56,7 +59,7 @@ static int cls_rc_chunk_refcount_get(cls_method_context_t hctx, bufferlist *in, 
   cls_chunk_refcount_get_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_rc_refcount_get(): failed to decode entry\n");
     return -EINVAL;
   }
@@ -84,7 +87,7 @@ static int cls_rc_chunk_refcount_put(cls_method_context_t hctx, bufferlist *in, 
   cls_chunk_refcount_put_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_rc_chunk_refcount_put(): failed to decode entry\n");
     return -EINVAL;
   }
@@ -134,7 +137,7 @@ static int cls_rc_chunk_refcount_set(cls_method_context_t hctx, bufferlist *in, 
   cls_chunk_refcount_set_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_chunk_refcount_set(): failed to decode entry\n");
     return -EINVAL;
   }
@@ -182,7 +185,7 @@ static int cls_rc_write_or_get(cls_method_context_t hctx, bufferlist *in, buffer
     decode(src_obj, in_iter);
     in_iter.copy(op.extent.length, indata);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     return -EINVAL;
   }
 
@@ -215,12 +218,12 @@ static int cls_rc_write_or_get(cls_method_context_t hctx, bufferlist *in, buffer
 static int cls_rc_has_chunk(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
-  string fp_oid;
+  std::string fp_oid;
   bufferlist indata, outdata;
   try {
     decode (fp_oid, in_iter);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     return -EINVAL;
   }
   CLS_LOG(10, " fp_oid: %s \n", fp_oid.c_str());

@@ -5,6 +5,8 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 
+using std::list;
+
 void cls_refcount_get_op::dump(ceph::Formatter *f) const
 {
   f->dump_string("tag", tag);
@@ -66,7 +68,7 @@ void cls_refcount_read_op::generate_test_instances(list<cls_refcount_read_op*>& 
 void cls_refcount_read_ret::dump(ceph::Formatter *f) const
 {
   f->open_array_section("refs");
-  for (list<string>::const_iterator p = refs.begin(); p != refs.end(); ++p)
+  for (auto p = refs.begin(); p != refs.end(); ++p)
     f->dump_string("ref", *p);
   f->close_section();
 }

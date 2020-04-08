@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
@@ -8,6 +8,11 @@
 #include "cls_timeindex_ops.h"
 
 #include "include/compat.h"
+
+using std::map;
+using std::string;
+
+using ceph::bufferlist;
 
 CLS_VER(1,0)
 CLS_NAME(timeindex)
@@ -61,12 +66,12 @@ static int cls_timeindex_add(cls_method_context_t hctx,
   cls_timeindex_add_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_add_op(): failed to decode op");
     return -EINVAL;
   }
 
-  for (list<cls_timeindex_entry>::iterator iter = op.entries.begin();
+  for (auto iter = op.entries.begin();
        iter != op.entries.end();
        ++iter) {
     cls_timeindex_entry& entry = *iter;
@@ -94,7 +99,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
   cls_timeindex_list_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_list_op(): failed to decode op");
     return -EINVAL;
   }
@@ -128,8 +133,8 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     return rc;
   }
 
-  list<cls_timeindex_entry>& entries = ret.entries;
-  map<string, bufferlist>::iterator iter = keys.begin();
+  auto& entries = ret.entries;
+  auto iter = keys.begin();
 
   string marker;
 
@@ -175,7 +180,7 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
   cls_timeindex_trim_op op;
   try {
     decode(op, in_iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_trim: failed to decode entry");
     return -EINVAL;
   }
@@ -205,7 +210,7 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
     return rc;
   }
 
-  map<string, bufferlist>::iterator iter = keys.begin();
+  auto iter = keys.begin();
 
   bool removed = false;
   for (; iter != keys.end(); ++iter) {

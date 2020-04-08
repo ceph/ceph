@@ -328,7 +328,7 @@ void MonMap::print(ostream& out) const
   out << "fsid " << fsid << "\n";
   out << "last_changed " << last_changed << "\n";
   out << "created " << created << "\n";
-  out << "min_mon_release " << ceph::to_integer<unsigned>(min_mon_release)
+  out << "min_mon_release " << to_integer<unsigned>(min_mon_release)
       << " (" << min_mon_release << ")\n";
   unsigned i = 0;
   for (auto p = ranks.begin(); p != ranks.end(); ++p) {
@@ -342,8 +342,8 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("fsid") <<  fsid;
   last_changed.gmtime(f->dump_stream("modified"));
   created.gmtime(f->dump_stream("created"));
-  f->dump_unsigned("min_mon_release", ceph::to_integer<unsigned>(min_mon_release));
-  f->dump_string("min_mon_release_name", ceph::to_string(min_mon_release));
+  f->dump_unsigned("min_mon_release", to_integer<unsigned>(min_mon_release));
+  f->dump_string("min_mon_release_name", to_string(min_mon_release));
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
@@ -368,7 +368,7 @@ void MonMap::dump(Formatter *f) const
 void MonMap::dump_summary(Formatter *f) const
 {
   f->dump_unsigned("epoch", epoch);
-  f->dump_string("min_mon_release_name", ceph::to_string(min_mon_release));
+  f->dump_string("min_mon_release_name", to_string(min_mon_release));
   f->dump_unsigned("num_mons", ranks.size());
 }
 

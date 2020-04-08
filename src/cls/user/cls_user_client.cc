@@ -6,9 +6,15 @@
 #include "cls/user/cls_user_client.h"
 #include "include/rados/librados.hpp"
 
+using std::list;
+using std::string;
 
-using namespace librados;
+using ceph::bufferlist;
+using ceph::real_clock;
 
+using librados::IoCtx;
+using librados::ObjectOperationCompletion;
+using librados::ObjectReadOperation;
 
 void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries, bool add)
 {
@@ -59,7 +65,7 @@ public:
           *truncated = ret.truncated;
         if (marker)
           *marker = ret.marker;
-      } catch (buffer::error& err) {
+      } catch (ceph::buffer::error& err) {
         r = -EIO;
       }
     }
@@ -108,7 +114,7 @@ public:
         decode(ret, iter);
         if (header)
 	  *header = ret.header;
-      } catch (buffer::error& err) {
+      } catch (ceph::buffer::error& err) {
         r = -EIO;
       }
       if (ret_ctx) {
@@ -148,7 +154,7 @@ int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *c
   encode(call, in);
   ObjectReadOperation op;
   op.exec("user", "get_header", in, new ClsUserGetHeaderCtx(NULL, ctx, NULL)); /* no need to pass pret, as we'll call ctx->handle_response() with correct error */
-  AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
+  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
   int r = io_ctx.aio_operate(oid, c, &op, NULL);
   c->release();
   if (r < 0)
