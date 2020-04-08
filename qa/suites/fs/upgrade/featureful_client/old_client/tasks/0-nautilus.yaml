@@ -14,8 +14,6 @@ tasks:
     extra_packages: ['librados2']
 - print: "**** done installing nautilus"
 - ceph:
-    mon_bind_addrvec: false
-    mon_bind_msgr2: false
     log-whitelist:
       - overall HEALTH_
       - \(FS_
