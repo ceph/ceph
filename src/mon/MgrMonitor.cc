@@ -1184,8 +1184,8 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = 0;
       goto out;
     }
-    if (!pending_map.any_supports_module(module)) {
-      ss << "module '" << module << "' does not exist";
+    if (!pending_map.modules.count(module)) {
+      ss << "module '" << module << "' is not enabled";
     }
     pending_map.modules.erase(module);
   } else {
