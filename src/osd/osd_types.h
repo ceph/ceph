@@ -4157,7 +4157,7 @@ struct pg_log_entry_t {
       (op == MODIFY || op == DELETE || op == ERROR);
   }
 
-  void set_op_returns(std::vector<OSDOp>& ops) {
+  void set_op_returns(const std::vector<OSDOp>& ops) {
     op_returns.resize(ops.size());
     for (unsigned i = 0; i < ops.size(); ++i) {
       op_returns[i].rval = ops[i].rval;
