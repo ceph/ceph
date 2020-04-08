@@ -1,7 +1,6 @@
 """
 Start mpi processes (and allow commands to be run inside process)
 """
-from StringIO import StringIO
 import logging
 import re
 
@@ -18,7 +17,7 @@ def _check_mpi_version(remotes):
     """
     versions = set()
     for remote in remotes:
-        version_str = remote.run(args=["mpiexec", "--version"], stdout=StringIO()).stdout.getvalue()
+        version_str = remote.sh("mpiexec --version")
         try:
             version = re.search("^\s+Version:\s+(.+)$", version_str, re.MULTILINE).group(1)
         except AttributeError:
