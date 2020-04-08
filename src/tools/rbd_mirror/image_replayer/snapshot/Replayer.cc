@@ -532,6 +532,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
 
   m_pending_snapshots = 0;
 
+  std::set<uint64_t> unlink_snap_ids;
   bool split_brain = false;
   bool remote_demoted = false;
   auto remote_image_ctx = m_state_builder->remote_image_ctx;
@@ -547,13 +548,17 @@ void Replayer<I>::scan_remote_mirror_snapshots(
 
     dout(15) << "remote mirror snapshot: id=" << snap_info_it->first << ", "
              << "mirror_ns=" << *mirror_ns << dendl;
+    remote_demoted = mirror_ns->is_demoted();
     if (!mirror_ns->is_primary() && !mirror_ns->is_non_primary()) {
       derr << "unknown remote mirror snapshot state" << dendl;
       handle_replay_complete(locker, -EINVAL,
                              "invalid remote mirror snapshot state");
       return;
-    } else {
-      remote_demoted = mirror_ns->is_demoted();
+    } else if (mirror_ns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) ==
+                 0) {
+      dout(15) << "skipping remote snapshot due to missing mirror peer"
+               << dendl;
+      continue;
     }
 
     auto remote_snap_id = snap_info_it->first;
@@ -564,10 +569,12 @@ void Replayer<I>::scan_remote_mirror_snapshots(
         ceph_assert(m_local_mirror_snap_ns.primary_mirror_uuid ==
                       m_state_builder->remote_mirror_uuid);
 
+        unlink_snap_ids.insert(remote_snap_id);
         if (m_local_mirror_snap_ns.complete &&
             m_local_mirror_snap_ns.primary_snap_id >= remote_snap_id) {
           // skip past completed remote snapshot
           m_remote_snap_id_start = remote_snap_id;
+          m_remote_mirror_snap_ns = *mirror_ns;
           dout(15) << "skipping synced remote snapshot " << remote_snap_id
                    << dendl;
           continue;
@@ -577,6 +584,7 @@ void Replayer<I>::scan_remote_mirror_snapshots(
           dout(15) << "skipping synced remote snapshot " << remote_snap_id
                    << " while search for in-progress sync" << dendl;
           m_remote_snap_id_start = remote_snap_id;
+          m_remote_mirror_snap_ns = *mirror_ns;
           continue;
         }
       } else if (m_local_mirror_snap_ns.state ==
@@ -604,16 +612,8 @@ void Replayer<I>::scan_remote_mirror_snapshots(
         // should not have been able to reach this
         ceph_assert(false);
       }
-    }
-
-    // find first snapshot where were are listed as a peer
-    if (!mirror_ns->is_primary()) {
+    } else if (!mirror_ns->is_primary()) {
       dout(15) << "skipping non-primary remote snapshot" << dendl;
-      continue;
-    } else if (mirror_ns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) ==
-                 0) {
-      dout(15) << "skipping remote snapshot due to missing mirror peer"
-               << dendl;
       continue;
     }
 
@@ -623,10 +623,24 @@ void Replayer<I>::scan_remote_mirror_snapshots(
       continue;
     }
 
+    // first primary snapshot where were are listed as a peer
     m_remote_snap_id_end = remote_snap_id;
     m_remote_mirror_snap_ns = *mirror_ns;
   }
   image_locker.unlock();
+
+  unlink_snap_ids.erase(m_remote_snap_id_start);
+  unlink_snap_ids.erase(m_remote_snap_id_end);
+  if (!unlink_snap_ids.empty()) {
+    locker->unlock();
+
+    // retry the unlinking process for a remote snapshot that we do not
+    // need anymore
+    auto remote_snap_id = *unlink_snap_ids.begin();
+    dout(10) << "unlinking from remote snapshot " << remote_snap_id << dendl;
+    unlink_peer(remote_snap_id);
+    return;
+  }
 
   if (m_remote_snap_id_end != CEPH_NOSNAP) {
     dout(10) << "found remote mirror snapshot: "
@@ -1143,24 +1157,24 @@ void Replayer<I>::handle_notify_image_update(int r) {
     derr << "failed to notify local image update: " << cpp_strerror(r) << dendl;
   }
 
-  unlink_peer();
+  unlink_peer(m_remote_snap_id_start);
 }
 
 template <typename I>
-void Replayer<I>::unlink_peer() {
-  if (m_remote_snap_id_start == 0) {
+void Replayer<I>::unlink_peer(uint64_t remote_snap_id) {
+  if (remote_snap_id == 0) {
     finish_sync();
     return;
   }
 
   // local snapshot fully synced -- we no longer depend on the sync
   // start snapshot in the remote image
-  dout(10) << "remote_snap_id=" << m_remote_snap_id_start << dendl;
+  dout(10) << "remote_snap_id=" << remote_snap_id << dendl;
 
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_unlink_peer>(this);
   auto req = librbd::mirror::snapshot::UnlinkPeerRequest<I>::create(
-    m_state_builder->remote_image_ctx, m_remote_snap_id_start,
+    m_state_builder->remote_image_ctx, remote_snap_id,
     m_remote_mirror_peer_uuid, ctx);
   req->send();
 }
@@ -1187,9 +1201,11 @@ void Replayer<I>::finish_sync() {
     std::unique_lock locker{m_lock};
     notify_status_updated();
 
-    m_sync_in_progress = false;
-    m_instance_watcher->notify_sync_complete(
-      m_state_builder->local_image_ctx->id);
+    if (m_sync_in_progress) {
+      m_sync_in_progress = false;
+      m_instance_watcher->notify_sync_complete(
+        m_state_builder->local_image_ctx->id);
+    }
   }
 
   if (is_replay_interrupted()) {

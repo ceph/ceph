@@ -123,37 +123,37 @@ private:
    *    |                                             | |
    *    | (new snapshot)                              | |
    *    |\--------------> COPY_SNAPSHOTS              | |
-   *    |                     |                       | |
-   *    |                     v                       | |
+   *    |                       |                     | |
+   *    |                       v                     | |
    *    |                 GET_REMOTE_IMAGE_STATE      | |
-   *    |                     |                       | |
-   *    |                     v                       | |
+   *    |                       |                     | |
+   *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
-   *    |                     |                       | |
-   *    |                     |/----------------------/ |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                     | |
+   *    |                       |/--------------------/ |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 REQUEST_SYNC                  |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 COPY_IMAGE                    |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 APPLY_IMAGE_STATE             |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 UPDATE_NON_PRIMARY_SNAPSHOT   |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 NOTIFY_IMAGE_UPDATE           |
-   *    |                     |                         |
-   *    |                     v                         |
-   *    |                 UNLINK_PEER                   |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    | (interrupted unlink)  v                       |
+   *    |\--------------> UNLINK_PEER                   |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 NOTIFY_LISTENER               |
-   *    |                     |                         |
-   *    |                     \------------------------/|
+   *    |                       |                       |
+   *    |                       \----------------------/|
    *    |                                               |
    *    | (remote demoted)                              |
    *    \---------------> NOTIFY_LISTENER               |
@@ -288,7 +288,7 @@ private:
   void notify_image_update();
   void handle_notify_image_update(int r);
 
-  void unlink_peer();
+  void unlink_peer(uint64_t remote_snap_id);
   void handle_unlink_peer(int r);
 
   void finish_sync();
