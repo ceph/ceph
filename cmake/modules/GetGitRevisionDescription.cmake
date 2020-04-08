@@ -40,20 +40,13 @@ set(__get_git_revision_description YES)
 get_filename_component(_gitdescmoddir ${CMAKE_CURRENT_LIST_FILE} PATH)
 
 function(get_git_head_revision _refspecvar _hashvar)
-	set(GIT_PARENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-	set(GIT_DIR "${GIT_PARENT_DIR}/.git")
-	set(TOP_LEVEL_DIR "${CMAKE_SOURCE_DIR}")
-	while(NOT EXISTS "${GIT_DIR}")	# .git dir not found, search parent directories
-		set(GIT_PREVIOUS_PARENT "${GIT_PARENT_DIR}")
-		get_filename_component(GIT_PARENT_DIR ${GIT_PARENT_DIR} PATH)
-		if(GIT_PARENT_DIR STREQUAL TOP_LEVEL_DIR)
-			# We have reached the top of the source tree, we are not in git
-			set(${_refspecvar} "GITDIR-NOTFOUND" PARENT_SCOPE)
-			set(${_hashvar} "GITDIR-NOTFOUND" PARENT_SCOPE)
-			return()
-		endif()
-		set(GIT_DIR "${GIT_PARENT_DIR}/.git")
-	endwhile()
+	set(GIT_DIR "${CMAKE_SOURCE_DIR}/.git")
+	if(NOT EXISTS "${GIT_DIR}")	# .git dir not found
+	  # We have reached the top of the source tree, we are not in git
+	  set(${_refspecvar} "GITDIR-NOTFOUND" PARENT_SCOPE)
+	  set(${_hashvar} "GITDIR-NOTFOUND" PARENT_SCOPE)
+	  return()
+	endif()
 	# check if this is a submodule or git-worktree
 	if(NOT IS_DIRECTORY ${GIT_DIR})
 		file(READ ${GIT_DIR} gitdirfile)
