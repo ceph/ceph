@@ -46,7 +46,7 @@ function(get_git_head_revision _refspecvar _hashvar)
 	while(NOT EXISTS "${GIT_DIR}")	# .git dir not found, search parent directories
 		set(GIT_PREVIOUS_PARENT "${GIT_PARENT_DIR}")
 		get_filename_component(GIT_PARENT_DIR ${GIT_PARENT_DIR} PATH)
-		if(GIT_PARENT_DIR STREQUAL TOP_LEVEL_DIR)
+		if(GIT_PREVIOUS_PARENT STREQUAL TOP_LEVEL_DIR)
 			# We have reached the top of the source tree, we are not in git
 			set(${_refspecvar} "GITDIR-NOTFOUND" PARENT_SCOPE)
 			set(${_hashvar} "GITDIR-NOTFOUND" PARENT_SCOPE)
