@@ -4433,6 +4433,10 @@ if __name__ == "__main__":
         sys.stderr.write('ERROR: cephadm should be run as root\n')
         sys.exit(1)
 
+    if 'func' not in args:
+        sys.stderr.write('No command specified; pass -h or --help for usage\n')
+        sys.exit(1)
+
     # podman or docker?
     if args.func != command_check_host:
         if args.docker:
@@ -4447,10 +4451,6 @@ if __name__ == "__main__":
             if not container_path and args.func != command_prepare_host:
                 sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
                 sys.exit(1)
-
-    if 'func' not in args:
-        sys.stderr.write('No command specified; pass -h or --help for usage\n')
-        sys.exit(1)
 
     try:
         r = args.func()
