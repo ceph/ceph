@@ -4459,7 +4459,8 @@ if __name__ == "__main__":
                     break
                 except Exception as e:
                     logger.debug('Could not locate %s: %s' % (i, e))
-            if not container_path and args.func != command_prepare_host:
+            if not container_path and args.func != command_prepare_host\
+                    and args.func != command_add_repo:
                 sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
                 sys.exit(1)
 
