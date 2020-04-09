@@ -2184,7 +2184,10 @@ def command_bootstrap():
                               '--allow-overwrite to overwrite' % f)
         dirname = os.path.dirname(f)
         if dirname and not os.path.exists(dirname):
-            raise Error('%s directory %s does not exist' % (f, dirname))
+            if dirname == "/etc/ceph":
+                os.mkdir(dirname)
+            else:
+                raise Error('%s directory %s does not exist' % (f, dirname))
 
     if not args.skip_prepare_host:
         command_prepare_host()

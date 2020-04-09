@@ -70,7 +70,6 @@ be accessible by any host accessing the Ceph cluster.
 
 To bootstrap the cluster::
 
-  # mkdir -p /etc/ceph
   # cephadm bootstrap --mon-ip *<mon-ip>*
 
 This command will:
