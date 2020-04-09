@@ -106,6 +106,16 @@ NFS_CORE_PARAM {{
         Protocols = 4;
 }}
 
+CACHEINODE {{
+        Dir_Chunk = 0;
+        NParts = 1;
+        Cache_Size = 1;
+}}
+
+EXPORT_DEFAULTS {{
+        Attr_Expiration_Time = 0;
+}}
+
 NFSv4 {{
         Delegations = false;
         RecoveryBackend = 'rados_cluster';
