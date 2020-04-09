@@ -500,8 +500,8 @@ public:
   void initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store);
   void finalize();
 
-  int process(LCWorker* worker);
-  int process(int index, int max_secs, LCWorker* worker);
+  int process(LCWorker* worker, bool once);
+  int process(int index, int max_secs, LCWorker* worker, bool once);
   bool if_already_run_today(time_t start_date);
   bool expired_session(time_t started);
   time_t thread_stop_at();
