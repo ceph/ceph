@@ -5,6 +5,7 @@ meta:
 
 tasks:
 - cbt:
+    branch: 'mimic'
     benchmarks:
       radosbench:
         concurrent_ops: 4

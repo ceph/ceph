@@ -1,5 +1,6 @@
 tasks:
 - cbt:
+    branch: 'mimic'
     benchmarks:
       librbdfio:
         op_size: [4194304]
