@@ -33,7 +33,9 @@ not assign placement groups to the OSD. If an OSD is ``down``, it should also be
 .. note:: If an OSD is ``down`` and ``in``, there is a problem and the cluster 
    will not be in a healthy state.
 
-.. ditaa:: +----------------+        +----------------+
+.. ditaa::
+
+           +----------------+        +----------------+
            |                |        |                |
            |   OSD #n In    |        |   OSD #n Up    |
            |                |        |                |
@@ -158,7 +160,9 @@ OSDs to establish agreement on the current state of the placement group
 (assuming a pool with 3 replicas of the PG).
 
 
-.. ditaa:: +---------+     +---------+     +-------+
+.. ditaa::
+
+           +---------+     +---------+     +-------+
            |  OSD 1  |     |  OSD 2  |     | OSD 3 |
            +---------+     +---------+     +-------+
                 |               |              |
@@ -265,8 +269,8 @@ group's Acting Set will peer. Once peering is complete, the placement group
 status should be ``active+clean``, which means a Ceph client can begin writing
 to the placement group.
 
-.. ditaa:: 
-         
+.. ditaa::
+
        /-----------\       /-----------\       /-----------\
        | Creating  |------>|  Peering  |------>|  Active   |
        \-----------/       \-----------/       \-----------/
