@@ -58,6 +58,7 @@ extensions = [
     'edit_on_github',
     'ceph_releases',
     ]
+
 ditaa = shutil.which("ditaa")
 if ditaa is not None:
     extensions += ['sphinxcontrib.ditaa']
@@ -66,6 +67,10 @@ else:
     plantweb_defaults = {
         'engine': 'ditaa'
     }
+
+build_with_rtd = os.environ.get('READTHEDOCS') == 'True'
+if build_with_rtd:
+    extensions += ['sphinx_search.extension']
 
 todo_include_todos = True
 
@@ -122,7 +127,7 @@ class Mock(object):
 
 sys.modules['ceph_module'] = Mock()
 
-if os.environ.get('READTHEDOCS') == 'True':
+if build_with_rtd:
     exclude_patterns += ['**/api/*',
                          '**/api.rst']
     autodoc_mock_imports = ['cephfs',
