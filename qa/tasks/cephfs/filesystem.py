@@ -517,16 +517,9 @@ class Filesystem(MDSCluster):
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
 
-    def get_pgs_per_fs_pool(self):
-        """
-        Calculate how many PGs to use when creating a pool, in order to avoid raising any
-        health warnings about mon_pg_warn_min_per_osd
-
-        :return: an integer number of PGs
-        """
-        pg_warn_min_per_osd = int(self.get_config('mon_pg_warn_min_per_osd'))
-        osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
-        return pg_warn_min_per_osd * osd_count
+    # In Octopus+, the PG count can be omitted to use the default. We keep the
+    # hard-coded value for deployments of Mimic/Nautilus.
+    pgs_per_fs_pool = 8
 
     def create(self):
         if self.name is None:
@@ -540,10 +533,8 @@ class Filesystem(MDSCluster):
 
         log.info("Creating filesystem '{0}'".format(self.name))
 
-        pgs_per_fs_pool = self.get_pgs_per_fs_pool()
-
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                         self.metadata_pool_name, pgs_per_fs_pool.__str__())
+                                         self.metadata_pool_name, self.pgs_per_fs_pool.__str__())
         if self.metadata_overlay:
             self.mon_manager.raw_cluster_cmd('fs', 'new',
                                              self.name, self.metadata_pool_name, data_pool_name,
@@ -556,7 +547,7 @@ class Filesystem(MDSCluster):
                 self.mon_manager.raw_cluster_cmd(*cmd)
                 self.mon_manager.raw_cluster_cmd(
                     'osd', 'pool', 'create',
-                    data_pool_name, pgs_per_fs_pool.__str__(), 'erasure',
+                    data_pool_name, self.pgs_per_fs_pool.__str__(), 'erasure',
                     data_pool_name)
                 self.mon_manager.raw_cluster_cmd(
                     'osd', 'pool', 'set',
@@ -564,7 +555,7 @@ class Filesystem(MDSCluster):
             else:
                 self.mon_manager.raw_cluster_cmd(
                     'osd', 'pool', 'create',
-                    data_pool_name, pgs_per_fs_pool.__str__())
+                    data_pool_name, self.pgs_per_fs_pool.__str__())
             self.mon_manager.raw_cluster_cmd('fs', 'new',
                                              self.name,
                                              self.metadata_pool_name,
@@ -644,7 +635,7 @@ class Filesystem(MDSCluster):
 
     def add_data_pool(self, name, create=True):
         if create:
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.get_pgs_per_fs_pool().__str__())
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.pgs_per_fs_pool().__str__())
         self.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', self.name, name)
         self.get_pool_names(refresh = True)
         for poolid, fs_name in self.data_pools.items():

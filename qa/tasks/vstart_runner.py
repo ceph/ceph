@@ -777,10 +777,6 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
     def set_clients_block(self, blocked, mds_id=None):
         raise NotImplementedError()
 
-    def get_pgs_per_fs_pool(self):
-        # FIXME: assuming there are 3 OSDs
-        return 3 * int(self.get_config('mon_pg_warn_min_per_osd'))
-
 
 class InteractiveFailureResult(unittest.TextTestResult):
     """

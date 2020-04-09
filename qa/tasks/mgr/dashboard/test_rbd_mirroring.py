@@ -15,7 +15,7 @@ class RbdMirroringTest(DashboardTestCase):
     def create_pool(cls, name, application='rbd'):
         data = {
             'pool': name,
-            'pg_num': 10,
+            'pg_num': 2**3,
             'pool_type': 'replicated',
             'application_metadata': [application]
         }

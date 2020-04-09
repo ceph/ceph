@@ -997,7 +997,6 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
 [global]
 osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
 osd_pool_default_min_size = 1
-mon_pg_warn_min_per_osd = 3
 
 [mon]
 mon_osd_reporter_subtree_level = osd
