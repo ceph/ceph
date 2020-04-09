@@ -2283,6 +2283,7 @@ private:
   void _close_db_and_around(bool read_only);
   int _prepare_db_environment(bool create, bool read_only,
 			      std::string* kv_dir, std::string* kv_backend);
+  int _close_db_environment();
 
   // updates legacy bluefs related recs in DB to a state valid for
   // downgrades from nautilus.
@@ -2528,6 +2529,9 @@ public:
     *pdb = db;
     return 0;
   }
+
+  int open_db_environment(KeyValueDB **pdb);
+  int close_db_environment();
 
   int write_meta(const std::string& key, const std::string& value) override;
   int read_meta(const std::string& key, std::string *value) override;
