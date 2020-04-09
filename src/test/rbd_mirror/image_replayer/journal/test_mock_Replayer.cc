@@ -207,6 +207,7 @@ struct ReplayStatusFormatter<librbd::MockTestImageCtx> {
     s_instance = nullptr;
   }
 
+  MOCK_METHOD1(handle_entry_processed, void(uint64_t));
   MOCK_METHOD2(get_or_send_update, bool(std::string *description, Context *on_finish));
 };
 
