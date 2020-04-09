@@ -19,6 +19,7 @@
 #include "os/bluestore/BlueFS.h"
 #include "os/bluestore/BlueStore.h"
 #include "common/admin_socket.h"
+#include "kv/RocksDBStore.h"
 
 namespace po = boost::program_options;
 
@@ -226,6 +227,8 @@ int main(int argc, char **argv)
   string log_file;
   string key, value;
   vector<string> allocs_name;
+  string empty_sharding(1, '\0');
+  string new_sharding = empty_sharding;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -242,6 +245,7 @@ int main(int argc, char **argv)
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'/'bluefs-slow'")
+    ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -262,7 +266,8 @@ int main(int argc, char **argv)
         "bluefs-log-dump, "
         "free-dump, "
         "free-score, "
-        "bluefs-stats")
+        "bluefs-stats, "
+        "reshard")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -394,6 +399,16 @@ int main(int argc, char **argv)
     }
     if (allocs_name.empty())
       allocs_name = vector<string>{"block", "bluefs-db", "bluefs-wal", "bluefs-slow"};
+  }
+  if (action == "reshard") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (new_sharding == empty_sharding) {
+      cerr << "must provide reshard specification" << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
   vector<const char*> args;
   if (log_file.size()) {
@@ -880,6 +895,28 @@ int main(int argc, char **argv)
     }
     cout << std::string(out.c_str(), out.length()) << std::endl;
      bluestore.cold_close();
+  } else if (action == "reshard") {
+    BlueStore bluestore(cct.get(), path);
+    KeyValueDB *db_ptr;
+    int r = bluestore.open_db_environment(&db_ptr);
+    if (r < 0) {
+      cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (r < 0) {
+      cerr << "error starting k-v inside bluestore: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    RocksDBStore* rocks_db = dynamic_cast<RocksDBStore*>(db_ptr);
+    ceph_assert(db_ptr);
+    ceph_assert(rocks_db);
+    r = rocks_db->reshard(new_sharding);
+    if (r < 0) {
+      cerr << "error resharding: " << cpp_strerror(r) << std::endl;
+    } else {
+      cout << "reshard success" << std::endl;
+    }
+    bluestore.close_db_environment();
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
