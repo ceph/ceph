@@ -10,6 +10,7 @@ python:
   version: 3
   install:
     - requirements: admin/doc-requirements.txt
+    - requirements: admin/doc-read-the-docs.txt
 sphinx:
   builder: dirhtml
   configuration: doc/conf.py
