@@ -1,3 +1,4 @@
+import shutil
 import sys
 import os
 
@@ -53,12 +54,19 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx.ext.graphviz',
     'sphinx.ext.todo',
-    'sphinxcontrib.ditaa',
     'breathe',
     'edit_on_github',
     'ceph_releases',
     ]
-ditaa = 'ditaa'
+ditaa = shutil.which("ditaa")
+if ditaa is not None:
+    extensions += ['sphinxcontrib.ditaa']
+else:
+    extensions += ['plantweb.directive']
+    plantweb_defaults = {
+        'engine': 'ditaa'
+    }
+
 todo_include_todos = True
 
 top_level = os.path.dirname(
@@ -87,6 +95,10 @@ edit_on_github_branch = 'master'
 # handles edit-on-github and old version warning display
 def setup(app):
     app.add_javascript('js/ceph.js')
+    if ditaa is None:
+        # add "ditaa" as an alias of "diagram"
+        from plantweb.directive import DiagramDirective
+        app.add_directive('ditaa', DiagramDirective)
 
 # mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
 # mgr.mgr_module
