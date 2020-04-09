@@ -105,7 +105,19 @@ class Mock(object):
 
 sys.modules['ceph_module'] = Mock()
 
-for pybind in [os.path.join(top_level, 'src/pybind'),
-               os.path.join(top_level, 'src/pybind/mgr')]:
+if os.environ.get('READTHEDOCS') == 'True':
+    exclude_patterns += ['**/api/*',
+                         '**/api.rst']
+    autodoc_mock_imports = ['cephfs',
+                            'rados',
+                            'rbd',
+                            'ceph']
+    pybinds = ['pybind/mgr']
+else:
+    pybinds = ['pybind',
+               'pybind/mgr']
+
+for c in pybinds:
+    pybind = os.path.join(top_level, 'src', c)
     if pybind not in sys.path:
         sys.path.insert(0, pybind)
