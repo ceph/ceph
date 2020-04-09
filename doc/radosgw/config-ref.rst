@@ -673,6 +673,9 @@ Swift Settings
               this option to trust the ``Forwarded`` and ``X-Forwarded-Proto`` headers
               sent by the proxy when determining whether the connection is secure.
               This is required for some features, such as server side encryption.
+              (Never enable this setting if you do not have a trusted proxy in front of
+              radosgw, or else malicious users will be able to set these headers in
+              any request.)
 :Type: Boolean
 :Default: ``false``
 

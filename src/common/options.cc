@@ -6766,7 +6766,10 @@ std::vector<Option> get_rgw_options() {
         "does not know whether incoming http connections are secure. Enable "
         "this option to trust the Forwarded and X-Forwarded-Proto headers sent "
         "by the proxy when determining whether the connection is secure. This "
-        "is required for some features, such as server side encryption.")
+        "is required for some features, such as server side encryption. "
+        "(Never enable this setting if you do not have a trusted proxy in "
+        "front of radosgw, or else malicious users will be able to set these "
+        "headers in any request.)")
     .add_see_also("rgw_crypt_require_ssl"),
 
     Option("rgw_crypt_require_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
