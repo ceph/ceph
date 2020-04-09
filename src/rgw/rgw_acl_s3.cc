@@ -177,13 +177,14 @@ bool ACLGrant_S3::xml_end(const char *el) {
   name.clear();
   email.clear();
 
+  string user_id;
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
     acl_id = static_cast<ACLID_S3 *>(acl_grantee->find_first("ID"));
     if (!acl_id)
       return false;
     // Check for subuser
-    string user_id = acl_id->to_str();
+    user_id = acl_id->to_str();
     parse_key_value(acl_id->to_str(), ":", user_id, subuser);
     id = user_id;
     acl_name = static_cast<ACLDisplayName_S3 *>(acl_grantee->find_first("DisplayName"));
@@ -221,9 +222,10 @@ void ACLGrant_S3::to_xml(CephContext *cct, ostream& out) {
 
   out << "<Grant>" <<
          "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
+  string id_str;
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
-    string id_str = id.to_str();
+    id_str = id.to_str();
     if (!subuser.empty()) {
       id_str += ":" + subuser;
     }
@@ -329,7 +331,8 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
     if (ret < 0)
       return ret;
     
-    if (!subuser.empty())
+    // if subuser equals to * it represents wildcard policy
+    if (!subuser.empty() && subuser != "*")
       if (info.subusers.find(subuser) == info.subusers.end())
         subuser.clear();
 
@@ -561,7 +564,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           err_msg = "Invalid id";
           return -EINVAL;
-        } else if (!subuser.empty() && grant_user.subusers.find(subuser) == grant_user.subusers.end()) {
+        } else if (!subuser.empty() && subuser != "*" && grant_user.subusers.find(subuser) == grant_user.subusers.end()) {
           ldout(cct, 10) << "grant subuser does not exist:" << subuser << dendl;
           err_msg = "Invalid id";
           return -EINVAL;
