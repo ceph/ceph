@@ -13,6 +13,7 @@ import fnmatch
 import time
 import threading
 import socket
+import six
 from six.moves import urllib
 import cherrypy
 
@@ -25,6 +26,17 @@ from . import logger, mgr
 from .exceptions import ViewCacheNoDataException
 from .settings import Settings
 from .services.auth import JwtManager
+
+
+def ensure_str(s, encoding='utf-8', errors='strict'):
+    """Ported from six."""
+    if not isinstance(s, (six.text_type, six.binary_type)):
+        raise TypeError("not expecting type '%s'" % type(s))
+    if six.PY2 and isinstance(s, six.text_type):
+        s = s.encode(encoding, errors)
+    elif six.PY3 and isinstance(s, six.binary_type):
+        s = s.decode(encoding, errors)
+    return s
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -42,6 +54,9 @@ class RequestLoggingTool(cherrypy.Tool):
     def request_begin(self):
         req = cherrypy.request
         user = JwtManager.get_username()
+        if user is not None:
+            # PY2: Encode user to str to prevent further implicit decoding
+            user = ensure_str(user)
         # Log the request.
         logger.debug('[%s:%s] [%s] [%s] %s', req.remote.ip, req.remote.port,
                      req.method, user, req.path_info)
@@ -115,7 +130,7 @@ class RequestLoggingTool(cherrypy.Tool):
         if user:
             logger_fn("[%s:%s] [%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
                       req.remote.port, req.method, status,
-                      "{0:.3f}s".format(lat), user, length, req.path_info)
+                      "{0:.3f}s".format(lat), ensure_str(user), length, req.path_info)
         else:
             logger_fn("[%s:%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
                       req.remote.port, req.method, status,
