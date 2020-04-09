@@ -24,6 +24,8 @@ namespace io { class AsyncOperation; }
 
 namespace deep_copy {
 
+struct Handler;
+
 template <typename ImageCtxT = librbd::ImageCtx>
 class ObjectCopyRequest {
 public:
@@ -33,16 +35,17 @@ public:
                                    librados::snap_t dst_snap_id_start,
                                    const SnapMap &snap_map,
                                    uint64_t object_number, bool flatten,
-                                   Context *on_finish) {
+                                   Handler* handler, Context *on_finish) {
     return new ObjectCopyRequest(src_image_ctx, dst_image_ctx,
                                  src_snap_id_start, dst_snap_id_start, snap_map,
-                                 object_number, flatten, on_finish);
+                                 object_number, flatten, handler, on_finish);
   }
 
   ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
                     librados::snap_t src_snap_id_start,
                     librados::snap_t dst_snap_id_start, const SnapMap &snap_map,
-                    uint64_t object_number, bool flatten, Context *on_finish);
+                    uint64_t object_number, bool flatten, Handler* handler,
+                    Context *on_finish);
 
   void send();
 
@@ -145,6 +148,7 @@ private:
   SnapMap m_snap_map;
   uint64_t m_dst_object_number;
   bool m_flatten;
+  Handler* m_handler;
   Context *m_on_finish;
 
   decltype(m_src_image_ctx->data_ctx) m_src_io_ctx;

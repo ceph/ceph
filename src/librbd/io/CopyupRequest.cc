@@ -241,7 +241,7 @@ void CopyupRequest<I>::deep_copy() {
     CopyupRequest<I>, &CopyupRequest<I>::handle_deep_copy>(this);
   auto req = deep_copy::ObjectCopyRequest<I>::create(
     m_image_ctx->parent, m_image_ctx, 0, 0,
-    m_image_ctx->migration_info.snap_map, m_object_no, m_flatten, ctx);
+    m_image_ctx->migration_info.snap_map, m_object_no, m_flatten, nullptr, ctx);
 
   req->send();
 }

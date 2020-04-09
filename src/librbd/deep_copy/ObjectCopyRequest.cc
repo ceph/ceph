@@ -7,6 +7,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/Handler.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequest.h"
@@ -47,13 +48,14 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
                                         librados::snap_t dst_snap_id_start,
                                         const SnapMap &snap_map,
                                         uint64_t dst_object_number,
-                                        bool flatten, Context *on_finish)
+                                        bool flatten, Handler* handler,
+                                        Context *on_finish)
   : m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
     m_src_snap_id_start(src_snap_id_start),
     m_dst_snap_id_start(dst_snap_id_start), m_snap_map(snap_map),
     m_dst_object_number(dst_object_number), m_flatten(flatten),
-    m_on_finish(on_finish) {
+    m_handler(handler), m_on_finish(on_finish) {
   ceph_assert(src_image_ctx->data_ctx.is_valid());
   ceph_assert(dst_image_ctx->data_ctx.is_valid());
   ceph_assert(!m_snap_map.empty());
@@ -220,6 +222,16 @@ void ObjectCopyRequest<I>::handle_read_object(int r) {
                  << dendl;
     finish(r);
     return;
+  }
+
+  if (m_handler != nullptr) {
+    uint64_t bytes_read = 0;
+
+    auto index = *m_read_snaps.begin();
+    for (auto &copy_op : m_read_ops[index]) {
+      bytes_read += copy_op.out_bl.length();
+    }
+    m_handler->handle_read(bytes_read);
   }
 
   ceph_assert(!m_read_snaps.empty());

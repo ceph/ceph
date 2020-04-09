@@ -8,9 +8,11 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "json_spirit/json_spirit.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
@@ -42,6 +44,10 @@ namespace image_replayer {
 namespace snapshot {
 
 namespace {
+
+double round_to_two_places(double value) {
+  return abs(round(value * 100) / 100);
+}
 
 template<typename I>
 std::pair<uint64_t, librbd::SnapInfo*> get_newest_mirror_snapshot(
@@ -96,10 +102,14 @@ struct Replayer<I>::C_TrackedOp : public Context {
 };
 
 template <typename I>
-struct Replayer<I>::ProgressContext : public librbd::ProgressContext {
+struct Replayer<I>::DeepCopyHandler : public librbd::deep_copy::Handler {
   Replayer *replayer;
 
-  ProgressContext(Replayer* replayer) : replayer(replayer) {
+  DeepCopyHandler(Replayer* replayer) : replayer(replayer) {
+  }
+
+  void handle_read(uint64_t bytes_read) override {
+    replayer->handle_copy_image_read(bytes_read);
   }
 
   int update_progress(uint64_t object_number, uint64_t object_count) override {
@@ -132,7 +142,7 @@ Replayer<I>::~Replayer() {
   dout(10) << dendl;
   ceph_assert(m_state == STATE_COMPLETE);
   ceph_assert(m_update_watch_ctx == nullptr);
-  ceph_assert(m_progress_ctx == nullptr);
+  ceph_assert(m_deep_copy_handler == nullptr);
 }
 
 template <typename I>
@@ -236,11 +246,9 @@ bool Replayer<I>::get_replay_status(std::string* description,
     replay_state = "syncing";
   }
 
-  *description =
-    "{"
-      "\"replay_state\": \"" + replay_state + "\", " +
-      "\"remote_snapshot_timestamp\": " +
-        stringify(remote_snap_info->timestamp.sec());
+  json_spirit::mObject root_obj;
+  root_obj["replay_state"] = replay_state;
+  root_obj["remote_snapshot_timestamp"] = remote_snap_info->timestamp.sec();
 
   auto matching_remote_snap_id = util::compute_remote_snap_id(
     m_state_builder->local_image_ctx->image_lock,
@@ -254,9 +262,8 @@ bool Replayer<I>::get_replay_status(std::string* description,
     // use the timestamp from the matching remote image since
     // the local snapshot would just be the time the snapshot was
     // synced and not the consistency point in time.
-    *description += ", "
-      "\"local_snapshot_timestamp\": " +
-        stringify(matching_remote_snap_it->second.timestamp.sec());
+    root_obj["local_snapshot_timestamp"] =
+      matching_remote_snap_it->second.timestamp.sec();
   }
 
   matching_remote_snap_it = m_state_builder->remote_image_ctx->snap_info.find(
@@ -264,16 +271,34 @@ bool Replayer<I>::get_replay_status(std::string* description,
   if (m_remote_snap_id_end != CEPH_NOSNAP &&
       matching_remote_snap_it !=
         m_state_builder->remote_image_ctx->snap_info.end()) {
-    *description += ", "
-      "\"syncing_snapshot_timestamp\": " +
-        stringify(remote_snap_info->timestamp.sec()) + ", " +
-      "\"syncing_percent\": " + stringify(static_cast<uint32_t>(
+    root_obj["syncing_snapshot_timestamp"] = remote_snap_info->timestamp.sec();
+    root_obj["syncing_percent"] = static_cast<uint64_t>(
         100 * m_local_mirror_snap_ns.last_copied_object_number /
-        static_cast<float>(std::max<uint64_t>(1U, m_local_object_count))));
+        static_cast<float>(std::max<uint64_t>(1U, m_local_object_count)));
   }
 
-  *description +=
-    "}";
+  m_bytes_per_second(0);
+  auto bytes_per_second = m_bytes_per_second.get_average();
+  root_obj["bytes_per_second"] = round_to_two_places(bytes_per_second);
+
+  auto bytes_per_snapshot = boost::accumulators::rolling_mean(
+    m_bytes_per_snapshot);
+  root_obj["bytes_per_snapshot"] = round_to_two_places(bytes_per_snapshot);
+
+  auto pending_bytes = bytes_per_snapshot * m_pending_snapshots;
+  if (bytes_per_second > 0 && m_pending_snapshots > 0) {
+    auto seconds_until_synced = round_to_two_places(
+      pending_bytes / bytes_per_second);
+    if (seconds_until_synced >= std::numeric_limits<uint64_t>::max()) {
+      seconds_until_synced = std::numeric_limits<uint64_t>::max();
+    }
+
+    root_obj["seconds_until_synced"] = static_cast<uint64_t>(
+      seconds_until_synced);
+  }
+
+  *description = json_spirit::write(
+    root_obj, json_spirit::remove_trailing_zeros);
 
   local_image_locker.unlock();
   remote_image_locker.unlock();
@@ -474,6 +499,8 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     std::unique_lock<ceph::mutex>* locker) {
   dout(10) << dendl;
 
+  m_pending_snapshots = 0;
+
   bool split_brain = false;
   bool remote_demoted = false;
   auto remote_image_ctx = m_state_builder->remote_image_ctx;
@@ -559,9 +586,14 @@ void Replayer<I>::scan_remote_mirror_snapshots(
       continue;
     }
 
+    // found candidate snapshot to sync
+    ++m_pending_snapshots;
+    if (m_remote_snap_id_end != CEPH_NOSNAP) {
+      continue;
+    }
+
     m_remote_snap_id_end = remote_snap_id;
     m_remote_mirror_snap_ns = *mirror_ns;
-    break;
   }
   image_locker.unlock();
 
@@ -752,6 +784,10 @@ void Replayer<I>::request_sync() {
   dout(10) << dendl;
 
   std::unique_lock locker{m_lock};
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
+
   auto ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<
       Replayer<I>, &Replayer<I>::handle_request_sync>(this));
@@ -791,7 +827,8 @@ void Replayer<I>::copy_image() {
            << m_local_mirror_snap_ns.last_copied_object_number << ", "
            << "snap_seqs=" << m_local_mirror_snap_ns.snap_seqs << dendl;
 
-  m_progress_ctx = new ProgressContext(this);
+  m_snapshot_bytes = 0;
+  m_deep_copy_handler = new DeepCopyHandler(this);
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_copy_image>(this);
   auto req = librbd::deep_copy::ImageCopyRequest<I>::create(
@@ -801,7 +838,7 @@ void Replayer<I>::copy_image() {
       librbd::deep_copy::ObjectNumber{
         m_local_mirror_snap_ns.last_copied_object_number} :
       librbd::deep_copy::ObjectNumber{}),
-    m_local_mirror_snap_ns.snap_seqs, m_progress_ctx, ctx);
+    m_local_mirror_snap_ns.snap_seqs, m_deep_copy_handler, ctx);
   req->send();
 }
 
@@ -809,14 +846,20 @@ template <typename I>
 void Replayer<I>::handle_copy_image(int r) {
   dout(10) << "r=" << r << dendl;
 
-  delete m_progress_ctx;
-  m_progress_ctx = nullptr;
+  delete m_deep_copy_handler;
+  m_deep_copy_handler = nullptr;
 
   if (r < 0) {
     derr << "failed to copy remote image to local image: " << cpp_strerror(r)
          << dendl;
     handle_replay_complete(r, "failed to copy remote image");
     return;
+  }
+
+  {
+    std::unique_lock locker{m_lock};
+    m_bytes_per_snapshot(m_snapshot_bytes);
+    m_snapshot_bytes = 0;
   }
 
   apply_image_state();
@@ -834,6 +877,15 @@ void Replayer<I>::handle_copy_image_progress(uint64_t object_number,
   m_local_object_count = object_count;
 
   update_non_primary_snapshot(false);
+}
+
+template <typename I>
+void Replayer<I>::handle_copy_image_read(uint64_t bytes_read) {
+  dout(20) << "bytes_read=" << bytes_read << dendl;
+
+  std::unique_lock locker{m_lock};
+  m_bytes_per_second(bytes_read);
+  m_snapshot_bytes += bytes_read;
 }
 
 template <typename I>

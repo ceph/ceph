@@ -36,7 +36,7 @@ public:
       librados::snap_t src_snap_id_start, librados::snap_t src_snap_id_end,
       librados::snap_t dst_snap_id_start, bool flatten,
       const librbd::deep_copy::ObjectNumber &object_number,
-      ContextWQ *work_queue, SnapSeqs *snap_seqs, ProgressContext *prog_ctx,
+      ContextWQ *work_queue, SnapSeqs *snap_seqs, deep_copy::Handler *handler,
       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -62,7 +62,6 @@ DeepCopyRequest<librbd::MockTestImageCtx>* DeepCopyRequest<librbd::MockTestImage
 } // namespace librbd
 
 // template definitions
-template class rbd::mirror::ImageSync<librbd::MockTestImageCtx>;
 #include "tools/rbd_mirror/ImageSync.cc"
 
 namespace rbd {

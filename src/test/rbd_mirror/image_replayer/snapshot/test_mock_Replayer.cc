@@ -51,7 +51,7 @@ struct ImageCopyRequest<MockTestImageCtx> {
                                   bool flatten,
                                   const ObjectNumber &object_number,
                                   const SnapSeqs &snap_seqs,
-                                  ProgressContext *prog_ctx,
+                                  Handler *handler,
                                   Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->src_snap_id_start = src_snap_id_start;

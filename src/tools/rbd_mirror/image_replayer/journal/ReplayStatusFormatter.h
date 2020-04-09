@@ -9,6 +9,7 @@
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+#include "tools/rbd_mirror/image_replayer/TimeRollingMean.h"
 
 namespace journal { class Journaler; }
 namespace librbd { class ImageCtx; }
@@ -34,6 +35,8 @@ public:
 
   ReplayStatusFormatter(Journaler *journaler, const std::string &mirror_uuid);
 
+  void handle_entry_processed(uint32_t bytes);
+
   bool get_or_send_update(std::string *description, Context *on_finish);
 
 private:
@@ -43,9 +46,12 @@ private:
   Context *m_on_finish = nullptr;
   cls::journal::ObjectPosition m_master_position;
   cls::journal::ObjectPosition m_mirror_position;
-  int m_entries_behind_master = 0;
+  int64_t m_entries_behind_master = 0;
   cls::journal::Tag m_tag;
   std::map<uint64_t, librbd::journal::TagData> m_tag_cache;
+
+  TimeRollingMean m_bytes_per_second;
+  TimeRollingMean m_entries_per_second;
 
   bool calculate_behind_master_or_send_update();
   void send_update_tag_cache(uint64_t master_tag_tid, uint64_t mirror_tag_tid);
