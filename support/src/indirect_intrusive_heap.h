@@ -48,7 +48,7 @@ namespace crimson {
 	   typename T,
 	   IndIntruHeapData T::*heap_info,
 	   typename C,
-	   uint K = 2>
+	   unsigned K = 2>
   class IndIntruHeap {
 
     // shorthand
