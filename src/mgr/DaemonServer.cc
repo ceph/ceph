@@ -406,6 +406,8 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
     } else if (key.type == "mon") {
       oss << "{\"prefix\": \"mon metadata\", \"id\": \""
 	  << key.name << "\"}";
+    } else {
+      ceph_abort();
     }
     monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
   }
