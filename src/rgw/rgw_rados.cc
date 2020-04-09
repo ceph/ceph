@@ -8043,7 +8043,12 @@ int RGWRados::list_lc_progress(const string& marker, uint32_t max_entries,
 
 int RGWRados::process_lc()
 {
-  return lc->process(nullptr);
+  RGWLC lc;
+  lc.initialize(cct, this->store);
+  RGWLC::LCWorker worker(&lc, cct, &lc, 0);
+  auto ret = lc.process(&worker, true /* once */);
+  lc.stop_processor(); // sets down_flag, but returns immediately
+  return ret;
 }
 
 bool RGWRados::process_expire_objects()

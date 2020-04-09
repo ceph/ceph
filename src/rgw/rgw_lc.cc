@@ -214,7 +214,7 @@ void *RGWLC::LCWorker::entry() {
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
       ldpp_dout(dpp, 2) << "life cycle: start" << dendl;
-      int r = lc->process(this);
+      int r = lc->process(this, false /* once */);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "ERROR: do life cycle process() returned error r="
 			  << r << dendl;
@@ -1549,7 +1549,7 @@ static inline vector<int> random_sequence(uint32_t n)
   return v;
 }
 
-int RGWLC::process(LCWorker* worker)
+int RGWLC::process(LCWorker* worker, bool once = false)
 {
   int max_secs = cct->_conf->rgw_lc_lock_max_time;
 
@@ -1557,7 +1557,7 @@ int RGWLC::process(LCWorker* worker)
    * that might be running in parallel */
   vector<int> shard_seq = random_sequence(max_objs);
   for (auto index : shard_seq) {
-    int ret = process(index, max_secs, worker);
+    int ret = process(index, max_secs, worker, once);
     if (ret < 0)
       return ret;
   }
@@ -1591,7 +1591,8 @@ time_t RGWLC::thread_stop_at()
   return time(nullptr) + interval;
 }
 
-int RGWLC::process(int index, int max_lock_secs, LCWorker* worker)
+int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
+  bool once = false)
 {
   dout(5) << "RGWLC::process(): ENTER: "
 	  << "index: " << index << " worker ix: " << worker->ix
@@ -1704,11 +1705,13 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker)
     l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
     ret = bucket_lc_process(entry.bucket, worker, thread_stop_at());
     bucket_lc_post(index, max_lock_secs, entry, ret, worker);
-  } while(1);
+  } while(1 && !once);
+
+  return 0;
 
 exit:
-    l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
-    return 0;
+  l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
+  return 0;
 }
 
 void RGWLC::start_processor()
@@ -1812,7 +1815,6 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 
 RGWLC::LCWorker::~LCWorker()
 {
-  workpool->drain();
   delete workpool;
 } /* ~LCWorker */
 
