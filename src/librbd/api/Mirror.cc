@@ -669,21 +669,33 @@ void Mirror<I>::image_demote(I *ictx, Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  auto on_refresh = new LambdaContext([ictx, on_finish](int r) {
+  auto on_cleanup = new LambdaContext([ictx, on_finish](int r) {
+      ictx->image_lock.lock();
+      ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+      ictx->image_lock.unlock();
+
+      ictx->state->handle_update_notification();
+
+      on_finish->complete(r);
+    });
+  auto on_refresh = new LambdaContext([ictx, on_cleanup](int r) {
       if (r < 0) {
         lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
-        on_finish->complete(r);
+        on_cleanup->complete(r);
         return;
       }
 
-      auto req = mirror::DemoteRequest<>::create(*ictx, on_finish);
+      auto req = mirror::DemoteRequest<>::create(*ictx, on_cleanup);
       req->send();
     });
-  if (ictx->state->is_refresh_required()) {
-    ictx->state->refresh(on_refresh);
-  } else {
-    on_refresh->complete(0);
-  }
+
+  // ensure we can create a snapshot after setting the non-primary
+  // feature bit
+  ictx->image_lock.lock();
+  ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  ictx->image_lock.unlock();
+
+  ictx->state->refresh(on_refresh);
 }
 
 template <typename I>
