@@ -5613,6 +5613,70 @@ void BlueStore::_sync_bluefs_and_fm()
   }
 }
 
+int BlueStore::open_db_environment(KeyValueDB **pdb)
+{
+  string kv_dir_fn;
+  string kv_backend;
+  _kv_only = true;
+  {
+    string type;
+    int r = read_meta("type", &type);
+    if (r < 0) {
+      derr << __func__ << " failed to load os-type: " << cpp_strerror(r)
+	   << dendl;
+      return r;
+    }
+
+    if (type != "bluestore") {
+      derr << __func__ << " expected bluestore, but type is " << type << dendl;
+      return -EIO;
+    }
+  }
+  int r = _open_path();
+  if (r < 0)
+    return r;
+  r = _open_fsid(false);
+  if (r < 0)
+    goto out_path;
+
+  r = _read_fsid(&fsid);
+  if (r < 0)
+    goto out_fsid;
+
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_fsid;
+
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_fsid;
+
+  r = _prepare_db_environment(false, false, &kv_dir_fn, &kv_backend);
+  if (r < 0)
+    goto out_bdev;
+
+  *pdb = db;
+  return 0;
+
+ out_bdev:
+  _close_bdev();
+ out_fsid:
+  _close_fsid();
+ out_path:
+  _close_path();
+
+  return r;
+}
+
+int BlueStore::close_db_environment()
+{
+  _close_db_and_around(false);
+  _close_bdev();
+  _close_fsid();
+  _close_path();
+  return 0;
+}
+
 int BlueStore::_prepare_db_environment(bool create, bool read_only,
 				       std::string* _fn, std::string* _kv_backend)
 {
