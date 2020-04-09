@@ -9,6 +9,7 @@ import re
 import errno
 import random
 import traceback
+from io import BytesIO
 
 from io import BytesIO
 from six import StringIO
@@ -1100,15 +1101,16 @@ class Filesystem(MDSCluster):
             raise ObjectNotFound(obj_name)
 
         data = proc.stdout.getvalue()
-        dump = remote.sh(
-            [os.path.join(self._prefix, "ceph-dencoder"),
+        dump = remote.run(
+            args=[os.path.join(self._prefix, "ceph-dencoder"),
                                             "type", type,
                                             "import", "-",
                                             "decode", "dump_json"],
-            stdin=data
+            stdin=data,
+            stdout=BytesIO()
         )
 
-        return json.loads(dump.strip())
+        return json.loads(dump.stdout.getvalue().strip())
 
     def _write_data_xattr(self, ino_no, xattr_name, data, pool=None):
         """
