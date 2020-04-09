@@ -1732,12 +1732,49 @@ bool RocksDBStore::check_omap_dir(string &omap_dir)
   db = nullptr;
   return status.ok();
 }
+
 void RocksDBStore::compact_range(const string& start, const string& end)
 {
   rocksdb::CompactRangeOptions options;
   rocksdb::Slice cstart(start);
   rocksdb::Slice cend(end);
-  db->CompactRange(options, &cstart, &cend);
+  string prefix_start, key_start;
+  string prefix_end, key_end;
+  string key_highest = "\xff\xff\xff\xff"; //cheating
+  string key_lowest = "";
+
+  auto compact_range = [&] (const decltype(cf_handles)::iterator column_it,
+			    const std::string& start,
+			    const std::string& end) {
+    rocksdb::Slice cstart(start);
+    rocksdb::Slice cend(end);
+    for (const auto& shard_it : column_it->second.handles) {
+      db->CompactRange(options, shard_it, &cstart, &cend);
+    }
+  };
+  db->CompactRange(options, default_cf, &cstart, &cend);
+  split_key(cstart, &prefix_start, &key_start);
+  split_key(cend, &prefix_end, &key_end);
+  if (prefix_start == prefix_end) {
+    const auto& column = cf_handles.find(prefix_start);
+    if (column != cf_handles.end()) {
+      compact_range(column, key_start, key_end);
+    }
+  } else {
+    auto column = cf_handles.find(prefix_start);
+    if (column != cf_handles.end()) {
+      compact_range(column, key_start, key_highest);
+      ++column;
+    }
+    const auto& column_end = cf_handles.find(prefix_end);
+    while (column != column_end) {
+      compact_range(column, key_lowest, key_highest);
+      column++;
+    }
+    if (column != cf_handles.end()) {
+      compact_range(column, key_lowest, key_end);
+    }
+  }
 }
 
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
