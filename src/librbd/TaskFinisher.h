@@ -51,14 +51,17 @@ public:
     m_finisher = singleton.m_finisher;
   }
 
-  void cancel(const Task& task) {
+  bool cancel(const Task& task) {
     std::lock_guard l{*m_lock};
     typename TaskContexts::iterator it = m_task_contexts.find(task);
-    if (it != m_task_contexts.end()) {
-      delete it->second.first;
-      m_safe_timer->cancel_event(it->second.second);
-      m_task_contexts.erase(it);
+    if (it == m_task_contexts.end()) {
+      return false;
     }
+    delete it->second.first;
+    bool canceled = m_safe_timer->cancel_event(it->second.second);
+    ceph_assert(canceled);
+    m_task_contexts.erase(it);
+    return true;
   }
 
   void cancel_all(Context *comp) {
@@ -88,8 +91,22 @@ public:
     return true;
   }
 
-  void queue(Context *ctx) {
-    m_finisher->queue(ctx);
+  bool reschedule_event_after(const Task& task, double seconds) {
+    std::lock_guard l{*m_lock};
+    auto it = m_task_contexts.find(task);
+    if (it == m_task_contexts.end()) {
+      return false;
+    }
+    bool canceled = m_safe_timer->cancel_event(it->second.second);
+    ceph_assert(canceled);
+    auto timer_ctx = new C_Task(this, task);
+    it->second.second = timer_ctx;
+    m_safe_timer->add_event_after(seconds, timer_ctx);
+    return true;
+  }
+
+  void queue(Context *ctx, int r = 0) {
+    m_finisher->queue(ctx, r);
   }
 
   bool queue(const Task& task, Context *ctx) {
