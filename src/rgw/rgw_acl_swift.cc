@@ -123,9 +123,9 @@ static ACLGrant user_to_grant(CephContext* const cct,
   if (user_ctl->get_info_by_uid(user, &grant_user, null_yield) < 0) {
     ldout(cct, 10) << "grant user does not exist: " << uid << dendl;
     /* skipping silently */
-    grant.set_canon(user, std::string(), perm);
+    grant.set_canon(user, std::string(), std::string(), perm);
   } else {
-    grant.set_canon(user, grant_user.display_name, perm);
+    grant.set_canon(user, std::string(), grant_user.display_name, perm);
   }
 
   return grant;
@@ -314,10 +314,10 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWUserCtl * const user_ctl,
       if (user_ctl->get_info_by_uid(user, &grant_user, null_yield) < 0) {
         ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
         /* skipping silently */
-        grant.set_canon(user, std::string(), perm);
+        grant.set_canon(user, std::string(), std::string(), perm);
         acl.add_grant(&grant);
       } else {
-        grant.set_canon(user, grant_user.display_name, perm);
+        grant.set_canon(user, std::string(), grant_user.display_name, perm);
         acl.add_grant(&grant);
       }
     }

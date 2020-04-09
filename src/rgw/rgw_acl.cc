@@ -39,7 +39,12 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
       if (!grant->get_id(id)) {
         ldout(cct, 0) << "ERROR: grant->get_id() failed" << dendl;
       }
-      acl_user_map[id.to_str()] |= perm.get_permissions();
+      string id_str = id.to_str();
+      string subuser = grant->get_subuser();
+      if (!subuser.empty()) {
+        id_str += ":" + subuser;
+      }
+      acl_user_map[id_str] |= perm.get_permissions();
     }
   }
 }
@@ -48,7 +53,12 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
 {
   rgw_user id;
   grant->get_id(id); // not that this will return false for groups, but that's ok, we won't search groups
-  grant_map.insert(pair<string, ACLGrant>(id.to_str(), *grant));
+  string id_str = id.to_str();
+  string subuser = grant->get_subuser();
+  if (!subuser.empty()) {
+    id_str += ":" + subuser;
+  }
+  grant_map.insert(pair<string, ACLGrant>(id_str, *grant));
   _add_grant(grant);
 }
 

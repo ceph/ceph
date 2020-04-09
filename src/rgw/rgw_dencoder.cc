@@ -292,7 +292,7 @@ void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
   email = "r@gw";
 
   ACLGrant *g1 = new ACLGrant;
-  g1->set_canon(id, name, RGW_PERM_READ);
+  g1->set_canon(id, std::string(), name, RGW_PERM_READ);
   g1->email = email;
   o.push_back(g1);
 

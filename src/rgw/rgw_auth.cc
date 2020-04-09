@@ -54,7 +54,7 @@ transform_old_authinfo(CephContext* const cct,
     }
 
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
-      return rgw_perms_from_aclspec_default_strategy(id, aclspec);
+      return rgw_perms_from_aclspec_default_strategy(id, std::string(), aclspec);
     }
 
     bool is_admin_of(const rgw_user& acct_id) const override {
@@ -125,11 +125,15 @@ transform_old_authinfo(const req_state* const s)
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
+  const string& subuser,
   const rgw::auth::Identity::aclspec_t& aclspec)
 {
-  dout(5) << "Searching permissions for uid=" << uid <<  dendl;
+  string uid_str = uid.to_str();
+  if (!subuser.empty())
+    uid_str += ":" + subuser;
+  dout(5) << "Searching permissions for uid=" << uid_str <<  dendl;
 
-  const auto iter = aclspec.find(uid.to_str());
+  const auto iter = aclspec.find(uid_str);
   if (std::end(aclspec) != iter) {
     dout(5) << "Found permission: " << iter->second << dendl;
     return iter->second;
@@ -390,7 +394,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   uint32_t perm = 0;
 
   /* For backward compatibility with ACLOwner. */
-  perm |= rgw_perms_from_aclspec_default_strategy(info.acct_user,
+  perm |= rgw_perms_from_aclspec_default_strategy(info.acct_user, std::string(),
                                                   aclspec);
 
   /* We also need to cover cases where rgw_keystone_implicit_tenants
@@ -398,7 +402,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   if (info.acct_user.tenant.empty()) {
     const rgw_user tenanted_acct_user(info.acct_user.id, info.acct_user.id);
 
-    perm |= rgw_perms_from_aclspec_default_strategy(tenanted_acct_user,
+    perm |= rgw_perms_from_aclspec_default_strategy(tenanted_acct_user, std::string(),
                                                     aclspec);
   }
 
@@ -592,7 +596,7 @@ const std::string rgw::auth::LocalApplier::NO_SUBUSER;
 
 uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
-  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec);
+  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, subuser, aclspec);
 }
 
 bool rgw::auth::LocalApplier::is_admin_of(const rgw_user& uid) const

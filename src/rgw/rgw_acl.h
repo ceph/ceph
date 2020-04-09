@@ -109,6 +109,7 @@ class ACLGrant
 protected:
   ACLGranteeType type;
   rgw_user id;
+  string subuser;
   string email;
   ACLPermission permission;
   string name;
@@ -134,6 +135,7 @@ public:
       return true;
     }
   }
+  string& get_subuser() { return subuser; }
   ACLGranteeType& get_type() { return type; }
   const ACLGranteeType& get_type() const { return type; }
   ACLPermission& get_permission() { return permission; }
@@ -147,6 +149,7 @@ public:
     string s;
     id.to_str(s);
     encode(s, bl);
+    encode(subuser, bl);
     string uri;
     encode(uri, bl);
     encode(email, bl);
@@ -163,6 +166,7 @@ public:
     string s;
     decode(s, bl);
     id.from_str(s);
+    decode(subuser, bl);
     string uri;
     decode(uri, bl);
     decode(email, bl);
@@ -187,9 +191,10 @@ public:
 
   ACLGroupTypeEnum uri_to_group(string& uri);
   
-  void set_canon(const rgw_user& _id, const string& _name, const uint32_t perm) {
+  void set_canon(const rgw_user& _id, const string& _subuser, const string& _name, const uint32_t perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
+    subuser = _subuser;
     name = _name;
     permission.set_permissions(perm);
   }
@@ -355,7 +360,7 @@ public:
     referer_list.clear();
 
     ACLGrant grant;
-    grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
+    grant.set_canon(id, std::string(), name, RGW_PERM_FULL_CONTROL);
     add_grant(&grant);
   }
 };

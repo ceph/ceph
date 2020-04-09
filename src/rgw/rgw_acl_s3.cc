@@ -182,7 +182,10 @@ bool ACLGrant_S3::xml_end(const char *el) {
     acl_id = static_cast<ACLID_S3 *>(acl_grantee->find_first("ID"));
     if (!acl_id)
       return false;
-    id = acl_id->to_str();
+    // Check for subuser
+    string user_id = acl_id->to_str();
+    parse_key_value(acl_id->to_str(), ":", user_id, subuser);
+    id = user_id;
     acl_name = static_cast<ACLDisplayName_S3 *>(acl_grantee->find_first("DisplayName"));
     if (acl_name)
       name = acl_name->get_data();
@@ -220,7 +223,11 @@ void ACLGrant_S3::to_xml(CephContext *cct, ostream& out) {
          "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
-    out << "<ID>" << id << "</ID>";
+    string id_str = id.to_str();
+    if (!subuser.empty()) {
+      id_str += ":" + subuser;
+    }
+    out << "<ID>" << id_str << "</ID>";
     if (name.size()) {
       out << "<DisplayName>" << name << "</DisplayName>";
     }
@@ -310,14 +317,23 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
     if (ret < 0)
       return ret;
 
-    grant.set_canon(info.user_id, info.display_name, rgw_perm);
+    grant.set_canon(info.user_id, std::string(), info.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
-    rgw_user user(id_val);
+    // Check fot subuser
+    string user_id = id_val;
+    string subuser;
+    parse_key_value(id_val, ":", user_id, subuser);
+
+    rgw_user user(user_id);
     ret = user_ctl->get_info_by_uid(user, &info, null_yield);
     if (ret < 0)
       return ret;
+    
+    if (!subuser.empty())
+      if (info.subusers.find(subuser) == info.subusers.end())
+        subuser.clear();
 
-    grant.set_canon(info.user_id, info.display_name, rgw_perm);
+    grant.set_canon(info.user_id, subuser, info.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "uri") == 0) {
     ACLGroupTypeEnum gid = grant.uri_to_group(id_val);
     if (gid == ACL_GROUP_NONE)
@@ -367,7 +383,7 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
   string bname = bucket_owner.get_display_name();
 
   /* owner gets full control */
-  owner_grant.set_canon(owner.get_id(), owner.get_display_name(), RGW_PERM_FULL_CONTROL);
+  owner_grant.set_canon(owner.get_id(), std::string(), owner.get_display_name(), RGW_PERM_FULL_CONTROL);
   add_grant(&owner_grant);
 
   if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
@@ -388,11 +404,11 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
     group_grant.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
     add_grant(&group_grant);
   } else if (canned_acl.compare("bucket-owner-read") == 0) {
-    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_READ);
+    bucket_owner_grant.set_canon(bid, std::string(), bname, RGW_PERM_READ);
     if (bid.compare(owner.get_id()) != 0)
       add_grant(&bucket_owner_grant);
   } else if (canned_acl.compare("bucket-owner-full-control") == 0) {
-    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
+    bucket_owner_grant.set_canon(bid, std::string(), bname, RGW_PERM_FULL_CONTROL);
     if (bid.compare(owner.get_id()) != 0)
       add_grant(&bucket_owner_grant);
   } else {
@@ -456,7 +472,7 @@ int RGWAccessControlPolicy_S3::create_from_headers(RGWUserCtl *user_ctl, const R
   std::list<ACLGrant> grants;
   int r = 0;
 
-  for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
+  for (const s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
     r = parse_acl_header(user_ctl, env, p, grants);
     if (r < 0) {
       return r;
@@ -510,6 +526,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
     ACLGrant new_grant;
     bool grant_ok = false;
     rgw_user uid;
+    string subuser;
     RGWUserInfo grant_user;
     switch (type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
@@ -537,19 +554,28 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
             err_msg = "Invalid id";
             return -EINVAL;
           }
+          subuser = src_grant.get_subuser();
         }
     
         if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(uid, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           err_msg = "Invalid id";
           return -EINVAL;
+        } else if (!subuser.empty() && grant_user.subusers.find(subuser) == grant_user.subusers.end()) {
+          ldout(cct, 10) << "grant subuser does not exist:" << subuser << dendl;
+          err_msg = "Invalid id";
+          return -EINVAL;
         } else {
           ACLPermission& perm = src_grant.get_permission();
-          new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
+          new_grant.set_canon(uid, subuser, grant_user.display_name, perm.get_permissions());
           grant_ok = true;
           rgw_user new_id;
           new_grant.get_id(new_id);
-          ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+          string new_subuser = new_grant.get_subuser();
+          string new_id_str = new_id.to_str();
+          if (!new_subuser.empty())
+            new_id_str += ":" + new_subuser;
+          ldout(cct, 10) << "new grant: " << new_id_str << ":" << grant_user.display_name << dendl;
         }
       }
       break;

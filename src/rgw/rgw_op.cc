@@ -837,7 +837,6 @@ static int rgw_iam_add_existing_objtags(rgw::sal::RGWRadosStore* store, struct r
 }
 
 static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct req_state *s){
-
   using header_pair_t = std::pair <const char*, const char*>;
   static const std::initializer_list <header_pair_t> acl_header_conditionals {
     {"HTTP_X_AMZ_GRANT_READ", "s3:x-amz-grant-read"},
@@ -851,7 +850,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
     for (const auto& c: acl_header_conditionals){
       auto hdr = s->info.env->get(c.first);
       if(hdr) {
-	e[c.second] = hdr;
+	      e[c.second] = hdr;
       }
     }
   }

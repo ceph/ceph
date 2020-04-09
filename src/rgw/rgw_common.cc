@@ -1143,10 +1143,10 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               struct perm_state_base * const s,
-			      const rgw_bucket& bucket,
+                              const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
-			      const boost::optional<Policy>& bucket_policy,
+                              const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& user_policies,
                               const uint64_t op)
 {

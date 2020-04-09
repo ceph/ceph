@@ -688,6 +688,7 @@ protected:
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
+  const string& subuser,
   const rgw::auth::Identity::aclspec_t& aclspec);
 
 #endif /* CEPH_RGW_AUTH_H */

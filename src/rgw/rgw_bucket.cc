@@ -3632,7 +3632,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
 
         //Create a grant and add grant
         ACLGrant grant;
-        grant.set_canon(user_id, display_name, RGW_PERM_FULL_CONTROL);
+        grant.set_canon(user_id, std::string(), display_name, RGW_PERM_FULL_CONTROL);
         acl.add_grant(&grant);
 
         //Update the ACL owner to the new user
