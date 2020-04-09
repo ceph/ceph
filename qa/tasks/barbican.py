@@ -4,6 +4,7 @@ Deploy and configure Barbican for Teuthology
 import argparse
 import contextlib
 import logging
+import six
 from six.moves import http_client
 from six.moves.urllib.parse import urlparse
 import json
@@ -172,7 +173,7 @@ def configure_barbican(ctx, config):
     Configure barbican paste-api and barbican-api.
     """
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     keystone_role = cconfig.get('use-keystone-role', None)
     if keystone_role is None:
@@ -239,7 +240,7 @@ def create_secrets(ctx, config):
     Create a main and an alternate s3 user.
     """
     assert isinstance(config, dict)
-    (cclient, cconfig) = config.items()[0]
+    (cclient, cconfig) = next(iter(config.items()))
 
     rgw_user = cconfig['rgw_user']
 
@@ -271,7 +272,7 @@ def create_secrets(ctx, config):
             rgw_access_user_resp.status < 300):
         raise Exception("Cannot authenticate user "+rgw_user["username"]+" for secret creation")
     #    baru_resp = json.loads(baru_req.data)
-    rgw_access_user_data = json.loads(rgw_access_user_resp.read())
+    rgw_access_user_data = json.loads(six.ensure_str(rgw_access_user_resp.read()))
     rgw_user_id = rgw_access_user_data['access']['user']['id']
 
     if 'secrets' in cconfig:
@@ -309,7 +310,7 @@ def create_secrets(ctx, config):
                     token_resp.status < 300):
                 raise Exception("Cannot authenticate user "+secret["username"]+" for secret creation")
 
-            token_data = json.loads(token_resp.read())
+            token_data = json.loads(six.ensure_str(token_resp.read()))
             token_id = token_data['access']['token']['id']
 
             key1_json = json.dumps(
@@ -342,7 +343,7 @@ def create_secrets(ctx, config):
             if not (barbican_sec_resp.status >= 200 and
                     barbican_sec_resp.status < 300):
                 raise Exception("Cannot create secret")
-            barbican_data = json.loads(barbican_sec_resp.read())
+            barbican_data = json.loads(six.ensure_str(barbican_sec_resp.read()))
             if 'secret_ref' not in barbican_data:
                 raise ValueError("Malformed secret creation response")
             secret_ref = barbican_data["secret_ref"]
