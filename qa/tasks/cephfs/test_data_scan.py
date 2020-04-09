@@ -508,6 +508,11 @@ class TestDataScan(CephFSTestCase):
         keys = self._dirfrag_keys(frag_obj_id)
         self.assertListEqual(sorted(keys), sorted(["%s_head" % f for f in file_names]))
 
+        # run scrub to update and make sure rstat.rbytes info in subdir inode and dirfrag
+        # are matched
+        out_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair", "recursive"])
+        self.assertNotEqual(out_json, None)
+
         # Remove the whole 'sudbdir' directory
         self.mount_a.run_shell(["rm", "-rf", "subdir/"])
 
