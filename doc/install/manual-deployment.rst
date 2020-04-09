@@ -247,14 +247,9 @@ The procedure is as follows:
 
 #. Start the monitor(s).
 
-   For most distributions, services are started via systemd now::
+   Start the service with systemd::
 
 	sudo systemctl start ceph-mon@node1
-
-   For older Debian/CentOS/RHEL, use sysvinit::
-
-	sudo /etc/init.d/ceph start mon.node1
-
 
 #. Verify that the monitor is running. ::
 
