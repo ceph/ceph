@@ -2563,7 +2563,7 @@ def test_ps_creation_triggers():
     fp.write('bar')
     fp.close()
     uploader = bucket.initiate_multipart_upload('multipart')
-    fp = tempfile.TemporaryFile(mode='r')
+    fp = tempfile.NamedTemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
@@ -2634,7 +2634,7 @@ def test_ps_s3_creation_triggers_on_master():
     fp.write('bar')
     fp.close()
     uploader = bucket.initiate_multipart_upload('multipart')
-    fp = tempfile.TemporaryFile(mode='r')
+    fp = tempfile.NamedTemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
@@ -2709,7 +2709,7 @@ def test_ps_s3_multipart_on_master():
     assert_equal(status/100, 2)
 
     # create objects in the bucket using multi-part upload
-    fp = tempfile.TemporaryFile(mode='w+b')
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
     content = bytearray(os.urandom(1024*1024))
     fp.write(content)
     fp.flush()
@@ -2903,7 +2903,7 @@ def test_ps_s3_metadata_on_master():
     # create objects in the bucket using COPY
     bucket.copy_key('copy_of_foo', bucket.name, key.name)
     # create objects in the bucket using multi-part upload
-    fp = tempfile.TemporaryFile(mode='w')
+    fp = tempfile.NamedTemporaryFile(mode='w')
     fp.write('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
     fp.close()
     uploader = bucket.initiate_multipart_upload('multipart_foo', 

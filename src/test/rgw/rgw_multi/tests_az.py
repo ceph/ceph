@@ -221,7 +221,7 @@ def test_az_object_replication():
     # check object on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     key_az = bucket_az.get_key("foo")
-    p1 = key_az.get_contents_as_string() == "bar"
+    p1 = key_az.get_contents_as_string(encoding='ascii') == "bar"
     assert_equal(p1, True)
 
 
@@ -238,7 +238,7 @@ def test_az_object_replication_versioning():
     # check object content on archive zone
     bucket_az = az_zones[0].conn.get_bucket(bucket_name)
     key_az = bucket_az.get_key("foo")
-    p1 = key_az.get_contents_as_string() == "bar"
+    p1 = key_az.get_contents_as_string(encoding='ascii') == "bar"
     assert_equal(p1, True)
     # grab object versioning and etag
     for b_version in bucket.list_versions():
@@ -345,13 +345,13 @@ def test_az_deleted_object_replication():
     bucket = zones[0].create_bucket(bucket_name)
     key = bucket.new_key("foo")
     key.set_contents_from_string("bar")
-    p1 = key.get_contents_as_string() == "bar"
+    p1 = key.get_contents_as_string(encoding='ascii') == "bar"
     assert_equal(p1, True)
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
     # update object on non archive zone
     key.set_contents_from_string("soup")
-    p2 = key.get_contents_as_string() == "soup"
+    p2 = key.get_contents_as_string(encoding='ascii') == "soup"
     assert_equal(p2, True)
     # sync
     zone_full_checkpoint(az_zones[0].zone, zones[0].zone)
@@ -367,7 +367,7 @@ def test_az_deleted_object_replication():
     key_az = bucket_az.get_key("foo")
     p4 = check_key_exists(key_az) == True
     assert_equal(p4, True)
-    p5 = key_az.get_contents_as_string() == "soup"
+    p5 = key_az.get_contents_as_string(encoding='ascii') == "soup"
     assert_equal(p5, True)
     b_ver_az = get_versioned_objs(bucket_az)
     p6 = len(b_ver_az) == 2
@@ -450,10 +450,10 @@ def test_az_old_object_version_in_archive_zone():
     assert_equal(p4, True)
     # check versioned objects on archive zone
     new_key_az = new_bucket_az.get_key("foo", version_id=obj_az_version_id)
-    p5 = new_key_az.get_contents_as_string() == "zero"
+    p5 = new_key_az.get_contents_as_string(encoding='ascii') == "zero"
     assert_equal(p5, True)
     new_key_latest_az = new_bucket_az.get_key("foo")
-    p6 = new_key_latest_az.get_contents_as_string() == "one"
+    p6 = new_key_latest_az.get_contents_as_string(encoding='ascii') == "one"
     assert_equal(p6, True)
 
 
@@ -589,9 +589,9 @@ def test_az_versioning_support_in_zones():
     # check body in zones
     obj_version_id = b_ver[0]['foo']['version_id']
     key = bucket.get_key("foo", version_id=obj_version_id)
-    p18 = key.get_contents_as_string() == "zero"
+    p18 = key.get_contents_as_string(encoding='ascii') == "zero"
     assert_equal(p18, True)
     obj_az_version_id = b_ver_az[0]['foo']['version_id']
     key_az = bucket_az.get_key("foo", version_id=obj_az_version_id)
-    p19 = key_az.get_contents_as_string() == "zero"
+    p19 = key_az.get_contents_as_string(encoding='ascii') == "zero"
     assert_equal(p19, True)

@@ -7,9 +7,11 @@ import json
 import logging
 import os
 import time
-from textwrap import dedent
 import traceback
+
+from io import BytesIO
 from collections import namedtuple, defaultdict
+from textwrap import dedent
 
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
@@ -146,13 +148,13 @@ class StripedStashedLayout(Workload):
             # Exactly stripe_count objects will exist
             self.os * self.sc,
             # Fewer than stripe_count objects will exist
-            self.os * self.sc / 2,
-            self.os * (self.sc - 1) + self.os / 2,
-            self.os * (self.sc - 1) + self.os / 2 - 1,
-            self.os * (self.sc + 1) + self.os / 2,
-            self.os * (self.sc + 1) + self.os / 2 + 1,
+            self.os * self.sc // 2,
+            self.os * (self.sc - 1) + self.os // 2,
+            self.os * (self.sc - 1) + self.os // 2 - 1,
+            self.os * (self.sc + 1) + self.os // 2,
+            self.os * (self.sc + 1) + self.os // 2 + 1,
             # More than stripe_count objects will exist
-            self.os * self.sc + self.os * self.sc / 2
+            self.os * self.sc + self.os * self.sc // 2
         ]
 
     def write(self):
@@ -565,7 +567,8 @@ class TestDataScan(CephFSTestCase):
         # introduce duplicated primary link
         file1_key = "file1_head"
         self.assertIn(file1_key, dirfrag1_keys)
-        file1_omap_data = self.fs.rados(["getomapval", dirfrag1_oid, file1_key, '-'])
+        file1_omap_data = self.fs.rados(["getomapval", dirfrag1_oid, file1_key, '-'],
+                                        stdout_data=BytesIO())
         self.fs.rados(["setomapval", dirfrag2_oid, file1_key], stdin_data=file1_omap_data)
         self.assertIn(file1_key, self._dirfrag_keys(dirfrag2_oid))
 
