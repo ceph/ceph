@@ -13,7 +13,9 @@ metadata. See example code for the following languages:
 - `Ruby`_
 
 
-.. ditaa:: +----------------------------+        +-----------------------------+
+.. ditaa::
+
+           +----------------------------+        +-----------------------------+
            |                            |        |                             |
            |    Create a Connection     |------->|      Create a Container     |
            |                            |        |                             |
