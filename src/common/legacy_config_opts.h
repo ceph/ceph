@@ -90,7 +90,7 @@ OPTION(plugin_crypto_accelerator, OPT_STR)
 
 OPTION(mempool_debug, OPT_BOOL)
 
-
+OPTION(openssl_engine_opts, OPT_STR)
 
 OPTION(key, OPT_STR)
 OPTION(keyfile, OPT_STR)

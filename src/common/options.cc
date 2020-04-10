@@ -803,6 +803,12 @@ std::vector<Option> get_global_options() {
     .set_default("crypto_isal")
     .set_description("Crypto accelerator library to use"),
 
+    Option("openssl_engine_opts", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("Use engine for specific openssl algorithm")
+    .set_long_description("Pass opts in this way: engine_id=engine1,dynamic_path=/some/path/engine1.so,default_algorithms=DIGESTS:engine_id=engine2,dynamic_path=/some/path/engine2.so,default_algorithms=CIPHERS,other_ctrl=other_value"),
+
     Option("mempool_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
