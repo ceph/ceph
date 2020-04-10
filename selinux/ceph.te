@@ -4,6 +4,7 @@ require {
 	type sysfs_t;
 	type configfs_t;
 	type commplex_main_port_t;
+	type http_cache_port_t;
 	type rpm_exec_t;
 	type rpm_var_lib_t;
 	type kernel_t;
