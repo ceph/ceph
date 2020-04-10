@@ -1130,7 +1130,7 @@ class Filesystem(MDSCluster):
             os.path.join(self._prefix, "rados"), "-p", pool, "setxattr",
             obj_name, xattr_name, data
         ]
-        remote.sh(args)
+        remote.run(args=args, timeout=3*60)
 
     def read_backtrace(self, ino_no, pool=None):
         """
