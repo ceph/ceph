@@ -1017,7 +1017,6 @@ int RocksDBStore::_test_init(const string& dir)
 RocksDBStore::~RocksDBStore()
 {
   close();
-
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
   }
