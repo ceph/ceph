@@ -77,6 +77,7 @@ set(common_srcs
   mime.c
   mutex_debug.cc
   numa.cc
+  openssl_opts_handler.cc
   options.cc
   page.cc
   perf_counters.cc
