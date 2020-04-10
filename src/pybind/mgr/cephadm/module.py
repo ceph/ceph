@@ -2,7 +2,7 @@ import json
 import errno
 import logging
 import time
-import yaml
+from copy import copy
 from threading import Event
 from functools import wraps
 
@@ -60,10 +60,13 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SSH_CONFIG = ('Host *\n'
-                      'User root\n'
-                      'StrictHostKeyChecking no\n'
-                      'UserKnownHostsFile /dev/null\n')
+DEFAULT_SSH_CONFIG = """
+Host *
+  User root
+  StrictHostKeyChecking no
+  UserKnownHostsFile /dev/null
+  ConnectTimeout=30
+"""
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
@@ -156,7 +159,7 @@ class SpecStore():
 class HostCache():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
-        self.mgr = mgr
+        self.mgr: CephadmOrchestrator = mgr
         self.daemons = {}   # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
@@ -317,6 +320,18 @@ class HostCache():
                 r.append(dd)
         return r
 
+    def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
+        for host, dm in self.daemons.items():
+            if host in self.mgr.offline_hosts:
+                def set_offline(dd: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
+                    ret = copy(dd)
+                    ret.status = -1
+                    ret.status_desc = 'host is offline'
+                    return ret
+                yield host, {name: set_offline(d) for name, d in dm.items()}
+            else:
+                yield host, dm
+
     def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
         result = []   # type: List[orchestrator.DaemonDescription]
@@ -343,6 +358,9 @@ class HostCache():
 
     def host_needs_daemon_refresh(self, host):
         # type: (str) -> bool
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Skipping daemon refresh')
+            return False
         if host in self.daemon_refresh_queue:
             self.daemon_refresh_queue.remove(host)
             return True
@@ -354,6 +372,9 @@ class HostCache():
 
     def host_needs_device_refresh(self, host):
         # type: (str) -> bool
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Skipping device refresh')
+            return False
         if host in self.device_refresh_queue:
             self.device_refresh_queue.remove(host)
             return True
@@ -707,6 +728,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if h not in self.inventory:
                 self.cache.rm_host(h)
 
+        # in-memory only.
+        self.offline_hosts: Set[str] = set()
+
     def shutdown(self):
         self.log.debug('shutdown')
         self._worker_pool.close()
@@ -996,38 +1020,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.upgrade_state = None
         self._save_upgrade_state()
         return
-
-    def _check_hosts(self):
-        self.log.debug('_check_hosts')
-        bad_hosts = []
-        hosts = self.inventory.keys()
-        for host in hosts:
-            if host not in self.inventory:
-                continue
-            self.log.debug(' checking %s' % host)
-            try:
-                out, err, code = self._run_cephadm(
-                    host, 'client', 'check-host', [],
-                    error_ok=True, no_fsid=True)
-                if code:
-                    self.log.debug(' host %s failed check' % host)
-                    if self.warn_on_failed_host_check:
-                        bad_hosts.append('host %s failed check: %s' % (host, err))
-                else:
-                    self.log.debug(' host %s ok' % host)
-            except Exception as e:
-                self.log.debug(' host %s failed check' % host)
-                bad_hosts.append('host %s failed check: %s' % (host, e))
-        if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
-            del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
-        if bad_hosts:
-            self.health_checks['CEPHADM_HOST_CHECK_FAILED'] = {
-                'severity': 'warning',
-                'summary': '%d hosts fail cephadm check' % len(bad_hosts),
-                'count': len(bad_hosts),
-                'detail': bad_hosts,
-            }
-        self.set_health_checks(self.health_checks)
 
     def _check_host(self, host):
         if host not in self.inventory:
@@ -1338,6 +1330,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             conn.exit()
         self._cons = {}
 
+    def offline_hosts_remove(self, host):
+        if host in self.offline_hosts:
+            self.offline_hosts.remove(host)
+
+
     @staticmethod
     def can_run():
         if remoto is not None:
@@ -1564,6 +1561,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if not addr and host in self.inventory:
             addr = self.inventory[host].get('addr', host)
 
+        self.offline_hosts_remove(host)
+
         try:
             try:
                 conn, connr = self._get_connection(addr)
@@ -1648,6 +1647,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # this is a misleading exception as it seems to be thrown for
             # any sort of connection failure, even those having nothing to
             # do with "host not found" (e.g., ssh key permission denied).
+            self.offline_hosts.add(host)
             user = 'root' if self.mode == 'root' else 'cephadm'
             msg = f'Failed to connect to {host} ({addr}).  ' \
                   f'Check that the host is reachable and accepts connections using the cephadm SSH key\n' \
@@ -1686,6 +1686,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.inventory[spec.hostname] = spec.to_json()
         self._save_inventory()
         self.cache.prime_empty_host(spec.hostname)
+        self.offline_hosts_remove(spec.hostname)
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
@@ -1732,7 +1733,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 hostname,
                 addr=info.get('addr', hostname),
                 labels=info.get('labels', []),
-                status=info.get('status', ''),
+                status='Offline' if hostname in self.offline_hosts else info.get('status', ''),
             ))
         return r
 
@@ -1865,7 +1866,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self._refresh_host_daemons(host)
         # <service_map>
         sm = {}  # type: Dict[str, orchestrator.ServiceDescription]
-        for h, dm in self.cache.daemons.items():
+        for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
                 if service_type and service_type != dd.daemon_type:
                     continue
@@ -1936,7 +1937,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 for hostname, hi in self.inventory.items():
                     self._refresh_host_daemons(hostname)
         result = []
-        for h, dm in self.cache.daemons.items():
+        for h, dm in self.cache.get_daemons_with_volatile_status():
             if host and h != host:
                 continue
             for name, dd in dm.items():
