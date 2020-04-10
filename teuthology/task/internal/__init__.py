@@ -314,8 +314,12 @@ def fetch_binaries_for_coredumps(path, remote):
             remote_path = remote.sh(['which', dump_program]).rstrip()
 
             # Pull remote program into coredump folder:
-            remote._sftp_get_file(remote_path, os.path.join(coredump_path,
-                                                            dump_program))
+            local_path = os.path.join(coredump_path,
+                                      dump_program.lstrip(os.path.sep))
+            local_dir = os.path.dirname(local_path)
+            if not os.path.exists(local_dir):
+                os.makedirs(local_dir)
+            remote._sftp_get_file(remote_path, local_path)
 
             # Pull Debug symbols:
             debug_path = os.path.join('/usr/lib/debug', remote_path)
