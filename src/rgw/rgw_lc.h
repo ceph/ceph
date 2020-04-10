@@ -508,7 +508,8 @@ public:
   int list_lc_progress(const string& marker, uint32_t max_entries,
 		       vector<cls_rgw_lc_entry>&);
   int bucket_lc_prepare(int index, LCWorker* worker);
-  int bucket_lc_process(string& shard_id, LCWorker* worker, time_t stop_at);
+  int bucket_lc_process(string& shard_id, LCWorker* worker, time_t stop_at,
+			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
 		     cls_rgw_lc_entry& entry, int& result, LCWorker* worker);
   bool going_down();
@@ -528,8 +529,7 @@ public:
 
   int handle_multipart_expiration(RGWRados::Bucket *target,
 				  const multimap<string, lc_op>& prefix_map,
-				  LCWorker* worker,
-				  time_t stop_at);
+				  LCWorker* worker, time_t stop_at, bool once);
 };
 
 namespace rgw::lc {
