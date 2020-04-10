@@ -11,7 +11,8 @@ Device`.
    Block Device.
 
 
-.. ditaa:: 
+.. ditaa::
+
            /------------------\         /----------------\
            |    Admin Node    |         |   ceph-client  |
            |                  +-------->+ cCCC           |
