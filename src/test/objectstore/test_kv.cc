@@ -74,6 +74,8 @@ public:
 
 TEST_P(KVTest, OpenClose) {
   ASSERT_EQ(0, db->create_and_open(cout));
+  db->close();
+  db->open(cout);
   fini();
 }
 
