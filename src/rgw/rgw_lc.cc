@@ -781,14 +781,14 @@ RGWLC::LCWorker::LCWorker(const DoutPrefixProvider* dpp, CephContext *cct,
   workpool = new WorkPool(this, wpw, 512);
 }
 
-static inline bool worker_should_stop(time_t stop_at)
+static inline bool worker_should_stop(time_t stop_at, bool once)
 {
-  return stop_at < time(nullptr);
+  return !once && stop_at < time(nullptr);
 }
 
 int RGWLC::handle_multipart_expiration(
   RGWRados::Bucket *target, const multimap<string, lc_op>& prefix_map,
-  LCWorker* worker, time_t stop_at)
+  LCWorker* worker, time_t stop_at, bool once)
 {
   MultipartMetaFilter mp_filter;
   vector<rgw_bucket_dir_entry> objs;
@@ -837,7 +837,7 @@ int RGWLC::handle_multipart_expiration(
   for (auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();
        ++prefix_iter) {
 
-    if (worker_should_stop(stop_at)) {
+    if (worker_should_stop(stop_at, once)) {
       ldout(cct, 5) << __func__ << " interval budget EXPIRED worker "
 		     << worker->ix
 		     << dendl;
@@ -1336,7 +1336,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 }
 
 int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
-			     time_t stop_at)
+			     time_t stop_at, bool once)
 {
   RGWLifecycleConfiguration  config(cct);
   RGWBucketInfo bucket_info;
@@ -1414,7 +1414,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();
       ++prefix_iter) {
 
-    if (worker_should_stop(stop_at)) {
+    if (worker_should_stop(stop_at, once)) {
       ldout(cct, 5) << __func__ << " interval budget EXPIRED worker "
 		     << worker->ix
 		     << dendl;
@@ -1457,7 +1457,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     worker->workpool->drain();
   }
 
-  ret = handle_multipart_expiration(&target, prefix_map, worker, stop_at);
+  ret = handle_multipart_expiration(&target, prefix_map, worker, stop_at, once);
   return ret;
 }
 
@@ -1650,7 +1650,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       }
     }
 
-    if(!if_already_run_today(head.start_date)) {
+    if(!if_already_run_today(head.start_date) ||
+       once) {
       head.start_date = now;
       head.marker.clear();
       ret = bucket_lc_prepare(index, worker);
@@ -1703,7 +1704,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	    << dendl;
 
     l.unlock(&store->getRados()->lc_pool_ctx, obj_names[index]);
-    ret = bucket_lc_process(entry.bucket, worker, thread_stop_at());
+    ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
     bucket_lc_post(index, max_lock_secs, entry, ret, worker);
   } while(1 && !once);
 
