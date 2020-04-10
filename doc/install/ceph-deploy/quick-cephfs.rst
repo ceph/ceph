@@ -44,6 +44,7 @@ For example::
 Now, your Ceph cluster would look like this:
 
 .. ditaa::
+
            /------------------\         /----------------\
            |    ceph-deploy   |         |     node1      |
            |    Admin Node    |         | cCCC           |

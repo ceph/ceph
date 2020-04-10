@@ -163,6 +163,7 @@ cluster. Then add a Ceph Monitor and Ceph Manager to ``node2`` and ``node3``
 to improve reliability and availability.
 
 .. ditaa::
+
            /------------------\         /----------------\
            |    ceph-deploy   |         |     node1      |
            |    Admin Node    |         | cCCC           |

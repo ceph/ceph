@@ -14,7 +14,8 @@ To use Ceph Block Devices with Kubernetes v1.13 and higher, you must install
 and configure ``ceph-csi`` within your Kubernetes environment. The following
 diagram depicts the Kubernetes/Ceph technology stack.
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+            +---------------------------------------------------+
             |                   Kubernetes                      |
             +---------------------------------------------------+
             |                    ceph--csi                      |

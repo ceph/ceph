@@ -9,7 +9,8 @@ authorization with the :term:`Ceph Storage Cluster`. Users are either
 individuals or system actors such as applications, which use Ceph clients to
 interact with the Ceph Storage Cluster daemons.
 
-.. ditaa::  +-----+
+.. ditaa::
+            +-----+
             | {o} |
             |     |
             +--+--+       /---------\               /---------\
