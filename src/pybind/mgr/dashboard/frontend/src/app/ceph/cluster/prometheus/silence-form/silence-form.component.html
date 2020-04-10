@@ -70,43 +70,8 @@
                    i18n>Editing a silence will expire the old silence and recreate it as a new silence</cd-helper>
       </div>
 
-      <!-- Creator -->
+      <!-- Start time -->
       <div class="card-body">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="created-by"
-                 i18n>Creator</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   formControlName="createdBy"
-                   id="created-by"
-                   name="created-by"
-                   type="text">
-            <span *ngIf="form.showError('createdBy', formDir, 'required')"
-                  class="invalid-feedback"
-                  i18n>This field is required!</span>
-          </div>
-        </div>
-
-        <!-- Comment -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="comment"
-                 i18n>Comment</label>
-          <div class="cd-col-form-input">
-            <textarea class="form-control"
-                      formControlName="comment"
-                      id="comment"
-                      name="comment"
-                      type="text">
-            </textarea>
-            <span *ngIf="form.showError('comment', formDir, 'required')"
-                  class="invalid-feedback"
-                  i18n>This field is required!</span>
-          </div>
-        </div>
-
-        <!-- Start time -->
         <div class="form-group row">
           <label class="cd-col-form-label"
                  for="starts-at">
@@ -199,6 +164,41 @@
             </span>
           </div>
         </fieldset>
+
+        <!-- Creator -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="created-by"
+                 i18n>Creator</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   formControlName="createdBy"
+                   id="created-by"
+                   name="created-by"
+                   type="text">
+            <span *ngIf="form.showError('createdBy', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Comment -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="comment"
+                 i18n>Comment</label>
+          <div class="cd-col-form-input">
+            <textarea class="form-control"
+                      formControlName="comment"
+                      id="comment"
+                      name="comment"
+                      type="text">
+            </textarea>
+            <span *ngIf="form.showError('comment', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
       </div>
 
       <div class="card-footer">
