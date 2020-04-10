@@ -662,21 +662,6 @@ int RocksDBStore::_test_init(const string& dir)
 RocksDBStore::~RocksDBStore()
 {
   close();
-  delete logger;
-
-  // Ensure db is destroyed before dependent db_cache and filterpolicy
-  for (auto& p : cf_handles) {
-    db->DestroyColumnFamilyHandle(
-      static_cast<rocksdb::ColumnFamilyHandle*>(p.second));
-    p.second = nullptr;
-  }
-  if (must_close_default_cf) {
-    db->DestroyColumnFamilyHandle(default_cf);
-    must_close_default_cf = false;
-  }
-  default_cf = nullptr;
-  delete db;
-  db = nullptr;
 
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
@@ -693,13 +678,30 @@ void RocksDBStore::close()
     compact_queue_cond.notify_all();
     compact_queue_lock.unlock();
     compact_thread.join();
-    dout(1) << __func__ << " compaction thread to stopped" << dendl;    
+    dout(1) << __func__ << " compaction thread to stopped" << dendl;
   } else {
     compact_queue_lock.unlock();
   }
 
-  if (logger)
+  if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
+  }
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  for (auto& p : cf_handles) {
+    db->DestroyColumnFamilyHandle(
+      static_cast<rocksdb::ColumnFamilyHandle*>(p.second));
+    p.second = nullptr;
+  }
+  if (must_close_default_cf) {
+    db->DestroyColumnFamilyHandle(default_cf);
+    must_close_default_cf = false;
+  }
+  default_cf = nullptr;
+  delete db;
+  db = nullptr;
 }
 
 int RocksDBStore::repair(std::ostream &out)
