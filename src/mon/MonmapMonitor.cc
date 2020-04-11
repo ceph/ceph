@@ -837,7 +837,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     for (auto& i : pending_map.mon_info) {
       if (i.second.public_addrs.v.size() == 1 &&
 	  i.second.public_addrs.front().is_legacy() &&
-	  i.second.public_addrs.front().get_port() == CEPH_MON_PORT_LEGACY) {
+	  i.second.public_addrs.front().get_port() != CEPH_MON_PORT_IANA) {
 	entity_addrvec_t av;
 	entity_addr_t a = i.second.public_addrs.front();
 	a.set_type(entity_addr_t::TYPE_MSGR2);
