@@ -158,8 +158,7 @@ TEST(BlueFS, write_read) {
     BlueFS::FileReader *h;
     ASSERT_EQ(0, fs.open_for_read("dir", "file", &h));
     bufferlist bl;
-    BlueFS::FileReaderBuffer buf(4096);
-    ASSERT_EQ(9, fs.read(h, &buf, 0, 1024, &bl, NULL));
+    ASSERT_EQ(9, fs.read(h, 0, 1024, &bl, NULL));
     ASSERT_EQ(0, strncmp("foobarbaz", bl.c_str(), 9));
     delete h;
   }
@@ -231,10 +230,9 @@ TEST(BlueFS, very_large_write) {
     BlueFS::FileReader *h;
     ASSERT_EQ(0, fs.open_for_read("dir", "bigfile", &h));
     bufferlist bl;
-    BlueFS::FileReaderBuffer readbuf(10485760);
     for (unsigned i = 0; i < 3*1024*1048576ull / sizeof(buf); ++i) {
       bl.clear();
-      fs.read(h, &readbuf, i * sizeof(buf), sizeof(buf), &bl, NULL);
+      fs.read(h, i * sizeof(buf), sizeof(buf), &bl, NULL);
       int r = memcmp(buf, bl.c_str(), sizeof(buf));
       if (r) {
 	cerr << "read got mismatch at offset " << i*sizeof(buf) << " r " << r
