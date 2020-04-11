@@ -72,7 +72,7 @@ do_umountall() {
     [ -n "$CEPH_FUSE_MNTS" ] && sudo umount -f $CEPH_FUSE_MNTS
 }
 
-usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [ganesha] [--crimson]\n"
+usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [nfs] [--crimson]\n"
 
 stop_all=1
 stop_mon=0
@@ -108,7 +108,7 @@ while [ $# -ge 1 ]; do
             stop_rgw=1
             stop_all=0
             ;;
-        ganesha | ganesha.nfsd )
+        nfs | ganesha.nfsd )
             stop_ganesha=1
             stop_all=0
             ;;
