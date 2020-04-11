@@ -697,7 +697,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     }
     mon->osdmon()->do_application_enable(poolid,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", fs_name);
+					 "data", fs_name, true);
     mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(
