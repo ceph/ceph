@@ -390,7 +390,6 @@ private:
 
   int _read(
     FileReader *h,   ///< [in] read from here
-    FileReaderBuffer *buf, ///< [in] reader state
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     ceph::buffer::list *outbl,   ///< [out] optional: reference the result here
@@ -559,12 +558,12 @@ public:
     std::unique_lock l(lock);
     return _fsync(h, l);
   }
-  int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
+  int read(FileReader *h, uint64_t offset, size_t len,
 	   ceph::buffer::list *outbl, char *out) {
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
-    return _read(h, buf, offset, len, outbl, out);
+    return _read(h, offset, len, outbl, out);
   }
   int read_random(FileReader *h, uint64_t offset, size_t len,
 		  char *out) {
