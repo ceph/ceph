@@ -5,6 +5,7 @@ from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
+from .fs.nfs import NFSCluster, FSExport
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -212,7 +213,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Cancel an pending or ongoing clone operation.",
             'perm': 'r'
         },
-
+        {
+            'cmd': 'nfs export create '
+            'name=type,type=CephString '
+            'name=fsname,type=CephString '
+            'name=binding,type=CephString '
+            'name=attach,type=CephString '
+            'name=readonly,type=CephBool,req=false '
+            'name=path,type=CephString,req=false ',
+            'desc': "Create a cephfs export",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs nfs export delete '
+                   'name=export_id,type=CephInt,req=true ',
+            'desc': "Delete a cephfs export",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'nfs cluster create '
+                   'name=type,type=CephString '
+                   'name=clusterid,type=CephString '
+                   'name=size,type=CephInt,req=false ',
+            'desc': "Create an NFS Cluster",
+            'perm': 'rw'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -233,6 +258,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
+        self.fs_export = FSExport(self)
 
     def __del__(self):
         self.vc.shutdown()
@@ -376,3 +402,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+
+    def _cmd_nfs_export_create(self, inbuf, cmd):
+        #TODO Extend export creation for rgw.
+        return self.fs_export.create_export(export_type=cmd['type'], fs_name=cmd['fsname'],
+                pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False),
+                path=cmd.get('path', '/'), cluster_id=cmd.get('attach'))
+
+    def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
+        return self.fs_export.delete_export(cmd['export_id'])
+
+    def _cmd_nfs_cluster_create(self, inbuf, cmd):
+        #TODO add placement option
+        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
+        return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'], size=cmd.get('size', 1))
