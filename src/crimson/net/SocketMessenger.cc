@@ -175,6 +175,10 @@ seastar::future<> SocketMessenger::shutdown()
       return conn.second->close_clean(false);
     });
   }).then([this] {
+    return seastar::parallel_for_each(closing_conns, [] (auto conn) {
+      return conn->close_clean(false);
+    });
+  }).then([this] {
     ceph_assert(connections.empty());
     shutdown_promise.set_value();
   });
@@ -304,6 +308,23 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
   ceph_assert(found != connections.end());
   ceph_assert(found->second == conn);
   connections.erase(found);
+}
+
+void SocketMessenger::closing_conn(SocketConnectionRef conn)
+{
+  closing_conns.push_back(conn);
+}
+
+void SocketMessenger::closed_conn(SocketConnectionRef conn)
+{
+  for (auto it = closing_conns.begin();
+       it != closing_conns.end();) {
+    if (*it == conn) {
+      it = closing_conns.erase(it);
+    } else {
+      it++;
+    }
+  }
 }
 
 seastar::future<uint32_t>

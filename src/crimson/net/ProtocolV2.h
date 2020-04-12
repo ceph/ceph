@@ -19,6 +19,7 @@ class ProtocolV2 final : public Protocol {
   ~ProtocolV2() override;
   void print(std::ostream&) const final;
  private:
+  void on_closed() override;
   bool is_connected() const override;
 
   void start_connect(const entity_addr_t& peer_addr,

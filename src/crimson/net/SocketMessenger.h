@@ -46,6 +46,7 @@ class SocketMessenger final : public Messenger {
   ChainedDispatchersRef dispatchers;
   std::map<entity_addr_t, SocketConnectionRef> connections;
   std::set<SocketConnectionRef> accepting_conns;
+  std::vector<SocketConnectionRef> closing_conns;
   ceph::net::PolicySet<Throttle> policy_set;
   // Distinguish messengers with meaningful names for debugging
   const std::string logic_name;
@@ -119,6 +120,8 @@ class SocketMessenger final : public Messenger {
   void unaccept_conn(SocketConnectionRef);
   void register_conn(SocketConnectionRef);
   void unregister_conn(SocketConnectionRef);
+  void closing_conn(SocketConnectionRef);
+  void closed_conn(SocketConnectionRef);
   seastar::shard_id shard_id() const {
     assert(seastar::this_shard_id() == master_sid);
     return master_sid;

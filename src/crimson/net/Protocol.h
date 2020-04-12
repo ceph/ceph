@@ -64,6 +64,8 @@ class Protocol {
 
   virtual void notify_write() {};
 
+  virtual void on_closed() {}
+
  public:
   const proto_t proto_type;
   SocketRef socket;
