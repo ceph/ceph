@@ -449,20 +449,16 @@ private:
 };
 
 struct MDSlaveUpdate {
-  MDSlaveUpdate(int oo, bufferlist &rbl, elist<MDSlaveUpdate*> &list) :
-    origop(oo),
-    item(this) {
+  MDSlaveUpdate(int oo, bufferlist &rbl) :
+    origop(oo) {
     rollback.claim(rbl);
-    list.push_back(&item);
   }
   ~MDSlaveUpdate() {
-    item.remove_myself();
     if (waiter)
       waiter->complete(0);
   }
   int origop;
   bufferlist rollback;
-  elist<MDSlaveUpdate*>::item item;
   Context *waiter = nullptr;
   set<CInode*> olddirs;
   set<CInode*> unlinked;

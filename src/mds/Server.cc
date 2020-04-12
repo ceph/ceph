@@ -6615,6 +6615,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   // commit case
   mdcache->predirty_journal_parents(mdr, &le->commit, dnl->get_inode(), 0, PREDIRTY_SHALLOW|PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->commit, targeti);
+  mdcache->add_uncommitted_slave(mdr->reqid, mdr->ls, mdr->slave_to_mds);
 
   // set up commit waiter
   mdr->more()->slave_commit = new C_MDS_SlaveLinkCommit(this, mdr, targeti);
@@ -6695,6 +6696,8 @@ void Server::_committed_slave(MDRequestRef& mdr)
 
   ceph_assert(g_conf()->mds_kill_link_at != 8);
 
+  bool assert_exist = mdr->more()->slave_update_journaled;
+  mdcache->finish_uncommitted_slave(mdr->reqid, assert_exist);
   auto req = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_COMMITTED);
   mds->send_message_mds(req, mdr->slave_to_mds);
   mdcache->request_finish(mdr);
@@ -6809,7 +6812,7 @@ void Server::_link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
   if (mdr)
     mdcache->request_finish(mdr);
 
-  mdcache->finish_rollback(mut->reqid);
+  mdcache->finish_rollback(mut->reqid, mdr);
 
   mut->cleanup();
 }
@@ -7280,6 +7283,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
     return;
   }
 
+  mdr->ls = mdlog->get_current_segment();
   ESlaveUpdate *le =  new ESlaveUpdate(mdlog, "slave_rmdir", mdr->reqid, mdr->slave_to_mds,
 				       ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RMDIR);
   mdlog->start_entry(le);
@@ -7293,6 +7297,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   le->commit.renamed_dirino = in->ino();
 
   mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
+  mdcache->add_uncommitted_slave(mdr->reqid, mdr->ls, mdr->slave_to_mds);
 
   mdr->more()->slave_update_journaled = true;
   submit_mdlog_entry(le, new C_MDS_SlaveRmdirPrep(this, mdr, dn, straydn),
@@ -7366,7 +7371,7 @@ void Server::handle_slave_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSla
 void Server::_commit_slave_rmdir(MDRequestRef& mdr, int r, CDentry *straydn)
 {
   dout(10) << "_commit_slave_rmdir " << *mdr << " r=" << r << dendl;
-  
+
   if (r == 0) {
     if (mdr->more()->slave_update_journaled) {
       CInode *strayin = straydn->get_projected_linkage()->get_inode();
@@ -7495,7 +7500,7 @@ void Server::_rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentr
   if (mdr)
     mdcache->request_finish(mdr);
 
-  mdcache->finish_rollback(reqid);
+  mdcache->finish_rollback(reqid, mdr);
 }
 
 
@@ -8960,6 +8965,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     mdr->ls = NULL;
     _logged_slave_rename(mdr, srcdn, destdn, straydn);
   } else {
+    mdcache->add_uncommitted_slave(mdr->reqid, mdr->ls, mdr->slave_to_mds);
     mdr->more()->slave_update_journaled = true;
     submit_mdlog_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn),
 		       mdr, __func__);
@@ -9582,7 +9588,7 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
       mdr->more()->slave_rolling_back = false;
   }
 
-  mdcache->finish_rollback(mut->reqid);
+  mdcache->finish_rollback(mut->reqid, mdr);
 
   mut->cleanup();
 }
