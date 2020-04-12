@@ -1,15 +1,18 @@
 meta:
 - desc: |
    install ceph/nautilus latest
-   run workload and upgrade-sequence in parallel
-   upgrade the client node
 tasks:
 - install:
+    branch: nautilus #tag: v13.2.8
     exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
       - ceph-mgr-cephadm
       - cephadm
-      - libcephfs-dev
-    branch: nautilus
+    extra_packages: ['librados2']
 - print: "**** done installing nautilus"
 - ceph:
     log-whitelist:
@@ -26,29 +29,12 @@ tasks:
       - Monitor daemon marked osd
       - Behind on trimming
       - Manager daemon
-      - Not found or unloadable
     conf:
       global:
         mon warn on pool no app: false
-        bluestore_warn_on_legacy_statfs: false
-        bluestore warn on no per pool omap: false
-        mon pg warn min per osd: 0
+        ms bind msgr2: false
 - exec:
     osd.0:
+      - ceph osd require-osd-release nautilus
       - ceph osd set-require-min-compat-client nautilus
 - print: "**** done ceph"
-- install.upgrade:
-    mon.a:
-    mon.b:
-    mon.c:
-- print: "**** done install.upgrade non-client hosts"
-- rgw:
-   - client.1
-- print: "**** done => started rgw client.1"
-- parallel:
-    - workload
-    - upgrade-sequence
-- print: "**** done parallel"
-- install.upgrade:
-    client.0:
-- print: "**** done install.upgrade on client.0"

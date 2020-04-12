@@ -4,6 +4,7 @@ overrides:
       - \(MON_DOWN\)
       - \(MGR_DOWN\)
       - slow request
+      - Not found or unloadable
 meta:
 - desc: install ceph/nautilus latest
 tasks:
