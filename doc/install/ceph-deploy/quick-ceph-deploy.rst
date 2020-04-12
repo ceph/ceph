@@ -294,14 +294,10 @@ example::
 
    As an exercise, let's create an object. Specify an object name, a path to
    a test file containing some object data and a pool name using the
-   ``rados put`` command on the command line. Let's also enable placement group
-   autoscaling so that the cluster will automatically set an appropriate number
-   of placement groups for the pool. For example::
+   ``rados put`` command on the command line. For example::
 
      echo {Test-data} > testfile.txt
-     ceph mgr module enable pg_autoscaler
-     ceph osd pool create mytest 0
-     ceph osd pool set mytest pg_autoscale_mode on
+     ceph osd pool create mytest
      rados put {object-name} {file-path} --pool=mytest
      rados put test-object-1 testfile.txt --pool=mytest
 
