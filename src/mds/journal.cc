@@ -119,6 +119,14 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     mds->mdcache->wait_for_uncommitted_master(*p, gather_bld.new_sub());
   }
 
+  // slave ops that haven't been committed
+  for (set<metareqid_t>::iterator p = uncommitted_slaves.begin();
+       p != uncommitted_slaves.end();
+       ++p) {
+    dout(10) << "try_to_expire waiting for master to ack OP_FINISH on " << *p << dendl;
+    mds->mdcache->wait_for_uncommitted_slave(*p, gather_bld.new_sub());
+  }
+
   // uncommitted fragments
   for (set<dirfrag_t>::iterator p = uncommitted_fragments.begin();
        p != uncommitted_fragments.end();
@@ -193,16 +201,6 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   }
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
-
-  // slave updates
-  for (elist<MDSlaveUpdate*>::iterator p = slave_updates.begin(member_offset(MDSlaveUpdate,
-									     item));
-       !p.end(); ++p) {
-    MDSlaveUpdate *su = *p;
-    dout(10) << "try_to_expire waiting on slave update " << su << dendl;
-    ceph_assert(su->waiter == 0);
-    su->waiter = gather_bld.new_sub();
-  }
 
   // idalloc
   if (inotablev > mds->inotable->get_committed_version()) {
@@ -2496,7 +2494,6 @@ void ESlaveUpdate::generate_test_instances(std::list<ESlaveUpdate*>& ls)
   ls.push_back(new ESlaveUpdate());
 }
 
-
 void ESlaveUpdate::replay(MDSRank *mds)
 {
   MDSlaveUpdate *su;
@@ -2505,29 +2502,21 @@ void ESlaveUpdate::replay(MDSRank *mds)
   case ESlaveUpdate::OP_PREPARE:
     dout(10) << "ESlaveUpdate.replay prepare " << reqid << " for mds." << master 
 	     << ": applying commit, saving rollback info" << dendl;
-    su = new MDSlaveUpdate(origop, rollback, segment->slave_updates);
+    su = new MDSlaveUpdate(origop, rollback);
     commit.replay(mds, segment, su);
-    mds->mdcache->add_uncommitted_slave_update(reqid, master, su);
+    mds->mdcache->add_uncommitted_slave(reqid, segment, master, su);
     break;
 
   case ESlaveUpdate::OP_COMMIT:
-    su = mds->mdcache->get_uncommitted_slave_update(reqid, master);
-    if (su) {
-      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master << dendl;
-      mds->mdcache->finish_uncommitted_slave_update(reqid, master);
-    } else {
-      dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master 
-	       << ": ignoring, no previously saved prepare" << dendl;
-    }
+    dout(10) << "ESlaveUpdate.replay commit " << reqid << " for mds." << master << dendl;
+    mds->mdcache->finish_uncommitted_slave(reqid, false);
     break;
 
   case ESlaveUpdate::OP_ROLLBACK:
     dout(10) << "ESlaveUpdate.replay abort " << reqid << " for mds." << master
 	     << ": applying rollback commit blob" << dendl;
     commit.replay(mds, segment);
-    su = mds->mdcache->get_uncommitted_slave_update(reqid, master);
-    if (su)
-      mds->mdcache->finish_uncommitted_slave_update(reqid, master);
+    mds->mdcache->finish_uncommitted_slave(reqid, false);
     break;
 
   default:
