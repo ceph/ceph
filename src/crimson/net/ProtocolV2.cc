@@ -2160,8 +2160,17 @@ void ProtocolV2::trigger_close()
   }
 
   protocol_timer.cancel();
-
+  messenger.closing_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+	conn.shared_from_this()));
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
+}
+
+void ProtocolV2::on_closed()
+{
+  messenger.closed_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+	conn.shared_from_this()));
 }
 
 void ProtocolV2::print(std::ostream& out) const

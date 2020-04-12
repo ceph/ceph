@@ -51,6 +51,7 @@ void Protocol::close(bool dispatch_reset,
   // unregister_conn() drops a reference, so hold another until completion
   auto cleanup = [conn_ref = conn.shared_from_this(), this] {
       logger().debug("{} closed!", conn);
+      on_closed();
 #ifdef UNIT_TESTS_BUILT
       is_closed_clean = true;
       if (conn.interceptor) {
