@@ -496,7 +496,7 @@ def test_features_to_string():
     features_string = rbd.features_to_string(features)
     eq(features_string, "layering")
 
-    features = 1024
+    features = 16777216
     assert_raises(InvalidArgument, rbd.features_to_string, features)
 
 @require_new_format()
@@ -587,6 +587,10 @@ class TestImage(object):
 
     def test_image_auto_close(self):
         image = Image(ioctx, image_name)
+
+    def test_use_after_close(self):
+        self.image.close()
+        assert_raises(InvalidArgument, self.image.stat)
 
     def test_write(self):
         data = rand_data(256)

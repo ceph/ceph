@@ -607,6 +607,7 @@ function TEST_repair_stats() {
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'
@@ -680,6 +681,7 @@ function TEST_repair_stats_ec() {
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'
@@ -5758,6 +5760,7 @@ function TEST_periodic_scrub_replicated() {
     # Can't upgrade with this set
     ceph osd set nodeep-scrub
     # Let map change propagate to OSDs
+    ceph tell osd.0 get_latest_osdmap
     flush_pg_stats
     sleep 5
 

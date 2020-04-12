@@ -5,12 +5,12 @@
 #include <typeindex>
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
+#include <include/ceph_fs.h>
 
 #include "json_spirit/json_spirit.h"
 
 #include "Formatter.h"
 
-using namespace json_spirit;
 
 
 class JSONObj;
@@ -168,6 +168,7 @@ void decode_json_obj(bool& val, JSONObj *obj);
 void decode_json_obj(ceph::buffer::list& val, JSONObj *obj);
 class utime_t;
 void decode_json_obj(utime_t& val, JSONObj *obj);
+void decode_json_obj(ceph_dir_layout& i, JSONObj *obj);
 
 template<class T>
 void decode_json_obj(std::list<T>& l, JSONObj *obj)

@@ -389,9 +389,31 @@ static DaemonKey key_from_service(
   }
 }
 
+void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
+					  const entity_addr_t& addr)
+{
+  if (!daemon_state.is_updating(key) &&
+      (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
+    std::ostringstream oss;
+    auto c = new MetadataUpdate(daemon_state, key);
+    if (key.type == "osd") {
+      oss << "{\"prefix\": \"osd metadata\", \"id\": "
+	  << key.name<< "}";
+    } else if (key.type == "mds") {
+      c->set_default("addr", stringify(addr));
+      oss << "{\"prefix\": \"mds metadata\", \"who\": \""
+	  << key.name << "\"}";
+    } else if (key.type == "mon") {
+      oss << "{\"prefix\": \"mon metadata\", \"id\": \""
+	  << key.name << "\"}";
+    }
+    monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
+  }
+}
+
 bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 {
-  std::lock_guard l(lock);
+  std::unique_lock l(lock);
 
   DaemonKey key = key_from_service(m->service_name,
 				   m->get_connection()->get_peer_type(),
@@ -421,6 +443,8 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
       dout(2) << "ignoring open from " << key << " " << con->get_peer_addr()
               << "; not ready for session (expect reconnect)" << dendl;
       con->mark_down();
+      l.unlock();
+      fetch_missing_metadata(key, m->get_source_addr());
       return true;
     }
   }
@@ -553,29 +577,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
       dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
               << dendl;
       // issue metadata request in background
-      if (!daemon_state.is_updating(key) && 
-          (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
-
-        std::ostringstream oss;
-        auto c = new MetadataUpdate(daemon_state, key);
-        if (key.type == "osd") {
-          oss << "{\"prefix\": \"osd metadata\", \"id\": "
-              << key.name<< "}";
-
-        } else if (key.type == "mds") {
-          c->set_default("addr", stringify(m->get_source_addr()));
-          oss << "{\"prefix\": \"mds metadata\", \"who\": \""
-              << key.name << "\"}";
- 
-        } else if (key.type == "mon") {
-          oss << "{\"prefix\": \"mon metadata\", \"id\": \""
-              << key.name << "\"}";
-        } else {
-          ceph_abort();
-        }
-
-        monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
-      }
+      fetch_missing_metadata(key, m->get_source_addr());
 
       locker.lock();
 
@@ -2528,6 +2530,7 @@ void DaemonServer::adjust_pgs()
 		       << dendl;
 	      ok = false;
 	    }
+	    vector<int32_t> source_acting;
             for (auto &merge_participant : {merge_source, merge_target}) {
               bool is_merge_source = merge_participant == merge_source;
               if (osdmap.have_pg_upmaps(merge_participant)) {
@@ -2559,6 +2562,19 @@ void DaemonServer::adjust_pgs()
 		         << " not clean (" << pg_state_string(q->second.state)
 		         << ")" << dendl;
 	        ok = false;
+	      }
+	      if (is_merge_source) {
+		source_acting = q->second.acting;
+	      } else if (ok && q->second.acting != source_acting) {
+		dout(10) << "pool " << i.first
+		         << " pg_num_target " << p.get_pg_num_target()
+		         << " pg_num " << p.get_pg_num()
+		         << (is_merge_source ? " - merge source " : " - merge target ")
+                         << merge_participant
+			 << " acting does not match (source " << source_acting
+			 << " != target " << q->second.acting
+			 << ")" << dendl;
+		ok = false;
 	      }
             }
 

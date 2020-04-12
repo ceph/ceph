@@ -16,6 +16,32 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
+
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::ErasureCodeProfile;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+
 static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -60,7 +86,7 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 	       << " " << progress_events.size() << " progress events"
 	       << dendl;
     }
-    catch (buffer::error& e) {
+    catch (ceph::buffer::error& e) {
       derr << "failed to decode mgrstat state; luminous dev version? "
 	   << e.what() << dendl;
     }

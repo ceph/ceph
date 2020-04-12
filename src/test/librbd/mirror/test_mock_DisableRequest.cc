@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockImageState.h"
 #include "test/librbd/mock/MockOperations.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
@@ -12,6 +13,7 @@
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/ImageStateUpdateRequest.h"
+#include "librbd/mirror/snapshot/PromoteRequest.h"
 
 namespace librbd {
 
@@ -49,7 +51,6 @@ PromoteRequest<librbd::MockTestImageCtx> *PromoteRequest<librbd::MockTestImageCt
 } // namespace journal
 
 namespace mirror {
-
 template <>
 struct GetInfoRequest<librbd::MockTestImageCtx> {
   cls::rbd::MirrorImage *mirror_image;
@@ -124,6 +125,30 @@ GetInfoRequest<librbd::MockTestImageCtx> *GetInfoRequest<librbd::MockTestImageCt
 ImageRemoveRequest<librbd::MockTestImageCtx> *ImageRemoveRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 ImageStateUpdateRequest<librbd::MockTestImageCtx> *ImageStateUpdateRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
+namespace snapshot {
+
+template <>
+struct PromoteRequest<librbd::MockTestImageCtx> {
+  Context *on_finish = nullptr;
+  static PromoteRequest *s_instance;
+  static PromoteRequest *create(librbd::MockTestImageCtx*,
+                                const std::string& global_image_id,
+                                Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  PromoteRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+PromoteRequest<librbd::MockTestImageCtx> *PromoteRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+} // namespace snapshot
 } // namespace mirror
 } // namespace librbd
 
@@ -150,10 +175,11 @@ class TestMockMirrorDisableRequest : public TestMockFixture {
 public:
   typedef DisableRequest<MockTestImageCtx> MockDisableRequest;
   typedef Journal<MockTestImageCtx> MockJournal;
-  typedef journal::PromoteRequest<MockTestImageCtx> MockPromoteRequest;
+  typedef journal::PromoteRequest<MockTestImageCtx> MockJournalPromoteRequest;
   typedef mirror::GetInfoRequest<MockTestImageCtx> MockGetInfoRequest;
   typedef mirror::ImageRemoveRequest<MockTestImageCtx> MockImageRemoveRequest;
   typedef mirror::ImageStateUpdateRequest<MockTestImageCtx> MockImageStateUpdateRequest;
+  typedef mirror::snapshot::PromoteRequest<MockTestImageCtx> MockSnapshotPromoteRequest;
 
   void expect_get_mirror_info(MockTestImageCtx &mock_image_ctx,
                               MockGetInfoRequest &mock_get_info_request,
@@ -222,9 +248,28 @@ public:
   }
 
   void expect_journal_promote(MockTestImageCtx &mock_image_ctx,
-                              MockPromoteRequest &mock_promote_request, int r) {
+                              MockJournalPromoteRequest &mock_promote_request,
+                              int r) {
     EXPECT_CALL(mock_promote_request, send())
       .WillOnce(FinishRequest(&mock_promote_request, r, &mock_image_ctx));
+  }
+
+  void expect_snapshot_promote(MockTestImageCtx &mock_image_ctx,
+                               MockSnapshotPromoteRequest &mock_promote_request,
+                               int r) {
+    EXPECT_CALL(mock_promote_request, send())
+      .WillOnce(FinishRequest(&mock_promote_request, r, &mock_image_ctx));
+  }
+
+  void expect_is_refresh_required(MockTestImageCtx &mock_image_ctx,
+                                  bool refresh_required) {
+    EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
+      .WillOnce(Return(refresh_required));
+  }
+
+  void expect_refresh_image(MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.state, refresh(_))
+      .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_snap_remove(MockTestImageCtx &mock_image_ctx,
@@ -322,7 +367,7 @@ TEST_F(TestMockMirrorDisableRequest, SuccessNonPrimary) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockPromoteRequest mock_promote_request;
+  MockJournalPromoteRequest mock_promote_request;
 
   expect_op_work_queue(mock_image_ctx);
 
@@ -337,6 +382,7 @@ TEST_F(TestMockMirrorDisableRequest, SuccessNonPrimary) {
   expect_mirror_image_state_update(
     mock_image_ctx, mock_image_state_update_request, 0);
   expect_journal_promote(mock_image_ctx, mock_promote_request, 0);
+  expect_is_refresh_required(mock_image_ctx, false);
   expect_journal_client_list(mock_image_ctx, {}, 0);
   MockImageRemoveRequest mock_image_remove_request;
   expect_mirror_image_remove(
@@ -424,13 +470,11 @@ TEST_F(TestMockMirrorDisableRequest, MirrorImageSetError) {
 }
 
 TEST_F(TestMockMirrorDisableRequest, JournalPromoteError) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  MockPromoteRequest mock_promote_request;
+  MockJournalPromoteRequest mock_promote_request;
 
   expect_op_work_queue(mock_image_ctx);
 
@@ -557,6 +601,62 @@ TEST_F(TestMockMirrorDisableRequest, JournalClientUnregisterError) {
   auto req = new MockDisableRequest(&mock_image_ctx, false, true, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockMirrorDisableRequest, SnapshotPromoteError) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockSnapshotPromoteRequest mock_promote_request;
+
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
+  MockImageStateUpdateRequest mock_image_state_update_request;
+  expect_mirror_image_state_update(
+    mock_image_ctx, mock_image_state_update_request, 0);
+  expect_snapshot_promote(mock_image_ctx, mock_promote_request, -EPERM);
+
+  C_SaferCond ctx;
+  auto req = new MockDisableRequest(&mock_image_ctx, true, true, &ctx);
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
+}
+
+TEST_F(TestMockMirrorDisableRequest, RefreshError) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockSnapshotPromoteRequest mock_promote_request;
+
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+
+  MockGetInfoRequest mock_get_info_request;
+  expect_get_mirror_info(
+    mock_image_ctx, mock_get_info_request,
+    {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "global id",
+     cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, PROMOTION_STATE_NON_PRIMARY, 0);
+  MockImageStateUpdateRequest mock_image_state_update_request;
+  expect_mirror_image_state_update(
+    mock_image_ctx, mock_image_state_update_request, 0);
+  expect_snapshot_promote(mock_image_ctx, mock_promote_request, 0);
+  expect_is_refresh_required(mock_image_ctx, true);
+  expect_refresh_image(mock_image_ctx, -EPERM);
+
+  C_SaferCond ctx;
+  auto req = new MockDisableRequest(&mock_image_ctx, true, true, &ctx);
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
 }
 
 TEST_F(TestMockMirrorDisableRequest, MirrorImageRemoveError) {

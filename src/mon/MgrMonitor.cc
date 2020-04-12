@@ -32,6 +32,32 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, map)
 using namespace TOPNSPC::common;
+
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::ErasureCodeProfile;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+
 static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 			const MgrMap& mgrmap) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
@@ -1051,7 +1077,13 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
 
   if (prefix == "mgr fail") {
     string who;
-    cmd_getval(cmdmap, "who", who);
+    if (!cmd_getval(cmdmap, "who", who)) {
+      if (!map.active_gid) {
+	ss << "Currently no active mgr";
+	goto out;
+      }
+      who = map.active_name;
+    }
 
     std::string err;
     uint64_t gid = strict_strtol(who.c_str(), 10, &err);
@@ -1202,7 +1234,7 @@ int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
     auto p = bl.cbegin();
     decode(m, p);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     if (err)
       *err << "mgr." << name << " metadata is corrupt";
     return -EIO;

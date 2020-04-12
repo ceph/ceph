@@ -18,6 +18,12 @@
 // rbd feature validation
 #include "librbd/Features.h"
 
+using std::ostream;
+using std::ostringstream;
+
+using ceph::Formatter;
+using ceph::parse_timespan;
+
 namespace {
 class printer : public boost::static_visitor<> {
   ostream& out;
@@ -198,7 +204,7 @@ int Option::parse_value(
   } else if (type == Option::TYPE_SECS) {
     try {
       *out = parse_timespan(val);
-    } catch (const invalid_argument& e) {
+    } catch (const std::invalid_argument& e) {
       *error_message = e.what();
       return -EINVAL;
     }
@@ -439,7 +445,7 @@ std::vector<Option> get_global_options() {
     Option("container_image", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("container image (used by cephadm orchestrator)")
     .set_flag(Option::FLAG_STARTUP)
-    .set_default("docker.io/ceph/daemon-base:latest-master-devel"),
+    .set_default("docker.io/ceph/ceph:v15"),
 
     Option("no_config_file", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -1736,6 +1742,11 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_pool_default_size")
     .add_see_also("osd_pool_default_min_size"),
 
+    Option("mon_allow_pool_size_one", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .add_service("mon")
+    .set_description("allow configuring pool with no replicas"),
+
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mgr")
@@ -2257,6 +2268,10 @@ std::vector<Option> get_global_options() {
     .set_default(3.0)
     .set_description(""),
 
+    Option("mon_client_log_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1.0)
+    .set_description("How frequently we send queued cluster log messages to mon"),
+
     Option("mon_client_ping_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
     .set_description(""),
@@ -2597,7 +2612,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jerasure lrc"
-  #ifdef HAVE_BETTER_YASM_ELF64
+  #if defined(HAVE_BETTER_YASM_ELF64) || defined(HAVE_ARMV8_SIMD)
          " isa"
   #endif
         )
@@ -3991,8 +4006,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description(""),
+    .set_default(false)
+    .set_description("Enabled buffered IO for bluefs reads.")
+    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold blocks from the compressed SST files itself, they can be read from page cache instead of from the disk.  This option previously was enabled by default, however in some test cases it appears to cause excessive swap utilization by the linux kernel and a large negative performance impact after several hours of run time.  Please exercise caution when enabling."),
 
     Option("bluefs_sync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -7739,6 +7755,11 @@ std::vector<Option> get_mds_options() {
     Option("mds_reconnect_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(45)
     .set_description("timeout in seconds to wait for clients to reconnect during MDS reconnect recovery state"),
+
+    Option("mds_deny_all_reconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("flag to deny all client reconnects during failover"),
 
     Option("mds_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)

@@ -29,16 +29,18 @@ struct lockdep_stopper_t {
     g_lockdep = 0;
   }
 };
+
+
 static pthread_mutex_t lockdep_mutex = PTHREAD_MUTEX_INITIALIZER;
 static CephContext *g_lockdep_ceph_ctx = NULL;
 static lockdep_stopper_t lockdep_stopper;
 static ceph::unordered_map<std::string, int> lock_ids;
-static map<int, std::string> lock_names;
-static map<int, int> lock_refs;
+static std::map<int, std::string> lock_names;
+static std::map<int, int> lock_refs;
 static char free_ids[MAX_LOCKS/8]; // bit set = free
-static ceph::unordered_map<pthread_t, map<int,BackTrace*> > held;
+static ceph::unordered_map<pthread_t, std::map<int,ceph::BackTrace*> > held;
 static char follows[MAX_LOCKS][MAX_LOCKS/8]; // follows[a][b] means b taken after a
-static BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
+static ceph::BackTrace *follows_bt[MAX_LOCKS][MAX_LOCKS];
 unsigned current_maxid;
 int last_freed_id = -1;
 static bool free_ids_inited;
@@ -93,7 +95,7 @@ void lockdep_unregister_ceph_context(CephContext *cct)
     lock_ids.clear();
     // FIPS zeroization audit 20191115: these memsets are not security related.
     memset((void*)&follows[0][0], 0, current_maxid * MAX_LOCKS/8);
-    memset((void*)&follows_bt[0][0], 0, sizeof(BackTrace*) * current_maxid * MAX_LOCKS);
+    memset((void*)&follows_bt[0][0], 0, sizeof(ceph::BackTrace*) * current_maxid * MAX_LOCKS);
   }
   pthread_mutex_unlock(&lockdep_mutex);
 }
@@ -104,11 +106,9 @@ int lockdep_dump_locks()
   if (!g_lockdep)
     goto out;
 
-  for (ceph::unordered_map<pthread_t, map<int,BackTrace*> >::iterator p = held.begin();
-       p != held.end();
-       ++p) {
+  for (auto p = held.begin(); p != held.end(); ++p) {
     lockdep_dout(0) << "--- thread " << p->first << " ---" << dendl;
-    for (map<int,BackTrace*>::iterator q = p->second.begin();
+    for (auto q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
       lockdep_dout(0) << "  * " << lock_names[q->first] << "\n";
@@ -205,7 +205,7 @@ void lockdep_unregister(int id)
   pthread_mutex_lock(&lockdep_mutex);
 
   std::string name;
-  map<int, std::string>::iterator p = lock_names.find(id);
+  auto p = lock_names.find(id);
   if (p == lock_names.end())
     name = "unknown" ;
   else
@@ -289,15 +289,13 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
   lockdep_dout(20) << "_will_lock " << name << " (" << id << ")" << dendl;
 
   // check dependency graph
-  map<int, BackTrace *> &m = held[p];
-  for (map<int, BackTrace *>::iterator p = m.begin();
-       p != m.end();
-       ++p) {
+  auto& m = held[p];
+  for (auto p = m.begin(); p != m.end(); ++p) {
     if (p->first == id) {
       if (!recursive) {
 	lockdep_dout(0) << "\n";
 	*_dout << "recursive lock of " << name << " (" << id << ")\n";
-	BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
+	auto bt = new ceph::BackTrace(BACKTRACE_SKIP);
 	bt->print(*_dout);
 	if (p->second) {
 	  *_dout << "\npreviously locked at\n";
@@ -313,7 +311,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
 
       // did we just create a cycle?
       if (does_follow(id, p->first)) {
-        BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
+        auto bt = new ceph::BackTrace(BACKTRACE_SKIP);
 	lockdep_dout(0) << "new dependency " << lock_names[p->first]
 		<< " (" << p->first << ") -> " << name << " (" << id << ")"
 		<< " creates a cycle at\n";
@@ -321,9 +319,7 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
 	*_dout << dendl;
 
 	lockdep_dout(0) << "btw, i am holding these locks:" << dendl;
-	for (map<int, BackTrace *>::iterator q = m.begin();
-	     q != m.end();
-	     ++q) {
+	for (auto q = m.begin(); q != m.end(); ++q) {
 	  lockdep_dout(0) << "  " << lock_names[q->first] << " (" << q->first << ")" << dendl;
 	  if (q->second) {
 	    lockdep_dout(0) << " ";
@@ -339,9 +335,9 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace,
 
 	ceph_abort();  // actually, we should just die here.
       } else {
-        BackTrace *bt = NULL;
+	ceph::BackTrace* bt = NULL;
         if (force_backtrace || lockdep_force_backtrace()) {
-          bt = new BackTrace(BACKTRACE_SKIP);
+          bt = new ceph::BackTrace(BACKTRACE_SKIP);
         }
         follows[p->first][id/8] |= 1 << (id % 8);
         follows_bt[p->first][id] = bt;
@@ -366,7 +362,7 @@ int lockdep_locked(const char *name, int id, bool force_backtrace)
 
   lockdep_dout(20) << "_locked " << name << dendl;
   if (force_backtrace || lockdep_force_backtrace())
-    held[p][id] = new BackTrace(BACKTRACE_SKIP);
+    held[p][id] = new ceph::BackTrace(BACKTRACE_SKIP);
   else
     held[p][id] = 0;
 out:

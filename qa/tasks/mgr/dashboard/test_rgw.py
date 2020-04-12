@@ -116,7 +116,7 @@ class RgwBucketTest(RgwTestCase):
 
     _mfa_token_serial = '1'
     _mfa_token_seed = '23456723'
-    _mfa_token_time_step = 1
+    _mfa_token_time_step = 3
 
     AUTH_ROLES = ['rgw-manager']
 
@@ -128,7 +128,7 @@ class RgwBucketTest(RgwTestCase):
         cls._radosgw_admin_cmd([
             'mfa', 'create', '--uid', 'teuth-test-user', '--totp-serial', cls._mfa_token_serial,
             '--totp-seed', cls._mfa_token_seed, '--totp-seed-type', 'base32',
-            '--totp-seconds', str(cls._mfa_token_time_step), '--totp-window', '2'
+            '--totp-seconds', str(cls._mfa_token_time_step), '--totp-window', '1'
         ])
         # Create tenanted users.
         cls._radosgw_admin_cmd([
@@ -241,7 +241,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['mfa_delete'], 'Enabled')
 
         # Update bucket: disable versioning & MFA Delete.
-        time.sleep(self._mfa_token_time_step)  # Required to get new TOTP pin.
+        time.sleep(self._mfa_token_time_step + 2)  # Required to get new TOTP pin.
         self._put(
             '/api/rgw/bucket/teuth-test-bucket',
             params={
@@ -265,7 +265,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 
-    def test_create_get_update_delete_w_tenant(self):
+    def test_crud_w_tenant(self):
         # Create a new bucket. The tenant of the user is used when
         # the bucket is created.
         self._post(
@@ -360,6 +360,56 @@ class RgwBucketTest(RgwTestCase):
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
+
+    def test_crud_w_locking(self):
+        # Create
+        self._post('/api/rgw/bucket',
+                   params={
+                       'bucket': 'teuth-test-bucket',
+                       'uid': 'teuth-test-user',
+                       'zonegroup': 'default',
+                       'placement_target': 'default-placement',
+                       'lock_enabled': 'true',
+                       'lock_mode': 'GOVERNANCE',
+                       'lock_retention_period_days': '0',
+                       'lock_retention_period_years': '1'
+                   })
+        self.assertStatus(201)
+        # Read
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(200)
+        self.assertSchema(
+            data,
+            JObj(sub_elems={
+                'lock_enabled': JLeaf(bool),
+                'lock_mode': JLeaf(str),
+                'lock_retention_period_days': JLeaf(int),
+                'lock_retention_period_years': JLeaf(int)
+            },
+                 allow_unknown=True))
+        self.assertTrue(data['lock_enabled'])
+        self.assertEqual(data['lock_mode'], 'GOVERNANCE')
+        self.assertEqual(data['lock_retention_period_days'], 0)
+        self.assertEqual(data['lock_retention_period_years'], 1)
+        # Update
+        self._put('/api/rgw/bucket/teuth-test-bucket',
+                  params={
+                      'bucket_id': data['id'],
+                      'uid': 'teuth-test-user',
+                      'lock_mode': 'COMPLIANCE',
+                      'lock_retention_period_days': '15',
+                      'lock_retention_period_years': '0'
+                  })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertTrue(data['lock_enabled'])
+        self.assertEqual(data['lock_mode'], 'COMPLIANCE')
+        self.assertEqual(data['lock_retention_period_days'], 15)
+        self.assertEqual(data['lock_retention_period_years'], 0)
+        self.assertStatus(200)
+        # Delete
+        self._delete('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(204)
 
 
 class RgwDaemonTest(RgwTestCase):

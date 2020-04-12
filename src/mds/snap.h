@@ -26,9 +26,9 @@
  * generic snap descriptor.
  */
 struct SnapInfo {
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<SnapInfo*>& ls);
 
   std::string_view get_long_name() const;
@@ -36,9 +36,9 @@ struct SnapInfo {
   snapid_t snapid;
   inodeno_t ino;
   utime_t stamp;
-  string name;
+  std::string name;
 
-  mutable string long_name; ///< cached _$ino_$name
+  mutable std::string long_name; ///< cached _$ino_$name
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 
@@ -48,7 +48,7 @@ inline bool operator==(const SnapInfo &l, const SnapInfo &r)
 	 l.stamp == r.stamp && l.name == r.name;
 }
 
-ostream& operator<<(ostream& out, const SnapInfo &sn);
+std::ostream& operator<<(std::ostream& out, const SnapInfo &sn);
 
 /*
  * SnapRealm - a subtree that shares the same set of snapshots.
@@ -56,9 +56,9 @@ ostream& operator<<(ostream& out, const SnapInfo &sn);
 struct SnapRealm;
 
 struct snaplink_t {
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<snaplink_t*>& ls);
 
   inodeno_t ino;
@@ -66,7 +66,7 @@ struct snaplink_t {
 };
 WRITE_CLASS_ENCODER(snaplink_t)
 
-ostream& operator<<(ostream& out, const snaplink_t &l);
+std::ostream& operator<<(std::ostream& out, const snaplink_t &l);
 
 // carry data about a specific version of a SnapRealm
 struct sr_t {
@@ -74,9 +74,9 @@ struct sr_t {
   void clear_parent_global() { flags &= ~PARENT_GLOBAL; }
   bool is_parent_global() const { return flags & PARENT_GLOBAL; }
 
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<sr_t*>& ls);
 
   snapid_t seq = 0;                     // basically, a version/seq # for changes to _this_ realm.
@@ -84,9 +84,9 @@ struct sr_t {
   snapid_t last_created = 0;            // last snap created in _this_ realm.
   snapid_t last_destroyed = 0;          // seq for last removal
   snapid_t current_parent_since = 1;
-  map<snapid_t, SnapInfo> snaps;
-  map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
-  set<snapid_t> past_parent_snaps;
+  std::map<snapid_t, SnapInfo> snaps;
+  std::map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
+  std::set<snapid_t> past_parent_snaps;
 
   __u32 flags = 0;
   enum {

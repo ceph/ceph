@@ -106,7 +106,6 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     updated = true;
   }
 
-  assert(map->require_osd_release >= ceph_release_t::mimic);
   if (info.is_pool_snaps_mode() && updated) {
     snapc = pi->get_snap_context();
   }
@@ -3794,7 +3793,7 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
 
 
 void PeeringState::append_log(
-  const vector<pg_log_entry_t>& logv,
+  vector<pg_log_entry_t>&& logv,
   eversion_t trim_to,
   eversion_t roll_forward_to,
   eversion_t mlcod,
@@ -4094,9 +4093,10 @@ void PeeringState::calc_trim_to_aggressive()
   size_t target = pl->get_target_pg_log_entries();
 
   // limit pg log trimming up to the can_rollback_to value
-  eversion_t limit = std::min(
+  eversion_t limit = std::min({
     pg_log.get_head(),
-    pg_log.get_can_rollback_to());
+    pg_log.get_can_rollback_to(),
+    last_update_ondisk});
   psdout(10) << __func__ << " limit = " << limit << dendl;
 
   if (limit != eversion_t() &&
@@ -5575,12 +5575,31 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     ps->share_pg_info();
   }
 
+  bool need_acting_change = false;
   for (size_t i = 0; i < ps->want_acting.size(); i++) {
     int osd = ps->want_acting[i];
     if (!advmap.osdmap->is_up(osd)) {
       pg_shard_t osd_with_shard(osd, shard_id_t(i));
-      ceph_assert(ps->is_acting(osd_with_shard) || ps->is_up(osd_with_shard));
+      if (!ps->is_acting(osd_with_shard) && !ps->is_up(osd_with_shard)) {
+        psdout(10) << "Active stray osd." << osd << " in want_acting is down"
+                   << dendl;
+        need_acting_change = true;
+      }
     }
+  }
+  if (need_acting_change) {
+     psdout(10) << "Active need acting change, call choose_acting again"
+                << dendl;
+    // possibly because we re-add some strays into the acting set and
+    // some of them then go down in a subsequent map before we could see
+    // the map changing the pg temp.
+    // call choose_acting again to clear them out.
+    // note that we leave restrict_to_up_acting to false in order to
+    // not overkill any chosen stray that is still alive.
+    pg_shard_t auth_log_shard;
+    bool history_les_bound = false;
+    ps->remove_down_peer_info(advmap.osdmap);
+    ps->choose_acting(auth_log_shard, false, &history_les_bound, true);
   }
 
   /* Check for changes in pool size (if the acting set changed as a result,

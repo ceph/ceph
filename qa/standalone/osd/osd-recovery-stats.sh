@@ -314,7 +314,7 @@ function TEST_recovery_undersized() {
     done
 
     create_pool $poolname 1 1
-    ceph osd pool set $poolname size 1
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
 
     wait_for_clean || return 1
 

@@ -129,7 +129,7 @@ try:
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.kernel_mount import KernelMount
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
-    from mgr.mgr_test_case import MgrCluster
+    from tasks.mgr.mgr_test_case import MgrCluster
     from teuthology.contextutil import MaxWhileTries
     from teuthology.task import interactive
 except ImportError:
@@ -333,7 +333,7 @@ class LocalRemote(object):
 
         # Filter out helper tools that don't exist in a vstart environment
         args = [a for a in args if a not in {
-            'adjust-ulimits', 'ceph-coverage', 'timeout'}]
+            'adjust-ulimits', 'ceph-coverage'}]
 
         # Adjust binary path prefix if given a bare program name
         if "/" not in args[0]:
@@ -389,7 +389,9 @@ class LocalRemote(object):
 
         return proc
 
-    def sh(self, command, log_limit=1024, cwd=None, env=None):
+    def sh(self, command, log_limit=1024, cwd=None, env=None, **kwargs):
+        if isinstance(command, list):
+            command=' '.join(command)
 
         return misc.sh(command=command, log_limit=log_limit, cwd=cwd,
                         env=env)
@@ -500,7 +502,6 @@ def safe_kill(pid):
         else:
             raise
 
-
 class LocalKernelMount(KernelMount):
     def __init__(self, ctx, test_dir, client_id):
         super(LocalKernelMount, self).__init__(ctx, test_dir, client_id, LocalRemote(), None, None, None)
@@ -519,67 +520,6 @@ class LocalKernelMount(KernelMount):
             return os.path.join(os.getcwd(), 'keyring')
         else:
             return keyring_path
-
-    def run_shell(self, args, wait=True, stdin=None, check_status=True,
-                  omit_sudo=False):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
-                                      stdin=stdin, check_status=check_status,
-                                      omit_sudo=omit_sudo)
-
-    def run_as_user(self, args, user, wait=True, stdin=None, check_status=True):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        if isinstance(args, str):
-            args = 'sudo -u %s -s /bin/bash -c %s' % (user, args)
-        elif isinstance(args, list):
-            cmdlist = args
-            cmd = ''
-            for i in cmdlist:
-                cmd = cmd + i + ' '
-            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c']
-            args.append(cmd)
-
-        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
-                                      check_status=check_status, stdin=stdin,
-                                      omit_sudo=False)
-
-    def run_as_root(self, args, wait=True, stdin=None, check_status=True):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        if isinstance(args, str):
-            args = 'sudo ' + args
-        if isinstance(args, list):
-            args.insert(0, 'sudo')
-
-        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
-                                      check_status=check_status,
-                                      omit_sudo=False)
-
-    def testcmd(self, args, wait=True, stdin=None, omit_sudo=False):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.run_shell(args, wait=wait, stdin=stdin, check_status=False,
-                              omit_sudo=omit_sudo)
-
-    def testcmd_as_user(self, args, user, wait=True, stdin=None):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.run_as_user(args, user=user, wait=wait, stdin=stdin,
-                                check_status=False)
-
-    def testcmd_as_root(self, args, wait=True, stdin=None):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.run_as_root(args, wait=wait, stdin=stdin,
-                                check_status=False)
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
@@ -708,66 +648,6 @@ class LocalFuseMount(FuseMount):
         # This is going to end up in a config file, so use an absolute path
         # to avoid assumptions about daemons' pwd
         return os.path.abspath("./client.{0}.keyring".format(self.client_id))
-
-    def run_shell(self, args, wait=True, stdin=None, check_status=True, omit_sudo=True):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
-                                      stdin=stdin, check_status=check_status,
-                                      omit_sudo=omit_sudo)
-
-    def run_as_user(self, args, user, wait=True, stdin=None, check_status=True):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        if isinstance(args, str):
-            args = 'sudo -u %s -s /bin/bash -c %s' % (user, args)
-        elif isinstance(args, list):
-            cmdlist = args
-            cmd = ''
-            for i in cmdlist:
-                cmd = cmd + i + ' '
-            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c']
-            args.append(cmd)
-
-        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
-                                      check_status=check_status, stdin=stdin,
-                                      omit_sudo=False)
-
-    def run_as_root(self, args, wait=True, stdin=None, check_status=True):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        if isinstance(args, str):
-            args = 'sudo ' + args
-        if isinstance(args, list):
-            args.insert(0, 'sudo')
-
-        return self.client_remote.run(args=args, wait=wait, cwd=self.mountpoint,
-                                      check_status=check_status,
-                                      omit_sudo=False)
-
-    def testcmd(self, args, wait=True, stdin=None, omit_sudo=True):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.run_shell(args, wait=wait, stdin=stdin, check_status=False,
-                              omit_sudo=omit_sudo)
-
-    def testcmd_as_user(self, args, user, wait=True, stdin=None):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.run_as_user(args, user=user, wait=wait, stdin=stdin,
-                                check_status=False)
-
-    def testcmd_as_root(self, args, wait=True, stdin=None):
-        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
-        # the "cd foo && bar" shenanigans isn't needed to begin with and
-        # then we wouldn't have to special case this
-        return self.run_as_root(args, wait=wait, stdin=stdin,
-                                check_status=False)
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
@@ -1326,7 +1206,7 @@ def exec_test():
     # Help developers by stopping up-front if their tree isn't built enough for all the
     # tools that the tests might want to use (add more here if needed)
     require_binaries = ["ceph-dencoder", "cephfs-journal-tool", "cephfs-data-scan",
-                        "cephfs-table-tool", "ceph-fuse", "rados"]
+                        "cephfs-table-tool", "ceph-fuse", "rados", "cephfs-meta-injection"]
     missing_binaries = [b for b in require_binaries if not os.path.exists(os.path.join(BIN_PREFIX, b))]
     if missing_binaries and not opt_ignore_missing_binaries:
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
@@ -1408,11 +1288,11 @@ def exec_test():
             mount = LocalFuseMount(ctx, test_dir, client_id)
 
         mounts.append(mount)
-        if mount.is_mounted():
-            log.warn("unmounting {0}".format(mount.mountpoint))
-            mount.umount_wait()
-        else:
-            if os.path.exists(mount.mountpoint):
+        if os.path.exists(mount.mountpoint):
+            if mount.is_mounted():
+                log.warn("unmounting {0}".format(mount.mountpoint))
+                mount.umount_wait()
+            else:
                 os.rmdir(mount.mountpoint)
 
     from tasks.cephfs_test_runner import DecoratingLoader

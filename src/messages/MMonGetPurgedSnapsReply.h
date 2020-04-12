@@ -10,7 +10,7 @@
 class MMonGetPurgedSnapsReply : public PaxosServiceMessage {
 public:
   epoch_t start, last;
-  map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
+  std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
 
   MMonGetPurgedSnapsReply(epoch_t s=0, epoch_t l=0)
     : PaxosServiceMessage{MSG_MON_GET_PURGED_SNAPS_REPLY, 0},

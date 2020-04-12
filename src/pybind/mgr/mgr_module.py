@@ -451,25 +451,7 @@ class FileHandler(logging.FileHandler):
         self.setFormatter(logging.Formatter("%(asctime)s [%(threadName)s] [%(levelname)-4s] [%(name)s] %(message)s"))
 
 
-def _define_logging_options(cls):
-    cls.MODULE_OPTIONS.append(
-        Option(name='log_level', type='str', default="", runtime=True,
-               enum_allowed=['info', 'debug', 'critical', 'error',
-                             'warning', '']))
-    cls.MODULE_OPTIONS.append(
-        Option(name='log_to_file', type='bool', default=False, runtime=True))
-    if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
-        cls.MODULE_OPTIONS.append(
-            Option(name='log_to_cluster', type='bool', default=False,
-                   runtime=True))
-    cls.MODULE_OPTIONS.append(
-        Option(name='log_to_cluster_level', type='str', default='info',
-               runtime=True,
-               enum_allowed=['info', 'debug', 'critical', 'error',
-                             'warning', '']))
-
 class MgrModuleLoggingMixin(object):
-
     def _configure_logging(self, mgr_level, module_level, cluster_level,
                            log_to_file, log_to_cluster):
         self._mgr_level = None
@@ -599,8 +581,6 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
 
-        _define_logging_options(self)
-
         # see also MgrModule.__init__()
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
@@ -620,6 +600,24 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
 
     def __del__(self):
         self._unconfigure_logging()
+
+    @classmethod
+    def _register_options(cls, module_name):
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_level', type='str', default="", runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_file', type='bool', default=False, runtime=True))
+        if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
+            cls.MODULE_OPTIONS.append(
+                Option(name='log_to_cluster', type='bool', default=False,
+                       runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_cluster_level', type='str', default='info',
+                   runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
 
     @property
     def log(self):
@@ -709,8 +707,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        _define_logging_options(self)
-
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
                 if 'type' in o:
@@ -744,6 +740,24 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def __del__(self):
         self._unconfigure_logging()
+
+    @classmethod
+    def _register_options(cls, module_name):
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_level', type='str', default="", runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_file', type='bool', default=False, runtime=True))
+        if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
+            cls.MODULE_OPTIONS.append(
+                Option(name='log_to_cluster', type='bool', default=False,
+                       runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_cluster_level', type='str', default='info',
+                   runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
 
     @classmethod
     def _register_commands(cls, module_name):
@@ -1556,69 +1570,3 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param arguments: dict of key/value arguments to test
         """
         return self._ceph_is_authorized(arguments)
-
-
-class PersistentStoreDict(object):
-    def __init__(self, mgr, prefix):
-        # type: (MgrModule, str) -> None
-        self.mgr = mgr
-        self.prefix = prefix + '.'
-
-    def _mk_store_key(self, key):
-        return self.prefix + key
-
-    def __missing__(self, key):
-        # KeyError won't work for the `in` operator.
-        # https://docs.python.org/3/reference/expressions.html#membership-test-details
-        raise IndexError('PersistentStoreDict: "{}" not found'.format(key))
-
-    def clear(self):
-        # Don't make any assumptions about the content of the values.
-        for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
-            k, _ = item
-            self.mgr.set_store(k, None)
-
-    def __getitem__(self, item):
-        # type: (str) -> Any
-        key = self._mk_store_key(item)
-        try:
-            val = self.mgr.get_store(key)
-            if val is None:
-                self.__missing__(key)
-            return json.loads(val)
-        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
-            logging.getLogger(__name__).debug('failed to deserialize item in store')
-            self.mgr.set_store(key, None)
-            raise
-
-    def __setitem__(self, item, value):
-        # type: (str, Any) -> None
-        """
-        value=None is not allowed, as it will remove the key.
-        """
-        key = self._mk_store_key(item)
-        self.mgr.set_store(key, json.dumps(value) if value is not None else None)
-
-    def __delitem__(self, item):
-        self[item] = None
-
-    def __len__(self):
-        return len(self.keys())
-
-    def items(self):
-        # type: () -> Iterator[Tuple[str, Any]]
-        prefix_len = len(self.prefix)
-        try:
-            for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
-                k, v = item
-                yield k[prefix_len:], json.loads(v)
-        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
-            logging.getLogger(__name__).exception('failed to deserialize')
-            self.clear()
-
-    def keys(self):
-        # type: () -> Set[str]
-        return {item[0] for item in self.items()}
-
-    def __iter__(self):
-        return iter(self.keys())

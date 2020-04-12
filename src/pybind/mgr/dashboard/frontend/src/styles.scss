@@ -345,6 +345,10 @@ cd-modal {
   .cd-col-form-input {
     @extend .col-lg-8;
   }
+
+  .cd-col-form-offset {
+    @extend .offset-lg-4;
+  }
 }
 
 /* Card */
@@ -490,4 +494,12 @@ bfv-messages {
 .badge-tab {
   color: $color-solid-gray;
   background-color: $color-light-shade-gray;
+}
+
+// angular-tree-component
+tree-root {
+  tree-viewport {
+    // Fix visual bug when tree is empty
+    min-height: 1em;
+  }
 }

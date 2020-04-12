@@ -22,6 +22,8 @@ export class AlertPanelComponent implements OnInit {
   size: 'slim' | 'normal' = 'normal';
   @Input()
   showIcon = true;
+  @Input()
+  showTitle = true;
 
   icons = Icons;
 

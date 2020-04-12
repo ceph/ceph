@@ -1,6 +1,5 @@
 import { Component, HostBinding, OnInit } from '@angular/core';
 
-import { PrometheusService } from '../../../shared/api/prometheus.service';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -19,12 +18,9 @@ export class NavigationComponent implements OnInit {
   @HostBinding('class.isPwdDisplayed') isPwdDisplayed = false;
 
   permissions: Permissions;
+  enabledFeature$: FeatureTogglesMap$;
   summaryData: any;
   icons = Icons;
-
-  isAlertmanagerConfigured = false;
-  isPrometheusConfigured = false;
-  enabledFeature$: FeatureTogglesMap$;
 
   isCollapsed = true;
   showMenuSidebar = true;
@@ -36,29 +32,20 @@ export class NavigationComponent implements OnInit {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private prometheusService: PrometheusService,
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService
   ) {
     this.permissions = this.authStorageService.getPermissions();
+    this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
-    this.enabledFeature$ = this.featureToggles.get();
     this.summaryService.subscribe((data: any) => {
       if (!data) {
         return;
       }
       this.summaryData = data;
     });
-    if (this.permissions.configOpt.read) {
-      this.prometheusService.ifAlertmanagerConfigured(() => {
-        this.isAlertmanagerConfigured = true;
-      });
-      this.prometheusService.ifPrometheusConfigured(() => {
-        this.isPrometheusConfigured = true;
-      });
-    }
     this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
       this.isPwdDisplayed = isDisplayed;
     });

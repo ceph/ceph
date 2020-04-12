@@ -14,11 +14,12 @@ import json
 import logging
 import time
 import datetime
-import Queue
+from six.moves import queue
 
 import sys
+import six
 
-from cStringIO import StringIO
+from io import BytesIO
 
 import boto.exception
 import boto.s3.connection
@@ -27,7 +28,7 @@ import boto.s3.acl
 import httplib2
 
 
-from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
+from tasks.util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
 
@@ -195,7 +196,7 @@ def ignore_this_entry(cat, bucket, user, out, b_in, err):
     pass
 class requestlog_queue():
     def __init__(self, add):
-        self.q = Queue.Queue(1000)
+        self.q = queue.Queue(1000)
         self.adder = add
     def handle_request_data(self, request, response, error=False):
         now = datetime.datetime.now()
@@ -1038,7 +1039,7 @@ def task(ctx, config):
     out['placement_pools'].append(rule)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'set'],
-        stdin=StringIO(json.dumps(out)),
+        stdin=BytesIO(six.ensure_binary(json.dumps(out))),
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
@@ -1071,16 +1072,15 @@ def main():
     client0 = remote.Remote(user + host)
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,
-     [ 'ceph.client.rgw.%s' % (host),  ]),])
-
+        [ 'ceph.client.rgw.%s' % (host),  ]),])
     ctx.rgw = argparse.Namespace()
     endpoints = {}
     endpoints['ceph.client.rgw.%s' % host] = (host, 80)
     ctx.rgw.role_endpoints = endpoints
     ctx.rgw.realm = None
     ctx.rgw.regions = {'region0': { 'api name': 'api1',
-	    'is master': True, 'master zone': 'r0z0',
-	    'zones': ['r0z0', 'r0z1'] }}
+        'is master': True, 'master zone': 'r0z0',
+        'zones': ['r0z0', 'r0z1'] }}
     ctx.rgw.config = {'ceph.client.rgw.%s' % host: {'system user': {'name': '%s-system-user' % host}}}
     task(config, None)
     exit()

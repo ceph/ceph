@@ -331,6 +331,7 @@ OPTION(auth_service_ticket_ttl, OPT_DOUBLE)
 OPTION(auth_debug, OPT_BOOL)          // if true, assert when weird things happen
 OPTION(mon_client_hunt_parallel, OPT_U32)   // how many mons to try to connect to in parallel during hunt
 OPTION(mon_client_hunt_interval, OPT_DOUBLE)   // try new mon every N seconds until we connect
+OPTION(mon_client_log_interval, OPT_DOUBLE)  // send logs every N seconds
 OPTION(mon_client_ping_interval, OPT_DOUBLE)  // ping every N seconds
 OPTION(mon_client_ping_timeout, OPT_DOUBLE)   // fail if we don't hear back
 OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE) // each time we reconnect to a monitor, double our timeout

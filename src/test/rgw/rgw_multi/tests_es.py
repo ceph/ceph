@@ -9,9 +9,9 @@ import dateutil
 
 from nose.tools import eq_ as eq
 
-from rgw_multi.multisite import *
-from rgw_multi.tests import *
-from rgw_multi.zone_es import *
+from .multisite import *
+from .tests import *
+from .zone_es import *
 
 log = logging.getLogger(__name__)
 

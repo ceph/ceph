@@ -1,5 +1,8 @@
+.. _drivegroups:
+
+===========
 DriveGroups
-============
+===========
 
 DriveGroups are a way to describe a cluster layout using the properties of disks.
 It gives the user an abstract way tell ceph which disks should turn into an OSD
@@ -7,7 +10,7 @@ with which configuration without knowing the specifics of device names and paths
 
 Instead of doing this::
 
-  [monitor 1] # ceph orchestrator osd create *<host>*:*<path-to-device>*
+  [monitor 1] # ceph orch daemon add osd *<host>*:*<path-to-device>*
 
 for each device and each host, we can define a yaml|json file that allows us to describe
 the layout. Here's the most basic example.
@@ -29,7 +32,7 @@ There will be a more detailed section on host_pattern down below.
 
 and pass it to `osd create` like so::
 
-  [monitor 1] # ceph orchestrator osd create -i /path/to/drivegroup.yml
+  [monitor 1] # ceph orch apply osd -i /path/to/drivegroup.yml
 
 This will go out on all the matching hosts and deploy these OSDs.
 

@@ -5,7 +5,7 @@ from time import sleep
 
 from teuthology.exceptions import CommandFailedError
 
-from mgr_test_case import MgrTestCase
+from .mgr_test_case import MgrTestCase
 
 
 log = logging.getLogger(__name__)
@@ -63,12 +63,12 @@ class TestOrchestratorCli(MgrTestCase):
 
     def test_ps(self):
         ret = self._orch_cmd("ps")
-        self.assertIn("ceph-mgr", ret)
+        self.assertIn("mgr", ret)
 
     def test_ps_json(self):
         ret = self._orch_cmd("ps", "--format", "json")
         self.assertIsInstance(json.loads(ret), list)
-        self.assertIn("ceph-mgr", ret)
+        self.assertIn("mgr", ret)
 
 
     def test_service_action(self):
@@ -82,21 +82,17 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("daemon", "start", "mds.a")
 
     def test_osd_create(self):
-        self._orch_cmd("osd", "create", "*:device")
-        self._orch_cmd("osd", "create", "*:device,device2")
-
-        drive_groups = {
-            'test': {
-                "host_pattern": "*",
-                "data_devices": {"paths": ["/dev/sda"]}
-            }
-        }
-
-        res = self._orch_cmd_result("osd", "create", "-i", "-", stdin=json.dumps(drive_groups))
+        drive_group = """
+service_type: osd
+service_id: any.sda
+placement:
+  host_pattern: '*'
+data_devices:
+  all: True
+"""
+        res = self._orch_cmd_result("apply", "osd", "-i", "-",
+                                    stdin=drive_group)
         self.assertEqual(res, 0)
-
-        with self.assertRaises(Exception):
-           self._orch_cmd("osd", "create", "notfound:device")
 
     def test_blink_device_light(self):
         def _ls_lights(what):
@@ -133,7 +129,7 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd('daemon', 'add', "nfs", "service_name", "pool")
 
     def test_osd_rm(self):
-        self._orch_cmd('daemon', "rm", "osd.0")
+        self._orch_cmd('daemon', "rm", "osd.0", '--force')
 
     def test_mds_rm(self):
         self._orch_cmd("daemon", "rm", "mds.fsname")
@@ -157,8 +153,8 @@ class TestOrchestratorCli(MgrTestCase):
         self._orch_cmd("host", "rm", "hostname")
 
     def test_mon_update(self):
-        self._orch_cmd("apply", "mon", "3", "host1:1.2.3.0/24", "host2:1.2.3.0/24", "host3:10.0.0.0/8")
-        self._orch_cmd("apply", "mon", "3", "host1:1.2.3.4", "host2:1.2.3.4", "host3:10.0.0.1")
+        self._orch_cmd("apply", "mon", "3 host1:1.2.3.0/24 host2:1.2.3.0/24 host3:10.0.0.0/8")
+        self._orch_cmd("apply", "mon", "3 host1:1.2.3.4 host2:1.2.3.4 host3:10.0.0.1")
 
     def test_mgr_update(self):
         self._orch_cmd("apply", "mgr", "3")

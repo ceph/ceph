@@ -37,7 +37,7 @@ operations extending back at least far enough to include any
 *unstable* writes (writes which have been started but not committed)
 and objects which aren't uptodate locally (see recovery and
 backfill).  In practice, the log will extend much further
-(osd_pg_min_log_entries when clean, osd_pg_max_log_entries when not
+(osd_min_pg_log_entries when clean, osd_max_pg_log_entries when not
 clean) because it's handy for quickly performing recovery.
 
 Using this log, as long as we talk to a non-empty subset of the OSDs

@@ -5,6 +5,7 @@
 #include "common/Formatter.h"
 
 using namespace std;
+using ceph::bufferlist;
 
 void SloppyCRCMap::write(uint64_t offset, uint64_t len, const bufferlist& bl,
 			 std::ostream *out)

@@ -16,7 +16,6 @@ import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { AccordionModule } from 'ngx-bootstrap/accordion';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
-import { WebStorageModule } from 'ngx-store';
 import { ToastrModule } from 'ngx-toastr';
 
 import { AppRoutingModule } from './app-routing.module';
@@ -56,8 +55,7 @@ export function jwtTokenGetter() {
         tokenGetter: jwtTokenGetter
       }
     }),
-    NgBootstrapFormValidationModule.forRoot(),
-    WebStorageModule
+    NgBootstrapFormValidationModule.forRoot()
   ],
   exports: [SharedModule],
   providers: [

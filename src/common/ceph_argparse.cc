@@ -55,9 +55,9 @@ struct strict_str_convert {
 
 void string_to_vec(std::vector<std::string>& args, std::string argstr)
 {
-  istringstream iss(argstr);
+  std::istringstream iss(argstr);
   while(iss) {
-    string sub;
+    std::string sub;
     iss >> sub;
     if (sub == "") break;
     args.push_back(sub);
@@ -79,7 +79,7 @@ split_dashdash(const std::vector<const char*>& args) {
 }
 
 static std::mutex g_str_vec_lock;
-static vector<string> g_str_vec;
+static std::vector<std::string> g_str_vec;
 
 void clear_g_str_vec()
 {
@@ -138,7 +138,7 @@ void vec_to_argv(const char *argv0, std::vector<const char*>& args,
 {
   *argv = (const char**)malloc(sizeof(char*) * (args.size() + 1));
   if (!*argv)
-    throw bad_alloc();
+    throw std::bad_alloc();
   *argc = 1;
   (*argv)[0] = argv0;
 
@@ -191,10 +191,10 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
 }
 
 
-bool parse_ip_port_vec(const char *s, vector<entity_addrvec_t>& vec, int type)
+bool parse_ip_port_vec(const char *s, std::vector<entity_addrvec_t>& vec, int type)
 {
   // first split by [ ;], which are not valid for an addrvec
-  list<string> items;
+  std::list<std::string> items;
   get_str_list(s, " ;", items);
 
   for (auto& i : items) {
@@ -480,7 +480,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   int r;
   va_list ap;
   va_start(ap, ret);
-  r = va_ceph_argparse_witharg(args, i, ret, cerr, ap);
+  r = va_ceph_argparse_witharg(args, i, ret, std::cerr, ap);
   va_end(ap);
   if (r < 0)
     _exit(1);
@@ -494,7 +494,7 @@ CephInitParameters ceph_argparse_early_args
   CephInitParameters iparams(module_type);
   std::string val;
 
-  vector<const char *> orig_args = args;
+  auto orig_args = args;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (strcmp(*i, "--") == 0) {
@@ -504,7 +504,7 @@ CephInitParameters ceph_argparse_early_args
       break;
     }
     else if (ceph_argparse_flag(args, i, "--version", "-v", (char*)NULL)) {
-      cout << pretty_version_to_str() << std::endl;
+      std::cout << pretty_version_to_str() << std::endl;
       _exit(0);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
@@ -525,20 +525,20 @@ CephInitParameters ceph_argparse_early_args
     }
     else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", (char*)NULL)) {
       if (!iparams.name.from_str(val)) {
-	cerr << "error parsing '" << val << "': expected string of the form TYPE.ID, "
-	     << "valid types are: " << EntityName::get_valid_types_as_str()
-	     << std::endl;
+	std::cerr << "error parsing '" << val << "': expected string of the form TYPE.ID, "
+		  << "valid types are: " << EntityName::get_valid_types_as_str()
+		  << std::endl;
 	_exit(1);
       }
     }
     else if (ceph_argparse_flag(args, i, "--show_args", (char*)NULL)) {
-      cout << "args: ";
+      std::cout << "args: ";
       for (std::vector<const char *>::iterator ci = orig_args.begin(); ci != orig_args.end(); ++ci) {
-        if (ci != orig_args.begin())
-          cout << " ";
-        cout << *ci;
+	if (ci != orig_args.begin())
+	  std::cout << " ";
+	std::cout << *ci;
       }
-      cout << std::endl;
+      std::cout << std::endl;
     }
     else {
       // ignore
@@ -550,7 +550,7 @@ CephInitParameters ceph_argparse_early_args
 
 static void generic_usage(bool is_server)
 {
-  cout <<
+  std::cout <<
     "  --conf/-c FILE    read configuration from the given configuration file" << std::endl <<
     (is_server ?
     "  --id/-i ID        set ID portion of my name" :
@@ -563,14 +563,14 @@ static void generic_usage(bool is_server)
     << std::endl;
 
   if (is_server) {
-    cout <<
+    std::cout <<
       "  -d                run in foreground, log to stderr" << std::endl <<
       "  -f                run in foreground, log to usual location" << std::endl <<
       std::endl <<
       "  --debug_ms N      set message debug level (e.g. 1)" << std::endl;
   }
 
-  cout.flush();
+  std::cout.flush();
 }
 
 bool ceph_argparse_need_usage(const std::vector<const char*>& args)

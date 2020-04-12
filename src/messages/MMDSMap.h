@@ -27,10 +27,10 @@ private:
 public:
   uuid_d fsid;
   epoch_t epoch = 0;
-  bufferlist encoded;
+  ceph::buffer::list encoded;
 
   version_t get_epoch() const { return epoch; }
-  const bufferlist& get_encoded() const { return encoded; }
+  const ceph::buffer::list& get_encoded() const { return encoded; }
 
 protected:
   MMDSMap() : 
@@ -45,12 +45,13 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "mdsmap"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mdsmap(e " << epoch << ")";
   }
 
   // marshalling
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(epoch, p);

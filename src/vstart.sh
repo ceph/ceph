@@ -589,6 +589,7 @@ prepare_conf() {
         mon osd full ratio = .99
         mon osd nearfull ratio = .99
         mon osd backfillfull ratio = .99
+        mon_max_pg_per_osd = ${MON_MAX_PG_PER_OSD:-1000}
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
         filestore fd cache size = 32
@@ -995,7 +996,8 @@ EOF
         ceph_adm mgr module enable cephadm
         ceph_adm orch set backend cephadm
         ceph_adm orch host add $HOSTNAME
-        ceph_adm orch apply crash all:true
+        ceph_adm orch apply crash '*'
+        ceph_adm config set mgr mgr/cephadm/allow_ptrace true
     fi
 }
 
@@ -1155,7 +1157,15 @@ EOF
         # Wait few seconds for grace period to be removed
         sleep 2
         prun ganesha-rados-grace -p nfs-ganesha -n ganesha
-done
+
+        if $with_mgr_dashboard; then
+            $CEPH_BIN/rados -p nfs-ganesha put "conf-$name" "$ganesha_dir/ganesha.conf"
+        fi
+    done
+
+    if $with_mgr_dashboard; then
+        ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace nfs-ganesha
+    fi
 }
 
 if [ "$debug" -eq 0 ]; then
@@ -1259,6 +1269,7 @@ mon_osd_reporter_subtree_level = osd
 mon_data_avail_warn = 2
 mon_data_avail_crit = 1
 mon_allow_pool_delete = true
+mon_allow_pool_size_one = true
 
 [osd]
 osd_scrub_load_threshold = 2000

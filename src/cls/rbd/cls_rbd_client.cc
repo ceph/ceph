@@ -2232,7 +2232,7 @@ int mirror_image_status_list_finish(bufferlist::const_iterator *iter,
 int mirror_image_status_get_summary(
     librados::IoCtx *ioctx,
     const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites,
-    std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+    std::map<cls::rbd::MirrorImageStatusState, int32_t> *states) {
   librados::ObjectReadOperation op;
   mirror_image_status_get_summary_start(&op, mirror_peer_sites);
 
@@ -2260,7 +2260,7 @@ void mirror_image_status_get_summary_start(
 
 int mirror_image_status_get_summary_finish(
     bufferlist::const_iterator *iter,
-    std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+    std::map<cls::rbd::MirrorImageStatusState, int32_t> *states) {
   try {
     decode(*states, *iter);
   } catch (const buffer::error &err) {

@@ -1,11 +1,12 @@
 from contextlib import contextmanager
+from io import BytesIO
 import json
 import logging
 import datetime
+import six
 import time
 from textwrap import dedent
 import os
-from StringIO import StringIO
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import Filesystem
@@ -184,23 +185,93 @@ class CephFSMount(object):
         return self.client_remote.run(
                args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',
                      py_version, '-c', pyscript], wait=False, stdin=run.PIPE,
-               stdout=StringIO())
+               stdout=BytesIO())
 
     def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
         p.wait()
-        return p.stdout.getvalue().strip()
+        return six.ensure_str(p.stdout.getvalue().strip())
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
-                  omit_sudo=True):
-        if isinstance(args, str):
-            args = args.split()
+                  cwd=None, omit_sudo=True):
+        args = args.split() if isinstance(args, str) else args
+        if not cwd:
+            cwd = self.mountpoint
 
-        args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
-        return self.client_remote.run(args=args, stdout=StringIO(),
-                                      stderr=StringIO(), wait=wait,
-                                      stdin=stdin, check_status=check_status,
-                                      omit_sudo=omit_sudo)
+        return self.client_remote.run(args=args, stdin=stdin, wait=wait,
+                                      stdout=BytesIO(), stderr=BytesIO(),
+                                      cwd=cwd, check_status=check_status)
+
+    def run_as_user(self, args, user, wait=True, stdin=None,
+                    check_status=True, cwd=None):
+        if isinstance(args, str):
+            args = 'sudo -u %s -s /bin/bash -c %s' % (user, args)
+        elif isinstance(args, list):
+            cmdlist = args
+            cmd = ''
+            for i in cmdlist:
+                cmd = cmd + i + ' '
+            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c']
+            args.append(cmd)
+        if not cwd:
+            cwd = self.mountpoint
+
+        return self.client_remote.run(args=args, wait=wait, stdin=stdin,
+                                      stdout=BytesIO(), stderr=BytesIO(),
+                                      check_status=check_status, cwd=cwd)
+
+    def run_as_root(self, args, wait=True, stdin=None, check_status=True,
+                    cwd=None):
+        if isinstance(args, str):
+            args = 'sudo ' + args
+        if isinstance(args, list):
+            args.insert(0, 'sudo')
+        if not cwd:
+            cwd = self.mountpoint
+
+        return self.client_remote.run(args=args, wait=wait, stdin=stdin,
+                                      stdout=BytesIO(), stderr=BytesIO(),
+                                      check_status=check_status, cwd=cwd)
+
+    def _verify(self, proc, retval=None, errmsg=None):
+        if retval:
+            msg = ('expected return value: {}\nreceived return value: '
+                   '{}\n'.format(retval, proc.returncode))
+            assert proc.returncode == retval, msg
+
+        if errmsg:
+            stderr = proc.stderr.getvalue().lower()
+            msg = ('didn\'t find given string in stderr -\nexpected string: '
+                   '{}\nreceived error message: {}\nnote: received error '
+                   'message is converted to lowercase'.format(errmsg, stderr))
+            assert errmsg in stderr, msg
+
+    def negtestcmd(self, args, retval=None, errmsg=None, stdin=None,
+                   cwd=None, wait=True):
+        """
+        Conduct a negative test for the given command.
+
+        retval and errmsg are parameters to confirm the cause of command
+        failure.
+        """
+        proc = self.run_shell(args=args, wait=wait, stdin=stdin, cwd=cwd,
+                              check_status=False)
+        self._verify(proc, retval, errmsg)
+        return proc
+
+    def negtestcmd_as_user(self, args, user, retval=None, errmsg=None,
+                           stdin=None, cwd=None, wait=True):
+        proc = self.run_as_user(args=args, user=user, wait=wait, stdin=stdin,
+                                cwd=cwd, check_status=False)
+        self._verify(proc, retval, errmsg)
+        return proc
+
+    def negtestcmd_as_root(self, args, retval=None, errmsg=None, stdin=None,
+                           cwd=None, wait=True):
+        proc = self.run_as_root(args=args, wait=wait, stdin=stdin, cwd=cwd,
+                                check_status=False)
+        self._verify(proc, retval, errmsg)
+        return proc
 
     def open_no_data(self, basename):
         """

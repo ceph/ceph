@@ -3,7 +3,7 @@
 SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 
 fsid='00000000-0000-0000-0000-0000deadbeef'
-image='docker.io/ceph/daemon-base:latest-master-devel'
+image='quay.io/ceph-ci/ceph:octopus'
 [ -z "$ip" ] && ip=127.0.0.1
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
@@ -41,7 +41,8 @@ $CEPHADM $CEPHADM_ARGS \
     --config c \
     --output-keyring k \
     --output-config c \
-    --allow-overwrite
+    --allow-overwrite \
+    --skip-mon-network
 chmod 644 k c
 
 # mon.b
@@ -92,7 +93,7 @@ pvcreate $loop_dev && vgcreate $OSD_VG_NAME $loop_dev
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
     $SUDO $CEPHADM shell --fsid $fsid --config c --keyring k -- \
-            ceph orch osd create \
+            ceph orch daemon add osd \
                 $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
 done
 

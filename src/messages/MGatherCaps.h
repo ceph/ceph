@@ -18,7 +18,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "gather_caps"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "gather_caps(" << ino << ")";
   }
 

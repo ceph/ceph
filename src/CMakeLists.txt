@@ -144,7 +144,6 @@ if(HAVE_INTEL)
   endif()
 endif()
 
-
 # require c++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -830,6 +829,7 @@ add_custom_target(cephfs_testing DEPENDS
     ceph-fuse
     ceph-dencoder
     cephfs-journal-tool
+    cephfs-meta-injection
     cephfs-data-scan
     cephfs-table-tool)
 

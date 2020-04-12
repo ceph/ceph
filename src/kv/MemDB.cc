@@ -37,6 +37,16 @@
 #define dwarn dout(0)
 #define dinfo dout(0)
 
+using std::cerr;
+using std::ostream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+
 static void split_key(const string& raw_key, string *prefix, string *key)
 {
   size_t pos = raw_key.find(KEY_DELIM, 0);
@@ -121,8 +131,8 @@ int MemDB::_load()
     string key;
     bufferptr datap;
 
-    bytes_done += ::decode_file(fd, key);
-    bytes_done += ::decode_file(fd, datap);
+    bytes_done += ceph::decode_file(fd, key);
+    bytes_done += ceph::decode_file(fd, datap);
 
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_map[key] = datap;
@@ -516,11 +526,11 @@ string MemDB::MDBWholeSpaceIteratorImpl::key()
   return key;
 }
 
-pair<string,string> MemDB::MDBWholeSpaceIteratorImpl::raw_key()
+std::pair<string,string> MemDB::MDBWholeSpaceIteratorImpl::raw_key()
 {
   string prefix, key;
   split_key(m_key_value.first, &prefix, &key);
-  return make_pair(prefix, key);
+  return { prefix, key };
 }
 
 bool MemDB::MDBWholeSpaceIteratorImpl::raw_key_is_prefixed(

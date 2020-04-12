@@ -50,7 +50,8 @@ public:
     encode(round, payload);
   }
 
-  void service_decode(bufferlist::const_iterator &p) {
+  void service_decode(ceph::buffer::list::const_iterator &p) {
+    using ceph::decode;
     decode(epoch, p);
     decode(round, p);
   }

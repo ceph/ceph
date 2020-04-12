@@ -465,7 +465,7 @@ class TestSnapshots(CephFSTestCase):
 
     def create_dir_and_snaps(self, dir_name, snaps):
         self.mount_a.run_shell(["mkdir", dir_name])
-        
+
         for sno in range(1, snaps+1, 1):
             sname = self.get_snap_name(dir_name, sno)
             try:
@@ -489,7 +489,7 @@ class TestSnapshots(CephFSTestCase):
     def test_mds_max_snaps_per_dir_with_increased_limit(self):
         """
         Test the newly introudced option named mds_max_snaps_per_dir
-        First create 101 directories and ensure that the 101st directory 
+        First create 101 directories and ensure that the 101st directory
         creation fails. Then increase the default by one and see if the
         additional directory creation succeeds
         """

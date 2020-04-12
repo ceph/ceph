@@ -27,11 +27,11 @@ class BitmapFreelistManager : public FreelistManager {
   uint64_t block_mask;  ///< mask to convert byte offset to block offset
   uint64_t key_mask;    ///< mask to convert offset to key offset
 
-  bufferlist all_set_bl;
+  ceph::buffer::list all_set_bl;
 
   KeyValueDB::Iterator enumerate_p;
   uint64_t enumerate_offset; ///< logical offset; position
-  bufferlist enumerate_bl;   ///< current key at enumerate_offset
+  ceph::buffer::list enumerate_bl;   ///< current key at enumerate_offset
   int enumerate_bl_pos;      ///< bit position in enumerate_bl
 
   uint64_t _get_offset(uint64_t key_off, int bit) {
@@ -47,10 +47,10 @@ class BitmapFreelistManager : public FreelistManager {
     KeyValueDB::Transaction txn);
 
 public:
-  BitmapFreelistManager(CephContext* cct, string meta_prefix,
-			string bitmap_prefix);
+  BitmapFreelistManager(CephContext* cct, std::string meta_prefix,
+			std::string bitmap_prefix);
 
-  static void setup_merge_operator(KeyValueDB *db, string prefix);
+  static void setup_merge_operator(KeyValueDB *db, std::string prefix);
 
   int create(uint64_t size, uint64_t granularity,
 	     KeyValueDB::Transaction txn) override;

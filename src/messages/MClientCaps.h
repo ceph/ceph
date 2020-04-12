@@ -44,11 +44,11 @@ private:
 
   struct ceph_mds_cap_peer peer;
 
-  bufferlist snapbl;
-  bufferlist xattrbl;
-  bufferlist flockbl;
+  ceph::buffer::list snapbl;
+  ceph::buffer::list xattrbl;
+  ceph::buffer::list flockbl;
   version_t  inline_version = 0;
-  bufferlist inline_data;
+  ceph::buffer::list inline_data;
 
   // Receivers may not use their new caps until they have this OSD map
   epoch_t osd_epoch_barrier = 0;
@@ -174,7 +174,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "Cfcap";}
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
@@ -200,8 +200,9 @@ public:
 
     out << ")";
   }
-  
+
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
     ceph_mds_caps_body_legacy body;
@@ -219,7 +220,7 @@ public:
       layout.from_legacy(body.layout);
       time_warp_seq = body.time_warp_seq;
     }
-    decode_nohead(head.snap_trace_len, snapbl, p);
+    ceph::decode_nohead(head.snap_trace_len, snapbl, p);
 
     ceph_assert(middle.length() == head.xattr_len);
     if (head.xattr_len)
@@ -289,7 +290,7 @@ public:
       body.time_warp_seq = time_warp_seq;
     }
     encode(body, payload);
-    encode_nohead(snapbl, payload);
+    ceph::encode_nohead(snapbl, payload);
 
     middle = xattrbl;
 
@@ -314,7 +315,7 @@ public:
       encode(inline_data, payload);
     } else {
       encode(inline_version, payload);
-      encode(bufferlist(), payload);
+      encode(ceph::buffer::list(), payload);
     }
 
     encode(osd_epoch_barrier, payload);

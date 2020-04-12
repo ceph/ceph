@@ -49,8 +49,8 @@ public:
   client_t get_last_wrlock_client() const {
     return last_wrlock_client;
   }
-  
-  void print(ostream& out) const override {
+
+  void print(std::ostream& out) const override {
     out << "(";
     _print(out);
     if (last_wrlock_client >= 0)

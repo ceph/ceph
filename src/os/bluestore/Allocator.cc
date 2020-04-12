@@ -9,6 +9,12 @@
 #include "common/admin_socket.h"
 #define dout_subsys ceph_subsys_bluestore
 
+using std::string;
+using std::to_string;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 class Allocator::SocketHook : public AdminSocketHook {
   Allocator *alloc;
 

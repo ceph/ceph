@@ -81,6 +81,7 @@ private:
   int load_commands();
   std::vector<ModuleCommand> commands;
 
+  int register_options(PyObject *cls);
   int load_options();
   std::map<std::string, MgrMap::ModuleOption> options;
 

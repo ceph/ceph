@@ -18,6 +18,24 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bluefs "
 using TOPNSPC::common::cmd_getval;
+
+using std::byte;
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::to_string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+
+
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::File, bluefs_file, bluefs);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::Dir, bluefs_dir, bluefs);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileWriter, bluefs_file_writer, bluefs);
@@ -1058,7 +1076,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       auto p = bl.cbegin();
       decode(t, p);
     }
-    catch (buffer::error& e) {
+    catch (ceph::buffer::error& e) {
       derr << __func__ << " 0x" << std::hex << pos << std::dec
            << ": stop: failed to decode: " << e.what()
            << dendl;
@@ -1863,7 +1881,7 @@ int BlueFS::_read_random(
   FileReader *h,         ///< [in] read from here
   uint64_t off,          ///< [in] offset
   uint64_t len,          ///< [in] this many bytes
-  char *out)             ///< [out] optional: or copy it here
+  char *out)             ///< [out] copy it here
 {
   auto* buf = &h->buf;
 
@@ -1918,11 +1936,9 @@ int BlueFS::_read_random(
 	      << " 0x" << off << "~" << len << std::dec
 	      << dendl;
 
-      if (out) {
-	// NOTE: h->bl is normally a contiguous buffer so c_str() is free.
-	memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
-	out += r;
-      }
+      // NOTE: h->bl is normally a contiguous buffer so c_str() is free.
+      memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
+      out += r;
 
       dout(30) << __func__ << " result chunk (0x"
 	       << std::hex << r << std::dec << " bytes):\n";

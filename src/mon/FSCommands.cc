@@ -21,6 +21,31 @@
 
 using TOPNSPC::common::cmd_getval;
 
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::ErasureCodeProfile;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+
 static const string EXPERIMENTAL_WARNING("Warning! This feature is experimental."
 "It may cause problems up to and including data loss."
 "Consult the documentation at ceph.com, and if unsure, do not proceed."

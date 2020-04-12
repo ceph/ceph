@@ -74,7 +74,10 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   }
 #endif
 
-  logger().debug("calling method {}.{}", cname, mname);
+  logger().debug("calling method {}.{}, num_read={}, num_write={}",
+                 cname, mname, num_read, num_write);
+  const auto prev_rd = num_read;
+  const auto prev_wr = num_write;
   return seastar::async(
     [this, method, indata=std::move(indata)]() mutable {
       ceph::bufferlist outdata;
@@ -83,10 +86,12 @@ OpsExecuter::call_errorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
       return std::make_pair(ret, std::move(outdata));
     }
   ).then(
-    [prev_rd = num_read, prev_wr = num_write, this, &osd_op, flags]
+    [this, prev_rd, prev_wr, &osd_op, flags]
     (auto outcome) -> call_errorator::future<> {
       auto& [ret, outdata] = outcome;
-
+      logger().debug("do_op_call: method returned ret={}, outdata.length()={}"
+                     " while num_read={}, num_write={}",
+                     ret, outdata.length(), num_read, num_write);
       if (num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
         logger().error("method tried to read object but is not marked RD");
         return crimson::ct_error::input_output_error::make();
@@ -671,25 +676,25 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
   case CEPH_OSD_OP_CREATE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.create(os, osd_op, txn);
-    });
+    }, true);
   case CEPH_OSD_OP_WRITE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.write(os, osd_op, txn);
-    });
+    }, true);
   case CEPH_OSD_OP_WRITEFULL:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.writefull(os, osd_op, txn);
-    });
+    }, true);
   case CEPH_OSD_OP_SETALLOCHINT:
     return osd_op_errorator::now();
   case CEPH_OSD_OP_SETXATTR:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.setxattr(os, osd_op, txn);
-    });
+    }, true);
   case CEPH_OSD_OP_DELETE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.remove(os, txn);
-    });
+    }, true);
   case CEPH_OSD_OP_CALL:
     return this->do_op_call(osd_op);
   case CEPH_OSD_OP_STAT:
@@ -724,13 +729,13 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
 #endif
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_set_vals(os, osd_op, txn);
-    });
+    }, true);
 
   // watch/notify
   case CEPH_OSD_OP_WATCH:
     return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
       return do_op_watch(osd_op, os, txn);
-    });
+    }, false);
   case CEPH_OSD_OP_NOTIFY:
     return do_read_op([this, &osd_op] (auto&, const auto& os) {
       return do_op_notify(osd_op, os);

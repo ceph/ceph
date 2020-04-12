@@ -35,7 +35,7 @@ class KernelDevice : public BlockDevice {
   bool aio, dio;
 
   int vdo_fd = -1;      ///< fd for vdo sysfs directory
-  string vdo_name;
+  std::string vdo_name;
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
 
@@ -91,7 +91,7 @@ class KernelDevice : public BlockDevice {
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
-  int _sync_write(uint64_t off, bufferlist& bl, bool buffered, int write_hint);
+  int _sync_write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint);
 
   int _lock();
 
@@ -114,7 +114,7 @@ public:
   void aio_submit(IOContext *ioc) override;
   void discard_drain() override;
 
-  int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
+  int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;
   int get_devname(std::string *s) const override {
     if (devname.empty()) {
       return -ENOENT;
@@ -126,15 +126,15 @@ public:
 
   bool get_thin_utilization(uint64_t *total, uint64_t *avail) const override;
 
-  int read(uint64_t off, uint64_t len, bufferlist *pbl,
+  int read(uint64_t off, uint64_t len, ceph::buffer::list *pbl,
 	   IOContext *ioc,
 	   bool buffered) override;
-  int aio_read(uint64_t off, uint64_t len, bufferlist *pbl,
+  int aio_read(uint64_t off, uint64_t len, ceph::buffer::list *pbl,
 	       IOContext *ioc) override;
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
-  int write(uint64_t off, bufferlist& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET) override;
-  int aio_write(uint64_t off, bufferlist& bl,
+  int write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET) override;
+  int aio_write(uint64_t off, ceph::buffer::list& bl,
 		IOContext *ioc,
 		bool buffered,
 		int write_hint = WRITE_LIFE_NOT_SET) override;

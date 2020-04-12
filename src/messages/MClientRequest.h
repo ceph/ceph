@@ -59,29 +59,29 @@ public:
 
   struct Release {
     mutable ceph_mds_request_release item;
-    string dname;
+    std::string dname;
 
     Release() : item(), dname() {}
-    Release(const ceph_mds_request_release& rel, string name) :
+    Release(const ceph_mds_request_release& rel, std::string name) :
       item(rel), dname(name) {}
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       item.dname_len = dname.length();
       encode(item, bl);
-      encode_nohead(dname, bl);
+      ceph::encode_nohead(dname, bl);
     }
-    void decode(bufferlist::const_iterator& bl) {
+    void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       decode(item, bl);
-      decode_nohead(item.dname_len, dname, bl);
+      ceph::decode_nohead(item.dname_len, dname, bl);
     }
   };
-  mutable vector<Release> releases; /* XXX HACK! */
+  mutable std::vector<Release> releases; /* XXX HACK! */
 
   // path arguments
   filepath path, path2;
-  vector<uint64_t> gid_list;
+  std::vector<uint64_t> gid_list;
 
   /* XXX HACK */
   mutable bool queued_for_replay = false;
@@ -169,11 +169,11 @@ public:
   int get_op() const { return head.op; }
   unsigned get_caller_uid() const { return head.caller_uid; }
   unsigned get_caller_gid() const { return head.caller_gid; }
-  const vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
+  const std::vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
-  const string& get_path() const { return path.get_path(); }
+  const std::string& get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
-  const string& get_path2() const { return path2.get_path(); }
+  const std::string& get_path2() const { return path2.get_path(); }
   const filepath& get_filepath2() const { return path2; }
 
   int get_dentry_wanted() const { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
@@ -182,6 +182,7 @@ public:
   bool is_queued_for_replay() const { return queued_for_replay; }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
 
     if (header.version >= 4) {
@@ -206,7 +207,7 @@ public:
 
     decode(path, p);
     decode(path2, p);
-    decode_nohead(head.num_releases, releases, p);
+    ceph::decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
       decode(stamp, p);
     if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
@@ -229,15 +230,15 @@ public:
 
     encode(path, payload);
     encode(path2, payload);
-    encode_nohead(releases, payload);
+    ceph::encode_nohead(releases, payload);
     encode(stamp, payload);
     encode(gid_list, payload);
   }
 
   std::string_view get_type_name() const override { return "creq"; }
-  void print(ostream& out) const override {
-    out << "client_request(" << get_orig_source() 
-	<< ":" << get_tid() 
+  void print(std::ostream& out) const override {
+    out << "client_request(" << get_orig_source()
+	<< ":" << get_tid()
 	<< " " << ceph_mds_op_name(get_op());
     if (head.op == CEPH_MDS_OP_GETATTR)
       out << " " << ccap_string(head.args.getattr.mask);

@@ -12,6 +12,8 @@
 #include <seastar/util/std-compat.hh>
 
 #include "common/version.h"
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Socket.h"
 
@@ -32,6 +34,19 @@ seastar::logger& logger()
 
 namespace crimson::admin {
 
+tell_result_t::tell_result_t(int ret, std::string&& err)
+  : ret{ret}, err(std::move(err))
+{}
+
+tell_result_t::tell_result_t(int ret, std::string&& err, ceph::bufferlist&& out)
+  : ret{ret}, err(std::move(err)), out(std::move(out))
+{}
+
+tell_result_t::tell_result_t(Formatter* formatter)
+{
+  formatter->flush(out);
+}
+
 seastar::future<>
 AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
 {
@@ -51,28 +66,29 @@ AdminSocket::register_command(std::unique_ptr<AdminSocketHook>&& hook)
 /*
  * Note: parse_cmd() is executed with servers_tbl_rwlock held as shared
  */
-AdminSocket::maybe_parsed_t AdminSocket::parse_cmd(std::string cmd,
-						   ceph::bufferlist& out)
+auto AdminSocket::parse_cmd(const std::vector<std::string>& cmd)
+  -> std::variant<parsed_command_t, tell_result_t>
 {
   // preliminaries:
   //   - create the formatter specified by the cmd parameters
   //   - locate the "op-code" string (the 'prefix' segment)
   //   - prepare for command parameters extraction via cmdmap_t
   cmdmap_t cmdmap;
+  ceph::bufferlist out;
 
   try {
     stringstream errss;
     //  note that cmdmap_from_json() may throw on syntax issues
-    if (!cmdmap_from_json({cmd}, &cmdmap, errss)) {
+    if (!cmdmap_from_json(cmd, &cmdmap, errss)) {
       logger().error("{}: incoming command error: {}", __func__, errss.str());
       out.append("error:"s);
       out.append(errss.str());
-      return maybe_parsed_t{ std::nullopt };
+      return tell_result_t{-EINVAL, "invalid json", std::move(out)};
     }
-  } catch (std::runtime_error& e) {
+  } catch (const std::runtime_error& e) {
     logger().error("{}: incoming command syntax: {}", __func__, cmd);
-    out.append("error: command syntax"s);
-    return maybe_parsed_t{ std::nullopt };
+    out.append(string{e.what()});
+    return tell_result_t{-EINVAL, "invalid json", std::move(out)};
   }
 
   string format;
@@ -82,43 +98,17 @@ AdminSocket::maybe_parsed_t AdminSocket::parse_cmd(std::string cmd,
     cmd_getval(cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
     logger().error("{}: invalid syntax: {}", __func__, cmd);
-    out.append("error: command syntax: missing 'prefix'"s);
-    return maybe_parsed_t{ std::nullopt };
-  }
-
-  if (prefix.empty()) {
-    // no command identified
-    out.append("error: no command identified"s);
-    return maybe_parsed_t{ std::nullopt };
+    out.append(string{e.what()});
+    return tell_result_t{-EINVAL, "invalid json", std::move(out)};
   }
 
   // match the incoming op-code to one of the registered APIs
   if (auto found = hooks.find(prefix); found != hooks.end()) {
     return parsed_command_t{ cmdmap, format, *found->second };
   } else {
-    return maybe_parsed_t{ std::nullopt };
-  }
-}
-
-/*
- * Note: validate_command() is executed with servers_tbl_rwlock held as shared
- */
-bool AdminSocket::validate_command(const parsed_command_t& parsed,
-                                   const std::string& command_text,
-                                   ceph::bufferlist& out) const
-{
-  logger().info("{}: validating {} against:{}", __func__, command_text,
-                parsed.hook.desc);
-
-  stringstream os;  // for possible validation error messages
-  if (validate_cmd(nullptr, std::string{parsed.hook.desc}, parsed.parameters, os)) {
-    return true;
-  } else {
-    os << "error: command validation failure ";
-    logger().error("{}: validation failure (incoming:{}) {}", __func__,
-		   command_text, os.str());
-    out.append(os);
-    return false;
+    return tell_result_t{-EINVAL,
+                         fmt::format("unknown command '{}'", prefix),
+                         std::move(out)};
   }
 }
 
@@ -136,25 +126,56 @@ seastar::future<> AdminSocket::finalize_response(
     .then([&out, outbuf_cont] { return out.write(outbuf_cont.c_str()); });
 }
 
+
+seastar::future<> AdminSocket::handle_command(crimson::net::Connection* conn,
+					      boost::intrusive_ptr<MCommand> m)
+{
+  return execute_command(m->cmd, std::move(m->get_data())).then(
+    [conn, tid=m->get_tid(), this](auto result) {
+    auto [ret, err, out] = std::move(result);
+    auto reply = make_message<MCommandReply>(ret, err);
+    reply->set_tid(tid);
+    reply->set_data(out);
+    return conn->send(reply);
+  });
+}
+
 seastar::future<> AdminSocket::execute_line(std::string cmdline,
                                             seastar::output_stream<char>& out)
 {
+  return execute_command({cmdline}, {}).then([&out, this](auto result) {
+     auto [ret, stderr, stdout] = std::move(result);
+     if (ret < 0) {
+       stdout.append(fmt::format("ERROR: {}\n", cpp_strerror(ret)));
+       stdout.append(stderr);
+     }
+     return finalize_response(out, std::move(stdout));
+  });
+}
+
+auto AdminSocket::execute_command(const std::vector<std::string>& cmd,
+				  ceph::bufferlist&& buf)
+  -> seastar::future<tell_result_t>
+{
   return seastar::with_shared(servers_tbl_rwlock,
-			      [this, cmdline, &out]() mutable {
-    ceph::bufferlist err;
-    auto parsed = parse_cmd(cmdline, err);
-    if (!parsed.has_value() ||
-	!validate_command(*parsed, cmdline, err)) {
-      return finalize_response(out, std::move(err));
+			      [cmd, buf=std::move(buf), this]() mutable {
+    auto maybe_parsed = parse_cmd(cmd);
+    if (auto parsed = std::get_if<parsed_command_t>(&maybe_parsed); parsed) {
+      stringstream os;
+      string desc{parsed->hook.desc};
+      if (!validate_cmd(nullptr, desc, parsed->params, os)) {
+	logger().error("AdminSocket::execute_command: "
+		       "failed to validate '{}': {}", cmd, os.str());
+	ceph::bufferlist out;
+	out.append(os);
+	return seastar::make_ready_future<tell_result_t>(
+          tell_result_t{-EINVAL, "invalid command json", std::move(out)});
+      }
+      return parsed->hook.call(parsed->params, parsed->format, std::move(buf));
+    } else {
+      auto& result = std::get<tell_result_t>(maybe_parsed);
+      return seastar::make_ready_future<tell_result_t>(std::move(result));
     }
-    return parsed->hook.call(parsed->hook.prefix,
-			     parsed->format,
-			     parsed->parameters).then(
-      [this, &out](auto result) {
-	// add 'failed' to the contents of out_buf? not what
-	// happens in the old code
-        return finalize_response(out, std::move(result));
-      });
   });
 }
 
@@ -199,8 +220,7 @@ seastar::future<> AdminSocket::handle_client(seastar::input_stream<char>& in,
     return in.close();
   }).handle_exception([](auto ep) {
     logger().debug("exception on {}: {}", __func__, ep);
-    return seastar::make_ready_future<>();
-  }).discard_result();
+  });
 }
 
 seastar::future<> AdminSocket::start(const std::string& path)
@@ -215,7 +235,7 @@ seastar::future<> AdminSocket::start(const std::string& path)
   auto sock_path = seastar::socket_address{ seastar::unix_domain_addr{ path } };
   server_sock = seastar::engine().listen(sock_path);
   // listen in background
-  std::ignore = seastar::do_until(
+  task = seastar::do_until(
     [this] { return stop_gate.is_closed(); },
     [this] {
       return seastar::with_gate(stop_gate, [this] {
@@ -236,11 +256,7 @@ seastar::future<> AdminSocket::start(const std::string& path)
           }
         });
       });
-    }).then([] {
-      logger().debug("AdminSocket::init(): admin-sock thread terminated");
-      return seastar::now();
     });
-
   return seastar::make_ready_future<>();
 }
 
@@ -250,13 +266,17 @@ seastar::future<> AdminSocket::stop()
     return seastar::now();
   }
   server_sock->abort_accept();
-  server_sock.reset();
   if (connected_sock) {
     connected_sock->shutdown_input();
     connected_sock->shutdown_output();
-    connected_sock.reset();
   }
-  return stop_gate.close();
+  return stop_gate.close().then([this] {
+    assert(task.has_value());
+    return task->then([] {
+      logger().info("AdminSocket: stopped");
+      return seastar::now();
+    });
+  });
 }
 
 /////////////////////////////////////////
@@ -268,9 +288,9 @@ class VersionHook final : public AdminSocketHook {
   VersionHook()
     : AdminSocketHook{"version", "version", "get ceph version"}
   {}
-  seastar::future<bufferlist> call(std::string_view,
-				   std::string_view format,
-				   const cmdmap_t&) const final
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
   {
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("version");
@@ -278,9 +298,7 @@ class VersionHook final : public AdminSocketHook {
     f->dump_string("release", ceph_release_to_str());
     f->dump_string("release_type", ceph_release_type());
     f->close_section();
-    bufferlist out;
-    f->flush(out);
-    return seastar::make_ready_future<bufferlist>(std::move(out));
+    return seastar::make_ready_future<tell_result_t>(f.get());
   }
 };
 
@@ -293,17 +311,15 @@ class GitVersionHook final : public AdminSocketHook {
   GitVersionHook()
     : AdminSocketHook{"git_version", "git_version", "get git sha1"}
   {}
-  seastar::future<bufferlist> call(std::string_view command,
-				   std::string_view format,
-				   const cmdmap_t&) const final
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
   {
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("version");
     f->dump_string("git_version", git_version_to_str());
     f->close_section();
-    ceph::bufferlist out;
-    f->flush(out);
-    return seastar::make_ready_future<bufferlist>(std::move(out));
+    return seastar::make_ready_future<tell_result_t>(f.get());
   }
 };
 
@@ -316,12 +332,12 @@ class HelpHook final : public AdminSocketHook {
     m_as{as}
   {}
 
-  seastar::future<bufferlist> call(std::string_view command,
-				   std::string_view format,
-				   const cmdmap_t& cmdmap) const final
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
   {
     return seastar::with_shared(m_as.servers_tbl_rwlock,
-				[this, format] {
+				[format, this] {
       unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
       f->open_object_section("help");
       for (const auto& [prefix, hook] : m_as) {
@@ -330,9 +346,7 @@ class HelpHook final : public AdminSocketHook {
 	}
       }
       f->close_section();
-      ceph::bufferlist out;
-      f->flush(out);
-      return seastar::make_ready_future<bufferlist>(std::move(out));
+      return seastar::make_ready_future<tell_result_t>(f.get());
     });
   }
 };
@@ -347,12 +361,12 @@ class GetdescsHook final : public AdminSocketHook {
 		    "list available commands"},
     m_as{ as } {}
 
-  seastar::future<bufferlist> call(std::string_view command,
-				   std::string_view format,
-				   const cmdmap_t& cmdmap) const final
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+				      std::string_view format,
+				      ceph::bufferlist&&) const final
   {
-    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
-    return seastar::with_shared(m_as.servers_tbl_rwlock, [this, f=move(f)] {
+    return seastar::with_shared(m_as.servers_tbl_rwlock, [format, this] {
+      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
       int cmdnum = 0;
       f->open_object_section("command_descriptions");
       for (const auto& [prefix, hook] : m_as) {
@@ -363,9 +377,7 @@ class GetdescsHook final : public AdminSocketHook {
         cmdnum++;
       }
       f->close_section();
-      ceph::bufferlist out;
-      f->flush(out);
-      return seastar::make_ready_future<bufferlist>(std::move(out));
+      return seastar::make_ready_future<tell_result_t>(f.get());
     });
   }
 };

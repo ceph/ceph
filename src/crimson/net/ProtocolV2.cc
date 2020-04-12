@@ -5,16 +5,12 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
-#if FMT_VERSION >= 60000
-#include <fmt/chrono.h>
-#else
-#include <fmt/time.h>
-#endif
 #include "include/msgr.h"
 #include "include/random.h"
 
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
+#include "crimson/common/formatter.h"
 
 #include "Config.h"
 #include "Dispatcher.h"
@@ -66,8 +62,8 @@ void abort_protocol() {
   throw std::system_error(make_error_code(crimson::net::error::protocol_aborted));
 }
 
-void abort_in_close(crimson::net::ProtocolV2& proto) {
-  (void) proto.close();
+void abort_in_close(crimson::net::ProtocolV2& proto, bool dispatch_reset) {
+  proto.close(dispatch_reset);
   abort_protocol();
 }
 
@@ -98,32 +94,6 @@ inline uint64_t generate_client_cookie() {
 }
 
 } // namespace anonymous
-
-template <>
-struct fmt::formatter<seastar::lowres_system_clock::time_point> {
-  // ignore the format string
-  template <typename ParseContext>
-  constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const seastar::lowres_system_clock::time_point& t,
-	      FormatContext& ctx) {
-    std::time_t tt = std::chrono::duration_cast<std::chrono::seconds>(
-      t.time_since_epoch()).count();
-    auto milliseconds = (t.time_since_epoch() %
-			 std::chrono::seconds(1)).count();
-    return fmt::format_to(ctx.out(), "{:%Y-%m-%d %H:%M:%S} {:03d}",
-			  fmt::localtime(tt), milliseconds);
-  }
-};
-
-namespace std {
-inline ostream& operator<<(
-  ostream& out, const seastar::lowres_system_clock::time_point& t)
-{
-  return out << fmt::format("{}", t);
-}
-}
 
 namespace crimson::net {
 
@@ -210,8 +180,6 @@ void ProtocolV2::start_accept(SocketRef&& sock,
   ceph_assert(!socket);
   // until we know better
   conn.target_addr = _peer_addr;
-  conn.set_ephemeral_port(_peer_addr.get_port(),
-                          SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   logger().info("{} ProtocolV2::start_accept(): target_addr={}", conn, _peer_addr);
   messenger.accept_conn(
@@ -443,8 +411,7 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
   if (conn.policy.lossy) {
     logger().info("{} {}: fault at {} on lossy channel, going to CLOSING -- {}",
                   conn, func_name, get_state_name(state), eptr);
-    dispatch_reset();
-    (void) close();
+    close(true);
   } else if (conn.policy.server ||
              (conn.policy.standby &&
               (!is_queued() && conn.sent.empty()))) {
@@ -462,17 +429,6 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
   }
 }
 
-void ProtocolV2::dispatch_reset()
-{
-  (void) seastar::with_gate(pending_dispatch, [this] {
-    return dispatcher.ms_handle_reset(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  }).handle_exception([this] (std::exception_ptr eptr) {
-    logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
-    ceph_abort("unexpected exception from ms_handle_reset()");
-  });
-}
-
 void ProtocolV2::reset_session(bool full)
 {
   server_cookie = 0;
@@ -482,17 +438,14 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
     reset_write();
-    (void) seastar::with_gate(pending_dispatch, [this] {
+    gated_dispatch("ms_handle_remote_reset", [this] {
       return dispatcher.ms_handle_remote_reset(
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().error("{} ms_handle_remote_reset caught exception: {}", conn, eptr);
-      ceph_abort("unexpected exception from ms_handle_remote_reset()");
     });
   }
 }
 
-seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
+seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange(bool is_connect)
 {
   // 1. prepare and send banner
   bufferlist banner_payload;
@@ -545,7 +498,7 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
       logger().debug("{} GOT banner: payload_len={}", conn, payload_len);
       INTERCEPT_CUSTOM(custom_bp_t::BANNER_PAYLOAD_READ, bp_type_t::READ);
       return read(payload_len);
-    }).then([this] (bufferlist bl) {
+    }).then([this, is_connect] (bufferlist bl) {
       // 4. process peer banner_payload and send HelloFrame
       auto p = bl.cbegin();
       uint64_t peer_supported_features;
@@ -568,13 +521,13 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
         logger().error("{} peer does not support all required features"
                        " required={} peer_supported={}",
                        conn, required_features, peer_supported_features);
-        abort_in_close(*this);
+        abort_in_close(*this, is_connect);
       }
       if ((supported_features & peer_required_features) != peer_required_features) {
         logger().error("{} we do not support all peer required features"
                        " peer_required={} supported={}",
                        conn, peer_required_features, supported_features);
-        abort_in_close(*this);
+        abort_in_close(*this, is_connect);
       }
       this->peer_required_features = peer_required_features;
       if (this->peer_required_features == 0) {
@@ -698,8 +651,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
     });
   } catch (const crimson::auth::error& e) {
     logger().error("{} get_initial_auth_request returned {}", conn, e);
-    dispatch_reset();
-    abort_in_close(*this);
+    abort_in_close(*this, true);
     return seastar::now();
   }
 }
@@ -893,9 +845,7 @@ void ProtocolV2::execute_connecting()
   if (socket) {
     socket->shutdown();
   }
-  execution_done = seastar::with_gate(pending_dispatch, [this] {
-      // we don't know my socket_port yet
-      conn.set_ephemeral_port(0, SocketConnection::side_t::none);
+  gated_execute("execute_connecting", [this] {
       return messenger.get_global_seq().then([this] (auto gs) {
           global_seq = gs;
           assert(client_cookie != 0);
@@ -917,7 +867,8 @@ void ProtocolV2::execute_connecting()
             abort_protocol();
           }
           if (socket) {
-            (void) with_gate(pending_dispatch, [sock = std::move(socket)] () mutable {
+            gated_dispatch("close_sockect_connecting",
+                           [sock = std::move(socket)] () mutable {
               return sock->close().then([sock = std::move(sock)] {});
             });
           }
@@ -938,18 +889,21 @@ void ProtocolV2::execute_connecting()
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
-          return banner_exchange();
+          return banner_exchange(true);
         }).then([this] (entity_type_t _peer_type,
                         entity_addr_t _my_addr_from_peer) {
           if (conn.get_peer_type() != _peer_type) {
             logger().warn("{} connection peer type does not match what peer advertises {} != {}",
                           conn, ceph_entity_type_name(conn.get_peer_type()),
                           ceph_entity_type_name(_peer_type));
-            dispatch_reset();
-            abort_in_close(*this);
+            abort_in_close(*this, true);
           }
-          conn.set_ephemeral_port(_my_addr_from_peer.get_port(),
-                                  SocketConnection::side_t::connector);
+          if (unlikely(state != state_t::CONNECTING)) {
+            logger().debug("{} triggered {} during banner_exchange(), abort",
+                           conn, get_state_name(state));
+            abort_protocol();
+          }
+          socket->learn_ephemeral_port_as_connector(_my_addr_from_peer.get_port());
           if (unlikely(_my_addr_from_peer.is_legacy())) {
             logger().warn("{} peer sent a legacy address for me: {}",
                           conn, _my_addr_from_peer);
@@ -976,12 +930,9 @@ void ProtocolV2::execute_connecting()
           }
           switch (next) {
            case next_step_t::ready: {
-            (void) seastar::with_gate(pending_dispatch, [this] {
+            gated_dispatch("ms_handle_connect", [this] {
               return dispatcher.ms_handle_connect(
                   seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-            }).handle_exception([this] (std::exception_ptr eptr) {
-              logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
-              ceph_abort("unexpected exception from ms_handle_connect()");
             });
             logger().info("{} connected:"
                           " gs={}, pgs={}, cs={}, client_cookie={},"
@@ -1158,7 +1109,7 @@ ProtocolV2::reuse_connection(
   // close this connection because all the necessary information is delivered
   // to the exisiting connection, and jump to error handling code to abort the
   // current state.
-  abort_in_close(*this);
+  abort_in_close(*this, false);
   return seastar::make_ready_future<next_step_t>(next_step_t::none);
 }
 
@@ -1202,15 +1153,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     logger().warn("{} server_connect:"
                   " existing connection {} is a lossy channel. Close existing in favor of"
                   " this connection", conn, *existing_conn);
-    existing_proto->dispatch_reset();
-    (void) existing_proto->close();
-
-    if (unlikely(state != state_t::ACCEPTING)) {
-      logger().debug("{} triggered {} in execute_accepting()",
-                     conn, get_state_name(state));
-      abort_protocol();
-    }
-    execute_establishing();
+    execute_establishing(existing_conn, true);
     return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   }
 
@@ -1334,24 +1277,21 @@ ProtocolV2::server_connect()
 
     SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
 
+    bool dispatch_reset = true;
     if (existing_conn) {
       if (existing_conn->protocol->proto_type != proto_t::v2) {
         logger().warn("{} existing connection {} proto version is {}, close existing",
                       conn, *existing_conn,
                       static_cast<int>(existing_conn->protocol->proto_type));
         // should unregister the existing from msgr atomically
-        (void) existing_conn->close();
+        // NOTE: this is following async messenger logic, but we may miss the reset event.
+        dispatch_reset = false;
       } else {
         return handle_existing_connection(existing_conn);
       }
     }
 
-    if (unlikely(state != state_t::ACCEPTING)) {
-      logger().debug("{} triggered {} in execute_accepting()",
-                     conn, get_state_name(state));
-      abort_protocol();
-    }
-    execute_establishing();
+    execute_establishing(existing_conn, dispatch_reset);
     return seastar::make_ready_future<next_step_t>(next_step_t::ready);
   });
 }
@@ -1449,7 +1389,8 @@ ProtocolV2::server_reconnect()
                     "close existing and reset client.",
                     conn, *existing_conn,
                     static_cast<int>(existing_conn->protocol->proto_type));
-      (void) existing_conn->close();
+      // NOTE: this is following async messenger logic, but we may miss the reset event.
+      existing_conn->mark_down();
       return send_reset(true);
     }
 
@@ -1542,13 +1483,13 @@ ProtocolV2::server_reconnect()
 void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
-  (void) seastar::with_gate(pending_dispatch, [this] {
+  gated_dispatch("execute_accepting", [this] {
       return seastar::futurize_apply([this] {
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
-          return banner_exchange();
+          return banner_exchange(false);
         }).then([this] (entity_type_t _peer_type,
                         entity_addr_t _my_addr_from_peer) {
           ceph_assert(conn.get_peer_type() == 0);
@@ -1603,7 +1544,7 @@ void ProtocolV2::execute_accepting()
         }).handle_exception([this] (std::exception_ptr eptr) {
           logger().info("{} execute_accepting(): fault at {}, going to CLOSING -- {}",
                         conn, get_state_name(state), eptr);
-          (void) close();
+          close(false);
         });
     });
 }
@@ -1645,22 +1586,36 @@ seastar::future<> ProtocolV2::finish_auth()
 
 // ESTABLISHING
 
-void ProtocolV2::execute_establishing() {
+void ProtocolV2::execute_establishing(
+    SocketConnectionRef existing_conn, bool dispatch_reset) {
+  if (unlikely(state != state_t::ACCEPTING)) {
+    logger().debug("{} triggered {} before execute_establishing()",
+                   conn, get_state_name(state));
+    abort_protocol();
+  }
+
+  auto accept_me = [this] {
+    messenger.register_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
+    messenger.unaccept_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
+  };
+
   trigger_state(state_t::ESTABLISHING, write_state_t::delay, false);
-  (void) seastar::with_gate(pending_dispatch, [this] {
+  if (existing_conn) {
+    existing_conn->protocol->close(dispatch_reset, std::move(accept_me));
+  } else {
+    accept_me();
+  }
+
+  gated_dispatch("ms_handle_accept_establishing", [this] {
     return dispatcher.ms_handle_accept(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  }).handle_exception([this] (std::exception_ptr eptr) {
-    logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
-    ceph_abort("unexpected exception from ms_handle_accept()");
   });
-  messenger.register_conn(
-    seastar::static_pointer_cast<SocketConnection>(
-      conn.shared_from_this()));
-  messenger.unaccept_conn(
-    seastar::static_pointer_cast<SocketConnection>(
-      conn.shared_from_this()));
-  execution_done = seastar::with_gate(pending_dispatch, [this] {
+
+  gated_execute("execute_establishing", [this] {
     return seastar::futurize_apply([this] {
       return send_server_ident();
     }).then([this] {
@@ -1753,23 +1708,20 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   if (socket) {
     socket->shutdown();
   }
-  (void) seastar::with_gate(pending_dispatch, [this] {
+  gated_dispatch("ms_handle_accept_replacing", [this] {
     return dispatcher.ms_handle_accept(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  }).handle_exception([this] (std::exception_ptr eptr) {
-    logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
-    ceph_abort("unexpected exception from ms_handle_accept()");
   });
-  (void) seastar::with_gate(pending_dispatch,
-                            [this,
-                             reconnect,
-                             do_reset,
-                             new_socket = std::move(new_socket),
-                             new_auth_meta = std::move(new_auth_meta),
-                             new_rxtx = std::move(new_rxtx),
-                             new_client_cookie, new_peer_name,
-                             new_conn_features, new_peer_global_seq,
-                             new_connect_seq, new_msg_seq] () mutable {
+  gated_dispatch("trigger_replacing",
+                 [this,
+                  reconnect,
+                  do_reset,
+                  new_socket = std::move(new_socket),
+                  new_auth_meta = std::move(new_auth_meta),
+                  new_rxtx = std::move(new_rxtx),
+                  new_client_cookie, new_peer_name,
+                  new_conn_features, new_peer_global_seq,
+                  new_connect_seq, new_msg_seq] () mutable {
     return wait_write_exit().then([this, do_reset] {
       if (do_reset) {
         reset_session(true);
@@ -1791,7 +1743,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       }
 
       if (socket) {
-        (void) with_gate(pending_dispatch, [sock = std::move(socket)] () mutable {
+        gated_dispatch("close_socket_replacing",
+                       [sock = std::move(socket)] () mutable {
           return sock->close().then([sock = std::move(sock)] {});
         });
       }
@@ -1983,11 +1936,8 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    (void) seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
+    gated_dispatch("ms_dispatch", [this, msg = std::move(msg_ref)] {
       return dispatcher.ms_dispatch(&conn, std::move(msg));
-    }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-      ceph_abort("unexpected exception from ms_dispatch()");
     });
   });
 }
@@ -2001,7 +1951,7 @@ void ProtocolV2::execute_ready()
     conn.interceptor->register_conn_ready(conn);
   }
 #endif
-  execution_done = seastar::with_gate(pending_dispatch, [this] {
+  gated_execute("execute_ready", [this] {
     protocol_timer.cancel();
     return seastar::keep_doing([this] {
       return read_main_preamble()
@@ -2107,8 +2057,7 @@ void ProtocolV2::execute_wait(bool max_backoff)
   if (socket) {
     socket->shutdown();
   }
-  execution_done = seastar::with_gate(pending_dispatch,
-                                      [this, max_backoff] {
+  gated_execute("execute_wait", [this, max_backoff] {
     double backoff = protocol_timer.last_dur();
     if (max_backoff) {
       backoff = conf.ms_max_backoff;
@@ -2139,14 +2088,14 @@ void ProtocolV2::execute_wait(bool max_backoff)
 void ProtocolV2::execute_server_wait()
 {
   trigger_state(state_t::SERVER_WAIT, write_state_t::delay, false);
-  execution_done = seastar::with_gate(pending_dispatch, [this] {
+  gated_execute("execute_server_wait", [this] {
     return read_exactly(1).then([this] (auto bl) {
       logger().warn("{} SERVER_WAIT got read, abort", conn);
       abort_in_fault();
     }).handle_exception([this] (std::exception_ptr eptr) {
       logger().info("{} execute_server_wait(): fault at {}, going to CLOSING -- {}",
                     conn, get_state_name(state), eptr);
-      (void) close();
+      close(false);
     });
   });
 }
@@ -2171,11 +2120,6 @@ void ProtocolV2::trigger_close()
   protocol_timer.cancel();
 
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
-#ifdef UNIT_TESTS_BUILT
-  if (conn.interceptor) {
-    conn.interceptor->register_conn_closed(conn);
-  }
-#endif
 }
 
 } // namespace crimson::net

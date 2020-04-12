@@ -57,6 +57,16 @@ export class RgwBucketFormComponent implements OnInit {
   }
 
   createForm() {
+    const self = this;
+    const eitherDaysOrYears = CdValidators.custom('eitherDaysOrYears', () => {
+      if (!self.bucketForm || !_.get(self.bucketForm.getRawValue(), 'lock_enabled')) {
+        return false;
+      }
+      const years = self.bucketForm.getValue('lock_retention_period_years');
+      const days = self.bucketForm.getValue('lock_retention_period_days');
+      return (days > 0 && years > 0) || (days === 0 && years === 0);
+    });
+    const lockPeriodDefinition = [0, [CdValidators.number(false), eitherDaysOrYears]];
     this.bucketForm = this.formBuilder.group({
       id: [null],
       bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
@@ -65,7 +75,11 @@ export class RgwBucketFormComponent implements OnInit {
       versioning: [null],
       'mfa-delete': [null],
       'mfa-token-serial': [''],
-      'mfa-token-pin': ['']
+      'mfa-token-pin': [''],
+      lock_enabled: [{ value: false, disabled: this.editing }],
+      lock_mode: ['COMPLIANCE'],
+      lock_retention_period_days: lockPeriodDefinition,
+      lock_retention_period_years: lockPeriodDefinition
     });
   }
 
@@ -103,10 +117,13 @@ export class RgwBucketFormComponent implements OnInit {
 
       this.rgwBucketService.get(bid).subscribe((resp: object) => {
         this.loading = false;
-        // Get the default values.
-        const defaults = _.clone(this.bucketForm.value);
-        // Extract the values displayed in the form.
-        let value: object = _.pick(resp, _.keys(this.bucketForm.value));
+        // Get the default values (incl. the values from disabled fields).
+        const defaults = _.clone(this.bucketForm.getRawValue());
+        // Get the values displayed in the form. We need to do that to
+        // extract those key/value pairs from the response data, otherwise
+        // the Angular react framework will throw an error if there is no
+        // field for a given key.
+        let value: object = _.pick(resp, _.keys(defaults));
         value['placement-target'] = resp['placement_rule'];
         // Append default values.
         value = _.merge(defaults, value);
@@ -133,31 +150,29 @@ export class RgwBucketFormComponent implements OnInit {
       this.goToListView();
       return;
     }
-    const bidCtl = this.bucketForm.get('bid');
-    const ownerCtl = this.bucketForm.get('owner');
-    const placementTargetCtl = this.bucketForm.get('placement-target');
+    const values = this.bucketForm.value;
     if (this.editing) {
       // Edit
-      const idCtl = this.bucketForm.get('id');
       const versioning = this.getVersioningStatus();
       const mfaDelete = this.getMfaDeleteStatus();
-      const mfaTokenSerial = this.bucketForm.getValue('mfa-token-serial');
-      const mfaTokenPin = this.bucketForm.getValue('mfa-token-pin');
       this.rgwBucketService
         .update(
-          bidCtl.value,
-          idCtl.value,
-          ownerCtl.value,
+          values['bid'],
+          values['id'],
+          values['owner'],
           versioning,
           mfaDelete,
-          mfaTokenSerial,
-          mfaTokenPin
+          values['mfa-token-serial'],
+          values['mfa-token-pin'],
+          values['lock_mode'],
+          values['lock_retention_period_days'],
+          values['lock_retention_period_years']
         )
         .subscribe(
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Updated Object Gateway bucket "{{bid}}".', { bid: bidCtl.value })
+              this.i18n('Updated Object Gateway bucket "{{bid}}".', values)
             );
             this.goToListView();
           },
@@ -169,12 +184,21 @@ export class RgwBucketFormComponent implements OnInit {
     } else {
       // Add
       this.rgwBucketService
-        .create(bidCtl.value, ownerCtl.value, this.zonegroup, placementTargetCtl.value)
+        .create(
+          values['bid'],
+          values['owner'],
+          this.zonegroup,
+          values['placement-target'],
+          values['lock_enabled'],
+          values['lock_mode'],
+          values['lock_retention_period_days'],
+          values['lock_retention_period_years']
+        )
         .subscribe(
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Created Object Gateway bucket "{{bid}}"', { bid: bidCtl.value })
+              this.i18n('Created Object Gateway bucket "{{bid}}"', values)
             );
             this.goToListView();
           },
@@ -290,7 +314,6 @@ export class RgwBucketFormComponent implements OnInit {
 
   updateVersioning() {
     this.isVersioningEnabled = !this.isVersioningEnabled;
-
     this.setMfaDeleteValidators();
   }
 
@@ -304,7 +327,6 @@ export class RgwBucketFormComponent implements OnInit {
 
   updateMfaDelete() {
     this.isMfaDeleteEnabled = !this.isMfaDeleteEnabled;
-
     this.setMfaDeleteValidators();
   }
 }

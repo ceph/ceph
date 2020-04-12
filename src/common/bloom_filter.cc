@@ -5,6 +5,10 @@
 
 MEMPOOL_DEFINE_FACTORY(unsigned char, byte, bloom_filter);
 
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
+
 void bloom_filter::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);

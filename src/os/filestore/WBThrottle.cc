@@ -7,6 +7,9 @@
 #include "common/perf_counters.h"
 #include "common/errno.h"
 
+using std::pair;
+using std::string;
+
 WBThrottle::WBThrottle(CephContext *cct) :
   cur_ios(0), cur_size(0),
   cct(cct),

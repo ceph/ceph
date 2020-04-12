@@ -14,10 +14,11 @@ set_target_properties(crimson::cflags PROPERTIES
 set(crimson_common_srcs
   admin/admin_socket.cc
   admin/osd_admin.cc
+  common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
+  common/formatter.cc
   common/perf_counters_collection.cc
-  common/assert.cc
   common/log.cc)
 
 # the specialized version of ceph-common, where
@@ -48,6 +49,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/hex.cc
   ${PROJECT_SOURCE_DIR}/src/common/fs_types.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ceph_json.cc
   ${PROJECT_SOURCE_DIR}/src/common/histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/hobject.cc
   ${PROJECT_SOURCE_DIR}/src/common/hostname.cc
@@ -80,6 +82,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
+  ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/crush/builder.c
   ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
   ${PROJECT_SOURCE_DIR}/src/crush/crush.c

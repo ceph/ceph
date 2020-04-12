@@ -23,7 +23,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 3 up, 3 in, 0 down, 0 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 1 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 1 },
+        { up: 1, in: 1 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {
@@ -43,7 +47,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 2 up, 1 in, 1 down, 1 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 0 }, { up: 0, in: 0 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 0 },
+        { up: 0, in: 0 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {
@@ -71,7 +79,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 2 up, 2 in, 1 down, 0 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 0, in: 0 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 1 },
+        { up: 0, in: 0 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {
@@ -99,7 +111,11 @@ describe('OsdSummaryPipe', () => {
 
   it('transforms having 3 osd with 3 up, 2 in, 0 down, 1 out', () => {
     const value = {
-      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 0 }]
+      osds: [
+        { up: 1, in: 1 },
+        { up: 1, in: 1 },
+        { up: 1, in: 0 }
+      ]
     };
     expect(pipe.transform(value)).toEqual([
       {

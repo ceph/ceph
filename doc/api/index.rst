@@ -14,10 +14,9 @@ See `Ceph Storage Cluster APIs`_.
 Ceph File System APIs
 =====================
 
-See `libcephfs (javadoc)`_.
+See `libcephfs`_
 
-.. _libcephfs (javadoc): libcephfs-java
-
+.. _libcephfs: ../cephfs/api
 
 Ceph Block Device APIs
 ======================

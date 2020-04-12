@@ -1,8 +1,7 @@
 import logging
 import json
 import tempfile
-import BaseHTTPServer
-import SocketServer
+from six.moves import BaseHTTPServer
 import random
 import threading
 import subprocess
@@ -31,7 +30,7 @@ from .zone_ps import PSTopic, \
     put_object_tagging, \
     get_object_tagging, \
     delete_all_objects
-from multisite import User
+from .multisite import User
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
 import boto.s3.tagging

@@ -3,13 +3,18 @@
 
 #include "osd.h"
 
+#include <sys/utsname.h>
+
 #include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include "common/pick_address.h"
 
+#include "common/pick_address.h"
+#include "include/util.h"
+
+#include "messages/MCommand.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
@@ -73,7 +78,7 @@ OSD::OSD(int id, uint32_t nonce,
     shard_services{*this, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
-    heartbeat_timer{[this] { (void)update_heartbeat_peers(); }},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
@@ -343,6 +348,7 @@ seastar::future<> OSD::_send_boot()
                                   heartbeat->get_front_addrs(),
                                   cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
+  collect_sys_info(&m->metadata, NULL);
   return monc->send_message(m);
 }
 
@@ -404,6 +410,12 @@ seastar::future<> OSD::_send_alive()
     auto m = make_message<MOSDAlive>(osdmap->get_epoch(), want);
     return monc->send_message(std::move(m));
   }
+}
+
+seastar::future<> OSD::handle_command(crimson::net::Connection* conn,
+				      Ref<MCommand> m)
+{
+  return asok->handle_command(conn, std::move(m));
 }
 
 /*
@@ -537,13 +549,15 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
 
 seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 {
-  return PGMeta{store.get(), pgid}.get_epoch().then([this](epoch_t e) {
+  return seastar::do_with(PGMeta(store.get(), pgid), [this, pgid] (auto& pg_meta) {
+    return pg_meta.get_epoch();
+  }).then([this](epoch_t e) {
     return get_map(e);
   }).then([pgid, this] (auto&& create_map) {
     return make_pg(std::move(create_map), pgid, false);
-  }).then([this, pgid](Ref<PG> pg) {
+  }).then([this](Ref<PG> pg) {
     return pg->read_state(store.get()).then([pg] {
-      return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+	return seastar::make_ready_future<Ref<PG>>(std::move(pg));
     });
   }).handle_exception([pgid](auto ep) {
     logger().info("pg {} saw exception on load {}", pgid, ep);
@@ -569,6 +583,8 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
       conn->get_shared(),
       m);
     return seastar::now();
+  case MSG_COMMAND:
+    return handle_command(conn, boost::static_pointer_cast<MCommand>(m));
   case MSG_OSD_PG_LEASE:
     [[fallthrough]];
   case MSG_OSD_PG_LEASE_ACK:
@@ -1035,10 +1051,10 @@ seastar::future<> OSD::send_beacon()
   return monc->send_message(m);
 }
 
-seastar::future<> OSD::update_heartbeat_peers()
+void OSD::update_heartbeat_peers()
 {
   if (!state.is_active()) {
-    return seastar::now();
+    return;
   }
   for (auto& pg : pg_map.get_pgs()) {
     vector<int> up, acting;
@@ -1053,7 +1069,7 @@ seastar::future<> OSD::update_heartbeat_peers()
       }
     }
   }
-  return heartbeat->update_peers(whoami);
+  heartbeat->update_peers(whoami);
 }
 
 seastar::future<> OSD::handle_peering_op(

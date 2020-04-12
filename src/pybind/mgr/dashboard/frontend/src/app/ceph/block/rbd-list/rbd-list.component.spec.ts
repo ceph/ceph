@@ -26,6 +26,7 @@ import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdListComponent } from './rbd-list.component';
 import { RbdModel } from './rbd-model';
 
@@ -55,7 +56,8 @@ describe('RbdListComponent', () => {
       RbdListComponent,
       RbdDetailsComponent,
       RbdSnapshotListComponent,
-      RbdConfigurationListComponent
+      RbdConfigurationListComponent,
+      RbdTabsComponent
     ],
     providers: [TaskListService, i18nProviders]
   });
@@ -96,6 +98,67 @@ describe('RbdListComponent', () => {
       summaryService['summaryDataSource'].error(undefined);
       expect(component.table.reset).toHaveBeenCalled();
       expect(component.viewCacheStatusList).toEqual([{ status: ViewCacheStatus.ValueException }]);
+    });
+  });
+
+  describe('handling of deletion', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+    });
+
+    it('should check if there are no snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd'
+      });
+      expect(component.hasSnapshots()).toBeFalsy();
+    });
+
+    it('should check if there are snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [{}, {}]
+      });
+      expect(component.hasSnapshots()).toBeTruthy();
+    });
+
+    it('should get delete disable description', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [
+          {
+            children: [{}]
+          }
+        ]
+      });
+      expect(component.getDeleteDisableDesc()).toBe(
+        'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.'
+      );
+    });
+
+    it('should list all protected snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [
+          {
+            name: 'snap1',
+            is_protected: false
+          },
+          {
+            name: 'snap2',
+            is_protected: true
+          }
+        ]
+      });
+
+      expect(component.listProtectedSnapshots()).toEqual(['snap2']);
     });
   });
 

@@ -55,7 +55,6 @@ struct PGStateInstance {
   }
 
   epoch_t this_epoch;
-  utime_t enter_time;
   std::vector<state_history_entry> state_history;
   std::stack<embedded_state> embedded_states;
 };

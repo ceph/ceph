@@ -33,6 +33,9 @@ using std::string;
 using std::vector;
 
 using ceph::bufferlist;
+using ceph::make_message;
+using ceph::ref_cast;
+using ceph::ref_t;
 
 #define dout_subsys ceph_subsys_mgrc
 #undef dout_prefix
