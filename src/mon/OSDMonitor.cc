@@ -647,16 +647,19 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
-    if (g_conf().get_val<bool>("mon_debug_no_require_nautilus")) {
-      derr << __func__ << " mon_debug_no_require_octopus and nautilus=true" << dendl;
-      newmap.require_osd_release = ceph_release_t::mimic;
-    } else {
-      derr << __func__ << " mon_debug_no_require_octopus=true" << dendl;
+  if (g_conf().get_val<bool>("mon_debug_no_require_pacific")) {
+    if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
+      derr << __func__ << " mon_debug_no_require_pacific and octopus=true" << dendl;
       newmap.require_osd_release = ceph_release_t::nautilus;
+    } else {
+      derr << __func__ << " mon_debug_no_require_pacific=true" << dendl;
+      newmap.require_osd_release = ceph_release_t::octopus;
     }
   } else {
-    newmap.require_osd_release = ceph_release_t::octopus;
+    newmap.require_osd_release = ceph_release_t::pacific;
+  }
+
+  if (newmap.require_osd_release >= ceph_release_t::octopus) {
     ceph_release_t r = ceph_release_from_name(
       g_conf()->mon_osd_initial_require_min_compat_client);
     if (!r) {
@@ -3395,6 +3398,13 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     mon->clog->info() << "disallowing boot of octopus+ OSD "
 		      << m->get_orig_source_inst()
 		      << " because require_osd_release < mimic";
+    goto ignore;
+  }
+  if (HAVE_FEATURE(m->osd_features, SERVER_PACIFIC) &&
+      osdmap.require_osd_release < ceph_release_t::nautilus) {
+    mon->clog->info() << "disallowing boot of pacific+ OSD "
+		      << m->get_orig_source_inst()
+		      << " because require_osd_release < nautilus";
     goto ignore;
   }
 
@@ -11225,6 +11235,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_OCTOPUS))
            && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_OCTOPUS feature";
+	err = -EPERM;
+	goto reply;
+      }
+    } else if (rel == ceph_release_t::pacific) {
+      if (!mon->monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_PACIFIC)) {
+	ss << "not all mons are pacific";
+	err = -EPERM;
+	goto reply;
+      }
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_PACIFIC))
+           && !sure) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_PACIFIC feature";
 	err = -EPERM;
 	goto reply;
       }

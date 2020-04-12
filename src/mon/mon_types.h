@@ -497,6 +497,7 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_OSDMAP_PRUNE (1ULL << 3);
       constexpr mon_feature_t FEATURE_NAUTILUS(    (1ULL << 4));
       constexpr mon_feature_t FEATURE_OCTOPUS(    (1ULL << 5));
+      constexpr mon_feature_t FEATURE_PACIFIC(    (1ULL << 6));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -514,6 +515,7 @@ namespace ceph {
           FEATURE_OSDMAP_PRUNE |
 	  FEATURE_NAUTILUS |
 	  FEATURE_OCTOPUS |
+	  FEATURE_PACIFIC |
 	  FEATURE_NONE
 	  );
       }
@@ -535,6 +537,7 @@ namespace ceph {
 	  FEATURE_NAUTILUS |
 	  FEATURE_OSDMAP_PRUNE |
 	  FEATURE_OCTOPUS |
+	  FEATURE_PACIFIC |
 	  FEATURE_NONE
 	  );
       }
@@ -553,6 +556,9 @@ namespace ceph {
 
 static inline ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f)
 {
+  if (f.contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
+    return ceph_release_t::pacific;
+  }
   if (f.contains_all(ceph::features::mon::FEATURE_OCTOPUS)) {
     return ceph_release_t::octopus;
   }
@@ -586,6 +592,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "nautilus";
   } else if (f == FEATURE_OCTOPUS) {
     return "octopus";
+  } else if (f == FEATURE_PACIFIC) {
+    return "pacific";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -606,6 +614,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_NAUTILUS;
   } else if (n == "octopus") {
     return FEATURE_OCTOPUS;
+  } else if (n == "pacific") {
+    return FEATURE_PACIFIC;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }
