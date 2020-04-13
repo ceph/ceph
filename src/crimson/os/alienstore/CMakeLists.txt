@@ -36,6 +36,7 @@ list(APPEND crimson_alien_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluestore_types.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/fastbmap_allocator_impl.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/FreelistManager.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/HybridAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/io_uring.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/StupidAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapAllocator.cc)
