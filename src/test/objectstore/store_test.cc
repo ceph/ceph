@@ -6674,6 +6674,540 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  // this will enable continuous allocations
+  SetVal(g_conf(), "bluestore_allocator", "avl");
+  StartDeferred(block_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "131072");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+  ghobject_t hoid2(hobject_t("test2", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, bl2;
+
+    bl.append(std::string(block_size * 2, 'c'));
+    bl2.append(std::string(block_size * 3, 'd'));
+
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    t.set_alloc_hint(cid, hoid2, block_size * 4, block_size * 4,
+      CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ);
+    t.write(cid, hoid2, 0, bl2.length(), bl2, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 2u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 5);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 5);
+  }
+
+  // overwrite at the beginning, 4K alignment
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'b'));
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 3u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, block_size, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'c'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+
+  // overwrite at the end, 4K alignment
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'g'));
+    t.write(cid, hoid, block_size, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 4u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 2u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, block_size, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'g'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+
+  // overwrite at 4K, 12K alignment
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'e'));
+    t.write(cid, hoid2, block_size , bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 5u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
+
+  // makes sure deferred has been submitted
+  // and do all the checks again
+  sleep(g_conf().get_val<double>("bluestore_max_defer_interval") + 2);
+
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 5u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, block_size, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'g'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid2, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'd'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid2, block_size, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'e'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid2, block_size * 2, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'd'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 5);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 5);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
+  ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size * 2, 'f'));
+
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 6u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
+
+  {
+    ObjectStore::Transaction t;
+    t.zero(cid, hoid, 0, 100);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, 100, bl);
+    ASSERT_EQ(r, (int)100);
+    expected.append(string(100, 0));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 100, block_size * 2 - 100, bl);
+    ASSERT_EQ(r, (int)block_size * 2 - 100);
+    expected.append(string(block_size * 2 - 100, 'f'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  sleep(2);
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2 - 100);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
+
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size, 'g'));
+
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 7u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'g'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, block_size, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'f'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
+
+  // check whether full overwrite bypass deferred
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size * 2, 'h'));
+
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 8u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, block_size * 2, bl);
+    ASSERT_EQ(r, (int)block_size * 2);
+    expected.append(string(block_size * 2, 'h'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size * 32, 'a'));
+
+    // this will create two 128K aligned blobs
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    t.write(cid, hoid, bl.length(), bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 10u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
+
+  // check whether overwrite (less than prefer_deferred_size) partially overlapping two adjacent blobs goes
+  // deferred
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size * 3, 'b'));
+
+    t.write(cid, hoid, 0x20000 - block_size, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 11u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 6u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, 0x20000 - block_size, bl);
+    ASSERT_EQ(r, 0x20000 - block_size);
+    expected.append(string(r, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    expected.clear();
+
+    r = store->read(ch, hoid, 0x20000 - block_size, block_size * 3, bl);
+    ASSERT_EQ(r, 3 * block_size);
+    expected.append(string(r, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    expected.clear();
+
+    r = store->read(ch, hoid, 0x20000 + 2 * block_size, block_size * 30, bl);
+    ASSERT_EQ(r, 30 * block_size);
+    expected.append(string(r, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    expected.clear();
+  }
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 64);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 64);
+  }
+
+  // check whether overwrite (larger than prefer_deferred_size) partially
+  // overlapping two adjacent blobs goes deferred
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size * 30, 'c'));
+
+    t.write(cid, hoid, 0x10000 + block_size, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  sleep(2);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 12u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 8u);
+
+  {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid, 0, 0x11000, bl);
+    ASSERT_EQ(r, 0x11000);
+    expected.append(string(r, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    expected.clear();
+
+    r = store->read(ch, hoid, 0x11000, block_size * 30, bl);
+    ASSERT_EQ(r, block_size * 30);
+    expected.append(string(r, 'c'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    expected.clear();
+
+    r = store->read(ch, hoid, block_size * 47, 0x10000 + block_size, bl);
+    ASSERT_EQ(r, 0x10000 + block_size);
+    expected.append(string(r, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    expected.clear();
+  }
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 64);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 64);
+  }
+
+  // check whether overwrite (2 * prefer_deferred_size) partially
+  // overlapping two adjacent blobs goes non-deferred if one of the part is 
+  // above prefer_deferred_size
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(block_size * 30, 'e'));
+
+    t.write(cid, hoid, 0x20000 - block_size, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  sleep(2);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 13u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 8u);
+
+  {
+    struct store_statfs_t statfs;
+    int r = store->statfs(&statfs);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 64);
+    ASSERT_LE(statfs.allocated, (unsigned)block_size * 64);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+
+TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t alloc_size = 4096;
+  size_t large_object_size = 1 * 1024 * 1024;
+  // this will enable continuous allocations
+  SetVal(g_conf(), "bluestore_allocator", "avl");
+  StartDeferred(alloc_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "131072");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  const PerfCounters* logger = store->get_perf_counters();
+  size_t exp_bluestore_write_big = 0;
+  size_t exp_bluestore_write_big_deferred = 0;
+
+  ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  for (size_t expected_write_size = 1024; expected_write_size <= 65536; expected_write_size *= 2) {
+    //create object with hint
+    ghobject_t hoid(hobject_t("test-"+to_string(expected_write_size), "", CEPH_NOSNAP, 0, -1, ""));
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      t.set_alloc_hint(cid, hoid, large_object_size, expected_write_size,
+		       CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ |
+		       CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+
+    //fill object
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append(std::string(large_object_size, 'h'));
+      t.write(cid, hoid, 0, bl.length(), bl,
+	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      r = queue_transaction(store, ch, std::move(t));
+      ++exp_bluestore_write_big;
+      ASSERT_EQ(r, 0);
+    }
+    ASSERT_EQ(logger->get(l_bluestore_write_big), exp_bluestore_write_big);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), exp_bluestore_write_big_deferred);
+
+    // check whether write will properly use deferred
+    {
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append(std::string(alloc_size + 2, 'z'));
+      t.write(cid, hoid, large_object_size - 2 * alloc_size - 1, bl.length(), bl,
+	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      r = queue_transaction(store, ch, std::move(t));
+      ++exp_bluestore_write_big;
+      ++exp_bluestore_write_big_deferred;
+      ASSERT_EQ(r, 0);
+    }
+    ASSERT_EQ(logger->get(l_bluestore_write_big), exp_bluestore_write_big);
+    ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), exp_bluestore_write_big_deferred);
+  }
+  ch.reset(nullptr);
+  CloseAndReopen();
+  ch = store->open_collection(cid);
+  // check values
+  for (size_t expected_write_size = 1024; expected_write_size <= 65536; expected_write_size *= 2) {
+    ghobject_t hoid(hobject_t("test-"+to_string(expected_write_size), "", CEPH_NOSNAP, 0, -1, ""));
+    {
+      bufferlist bl, expected;
+      r = store->read(ch, hoid, 0, large_object_size, bl);
+      ASSERT_EQ(r, large_object_size);
+      expected.append(string(large_object_size - 2 * alloc_size - 1, 'h'));
+      expected.append(string(alloc_size + 2, 'z'));
+      expected.append(string(alloc_size - 1, 'h'));
+      ASSERT_TRUE(bl_eq(expected, bl));
+    }
+  }
+  {
+    ObjectStore::Transaction t;
+    for (size_t expected_write_size = 1024; expected_write_size <= 65536; expected_write_size *= 2) {
+      ghobject_t hoid(hobject_t("test-"+to_string(expected_write_size), "", CEPH_NOSNAP, 0, -1, ""));
+      t.remove(cid, hoid);
+    }
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
 
   if (string(GetParam()) != "bluestore")

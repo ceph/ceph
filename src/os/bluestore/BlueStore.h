@@ -118,12 +118,13 @@ enum {
   l_bluestore_write_big,
   l_bluestore_write_big_bytes,
   l_bluestore_write_big_blobs,
+  l_bluestore_write_big_deferred,
   l_bluestore_write_small,
   l_bluestore_write_small_bytes,
   l_bluestore_write_small_unused,
-  l_bluestore_write_small_deferred,
+  l_bluestore_write_deferred,
   l_bluestore_write_small_pre_read,
-  l_bluestore_write_small_new,
+  l_bluestore_write_new,
   l_bluestore_txc,
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
@@ -1938,6 +1939,26 @@ public:
     void dump(ceph::Formatter *f);
   };
 
+  struct BigDeferredWriteContext {
+    uint64_t off = 0;     // original logical offset
+    uint32_t b_off = 0;   // blob relative offset
+    uint32_t used = 0;
+    uint64_t head_read = 0;
+    uint64_t tail_read = 0;
+    PExtentVector res_extents;
+
+    inline uint64_t blob_aligned_len() const {
+      return used + head_read + tail_read;
+    }
+
+    bool can_defer(BlueStore::extent_map_t::iterator ep,
+      uint64_t prefer_deferred_size,
+      uint64_t block_size,
+      uint64_t offset,
+      uint64_t l);
+    bool apply_defer(BlueStore::extent_map_t::iterator ep);
+  };
+
   // --------------------------------------------------------
   // members
 private:
@@ -3060,6 +3081,14 @@ private:
     uint64_t offset, uint64_t length,
     ceph::buffer::list::iterator& blp,
     WriteContext *wctx);
+  void _do_write_big_apply_deferred(
+    TransContext* txc,
+    CollectionRef& c,
+    OnodeRef o,
+    BlueStore::extent_map_t::iterator ep,
+    BigDeferredWriteContext& dctx,
+    bufferlist::iterator& blp,
+    WriteContext* wctx);
   void _do_write_big(
     TransContext *txc,
     CollectionRef &c,
