@@ -12,7 +12,7 @@ else
   fi
 fi
 
-PYTHON=${PYTHON:-"python2"}
+PYTHON=${PYTHON:-"python3"}
 VENV=${VENV:-"virtualenv"}
 
 case "$(uname -s)" in
