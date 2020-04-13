@@ -4862,8 +4862,7 @@ int BlueStore::_check_or_set_bdev_label(
     if (cct->_conf->bluestore_debug_permit_any_bdev_label) {
       dout(20) << __func__ << " bdev " << path << " fsid " << label.osd_uuid
 	   << " and fsid " << fsid << " check bypassed" << dendl;
-    }
-    else if (label.osd_uuid != fsid) {
+    } else if (label.osd_uuid != fsid) {
       derr << __func__ << " bdev " << path << " fsid " << label.osd_uuid
 	   << " does not match our fsid " << fsid << dendl;
       return -EIO;
@@ -4972,8 +4971,11 @@ void BlueStore::_close_bdev()
   bdev = NULL;
 }
 
-int BlueStore::_open_fm(KeyValueDB::Transaction t)
+int BlueStore::_open_fm(KeyValueDB::Transaction t, bool read_only)
 {
+  int r;
+  bluestore_bdev_label_t label;
+
   ceph_assert(fm == NULL);
   fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
@@ -5045,9 +5047,19 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t)
 	start += l + u;
       }
     }
+    r = _write_out_fm_meta(0, false, &label);
+    ceph_assert(r == 0);
+  } else {
+    string p = path + "/block";
+    r = _read_bdev_label(cct, p, &label);
+    if (r < 0) {
+      derr << __func__ << " freelist init failed, error reading bdev label: " << cpp_strerror(r) << dendl;
+      delete fm;
+      fm = NULL;
+      return r;
+    }
   }
-
-  int r = fm->init(db);
+  r = fm->init(label, db, read_only);
   if (r < 0) {
     derr << __func__ << " freelist init failed: " << cpp_strerror(r) << dendl;
     delete fm;
@@ -5077,6 +5089,34 @@ void BlueStore::_close_fm()
   fm->shutdown();
   delete fm;
   fm = NULL;
+}
+
+int BlueStore::_write_out_fm_meta(uint64_t target_size,
+  bool update_root_size,
+  bluestore_bdev_label_t* res_label)
+{
+  string p = path + "/block";
+
+  std::vector<std::pair<string, string>> fm_meta;
+  fm->get_meta(target_size, &fm_meta);
+
+  bluestore_bdev_label_t label;
+  int r = _read_bdev_label(cct, p, &label);
+  if (r < 0)
+    return r;
+
+  for (auto& m : fm_meta) {
+    label.meta[m.first] = m.second;
+  }
+  if (update_root_size) {
+    label.size = target_size;
+  }
+  r = _write_bdev_label(cct, p, label);
+  if (res_label) {
+    *res_label = label;
+  }
+
+  return r;
 }
 
 int BlueStore::_open_alloc()
@@ -5121,14 +5161,16 @@ int BlueStore::_open_alloc()
     bytes += length;
   }
   fm->enumerate_reset();
-  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
-	  << " in " << num << " extents"
-	  << dendl;
 
   // also mark bluefs space as allocated
   for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
     alloc->init_rm_free(e.get_start(), e.get_len());
   }
+
+  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
+    << " in " << num << " extents"
+    << " available " << byte_u_t(alloc->get_free())
+    << dendl;
 
   return 0;
 }
@@ -5482,9 +5524,9 @@ int BlueStore::_open_bluefs(bool create)
   return r;
 }
 
-void BlueStore::_close_bluefs()
+void BlueStore::_close_bluefs(bool cold_close)
 {
-  bluefs->umount();
+  bluefs->umount(cold_close);
   _minimal_close_bluefs();
 }
 
@@ -5539,7 +5581,7 @@ int BlueStore::_open_db_and_around(bool read_only)
       goto out_db;
     }
 
-    r = _open_fm(nullptr);
+    r = _open_fm(nullptr, true);
     if (r < 0)
       goto out_db;
 
@@ -5549,7 +5591,7 @@ int BlueStore::_open_db_and_around(bool read_only)
 
     // now open in R/W mode
     if (!read_only) {
-      _close_db();
+      _close_db(true);
 
       r = _open_db(false, false, false);
       if (r < 0) {
@@ -5557,6 +5599,7 @@ int BlueStore::_open_db_and_around(bool read_only)
 	_close_fm();
 	return r;
       }
+      fm->sync(db);
     }
   } else {
     r = _open_db(false, false);
@@ -5568,7 +5611,7 @@ int BlueStore::_open_db_and_around(bool read_only)
       goto out_db;
     }
 
-    r = _open_fm(nullptr);
+    r = _open_fm(nullptr, false);
     if (r < 0)
       goto out_db;
 
@@ -5581,18 +5624,18 @@ int BlueStore::_open_db_and_around(bool read_only)
  out_fm:
   _close_fm();
  out_db:
-  _close_db();
+  _close_db(read_only);
   return r;
 }
 
-void BlueStore::_close_db_and_around()
+void BlueStore::_close_db_and_around(bool read_only)
 {
   if (bluefs) {
-    if (out_of_sync_fm.fetch_and(0)) {
+    if (!read_only && out_of_sync_fm.fetch_and(0)) {
       _sync_bluefs_and_fm();
     }
-    _close_db();
-    while(out_of_sync_fm.fetch_and(0)) {
+    _close_db(read_only);
+    while(!read_only && out_of_sync_fm.fetch_and(0)) {
       // if seen some allocations during close - repeat open_db, sync fm, close
       dout(0) << __func__ << " syncing FreelistManager" << dendl;
       int r = _open_db(false, false, false);
@@ -5603,7 +5646,7 @@ void BlueStore::_close_db_and_around()
 	break;
       }
       _sync_bluefs_and_fm();
-      _close_db();
+      _close_db(false);
     }
     if (!_kv_only) {
       _close_alloc();
@@ -5612,7 +5655,7 @@ void BlueStore::_close_db_and_around()
   } else {
     _close_alloc();
     _close_fm();
-    _close_db();
+    _close_db(read_only);
   }
 }
 
@@ -5698,8 +5741,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
         (void)r;
       }
       env = new rocksdb::EnvMirror(b, a, false, true);
-    }
-    else {
+    } else {
       env = new BlueRocksEnv(bluefs);
 
       // simplify the dir names, too, as "seen" by rocksdb
@@ -5781,7 +5823,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
     if (bluefs) {
-      _close_bluefs();
+      _close_bluefs(read_only);
     }
     // delete env manually here since we can't depend on db to do this
     // under this case
@@ -5826,7 +5868,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    _close_db();
+    _close_db(read_only);
     return -EIO;
   }
   dout(1) << __func__ << " opened " << kv_backend
@@ -5834,13 +5876,13 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   return 0;
 }
 
-void BlueStore::_close_db()
+void BlueStore::_close_db(bool cold_close)
 {
   ceph_assert(db);
   delete db;
   db = NULL;
   if (bluefs) {
-    _close_bluefs();
+    _close_bluefs(cold_close);
   }
 }
 
@@ -6423,7 +6465,7 @@ int BlueStore::mkfs()
 
   {
     KeyValueDB::Transaction t = db->get_transaction();
-    r = _open_fm(t);
+    r = _open_fm(t, true);
     if (r < 0)
       goto out_close_db;
     {
@@ -6471,7 +6513,7 @@ int BlueStore::mkfs()
  out_close_fm:
   _close_fm();
  out_close_db:
-  _close_db();
+  _close_db(false);
  out_close_bdev:
   _close_bdev();
  out_close_fsid:
@@ -6520,7 +6562,7 @@ int BlueStore::_mount_for_bluefs()
 
 void BlueStore::_umount_for_bluefs()
 {
-  _close_bluefs();
+  _close_bluefs(false);
   _close_fsid();
   _close_path();
 }
@@ -6819,10 +6861,10 @@ string BlueStore::get_device_path(unsigned id)
 
 int BlueStore::expand_devices(ostream& out)
 {
-  int r = _mount(false);
+  int r = cold_open();
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
-  out << "Expanding..." << std::endl;
+  out << "Expanding DB/WAL..." << std::endl;
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
     if (devid == bluefs_layout.shared_bdev ) {
       continue;
@@ -6872,37 +6914,27 @@ int BlueStore::expand_devices(ostream& out)
   uint64_t size = bdev->get_size();
   if (size0 < size) {
     out << bluefs_layout.shared_bdev
-	<<" : expanding " << " from 0x" << std::hex
-	<< size0 << " to 0x" << size << std::dec << std::endl;
-    KeyValueDB::Transaction txn;
-    txn = db->get_transaction();
-    int r = fm->expand(size, txn);
-    ceph_assert(r == 0);
-    db->submit_transaction_sync(txn);
+      << " : expanding " << " from 0x" << std::hex
+      << size0 << " to 0x" << size << std::dec << std::endl;
+    _write_out_fm_meta(size, true);
+    cold_close();
 
-     // always reference to slow device here
-    string p = get_device_path(BlueFS::BDEV_SLOW);
-    ceph_assert(!p.empty());
-    const char* path = p.c_str();
-    bluestore_bdev_label_t label;
-    r = _read_bdev_label(cct, path, &label);
-    if (r < 0) {
-      derr << "unable to read label for " << path << ": "
-	    << cpp_strerror(r) << dendl;
-    } else {
-      label.size = size;
-      r = _write_bdev_label(cct, path, label);
-      if (r < 0) {
-	derr << "unable to write label for " << path << ": "
-	      << cpp_strerror(r) << dendl;
-      } else {
-	out << bluefs_layout.shared_bdev
-	      <<" : size label updated to " << size
-	      << std::endl;
-      }
-    }
+    // mount in read/write to sync expansion changes
+    r = _mount(false);
+    ceph_assert(r == 0);
+    umount();
+  } else {
+    cold_close();
   }
-  umount();
+  return r;
+}
+
+int BlueStore::dump_bluefs_sizes(ostream& out)
+{
+  int r = cold_open();
+  ceph_assert(r == 0);
+  bluefs->dump_block_extents(out);
+  cold_close();
   return r;
 }
 
@@ -7045,7 +7077,7 @@ int BlueStore::_mount(bool kv_only, bool open_db)
  out_coll:
   _flush_cache();
  out_db:
-  _close_db_and_around();
+  _close_db_and_around(false);
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -7071,7 +7103,7 @@ int BlueStore::umount()
     dout(20) << __func__ << " closing" << dendl;
 
   }
-  _close_db_and_around();
+  _close_db_and_around(false);
   _close_bdev();
   _close_fsid();
   _close_path();
@@ -7123,7 +7155,7 @@ int BlueStore::cold_open()
 }
 int BlueStore::cold_close()
 {
-  _close_db_and_around();
+  _close_db_and_around(true);
   _close_bdev();
   _close_fsid();
   _close_path();
@@ -8189,7 +8221,7 @@ out_scan:
   mempool_thread.shutdown();
   _flush_cache();
 out_db:
-  _close_db_and_around();
+  _close_db_and_around(false);
 out_bdev:
   _close_bdev();
 out_fsid:
@@ -8278,8 +8310,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
           bs.set(pos);
-        }
-	);
+        });
     }
     int r = bluefs->fsck();
     if (r < 0) {
@@ -11069,6 +11100,14 @@ int BlueStore::_upgrade_super()
       _prepare_ondisk_format_super(t);
       int r = db->submit_transaction_sync(t);
       ceph_assert(r == 0);
+    }
+    if (ondisk_format == 3) {
+      // changes:
+      // - FreelistManager keeps meta within bdev label
+      int r = _write_out_fm_meta(0);
+      ceph_assert(r == 0);
+
+      ondisk_format = 4;
     }
   }
   // done
