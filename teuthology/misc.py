@@ -863,7 +863,7 @@ def wait_until_healthy(ctx, remote, ceph_cluster='ceph', use_sudo=False):
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir)]
     args.extend(cmd)
-    with safe_while(tries=(900 / 6), action="wait_until_healthy") as proceed:
+    with safe_while(tries=(900 // 6), action="wait_until_healthy") as proceed:
         while proceed():
             out = remote.sh(args, logger=log.getChild('health'))
             log.debug('Ceph health: %s', out.rstrip('\n'))

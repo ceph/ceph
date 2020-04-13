@@ -485,7 +485,7 @@ def wait(processes, timeout=None):
     if timeout:
         log.info("waiting for %d", timeout)
     if timeout and timeout > 0:
-        with safe_while(tries=(timeout / 6)) as check_time:
+        with safe_while(tries=(timeout // 6)) as check_time:
             not_ready = list(processes)
             while len(not_ready) > 0:
                 check_time()
