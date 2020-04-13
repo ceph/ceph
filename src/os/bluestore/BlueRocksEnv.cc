@@ -69,6 +69,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    h->buf.invalidate_cache(offset, length);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -140,6 +141,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    h->buf.invalidate_cache(offset, length);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -255,6 +257,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   // If the system is not caching the file contents, then this is a noop.
   // This call has no effect on dirty pages in the cache.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    fs->fsync(h);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
