@@ -1,0 +1,26 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - but it is still running
+    - had wrong client addr
+    - had wrong cluster addr
+    - reached quota
+    - overall HEALTH_
+    - \(POOL_FULL\)
+    - \(POOL_APP_NOT_ENABLED\)
+- workunit:
+    clients:
+      all:
+        - rados/test_dedup_tool.sh

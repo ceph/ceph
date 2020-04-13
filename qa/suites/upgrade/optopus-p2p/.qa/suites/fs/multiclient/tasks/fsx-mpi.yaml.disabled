@@ -1,0 +1,17 @@
+# make sure we get the same MPI version on all hosts
+tasks:
+- pexec:
+    clients:
+      - cd $TESTDIR
+      - wget http://download.ceph.com/qa/fsx-mpi.c
+      - mpicc fsx-mpi.c -o fsx-mpi
+      - rm fsx-mpi.c
+      - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
+- ssh_keys:
+- mpi:
+    exec: sudo $TESTDIR/fsx-mpi -o 1MB -N 50000 -p 10000 -l 1048576 $TESTDIR/gmnt/test
+    workdir: $TESTDIR/gmnt
+- pexec:
+    all:
+      - rm $TESTDIR/gmnt
+      - rm $TESTDIR/fsx-mpi

@@ -1,0 +1,11 @@
+tasks:
+- exec:
+    client.0:
+    - "dmesg -C"
+- rbd:
+    all:
+      fs_type: ext4
+- workunit:
+    clients:
+      all:
+        - suites/wac.sh

@@ -1,0 +1,20 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
+    crush_tunables: jewel
+    conf:
+      client:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+      mon:
+        mon warn on pool no app: false
+        debug mgrc: 20
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rados/test.sh

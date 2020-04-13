@@ -1,0 +1,50 @@
+---
+ceph:
+  deb:
+  - ceph
+  - ceph-mds
+  - ceph-mgr
+  - ceph-common
+  - ceph-fuse
+  - ceph-test
+  - radosgw
+  - python-ceph
+  - libcephfs2
+  - libcephfs-dev
+  - librados2
+  - librbd1
+  - rbd-fuse
+  - ceph-common-dbg
+  - ceph-fuse-dbg
+  - ceph-mds-dbg
+  - ceph-mgr-dbg
+  - ceph-mon-dbg
+  - ceph-osd-dbg
+  - ceph-test-dbg
+  - libcephfs2-dbg
+  - librados2-dbg
+  - libradosstriper1-dbg
+  - librbd1-dbg
+  - librgw2-dbg
+  - radosgw-dbg
+  - rbd-fuse-dbg
+  - rbd-mirror-dbg
+  - rbd-nbd-dbg
+  rpm:
+  - ceph-radosgw
+  - ceph-test
+  - ceph
+  - ceph-mgr
+  - ceph-mgr-dashboard
+  - ceph-mgr-diskprediction-cloud
+  - ceph-mgr-diskprediction-local
+  - ceph-mgr-rook
+  - ceph-mgr-ssh
+  - ceph-fuse
+  - libcephfs2
+  - libcephfs-devel
+  - librados2
+  - librbd1
+  - python-ceph
+  - rbd-fuse
+  - ceph-debuginfo

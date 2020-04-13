@@ -1,0 +1,13 @@
+# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
+os_type: centos
+
+overrides:
+  install:
+    ceph:
+      flavor: notcmalloc
+      debuginfo: true
+  rbd_fsx:
+    valgrind: ["--tool=memcheck"]
+  workunit:
+    env:
+      VALGRIND: "--tool=memcheck --leak-check=full"

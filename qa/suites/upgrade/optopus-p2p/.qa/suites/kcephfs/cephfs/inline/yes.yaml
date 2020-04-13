@@ -1,0 +1,4 @@
+tasks:
+- exec:
+    client.0:
+      - sudo ceph fs set cephfs inline_data true --yes-i-really-mean-it

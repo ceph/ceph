@@ -1,0 +1,19 @@
+# Note this test is unlikely to exercise the code as expected in the future:
+# "It's too tricky to arrange inodes in session->caps. we don't know if it
+# still works in the future." -Zheng
+
+overrides:
+  ceph:
+    log-whitelist:
+      - MDS cache is too large
+      - \(MDS_CACHE_OVERSIZED\)
+tasks:
+- exec:
+    mon.a:
+    - "ceph tell mds.* config set mds_min_caps_per_client 1"
+- background_exec:
+    mon.a:
+    - "sleep 30 && ceph tell mds.* config set mds_cache_memory_limit 1"
+- exec:
+    client.0:
+    - ceph_test_trim_caps

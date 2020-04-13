@@ -1,0 +1,3 @@
+kernel:
+  client:
+    branch: testing

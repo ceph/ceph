@@ -1,0 +1,22 @@
+roles:
+- [mon.a, mds.a, mgr.x, osd.0, osd.1, client.0]
+overrides:
+  ceph:
+    log-whitelist:
+      - \(POOL_APP_NOT_ENABLED\)
+tasks:
+- install:
+    extra_packages:
+      deb:
+        - libradosstriper-dev
+        - librados-dev
+        - libradospp-dev
+      rpm:
+        - libradosstriper-devel
+        - librados-devel
+        - libradospp-devel
+- ceph:
+- workunit:
+    clients:
+      all:
+        - rados/test_librados_build.sh

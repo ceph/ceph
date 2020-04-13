@@ -1,0 +1,4 @@
+tasks:
+- install:
+- ceph:
+- kclient:

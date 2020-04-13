@@ -1,0 +1,14 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+- [mon.b, mgr.y, osd.3, osd.4, osd.5]
+- [mon.c, mgr.z, osd.6, osd.7, osd.8]
+- [osd.9, osd.10, osd.11]
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+      - 'application not enabled'
+- workunit:
+    timeout: 30m
+    clients:
+      all: [rbd/issue-20295.sh]

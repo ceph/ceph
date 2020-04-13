@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      client.0:
+        admin socket: /var/run/ceph/ceph-$name.asok
+tasks:
+- radosbench:
+    clients: [client.0]
+    time: 150
+- admin_socket:
+    client.0:
+      objecter_requests:
+        test: "http://git.ceph.com/?p={repo};a=blob_plain;f=src/test/admin_socket/objecter_requests;hb={branch}"

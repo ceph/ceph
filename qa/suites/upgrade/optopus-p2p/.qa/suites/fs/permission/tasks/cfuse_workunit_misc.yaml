@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse default permissions: false
+        client acl type: posix_acl
+tasks:
+- workunit:
+    clients:
+      all:
+        - fs/misc/acl.sh
+        - fs/misc/chmod.sh

@@ -1,0 +1,18 @@
+
+tasks:
+  - install:
+  - ceph:
+      # tests may leave mgrs broken, so don't try and call into them
+      # to invoke e.g. pg dump during teardown.
+      wait-for-scrub: false
+      log-whitelist:
+        - overall HEALTH_
+        - \(MGR_DOWN\)
+        - \(MGR_INSIGHTS_WARNING\)
+        - \(insights_health_check
+        - \(PG_
+        - replacing it with standby
+        - No standby daemons available
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_orchestrator_cli

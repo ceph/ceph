@@ -1,0 +1,48 @@
+# Large file random writes.
+# 1024 files, 100MB per file.
+
+time=300  # 5 min
+alignio=1
+
+[filesystem0]
+        location=.
+        num_files=128
+        min_filesize=104857600  # 100 MB
+        max_filesize=104857600
+        reuse=1
+[end0]
+
+[threadgroup0]
+        num_threads=32
+
+        write_random=1
+        write_weight=1
+
+        write_size=5242880  # 5 MB
+        write_blocksize=4096
+
+        [stats]
+                enable_stats=1
+                enable_range=1
+
+                msec_range    0.00      0.01
+                msec_range    0.01      0.02
+                msec_range    0.02      0.05
+                msec_range    0.05      0.10
+                msec_range    0.10      0.20
+                msec_range    0.20      0.50
+                msec_range    0.50      1.00
+                msec_range    1.00      2.00
+                msec_range    2.00      5.00
+                msec_range    5.00     10.00
+                msec_range   10.00     20.00
+                msec_range   20.00     50.00
+                msec_range   50.00    100.00
+                msec_range  100.00    200.00
+                msec_range  200.00    500.00
+                msec_range  500.00   1000.00
+                msec_range 1000.00   2000.00
+                msec_range 2000.00   5000.00
+                msec_range 5000.00  10000.00
+        [end]
+[end0]

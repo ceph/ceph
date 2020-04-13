@@ -1,0 +1,15 @@
+meta:
+- desc: |
+   librbd python api tests
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default clone format: 1
+tasks:
+- workunit:
+    branch: luminous
+    clients:
+      client.0:
+        - rbd/test_librbd_python.sh
+- print: "**** done rbd/test_librbd_python.sh 9-workload"

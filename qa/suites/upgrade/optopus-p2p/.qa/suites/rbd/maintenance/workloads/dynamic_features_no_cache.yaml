@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd cache: false
+op_workload:
+  sequential:
+    - workunit:
+        clients:
+          client.0:
+          - rbd/qemu_dynamic_features.sh
+        env:
+          IMAGE_NAME: client.0.1-clone

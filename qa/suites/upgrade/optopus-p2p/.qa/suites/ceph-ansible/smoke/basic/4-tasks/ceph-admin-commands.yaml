@@ -1,0 +1,7 @@
+meta:
+- desc: "Run ceph-admin-commands.sh"
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - ceph-tests/ceph-admin-commands.sh

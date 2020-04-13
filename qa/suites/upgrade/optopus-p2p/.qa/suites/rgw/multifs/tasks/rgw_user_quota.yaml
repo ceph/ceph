@@ -1,0 +1,10 @@
+# Amazon/S3.pm (cpan) not available as an rpm
+os_type: ubuntu
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]
+- workunit:
+    clients:
+      client.0:
+        - rgw/s3_user_quota.pl

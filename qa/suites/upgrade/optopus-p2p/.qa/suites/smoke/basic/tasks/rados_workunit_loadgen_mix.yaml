@@ -1,0 +1,13 @@
+tasks:
+- install:
+- ceph:
+    fs: ext4
+    log-whitelist:
+    - but it is still running
+    - overall HEALTH_
+    - \(POOL_APP_NOT_ENABLED\)
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - rados/load-gen-mix.sh

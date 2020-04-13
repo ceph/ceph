@@ -1,0 +1,24 @@
+tasks:
+- install:
+- exec:
+    mon.b:
+    - sudo systemctl stop chronyd.service || true
+    - sudo systemctl stop systemd-timesync.service || true
+    - sudo systemctl stop ntpd.service || true
+    - sudo systemctl stop ntp.service || true
+    - date -u -s @$(expr $(date -u +%s) + 2)
+- ceph:
+    wait-for-healthy: false
+    log-whitelist:
+    - .*clock.*skew.*
+    - clocks not synchronized
+    - overall HEALTH_
+    - \(MON_CLOCK_SKEW\)
+    - \(MGR_DOWN\)
+    - \(MON_DOWN\)
+    - \(PG_
+    - \(SLOW_OPS\)
+    - No standby daemons available
+    - slow request
+- mon_clock_skew_check:
+    expect-skew: true

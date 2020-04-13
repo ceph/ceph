@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - force file system read-only
+      - bad backtrace
+      - MDS in read-only mode
+      - \(MDS_READ_ONLY\)
+
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_auto_repair

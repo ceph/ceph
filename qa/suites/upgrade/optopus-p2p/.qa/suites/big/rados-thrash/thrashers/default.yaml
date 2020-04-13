@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - but it is still running
+    - objects unfound and apparently lost
+tasks:
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 1
+    chance_pgnum_shrink: 1
+    chance_pgpnum_fix: 1

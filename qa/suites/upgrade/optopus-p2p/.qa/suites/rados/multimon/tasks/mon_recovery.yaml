@@ -1,0 +1,10 @@
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(PG_AVAILABILITY\)
+      - \(SLOW_OPS\)
+      - slow request
+- mon_recovery:

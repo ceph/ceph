@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph mon enable-msgr2
+      - ceph config rm global mon_warn_on_msgr2_not_enabled
+- ceph.healthy:
