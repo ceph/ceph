@@ -3979,6 +3979,8 @@ def create_packager(stable=None, version=None, branch=None, commit=None):
 def command_add_repo():
     if args.version and args.release:
         raise Error('you can specify either --release or --version but not both')
+    if not args.version and not args.release and not args.dev and not args.dev_commit:
+        raise Error('please supply a --release, --version, --dev or --dev-commit argument')
     if args.version:
         try:
             (x, y, z) = args.version.split('.')
