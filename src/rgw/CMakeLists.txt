@@ -88,6 +88,7 @@ set(librgw_common_srcs
   rgw_data_sync.cc
   rgw_sync_counters.cc
   rgw_sync_error_repo.cc
+  rgw_sync_info.cc
   rgw_sync_module.cc
   rgw_sync_module_aws.cc
   rgw_sync_module_es.cc
