@@ -416,7 +416,7 @@
       ],
       "targets": [
         {
-          "expr": "topk(10, (sort((irate(ceph_rbd_write_ops[30s]) + on(image, pool, namespace) irate(ceph_rbd_read_ops[30s])))))",
+          "expr": "topk(10, (sort((irate(ceph_rbd_write_ops[30s]) + on (image, pool, namespace) irate(ceph_rbd_read_ops[30s])))))",
           "format": "table",
           "instant": true,
           "intervalFactor": 1,
