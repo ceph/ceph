@@ -431,7 +431,7 @@
       "strokeWidth": 1,
       "targets": [
         {
-          "expr": "count by(device_class) (ceph_osd_metadata)",
+          "expr": "count by (device_class) (ceph_osd_metadata)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{device_class}}",
