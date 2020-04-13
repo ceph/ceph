@@ -209,6 +209,7 @@ public:
 };
 
 class RGWMetadataTopHandler;
+class RGWLC;
 
 class RGWMetadataManager {
   friend class RGWMetadataHandler;
@@ -230,7 +231,8 @@ public:
   int get(string& metadata_key, Formatter *f, optional_yield y);
   int put(string& metadata_key, bufferlist& bl, optional_yield y,
           RGWMDLogSyncType sync_mode,
-          obj_version *existing_version = NULL);
+          obj_version *existing_version = NULL,
+          RGWLC *lc = NULL);
   int remove(string& metadata_key, optional_yield y);
 
   int mutate(const string& metadata_key,

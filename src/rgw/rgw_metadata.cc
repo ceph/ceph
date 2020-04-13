@@ -12,8 +12,10 @@
 #include "rgw_tools.h"
 #include "rgw_mdlog.h"
 #include "rgw_sal.h"
+#include "rgw_lc.h"
 
 #include "rgw_cr_rados.h"
+#include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_meta.h"
@@ -24,6 +26,7 @@
 #include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
+#include <boost/algorithm/string.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -659,7 +662,8 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y
 int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
 			    optional_yield y,
                             RGWMDLogSyncType sync_type,
-                            obj_version *existing_version)
+                            obj_version *existing_version,
+                            RGWLC* lc)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -701,6 +705,22 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   ret = handler->put(entry, obj, objv_tracker, y, sync_type);
   if (existing_version) {
     *existing_version = objv_tracker.read_version;
+  }
+
+  if (lc && boost::algorithm::starts_with(metadata_key, "bucket.instance:")) {
+    if (RGWBucketInstanceMetadataObject* bucket_meta_obj = dynamic_cast<RGWBucketInstanceMetadataObject*>(obj)) {
+      auto pattrs = obj->get_pattrs();
+      if (pattrs) {
+        auto lc_it = pattrs->find(RGW_ATTR_LC);
+        if (lc_it != pattrs->end()) {
+          ldout(cct, 20) << "add lc entry for " << bucket_meta_obj->get_bucket_info().bucket.name << dendl;
+          lc->set_entry(bucket_meta_obj->get_bucket_info().bucket);
+        } else {
+          ldout(cct, 20) << "rm lc entry for " << bucket_meta_obj->get_bucket_info().bucket.name << dendl;
+          lc->rm_entry(bucket_meta_obj->get_bucket_info().bucket);
+        }
+      }
+    }
   }
 
   delete obj;

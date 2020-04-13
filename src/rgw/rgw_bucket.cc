@@ -2972,7 +2972,7 @@ public:
                                        RGWSI_MetaBackend_Handler::Op *_op, string& entry,
                                        RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 				       optional_yield y,
-                                       RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj, objv_tracker, y, type),
+                                       RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj, objv_tracker, y, type), cct(cct),
                                                                 bihandler(_handler) {
     obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
 
