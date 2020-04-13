@@ -236,6 +236,15 @@ public:
     void skip(size_t n) {
       pos += n;
     }
+
+    // For the sake of simplicity, we invalidate completed rather than
+    // for the provided extent
+    void invalidate_cache(uint64_t offset, uint64_t length) {
+      if (offset >= bl_off && offset < get_buf_end()) {
+	bl.clear();
+	bl_off = 0;
+      }
+    }
   };
 
   struct FileReader {
