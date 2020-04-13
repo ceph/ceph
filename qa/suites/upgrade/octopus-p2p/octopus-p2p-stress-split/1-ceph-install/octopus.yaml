@@ -1,0 +1,19 @@
+meta:
+- desc: install ceph/octopus v15.2.1
+tasks:
+- install:
+    tag: v15.2.1
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
+- print: "**** done install octopus v15.2.1"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release octopus
+      - ceph osd set-require-min-compat-client octopus
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false
