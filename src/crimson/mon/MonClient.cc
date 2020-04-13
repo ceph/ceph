@@ -922,6 +922,9 @@ seastar::future<> Client::stop()
   logger().info("{}", __func__);
   auto fut = gate.close();
   timer.cancel();
+  for (auto& pending_con : pending_conns) {
+    pending_con->close();
+  }
   if (active_con) {
     active_con->close();
   }
@@ -1000,7 +1003,10 @@ seastar::future<> Client::reopen_session(int rank)
       return seastar::make_exception_future(ep);
     });
   }).then([this] {
-    ceph_assert_always(active_con);
+    if (!active_con) {
+      return seastar::make_exception_future(
+	  crimson::common::system_shutdown_exception());
+    }
     return active_con->renew_rotating_keyring();
   });
 }
