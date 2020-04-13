@@ -474,6 +474,31 @@ int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,
   return 0;
 }
 
+int cls_cxx_map_get_vals_by_keys(cls_method_context_t hctx,
+                                 const std::set<std::string> &keys,
+                                 std::map<std::string, bufferlist> *map)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  OSDOp& op = ops[0];
+  int ret;
+
+  encode(keys, op.indata);
+
+  op.op.op = CEPH_OSD_OP_OMAPGETVALSBYKEYS;
+  ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
+  if (ret < 0)
+    return ret;
+
+  auto iter = op.outdata.cbegin();
+  try {
+    decode(*map, iter);
+  } catch (buffer::error& e) {
+    return -EIO;
+  }
+  return 0;
+}
+
 int cls_cxx_map_set_val(cls_method_context_t hctx, const string &key,
 			bufferlist *inbl)
 {
