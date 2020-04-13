@@ -620,25 +620,28 @@ int RocksDBStore::do_open(ostream &out,
     }
   }
   ceph_assert(default_cf != nullptr);
-  
-  PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
-  plb.add_u64_counter(l_rocksdb_txns, "submit_transaction", "Submit transactions");
-  plb.add_u64_counter(l_rocksdb_txns_sync, "submit_transaction_sync", "Submit transactions sync");
-  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
-  plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
-  plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
-  plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");
-  plb.add_u64_counter(l_rocksdb_compact_range, "compact_range", "Compactions by range");
-  plb.add_u64_counter(l_rocksdb_compact_queue_merge, "compact_queue_merge", "Mergings of ranges in compaction queue");
-  plb.add_u64(l_rocksdb_compact_queue_len, "compact_queue_len", "Length of compaction queue");
-  plb.add_time_avg(l_rocksdb_write_wal_time, "rocksdb_write_wal_time", "Rocksdb write wal time");
-  plb.add_time_avg(l_rocksdb_write_memtable_time, "rocksdb_write_memtable_time", "Rocksdb write memtable time");
-  plb.add_time_avg(l_rocksdb_write_delay_time, "rocksdb_write_delay_time", "Rocksdb write delay time");
-  plb.add_time_avg(l_rocksdb_write_pre_and_post_process_time, 
-      "rocksdb_write_pre_and_post_time", "total time spent on writing a record, excluding write process");
-  logger = plb.create_perf_counters();
-  cct->get_perfcounters_collection()->add(logger);
+
+  if (cct->_conf->rocksdb_perf)
+  {
+    PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
+    plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
+    plb.add_u64_counter(l_rocksdb_txns, "submit_transaction", "Submit transactions");
+    plb.add_u64_counter(l_rocksdb_txns_sync, "submit_transaction_sync", "Submit transactions sync");
+    plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
+    plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
+    plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
+    plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");
+    plb.add_u64_counter(l_rocksdb_compact_range, "compact_range", "Compactions by range");
+    plb.add_u64_counter(l_rocksdb_compact_queue_merge, "compact_queue_merge", "Mergings of ranges in compaction queue");
+    plb.add_u64(l_rocksdb_compact_queue_len, "compact_queue_len", "Length of compaction queue");
+    plb.add_time_avg(l_rocksdb_write_wal_time, "rocksdb_write_wal_time", "Rocksdb write wal time");
+    plb.add_time_avg(l_rocksdb_write_memtable_time, "rocksdb_write_memtable_time", "Rocksdb write memtable time");
+    plb.add_time_avg(l_rocksdb_write_delay_time, "rocksdb_write_delay_time", "Rocksdb write delay time");
+    plb.add_time_avg(l_rocksdb_write_pre_and_post_process_time,
+        "rocksdb_write_pre_and_post_time", "total time spent on writing a record, excluding write process");
+    logger = plb.create_perf_counters();
+    cct->get_perfcounters_collection()->add(logger);
+  }
 
   if (compact_on_mount) {
     derr << "Compacting rocksdb store..." << dendl;
@@ -841,7 +844,7 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
          << " Rocksdb transaction: " << rocks_txc.seen << dendl;
   }
 
-  if (cct->_conf->rocksdb_perf) {
+  if (logger) {
     utime_t write_memtable_time;
     utime_t write_delay_time;
     utime_t write_wal_time;
@@ -865,31 +868,45 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
 
 int RocksDBStore::submit_transaction(KeyValueDB::Transaction t) 
 {
-  utime_t start = ceph_clock_now();
+  utime_t start;
+  if (logger)
+  {
+    start = ceph_clock_now();
+  }
   rocksdb::WriteOptions woptions;
   woptions.sync = false;
 
   int result = submit_common(woptions, t);
 
-  utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_txns);
-  logger->tinc(l_rocksdb_submit_latency, lat);
+  if (logger)
+  {
+    utime_t lat = ceph_clock_now() - start;
+    logger->inc(l_rocksdb_txns);
+    logger->tinc(l_rocksdb_submit_latency, lat);
+  }
   
   return result;
 }
 
 int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
-  utime_t start = ceph_clock_now();
+  utime_t start;
+  if (logger)
+  {
+    start = ceph_clock_now();
+  }
   rocksdb::WriteOptions woptions;
   // if disableWAL, sync can't set
   woptions.sync = !disableWAL;
   
   int result = submit_common(woptions, t);
-  
-  utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_txns_sync);
-  logger->tinc(l_rocksdb_submit_sync_latency, lat);
+
+  if (logger)
+  {
+    utime_t lat = ceph_clock_now() - start;
+    logger->inc(l_rocksdb_txns_sync);
+    logger->tinc(l_rocksdb_submit_sync_latency, lat);
+  }
 
   return result;
 }
@@ -1099,7 +1116,11 @@ int RocksDBStore::get(
     std::map<string, bufferlist> *out)
 {
   rocksdb::PinnableSlice value;
-  utime_t start = ceph_clock_now();
+  utime_t start;
+  if (logger)
+  {
+    start = ceph_clock_now();
+  }
   auto cf = get_cf_handle(prefix);
   if (cf) {
     for (auto& key : keys) {
@@ -1129,9 +1150,12 @@ int RocksDBStore::get(
       value.Reset();
     }
   }
-  utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_gets);
-  logger->tinc(l_rocksdb_get_latency, lat);
+  if (logger)
+  {
+    utime_t lat = ceph_clock_now() - start;
+    logger->inc(l_rocksdb_gets);
+    logger->tinc(l_rocksdb_get_latency, lat);
+  }
   return 0;
 }
 
@@ -1141,7 +1165,11 @@ int RocksDBStore::get(
     bufferlist *out)
 {
   ceph_assert(out && (out->length() == 0));
-  utime_t start = ceph_clock_now();
+  utime_t start;
+  if (logger)
+  {
+    start = ceph_clock_now();
+  }
   int r = 0;
   rocksdb::PinnableSlice value;
   rocksdb::Status s;
@@ -1165,9 +1193,12 @@ int RocksDBStore::get(
   } else {
     ceph_abort_msg(s.getState());
   }
-  utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_gets);
-  logger->tinc(l_rocksdb_get_latency, lat);
+  if (logger)
+  {
+    utime_t lat = ceph_clock_now() - start;
+    logger->inc(l_rocksdb_gets);
+    logger->tinc(l_rocksdb_get_latency, lat);
+  }
   return r;
 }
 
@@ -1178,7 +1209,11 @@ int RocksDBStore::get(
   bufferlist *out)
 {
   ceph_assert(out && (out->length() == 0));
-  utime_t start = ceph_clock_now();
+  utime_t start;
+  if (logger)
+  {
+    start = ceph_clock_now();
+  }
   int r = 0;
   rocksdb::PinnableSlice value;
   rocksdb::Status s;
@@ -1203,9 +1238,12 @@ int RocksDBStore::get(
   } else {
     ceph_abort_msg(s.getState());
   }
-  utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_gets);
-  logger->tinc(l_rocksdb_get_latency, lat);
+  if (logger)
+  {
+    utime_t lat = ceph_clock_now() - start;
+    logger->inc(l_rocksdb_gets);
+    logger->tinc(l_rocksdb_get_latency, lat);
+  }
   return r;
 }
 
@@ -1231,7 +1269,10 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 
 void RocksDBStore::compact()
 {
-  logger->inc(l_rocksdb_compact);
+  if (logger)
+  {
+    logger->inc(l_rocksdb_compact);
+  }
   rocksdb::CompactRangeOptions options;
   db->CompactRange(options, default_cf, nullptr, nullptr);
   for (auto cf : cf_handles) {
@@ -1251,9 +1292,15 @@ void RocksDBStore::compact_thread_entry()
     if (!compact_queue.empty()) {
       auto range = compact_queue.front();
       compact_queue.pop_front();
-      logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
+      if (logger)
+      {
+        logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
+      }
       l.unlock();
-      logger->inc(l_rocksdb_compact_range);
+      if (logger)
+      {
+        logger->inc(l_rocksdb_compact_range);
+      }
       if (range.first.empty() && range.second.empty()) {
         compact();
       } else {
@@ -1286,7 +1333,10 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
       // select right bound that is bigger
       compact_queue.push_back(make_pair(start, end > p->second ? end : p->second));
       compact_queue.erase(p);
-      logger->inc(l_rocksdb_compact_queue_merge);
+      if (logger)
+      {
+        logger->inc(l_rocksdb_compact_queue_merge);
+      }
       break;
     }
     if (start <= p->second && p->second <= end) {
@@ -1295,7 +1345,10 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
       //But we break if previous condition, so start > p->first.
       compact_queue.push_back(make_pair(p->first, end));
       compact_queue.erase(p);
-      logger->inc(l_rocksdb_compact_queue_merge);
+      if (logger)
+      {
+        logger->inc(l_rocksdb_compact_queue_merge);
+      }
       break;
     }
     ++p;
@@ -1303,7 +1356,10 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
   if (p == compact_queue.end()) {
     // no merge, new entry.
     compact_queue.push_back(make_pair(start, end));
-    logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
+    if (logger)
+    {
+      logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
+    }
   }
   compact_queue_cond.notify_all();
   if (!compact_thread.is_started()) {
