@@ -347,7 +347,9 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  unsigned _get_slow_device_id() {
+    return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
+  }
   const char* get_device_name(unsigned id);
   int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
@@ -447,7 +449,7 @@ public:
   int mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout);
   int mount();
   int maybe_verify_layout(const bluefs_layout_t& layout) const;
-  void umount();
+  void umount(bool avoid_compact = false);
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
@@ -518,7 +520,7 @@ public:
   void compact_log();
 
   /// sync any uncommitted state to disk
-  void sync_metadata();
+  void sync_metadata(bool avoid_compact);
 
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;
