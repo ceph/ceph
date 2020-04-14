@@ -1071,7 +1071,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
-    ldout(cct, 1) << __func__ << " read frame length and tag failed r=" << r
+    ldout(cct, 1) << __func__ << " read frame preamble failed r=" << r
                   << " (" << cpp_strerror(r) << ")" << dendl;
     return _fault();
   }
@@ -1206,7 +1206,7 @@ CtPtr ProtocolV2::read_frame_segment() {
       get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment));
   } catch (std::bad_alloc&) {
     // Catching because of potential issues with satisfying alignment.
-    ldout(cct, 20) << __func__ << " can't allocate aligned rx_buffer "
+    ldout(cct, 1) << __func__ << " can't allocate aligned rx_buffer"
 		   << " len=" << get_onwire_size(cur_rx_desc.length)
 		   << " align=" << cur_rx_desc.alignment
 		   << dendl;
@@ -1349,7 +1349,8 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r)
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
-    ldout(cct, 1) << __func__ << " read data error " << dendl;
+    ldout(cct, 1) << __func__ << " read frame epilogue failed r=" << r
+                  << " (" << cpp_strerror(r) << ")" << dendl;
     return _fault();
   }
 
