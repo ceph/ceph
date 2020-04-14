@@ -1135,12 +1135,12 @@ class CephFSShell(Cmd):
             try:
                 statfs = cephfs.statfs(file)
                 stat = cephfs.stat(file)
-                block_size = statfs['f_blocks']*statfs['f_bsize'] // 1024
+                block_size = (statfs['f_blocks'] * statfs['f_bsize']) // 1024
                 available = block_size - stat.st_size
                 use = 0
 
                 if block_size > 0:
-                    use = (stat.st_size*100 // block_size)
+                    use = (stat.st_size * 100) // block_size
 
                 if header:
                     header = False
