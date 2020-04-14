@@ -2,11 +2,11 @@
 
 #include "auth/Auth.h"
 #include "messages/MPing.h"
+#include "common/ceph_argparse.h"
 #include "crimson/auth/DummyAuth.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/net/Config.h"
 #include "crimson/thread/Throttle.h"
 
 #include <seastar/core/alien.hh>
@@ -16,6 +16,7 @@
 #include <seastar/core/posix.hh>
 #include <seastar/core/reactor.hh>
 
+using crimson::common::local_conf;
 
 enum class echo_role {
   as_server,
@@ -61,7 +62,7 @@ struct Server {
     }
   } dispatcher;
   Server(crimson::net::MessengerRef msgr)
-    : byte_throttler(crimson::net::conf.osd_client_message_size_cap),
+    : byte_throttler(local_conf()->osd_client_message_size_cap),
       msgr{msgr}
   {
     msgr->set_crc_header();
@@ -85,7 +86,7 @@ struct Client {
     }
   } dispatcher;
   Client(crimson::net::MessengerRef msgr)
-    : byte_throttler(crimson::net::conf.osd_client_message_size_cap),
+    : byte_throttler(local_conf()->osd_client_message_size_cap),
       msgr{msgr}
   {
     msgr->set_crc_header();
@@ -121,7 +122,17 @@ public:
 
   void run(seastar::app_template& app, int argc, char** argv) {
     app.run(argc, argv, [this] {
-      return seastar::now().then([this] {
+      std::vector<const char*> args;
+      std::string cluster;
+      std::string conf_file_list;
+      auto init_params = ceph_argparse_early_args(args,
+                                                CEPH_ENTITY_TYPE_CLIENT,
+                                                &cluster,
+                                                &conf_file_list);
+      return crimson::common::sharded_conf().start(init_params.name, cluster)
+      .then([conf_file_list] {
+        return local_conf().parse_config_files(conf_file_list);
+      }).then([this] {
         return set_seastar_ready();
       }).then([on_end = std::move(on_end)] () mutable {
         // seastar: let me know once i am free to leave.
@@ -133,6 +144,8 @@ public:
             return seastar::make_ready_future<>();
           });
         });
+      }).then([]() {
+        return crimson::common::sharded_conf().stop();
       }).handle_exception([](auto ep) {
         std::cerr << "Error: " << ep << std::endl;
       }).finally([] {

@@ -1,10 +1,13 @@
 #include "ThreadPool.h"
 
+#include <chrono>
 #include <pthread.h>
-#include "crimson/net/Config.h"
 #include "include/intarith.h"
 
 #include "include/ceph_assert.h"
+#include "crimson/common/config_proxy.h"
+
+using crimson::common::local_conf;
 
 namespace crimson::thread {
 
@@ -14,10 +17,11 @@ ThreadPool::ThreadPool(size_t n_threads,
   : queue_size{round_up_to(queue_sz, seastar::smp::count)},
     pending{queue_size}
 {
+  auto queue_max_wait = std::chrono::seconds(local_conf()->threadpool_empty_queue_max_wait);
   for (size_t i = 0; i < n_threads; i++) {
-    threads.emplace_back([this, cpu_id] {
+    threads.emplace_back([this, cpu_id, queue_max_wait] {
       pin(cpu_id);
-      loop();
+      loop(queue_max_wait);
     });
   }
 }
@@ -39,14 +43,13 @@ void ThreadPool::pin(unsigned cpu_id)
   ceph_assert(r == 0);
 }
 
-void ThreadPool::loop()
+void ThreadPool::loop(std::chrono::milliseconds queue_max_wait)
 {
   for (;;) {
     WorkItem* work_item = nullptr;
     {
       std::unique_lock lock{mutex};
-      cond.wait_for(lock,
-                    crimson::net::conf.threadpool_empty_queue_max_wait,
+      cond.wait_for(lock, queue_max_wait,
                     [this, &work_item] {
         return pending.pop(work_item) || is_stopping();
       });

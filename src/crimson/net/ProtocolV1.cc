@@ -15,7 +15,6 @@
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/log.h"
-#include "Config.h"
 #include "Dispatcher.h"
 #include "Errors.h"
 #include "Socket.h"
@@ -24,6 +23,8 @@
 
 WRITE_RAW_ENCODER(ceph_msg_connect);
 WRITE_RAW_ENCODER(ceph_msg_connect_reply);
+
+using crimson::common::local_conf;
 
 std::ostream& operator<<(std::ostream& out, const ceph_msg_connect& c)
 {
@@ -517,14 +518,14 @@ bool ProtocolV1::require_auth_feature() const
   if (h.connect.authorizer_protocol != CEPH_AUTH_CEPHX) {
     return false;
   }
-  if (conf.cephx_require_signatures) {
+  if (local_conf()->cephx_require_signatures) {
     return true;
   }
   if (h.connect.host_type == CEPH_ENTITY_TYPE_OSD ||
       h.connect.host_type == CEPH_ENTITY_TYPE_MDS) {
-    return conf.cephx_cluster_require_signatures;
+    return local_conf()->cephx_cluster_require_signatures;
   } else {
-    return conf.cephx_service_require_signatures;
+    return local_conf()->cephx_service_require_signatures;
   }
 }
 
