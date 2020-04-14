@@ -112,6 +112,16 @@ if(WITH_BLUESTORE)
   set_target_properties(unittest_fastbmap_allocator PROPERTIES COMPILE_FLAGS
   "${UNITTEST_CXX_FLAGS}")
 
+  add_executable(unittest_hybrid_allocator
+    hybrid_allocator_test.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_hybrid_allocator)
+  target_link_libraries(unittest_hybrid_allocator os global)
+
+  set_target_properties(unittest_hybrid_allocator PROPERTIES COMPILE_FLAGS
+  "${UNITTEST_CXX_FLAGS}")
+
   add_executable(unittest_alloc_aging EXCLUDE_FROM_ALL
     Allocator_aging_fragmentation.cc)
   target_link_libraries(unittest_alloc_aging os global GTest::Main)
