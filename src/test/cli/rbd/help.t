@@ -151,15 +151,13 @@
       watch                             Watch events on image.
   
   Optional arguments:
-    -c [ --conf ] arg     path to cluster configuration
-    --cluster arg         cluster name
-    --id arg              client id (without 'client.' prefix)
-    --user arg            client id (without 'client.' prefix)
-    -n [ --name ] arg     client name
-    -m [ --mon_host ] arg monitor host
-    --secret arg          path to secret key (deprecated)
-    -K [ --keyfile ] arg  path to secret key
-    -k [ --keyring ] arg  path to keyring
+    -c [ --conf ] arg                   path to cluster configuration
+    --cluster arg                       cluster name
+    --id arg                            client id (without 'client.' prefix)
+    -n [ --name ] arg                   client name
+    -m [ --mon_host ] arg               monitor host
+    -K [ --keyfile ] arg                path to secret key
+    -k [ --keyring ] arg                path to keyring
   
   See 'rbd help <command>' for help on a specific command.
   $ rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g' | while read -r line; do echo rbd help $line ; rbd help $line; done
@@ -243,7 +241,6 @@
     --dest-pool arg           destination pool name
     --dest-namespace arg      destination namespace name
     --dest arg                destination image name
-    --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
@@ -447,7 +444,6 @@
     --dest-pool arg              destination pool name
     --dest-namespace arg         destination namespace name
     --dest arg                   destination image name
-    --order arg                  object order [12 <= order <= 25]
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
@@ -490,10 +486,7 @@
     -p [ --pool ] arg         pool name
     --namespace arg           namespace name
     --image arg               image name
-    --image-format arg        image format [1 (deprecated) or 2]
-    --new-format              use image format 2
-                              (deprecated)
-    --order arg               object order [12 <= order <= 25]
+    --image-format arg        image format [default: 2]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
@@ -548,7 +541,6 @@
     --dest-pool arg              destination pool name
     --dest-namespace arg         destination namespace name
     --dest arg                   destination image name
-    --order arg                  object order [12 <= order <= 25]
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
@@ -1119,10 +1111,7 @@
     --dest-pool arg           destination pool name
     --dest-namespace arg      destination namespace name
     --dest arg                destination image name
-    --image-format arg        image format [1 (deprecated) or 2]
-    --new-format              use image format 2
-                              (deprecated)
-    --order arg               object order [12 <= order <= 25]
+    --image-format arg        image format [default: 2]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
@@ -1137,8 +1126,6 @@
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
     --export-format arg       format of image file
-    -p [ --pool ] arg         pool name (deprecated)
-    --image arg               image name (deprecated)
   
   Image Features:
     (*) supports enabling/disabling on existing images
@@ -1497,10 +1484,7 @@
     --dest-pool arg           destination pool name
     --dest-namespace arg      destination namespace name
     --dest arg                destination image name
-    --image-format arg        image format [1 (deprecated) or 2]
-    --new-format              use image format 2
-                              (deprecated)
-    --order arg               object order [12 <= order <= 25]
+    --image-format arg        image format [default: 2]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),

@@ -56,6 +56,28 @@ void OptionPrinter::print_short(std::ostream &os, size_t initial_offset) {
   }
 }
 
+void OptionPrinter::print_optional(const OptionsDescription &global_opts,
+                                   size_t &name_width, std::ostream &os) {
+  std::string indent2(2, ' ');
+
+  for (size_t i = 0; i < global_opts.options().size(); ++i) {
+    std::string description = global_opts.options()[i]->description();
+    auto result = boost::find_first(description, "deprecated");
+    if (!result.empty()) {
+      continue;
+    }
+    std::stringstream ss;
+    ss << indent2
+       << global_opts.options()[i]->format_name() << " "
+       << global_opts.options()[i]->format_parameter();
+
+    std::cout << ss.str();
+    IndentStream indent_stream(name_width, ss.str().size(), LINE_WIDTH, std::cout);
+    indent_stream << global_opts.options()[i]->description() << std::endl;
+  }
+
+}
+
 void OptionPrinter::print_detailed(std::ostream &os) {
   std::string indent_prefix(2, ' ');
   size_t name_width = compute_name_width(indent_prefix.size());
@@ -76,16 +98,7 @@ void OptionPrinter::print_detailed(std::ostream &os) {
 
   if (m_optional.options().size() > 0) {
     std::cout << OPTIONAL_ARGUMENTS << std::endl;
-    for (size_t i = 0; i < m_optional.options().size(); ++i) {
-      std::stringstream ss;
-      ss << indent_prefix
-         << m_optional.options()[i]->format_name() << " "
-         << m_optional.options()[i]->format_parameter();
-
-      std::cout << ss.str();
-      IndentStream indent_stream(name_width, ss.str().size(), LINE_WIDTH, os);
-      indent_stream << m_optional.options()[i]->description() << std::endl;
-    }
+    print_optional(m_optional, name_width, os);
     std::cout << std::endl;
   }
 }
