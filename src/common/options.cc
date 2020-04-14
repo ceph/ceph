@@ -8665,6 +8665,11 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("client_debug_stat_cap_mask", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(-1)
+    .set_description(""),
+
     Option("client_debug_force_sync_read", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
