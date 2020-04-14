@@ -227,15 +227,15 @@ void add_create_image_options(po::options_description *opt,
   if (include_format) {
     opt->add_options()
       (IMAGE_FORMAT.c_str(), po::value<ImageFormat>(),
-       "image format [1 (deprecated) or 2]")
+       "image format [default: 2]")
       (IMAGE_NEW_FORMAT.c_str(),
        po::value<ImageNewFormat>()->zero_tokens(),
-       "use image format 2\n(deprecated)");
+       "deprecated[:image-format 2]");
   }
 
   opt->add_options()
     (IMAGE_ORDER.c_str(), po::value<ImageOrder>(),
-     "object order [12 <= order <= 25]")
+     "deprecated[:object-size]")
     (IMAGE_OBJECT_SIZE.c_str(), po::value<ImageObjectSize>(),
      "object size in B/K/M [4K <= object size <= 32M]")
     (IMAGE_FEATURES.c_str(), po::value<ImageFeatures>()->composing(),
@@ -431,8 +431,6 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 
 void validate(boost::any& v, const std::vector<std::string>& values,
               ImageNewFormat *target_type, int dummy) {
-  std::cout << "rbd: --new-format is deprecated, use --image-format"
-            << std::endl;
   v = boost::any(true);
 }
 
@@ -504,7 +502,6 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 
 void validate(boost::any& v, const std::vector<std::string>& values,
               Secret *target_type, int) {
-  std::cerr << "rbd: --secret is deprecated, use --keyfile" << std::endl;
 
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);

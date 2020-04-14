@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include <string>
 #include <vector>
+#include <boost/algorithm/string.hpp>
 #include <boost/program_options.hpp>
 
 namespace rbd {
@@ -27,6 +28,8 @@ public:
 
   void print_short(std::ostream &os, size_t initial_offset);
   void print_detailed(std::ostream &os);
+  static void print_optional(const OptionsDescription &global_opts,
+                             size_t &name_width, std::ostream &os);
 
 private:
   const OptionsDescription &m_positional;
