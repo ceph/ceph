@@ -64,6 +64,7 @@ shell = None    # holds instance of class CephFSShell
 #
 #######################################################################
 
+
 def poutput(s, end='\n'):
     shell.poutput(s, end=end)
 
@@ -118,6 +119,7 @@ def to_bytes(param):
     elif param is None:
         return None
 
+
 def ls(path, opts=''):
     # opts tries to be like /bin/ls opts
     almost_all = 'A' in opts
@@ -133,6 +135,7 @@ def ls(path, opts=''):
     except libcephfs.ObjectNotFound as e:
         perror(e)
         shell.exit_code = e.get_error_code()
+
 
 def glob(path, pattern):
     paths = []
