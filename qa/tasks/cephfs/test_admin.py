@@ -133,6 +133,24 @@ class TestAdminCommands(CephFSTestCase):
         else:
             raise RuntimeError("expected failure")
 
+    def test_fs_new_pool_application_metadata(self):
+        """
+        That the application metadata set on the pools of a newly created filesystem are as expected.
+        """
+        self.fs.delete_all_filesystems()
+        fs_name = "test_fs_new_pool_application"
+        keys = ['metadata', 'data']
+        pool_names = [fs_name+'-'+key for key in keys]
+        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        for p in pool_names:
+            mon_cmd('osd', 'pool', 'create', p, str(self.fs.pgs_per_fs_pool))
+            mon_cmd('osd', 'pool', 'application', 'enable', p, 'cephfs')
+        mon_cmd('fs', 'new', fs_name, pool_names[0], pool_names[1])
+        for i in range(2):
+            self._check_pool_application_metadata_key_value(
+                pool_names[i], 'cephfs', keys[i], fs_name)
+
+
 class TestConfigCommands(CephFSTestCase):
     """
     Test that daemons and clients respond to the otherwise rarely-used
