@@ -5,8 +5,7 @@
 #include "ClassHandler.h"
 #include "common/errno.h"
 #include "common/ceph_context.h"
-
-#include <dlfcn.h>
+#include "include/dlfcn_compat.h"
 
 #include <map>
 
@@ -23,7 +22,7 @@
 
 
 #define CLS_PREFIX "libcls_"
-#define CLS_SUFFIX ".so"
+#define CLS_SUFFIX SHARED_LIB_SUFFIX
 
 using std::map;
 using std::set;
