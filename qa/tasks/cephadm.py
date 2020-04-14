@@ -291,25 +291,11 @@ def ceph_bootstrap(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     fsid = ctx.ceph[cluster_name].fsid
 
+    bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
+    first_mon = ctx.ceph[cluster_name].first_mon
+    first_mon_role = ctx.ceph[cluster_name].first_mon_role
     mons = ctx.ceph[cluster_name].mons
-    first_mon_role = sorted(mons.keys())[0]
-    _, _, first_mon = teuthology.split_role(first_mon_role)
-    (bootstrap_remote,) = ctx.cluster.only(first_mon_role).remotes.keys()
-    log.info('First mon is mon.%s on %s' % (first_mon,
-                                            bootstrap_remote.shortname))
-    ctx.ceph[cluster_name].bootstrap_remote = bootstrap_remote
-    ctx.ceph[cluster_name].first_mon = first_mon
-
-    others = ctx.cluster.remotes[bootstrap_remote]
-    log.info('others %s' % others)
-    mgrs = sorted([r for r in others
-                   if teuthology.is_type('mgr', cluster_name)(r)])
-    if not mgrs:
-        raise RuntimeError('no mgrs on the same host as first mon %s' % first_mon)
-    _, _, first_mgr = teuthology.split_role(mgrs[0])
-    log.info('First mgr is %s' % (first_mgr))
-    ctx.ceph[cluster_name].first_mgr = first_mgr
-
+    
     ctx.cluster.run(args=[
         'sudo', 'mkdir', '-p', '/etc/ceph',
         ]);
@@ -338,14 +324,16 @@ def ceph_bootstrap(ctx, config):
             wait=False,
             started=True,
         )
-        ctx.daemons.register_daemon(
-            bootstrap_remote, 'mgr', first_mgr,
-            cluster=cluster_name,
-            fsid=fsid,
-            logger=log.getChild('mgr.' + first_mgr),
-            wait=False,
-            started=True,
-        )
+        if not ctx.ceph[cluster_name].roleless:
+            first_mgr = ctx.ceph[cluster_name].first_mgr
+            ctx.daemons.register_daemon(
+                bootstrap_remote, 'mgr', first_mgr,
+                cluster=cluster_name,
+                fsid=fsid,
+                logger=log.getChild('mgr.' + first_mgr),
+                wait=False,
+                started=True,
+            )
 
         # bootstrap
         log.info('Bootstrapping...')
@@ -356,16 +344,19 @@ def ceph_bootstrap(ctx, config):
             '-v',
             'bootstrap',
             '--fsid', fsid,
-            '--mon-id', first_mon,
-            '--mgr-id', first_mgr,
-            '--orphan-initial-daemons',   # we will do it explicitly!
-            '--skip-monitoring-stack',    # we'll provision these explicitly
             '--config', '{}/seed.{}.conf'.format(testdir, cluster_name),
             '--output-config', '/etc/ceph/{}.conf'.format(cluster_name),
             '--output-keyring',
             '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             '--output-pub-ssh-key', '{}/{}.pub'.format(testdir, cluster_name),
         ]
+        if not ctx.ceph[cluster_name].roleless:
+            cmd += [
+                '--mon-id', first_mon,
+                '--mgr-id', first_mgr,
+                '--orphan-initial-daemons',   # we will do it explicitly!
+                '--skip-monitoring-stack',    # we'll provision these explicitly
+            ]
         if mons[first_mon_role].startswith('['):
             cmd += ['--mon-addrv', mons[first_mon_role]]
         else:
@@ -583,6 +574,7 @@ def ceph_osds(ctx, config):
     """
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
+
     try:
         log.info('Deploying OSDs...')
 
@@ -934,8 +926,6 @@ def restart(ctx, config):
 @contextlib.contextmanager
 def crush_setup(ctx, config):
     cluster_name = config['cluster']
-    first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
-    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
 
     profile = config.get('crush_tunables', 'default')
     log.info('Setting crush tunables to %s', profile)
@@ -971,6 +961,8 @@ def task(ctx, config):
 
     ctx.ceph[cluster_name].thrashers = []
     # fixme: setup watchdog, ala ceph.py
+
+    ctx.ceph[cluster_name].roleless = False  # see below
 
     # cephadm mode?
     if 'cephadm_mode' not in config:
@@ -1012,12 +1004,50 @@ def task(ctx, config):
     roles = [role_list for (remote, role_list) in remotes_and_roles]
     ips = [host for (host, port) in
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
+
+    if config.get('roleless', False):
+        # mons will be named after hosts
+        n = len(roles)
+        roles = []
+        first_mon = None
+        for remote, _ in remotes_and_roles:
+            roles.append(['mon.' + remote.shortname])
+            if not first_mon:
+                first_mon = remote.shortname
+                bootstrap_remote = remote
+        log.info('No roles; fabricating mons %s' % roles)
+        
     ctx.ceph[cluster_name].mons = get_mons(
         roles, ips, cluster_name,
         mon_bind_msgr2=config.get('mon_bind_msgr2', True),
         mon_bind_addrvec=config.get('mon_bind_addrvec', True),
-        )
+    )
     log.info('Monitor IPs: %s' % ctx.ceph[cluster_name].mons)
+
+    if config.get('roleless', False):
+        ctx.ceph[cluster_name].roleless = True
+        ctx.ceph[cluster_name].bootstrap_remote = bootstrap_remote
+        ctx.ceph[cluster_name].first_mon = first_mon
+        ctx.ceph[cluster_name].first_mon_role = 'mon.' + first_mon
+    else:
+        first_mon_role = sorted(ctx.ceph[cluster_name].mons.keys())[0]
+        _, _, first_mon = teuthology.split_role(first_mon_role)
+        (bootstrap_remote,) = ctx.cluster.only(first_mon_role).remotes.keys()
+        log.info('First mon is mon.%s on %s' % (first_mon,
+                                                bootstrap_remote.shortname))
+        ctx.ceph[cluster_name].bootstrap_remote = bootstrap_remote
+        ctx.ceph[cluster_name].first_mon = first_mon
+        ctx.ceph[cluster_name].first_mon_role = first_mon_role
+
+        others = ctx.cluster.remotes[bootstrap_remote]
+        mgrs = sorted([r for r in others
+                       if teuthology.is_type('mgr', cluster_name)(r)])
+        if not mgrs:
+            raise RuntimeError('no mgrs on the same host as first mon %s' % first_mon)
+        _, _, first_mgr = teuthology.split_role(mgrs[0])
+        log.info('First mgr is %s' % (first_mgr))
+        ctx.ceph[cluster_name].first_mgr = first_mgr
+        
 
     with contextutil.nested(
             lambda: ceph_initial(),
