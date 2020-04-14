@@ -1,3 +1,4 @@
+#include "common/ceph_argparse.h"
 #include "common/ceph_time.h"
 #include "messages/MPing.h"
 #include "messages/MCommand.h"
@@ -7,7 +8,6 @@
 #include "crimson/auth/DummyAuth.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
-#include "crimson/net/Config.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Interceptor.h"
@@ -26,6 +26,7 @@
 #include "test_cmds.h"
 
 namespace bpo = boost::program_options;
+using crimson::common::local_conf;
 
 namespace {
 
@@ -3541,35 +3542,49 @@ int main(int argc, char** argv)
     ("v2-testpeer-islocal", bpo::value<bool>()->default_value(true),
      "create a local crimson testpeer, or connect to a remote testpeer");
   return app.run(argc, argv, [&app] {
-    auto&& config = app.configuration();
-    verbose = config["verbose"].as<bool>();
-    auto rounds = config["rounds"].as<unsigned>();
-    auto keepalive_ratio = config["keepalive-ratio"].as<double>();
-    entity_addr_t v2_test_addr;
-    ceph_assert(v2_test_addr.parse(
+    std::vector<const char*> args;
+    std::string cluster;
+    std::string conf_file_list;
+    auto init_params = ceph_argparse_early_args(args,
+                                                CEPH_ENTITY_TYPE_CLIENT,
+                                                &cluster,
+                                                &conf_file_list);
+    return crimson::common::sharded_conf().start(init_params.name, cluster)
+    .then([conf_file_list] {
+      return local_conf().parse_config_files(conf_file_list);
+    }).then([&app] {
+      auto&& config = app.configuration();
+      verbose = config["verbose"].as<bool>();
+      auto rounds = config["rounds"].as<unsigned>();
+      auto keepalive_ratio = config["keepalive-ratio"].as<double>();
+      entity_addr_t v2_test_addr;
+      ceph_assert(v2_test_addr.parse(
           config["v2-test-addr"].as<std::string>().c_str(), nullptr));
-    entity_addr_t v2_testpeer_addr;
-    ceph_assert(v2_testpeer_addr.parse(
+      entity_addr_t v2_testpeer_addr;
+      ceph_assert(v2_testpeer_addr.parse(
           config["v2-testpeer-addr"].as<std::string>().c_str(), nullptr));
-    auto v2_testpeer_islocal = config["v2-testpeer-islocal"].as<bool>();
-    return test_echo(rounds, keepalive_ratio, false)
-    .then([rounds, keepalive_ratio] {
-      return test_echo(rounds, keepalive_ratio, true);
+      auto v2_testpeer_islocal = config["v2-testpeer-islocal"].as<bool>();
+      return test_echo(rounds, keepalive_ratio, false)
+      .then([rounds, keepalive_ratio] {
+        return test_echo(rounds, keepalive_ratio, true);
+      }).then([] {
+        return test_concurrent_dispatch(false);
+      }).then([] {
+        return test_concurrent_dispatch(true);
+      }).then([] {
+        return test_preemptive_shutdown(false);
+      }).then([] {
+        return test_preemptive_shutdown(true);
+      }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
+        return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
+      }).then([] {
+        std::cout << "All tests succeeded" << std::endl;
+        // Seastar has bugs to have events undispatched during shutdown,
+        // which will result in memory leak and thus fail LeakSanitizer.
+        return seastar::sleep(100ms);
+      });
     }).then([] {
-      return test_concurrent_dispatch(false);
-    }).then([] {
-      return test_concurrent_dispatch(true);
-    }).then([] {
-      return test_preemptive_shutdown(false);
-    }).then([] {
-      return test_preemptive_shutdown(true);
-    }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
-      return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
-    }).then([] {
-      std::cout << "All tests succeeded" << std::endl;
-      // Seastar has bugs to have events undispatched during shutdown,
-      // which will result in memory leak and thus fail LeakSanitizer.
-      return seastar::sleep(100ms);
+      return crimson::common::sharded_conf().stop();
     }).handle_exception([] (auto eptr) {
       std::cout << "Test failure" << std::endl;
       return seastar::make_exception_future<>(eptr);
