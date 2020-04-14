@@ -24,7 +24,8 @@ Linux Kernel
   - 4.19.z
   - 4.14.z
 
-  For CephFS, see `CephFS best practices`_ for kernel version guidance.
+  For CephFS, see the section about `Mounting CephFS using Kernel Driver`_
+  for kernel version guidance.
 
   Older kernel client versions may not support your `CRUSH tunables`_ profile
   or other newer features of the Ceph cluster, requiring the storage cluster
@@ -117,4 +118,4 @@ Testing
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
 
-.. _CephFS best practices: ../../cephfs/best-practices
+.. _Mounting CephFS using Kernel Driver: ../../cephfs/mount-using-kernel-driver#which-kernel-version
