@@ -1,3 +1,11 @@
+.about-container {
+  background-color: #374249;
+  background-image: url('assets/ceph_login_bgimage_fix.png');
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  color: #fff;
+  text-shadow: 1px 1px #374249;
+}
 .product-versions {
   margin-top: 30px;
 }
@@ -7,30 +15,21 @@
 .modal-header {
   border-bottom: none;
 }
+.modal-header .close {
+  color: #fff;
+  font-size: 2em;
+}
 .modal-body {
   padding-left: 80px;
   padding-right: 80px;
 }
-.modal-footer {
-  border-top: none;
-}
-h2 {
-  font-size: 3em;
-}
 .ceph-logo {
-  width: 10%;
-}
-.list-unstyled li {
-  margin-top: 5px;
+  width: 25%;
+  margin-bottom: 30px;
+  object-position: -20px 0;
 }
 .modal-footer {
+  display: block;
+  border-top: none;
   padding: 15px 80px 35px 80px;
-}
-.modal-body {
-  margin-top: 0;
-  padding-top: 0;
-
-  h2 {
-    margin-top: 0;
-  }
 }
