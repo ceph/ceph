@@ -67,10 +67,9 @@ private:
     return statenames[state];
   }
 
-public:
   // TODO: move into auth_meta?
   ceph::crypto::onwire::rxtx_t session_stream_handlers;
-private:
+
   entity_name_t peer_name;
   State state;
   uint64_t peer_required_features;
