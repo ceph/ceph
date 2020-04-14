@@ -58,7 +58,7 @@ function TEST_ceph_df() {
     local ec_poolname=testcephdf_erasurecode
     create_pool $rep_poolname 6 6 replicated
     create_pool $ec_poolname 6 6 erasure ec42profile
-    sleep 2
+    flush_pg_stats
 
     local global_avail=`ceph df -f json | jq '.stats.total_avail_bytes'`
     local rep_avail=`ceph df -f json | jq '.pools | map(select(.name == "'$rep_poolname'"))[0].stats.max_avail'`
