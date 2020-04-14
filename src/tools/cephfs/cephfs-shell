@@ -112,7 +112,7 @@ def to_bytes(param):
     elif isinstance(param, str):
         return bytes(param, encoding='utf-8')
     elif isinstance(param, list):
-        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for \
+        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for
                 i in param]
     elif isinstance(param, int) or isinstance(param, float):
         return str(param).encode('utf-8')
