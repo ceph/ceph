@@ -1522,6 +1522,38 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in write")
         return ret
 
+    def truncate(self, path, size):
+        """
+        Truncate the file to the given size.  If this operation causes the
+        file to expand, the empty bytes will be filled in with zeros.
+
+        :param path: the path to the file to truncate.
+        :param size: the new size of the file.
+        """
+
+        if not isinstance(size, int):
+            raise TypeError('size must be a int')
+
+        statx_dict = dict()
+        statx_dict["size"] = size
+        self.setattrx(path, statx_dict, CEPH_SETATTR_SIZE, AT_SYMLINK_NOFOLLOW)
+
+    def ftruncate(self, fd, size):
+        """
+        Truncate the file to the given size.  If this operation causes the
+        file to expand, the empty bytes will be filled in with zeros.
+
+        :param path: the path to the file to truncate.
+        :param size: the new size of the file.
+        """
+
+        if not isinstance(size, int):
+            raise TypeError('size must be a int')
+
+        statx_dict = dict()
+        statx_dict["size"] = size
+        self.fsetattrx(fd, statx_dict, CEPH_SETATTR_SIZE)
+
     def mknod(self, path, mode, rdev=0):
         """
         Make a block or character special file.

@@ -525,6 +525,29 @@ def test_fchown():
     cephfs.unlink(b'/file-fchown')
 
 @with_setup(setup_test)
+def test_truncate():
+    fd = cephfs.open(b'/file-truncate', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    cephfs.truncate(b'/file-truncate', 0)
+    stat = cephfs.fsync(fd, 0)
+    st = cephfs.statx(b'/file-truncate', libcephfs.CEPH_STATX_SIZE, 0)
+    assert_equal(st["size"], 0)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-truncate')
+
+@with_setup(setup_test)
+def test_ftruncate():
+    fd = cephfs.open(b'/file-ftruncate', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    assert_raises(TypeError, cephfs.ftruncate, b'/file-ftruncate', 0)
+    cephfs.ftruncate(fd, 0)
+    stat = cephfs.fsync(fd, 0)
+    st = cephfs.fstat(fd)
+    assert_equal(st.st_size, 0)
+    cephfs.close(fd)
+    cephfs.unlink(b'/file-ftruncate')
+
+@with_setup(setup_test)
 def test_fallocate():
     fd = cephfs.open(b'/file-fallocate', 'w', 0o755)
     assert_raises(TypeError, cephfs.fallocate, b'/file-fallocate', 0, 10)
