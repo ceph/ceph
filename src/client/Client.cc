@@ -331,6 +331,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     acl_type = POSIX_ACL;
 
   async_dirop_mask = cct->_conf.get_val<uint64_t>("client_async_dirop_mask");
+  debug_stat_cap_mask = cct->_conf.get_val<int64_t>("client_debug_stat_cap_mask");
 
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
@@ -6426,10 +6427,11 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
   if (!mount_root.empty()) {
     fp = filepath(mount_root.c_str());
   }
+  int getattr_mask = debug_stat_cap_mask >= 0 ? debug_stat_cap_mask : CEPH_STAT_CAP_INODE_ALL;
   while (true) {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
-    req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
+    req->head.args.getattr.mask = getattr_mask;
     int res = make_request(req, perms);
     if (res < 0) {
       if (res == -CEPHFS_EACCES && root) {
@@ -11583,7 +11585,8 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   string dname(name);
   InodeRef in;
 
-  r = _lookup(parent, dname, CEPH_STAT_CAP_INODE_ALL, &in, perms);
+  int mask = debug_stat_cap_mask >= 0 ? debug_stat_cap_mask : CEPH_STAT_CAP_INODE_ALL;
+  r = _lookup(parent, dname, mask, &in, perms);
   if (r < 0) {
     attr->st_ino = 0;
     goto out;
@@ -11903,7 +11906,8 @@ int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 
   std::scoped_lock lock(client_lock);
 
-  int res = _ll_getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
+  int mask = debug_stat_cap_mask >= 0 ? debug_stat_cap_mask : CEPH_STAT_CAP_INODE_ALL;
+  int res = _ll_getattr(in, mask, perms);
 
   if (res == 0)
     fill_stat(in, attr);
@@ -14302,10 +14306,10 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
     return -CEPHFS_ENOTCONN;
 
   std::scoped_lock lock(client_lock);
-  InodeRef in;
 
-  int r = _ll_create(parent, name, mode, flags, &in, CEPH_STAT_CAP_INODE_ALL,
-		      fhp, perms);
+  int mask = debug_stat_cap_mask >= 0 ? debug_stat_cap_mask : CEPH_STAT_CAP_INODE_ALL;
+  InodeRef in;
+  int r = _ll_create(parent, name, mode, flags, &in, mask, fhp, perms);
   if (r >= 0) {
     ceph_assert(in);
 
@@ -15716,6 +15720,7 @@ const char** Client::get_tracked_conf_keys() const
     "client_oc_target_dirty",
     "client_oc_max_dirty_age",
     "client_async_dirop_mask",
+    "client_debug_stat_cap_mask",
     NULL
   };
   return keys;
@@ -15757,6 +15762,9 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("client_async_dirop_mask")) {
     async_dirop_mask = cct->_conf.get_val<uint64_t>("client_async_dirop_mask");
+  }
+  if (changed.count("client_debug_stat_cap_mask")) {
+    debug_stat_cap_mask = cct->_conf.get_val<int64_t>("client_debug_stat_cap_mask");
   }
 }
 
