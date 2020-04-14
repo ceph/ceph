@@ -872,17 +872,14 @@ void Replayer<I>::create_non_primary_snapshot() {
 
     // (re)build a full mapping from remote to local snap ids for all user
     // snapshots to support applying image state in the future
-    for (auto remote_snap_info_it = remote_image_ctx->snap_info.begin();
-         remote_snap_info_it != remote_image_ctx->snap_info.end();
-         ++remote_snap_info_it) {
-      auto remote_snap_id = remote_snap_info_it->first;
+    for (auto& [remote_snap_id, remote_snap_info] :
+           remote_image_ctx->snap_info) {
       if (remote_snap_id >= m_remote_snap_id_end) {
         break;
       }
 
       // we can ignore all non-user snapshots since image state only includes
       // user snapshots
-      auto& remote_snap_info = remote_snap_info_it->second;
       if (boost::get<cls::rbd::UserSnapshotNamespace>(
             &remote_snap_info.snap_namespace) == nullptr) {
         continue;
