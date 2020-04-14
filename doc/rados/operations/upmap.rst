@@ -1,3 +1,5 @@
+.. _upmap:
+
 Using the pg-upmap
 ==================
 
@@ -12,8 +14,13 @@ clients understand the new *pg-upmap* structure in the OSDMap.
 Enabling
 --------
 
-To allow use of the feature, you must tell the cluster that it only
-needs to support luminous (and newer) clients with::
+New clusters will have this module on by default. The cluster must only
+have luminous (and newer) clients. You can the turn the balancer off with::
+
+  ceph balancer off
+
+To allow use of the feature on existing clusters, you must tell the
+cluster that it only needs to support luminous (and newer) clients with::
 
   ceph osd set-require-min-compat-client luminous
 
@@ -26,7 +33,7 @@ use with::
 Balancer module
 -----------------
 
-The new `balancer` module for ceph-mgr will automatically balance
+The `balancer` module for ceph-mgr will automatically balance
 the number of PGs per OSD.  See ``Balancer``
 
 
