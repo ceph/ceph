@@ -1069,7 +1069,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     host_detail.append(
                         'stray host %s has %d stray daemons: %s' % (
                             host, len(missing_names), missing_names))
-            if host_detail:
+            if self.warn_on_stray_hosts and host_detail:
                 self.health_checks['CEPHADM_STRAY_HOST'] = {
                     'severity': 'warning',
                     'summary': '%d stray host(s) with %s daemon(s) '
@@ -1078,7 +1078,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'count': len(host_detail),
                     'detail': host_detail,
                 }
-            if daemon_detail:
+            if self.warn_on_stray_daemons and daemon_detail:
                 self.health_checks['CEPHADM_STRAY_DAEMON'] = {
                     'severity': 'warning',
                     'summary': '%d stray daemons(s) not managed by cephadm' % (
