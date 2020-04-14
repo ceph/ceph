@@ -14,8 +14,6 @@ namespace librbd {
 namespace cache {
 namespace rwl {
 
-typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
-
 template <typename T>
 C_BlockIORequest<T>::C_BlockIORequest(T &rwl, const utime_t arrived, io::Extents &&extents,
                                       bufferlist&& bl, const int fadvise_flags, Context *user_req)
@@ -191,6 +189,7 @@ void C_WriteRequest<T>::setup_buffer_resources(
 
 template <typename T>
 void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
+  GenericWriteLogEntries log_entries;
   {
     std::lock_guard locker(m_lock);
     std::shared_ptr<SyncPoint> current_sync_point = rwl.get_current_sync_point();
@@ -232,6 +231,7 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
       /* A WS is also a write */
       ldout(rwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get()
                                    << " operation=" << operation << dendl;
+      log_entries.emplace_back(operation->log_entry);
       rwl.inc_last_op_sequence_num();
       operation->init(true, allocation, current_sync_gen,
                       rwl.get_last_op_sequence_num(), this->bl, buffer_offset, op_set->persist_on_flush);
@@ -248,6 +248,7 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   for (auto &operation : op_set->operations) {
     operation->copy_bl_to_pmem_buffer();
   }
+  rwl.add_into_log_map(log_entries);
 }
 
 template <typename T>

@@ -14,6 +14,7 @@
 #include "librbd/cache/Types.h"
 #include "librbd/cache/rwl/LogOperation.h"
 #include "librbd/cache/rwl/Request.h"
+#include "librbd/cache/rwl/LogMap.h"
 #include <functional>
 #include <list>
 
@@ -36,6 +37,8 @@ class GenericLogEntry;
 typedef std::list<std::shared_ptr<WriteLogEntry>> WriteLogEntries;
 typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
 typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
+typedef LogMapEntries<GenericWriteLogEntry> WriteLogMapEntries;
+typedef LogMap<GenericWriteLogEntry> WriteLogMap;
 
 /**** Write log entries end ****/
 
@@ -125,6 +128,7 @@ public:
   uint32_t get_free_log_entries() {
     return m_free_log_entries;
   }
+  void add_into_log_map(rwl::GenericWriteLogEntries &log_entries);
 private:
   typedef std::list<rwl::C_WriteRequest<This> *> C_WriteRequests;
   typedef std::list<rwl::C_BlockIORequest<This> *> C_BlockIORequests;
@@ -219,6 +223,8 @@ private:
 
   rwl::GenericLogOperations m_ops_to_flush; /* Write ops needing flush in local log */
   rwl::GenericLogOperations m_ops_to_append; /* Write ops needing event append in local log */
+
+  rwl::WriteLogMap m_blocks_to_log_entries;
 
   /* New entries are at the back. Oldest at the front */
   rwl::GenericLogEntries m_log_entries;
