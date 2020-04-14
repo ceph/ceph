@@ -232,7 +232,7 @@ groups:
           (
             predict_linear(ceph_pool_stored[2d], 3600 * 24 * 5) >=
             ceph_pool_max_avail
-          ) * on(pool_id) group_right(name) ceph_pool_metadata
+          ) * on(pool_id) group_left(name) ceph_pool_metadata
         labels:
           severity: warning
           type: ceph_default
