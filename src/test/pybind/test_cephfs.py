@@ -629,3 +629,14 @@ def test_readdirops():
     for i in dirs:
         cephfs.rmdir(i)
     cephfs.closedir(handler)
+
+def test_preadv_pwritev():
+    fd = cephfs.open(b'file-1', 'w', 0o755)
+    cephfs.pwritev(fd, [b"asdf", b"zxcvb"], 0)
+    cephfs.close(fd)
+    fd = cephfs.open(b'file-1', 'r', 0o755)
+    buf = [bytearray(i) for i in [4, 5]]
+    cephfs.preadv(fd, buf, 0)
+    assert_equal([b"asdf", b"zxcvb"], list(buf))
+    cephfs.close(fd)
+    cephfs.unlink(b'file-1')

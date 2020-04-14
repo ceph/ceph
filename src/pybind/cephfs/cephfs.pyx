@@ -97,6 +97,11 @@ cdef extern from "time.h":
         time_t      tv_sec
         long int    tv_nsec
 
+cdef extern from "<sys/uio.h>":
+    cdef struct iovec:
+        void *iov_base
+        size_t iov_len
+
 cdef extern from "sys/types.h":
     ctypedef unsigned long mode_t
     ctypedef unsigned long dev_t
@@ -188,7 +193,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_flistxattr(ceph_mount_info *cmount, int fd, char *list, size_t size)
     int ceph_llistxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
+    int ceph_pwritev(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
+    int ceph_preadv(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
     int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev)
     int ceph_close(ceph_mount_info *cmount, int fd)
@@ -531,6 +538,17 @@ cdef void* realloc_chk(void* ptr, size_t size) except NULL:
     if ret == NULL:
         raise MemoryError("realloc failed")
     return ret
+
+
+cdef iovec * to_iovec(buffers) except NULL:
+    cdef iovec *iov = <iovec *>malloc(len(buffers) * sizeof(iovec))
+    cdef char *s = NULL
+    if iov == NULL:
+        raise MemoryError("malloc failed")
+    for i in xrange(len(buffers)):
+        s = <char*>buffers[i]
+        iov[i] = [<void*>s, len(buffers[i])]
+    return iov
 
 
 cdef class LibCephFS(object):
@@ -1367,6 +1385,40 @@ cdef class LibCephFS(object):
             # itself and set ret_s to NULL, hence XDECREF).
             ref.Py_XDECREF(ret_s)
 
+    def preadv(self, fd, buffers, offset):
+        """
+        Write data to a file.
+
+        :param fd: the file descriptor of the open file to read from
+        :param buffers: the list of byte object to read from the file
+        :param offset: the offset of the file read from.  If this value is negative, the
+                       function reads from the current offset of the file descriptor.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(buffers, list):
+            raise TypeError('buffers must be a list')
+        for buf in buffers:
+            if not isinstance(buf, bytearray):
+                raise TypeError('buffers must be a list of bytes')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+
+        cdef:
+            int _fd = fd
+            int _iovcnt = len(buffers)
+            int64_t _offset = offset
+            iovec *_iov = to_iovec(buffers)
+        try:
+            with nogil:
+                ret = ceph_preadv(self.cluster, _fd, _iov, _iovcnt, _offset)
+            if ret < 0:
+                raise make_ex(ret, "error in preadv")
+            return ret
+        finally:
+            free(_iov)
+
     def write(self, fd, buf, offset):
         """
         Write data to a file.
@@ -1396,6 +1448,40 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in write")
         return ret
+
+    def pwritev(self, fd, buffers, offset):
+        """
+        Write data to a file.
+
+        :param fd: the file descriptor of the open file to write to
+        :param buffers: the list of byte object to write to the file
+        :param offset: the offset of the file write into.  If this value is negative, the
+                       function writes to the current offset of the file descriptor.
+        """
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(buffers, list):
+            raise TypeError('buffers must be a list')
+        for buf in buffers:
+            if not isinstance(buf, bytes):
+                raise TypeError('buffers must be a list of bytes')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+
+        cdef:
+            int _fd = fd
+            int _iovcnt = len(buffers)
+            int64_t _offset = offset
+            iovec *_iov = to_iovec(buffers)
+        try:
+            with nogil:
+                ret = ceph_pwritev(self.cluster, _fd, _iov, _iovcnt, _offset)
+            if ret < 0:
+                raise make_ex(ret, "error in pwritev")
+            return ret
+        finally:
+            free(_iov)
 
     def flock(self, fd, operation, owner):
         """
