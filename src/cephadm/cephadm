@@ -2779,8 +2779,12 @@ def command_enter():
             '-e', 'LANG=C',
             '-e', "PS1=%s" % CUSTOM_PS1,
         ]
-    c = get_container(args.fsid, daemon_type, daemon_id,
-                      container_args=container_args)
+    c = CephContainer(
+        image=args.image,
+        entrypoint='doesnotmatter',
+        container_args=container_args,
+        cname='ceph-%s-%s.%s' % (args.fsid, daemon_type, daemon_id),
+    )
     command = c.exec_cmd(command)
     return call_timeout(command, args.timeout)
 
