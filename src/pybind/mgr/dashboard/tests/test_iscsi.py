@@ -606,6 +606,7 @@ class IscsiClientMock(object):
 
     def get_settings(self):
         return {
+            "api_version": 2,
             "backstores": [
                 "user:rbd"
             ],
