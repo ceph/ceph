@@ -1,0 +1,117 @@
+[
+    {
+        "data": {
+            "changed": true,
+            "osds": [
+                {
+                    "block.wal": {
+                        "human_readable_size": "7.00 GB",
+                        "path": "vg: vg/lv",
+                        "percentage": 50,
+                        "size": 7516192768
+                    },
+                    "data": {
+                        "human_readable_size": "19.00 GB",
+                        "path": "/dev/sdc",
+                        "percentage": 100,
+                        "size": 20401094656
+                    }
+                },
+                {
+                    "block.wal": {
+                        "human_readable_size": "7.00 GB",
+                        "path": "vg: vg/lv",
+                        "percentage": 50,
+                        "size": 7516192768
+                    },
+                    "data": {
+                        "human_readable_size": "19.00 GB",
+                        "path": "/dev/sdd",
+                        "percentage": 100,
+                        "size": 20401094656
+                    }
+                }
+            ],
+            "vgs": [],
+            "wal_vg": {
+                "devices": "/dev/sdb",
+                "human_readable_size": "14.00 GB",
+                "human_readable_sizes": "7.00 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 15032385536,
+                "sizes": 7516192768
+            }
+        },
+        "drivegroup": "dashboard-admin-1586509411014",
+        "host": "mgr0"
+    },
+    {
+        "data": {
+            "changed": true,
+            "osds": [
+                {
+                    "block.db": {
+                        "human_readable_size": "4.50 GB",
+                        "path": "vg: vg/lv",
+                        "percentage": 50,
+                        "size": 4831838208
+                    },
+                    "block.wal": {
+                        "human_readable_size": "14.00 GB",
+                        "path": "vg: vg/lv",
+                        "percentage": 50,
+                        "size": 15032385536
+                    },
+                    "data": {
+                        "human_readable_size": "19.00 GB",
+                        "path": "/dev/sdd",
+                        "percentage": 100,
+                        "size": 20401094656
+                    }
+                },
+                {
+                    "block.db": {
+                        "human_readable_size": "4.50 GB",
+                        "path": "vg: vg/lv",
+                        "percentage": 50,
+                        "size": 4831838208
+                    },
+                    "block.wal": {
+                        "human_readable_size": "14.00 GB",
+                        "path": "vg: vg/lv",
+                        "percentage": 50,
+                        "size": 15032385536
+                    },
+                    "data": {
+                        "human_readable_size": "19.00 GB",
+                        "path": "/dev/sde",
+                        "percentage": 100,
+                        "size": 20401094656
+                    }
+                }
+            ],
+            "vg": {
+                "devices": "/dev/sda",
+                "human_readable_size": "9.00 GB",
+                "human_readable_sizes": "4.50 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 9663676416,
+                "sizes": 4831838208
+            },
+            "vgs": [],
+            "wal_vg": {
+                "devices": "/dev/sdb, /dev/sdc",
+                "human_readable_size": "28.00 GB",
+                "human_readable_sizes": "14.00 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 30064771072,
+                "sizes": 15032385536
+            }
+        },
+        "drivegroup": "dashboard-admin-1586509411014",
+        "host": "osd0"
+    }
+]

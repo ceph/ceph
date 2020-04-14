@@ -1,18 +1,37 @@
 <cd-modal [modalRef]="bsModalRef">
   <ng-container class="modal-title"
-                i18n>OSD creation preview</ng-container>
+                i18n>OSDs Creation Preview</ng-container>
 
   <ng-container class="modal-content">
     <form #frm="ngForm"
           [formGroup]="formGroup"
           novalidate>
       <div class="modal-body">
-        <h3 i18n>DriveGroups</h3>
-        <pre>{{ driveGroups | json}}</pre>
+        <cd-table [data]="osds"
+                  [columns]="columns"
+                  selectionType="single"
+                  columnMode="flex"
+                  [forceIdentifier]="true"
+                  [autoReload]="false"
+                  [searchField]="false"
+                  (fetchData)="getPreview($event)"
+                  [hasDetails]="true"
+                  (setExpandedRow)="setExpandedRow($event)">
+          <cd-osd-creation-preview-details cdTableDetail
+                                           [osd]="expandedRow">
+          </cd-osd-creation-preview-details>
+        </cd-table>
+      </div>
+      <div *ngIf="osds.length !== 0">
+        <p class="text-center">
+          <span i18n>Number of OSD(s) to be created: {{ osds.length }}. Raw capacity to be increased:
+            {{ capacity | dimlessBinary }}.</span>
+        </p>
       </div>
       <div class="modal-footer">
         <cd-submit-button (submitAction)="onSubmit()"
-                          [form]="formGroup">{{ action | titlecase }}</cd-submit-button>
+                          [form]="formGroup"
+                          [disabled]="updating || osds.length === 0">{{ action | titlecase }}</cd-submit-button>
         <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
       </div>
     </form>

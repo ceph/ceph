@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+import json
+import os
 
 try:
     from typing import Dict, Any  # pylint: disable=unused-import
 except ImportError:
     pass
+
+from orchestrator import InventoryHost
+from ceph.deployment.drive_group import DriveGroupSpec
 
 
 def update_dict(data, update_data):
@@ -54,3 +59,24 @@ def update_dict(data, update_data):
 
                 element[key] = v
     return data
+
+
+class OrchHelper():
+    def __init__(self, test):
+        self.fixture_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                           'fixtures', test)
+
+    def load_json(self, fixture):
+        fixture = os.path.join(self.fixture_folder, fixture)
+        with open(fixture) as f:
+            return json.load(f)
+
+    def load_inventory(self, fixture):
+        inventory_nodes = self.load_json(fixture)
+        return [InventoryHost.from_json(n) for n in inventory_nodes]
+
+    def load_osd_dg(self, fixture):
+        return DriveGroupSpec.from_json(self.load_json(fixture))
+
+    def load_osd_preview(self, fixture):
+        return self.load_json(fixture)

@@ -8,14 +8,12 @@ try:
     import mock
 except ImportError:
     from unittest import mock
-from ceph.deployment.drive_group import DeviceSelection, DriveGroupSpec
-from ceph.deployment.service_spec import PlacementSpec
 
 from . import ControllerTestCase
 from ..controllers.osd import Osd
 from ..tools import NotificationQueue, TaskManager
 from .. import mgr
-from .helper import update_dict
+from .helper import update_dict, OrchHelper
 
 try:
     from typing import List, Dict, Any  # pylint: disable=unused-import
@@ -208,6 +206,7 @@ class OsdTest(ControllerTestCase):
     def setup_server(cls):
         Osd._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
         cls.setup_controllers([Osd])
+        cls.orch_helper = OrchHelper('test_osd')
         NotificationQueue.start_queue()
         TaskManager.init()
 
@@ -273,18 +272,10 @@ class OsdTest(ControllerTestCase):
         instance.return_value = fake_client
 
         # Valid DriveGroup
+        dg_spec = self.orch_helper.load_osd_dg('00_dg.json')
         data = {
             'method': 'drive_groups',
-            'data': [
-                {
-                    'service_type': 'osd',
-                    'service_id': 'all_hdd',
-                    'data_devices': {
-                        'rotational': True
-                    },
-                    'host_pattern': '*',
-                }
-            ],
+            'data': [dg_spec.to_json()],
             'tracking_id': 'all_hdd, b_ssd'
         }
 
@@ -297,11 +288,7 @@ class OsdTest(ControllerTestCase):
         fake_client.available.return_value = True
         self._task_post('/api/osd', data)
         self.assertStatus(201)
-        dg_specs = [DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
-                                   service_id='all_hdd',
-                                   service_type='osd',
-                                   data_devices=DeviceSelection(rotational=True))]
-        fake_client.osds.create.assert_called_with(dg_specs)
+        fake_client.osds.create.assert_called_with([dg_spec])
 
     @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
     def test_osd_create_with_invalid_drive_groups(self, instance):
@@ -309,20 +296,34 @@ class OsdTest(ControllerTestCase):
         fake_client = mock.Mock()
         instance.return_value = fake_client
 
+        dg_spec = self.orch_helper.load_osd_dg('00_dg.json')
+        dg = dg_spec.to_json()
+        dg['host_pattern_wrong'] = 'unknown'
         # Invalid DriveGroup
         data = {
             'method': 'drive_groups',
-            'data': [
-                {
-                    'service_type': 'osd',
-                    'service_id': 'invalid_dg',
-                    'data_devices': {
-                        'rotational': True
-                    },
-                    'host_pattern_wrong': 'unknown',
-                }
-            ],
+            'data': [dg],
             'tracking_id': 'all_hdd, b_ssd'
         }
         self._task_post('/api/osd', data)
         self.assertStatus(400)
+
+    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    def test_osd_preview(self, instance):
+        fake_client = mock.Mock()
+        instance.return_value = fake_client
+
+        dg_spec = self.orch_helper.load_osd_dg('01_dg.json')
+        data = {
+            'drive_groups': [
+                dg_spec.to_json()
+            ]
+        }
+        fake_client.osds.preview.return_value = self.orch_helper.load_osd_preview(
+            '01_orch_preview.json')
+        fake_client.inventory.list.return_value = self.orch_helper.load_inventory(
+            '01_orch_inventory.json')
+        self._task_post('/api/osd/preview', data)
+        self.assertStatus(200)
+        fake_client.osds.preview.assert_called_with([dg_spec])
+        self.assertJsonBody(self.orch_helper.load_json('01_be_osd_preview.json'))

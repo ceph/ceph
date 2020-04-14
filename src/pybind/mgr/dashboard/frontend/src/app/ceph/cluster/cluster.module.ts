@@ -30,6 +30,7 @@ import { InventoryComponent } from './inventory/inventory.component';
 import { LogsComponent } from './logs/logs.component';
 import { MgrModulesModule } from './mgr-modules/mgr-modules.module';
 import { MonitorComponent } from './monitor/monitor.component';
+import { OsdCreationPreviewDetailsComponent } from './osd/osd-creation-preview-details/osd-creation-preview-details.component';
 import { OsdCreationPreviewModalComponent } from './osd/osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
 import { OsdDevicesSelectionGroupsComponent } from './osd/osd-devices-selection-groups/osd-devices-selection-groups.component';
@@ -117,6 +118,7 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdDevicesSelectionModalComponent,
     InventoryDevicesComponent,
     OsdDevicesSelectionGroupsComponent,
+    OsdCreationPreviewDetailsComponent,
     OsdCreationPreviewModalComponent,
     RulesListComponent,
     ActiveAlertListComponent,

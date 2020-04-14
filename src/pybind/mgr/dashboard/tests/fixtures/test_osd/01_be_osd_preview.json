@@ -1,0 +1,480 @@
+[
+    {
+        "hostname": "mgr0",
+        "data": {
+            "human_readable_size": "19.00 GB",
+            "path": "/dev/sdc",
+            "percentage": 100.0,
+            "size": 20401094656.0,
+            "devices": [
+                {
+                    "rejected_reasons": [],
+                    "available": true,
+                    "path": "/dev/sdc",
+                    "sys_api": {
+                        "removable": "0",
+                        "ro": "0",
+                        "vendor": "QEMU",
+                        "model": "QEMU HARDDISK",
+                        "rev": "2.5+",
+                        "sas_address": "",
+                        "sas_device_handle": "",
+                        "support_discard": "4096",
+                        "rotational": "1",
+                        "nr_requests": "128",
+                        "scheduler_mode": "noop",
+                        "partitions": {},
+                        "sectors": 0,
+                        "sectorsize": "512",
+                        "size": 21474836480.0,
+                        "human_readable_size": "20.00 GB",
+                        "path": "/dev/sdc",
+                        "locked": 0
+                    },
+                    "lvs": [],
+                    "human_readable_type": "hdd",
+                    "device_id": "QEMU_QEMU_HARDDISK_mgr0-disk2"
+                }
+            ]
+        },
+        "wal": {
+            "human_readable_size": "7.00 GB",
+            "path": "vg: vg/lv",
+            "percentage": 50,
+            "size": 7516192768,
+            "vg": {
+                "devices": [
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sdb",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 16106127360.0,
+                            "human_readable_size": "15.00 GB",
+                            "path": "/dev/sdb",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_mgr0-disk3-ssd"
+                    }
+                ],
+                "human_readable_size": "14.00 GB",
+                "human_readable_sizes": "7.00 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 15032385536,
+                "sizes": 7516192768
+            }
+        },
+        "db": {}
+    },
+    {
+        "hostname": "mgr0",
+        "data": {
+            "human_readable_size": "19.00 GB",
+            "path": "/dev/sdd",
+            "percentage": 100.0,
+            "size": 20401094656.0,
+            "devices": [
+                {
+                    "rejected_reasons": [],
+                    "available": true,
+                    "path": "/dev/sdd",
+                    "sys_api": {
+                        "removable": "0",
+                        "ro": "0",
+                        "vendor": "QEMU",
+                        "model": "QEMU HARDDISK",
+                        "rev": "2.5+",
+                        "sas_address": "",
+                        "sas_device_handle": "",
+                        "support_discard": "4096",
+                        "rotational": "1",
+                        "nr_requests": "128",
+                        "scheduler_mode": "noop",
+                        "partitions": {},
+                        "sectors": 0,
+                        "sectorsize": "512",
+                        "size": 21474836480.0,
+                        "human_readable_size": "20.00 GB",
+                        "path": "/dev/sdd",
+                        "locked": 0
+                    },
+                    "lvs": [],
+                    "human_readable_type": "hdd",
+                    "device_id": "QEMU_QEMU_HARDDISK_mgr0-disk1"
+                }
+            ]
+        },
+        "wal": {
+            "human_readable_size": "7.00 GB",
+            "path": "vg: vg/lv",
+            "percentage": 50,
+            "size": 7516192768,
+            "vg": {
+                "devices": [
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sdb",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 16106127360.0,
+                            "human_readable_size": "15.00 GB",
+                            "path": "/dev/sdb",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_mgr0-disk3-ssd"
+                    }
+                ],
+                "human_readable_size": "14.00 GB",
+                "human_readable_sizes": "7.00 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 15032385536,
+                "sizes": 7516192768
+            }
+        },
+        "db": {}
+    },
+    {
+        "hostname": "osd0",
+        "data": {
+            "human_readable_size": "19.00 GB",
+            "path": "/dev/sdd",
+            "percentage": 100.0,
+            "size": 20401094656.0,
+            "devices": [
+                {
+                    "rejected_reasons": [],
+                    "available": true,
+                    "path": "/dev/sdd",
+                    "sys_api": {
+                        "removable": "0",
+                        "ro": "0",
+                        "vendor": "QEMU",
+                        "model": "QEMU HARDDISK",
+                        "rev": "2.5+",
+                        "sas_address": "",
+                        "sas_device_handle": "",
+                        "support_discard": "4096",
+                        "rotational": "1",
+                        "nr_requests": "128",
+                        "scheduler_mode": "noop",
+                        "partitions": {},
+                        "sectors": 0,
+                        "sectorsize": "512",
+                        "size": 21474836480.0,
+                        "human_readable_size": "20.00 GB",
+                        "path": "/dev/sdd",
+                        "locked": 0
+                    },
+                    "lvs": [],
+                    "human_readable_type": "hdd",
+                    "device_id": "QEMU_QEMU_HARDDISK_osd0-disk2"
+                }
+            ]
+        },
+        "wal": {
+            "human_readable_size": "14.00 GB",
+            "path": "vg: vg/lv",
+            "percentage": 50,
+            "size": 15032385536,
+            "vg": {
+                "devices": [
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sdb",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 16106127360.0,
+                            "human_readable_size": "15.00 GB",
+                            "path": "/dev/sdb",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_osd0-disk4-ssd"
+                    },
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sdc",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 16106127360.0,
+                            "human_readable_size": "15.00 GB",
+                            "path": "/dev/sdc",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_osd0-disk3-ssd"
+                    }
+                ],
+                "human_readable_size": "28.00 GB",
+                "human_readable_sizes": "14.00 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 30064771072,
+                "sizes": 15032385536
+            }
+        },
+        "db": {
+            "human_readable_size": "4.50 GB",
+            "path": "vg: vg/lv",
+            "percentage": 50,
+            "size": 4831838208,
+            "vg": {
+                "devices": [
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sda",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 10737418240.0,
+                            "human_readable_size": "10.00 GB",
+                            "path": "/dev/sda",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_osd0-disk5-ssd"
+                    }
+                ],
+                "human_readable_size": "9.00 GB",
+                "human_readable_sizes": "4.50 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 9663676416,
+                "sizes": 4831838208
+            }
+        }
+    },
+    {
+        "hostname": "osd0",
+        "data": {
+            "human_readable_size": "19.00 GB",
+            "path": "/dev/sde",
+            "percentage": 100.0,
+            "size": 20401094656.0,
+            "devices": [
+                {
+                    "rejected_reasons": [],
+                    "available": true,
+                    "path": "/dev/sde",
+                    "sys_api": {
+                        "removable": "0",
+                        "ro": "0",
+                        "vendor": "QEMU",
+                        "model": "QEMU HARDDISK",
+                        "rev": "2.5+",
+                        "sas_address": "",
+                        "sas_device_handle": "",
+                        "support_discard": "4096",
+                        "rotational": "1",
+                        "nr_requests": "128",
+                        "scheduler_mode": "noop",
+                        "partitions": {},
+                        "sectors": 0,
+                        "sectorsize": "512",
+                        "size": 21474836480.0,
+                        "human_readable_size": "20.00 GB",
+                        "path": "/dev/sde",
+                        "locked": 0
+                    },
+                    "lvs": [],
+                    "human_readable_type": "hdd",
+                    "device_id": "QEMU_QEMU_HARDDISK_osd0-disk1"
+                }
+            ]
+        },
+        "wal": {
+            "human_readable_size": "14.00 GB",
+            "path": "vg: vg/lv",
+            "percentage": 50,
+            "size": 15032385536,
+            "vg": {
+                "devices": [
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sdb",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 16106127360.0,
+                            "human_readable_size": "15.00 GB",
+                            "path": "/dev/sdb",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_osd0-disk4-ssd"
+                    },
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sdc",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 16106127360.0,
+                            "human_readable_size": "15.00 GB",
+                            "path": "/dev/sdc",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_osd0-disk3-ssd"
+                    }
+                ],
+                "human_readable_size": "28.00 GB",
+                "human_readable_sizes": "14.00 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 30064771072,
+                "sizes": 15032385536
+            }
+        },
+        "db": {
+            "human_readable_size": "4.50 GB",
+            "path": "vg: vg/lv",
+            "percentage": 50,
+            "size": 4831838208,
+            "vg": {
+                "devices": [
+                    {
+                        "rejected_reasons": [],
+                        "available": true,
+                        "path": "/dev/sda",
+                        "sys_api": {
+                            "removable": "0",
+                            "ro": "0",
+                            "vendor": "QEMU",
+                            "model": "QEMU HARDDISK",
+                            "rev": "2.5+",
+                            "sas_address": "",
+                            "sas_device_handle": "",
+                            "support_discard": "4096",
+                            "rotational": "0",
+                            "nr_requests": "128",
+                            "scheduler_mode": "noop",
+                            "partitions": {},
+                            "sectors": 0,
+                            "sectorsize": "512",
+                            "size": 10737418240.0,
+                            "human_readable_size": "10.00 GB",
+                            "path": "/dev/sda",
+                            "locked": 0
+                        },
+                        "lvs": [],
+                        "human_readable_type": "ssd",
+                        "device_id": "QEMU_QEMU_HARDDISK_osd0-disk5-ssd"
+                    }
+                ],
+                "human_readable_size": "9.00 GB",
+                "human_readable_sizes": "4.50 GB",
+                "parts": 2,
+                "percentages": 50,
+                "size": 9663676416,
+                "sizes": 4831838208
+            }
+        }
+    }
+]

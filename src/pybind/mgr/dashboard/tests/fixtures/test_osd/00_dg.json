@@ -1,0 +1,8 @@
+{
+    "service_type": "osd",
+    "service_id": "all_hdd",
+    "data_devices": {
+        "rotational": true
+    },
+    "host_pattern": "*"
+}
