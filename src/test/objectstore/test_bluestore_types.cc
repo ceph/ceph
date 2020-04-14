@@ -7,6 +7,7 @@
 #include "include/stringify.h"
 #include "common/ceph_time.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/AvlAllocator.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
@@ -40,6 +41,7 @@ TEST(bluestore, sizeof) {
   P(boost::intrusive::unordered_set_base_hook<>);
   P(bufferlist);
   P(bufferptr);
+  P(range_seg_t);
   cout << "map<uint64_t,uint64_t>\t" << sizeof(map<uint64_t,uint64_t>) << std::endl;
   cout << "map<char,char>\t" << sizeof(map<char,char>) << std::endl;
 }
