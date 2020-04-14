@@ -19,6 +19,8 @@ class SyncPointLogEntry;
 class GenericWriteLogEntry;
 class WriteLogEntry;
 
+typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
+
 class GenericLogEntry {
 public:
   WriteLogPmemEntry ram_entry;
@@ -106,6 +108,7 @@ public:
   std::shared_ptr<SyncPointLogEntry> get_sync_point_entry() override {
     return sync_point_entry;
   }
+  virtual void copy_pmem_bl(bufferlist *out_bl) = 0;
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const GenericWriteLogEntry &entry);
@@ -151,7 +154,7 @@ public:
   /* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */
   buffer::list &get_pmem_bl();
   /* Constructs a new bl containing copies of pmem_bp */
-  void copy_pmem_bl(bufferlist *out_bl);
+  void copy_pmem_bl(bufferlist *out_bl) override;
   void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
                  Context *ctx) override;
   std::ostream &format(std::ostream &os) const;
