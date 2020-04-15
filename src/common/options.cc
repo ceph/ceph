@@ -3326,7 +3326,23 @@ std::vector<Option> get_global_options() {
     .set_default(-1)
     .set_description(""),
 
-    Option("bluefs_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bdev_enable_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
+    Option("bdev_async_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+    
+    Option("bdev_flock_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.1)
+    .set_description("interval to retry the flock"),
+    
+    Option("bdev_flock_retry", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_description("times to retry the flock"),
+
+    Option("bluefs_alloc_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("Allocation unit size for DB and WAL devices"),
 
