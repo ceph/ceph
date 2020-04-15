@@ -470,13 +470,15 @@ Commands
   can be explicitly disabled mirroring for each image within
   the pool.
 
-:command:`mirror image enable` *image-spec*
+:command:`mirror image enable` *image-spec* *mode*
   Enable RBD mirroring for an image. If the mirroring is
   configured in ``image`` mode for the image's pool, then it
   can be explicitly enabled mirroring for each image within
   the pool.
 
-  This requires the RBD journaling feature is enabled.
+  The mirror image mode can either be ``journal`` (default) or
+  ``snapshot``. The ``journal`` mode requires the RBD journaling
+  feature.
 
 :command:`mirror image promote` [--force] *image-spec*
   Promote a non-primary image to primary for RBD mirroring.
@@ -536,6 +538,18 @@ Commands
   Show status for all mirrored images in the pool.
   With --verbose, also show additionally output status
   details for every mirroring image in the pool.
+
+:command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
+  Add mirror snapshot schedule.
+
+:command:`mirror snapshot schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*] [--image *image*]
+  List mirror snapshot schedule.
+
+:command:`mirror snapshot schedule remove` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
+  Remove mirror snapshot schedule.
+
+:command:`mirror snapshot schedule status` [-p | --pool *pool*] [--format *format*] [--pretty-format] [--namespace *namespace*] [--image *image*]
+  Show mirror snapshot schedule status.
 
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
@@ -636,6 +650,18 @@ Commands
   Delete an image from trash. If image deferment time has not expired
   you can not removed it unless use force. But an actively in-use by clones 
   or has snapshots can not be removed.
+
+:command:`trash purge schedule add` [-p | --pool *pool*] [--namespace *namespace*] *interval* [*start-time*]
+  Add trash purge schedule.
+
+:command:`trash purge schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*]
+  List trash purge schedule.
+
+:command:`trash purge schedule remove` [-p | --pool *pool*] [--namespace *namespace*] *interval* [*start-time*]
+  Remove trash purge schedule.
+
+:command:`trash purge schedule status` [-p | --pool *pool*] [--format *format*] [--pretty-format] [--namespace *namespace*]
+  Show trash purge schedule status.
 
 :command:`watch` *image-spec*
   Watch events on image.

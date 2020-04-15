@@ -22,36 +22,36 @@ RGWMetadataHandler *RGWSyncModuleInstance::alloc_bucket_meta_handler()
   return RGWBucketMetaHandlerAllocator::alloc();
 }
 
-RGWMetadataHandler *RGWSyncModuleInstance::alloc_bucket_instance_meta_handler()
+RGWBucketInstanceMetadataHandlerBase *RGWSyncModuleInstance::alloc_bucket_instance_meta_handler()
 {
   return RGWBucketInstanceMetaHandlerAllocator::alloc();
 }
 
-RGWStatRemoteObjCBCR::RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
-                       RGWBucketInfo& _bucket_info, rgw_obj_key& _key) : RGWCoroutine(_sync_env->cct),
-                                                          sync_env(_sync_env),
-                                                          bucket_info(_bucket_info), key(_key) {
+RGWStatRemoteObjCBCR::RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
+                       rgw_bucket& _src_bucket, rgw_obj_key& _key) : RGWCoroutine(_sc->cct),
+                                                          sc(_sc), sync_env(_sc->env),
+                                                          src_bucket(_src_bucket), key(_key) {
 }
 
-RGWCallStatRemoteObjCR::RGWCallStatRemoteObjCR(RGWDataSyncEnv *_sync_env,
-                                               RGWBucketInfo& _bucket_info, rgw_obj_key& _key) : RGWCoroutine(_sync_env->cct),
-                                                                                                 sync_env(_sync_env),
-                                                                                                 bucket_info(_bucket_info), key(_key) {
+RGWCallStatRemoteObjCR::RGWCallStatRemoteObjCR(RGWDataSyncCtx *_sc,
+                                               rgw_bucket& _src_bucket, rgw_obj_key& _key) : RGWCoroutine(_sc->cct),
+                                                                                                 sc(_sc), sync_env(_sc->env),
+                                                                                                 src_bucket(_src_bucket), key(_key) {
 }
 
 int RGWCallStatRemoteObjCR::operate() {
   reenter(this) {
     yield {
       call(new RGWStatRemoteObjCR(sync_env->async_rados, sync_env->store,
-                                  sync_env->source_zone,
-                                  bucket_info, key, &mtime, &size, &etag, &attrs, &headers));
+                                  sc->source_zone,
+                                  src_bucket, key, &mtime, &size, &etag, &attrs, &headers));
     }
     if (retcode < 0) {
       ldout(sync_env->cct, 10) << "RGWStatRemoteObjCR() returned " << retcode << dendl;
       return set_cr_error(retcode);
     }
-    ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sync_env->source_zone
-                             << " b=" << bucket_info.bucket << " k=" << key
+    ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sc->source_zone
+                             << " b=" << src_bucket << " k=" << key
                              << " size=" << size << " mtime=" << mtime << dendl;
     yield {
       RGWStatRemoteObjCBCR *cb = allocate_callback();

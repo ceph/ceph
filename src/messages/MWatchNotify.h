@@ -35,7 +35,7 @@ private:
 
   MWatchNotify()
     : Message{CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION} { }
-  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, ceph::buffer::list b)
+  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, ceph::buffer::list b, uint64_t n=0)
     : Message{CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION},
       cookie(c),
       ver(v),
@@ -43,7 +43,7 @@ private:
       opcode(o),
       bl(b),
       return_code(0),
-      notifier_gid(0) { }
+      notifier_gid(n) { }
 private:
   ~MWatchNotify() override {}
 

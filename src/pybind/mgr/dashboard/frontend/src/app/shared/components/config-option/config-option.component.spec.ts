@@ -30,7 +30,7 @@ describe('ConfigOptionComponent', () => {
     fixture.detectChanges();
     configurationService = TestBed.get(ConfigurationService);
 
-    const configOptions = [
+    const configOptions: Record<string, any> = [
       {
         name: 'osd_scrub_auto_repair_num_errors',
         type: 'uint',

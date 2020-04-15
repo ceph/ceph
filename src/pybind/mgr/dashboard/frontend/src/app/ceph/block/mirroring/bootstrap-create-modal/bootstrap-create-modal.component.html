@@ -17,11 +17,9 @@
         </p>
 
         <div class="form-group">
-          <label class="col-form-label"
-                 for="siteName">
-            <span i18n>Site Name</span>
-            <span class="required"></span>
-          </label>
+          <label class="col-form-label required"
+                 for="siteName"
+                 i18n>Site Name</label>
           <input class="form-control"
                  type="text"
                  placeholder="Name..."
@@ -37,11 +35,9 @@
 
         <div class="form-group"
              formGroupName="pools">
-          <label class="col-form-label"
-                 for="pools">
-            <span i18n>Pools</span>
-            <span class="required"></span>
-          </label>
+          <label class="col-form-label required"
+                 for="pools"
+                 i18n>Pools</label>
           <div class="custom-control custom-checkbox"
                *ngFor="let pool of pools">
             <input type="checkbox"
@@ -57,11 +53,10 @@
                 i18n>At least one pool is required.</span>
         </div>
 
-        <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="createBootstrapForm"
-                            (submitAction)="generate()">Generate</cd-submit-button>
-        </div>
+        <cd-submit-button class="mb-4 float-right"
+                          i18n
+                          [form]="createBootstrapForm"
+                          (submitAction)="generate()">Generate</cd-submit-button>
 
         <div class="form-group">
           <label class="col-form-label"
@@ -79,12 +74,10 @@
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-back-button [back]="modalRef.hide"
-                          name="Close"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-back-button [back]="modalRef.hide"
+                        name="Close"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

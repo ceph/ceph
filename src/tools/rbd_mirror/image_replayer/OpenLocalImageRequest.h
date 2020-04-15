@@ -67,6 +67,7 @@ private:
   cls::rbd::MirrorImage m_mirror_image;
   librbd::mirror::PromotionState m_promotion_state =
     librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
+  std::string m_primary_mirror_uuid;
   int m_ret_val = 0;
 
   void send_open_image();

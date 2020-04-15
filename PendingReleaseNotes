@@ -226,6 +226,15 @@
   autoscaling, see :ref:`pg-autoscaler`.  Note that existing pools in
   upgraded clusters will still be set to ``warn`` by default.
 
+* The pool parameter ``target_size_ratio``, used by the pg autoscaler,
+  has changed meaning. It is now normalized across pools, rather than
+  specifying an absolute ratio. For details, see :ref:`pg-autoscaler`.
+  If you have set target size ratios on any pools, you may want to set
+  these pools to autoscale ``warn`` mode to avoid data movement during
+  the upgrade::
+
+    ceph osd pool set <pool-name> pg_autoscale_mode warn
+
 * The ``upmap_max_iterations`` config option of mgr/balancer has been
   renamed to ``upmap_max_optimizations`` to better match its behaviour.
 
@@ -284,4 +293,34 @@
   the racks.  In those cases, the configuration value can be increased.
 
 * MDS daemons can now be assigned to manage a particular file system via the
-  new ``mds_join_fs`` option.
+  new ``mds_join_fs`` option. The monitors will try to use only MDS for a file
+  system with mds_join_fs equal to the file system name (strong affinity).
+  Monitors may also deliberately failover an active MDS to a standby when the
+  cluster is otherwise healthy if the standby has stronger affinity.
+
+* RGW Multisite: A new fine grained bucket-granularity policy configuration
+  system has been introduced and it supersedes the previous coarse zone sync
+  configuration (specifically the ``sync_from`` and ``sync_from_all`` fields
+  in the zonegroup configuration. New configuration should only be configured
+  after all relevant zones in the zonegroup have been upgraded.
+
+* RGW S3: Support has been added for BlockPublicAccess set of APIs at a bucket
+  level, currently blocking/ignoring public acls & policies are supported.
+  User/Account level APIs are planned to be added in the future
+
+* RGW: The default number of bucket index shards for new buckets was raised
+  from 1 to 11 to increase the amount of write throughput for small buckets
+  and delay the onset of dynamic resharding. This change only affects new
+  deployments/zones. To change this default value on existing deployments,
+  use 'radosgw-admin zonegroup modify --bucket-index-max-shards=11'.
+  If the zonegroup is part of a realm, the change must be committed with
+  'radosgw-admin period update --commit' - otherwise the change will take
+  effect after radosgws are restarted.
+
+* Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
+  by default. However, if enabled, user now have to pass the
+  ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really
+  sure of configuring pool size 1.
+
+* librbd now inherits the stripe unit and count from its parent image upon creation.
+  This can be overridden by specifying different stripe settings during clone creation.

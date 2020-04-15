@@ -28,17 +28,17 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
-                 RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
+                 RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
-                 RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
-                 RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY,
+                 RBD_SNAP_NAMESPACE_TYPE_MIRROR,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
                  RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
                  RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX,
-                 RBD_SNAP_REMOVE_UNPROTECT)
+                 RBD_SNAP_REMOVE_UNPROTECT, RBD_SNAP_MIRROR_STATE_PRIMARY,
+                 RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)
 
 rados = None
 ioctx = None
@@ -496,7 +496,7 @@ def test_features_to_string():
     features_string = rbd.features_to_string(features)
     eq(features_string, "layering")
 
-    features = 1024
+    features = 16777216
     assert_raises(InvalidArgument, rbd.features_to_string, features)
 
 @require_new_format()
@@ -587,6 +587,10 @@ class TestImage(object):
 
     def test_image_auto_close(self):
         image = Image(ioctx, image_name)
+
+    def test_use_after_close(self):
+        self.image.close()
+        assert_raises(InvalidArgument, self.image.stat)
 
     def test_write(self):
         data = rand_data(256)
@@ -1372,6 +1376,30 @@ class TestClone(object):
                                self.image.stripe_unit(),
                                self.image.stripe_count())
 
+    def test_stripe_unit_and_count(self):
+        global features
+        global ioctx
+        image_name = get_temp_image_name()
+        RBD().create(ioctx, image_name, IMG_SIZE, IMG_ORDER, old_format=False,
+                     features=int(features), stripe_unit=1048576, stripe_count=8)
+        image = Image(ioctx, image_name)
+        image.create_snap('snap1')
+        image.protect_snap('snap1')
+        clone_name = get_temp_image_name()
+        RBD().clone(ioctx, image_name, 'snap1', ioctx, clone_name)
+        clone = Image(ioctx, clone_name)
+
+        eq(1048576, clone.stripe_unit())
+        eq(8, clone.stripe_count())
+
+        clone.close()
+        RBD().remove(ioctx, clone_name)
+        image.unprotect_snap('snap1')
+        image.remove_snap('snap1')
+        image.close()
+        RBD().remove(ioctx, image_name)
+
+
     def test_unprotected(self):
         self.image.create_snap('snap2')
         global features
@@ -1593,12 +1621,13 @@ class TestClone(object):
         assert_raises(ReadOnlyImage, self.clone.flatten)
         self.clone.remove_snap('snap2')
 
-    def check_flatten_with_order(self, new_order):
+    def check_flatten_with_order(self, new_order, stripe_unit=None,
+                                 stripe_count=None):
         global ioctx
         global features
         clone_name2 = get_temp_image_name()
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         #with Image(ioctx, 'clone2') as clone:
         clone2 = Image(ioctx, clone_name2)
         clone2.flatten()
@@ -1608,7 +1637,7 @@ class TestClone(object):
 
         # flatten after resizing to non-block size
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         with Image(ioctx, clone_name2) as clone:
             clone.resize(IMG_SIZE // 2 - 1)
             clone.flatten()
@@ -1617,7 +1646,7 @@ class TestClone(object):
 
         # flatten after resizing to non-block size
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         with Image(ioctx, clone_name2) as clone:
             clone.resize(IMG_SIZE // 2 + 1)
             clone.flatten()
@@ -1628,7 +1657,7 @@ class TestClone(object):
         self.check_flatten_with_order(IMG_ORDER)
 
     def test_flatten_smaller_order(self):
-        self.check_flatten_with_order(IMG_ORDER - 2)
+        self.check_flatten_with_order(IMG_ORDER - 2, 1048576, 1)
 
     def test_flatten_larger_order(self):
         self.check_flatten_with_order(IMG_ORDER + 2)
@@ -1855,10 +1884,13 @@ class TestExclusiveLock(object):
                 rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
                 with Image(ioctx2, image_name) as image, \
                      Image(blacklist_ioctx, image_name) as blacklist_image:
+
+                    lock_owners = list(image.lock_get_owners())
+                    eq(0, len(lock_owners))
+
                     blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
                     assert_raises(ReadOnlyImage, image.lock_acquire,
                                   RBD_LOCK_MODE_EXCLUSIVE)
-
                     lock_owners = list(image.lock_get_owners())
                     eq(1, len(lock_owners))
                     eq(RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]['mode'])
@@ -1905,6 +1937,10 @@ class TestMirroring(object):
         remove_image()
         self.rbd.mirror_mode_set(ioctx, self.initial_mirror_mode)
 
+    def test_uuid(self):
+        mirror_uuid = self.rbd.mirror_uuid_get(ioctx)
+        assert(mirror_uuid)
+
     def test_site_name(self):
         site_name = "us-west-1"
         self.rbd.mirror_site_name_set(rados, site_name)
@@ -1942,7 +1978,7 @@ class TestMirroring(object):
             'direction': RBD_MIRROR_PEER_DIRECTION_RX_TX,
             'site_name' : site_name,
             'cluster_name' : site_name,
-            'fsid': '',
+            'mirror_uuid': '',
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
@@ -1955,7 +1991,7 @@ class TestMirroring(object):
             'direction': RBD_MIRROR_PEER_DIRECTION_RX_TX,
             'site_name' : cluster_name,
             'cluster_name' : cluster_name,
-            'fsid': '',
+            'mirror_uuid': '',
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
@@ -1996,11 +2032,19 @@ class TestMirroring(object):
         info = self.image.mirror_image_get_info()
         self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, False)
 
+        entries = dict(self.rbd.mirror_image_info_list(ioctx))
+        info['mode'] = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+        eq(info, entries[self.image.id()])
+
         self.image.mirror_image_resync()
 
         self.image.mirror_image_promote(True)
         info = self.image.mirror_image_get_info()
         self.check_info(info, global_id, RBD_MIRROR_IMAGE_ENABLED, True)
+
+        entries = dict(self.rbd.mirror_image_info_list(ioctx))
+        info['mode'] = RBD_MIRROR_IMAGE_MODE_JOURNAL;
+        eq(info, entries[self.image.id()])
 
         fail = False
         try:
@@ -2068,39 +2112,59 @@ class TestMirroring(object):
         mode = self.image.mirror_image_get_mode()
         eq(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode)
 
-        snap_id = self.image.mirror_image_create_snapshot()
-
         snaps = list(self.image.list_snaps())
         eq(1, len(snaps))
         snap = snaps[0]
-        eq(snap['id'], snap_id)
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
-        eq(False, snap['mirror_primary']['demoted'])
-        eq(sorted([peer1_uuid, peer2_uuid]),
-           sorted(snap['mirror_primary']['mirror_peer_uuids']))
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
 
-        eq(RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY,
+        info = self.image.mirror_image_get_info()
+        eq(True, info['primary'])
+        entries = dict(
+            self.rbd.mirror_image_info_list(ioctx,
+                                            RBD_MIRROR_IMAGE_MODE_SNAPSHOT))
+        info['mode'] = RBD_MIRROR_IMAGE_MODE_SNAPSHOT;
+        eq(info, entries[self.image.id()])
+
+        snap_id = self.image.mirror_image_create_snapshot()
+
+        snaps = list(self.image.list_snaps())
+        eq(2, len(snaps))
+        snap = snaps[0]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+        snap = snaps[1]
+        eq(snap['id'], snap_id)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY, snap['mirror']['state'])
+        eq(sorted([peer1_uuid, peer2_uuid]),
+           sorted(snap['mirror']['mirror_peer_uuids']))
+
+        eq(RBD_SNAP_NAMESPACE_TYPE_MIRROR,
            self.image.snap_get_namespace_type(snap_id))
-        mirror_snap = self.image.snap_get_mirror_primary_namespace(snap_id)
-        eq(mirror_snap, snap['mirror_primary'])
+        mirror_snap = self.image.snap_get_mirror_namespace(snap_id)
+        eq(mirror_snap, snap['mirror'])
 
         self.image.mirror_image_demote()
 
         assert_raises(InvalidArgument, self.image.mirror_image_create_snapshot)
 
         snaps = list(self.image.list_snaps())
-        eq(2, len(snaps))
+        eq(3, len(snaps))
         snap = snaps[0]
-        eq(snap['id'], snap_id)
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
         snap = snaps[1]
-        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY)
-        eq(True, snap['mirror_primary']['demoted'])
+        eq(snap['id'], snap_id)
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        snap = snaps[2]
+        eq(snap['namespace'], RBD_SNAP_NAMESPACE_TYPE_MIRROR)
+        eq(RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED, snap['mirror']['state'])
         eq(sorted([peer1_uuid, peer2_uuid]),
-           sorted(snap['mirror_primary']['mirror_peer_uuids']))
+           sorted(snap['mirror']['mirror_peer_uuids']))
 
         self.rbd.mirror_peer_remove(ioctx, peer1_uuid)
         self.rbd.mirror_peer_remove(ioctx, peer2_uuid)
+        self.image.mirror_image_promote(False)
 
 class TestTrash(object):
 

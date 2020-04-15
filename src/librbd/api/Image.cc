@@ -16,6 +16,7 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Trash.h"
+#include "librbd/deep_copy/Handler.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/image/PreRemoveRequest.h"
@@ -614,8 +615,9 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     C_SaferCond ctx;
     std::string dest_id = util::generate_image_id(dest_md_ctx);
     auto *req = image::CloneRequest<I>::create(
-      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
-      dest_md_ctx, destname, dest_id, opts, "", "", src->op_work_queue, &ctx);
+      config, parent_io_ctx, parent_spec.image_id, "", {}, parent_spec.snap_id,
+      dest_md_ctx, destname, dest_id, opts, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
+      "", "", src->op_work_queue, &ctx);
     req->send();
     r = ctx.wait();
   }
@@ -678,9 +680,10 @@ int Image<I>::deep_copy(I *src, I *dest, bool flatten,
 
   C_SaferCond cond;
   SnapSeqs snap_seqs;
-  auto req = DeepCopyRequest<I>::create(src, dest, snap_id_start, snap_id_end,
-                                        flatten, boost::none, op_work_queue,
-                                        &snap_seqs, &prog_ctx, &cond);
+  deep_copy::ProgressHandler progress_handler{&prog_ctx};
+  auto req = DeepCopyRequest<I>::create(
+    src, dest, snap_id_start, snap_id_end, 0U, flatten, boost::none, op_work_queue,
+    &snap_seqs, &progress_handler, &cond);
   req->send();
   int r = cond.wait();
   if (r < 0) {

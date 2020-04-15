@@ -20,7 +20,7 @@ describe('OsdDetailsComponent', () => {
   let fixture: ComponentFixture<OsdDetailsComponent>;
   let debugElement: DebugElement;
   let osdService: OsdService;
-  let getDetailsSpy;
+  let getDetailsSpy: jasmine.Spy;
 
   configureTestBed({
     imports: [HttpClientTestingModule, TabsModule.forRoot(), SharedModule],

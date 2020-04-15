@@ -99,7 +99,7 @@ function init_first_zone {
 # create zonegroup, zone
   x $(rgw_admin $cid) zonegroup create --rgw-zonegroup=$zg --master --default
   x $(rgw_admin $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints --default
-  x $(rgw_admin $cid) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
+  x $(rgw_admin $cid) user create --uid=zone.user --display-name=ZoneUser --access-key=${access_key} --secret=${secret} --system
 
   x $(rgw_admin $cid) period update --commit
 }
@@ -120,7 +120,7 @@ function init_zone_in_existing_zg {
   x $(rgw_admin $cid) realm pull --url=$url:$master_zg_zone1_port --access-key=${access_key} --secret=${secret} --default
   x $(rgw_admin $cid) zonegroup default --rgw-zonegroup=$zg
   x $(rgw_admin $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
-  x $(rgw_admin $cid) period update --commit --url=$url:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+  x $(rgw_admin $cid) period update --commit
 }
 
 function init_first_zone_in_slave_zg {
@@ -146,8 +146,7 @@ function init_first_zone_in_slave_zg {
   x $(rgw_admin $cid) zone default --rgw-zone=$zone
   x $(rgw_admin $cid) zonegroup add --rgw-zonegroup=$zg --rgw-zone=$zone
 
-  x $(rgw_admin $cid) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
-  x $(rgw_admin $cid) period update --commit --url=localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+  x $(rgw_admin $cid) period update --commit
 
 }
 

@@ -12,6 +12,17 @@
             "input":{"shape":"DeleteBucketNotificationConfigurationRequest"},
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#delete-notification",
             "documentation":"<p>Deletes the notification configuration from the bucket.</p>"
+        },
+        "GetUsageStats":{
+            "name":"GetUsageStats",
+            "http":{
+                "method":"GET",
+                "requestUri":"/?usage",
+                "responseCode":200
+            },
+            "output": {"shape": "GetUsageStatsOutput"},
+            "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/serviceops#get-usage-stats",
+            "documentation":"<p>Get usage stats for the user</p>"
         }
     },
     "shapes": {
@@ -26,6 +37,35 @@
             }
         },
         "AllowUnordered":{"type":"boolean"},
+        "PutObjectRequest": {
+            "members": {
+                "AppendPosition": {
+                    "shape":"AppendPosition",
+                    "documentation": "<p>Position to allow appending</p>",
+                    "location": "querystring",
+                    "locationName": "position"
+                },
+                "Append": {
+                    "shape":"Append",
+                    "documentation":"<p>Append Object</p>",
+                    "location": "querystring",
+                    "locationName": "append"
+                }
+            }
+        },
+        "Append": {"type":"boolean"},
+        "AppendPosition":{"type":"integer"},
+        "PutObjectOutput": {
+            "members": {
+                "AppendPosition": {
+                    "shape":"AppendPosition",
+                    "documentation": "<p>Position to allow appending</p>",
+                    "location": "header",
+                    "locationName": "x-rgw-next-append-position",
+                    "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/objectops/#append-object"
+                }
+            }
+        },
         "GetBucketNotificationConfigurationRequest":{
             "type":"structure",
             "required":["Bucket"],
@@ -138,7 +178,27 @@
                 }
             },
             "documentation":"<p>A container for object tags filtering rules.</p>"
-        }
+        },
+        "GetUsageStatsOutput": {
+            "type": "structure",
+            "members": {
+                "Summary": {
+                    "shape":"UsageStatsSummary",
+                    "documentation": "<p/>"
+                }
+            }
+        },
+        "UsageStatsSummary": {
+            "type": "structure",
+            "members": {
+                "TotalBytes":{"shape":"TotalBytes"},
+                "TotalBytesRounded":{"shape":"TotalBytesRounded"},
+                "TotalEntries":{"shape":"TotalEntries"}
+            }
+        },
+        "TotalBytesRounded":{"type":"integer"},
+        "TotalBytes":{"type":"integer"},
+        "TotalEntries":{"type":"integer"}
     },
     "documentation":"<p/>"
 }

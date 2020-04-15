@@ -153,6 +153,9 @@ public:
                            uint64_t nonce,
 			   uint64_t cflags);
 
+  static uint64_t get_random_nonce();
+  static uint64_t get_pid_nonce();
+
   /**
    * create a new messenger
    *
@@ -413,6 +416,8 @@ public:
    */
   virtual int bind(const entity_addr_t& bind_addr) = 0;
 
+  virtual int bindv(const entity_addrvec_t& addrs);
+
   /**
    * This function performs a full restart of the Messenger component,
    * whatever that means.  Other entities who connect to this
@@ -429,10 +434,15 @@ public:
    * is true.
    * @param bind_addr The address to bind to.
    * @return 0 on success, or -1 on error, or -errno if
+   * we can be more specific about the failure.
    */
   virtual int client_bind(const entity_addr_t& bind_addr) = 0;
 
-  virtual int bindv(const entity_addrvec_t& addrs);
+  /**
+   * reset the 'client' Messenger. Mark all the existing Connections down
+   * and update 'nonce'.
+   */
+  virtual int client_reset() = 0;
 
 
   virtual bool should_use_msgr2() {
@@ -645,7 +655,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const cref_t<Message>& m) {
+  bool ms_can_fast_dispatch(const ceph::cref_t<Message>& m) {
     for (const auto &dispatcher : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m))
 	return true;
@@ -659,7 +669,7 @@ public:
    * @param m The Message we are fast dispatching.
    * If none of our Dispatchers can handle it, ceph_abort().
    */
-  void ms_fast_dispatch(const ref_t<Message> &m) {
+  void ms_fast_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m)) {
@@ -670,12 +680,12 @@ public:
     ceph_abort();
   }
   void ms_fast_dispatch(Message *m) {
-    return ms_fast_dispatch(ref_t<Message>(m, false)); /* consume ref */
+    return ms_fast_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    *
    */
-  void ms_fast_preprocess(const ref_t<Message> &m) {
+  void ms_fast_preprocess(const ceph::ref_t<Message> &m) {
     for (const auto &dispatcher : fast_dispatchers) {
       dispatcher->ms_fast_preprocess2(m);
     }
@@ -687,7 +697,7 @@ public:
    *
    *  @param m The Message to deliver.
    */
-  void ms_deliver_dispatch(const ref_t<Message> &m) {
+  void ms_deliver_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for (const auto &dispatcher : dispatchers) {
       if (dispatcher->ms_dispatch2(m))
@@ -698,7 +708,7 @@ public:
     ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
   }
   void ms_deliver_dispatch(Message *m) {
-    return ms_deliver_dispatch(ref_t<Message>(m, false)); /* consume ref */
+    return ms_deliver_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call

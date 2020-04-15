@@ -393,12 +393,10 @@ int MultipartObjectProcessor::prepare_head()
     return r;
   }
   stripe_size = manifest_gen.cur_stripe_max_size();
-
-  uint64_t max_head_size = std::min(chunk_size, stripe_size);
-  set_head_chunk_size(max_head_size);
+  set_head_chunk_size(stripe_size);
 
   chunk = ChunkProcessor(&writer, chunk_size);
-  stripe = StripeProcessor(&chunk, this, max_head_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
   return 0;
 }
 
@@ -489,7 +487,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
       .set_must_exist(true)
       .set(p, bl, null_yield);
   if (r < 0) {
-    return r;
+    return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
 
   if (!obj_op.meta.canceled) {
@@ -548,6 +546,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
       return -ERR_POSITION_NOT_EQUAL_TO_LENGTH;
     }
     try {
+      using ceph::decode;
       decode(cur_part_num, iter->second);
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 5) << "ERROR: failed to decode part num" << dendl;
@@ -560,6 +559,11 @@ int AppendObjectProcessor::prepare(optional_yield y)
       string s = rgw_string_unquote(iter->second.c_str());
       size_t pos = s.find("-");
       cur_etag = s.substr(0, pos);
+    }
+
+    iter = astate->attrset.find(RGW_ATTR_STORAGE_CLASS);
+    if (iter != astate->attrset.end()) {
+      tail_placement_rule.storage_class = iter->second.to_str();
     }
     cur_manifest = &(*astate->manifest);
     manifest.set_prefix(cur_manifest->get_prefix());
@@ -631,6 +635,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   obj_op.meta.appendable = true;
   //Add the append part number
   bufferlist cur_part_num_bl;
+  using ceph::encode;
   encode(cur_part_num, cur_part_num_bl);
   attrs[RGW_ATTR_APPEND_PART_NUM] = cur_part_num_bl;
   //calculate the etag

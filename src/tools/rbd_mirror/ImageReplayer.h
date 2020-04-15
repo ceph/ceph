@@ -24,6 +24,7 @@ namespace mirror {
 
 template <typename> struct InstanceWatcher;
 template <typename> struct MirrorStatusUpdater;
+struct PoolMetaCache;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -45,10 +46,11 @@ public:
       const std::string &global_image_id, Threads<ImageCtxT> *threads,
       InstanceWatcher<ImageCtxT> *instance_watcher,
       MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
                              threads, instance_watcher, local_status_updater,
-                             cache_manager_handler);
+                             cache_manager_handler, pool_meta_cache);
   }
   void destroy() {
     delete this;
@@ -60,7 +62,8 @@ public:
                 Threads<ImageCtxT> *threads,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 MirrorStatusUpdater<ImageCtxT>* local_status_updater,
-                journal::CacheManagerHandler *cache_manager_handler);
+                journal::CacheManagerHandler *cache_manager_handler,
+                PoolMetaCache* pool_meta_cache);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -181,6 +184,7 @@ private:
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
 
   Peers m_peers;
   Peer<ImageCtxT> m_remote_image_peer;
@@ -217,6 +221,8 @@ private:
 
   AsyncOpTracker m_in_flight_op_tracker;
 
+  Context* m_update_status_task = nullptr;
+
   static std::string to_string(const State state);
 
   bool is_stopped_() const {
@@ -228,6 +234,10 @@ private:
   bool is_replaying_() const {
     return (m_state == STATE_REPLAYING);
   }
+
+  void schedule_update_mirror_image_replay_status();
+  void handle_update_mirror_image_replay_status(int r);
+  void cancel_update_mirror_image_replay_status();
 
   void update_mirror_image_status(bool force, const OptionalState &state);
   void set_mirror_image_status_update(bool force, const OptionalState &state);
@@ -246,6 +256,7 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+
 };
 
 } // namespace mirror

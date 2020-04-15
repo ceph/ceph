@@ -6,43 +6,43 @@
   $ map="$TESTDIR/foo"
   $ crushtool --outfn "$map" --build --set-chooseleaf-vary-r 0 --set-chooseleaf-stable 0 --num_osds 25 node straw 5 rack straw 1 root straw 0 --reweight-item osd.2 99 -o "$map" --tree
   crushtool reweighting item osd.2 to 99
-  ID  CLASS WEIGHT    TYPE NAME          
-  -11       123.00000 root root          
-   -6       103.00000     rack rack0     
-   -1       103.00000         node node0 
-    0         1.00000             osd.0  
-    1         1.00000             osd.1  
-    2        99.00000             osd.2  
-    3         1.00000             osd.3  
-    4         1.00000             osd.4  
-   -7         5.00000     rack rack1     
-   -2         5.00000         node node1 
-    5         1.00000             osd.5  
-    6         1.00000             osd.6  
-    7         1.00000             osd.7  
-    8         1.00000             osd.8  
-    9         1.00000             osd.9  
-   -8         5.00000     rack rack2     
-   -3         5.00000         node node2 
-   10         1.00000             osd.10 
-   11         1.00000             osd.11 
-   12         1.00000             osd.12 
-   13         1.00000             osd.13 
-   14         1.00000             osd.14 
-   -9         5.00000     rack rack3     
-   -4         5.00000         node node3 
-   15         1.00000             osd.15 
-   16         1.00000             osd.16 
-   17         1.00000             osd.17 
-   18         1.00000             osd.18 
-   19         1.00000             osd.19 
-  -10         5.00000     rack rack4     
-   -5         5.00000         node node4 
-   20         1.00000             osd.20 
-   21         1.00000             osd.21 
-   22         1.00000             osd.22 
-   23         1.00000             osd.23 
-   24         1.00000             osd.24 
+  ID   CLASS  WEIGHT     TYPE NAME         
+  -11         123.00000  root root         
+   -6         103.00000      rack rack0    
+   -1         103.00000          node node0
+    0           1.00000              osd.0 
+    1           1.00000              osd.1 
+    2          99.00000              osd.2 
+    3           1.00000              osd.3 
+    4           1.00000              osd.4 
+   -7           5.00000      rack rack1    
+   -2           5.00000          node node1
+    5           1.00000              osd.5 
+    6           1.00000              osd.6 
+    7           1.00000              osd.7 
+    8           1.00000              osd.8 
+    9           1.00000              osd.9 
+   -8           5.00000      rack rack2    
+   -3           5.00000          node node2
+   10           1.00000              osd.10
+   11           1.00000              osd.11
+   12           1.00000              osd.12
+   13           1.00000              osd.13
+   14           1.00000              osd.14
+   -9           5.00000      rack rack3    
+   -4           5.00000          node node3
+   15           1.00000              osd.15
+   16           1.00000              osd.16
+   17           1.00000              osd.17
+   18           1.00000              osd.18
+   19           1.00000              osd.19
+  -10           5.00000      rack rack4    
+   -5           5.00000          node node4
+   20           1.00000              osd.20
+   21           1.00000              osd.21
+   22           1.00000              osd.22
+   23           1.00000              osd.23
+   24           1.00000              osd.24
   $ crushtool -d "$map"
   # begin crush map
   tunable choose_local_tries 0

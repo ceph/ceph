@@ -145,7 +145,8 @@ RGWSI_Bucket_SObj::~RGWSI_Bucket_SObj() {
 void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
                              RGWSI_SysObj_Cache *_cache_svc, RGWSI_BucketIndex *_bi,
                              RGWSI_Meta *_meta_svc, RGWSI_MetaBackend *_meta_be_svc,
-                             RGWSI_SyncModules *_sync_modules_svc)
+                             RGWSI_SyncModules *_sync_modules_svc,
+                             RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
   svc.bucket = this;
   svc.zone = _zone_svc;
@@ -155,6 +156,7 @@ void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
   svc.meta = _meta_svc;
   svc.meta_be = _meta_be_svc;
   svc.sync_modules = _sync_modules_svc;
+  svc.bucket_sync = _bucket_sync_svc;
 }
 
 int RGWSI_Bucket_SObj::do_start()
@@ -522,7 +524,15 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
   int ret = svc.meta_be->put(ctx.get(), key, params, &info.objv_tracker, y);
-  if (ret == -EEXIST) {
+
+  if (ret >= 0) {
+    int r = svc.bucket_sync->handle_bi_update(info,
+                                              orig_info.value_or(nullptr),
+                                              y);
+    if (r < 0) {
+      return r;
+    }
+  } else if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
      * since bucket instace meta object is unique for this specific bucket instace, we don't
@@ -543,11 +553,27 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
 
 int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                    const string& key,
+                                                   const RGWBucketInfo& info,
                                                    RGWObjVersionTracker *objv_tracker,
                                                    optional_yield y)
 {
   RGWSI_MBSObj_RemoveParams params;
-  return svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
+
+  if (ret < 0 &&
+      ret != -ENOENT) {
+    return ret;
+  }
+
+  int r = svc.bucket_sync->handle_bi_removal(info, y);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
+    /* returning success as index is just keeping hints, so will keep extra hints,
+     * but bucket removal succeeded
+     */
+  }
+
+  return 0;
 }
 
 int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,

@@ -21,7 +21,9 @@ software that interfaces with ``libvirt``. The following stack diagram
 illustrates how ``libvirt`` and QEMU use Ceph block devices via ``librbd``. 
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                     libvirt                       |
             +------------------------+--------------------------+
                                      |

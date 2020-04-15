@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <cstring>
+
 #include "include/types.h"
 #include "rabin.h"
-#include <string.h>
 
 
 uint64_t RabinChunk::gen_rabin_hash(char* chunk_data, uint64_t off, uint64_t len) {
@@ -35,8 +36,8 @@ bool RabinChunk::end_of_chunk(const uint64_t fp , int numbits) {
  *   output_chunks split by Rabin
  */
 
-int RabinChunk::do_rabin_chunks(bufferlist & inputdata, 
-				vector<pair<uint64_t, uint64_t>> & chunks, 
+int RabinChunk::do_rabin_chunks(ceph::buffer::list& inputdata,
+				std::vector<std::pair<uint64_t, uint64_t>>& chunks,
 				uint64_t min_val = 0, uint64_t max_val = 0)
 {
   char *ptr = inputdata.c_str();
@@ -56,7 +57,7 @@ int RabinChunk::do_rabin_chunks(bufferlist & inputdata,
   }
 
   if (data_size < min) {
-    chunks.push_back(make_pair(0, data_size));
+    chunks.push_back(std::make_pair(0, data_size));
     return 0;
   }
 
@@ -113,7 +114,7 @@ int RabinChunk::do_rabin_chunks(bufferlist & inputdata,
     }
 
     if (store_chunk) {
-      chunks.push_back(make_pair(c_start, c_size));
+      chunks.push_back(std::make_pair(c_start, c_size));
       c_start += c_size;
       c_offset = c_start;
       start_new_chunk = true;
@@ -127,7 +128,7 @@ int RabinChunk::do_rabin_chunks(bufferlist & inputdata,
 
   if (c_start < data_size) {
     c_size = data_size - c_start;
-    chunks.push_back(make_pair(c_start, c_size));
+    chunks.push_back(std::make_pair(c_start, c_size));
   }
 
   return 0;

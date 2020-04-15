@@ -17,9 +17,8 @@
 
 #include <deque>
 
+#include "include/common_fwd.h"
 #include "common/code_environment.h"
-
-class CephContext;
 
 enum common_init_flags_t {
   // Set up defaults that make sense for an unprivileged daemon

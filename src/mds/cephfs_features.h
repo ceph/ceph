@@ -20,7 +20,7 @@
 // and update Server::update_required_client_features(). This feature bit
 // is used to indicate that operator only wants clients from that release or
 // later to mount CephFS.
-#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_OCTOPUS
+#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_PACIFIC
 
 // The first 5 bits are reserved for old ceph releases.
 #define CEPHFS_FEATURE_JEWEL		5
@@ -32,6 +32,7 @@
 #define CEPHFS_FEATURE_LAZY_CAP_WANTED  11
 #define CEPHFS_FEATURE_MULTI_RECONNECT  12
 #define CEPHFS_FEATURE_NAUTILUS         12
+#define CEPHFS_FEATURE_DELEG_INO        13
 #define CEPHFS_FEATURE_OCTOPUS          13
 
 #define CEPHFS_FEATURES_ALL {		\
@@ -45,6 +46,7 @@
   CEPHFS_FEATURE_LAZY_CAP_WANTED,	\
   CEPHFS_FEATURE_MULTI_RECONNECT,	\
   CEPHFS_FEATURE_NAUTILUS,              \
+  CEPHFS_FEATURE_DELEG_INO,             \
   CEPHFS_FEATURE_OCTOPUS,               \
 }
 

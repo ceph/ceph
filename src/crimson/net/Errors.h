@@ -25,13 +25,7 @@ enum class error {
   bad_peer_address,
   negotiation_failure,
   read_eof,
-  connection_aborted,
-  connection_refused,
-  connection_reset,
   corrupted_message,
-  invalid_argument,
-  address_in_use,
-  broken_pipe,
   protocol_aborted,
 };
 

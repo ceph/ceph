@@ -11,10 +11,12 @@
 
 #include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/future-util.hh>
 
 #include "osd/osd_types.h"
 #include "include/uuid.h"
 
+#include "crimson/os/cyanstore/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 
 namespace ceph::os {
@@ -34,15 +36,47 @@ class CyanStore final : public FuturizedStore {
   uuid_d osd_fsid;
 
 public:
+  class CyanOmapIterator final : public OmapIterator {
+  public:
+    CyanOmapIterator() {}
+    CyanOmapIterator(ObjectRef obj) : obj(obj) {
+      iter = obj->omap.begin();
+    }
+    virtual seastar::future<int> seek_to_first();
+    virtual seastar::future<int> upper_bound(const std::string &after);
+    virtual seastar::future<int> lower_bound(const std::string &to);
+    virtual bool valid() const;
+    virtual seastar::future<int> next();
+    virtual std::string key() {
+      return iter->first;
+    }
+    virtual seastar::future<std::string> tail_key() {
+      return seastar::make_ready_future<std::string>((++obj->omap.end())->first);
+    }
+    virtual ceph::buffer::list value() {
+      return iter->second;
+    }
+    virtual int status() const {
+      return iter != obj->omap.end() ? 0 : -1;
+    }
+    virtual ~CyanOmapIterator() {}
+  private:
+    std::map<std::string, bufferlist>::const_iterator iter;
+    ObjectRef obj;
+  };
 
   CyanStore(const std::string& path);
   ~CyanStore() final;
 
+  seastar::future<> stop() final {return seastar::now();}
   seastar::future<> mount() final;
   seastar::future<> umount() final;
 
   seastar::future<> mkfs(uuid_d new_osd_fsid) final;
-  store_statfs_t stat() const final;
+  seastar::future<store_statfs_t> stat() const final;
+  seastar::future<struct stat> stat(
+    CollectionRef c,
+    const ghobject_t& oid) final;
 
   read_errorator::future<ceph::bufferlist> read(
     CollectionRef c,
@@ -76,6 +110,10 @@ public:
     const std::optional<std::string> &start ///< [in] start, empty for begin
     ) final; ///< @return <done, values> values.empty() iff done
 
+  seastar::future<ceph::bufferlist> omap_get_header(
+    CollectionRef c,
+    const ghobject_t& oid) final;
+
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
   seastar::future<std::vector<coll_t>> list_collections() final;
@@ -88,6 +126,15 @@ public:
   seastar::future<int, std::string> read_meta(const std::string& key) final;
   uuid_d get_fsid() const final;
   unsigned get_max_attr_name_length() const final;
+
+  seastar::future<OmapIteratorRef> get_omap_iterator(
+    CollectionRef c,
+    const ghobject_t& oid);
+
+  seastar::future<std::map<uint64_t, uint64_t>> fiemap(CollectionRef c,
+						       const ghobject_t& oid,
+						       uint64_t off,
+						       uint64_t len);
 
 private:
   int _remove(const coll_t& cid, const ghobject_t& oid);

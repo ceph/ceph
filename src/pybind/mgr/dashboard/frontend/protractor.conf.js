@@ -2,7 +2,7 @@
 // https://github.com/angular/protractor/blob/master/lib/config.ts
 
 const { SpecReporter } = require('jasmine-spec-reporter');
-let failFast = require("protractor-fail-fast");
+let failFast = require('protractor-fail-fast');
 
 const config = {
   SELENIUM_PROMISE_MANAGER: false,
@@ -22,7 +22,7 @@ const config = {
     chromeOptions: {
       args: ['--no-sandbox', '--headless', '--window-size=1920x1080']
     },
-    acceptInsecureCerts : true
+    acceptInsecureCerts: true
   },
   directConnect: true,
   baseUrl: process.env.BASE_URL || 'http://localhost:4200/',
@@ -30,12 +30,12 @@ const config = {
   jasmineNodeOpts: {
     showColors: true,
     defaultTimeoutInterval: 300000,
-    print: function() {}
+    print: function () {}
   },
   params: {
     login: {
-      user: 'admin',
-      password: 'admin'
+      user: process.env.E2E_LOGIN_USER || 'admin',
+      password: process.env.E2E_LOGIN_PWD || 'admin'
     }
   },
 
@@ -52,7 +52,7 @@ const config = {
     },
     failFast.init()
   ],
-  afterLaunch: function() {
+  afterLaunch: function () {
     failFast.clean();
   }
 };
@@ -63,7 +63,11 @@ config.onPrepare = async () => {
   require('ts-node').register({
     project: 'e2e/tsconfig.e2e.json'
   });
-  jasmine.getEnv().addReporter(new SpecReporter({ spec: { displayStacktrace: true, displayDuration: true } }));
+  jasmine
+    .getEnv()
+    .addReporter(
+      new SpecReporter({ spec: { displayStacktrace: 'pretty', displayDuration: true } })
+    );
 
   await browser.get('/#/login');
 

@@ -30,7 +30,6 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    bool is_msgr2)
   : messenger(messenger)
 {
-  ceph_assert(&messenger.container().local() == &messenger);
   if (is_msgr2) {
     protocol = std::make_unique<ProtocolV2>(dispatcher, *this, messenger);
   } else {
@@ -53,15 +52,21 @@ SocketConnection::get_messenger() const {
 
 bool SocketConnection::is_connected() const
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::engine().cpu_id() == shard_id());
   return protocol->is_connected();
 }
 
 #ifdef UNIT_TESTS_BUILT
 bool SocketConnection::is_closed() const
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::engine().cpu_id() == shard_id());
   return protocol->is_closed();
+}
+
+bool SocketConnection::is_closed_clean() const
+{
+  assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_closed_clean;
 }
 
 #endif
@@ -72,24 +77,20 @@ bool SocketConnection::peer_wins() const
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
-  // Cannot send msg from another core now, its ref counter can be contaminated!
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
-  return seastar::smp::submit_to(shard_id(), [this, msg=std::move(msg)] {
-    return protocol->send(std::move(msg));
-  });
+  assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->send(std::move(msg));
 }
 
 seastar::future<> SocketConnection::keepalive()
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-    return protocol->keepalive();
-  });
+  assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->keepalive();
 }
 
-seastar::future<> SocketConnection::close()
+void SocketConnection::mark_down()
 {
-  ceph_assert(seastar::engine().cpu_id() == shard_id());
-  return protocol->close();
+  assert(seastar::engine().cpu_id() == shard_id());
+  protocol->close(false);
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)
@@ -113,16 +114,22 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
 
 void
 SocketConnection::start_connect(const entity_addr_t& _peer_addr,
-                                const entity_type_t& _peer_type)
+                                const entity_name_t& _peer_name)
 {
-  protocol->start_connect(_peer_addr, _peer_type);
+  protocol->start_connect(_peer_addr, _peer_name);
 }
 
 void
-SocketConnection::start_accept(SocketFRef&& sock,
+SocketConnection::start_accept(SocketRef&& sock,
                                const entity_addr_t& _peer_addr)
 {
   protocol->start_accept(std::move(sock), _peer_addr);
+}
+
+seastar::future<>
+SocketConnection::close_clean(bool dispatch_reset)
+{
+  return protocol->close_clean(dispatch_reset);
 }
 
 seastar::shard_id SocketConnection::shard_id() const {
@@ -131,13 +138,13 @@ seastar::shard_id SocketConnection::shard_id() const {
 
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
-    if (side == side_t::none) {
+    if (!protocol->socket) {
       out << " >> " << get_peer_name() << " " << peer_addr;
-    } else if (side == side_t::acceptor) {
+    } else if (protocol->socket->get_side() == Socket::side_t::acceptor) {
       out << " >> " << get_peer_name() << " " << peer_addr
-          << "@" << ephemeral_port;
-    } else { // side == side_t::connector
-      out << "@" << ephemeral_port
+          << "@" << protocol->socket->get_ephemeral_port();
+    } else { // protocol->socket->get_side() == Socket::side_t::connector
+      out << "@" << protocol->socket->get_ephemeral_port()
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }

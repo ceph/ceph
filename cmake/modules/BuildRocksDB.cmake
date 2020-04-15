@@ -2,6 +2,15 @@ function(build_rocksdb)
   set(rocksdb_CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_GFLAGS=OFF)
 
+  # cmake doesn't properly handle arguments containing ";", such as
+  # CMAKE_PREFIX_PATH, for which reason we'll have to use some other separator.
+  string(REPLACE ";" "!" CMAKE_PREFIX_PATH_ALT_SEP "${CMAKE_PREFIX_PATH}")
+  list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH_ALT_SEP})
+  if(CMAKE_TOOLCHAIN_FILE)
+    list(APPEND rocksdb_CMAKE_ARGS
+         -DCMAKE_TOOLCHAIN_FILE=$CMAKE_TOOLCHAIN_FILE)
+  endif()
+
   if(ALLOCATOR STREQUAL "jemalloc")
     list(APPEND rocksdb_CMAKE_ARGS -DWITH_JEMALLOC=ON)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES JeMalloc::JeMalloc)
@@ -25,6 +34,9 @@ function(build_rocksdb)
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_LZ4=${LZ4_FOUND})
   if(LZ4_FOUND)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES LZ4::LZ4)
+    # When cross compiling, cmake may fail to locate lz4.
+    list(APPEND rocksdb_CMAKE_ARGS -DLZ4_INCLUDE_DIR=${LZ4_INCLUDE_DIR})
+    list(APPEND rocksdb_CMAKE_ARGS -DLZ4_LIBRARIES=${LZ4_LIBRARY})
   endif()
 
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_ZLIB=${ZLIB_FOUND})
@@ -74,7 +86,8 @@ function(build_rocksdb)
     BUILD_COMMAND "${make_cmd}"
     BUILD_ALWAYS TRUE
     BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
-    INSTALL_COMMAND "true")
+    INSTALL_COMMAND "true"
+    LIST_SEPARATOR !)
 
   add_library(RocksDB::RocksDB STATIC IMPORTED)
   add_dependencies(RocksDB::RocksDB rocksdb_ext)

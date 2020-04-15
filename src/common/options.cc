@@ -7,6 +7,7 @@
 
 // Helpers for validators
 #include "include/stringify.h"
+#include "include/common_fwd.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <regex>
@@ -16,6 +17,12 @@
 
 // rbd feature validation
 #include "librbd/Features.h"
+
+using std::ostream;
+using std::ostringstream;
+
+using ceph::Formatter;
+using ceph::parse_timespan;
 
 namespace {
 class printer : public boost::static_visitor<> {
@@ -197,7 +204,7 @@ int Option::parse_value(
   } else if (type == Option::TYPE_SECS) {
     try {
       *out = parse_timespan(val);
-    } catch (const invalid_argument& e) {
+    } catch (const std::invalid_argument& e) {
       *error_message = e.what();
       return -EINVAL;
     }
@@ -430,7 +437,6 @@ std::vector<Option> get_global_options() {
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")
-    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_tag("network")
@@ -439,7 +445,7 @@ std::vector<Option> get_global_options() {
     Option("container_image", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("container image (used by cephadm orchestrator)")
     .set_flag(Option::FLAG_STARTUP)
-    .set_default("ceph/daemon-base:latest-master-devel"),
+    .set_default("docker.io/ceph/ceph:v15"),
 
     Option("no_config_file", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -1736,6 +1742,11 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_pool_default_size")
     .add_see_also("osd_pool_default_min_size"),
 
+    Option("mon_allow_pool_size_one", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .add_service("mon")
+    .set_description("allow configuring pool with no replicas"),
+
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mgr")
@@ -2027,17 +2038,17 @@ std::vector<Option> get_global_options() {
     .set_description("file to dump paxos transactions to")
     .add_see_also("mon_debug_dump_transactions"),
 
-    Option("mon_debug_no_require_nautilus", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(false)
-    .add_service("mon")
-    .set_flag(Option::FLAG_CLUSTER_CREATE)
-    .set_description("do not set nautilus feature for new mon clusters"),
-
     Option("mon_debug_no_require_octopus", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .add_service("mon")
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("do not set octopus feature for new mon clusters"),
+
+    Option("mon_debug_no_require_pacific", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .add_service("mon")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
+    .set_description("do not set pacific feature for new mon clusters"),
 
     Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -2256,6 +2267,10 @@ std::vector<Option> get_global_options() {
     Option("mon_client_hunt_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(3.0)
     .set_description(""),
+
+    Option("mon_client_log_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1.0)
+    .set_description("How frequently we send queued cluster log messages to mon"),
 
     Option("mon_client_ping_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
@@ -2570,7 +2585,7 @@ std::vector<Option> get_global_options() {
     .add_service("mon"),
 
     Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(16)
+    .set_default(32)
     .set_description("number of PGs for new pools")
     .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
@@ -2597,7 +2612,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jerasure lrc"
-  #ifdef HAVE_BETTER_YASM_ELF64
+  #if defined(HAVE_BETTER_YASM_ELF64) || defined(HAVE_ARMV8_SIMD)
          " isa"
   #endif
         )
@@ -3271,11 +3286,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_class_load_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap")
     .set_description(""),
 
     Option("osd_class_default_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap")
     .set_description(""),
 
     Option("osd_check_for_log_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3302,15 +3317,21 @@ std::vector<Option> get_global_options() {
     .set_default(40)
     .set_description(""),
 
+    Option("osd_target_pg_log_entries_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3000 * 100)
+    .set_description("target number of PG entries total on an OSD")
+    .add_see_also("osd_max_pg_log_entries")
+    .add_see_also("osd_min_pg_log_entries"),
+
     Option("osd_min_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(3000)
+    .set_default(250)
     .set_description("minimum number of entries to maintain in the PG log")
     .add_service("osd")
     .add_see_also("osd_max_pg_log_entries")
     .add_see_also("osd_pg_log_dups_tracked"),
 
     Option("osd_max_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(3000)
+    .set_default(10000)
     .set_description("maximum number of entries to maintain in the PG log when degraded before we trim")
     .add_service("osd")
     .add_see_also("osd_min_pg_log_entries")
@@ -3643,7 +3664,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_delete_range_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1024)
+    .set_default(1048576)
     .set_description("The number of keys required to invoke DeleteRange when deleting muliple keys."),
 
     Option("rocksdb_bloom_bits_per_key", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3985,8 +4006,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description(""),
+    .set_default(false)
+    .set_description("Enabled buffered IO for bluefs reads.")
+    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold blocks from the compressed SST files itself, they can be read from page cache instead of from the disk.  This option previously was enabled by default, however in some test cases it appears to cause excessive swap utilization by the linux kernel and a large negative performance impact after several hours of run time.  Please exercise caution when enabling."),
 
     Option("bluefs_sync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -3994,6 +4016,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("bitmap")
+    .set_enum_allowed({"bitmap", "stupid", "avl", "hybrid"})
     .set_description(""),
 
     Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4156,7 +4179,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("A smaller allocation size generally means less data is read and then rewritten when a copy-on-write operation is triggered (e.g., when writing to something that was recently snapshotted).  Similarly, less data is journaled before performing an overwrite (writes smaller than min_alloc_size must first pass through the BlueStore journal).  Larger values of min_alloc_size reduce the amount of metadata required to describe the on-disk layout and reduce overall fragmentation."),
 
     Option("bluestore_min_alloc_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(4_K)
+    .set_default(64_K)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for rotational media")
     .add_see_also("bluestore_min_alloc_size"),
@@ -4178,7 +4201,7 @@ std::vector<Option> get_global_options() {
     .set_description("Writes smaller than this size will be written to the journal and then asynchronously written to the device.  This can be beneficial when using rotational media where seeks are expensive, and is helpful both with and without solid state journal/wal devices."),
 
     Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(32768)
+    .set_default(65536)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for rotational media")
     .add_see_also("bluestore_prefer_deferred_size"),
@@ -4350,6 +4373,10 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_cache_autotune")
     .set_description("The number of seconds to wait between rebalances when cache autotune is enabled."),
 
+    Option("bluestore_alloc_stats_dump_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+      .set_default(3600 * 24)
+      .set_description("The period (in second) for logging allocation statistics."),
+
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
     .set_flag(Option::FLAG_CREATE)
@@ -4357,7 +4384,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("bitmap")
-    .set_enum_allowed({"bitmap", "stupid", "avl"})
+    .set_enum_allowed({"bitmap", "stupid", "avl", "hybrid"})
     .set_description("Allocator policy")
     .set_long_description("Allocator to use for bluestore.  Stupid should only be used for testing."),
 
@@ -4610,6 +4637,10 @@ std::vector<Option> get_global_options() {
     Option("bluestore_avl_alloc_bf_free_pct", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(4)
     .set_description(""),
+
+    Option("bluestore_hybrid_alloc_mem_cap", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(64_M)
+    .set_description("Maximum RAM hybrid allocator should use before enabling bitmap supplement"),
 
     Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb_original")
@@ -5386,7 +5417,10 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_override_bucket_index_max_shards", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("The default number of bucket index shards for newly-created "
+        "buckets. This value overrides bucket_index_max_shards stored in the zone. "
+        "Setting this value in the zone is preferred, because it applies globally "
+        "to all radosgw daemons running in the zone."),
 
     Option("rgw_bucket_index_max_aio", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128)
@@ -5482,6 +5516,11 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "This is needed for virtual hosting of buckets, unless configured via zonegroup "
         "configuration."),
+    
+    Option("rgw_numa_node", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(-1)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("set rgw's cpu affinity to a numa node (-1 for none)"),
 
     Option("rgw_service_provider_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -6362,6 +6401,12 @@ std::vector<Option> get_rgw_options() {
         "the type of the frontend followed by an optional space delimited set of "
         "key=value config parameters."),
 
+    Option("rgw_frontend_defaults", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("beast ssl_certificate=config://rgw/cert/$realm/$zone.crt ssl_private_key=config://rgw/cert/$realm/$zone.key")
+    .set_description("RGW frontends default configuration")
+    .set_long_description(
+        "A comma delimited list of default frontends configuration."),
+
     Option("rgw_user_quota_bucket_sync_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(180)
     .set_description("User quota bucket sync interval")
@@ -7170,6 +7215,12 @@ static std::vector<Option> get_rbd_options() {
     .set_description("Compression hint to send to the OSDs during writes")
     .set_flag(Option::FLAG_RUNTIME),
 
+    Option("rbd_read_from_replica_policy", Option::TYPE_STR, Option::LEVEL_BASIC)
+    .set_enum_allowed({"default", "balance", "localize"})
+    .set_default("default")
+    .set_description("Read replica policy send to the OSDS during reads")
+    .set_flag(Option::FLAG_RUNTIME),
+
     Option("rbd_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("true if LTTng-UST tracepoints should be enabled"),
@@ -7561,9 +7612,10 @@ std::vector<Option> get_mds_options() {
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description("path to MDS data and keyring"),
 
-    Option("mds_join_fs", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("mds_join_fs", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("")
-    .set_description("force mds daemon to join a specific fs")
+    .set_description("file system MDS prefers to join")
+    .set_long_description("This setting indicates which file system name the MDS should prefer to join (affinity). The monitors will try to have the MDS cluster safely reach a state where all MDS have strong affinity, even via failovers to a standby.")
     .set_flag(Option::FLAG_RUNTIME),
 
     Option("mds_max_xattr_pairs_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
@@ -7709,6 +7761,11 @@ std::vector<Option> get_mds_options() {
     .set_default(45)
     .set_description("timeout in seconds to wait for clients to reconnect during MDS reconnect recovery state"),
 
+    Option("mds_deny_all_reconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("flag to deny all client reconnects during failover"),
+
     Option("mds_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("time in seconds between upkeep tasks"),
@@ -7724,6 +7781,11 @@ std::vector<Option> get_mds_options() {
     Option("mds_client_prealloc_inos", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description("number of unused inodes to pre-allocate to clients for file creation"),
+
+    Option("mds_client_delegate_inos_pct", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(50)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("percentage of preallocated inos to delegate to client"),
 
     Option("mds_early_reply", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -8336,15 +8398,20 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("client_fs", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_default("")
-
     .set_description("CephFS file system name to mount")
     .set_long_description("Use this with ceph-fuse, or with any process "
         "that uses libcephfs.  Programs using libcephfs may also pass "
         "the filesystem name into mount(), which will override this setting. "
         "If no filesystem name is given in mount() or this setting, the default "
         "filesystem will be mounted (usually the first created)."),
+
+    /* Alias for client_fs. Deprecated */
+    Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_default(""),
 
     Option("fake_statfs_for_testing", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
@@ -8379,7 +8446,7 @@ std::vector<Option> get_cephfs_shell_options() {
 
     Option("echo", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(false)
-    .set_description("Allow tracebacks on error for CephFS Shell"),
+    .set_description("Print command issued on prompt before execution"),
 
     Option("editor", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("vim")

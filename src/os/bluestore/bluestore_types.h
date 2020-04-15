@@ -18,6 +18,7 @@
 #include <ostream>
 #include <bitset>
 #include <type_traits>
+#include "include/mempool.h"
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
@@ -35,18 +36,18 @@ struct bluestore_bdev_label_t {
   uuid_d osd_uuid;     ///< osd uuid
   uint64_t size = 0;   ///< device size
   utime_t btime;       ///< birth time
-  string description;  ///< device description
+  std::string description;  ///< device description
 
-  map<string,string> meta; ///< {read,write}_meta() content from ObjectStore
+  std::map<std::string,std::string> meta; ///< {read,write}_meta() content from ObjectStore
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_bdev_label_t*>& o);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_bdev_label_t*>& o);
 };
 WRITE_CLASS_ENCODER(bluestore_bdev_label_t)
 
-ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l);
+std::ostream& operator<<(std::ostream& out, const bluestore_bdev_label_t& l);
 
 /// collection metadata
 struct bluestore_cnode_t {
@@ -59,12 +60,12 @@ struct bluestore_cnode_t {
     denc(v.bits, p);
     DENC_FINISH(p);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_cnode_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_cnode_t*>& o);
 };
 WRITE_CLASS_DENC(bluestore_cnode_t)
 
-ostream& operator<<(ostream& out, const bluestore_cnode_t& l);
+std::ostream& operator<<(std::ostream& out, const bluestore_cnode_t& l);
 
 template <typename OFFS_TYPE, typename LEN_TYPE>
 struct bluestore_interval_t
@@ -103,12 +104,12 @@ struct bluestore_pextent_t : public bluestore_interval_t<uint64_t, uint32_t>
     denc_varint_lowz(v.length, p);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_pextent_t*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_pextent_t*>& ls);
 };
 WRITE_CLASS_DENC(bluestore_pextent_t)
 
-ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
+std::ostream& operator<<(std::ostream& out, const bluestore_pextent_t& o);
 
 typedef mempool::bluestore_cache_other::vector<bluestore_pextent_t> PExtentVector;
 
@@ -128,13 +129,13 @@ struct denc_traits<PExtentVector> {
     }
   }
   static void encode(const PExtentVector& v,
-		     bufferlist::contiguous_appender& p) {
+		     ceph::buffer::list::contiguous_appender& p) {
     denc_varint(v.size(), p);
     for (auto& i : v) {
       denc(i, p);
     }
   }
-  static void decode(PExtentVector& v, bufferptr::const_iterator& p) {
+  static void decode(PExtentVector& v, ceph::buffer::ptr::const_iterator& p) {
     unsigned num;
     denc_varint(num, p);
     v.clear();
@@ -145,7 +146,7 @@ struct denc_traits<PExtentVector> {
   }
 };
 
-/// extent_map: a map of reference counted extents
+/// extent_map: a std::map of reference counted extents
 struct bluestore_extent_ref_map_t {
   struct record_t {
     uint32_t length;
@@ -186,7 +187,7 @@ struct bluestore_extent_ref_map_t {
       p += elem_size * ref_map.size();
     }
   }
-  void encode(bufferlist::contiguous_appender& p) const {
+  void encode(ceph::buffer::list::contiguous_appender& p) const {
     const uint32_t n = ref_map.size();
     denc_varint(n, p);
     if (n) {
@@ -201,7 +202,7 @@ struct bluestore_extent_ref_map_t {
       }
     }
   }
-  void decode(bufferptr::const_iterator& p) {
+  void decode(ceph::buffer::ptr::const_iterator& p) {
     uint32_t n;
     denc_varint(n, p);
     if (n) {
@@ -217,13 +218,13 @@ struct bluestore_extent_ref_map_t {
     }
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_extent_ref_map_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_extent_ref_map_t*>& o);
 };
 WRITE_CLASS_DENC(bluestore_extent_ref_map_t)
 
 
-ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& rm);
+std::ostream& operator<<(std::ostream& out, const bluestore_extent_ref_map_t& rm);
 static inline bool operator==(const bluestore_extent_ref_map_t::record_t& l,
 			      const bluestore_extent_ref_map_t::record_t& r) {
   return l.length == r.length && l.refs == r.refs;
@@ -385,7 +386,7 @@ struct bluestore_blob_use_tracker_t {
       }
     }
   }
-  void encode(bufferlist::contiguous_appender& p) const {
+  void encode(ceph::buffer::list::contiguous_appender& p) const {
     denc_varint(au_size, p);
     if (au_size) {
       denc_varint(num_au, p);
@@ -400,7 +401,7 @@ struct bluestore_blob_use_tracker_t {
       }
     }
   }
-  void decode(bufferptr::const_iterator& p) {
+  void decode(ceph::buffer::ptr::const_iterator& p) {
     clear();
     denc_varint(au_size, p);
     if (au_size) {
@@ -416,13 +417,13 @@ struct bluestore_blob_use_tracker_t {
     }
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_blob_use_tracker_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_blob_use_tracker_t*>& o);
 private:
   void allocate();
 };
 WRITE_CLASS_DENC(bluestore_blob_use_tracker_t)
-ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& rm);
+std::ostream& operator<<(std::ostream& out, const bluestore_blob_use_tracker_t& rm);
 
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
@@ -436,10 +437,10 @@ public:
     LEGACY_FLAG_MUTABLE = 1,  ///< [legacy] blob can be overwritten or split
     FLAG_COMPRESSED = 2,      ///< blob is compressed
     FLAG_CSUM = 4,            ///< blob has checksums
-    FLAG_HAS_UNUSED = 8,      ///< blob has unused map
+    FLAG_HAS_UNUSED = 8,      ///< blob has unused std::map
     FLAG_SHARED = 16,         ///< blob is shared; see external SharedBlob
   };
-  static string get_flags_string(unsigned flags);
+  static std::string get_flags_string(unsigned flags);
 
   uint32_t flags = 0;                 ///< FLAG_*
 
@@ -449,7 +450,7 @@ public:
   uint8_t csum_type = Checksummer::CSUM_NONE;      ///< CSUM_*
   uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
 
-  bufferptr csum_data;                ///< opaque vector of csum data
+  ceph::buffer::ptr csum_data;                ///< opaque std::vector of csum data
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
@@ -474,7 +475,7 @@ public:
     p += sizeof(unused_t);
   }
 
-  void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
+  void encode(ceph::buffer::list::contiguous_appender& p, uint64_t struct_v) const {
     ceph_assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
@@ -494,7 +495,7 @@ public:
     }
   }
 
-  void decode(bufferptr::const_iterator& p, uint64_t struct_v) {
+  void decode(ceph::buffer::ptr::const_iterator& p, uint64_t struct_v) {
     ceph_assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
@@ -527,8 +528,8 @@ public:
     return !has_csum() || blob_offset % get_csum_chunk_size() == 0;
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_blob_t*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_blob_t*>& ls);
 
   bool has_flag(unsigned f) const {
     return flags & f;
@@ -539,7 +540,7 @@ public:
   void clear_flag(unsigned f) {
     flags &= ~f;
   }
-  string get_flags_string() const {
+  std::string get_flags_string() const {
     return get_flags_string(flags);
   }
 
@@ -596,21 +597,20 @@ public:
     ceph_assert(p != extents.end());
     while (b_off >= p->length) {
       b_off -= p->length;
-      ++p;
-      ceph_assert(p != extents.end());
+      if (++p == extents.end())
+        return false;
     }
     b_len += b_off;
     while (b_len) {
-      ceph_assert(p != extents.end());
       if (require_allocated != p->is_valid()) {
         return false;
       }
-
       if (p->length >= b_len) {
         return true;
       }
       b_len -= p->length;
-      ++p;
+      if (++p == extents.end())
+        return false;
     }
     ceph_abort_msg("we should not get here");
     return false;
@@ -633,6 +633,7 @@ public:
     if (!has_unused()) {
       return false;
     }
+    ceph_assert(!is_compressed());
     uint64_t blob_len = get_logical_length();
     ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
     ceph_assert(offset + length <= blob_len);
@@ -648,6 +649,7 @@ public:
 
   /// mark a range that has never been used
   void add_unused(uint64_t offset, uint64_t length) {
+    ceph_assert(!is_compressed());
     uint64_t blob_len = get_logical_length();
     ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
     ceph_assert(offset + length <= blob_len);
@@ -665,6 +667,7 @@ public:
   /// indicate that a range has (now) been used.
   void mark_used(uint64_t offset, uint64_t length) {
     if (has_unused()) {
+      ceph_assert(!is_compressed());
       uint64_t blob_len = get_logical_length();
       ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
       ceph_assert(offset + length <= blob_len);
@@ -680,10 +683,49 @@ public:
     }
   }
 
+  // map_f_invoke templates intended to mask parameters which are not expected
+  // by the provided callback
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    uint64_t,
+    uint64_t>>::type* = nullptr>
+  int map_f_invoke(uint64_t lo,
+    const bluestore_pextent_t& p,
+    uint64_t o,
+    uint64_t l, F&& f) const{
+    return f(o, l);
+  }
+
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    uint64_t,
+    uint64_t,
+    uint64_t>>::type * = nullptr>
+  int map_f_invoke(uint64_t lo,
+    const bluestore_pextent_t& p,
+    uint64_t o,
+    uint64_t l, F&& f) const {
+    return f(lo, o, l);
+  }
+
+  template<class F, typename std::enable_if<std::is_invocable_r_v<
+    int,
+    F,
+    const bluestore_pextent_t&,
+    uint64_t,
+    uint64_t>>::type * = nullptr>
+    int map_f_invoke(uint64_t lo,
+      const bluestore_pextent_t& p,
+      uint64_t o,
+      uint64_t l, F&& f) const {
+    return f(p, o, l);
+  }
+
   template<class F>
   int map(uint64_t x_off, uint64_t x_len, F&& f) const {
-    static_assert(std::is_invocable_r_v<int, F, uint64_t, uint64_t>);
-
+    auto x_off0 = x_off;
     auto p = extents.begin();
     ceph_assert(p != extents.end());
     while (x_off >= p->length) {
@@ -691,23 +733,24 @@ public:
       ++p;
       ceph_assert(p != extents.end());
     }
-    while (x_len > 0) {
-      ceph_assert(p != extents.end());
+    while (x_len > 0 && p != extents.end()) {
       uint64_t l = std::min(p->length - x_off, x_len);
-      int r = f(p->offset + x_off, l);
+      int r = map_f_invoke(x_off0, *p, p->offset + x_off, l, f);
       if (r < 0)
         return r;
       x_off = 0;
       x_len -= l;
+      x_off0 += l;
       ++p;
     }
     return 0;
   }
+
   template<class F>
   void map_bl(uint64_t x_off,
-	      bufferlist& bl,
+	      ceph::buffer::list& bl,
 	      F&& f) const {
-    static_assert(std::is_invocable_v<F, uint64_t, bufferlist&>);
+    static_assert(std::is_invocable_v<F, uint64_t, ceph::buffer::list&>);
 
     auto p = extents.begin();
     ceph_assert(p != extents.end());
@@ -716,12 +759,12 @@ public:
       ++p;
       ceph_assert(p != extents.end());
     }
-    bufferlist::iterator it = bl.begin();
+    ceph::buffer::list::iterator it = bl.begin();
     uint64_t x_len = bl.length();
     while (x_len > 0) {
       ceph_assert(p != extents.end());
       uint64_t l = std::min(p->length - x_off, x_len);
-      bufferlist t;
+      ceph::buffer::list t;
       it.copy(l, t);
       f(p->offset + x_off, t);
       x_off = 0;
@@ -780,18 +823,18 @@ public:
     flags |= FLAG_CSUM;
     csum_type = type;
     csum_chunk_order = order;
-    csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
+    csum_data = ceph::buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
     csum_data.zero();
     csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
   }
 
   /// calculate csum for the buffer at the given b_off
-  void calc_csum(uint64_t b_off, const bufferlist& bl);
+  void calc_csum(uint64_t b_off, const ceph::buffer::list& bl);
 
   /// verify csum: return -EOPNOTSUPP for unsupported checksum type;
   /// return -1 and valid(nonnegative) b_bad_off for checksum error;
   /// return 0 if all is well.
-  int verify_csum(uint64_t b_off, const bufferlist& bl, int* b_bad_off,
+  int verify_csum(uint64_t b_off, const ceph::buffer::list& bl, int* b_bad_off,
 		  uint64_t *bad_csum) const;
 
   bool can_prune_tail() const {
@@ -805,9 +848,9 @@ public:
     logical_length -= p.length;
     extents.pop_back();
     if (has_csum()) {
-      bufferptr t;
+      ceph::buffer::ptr t;
       t.swap(csum_data);
-      csum_data = bufferptr(t.c_str(),
+      csum_data = ceph::buffer::ptr(t.c_str(),
 			    get_logical_length() / get_csum_chunk_size() *
 			    get_csum_value_size());
     }
@@ -822,9 +865,9 @@ public:
         new_len - logical_length));
     logical_length = new_len;
     if (has_csum()) {
-      bufferptr t;
+      ceph::buffer::ptr t;
       t.swap(csum_data);
-      csum_data = buffer::create(
+      csum_data = ceph::buffer::create(
 	get_csum_value_size() * logical_length / get_csum_chunk_size());
       csum_data.copy_in(0, t.length(), t.c_str());
       csum_data.zero(t.length(), csum_data.length() - t.length());
@@ -858,7 +901,7 @@ public:
 };
 WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
-ostream& operator<<(ostream& out, const bluestore_blob_t& o);
+std::ostream& operator<<(std::ostream& out, const bluestore_blob_t& o);
 
 
 /// shared blob state
@@ -878,8 +921,8 @@ struct bluestore_shared_blob_t {
   }
 
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_shared_blob_t*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_shared_blob_t*>& ls);
 
   bool empty() const {
     return ref_map.empty();
@@ -887,13 +930,13 @@ struct bluestore_shared_blob_t {
 };
 WRITE_CLASS_DENC(bluestore_shared_blob_t)
 
-ostream& operator<<(ostream& out, const bluestore_shared_blob_t& o);
+std::ostream& operator<<(std::ostream& out, const bluestore_shared_blob_t& o);
 
 /// onode: per-object metadata
 struct bluestore_onode_t {
   uint64_t nid = 0;                    ///< numeric id (locally unique)
   uint64_t size = 0;                   ///< object size
-  map<mempool::bluestore_cache_other::string, bufferptr> attrs;        ///< attrs
+  std::map<mempool::bluestore_cache_other::string, ceph::buffer::ptr> attrs;        ///< attrs
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
@@ -902,9 +945,9 @@ struct bluestore_onode_t {
       denc_varint(v.offset, p);
       denc_varint(v.bytes, p);
     }
-    void dump(Formatter *f) const;
+    void dump(ceph::Formatter *f) const;
   };
-  vector<shard_info> extent_map_shards; ///< extent map shards (if any)
+  std::vector<shard_info> extent_map_shards; ///< extent std::map shards (if any)
 
   uint32_t expected_object_size = 0;
   uint32_t expected_write_size = 0;
@@ -918,8 +961,8 @@ struct bluestore_onode_t {
     FLAG_PERPOOL_OMAP = 4, ///< omap data is in per-pool prefix; per-pool keys
   };
 
-  string get_flags_string() const {
-    string s;
+  std::string get_flags_string() const {
+    std::string s;
     if (flags & FLAG_OMAP) {
       s = "omap";
     }
@@ -977,13 +1020,13 @@ struct bluestore_onode_t {
     denc_varint(v.alloc_hint_flags, p);
     DENC_FINISH(p);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_onode_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_onode_t*>& o);
 };
 WRITE_CLASS_DENC(bluestore_onode_t::shard_info)
 WRITE_CLASS_DENC(bluestore_onode_t)
 
-ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si);
+std::ostream& operator<<(std::ostream& out, const bluestore_onode_t::shard_info& si);
 
 /// writeahead-logged op
 struct bluestore_deferred_op_t {
@@ -993,7 +1036,7 @@ struct bluestore_deferred_op_t {
   __u8 op = 0;
 
   PExtentVector extents;
-  bufferlist data;
+  ceph::buffer::list data;
 
   DENC(bluestore_deferred_op_t, v, p) {
     DENC_START(1, 1, p);
@@ -1002,8 +1045,8 @@ struct bluestore_deferred_op_t {
     denc(v.data, p);
     DENC_FINISH(p);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_deferred_op_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_deferred_op_t*>& o);
 };
 WRITE_CLASS_DENC(bluestore_deferred_op_t)
 
@@ -1011,7 +1054,7 @@ WRITE_CLASS_DENC(bluestore_deferred_op_t)
 /// writeahead-logged transaction
 struct bluestore_deferred_transaction_t {
   uint64_t seq = 0;
-  list<bluestore_deferred_op_t> ops;
+  std::list<bluestore_deferred_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after tx
 
   bluestore_deferred_transaction_t() : seq(0) {}
@@ -1023,8 +1066,8 @@ struct bluestore_deferred_transaction_t {
     denc(v.released, p);
     DENC_FINISH(p);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_deferred_transaction_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_deferred_transaction_t*>& o);
 };
 WRITE_CLASS_DENC(bluestore_deferred_transaction_t)
 
@@ -1042,8 +1085,8 @@ struct bluestore_compression_header_t {
     denc(v.length, p);
     DENC_FINISH(p);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_compression_header_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluestore_compression_header_t*>& o);
 };
 WRITE_CLASS_DENC(bluestore_compression_header_t)
 

@@ -40,6 +40,7 @@ template <>
 struct ImageDispatchSpec<librbd::MockTestImageCtx> {
   static ImageDispatchSpec* s_instance;
   AioCompletion *aio_comp = nullptr;
+  bool blocked = false;
 
   static ImageDispatchSpec* create_write_request(
       librbd::MockTestImageCtx &image_ctx, AioCompletion *aio_comp,
@@ -421,7 +422,6 @@ TEST_F(TestMockIoImageRequestWQ, QosNoLimit) {
   expect_is_refresh_request(mock_image_ctx, false);
   expect_is_write_op(mock_queued_image_request, true);
   expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
-  expect_start_op(mock_queued_image_request);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == &mock_queued_image_request);
 }
 

@@ -20,15 +20,15 @@ export class ImageListComponent implements OnInit, OnDestroy {
 
   subs: Subscription;
 
-  image_error = {
+  image_error: Record<string, any> = {
     data: [],
     columns: {}
   };
-  image_syncing = {
+  image_syncing: Record<string, any> = {
     data: [],
     columns: {}
   };
-  image_ready = {
+  image_ready: Record<string, any> = {
     data: [],
     columns: {}
   };

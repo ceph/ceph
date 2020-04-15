@@ -341,9 +341,6 @@ else
             centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO $yumdnf install -y $yumdnf-utils
-                if test $ID = rhel ; then
-                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
-                fi
                 rpm --quiet --query epel-release || \
 		    $SUDO $yumdnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
@@ -364,16 +361,20 @@ else
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager \
 			  --enable rhel-server-rhscl-7-rpms \
+			  --enable rhel-7-server-optional-rpms \
 			  --enable rhel-7-server-devtools-rpms
                     dts_ver=8
                 elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     $SUDO dnf config-manager --set-enabled PowerTools
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
-		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-		    $SUDO dnf config-manager --setopt gpgcheck=0 apt-mirror.front.sepia.ceph.com_lab-extras_8_ --save
-		    $SUDO dnf copr enable -y ktdreyer/ceph-el8
+                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
+                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
+                    $SUDO dnf copr enable -y ktdreyer/ceph-el8
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     $SUDO subscription-manager repos --enable "codeready-builder-for-rhel-8-*-rpms"
+		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
+		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
+		    $SUDO dnf copr enable -y ktdreyer/ceph-el8
                 fi
                 ;;
         esac
@@ -433,17 +434,7 @@ function activate_virtualenv() {
     local env_dir=$top_srcdir/install-deps-python3
 
     if ! test -d $env_dir ; then
-        # Make a temporary virtualenv to get a fresh version of virtualenv
-        # because CentOS 7 has a buggy old version (v1.10.1)
-        # https://github.com/pypa/virtualenv/issues/463
-        virtualenv --python=python3 ${env_dir}_tmp
-        # install setuptools before upgrading virtualenv, as the latter needs
-        # a recent setuptools for setup commands like `extras_require`.
-        ${env_dir}_tmp/bin/pip install --upgrade setuptools
-        ${env_dir}_tmp/bin/pip install --upgrade virtualenv
-        ${env_dir}_tmp/bin/virtualenv --python python3 $env_dir
-        rm -rf ${env_dir}_tmp
-
+        virtualenv --python=python3 ${env_dir}
         . $env_dir/bin/activate
         if ! populate_wheelhouse install ; then
             rm -rf $env_dir

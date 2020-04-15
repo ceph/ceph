@@ -69,7 +69,7 @@ TEST(AES, Encrypt) {
   char cipher_s[sizeof(want_cipher)];
 
   ASSERT_EQ(sizeof(cipher_s), cipher.length());
-  cipher.copy(0, sizeof(cipher_s), &cipher_s[0]);
+  cipher.cbegin().copy(sizeof(cipher_s), &cipher_s[0]);
 
   int err;
   err = memcmp(cipher_s, want_cipher, sizeof(want_cipher));
@@ -153,7 +153,7 @@ TEST(AES, Decrypt) {
   ASSERT_EQ(error, "");
 
   ASSERT_EQ(sizeof(plaintext_s), plaintext.length());
-  plaintext.copy(0, sizeof(plaintext_s), &plaintext_s[0]);
+  plaintext.cbegin().copy(sizeof(plaintext_s), &plaintext_s[0]);
 
   int err;
   err = memcmp(plaintext_s, want_plaintext, sizeof(want_plaintext));

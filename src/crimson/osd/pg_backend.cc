@@ -119,10 +119,10 @@ PGBackend::mutate_object(
   std::set<pg_shard_t> pg_shards,
   crimson::osd::ObjectContextRef &&obc,
   ceph::os::Transaction&& txn,
-  const MOSDOp& m,
+  const osd_op_params_t& osd_op_p,
   epoch_t min_epoch,
   epoch_t map_epoch,
-  eversion_t ver)
+  std::vector<pg_log_entry_t>&& log_entries)
 {
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (obc->obs.exists) {
@@ -131,8 +131,13 @@ PGBackend::mutate_object(
     obc->obs.oi.prior_version = ctx->obs->oi.version;
 #endif
 
-    obc->obs.oi.last_reqid = m.get_reqid();
-    obc->obs.oi.mtime = m.get_mtime();
+    auto& m = osd_op_p.req;
+    obc->obs.oi.prior_version = obc->obs.oi.version;
+    obc->obs.oi.version = osd_op_p.at_version;
+    if (osd_op_p.user_at_version > obc->obs.oi.user_version)
+      obc->obs.oi.user_version = osd_op_p.user_at_version;
+    obc->obs.oi.last_reqid = m->get_reqid();
+    obc->obs.oi.mtime = m->get_mtime();
     obc->obs.oi.local_mtime = ceph_clock_now();
 
     // object_info_t
@@ -148,7 +153,7 @@ PGBackend::mutate_object(
   }
   return _submit_transaction(
     std::move(pg_shards), obc->obs.oi.soid, std::move(txn),
-    m.get_reqid(), min_epoch, map_epoch, ver);
+    std::move(osd_op_p), min_epoch, map_epoch, std::move(log_entries));
 }
 
 static inline bool _read_verify_data(

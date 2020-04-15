@@ -31,9 +31,9 @@ public:
     that makes it less work to process when exports are in progress.
   */
   struct realm {
-    map<vinodeno_t, uint32_t> inodes;
-    map<dirfrag_t, uint32_t> dirs;
-    map<dirfrag_t, map<pair<string,snapid_t>,uint32_t> > dentries;
+    std::map<vinodeno_t, uint32_t> inodes;
+    std::map<dirfrag_t, uint32_t> dirs;
+    std::map<dirfrag_t, std::map<std::pair<std::string,snapid_t>,uint32_t> > dentries;
 
     void merge(const realm& o) {
       inodes.insert(o.inodes.begin(), o.inodes.end());
@@ -46,13 +46,13 @@ public:
       }
     }
 
-    void encode(bufferlist &bl) const {
+    void encode(ceph::buffer::list &bl) const {
       using ceph::encode;
       encode(inodes, bl);
       encode(dirs, bl);
       encode(dentries, bl);
     }
-    void decode(bufferlist::const_iterator &bl) {
+    void decode(ceph::buffer::list::const_iterator &bl) {
       using ceph::decode;
       decode(inodes, bl);
       decode(dirs, bl);
@@ -61,20 +61,20 @@ public:
   };
   WRITE_CLASS_ENCODER(realm)
 
-  map<dirfrag_t, realm> realms;
+  std::map<dirfrag_t, realm> realms;
 
   int get_from() const { return from; }
 
 protected:
   MCacheExpire() : SafeMessage{MSG_MDS_CACHEEXPIRE}, from(-1) {}
-  MCacheExpire(int f) : 
+  MCacheExpire(int f) :
     SafeMessage{MSG_MDS_CACHEEXPIRE},
     from(f) { }
   ~MCacheExpire() override {}
 
 public:
   std::string_view get_type_name() const override { return "cache_expire";}
-  
+
   void add_inode(dirfrag_t r, vinodeno_t vino, unsigned nonce) {
     realms[r].inodes[vino] = nonce;
   }
@@ -82,7 +82,7 @@ public:
     realms[r].dirs[df] = nonce;
   }
   void add_dentry(dirfrag_t r, dirfrag_t df, std::string_view dn, snapid_t last, unsigned nonce) {
-    realms[r].dentries[df][pair<string,snapid_t>(dn,last)] = nonce;
+    realms[r].dentries[df][std::pair<std::string,snapid_t>(dn,last)] = nonce;
   }
 
   void add_realm(dirfrag_t df, const realm& r) {
@@ -98,7 +98,7 @@ public:
     decode(from, p);
     decode(realms, p);
   }
-    
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(from, payload);

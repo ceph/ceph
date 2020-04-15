@@ -34,6 +34,7 @@
 #define EVENT_SLAVEUPDATE  21
 #define EVENT_OPEN         22
 #define EVENT_COMMITTED    23
+#define EVENT_PURGED       24
 
 #define EVENT_TABLECLIENT  42
 #define EVENT_TABLESERVER  43

@@ -1,6 +1,7 @@
 overrides:
   ceph:
     log-whitelist:
+      - Replacing daemon mds
       - Scrub error on inode
       - Behind on trimming
       - Metadata damage detected

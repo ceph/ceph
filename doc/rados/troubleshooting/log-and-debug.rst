@@ -330,12 +330,20 @@ settings:
 :Default: ``10000``
 
 
+``log to file``
+
+:Description: Determines if logging messages should appear in a file.
+:Type: Boolean
+:Required: No
+:Default: ``true``
+
+
 ``log to stderr``
 
 :Description: Determines if logging messages should appear in ``stderr``.
 :Type: Boolean
 :Required: No
-:Default: ``true``
+:Default: ``false``
 
 
 ``err to stderr``
@@ -367,7 +375,7 @@ settings:
 :Description: Determines if Ceph should flush the log files after exit.
 :Type: Boolean
 :Required: No
-:Default: ``true``
+:Default: ``false``
 
 
 ``clog to monitors``
@@ -449,7 +457,7 @@ OSD
 :Description: The minimum number of log entries for placement groups. 
 :Type: 32-bit Unsigned Integer
 :Required: No
-:Default: 1000
+:Default: 250
 
 
 ``osd op log threshold``

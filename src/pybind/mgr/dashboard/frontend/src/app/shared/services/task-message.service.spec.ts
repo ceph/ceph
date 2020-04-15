@@ -126,8 +126,29 @@ describe('TaskManagerMessageService', () => {
       });
     });
 
+    describe('crush rule tasks', () => {
+      beforeEach(() => {
+        const metadata = {
+          name: 'someRuleName'
+        };
+        defaultMsg = `crush rule '${metadata.name}'`;
+        finishedTask.metadata = metadata;
+      });
+
+      it('tests crushRule/create messages', () => {
+        finishedTask.name = 'crushRule/create';
+        testCreate(defaultMsg);
+        testErrorCode(17, `Name is already used by ${defaultMsg}.`);
+      });
+
+      it('tests crushRule/delete messages', () => {
+        finishedTask.name = 'crushRule/delete';
+        testDelete(defaultMsg);
+      });
+    });
+
     describe('rbd tasks', () => {
-      let metadata;
+      let metadata: Record<string, any>;
       let childMsg: string;
       let destinationMsg: string;
       let snapMsg: string;
@@ -168,6 +189,7 @@ describe('TaskManagerMessageService', () => {
       it('tests rbd/delete messages', () => {
         finishedTask.name = 'rbd/delete';
         testDelete(defaultMsg);
+        testErrorCode(16, `${defaultMsg} is busy.`);
         testErrorCode(39, `${defaultMsg} contains snapshots.`);
       });
 

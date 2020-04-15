@@ -47,7 +47,21 @@
 
 #define dout_subsys ceph_subsys_mon
 
+using std::cerr;
+using std::cout;
+using std::list;
+using std::map;
+using std::ostringstream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::JSONFormatter;
+
 Monitor *mon = NULL;
+
 
 void handle_mon_signal(int signum)
 {
@@ -61,6 +75,7 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
   dout(10) << __func__ << dendl;
   /*
    * the monmap may be in one of three places:
+   *  'mon_sync:temp_newer_monmap' - stashed newer map for bootstrap
    *  'monmap:<latest_version_no>' - the monmap we'd really like to have
    *  'mon_sync:latest_monmap'     - last monmap backed up for the last sync
    *  'mkfs:monmap'                - a monmap resulting from mkfs
@@ -74,6 +89,24 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
       ceph_assert(bl.length() > 0);
       dout(10) << __func__ << " read last committed monmap ver "
                << latest_ver << dendl;
+
+      // see if there is stashed newer map (see bootstrap())
+      if (store.exists("mon_sync", "temp_newer_monmap")) {
+	bufferlist bl2;
+	int err = store.get("mon_sync", "temp_newer_monmap", bl2);
+	ceph_assert(err == 0);
+	ceph_assert(bl2.length() > 0);
+	MonMap b;
+	b.decode(bl2);
+	if (b.get_epoch() > latest_ver) {
+	  dout(10) << __func__ << " using stashed monmap " << b.get_epoch()
+		   << " instead" << dendl;
+	  bl.claim(bl2);
+	} else {
+	  dout(10) << __func__ << " ignoring stashed monmap " << b.get_epoch()
+		   << dendl;
+	}
+      }
       return 0;
     }
   }
@@ -377,7 +410,7 @@ int main(int argc, const char **argv)
 
 	// always mark seed/mkfs monmap as epoch 0
 	monmap.set_epoch(0);
-      } catch (const buffer::error& e) {
+      } catch (const ceph::buffer::error& e) {
 	derr << argv[0] << ": error decoding monmap " << monmap_fn << ": " << e.what() << dendl;
 	exit(1);
       }
@@ -673,7 +706,7 @@ int main(int argc, const char **argv)
     if (err >= 0) {
       try {
         monmap.decode(mapbl);
-      } catch (const buffer::error& e) {
+      } catch (const ceph::buffer::error& e) {
         derr << "can't decode monmap: " << e.what() << dendl;
       }
     } else {
@@ -759,7 +792,8 @@ int main(int argc, const char **argv)
   std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MON(rank), "mon",
-				      0, Messenger::HAS_MANY_CONNECTIONS);
+				      0,  // zero nonce
+				      Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
@@ -810,7 +844,8 @@ int main(int argc, const char **argv)
 
   Messenger *mgr_msgr = Messenger::create(g_ceph_context, public_msgr_type,
 					  entity_name_t::MON(rank), "mon-mgrc",
-					  getpid(), 0);
+					  Messenger::get_pid_nonce(),
+					  0);
   if (!mgr_msgr) {
     derr << "unable to create mgr_msgr" << dendl;
     prefork.exit(1);

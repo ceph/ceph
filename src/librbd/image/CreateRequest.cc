@@ -32,8 +32,7 @@ using util::create_context_callback;
 
 namespace {
 
-int validate_features(CephContext *cct, uint64_t features,
-                       bool force_non_primary) {
+int validate_features(CephContext *cct, uint64_t features) {
   if (features & ~RBD_FEATURES_ALL) {
     lderr(cct) << "librbd does not support requested features." << dendl;
     return -ENOSYS;
@@ -52,13 +51,10 @@ int validate_features(CephContext *cct, uint64_t features,
     lderr(cct) << "cannot use object map without exclusive lock" << dendl;
     return -EINVAL;
   }
-  if ((features & RBD_FEATURE_JOURNALING) != 0) {
-    if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-      lderr(cct) << "cannot use journaling without exclusive lock" << dendl;
-      return -EINVAL;
-    }
-  } else if (force_non_primary) {
-    ceph_abort();
+  if ((features & RBD_FEATURE_JOURNALING) != 0 &&
+      (features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+    lderr(cct) << "cannot use journaling without exclusive lock" << dendl;
+    return -EINVAL;
   }
 
   return 0;
@@ -118,14 +114,16 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
                                 const std::string &image_name,
                                 const std::string &image_id, uint64_t size,
                                 const ImageOptions &image_options,
+                                bool skip_mirror_enable,
+                                cls::rbd::MirrorImageMode mirror_image_mode,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
-                                bool skip_mirror_enable,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_config(config), m_image_name(image_name), m_image_id(image_id),
-    m_size(size), m_non_primary_global_image_id(non_primary_global_image_id),
+    m_size(size), m_skip_mirror_enable(skip_mirror_enable),
+    m_mirror_image_mode(mirror_image_mode),
+    m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
-    m_skip_mirror_enable(skip_mirror_enable),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
 
   m_io_ctx.dup(ioctx);
@@ -226,7 +224,7 @@ template<typename I>
 void CreateRequest<I>::send() {
   ldout(m_cct, 20) << dendl;
 
-  int r = validate_features(m_cct, m_features, m_force_non_primary);
+  int r = validate_features(m_cct, m_features);
   if (r < 0) {
     complete(r);
     return;
@@ -546,7 +544,7 @@ void CreateRequest<I>::handle_object_map_resize(int r) {
 template<typename I>
 void CreateRequest<I>::fetch_mirror_mode() {
   if ((m_features & RBD_FEATURE_JOURNALING) == 0) {
-    complete(0);
+    mirror_image_enable();
     return;
   }
 
@@ -577,10 +575,10 @@ void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
     return;
   }
 
-  cls::rbd::MirrorMode mirror_mode_internal = cls::rbd::MIRROR_MODE_DISABLED;
+  m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   if (r == 0) {
     auto it = m_outbl.cbegin();
-    r = cls_client::mirror_mode_get_finish(&it, &mirror_mode_internal);
+    r = cls_client::mirror_mode_get_finish(&it, &m_mirror_mode);
     if (r < 0) {
       lderr(m_cct) << "Failed to retrieve mirror mode" << dendl;
 
@@ -588,21 +586,6 @@ void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
       remove_object_map();
       return;
     }
-  }
-
-  // TODO: remove redundant code...
-  switch (mirror_mode_internal) {
-  case cls::rbd::MIRROR_MODE_DISABLED:
-  case cls::rbd::MIRROR_MODE_IMAGE:
-  case cls::rbd::MIRROR_MODE_POOL:
-    m_mirror_mode = static_cast<rbd_mirror_mode_t>(mirror_mode_internal);
-    break;
-  default:
-    lderr(m_cct) << "Unknown mirror mode ("
-                 << static_cast<uint32_t>(mirror_mode_internal) << ")" << dendl;
-    r = -EINVAL;
-    remove_object_map();
-    return;
   }
 
   journal_create();
@@ -616,15 +599,20 @@ void CreateRequest<I>::journal_create() {
   Context *ctx = create_context_callback<klass, &klass::handle_journal_create>(
     this);
 
+  // only link to remote primary mirror uuid if in journal-based
+  // mirroring mode
+  bool use_primary_mirror_uuid = (
+    m_force_non_primary &&
+    m_mirror_image_mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL);
+
   librbd::journal::TagData tag_data;
-  tag_data.mirror_uuid = (m_force_non_primary ? m_primary_mirror_uuid :
+  tag_data.mirror_uuid = (use_primary_mirror_uuid ? m_primary_mirror_uuid :
                           librbd::Journal<I>::LOCAL_MIRROR_UUID);
 
-  librbd::journal::CreateRequest<I> *req =
-    librbd::journal::CreateRequest<I>::create(
-      m_io_ctx, m_image_id, m_journal_order, m_journal_splay_width,
-      m_journal_pool, cls::journal::Tag::TAG_CLASS_NEW, tag_data,
-      librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
+  auto req = librbd::journal::CreateRequest<I>::create(
+    m_io_ctx, m_image_id, m_journal_order, m_journal_splay_width,
+    m_journal_pool, cls::journal::Tag::TAG_CLASS_NEW, tag_data,
+    librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
   req->send();
 }
 
@@ -646,7 +634,7 @@ void CreateRequest<I>::handle_journal_create(int r) {
 
 template<typename I>
 void CreateRequest<I>::mirror_image_enable() {
-  if (((m_mirror_mode != RBD_MIRROR_MODE_POOL) && !m_force_non_primary) ||
+  if (((m_mirror_mode != cls::rbd::MIRROR_MODE_POOL) && !m_force_non_primary) ||
       m_skip_mirror_enable) {
     complete(0);
     return;
@@ -656,12 +644,9 @@ void CreateRequest<I>::mirror_image_enable() {
   auto ctx = create_context_callback<
     CreateRequest<I>, &CreateRequest<I>::handle_mirror_image_enable>(this);
 
-  // TODO: in future rbd-mirror will want to enable mirroring
-  // not only in journal mode.
-  auto req = mirror::EnableRequest<I>::create(m_io_ctx, m_image_id,
-                                              RBD_MIRROR_IMAGE_MODE_JOURNAL,
-                                              m_non_primary_global_image_id,
-                                              m_op_work_queue, ctx);
+  auto req = mirror::EnableRequest<I>::create(
+    m_io_ctx, m_image_id, m_mirror_image_mode,
+    m_non_primary_global_image_id, m_op_work_queue, ctx);
   req->send();
 }
 

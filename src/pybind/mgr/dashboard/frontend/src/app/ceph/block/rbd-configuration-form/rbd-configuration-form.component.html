@@ -15,10 +15,10 @@
          [hidden]="!sectionVisibility[section.class]">
       <div class="form-group row"
            *ngFor="let option of section.options">
-        <label class="col-form-label col-sm-3"
+        <label class="cd-col-form-label"
                [for]="option.name">{{ option.displayName }}<cd-helper>{{ option.description }}</cd-helper></label>
 
-        <div class="col-sm-9 {{ section.heading }}">
+        <div class="cd-col-form-input {{ section.heading }}">
           <div class="input-group">
             <ng-container [ngSwitch]="option.type">
               <ng-container *ngSwitchCase="configurationType.milliseconds">

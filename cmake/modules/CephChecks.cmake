@@ -92,14 +92,23 @@ CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
 CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
 
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+if(NOT CMAKE_CROSSCOMPILING)
   include(CheckCXXSourceRuns)
   cmake_push_check_state()
   set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
+  if(WIN32)
+    set(CMAKE_REQUIRED_LIBRARIES ws2_32)
+  endif()
+
   check_cxx_source_runs("
 #include <cstdint>
 #include <iterator>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 
 uint32_t load(char* p, size_t offset)
 {
@@ -129,9 +138,9 @@ int main(int argc, char **argv)
   if(NOT HAVE_UNALIGNED_ACCESS)
     message(FATAL_ERROR "Unaligned access is required")
   endif()
-else(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+else(NOT CMAKE_CROSSCOMPILING)
   message(STATUS "Assuming unaligned access is supported")
-endif(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+endif(NOT CMAKE_CROSSCOMPILING)
 
 # should use LINK_OPTIONS instead of LINK_LIBRARIES, if we can use cmake v3.14+
 try_compile(HAVE_LINK_VERSION_SCRIPT

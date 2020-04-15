@@ -1,9 +1,10 @@
+import * as _ from 'lodash';
+
+import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { FormatterService } from '../../../../shared/services/formatter.service';
-import { InventoryDeviceAppliedFilter } from '../../inventory/inventory-devices/inventory-device-applied-filters.interface';
 
 export class DriveGroup {
-  // DriveGroupSpec object.
-  spec = {};
+  spec: Object;
 
   // Map from filter column prop to device selection attribute name
   private deviceSelectionAttrs: {
@@ -16,6 +17,7 @@ export class DriveGroup {
   private formatterService: FormatterService;
 
   constructor() {
+    this.reset();
     this.formatterService = new FormatterService();
     this.deviceSelectionAttrs = {
       'sys_api.vendor': {
@@ -45,21 +47,28 @@ export class DriveGroup {
   }
 
   reset() {
-    this.spec = {};
+    this.spec = {
+      service_type: 'osd',
+      service_id: `dashboard-${_.now()}`
+    };
+  }
+
+  setName(name: string) {
+    this.spec['service_id'] = name;
   }
 
   setHostPattern(pattern: string) {
     this.spec['host_pattern'] = pattern;
   }
 
-  setDeviceSelection(type: string, appliedFilters: InventoryDeviceAppliedFilter[]) {
+  setDeviceSelection(type: string, appliedFilters: CdTableColumnFiltersChange['filters']) {
     const key = `${type}_devices`;
     this.spec[key] = {};
     appliedFilters.forEach((filter) => {
       const attr = this.deviceSelectionAttrs[filter.prop];
       if (attr) {
         const name = attr.name;
-        this.spec[key][name] = attr.formatter ? attr.formatter(filter.value) : filter.value;
+        this.spec[key][name] = attr.formatter ? attr.formatter(filter.value.raw) : filter.value.raw;
       }
     });
   }

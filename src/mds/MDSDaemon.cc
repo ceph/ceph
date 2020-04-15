@@ -59,7 +59,7 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
-
+using TOPNSPC::common::cmd_getval;
 // cons/des
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
@@ -169,18 +169,18 @@ void MDSDaemon::asok_command(
       r = -EOPNOTSUPP;
     } else {
       string heapcmd;
-      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
+      cmd_getval(cmdmap, "heapcmd", heapcmd);
       vector<string> heapcmd_vec;
       get_str_vec(heapcmd, heapcmd_vec);
       string value;
-      if (cmd_getval(cct, cmdmap, "value", value)) {
+      if (cmd_getval(cmdmap, "value", value)) {
 	heapcmd_vec.push_back(value);
       }
       ceph_heap_profiler_handle_command(heapcmd_vec, ss);
     }
   } else if (command == "cpu_profiler") {
     string arg;
-    cmd_getval(cct, cmdmap, "arg", arg);
+    cmd_getval(cmdmap, "arg", arg);
     vector<string> argvec;
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ss);
@@ -192,7 +192,7 @@ void MDSDaemon::asok_command(
       try {
 	mds_rank->handle_asok_command(command, cmdmap, f, inbl, on_finish);
 	return;
-      } catch (const bad_cmd_get& e) {
+      } catch (const TOPNSPC::common::bad_cmd_get& e) {
 	ss << e.what();
 	r = -EINVAL;
       }
@@ -620,7 +620,7 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
     r = -EINVAL;
     ss << "no command given";
     outs = ss.str();
-  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+  } else if (!TOPNSPC::common::cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     r = -EINVAL;
     outs = ss.str();
   } else {
@@ -633,13 +633,6 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
   reply->set_data(outbl);
   m->get_connection()->send_message2(reply);
 }
-
-const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
-{
-  static const std::vector<MDSCommand> commands = {
-  };
-  return commands;
-};
 
 void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 {
@@ -911,6 +904,17 @@ bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 /*
  * high priority messages we always process
  */
+
+#define ALLOW_MESSAGES_FROM(peers)                                      \
+  do {                                                                  \
+    if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
+      dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" \
+              << m->get_connection()->get_peer_type() << " allowing="   \
+              << #peers << " message=" << *m << dendl;                  \
+      return true;                                                      \
+    }                                                                   \
+  } while (0)
+
 bool MDSDaemon::handle_core_message(const cref_t<Message> &m)
 {
   switch (m->get_type()) {

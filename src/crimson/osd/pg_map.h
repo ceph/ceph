@@ -37,7 +37,8 @@ class PGMap {
   };
 
   std::map<spg_t, PGCreationState> pgs_creating;
-  std::map<spg_t, Ref<PG>> pgs;
+  using pgs_t = std::map<spg_t, Ref<PG>>;
+  pgs_t pgs;
 
 public:
   /**
@@ -61,8 +62,8 @@ public:
    */
   void pg_loaded(spg_t pgid, Ref<PG> pg);
 
-  decltype(pgs) &get_pgs() { return pgs; }
-
+  pgs_t& get_pgs() { return pgs; }
+  const pgs_t& get_pgs() const { return pgs; }
   PGMap() = default;
   ~PGMap();
 };

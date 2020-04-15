@@ -10,6 +10,9 @@
 #include "RocksDBStore.h"
 #endif
 
+using std::map;
+using std::string;
+
 KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 			       const string& dir,
 			       map<string,string> options,

@@ -27,12 +27,6 @@ class IscsiGatewayDoesNotExist(Exception):
             "iSCSI gateway '{}' does not exist".format(hostname))
 
 
-class IscsiGatewayInUse(Exception):
-    def __init__(self, hostname):
-        super(IscsiGatewayInUse, self).__init__(
-            "iSCSI gateway '{}' is in use".format(hostname))
-
-
 class InvalidServiceUrl(Exception):
     def __init__(self, service_url):
         super(InvalidServiceUrl, self).__init__(
@@ -84,11 +78,11 @@ class IscsiGatewaysConfig(object):
 
     @staticmethod
     def _load_config_from_orchestrator():
-        config = {'gateways': {}}
+        config = {'gateways': {}}  # type: dict
         try:
             instances = OrchClient.instance().services.list("iscsi")
             for instance in instances:
-                config['gateways'][instance.nodename] = {
+                config['gateways'][instance.hostname] = {
                     'service_url': instance.service_url
                 }
         except (RuntimeError, OrchestratorError, ImportError):

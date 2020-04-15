@@ -100,7 +100,7 @@ export CEPH_DEV=1
 [ -z "$CEPH_NUM_MGR" ] && CEPH_NUM_MGR="$MGR"
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS="$FS"
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW="$RGW"
-[ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM="$GANESHA"
+[ -z "$GANESHA_DAEMON_NUM" ] && GANESHA_DAEMON_NUM="$NFS"
 
 # if none of the CEPH_NUM_* number is specified, kill the existing
 # cluster.
@@ -189,7 +189,7 @@ inc_osd_num=0
 
 msgr="21"
 
-usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 GANESHA=1 $0 -n -d\n"
+usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 NFS=1 $0 -n -d\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
@@ -464,8 +464,8 @@ if [ "$new" -eq 0 ]; then
         CEPH_NUM_MGR="$MGR"
     RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
-    GANESHA=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_ganesha 2>/dev/null` && \
-        GANESHA_DAEMON_NUM="$GANESHA"
+    NFS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_ganesha 2>/dev/null` && \
+        GANESHA_DAEMON_NUM="$NFS"
 else
     # only delete if -n
     if [ -e "$conf_fn" ]; then
@@ -589,6 +589,7 @@ prepare_conf() {
         mon osd full ratio = .99
         mon osd nearfull ratio = .99
         mon osd backfillfull ratio = .99
+        mon_max_pg_per_osd = ${MON_MAX_PG_PER_OSD:-1000}
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
         filestore fd cache size = 32
@@ -911,6 +912,7 @@ start_mgr() {
     local ssl=${DASHBOARD_SSL:-1}
     # avoid monitors on nearby ports (which test/*.sh use extensively)
     MGR_PORT=$(($CEPH_PORT + 1000))
+    PROMETHEUS_PORT=9283
     for name in x y z a b c d e f g h i j k l m n o p
     do
         [ $mgr -eq $CEPH_NUM_MGR ] && break
@@ -942,6 +944,8 @@ EOF
                 fi
             fi
 	    MGR_PORT=$(($MGR_PORT + 1000))
+	    ceph_adm config set mgr mgr/prometheus/$name/server_port $PROMETHEUS_PORT --force
+	    PROMETHEUS_PORT=$(($PROMETHEUS_PORT + 1000))
 
 	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT --force
             if [ $mgr -eq 1 ]; then
@@ -987,11 +991,13 @@ EOF
 
     if [ "$cephadm" -eq 1 ]; then
         debug echo Enabling cephadm orchestrator
-        ceph_adm config-key set mgr/ssh/ssh_identity_key -i ~/.ssh/id_rsa
-        ceph_adm config-key set mgr/ssh/ssh_identity_pub -i ~/.ssh/id_rsa.pub
+        ceph_adm config-key set mgr/cephadm/ssh_identity_key -i ~/.ssh/id_rsa
+        ceph_adm config-key set mgr/cephadm/ssh_identity_pub -i ~/.ssh/id_rsa.pub
         ceph_adm mgr module enable cephadm
-        ceph_adm orchestrator set backend cephadm
-        ceph_adm orchestrator host add $HOSTNAME
+        ceph_adm orch set backend cephadm
+        ceph_adm orch host add $HOSTNAME
+        ceph_adm orch apply crash '*'
+        ceph_adm config set mgr mgr/cephadm/allow_ptrace true
     fi
 }
 
@@ -1078,57 +1084,49 @@ start_ganesha() {
         port=$(($GANESHA_PORT + ganesha))
         ganesha=$(($ganesha + 1))
         ganesha_dir="$CEPH_DEV_DIR/ganesha.$name"
-
-        echo "Starting ganesha.$name on port: $port"
+        test_user="ganesha-$name"
+        pool_name="nfs-ganesha"
+        namespace=$name
 
         prun rm -rf $ganesha_dir
         prun mkdir -p $ganesha_dir
+        prun ceph_adm auth get-or-create client.$test_user \
+            mon "allow r" \
+            osd "allow rw pool=$pool_name namespace=$namespace, allow rw tag cephfs data=a" \
+            mds "allow rw path=/" \
+            >> "$keyring_fn"
+        prun ceph_adm nfs cluster create cephfs $name
 
         echo "NFS_CORE_PARAM {
-        Enable_NLM = false;
-        Enable_RQUOTA = false;
-        Protocols = 4;
-        NFS_Port = $port;
-}
+            Enable_NLM = false;
+            Enable_RQUOTA = false;
+            Protocols = 4;
+            NFS_Port = $port;
+        }
 
-CACHEINODE {
-        Dir_Chunk = 0;
-        NParts = 1;
-        Cache_Size = 1;
-}
+        CACHEINODE {
+           Dir_Chunk = 0;
+           NParts = 1;
+           Cache_Size = 1;
+        }
 
-NFSv4 {
-        RecoveryBackend = 'rados_cluster';
-        Minor_Versions = 1, 2;
-}
+        NFSv4 {
+           RecoveryBackend = rados_cluster;
+           Minor_Versions = 1, 2;
+        }
 
-EXPORT {
-	Export_Id = 100;
-	Transports = TCP;
-	Path = /;
-	Pseudo = /ceph/;
-	Protocols = 4;
-	Access_Type = RW;
-	Attr_Expiration_Time = 0;
-	Squash = None;
-	FSAL {
-	    Name = CEPH;
-	}
-}
+        %url rados://$pool_name/$namespace/conf-nfs
 
-CEPH {
-	Ceph_Conf = $conf_fn;
-}
+        RADOS_KV {
+           pool = $pool_name;
+           namespace = $namespace;
+           UserId = $test_user;
+           nodeid = $name;
+        }
 
-RADOS_KV {
-	Ceph_Conf = $conf_fn;
-	pool = 'nfs-ganesha';
-	namespace = 'ganesha';
-	UserId = 'admin';
-	nodeid = $name;
-}" > "$ganesha_dir/ganesha.conf"
-
-
+        RADOS_URLS {
+	   Userid = $test_user;
+        }" > "$ganesha_dir/ganesha.conf"
 	wconf <<EOF
 [ganesha.$name]
         host = $HOSTNAME
@@ -1138,20 +1136,29 @@ RADOS_KV {
         pid file = $ganesha_dir/ganesha.pid
 EOF
 
-        if !($CEPH_BIN/rados lspools | grep "nfs-ganesha"); then
-            prun ceph_adm osd pool create nfs-ganesha
-            prun ceph_adm osd pool application enable nfs-ganesha nfs
-        fi
+        prun ceph_adm nfs export create cephfs "a" "/cephfs" $name
+        prun ganesha-rados-grace -p $pool_name -n $namespace add $name
+        prun ganesha-rados-grace -p $pool_name -n $namespace
 
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha add $name
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
-
-        prun /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
-        prun ganesha-rados-grace -p nfs-ganesha -n ganesha
-done
+
+        prun ganesha-rados-grace -p $pool_name -n $namespace
+
+        if $with_mgr_dashboard; then
+            $CEPH_BIN/rados -p $pool_name put "conf-$name" "$ganesha_dir/ganesha.conf"
+        fi
+
+        echo "$test_user started on port: $port"
+    done
+
+    if $with_mgr_dashboard; then
+        ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace $pool_name
+    fi
+
+    echo "Mount using: mount -t nfs -o port=<ganesha-port-num> <address>:<ganesha pseudo path>"
 }
 
 if [ "$debug" -eq 0 ]; then
@@ -1255,6 +1262,7 @@ mon_osd_reporter_subtree_level = osd
 mon_data_avail_warn = 2
 mon_data_avail_crit = 1
 mon_allow_pool_delete = true
+mon_allow_pool_size_one = true
 
 [osd]
 osd_scrub_load_threshold = 2000

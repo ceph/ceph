@@ -15,11 +15,11 @@
 #ifndef CEPH_STRIPER_H
 #define CEPH_STRIPER_H
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
 #include "osdc/StriperTypes.h"
 
-class CephContext;
 
 //namespace ceph {
 
@@ -122,7 +122,7 @@ class CephContext;
 
     private:
       void add_partial_sparse_result(
-          CephContext *cct, bufferlist& bl,
+          CephContext *cct, ceph::buffer::list& bl,
           std::map<uint64_t, uint64_t>::const_iterator* it,
           const std::map<uint64_t, uint64_t>::const_iterator& end_it,
           uint64_t* bl_off, uint64_t tofs, uint64_t tlen);

@@ -59,6 +59,7 @@ set(librbd_internal_srcs
   image/CreateRequest.cc
   image/DetachChildRequest.cc
   image/DetachParentRequest.cc
+  image/GetMetadataRequest.cc
   image/ListWatchersRequest.cc
   image/OpenRequest.cc
   image/PreRemoveRequest.cc
@@ -103,11 +104,15 @@ set(librbd_internal_srcs
   mirror/EnableRequest.cc
   mirror/GetInfoRequest.cc
   mirror/GetStatusRequest.cc
+  mirror/GetUuidRequest.cc
+  mirror/ImageRemoveRequest.cc
+  mirror/ImageStateUpdateRequest.cc
   mirror/PromoteRequest.cc
   mirror/snapshot/CreateNonPrimaryRequest.cc
   mirror/snapshot/CreatePrimaryRequest.cc
   mirror/snapshot/DemoteRequest.cc
   mirror/snapshot/GetImageStateRequest.cc
+  mirror/snapshot/ImageMeta.cc
   mirror/snapshot/PromoteRequest.cc
   mirror/snapshot/RemoveImageStateRequest.cc
   mirror/snapshot/SetImageStateRequest.cc
@@ -116,6 +121,7 @@ set(librbd_internal_srcs
   mirror/snapshot/Utils.cc
   mirror/snapshot/WriteImageStateRequest.cc
   object_map/CreateRequest.cc
+  object_map/DiffRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc
   object_map/RefreshRequest.cc
@@ -160,9 +166,12 @@ endif()
 if(WITH_RBD_RWL)
   set(librbd_internal_srcs
     ${librbd_internal_srcs}
-    cache/rwl/Types.cc
-    cache/rwl/LogEntry.cc
     cache/rwl/ImageCacheState.cc
+    cache/rwl/LogEntry.cc
+    cache/rwl/LogOperation.cc
+    cache/rwl/Request.cc
+    cache/rwl/SyncPoint.cc
+    cache/rwl/Types.cc
     cache/ReplicatedWriteLog.cc)
 endif()
 
@@ -184,9 +193,9 @@ target_link_libraries(rbd_internal PRIVATE
   osdc)
 
 if(WITH_RBD_RWL)
-  target_link_libraries(rbd_internal PRIVATE
-    pmem::pmemobj
-    pmem::pmem)
+  target_link_libraries(rbd_internal
+    PUBLIC pmem::pmemobj
+    PRIVATE pmem::pmem)
 endif()
 
 add_library(librbd ${CEPH_SHARED}

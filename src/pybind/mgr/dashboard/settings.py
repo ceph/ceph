@@ -62,6 +62,27 @@ class Options(object):
     USER_PWD_EXPIRATION_WARNING_1 = (10, int)
     USER_PWD_EXPIRATION_WARNING_2 = (5, int)
 
+    # Password policy
+    PWD_POLICY_ENABLED = (True, bool)
+    # Individual checks
+    PWD_POLICY_CHECK_LENGTH_ENABLED = (True, bool)
+    PWD_POLICY_CHECK_OLDPWD_ENABLED = (True, bool)
+    PWD_POLICY_CHECK_USERNAME_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_COMPLEXITY_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED = (False, bool)
+    PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED = (False, bool)
+    # Settings
+    PWD_POLICY_MIN_LENGTH = (8, int)
+    PWD_POLICY_MIN_COMPLEXITY = (10, int)
+    PWD_POLICY_EXCLUSION_LIST = (','.join(['osd', 'host',
+                                           'dashboard', 'pool',
+                                           'block', 'nfs',
+                                           'ceph', 'monitors',
+                                           'gateway', 'logs',
+                                           'crush', 'maps']),
+                                 str)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
@@ -163,7 +184,8 @@ def options_schema_list():
     for option, value in inspect.getmembers(Options, filter_attr):
         if option.startswith('_'):
             continue
-        result.append({'name': option, 'default': value[0]})
+        result.append({'name': option, 'default': value[0],
+                       'type': value[1].__name__})
 
     return result
 

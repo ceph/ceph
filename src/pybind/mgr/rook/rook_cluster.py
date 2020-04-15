@@ -6,17 +6,22 @@ call methods.
 
 This module is runnable outside of ceph-mgr, useful for testing.
 """
+import datetime
 import threading
 import logging
 import json
 from contextlib import contextmanager
+from time import sleep
 
+import jsonpatch
 from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 
 # Optional kubernetes imports to enable MgrModule.can_run
 # to behave cleanly.
 from urllib3.exceptions import ProtocolError
 
+from ceph.deployment.drive_group import DriveGroupSpec
+from ceph.deployment.service_spec import ServiceSpec
 from mgr_util import merge_dicts
 
 try:
@@ -25,12 +30,16 @@ except ImportError:
     pass  # just for type annotations
 
 try:
+    from kubernetes import client, watch
     from kubernetes.client.rest import ApiException
-    from kubernetes.client import V1ListMeta, CoreV1Api, V1Pod
-    from kubernetes import watch
 except ImportError:
     class ApiException(Exception):  # type: ignore
         status = 0
+
+from .rook_client.ceph import cephfilesystem as cfs
+from .rook_client.ceph import cephnfs as cnfs
+from .rook_client.ceph import cephobjectstore as cos
+from .rook_client.ceph import cephcluster as ccl
 
 
 import orchestrator
@@ -99,8 +108,8 @@ class KubernetesResource(object):
     def _fetch(self):
         """ Execute the requested api method as a one-off fetch"""
         response = self.api_func(**self.kwargs)
-        # metadata is a V1ListMeta object type
-        metadata = response.metadata  # type: V1ListMeta
+        # metadata is a client.V1ListMeta object type
+        metadata = response.metadata  # type: client.V1ListMeta
         self._items = {item.metadata.name: item for item in response.items}
         log.info('Full fetch of {}. result: {}'.format(self.api_func, len(self._items)))
         return metadata.resource_version
@@ -174,21 +183,22 @@ class KubernetesResource(object):
 
 
 class RookCluster(object):
-    def __init__(self, k8s, rook_env):
+    def __init__(self, coreV1_api, batchV1_api, rook_env):
         self.rook_env = rook_env  # type: RookEnv
-        self.k8s = k8s  # type: CoreV1Api
+        self.coreV1_api = coreV1_api  # client.CoreV1Api
+        self.batchV1_api = batchV1_api
 
         #  TODO: replace direct k8s calls with Rook API calls
         # when they're implemented
-        self.inventory_maps = KubernetesResource(self.k8s.list_namespaced_config_map,
+        self.inventory_maps = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
                                                  namespace=self.rook_env.operator_namespace,
                                                  label_selector="app=rook-discover")
 
-        self.rook_pods = KubernetesResource(self.k8s.list_namespaced_pod,
+        self.rook_pods = KubernetesResource(self.coreV1_api.list_namespaced_pod,
                                             namespace=self.rook_env.namespace,
                                             label_selector="rook_cluster={0}".format(
                                                 self.rook_env.cluster_name))
-        self.nodes = KubernetesResource(self.k8s.list_node)
+        self.nodes = KubernetesResource(self.coreV1_api.list_node)
 
     def rook_url(self, path):
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
@@ -199,7 +209,7 @@ class RookCluster(object):
         full_path = self.rook_url(path)
         log.debug("[%s] %s" % (verb, full_path))
 
-        return self.k8s.api_client.call_api(
+        return self.coreV1_api.api_client.call_api(
             full_path,
             verb,
             auth_settings=['BearerToken'],
@@ -231,7 +241,7 @@ class RookCluster(object):
 
         try:
             result = [i for i in self.inventory_maps.items if predicate(i)]
-        except ApiException as e:
+        except ApiException as dummy_e:
             log.exception("Failed to fetch device metadata")
             raise
 
@@ -278,7 +288,7 @@ class RookCluster(object):
                         rook_file_system=<self.fs_name>
         """
         def predicate(item):
-            # type: (V1Pod) -> bool
+            # type: (client.V1Pod) -> bool
             metadata = item.metadata
             if service_type is not None:
                 if metadata.labels['app'] != "rook-ceph-{0}".format(service_type):
@@ -305,21 +315,60 @@ class RookCluster(object):
                     return False
             return True
 
+        refreshed = datetime.datetime.utcnow()
         pods = [i for i in self.rook_pods.items if predicate(i)]
 
         pods_summary = []
 
         for p in pods:
             d = p.to_dict()
-            # p['metadata']['creationTimestamp']
-            pods_summary.append({
+
+            image_name = None
+            for c in d['spec']['containers']:
+                # look at the first listed container in the pod...
+                image_name = c['image']
+                break
+
+            s = {
                 "name": d['metadata']['name'],
-                "nodename": d['spec']['node_name'],
+                "hostname": d['spec']['node_name'],
                 "labels": d['metadata']['labels'],
-                'phase': d['status']['phase']
-            })
+                'phase': d['status']['phase'],
+                'container_image_name': image_name,
+                'refreshed': refreshed,
+                # these may get set below...
+                'started': None,
+                'created': None,
+            }
+
+            # note: we want UTC but no tzinfo
+            if d['metadata'].get('creation_timestamp', None):
+                s['created'] = d['metadata']['creation_timestamp'].astimezone(
+                    tz=datetime.timezone.utc).replace(tzinfo=None)
+            if d['status'].get('start_time', None):
+                s['started'] = d['status']['start_time'].astimezone(
+                    tz=datetime.timezone.utc).replace(tzinfo=None)
+
+            pods_summary.append(s)
 
         return pods_summary
+
+    def remove_pods(self, names):
+        pods = [i for i in self.rook_pods.items]
+        num = 0
+        for p in pods:
+            d = p.to_dict()
+            daemon_type = d['metadata']['labels']['app'].replace('rook-ceph-','')
+            daemon_id = d['metadata']['labels']['ceph_daemon_id']
+            name = daemon_type + '.' + daemon_id
+            if name in names:
+                self.coreV1_api.delete_namespaced_pod(
+                    d['metadata']['name'],
+                    self.rook_env.namespace,
+                    body=client.V1DeleteOptions()
+                )
+                num += 1
+        return "Removed %d pods" % num
 
     def get_node_names(self):
         return [i.metadata.name for i in self.nodes.items]
@@ -335,92 +384,103 @@ class RookCluster(object):
             else:
                 raise
 
-    def add_filesystem(self, spec):
-        # type: (orchestrator.StatelessServiceSpec) -> None
+    def apply_filesystem(self, spec):
+        # type: (ServiceSpec) -> None
+        # TODO use spec.placement
+        # TODO warn if spec.extended has entries we don't kow how
+        #      to action.
+        def _update_fs(current, new):
+            # type: (cfs.CephFilesystem, cfs.CephFilesystem) -> cfs.CephFilesystem
+            new.spec.metadataServer.activeCount = spec.placement.count or 1
+            return new
+
+        def _create_fs():
+            # type: () -> cfs.CephFilesystem
+            return cfs.CephFilesystem(
+                apiVersion=self.rook_env.api_name,
+                metadata=dict(
+                    name=spec.service_id,
+                    namespace=self.rook_env.namespace,
+                ),
+                spec=cfs.Spec(
+                    metadataServer=cfs.MetadataServer(
+                        activeCount=spec.placement.count or 1,
+                        activeStandby=True
+                    )
+                )
+            )
+        return self._create_or_patch(
+            cfs.CephFilesystem, 'cephfilesystems', spec.service_id,
+            _update_fs, _create_fs)
+
+    def apply_objectstore(self, spec):
+
+        # FIXME: service_id is $realm.$zone, but rook uses realm
+        # $crname and zone $crname.  The '.'  will confuse kubernetes.
+        # For now, assert that realm==zone.
+        (realm, zone) = spec.service_id.split('.', 1)
+        assert realm == zone
+        assert spec.subcluster is None
+        name = realm
+
+        def _create_zone():
+            # type: () -> cos.CephObjectStore
+            port = None
+            secure_port = None
+            if spec.ssl:
+                secure_port = spec.get_port()
+            else:
+                port = spec.get_port()
+            return cos.CephObjectStore(
+                apiVersion=self.rook_env.api_name,
+                metadata=dict(
+                    name=name,
+                    namespace=self.rook_env.namespace
+                ),
+                spec=cos.Spec(
+                    gateway=cos.Gateway(
+                        type='s3',
+                        port=port,
+                        securePort=secure_port,
+                        instances=spec.placement.count or 1,
+                    )
+                )
+            )
+
+        def _update_zone(current, new):
+            new.spec.gateway.instances = spec.placement.count or 1
+            return new
+
+        return self._create_or_patch(
+            cos.CephObjectStore, 'cephobjectstores', name,
+            _update_zone, _create_zone)
+
+    def add_nfsgw(self, spec):
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
 
-        rook_fs = {
-            "apiVersion": self.rook_env.api_name,
-            "kind": "CephFilesystem",
-            "metadata": {
-                "name": spec.name,
-                "namespace": self.rook_env.namespace
-            },
-            "spec": {
-                "onlyManageDaemons": True,
-                "metadataServer": {
-                    "activeCount": spec.count,
-                    "activeStandby": True
-
-                }
-            }
-        }
-
-        with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.name)):
-            self.rook_api_post("cephfilesystems/", body=rook_fs)
-
-    def add_nfsgw(self, spec):
-        # type: (orchestrator.NFSServiceSpec) -> None
-        # TODO use spec.placement
-
-        rook_nfsgw = {
-            "apiVersion": self.rook_env.api_name,
-            "kind": "CephNFS",
-            "metadata": {
-                "name": spec.name,
-                "namespace": self.rook_env.namespace
-            },
-            "spec": {
-                "rados": {
-                    "pool": spec.pool
-                },
-                "server": {
-                    "active": spec.count,
-                }
-            }
-        }
+        rook_nfsgw = cnfs.CephNFS(
+            apiVersion=self.rook_env.api_name,
+            metadata=dict(
+                name=spec.service_id,
+                namespace=self.rook_env.namespace,
+            ),
+            spec=cnfs.Spec(
+                rados=cnfs.Rados(
+                    pool=spec.pool
+                ),
+                server=cnfs.Server(
+                    active=spec.placement.count
+                )
+            )
+        )
 
         if spec.namespace:
-            rook_nfsgw["spec"]["rados"]["namespace"] = spec.namespace  # type: ignore
+            rook_nfsgw.spec.rados.namespace = spec.namespace
 
-        with self.ignore_409("NFS cluster '{0}' already exists".format(spec.name)):
-            self.rook_api_post("cephnfses/", body=rook_nfsgw)
-
-    def add_objectstore(self, spec):
-        # type: (orchestrator.RGWSpec) -> None
-        rook_os = {
-            "apiVersion": self.rook_env.api_name,
-            "kind": "CephObjectStore",
-            "metadata": {
-                "name": spec.name,
-                "namespace": self.rook_env.namespace
-            },
-            "spec": {
-                "metadataPool": {
-                    "failureDomain": "host",
-                    "replicated": {
-                        "size": 1
-                    }
-                },
-                "dataPool": {
-                    "failureDomain": "osd",
-                    "replicated": {
-                        "size": 1
-                    }
-                },
-                "gateway": {
-                    "type": "s3",
-                    "port": spec.rgw_frontend_port if spec.rgw_frontend_port is not None else 80,
-                    "instances": spec.count,
-                    "allNodes": False
-                }
-            }
-        }
-
-        with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.name)):
-            self.rook_api_post("cephobjectstores/", body=rook_os)
+        with self.ignore_409("NFS cluster '{0}' already exists".format(spec.service_id)):
+            self.rook_api_post("cephnfses/", body=rook_nfsgw.to_json())
 
     def rm_service(self, rooktype, service_id):
 
@@ -448,131 +508,265 @@ class RookCluster(object):
         return node_name in self.get_node_names()
 
     def update_mon_count(self, newcount):
-        patch = [{"op": "replace", "path": "/spec/mon/count", "value": newcount}]
-
-        try:
-            self.rook_api_patch(
-                "cephclusters/{0}".format(self.rook_env.cluster_name),
-                body=patch)
-        except ApiException as e:
-            log.exception("API exception: {0}".format(e))
-            raise ApplyException(
-                "Failed to update mon count in Cluster CRD: {0}".format(e))
-
-        return "Updated mon count to {0}".format(newcount)
-
-    def update_mds_count(self, svc_id, newcount):
-        patch = [{"op": "replace", "path": "/spec/metadataServer/activeCount",
-                  "value": newcount}]
-
-        try:
-            self.rook_api_patch(
-                "cephfilesystems/{0}".format(svc_id),
-                body=patch)
-        except ApiException as e:
-            log.exception("API exception: {0}".format(e))
-            raise ApplyException(
-                "Failed to update NFS server count for {0}: {1}".format(svc_id, e))
-        return "Updated NFS server count for {0} to {1}".format(svc_id, newcount)
+        def _update_mon_count(current, new):
+            # type: (ccl.CephCluster, ccl.CephCluster) -> ccl.CephCluster
+            new.spec.mon.count = newcount
+            return new
+        return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
 
     def update_nfs_count(self, svc_id, newcount):
-        patch = [{"op": "replace", "path": "/spec/server/active", "value": newcount}]
-
-        try:
-            self.rook_api_patch(
-                "cephnfses/{0}".format(svc_id),
-                body=patch)
-        except ApiException as e:
-            log.exception("API exception: {0}".format(e))
-            raise ApplyException(
-                "Failed to update NFS server count for {0}: {1}".format(svc_id, e))
-        return "Updated NFS server count for {0} to {1}".format(svc_id, newcount)
+        def _update_nfs_count(current, new):
+            # type: (cnfs.CephNFS, cnfs.CephNFS) -> cnfs.CephNFS
+            new.spec.server.active = newcount
+            return new
+        return self._patch(cnfs.CephNFS, 'cephnfses',svc_id, _update_nfs_count)
 
     def add_osds(self, drive_group, all_hosts):
-        # type: (orchestrator.DriveGroupSpec, List[str]) -> str
+        # type: (DriveGroupSpec, List[str]) -> str
         """
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
         """
-        block_devices = drive_group.data_devices.paths if drive_group.data_devices else None
+        block_devices = drive_group.data_devices.paths if drive_group.data_devices else []
         directories = drive_group.data_directories
 
         assert drive_group.objectstore in ("bluestore", "filestore")
 
-        # The CRD looks something like this:
-        #     nodes:
-        #       - name: "gravel1.rockery"
-        #         devices:
-        #          - name: "sdb"
-        #         config:
-        #           storeType: bluestore
+        def _add_osds(current_cluster, new_cluster):
+            # type: (ccl.CephCluster, ccl.CephCluster) -> ccl.CephCluster
 
-        current_cluster = self.rook_api_get(
-            "cephclusters/{0}".format(self.rook_env.cluster_name))
+            # FIXME: this is all not really atomic, because jsonpatch doesn't
+            # let us do "test" operations that would check if items with
+            # matching names were in existing lists.
 
-        patch = []
+            if not hasattr(new_cluster.spec.storage, 'nodes'):
+                new_cluster.spec.storage.nodes = ccl.NodesList()
 
-        # FIXME: this is all not really atomic, because jsonpatch doesn't
-        # let us do "test" operations that would check if items with
-        # matching names were in existing lists.
+            current_nodes = getattr(current_cluster.spec.storage, 'nodes', ccl.NodesList())
+            matching_host = drive_group.placement.pattern_matches_hosts(all_hosts)[0]
 
-        if 'nodes' not in current_cluster['spec']['storage']:
-            patch.append({
-                'op': 'add', 'path': '/spec/storage/nodes', 'value': []
-            })
+            if matching_host not in [n.name for n in current_nodes]:
+                pd = ccl.NodesItem(
+                    name=matching_host,
+                    config=ccl.Config(
+                        storeType=drive_group.objectstore
+                    )
+                )
 
-        current_nodes = current_cluster['spec']['storage'].get('nodes', [])
+                if block_devices:
+                    pd.devices = ccl.DevicesList(
+                        ccl.DevicesItem(name=d.path) for d in block_devices
+                    )
+                if directories:
+                    pd.directories = ccl.DirectoriesList(
+                        ccl.DirectoriesItem(path=p) for p in directories
+                    )
+                new_cluster.spec.storage.nodes.append(pd)
+            else:
+                for _node in new_cluster.spec.storage.nodes:
+                    current_node = _node  # type: ccl.NodesItem
+                    if current_node.name == matching_host:
+                        if block_devices:
+                            if not hasattr(current_node, 'devices'):
+                                current_node.devices = ccl.DevicesList()
+                            new_devices = list(set(block_devices) - set([d.name for d in current_node.devices]))
+                            current_node.devices.extend(
+                                ccl.DevicesItem(name=n.path) for n in new_devices
+                            )
 
-        if drive_group.hosts(all_hosts)[0] not in [n['name'] for n in current_nodes]:
-            pd = { "name": drive_group.hosts(all_hosts)[0],
-                   "config": { "storeType": drive_group.objectstore }}
+                        if directories:
+                            if not hasattr(current_node, 'directories'):
+                                current_node.directories = ccl.DirectoriesList()
+                            new_dirs = list(set(directories) - set([d.path for d in current_node.directories]))
+                            current_node.directories.extend(
+                                ccl.DirectoriesItem(path=n) for n in new_dirs
+                            )
+            return new_cluster
 
-            if block_devices:
-                pd["devices"] = [{'name': d} for d in block_devices]
-            if directories:
-                pd["directories"] = [{'path': p} for p in directories]
+        return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _add_osds)
 
-            patch.append({ "op": "add", "path": "/spec/storage/nodes/-", "value": pd })  # type: ignore
-        else:
-            # Extend existing node
-            node_idx = None
-            current_node = None
-            for i, c in enumerate(current_nodes):
-                if c['name'] == drive_group.hosts(all_hosts)[0]:
-                    current_node = c
-                    node_idx = i
-                    break
+    def _patch(self, crd, crd_name, cr_name, func):
+        current_json = self.rook_api_get(
+            "{}/{}".format(crd_name, cr_name)
+        )
 
-            assert node_idx is not None
-            assert current_node is not None
+        current = crd.from_json(current_json)
+        new = crd.from_json(current_json)  # no deepcopy.
 
-            new_devices = list(set(block_devices) - set([d['name'] for d in current_node['devices']]))
-            for n in new_devices:
-                patch.append({
-                    "op": "add",
-                    "path": "/spec/storage/nodes/{0}/devices/-".format(node_idx),
-                    "value": {'name': n}  # type: ignore
-                })
+        new = func(current, new)
 
-            new_dirs = list(set(directories) - set(current_node['directories']))
-            for p in new_dirs:
-                patch.append({
-                    "op": "add",
-                    "path": "/spec/storage/nodes/{0}/directories/-".format(node_idx),
-                    "value": {'path': p}  # type: ignore
-                })
+        patch = list(jsonpatch.make_patch(current_json, new.to_json()))
+
+        log.info('patch for {}/{}: \n{}'.format(crd_name, cr_name, patch))
 
         if len(patch) == 0:
             return "No change"
 
         try:
             self.rook_api_patch(
-                "cephclusters/{0}".format(self.rook_env.cluster_name),
+                "{}/{}".format(crd_name, cr_name),
                 body=patch)
         except ApiException as e:
             log.exception("API exception: {0}".format(e))
             raise ApplyException(
-                "Failed to create OSD entries in Cluster CRD: {0}".format(
-                    e))
+                "Failed to update {}/{}: {}".format(crd_name, cr_name, e))
 
         return "Success"
+
+    def _create_or_patch(self, crd, crd_name, cr_name, update_func, create_func):
+        try:
+            current_json = self.rook_api_get(
+                "{}/{}".format(crd_name, cr_name)
+            )
+        except ApiException as e:
+            if e.status == 404:
+                current_json = None
+            else:
+                raise
+
+        if current_json:
+            current = crd.from_json(current_json)
+            new = crd.from_json(current_json)  # no deepcopy.
+
+            new = update_func(current, new)
+
+            patch = list(jsonpatch.make_patch(current_json, new.to_json()))
+
+            log.info('patch for {}/{}: \n{}'.format(crd_name, cr_name, patch))
+
+            if len(patch) == 0:
+                return "No change"
+
+            try:
+                self.rook_api_patch(
+                    "{}/{}".format(crd_name, cr_name),
+                    body=patch)
+            except ApiException as e:
+                log.exception("API exception: {0}".format(e))
+                raise ApplyException(
+                    "Failed to update {}/{}: {}".format(crd_name, cr_name, e))
+            return "Updated"
+        else:
+            new = create_func()
+            with self.ignore_409("{} {} already exists".format(crd_name,
+                                                               cr_name)):
+                self.rook_api_post("{}/".format(crd_name),
+                                   body=new.to_json())
+            return "Created"
+    def get_ceph_image(self) -> str:
+        try:
+            api_response = self.coreV1_api.list_namespaced_pod(self.rook_env.namespace,
+                                                               label_selector="app=rook-ceph-mon",
+                                                               timeout_seconds=10)
+            if api_response.items:
+                return api_response.items[-1].spec.containers[0].image
+            else:
+                raise orchestrator.OrchestratorError(
+                        "Error getting ceph image. Cluster without monitors")
+        except ApiException as e:
+            raise orchestrator.OrchestratorError("Error getting ceph image: {}".format(e))
+
+
+    def _execute_blight_job(self, ident_fault: str, on: bool, loc: orchestrator.DeviceLightLoc) -> str:
+        operation_id = str(hash(loc))
+        message = ""
+
+        # job definition
+        job_metadata = client.V1ObjectMeta(name=operation_id,
+                                           namespace= self.rook_env.namespace,
+                                           labels={"ident": operation_id})
+        pod_metadata = client.V1ObjectMeta(labels={"ident": operation_id})
+        pod_container = client.V1Container(name="ceph-lsmcli-command",
+                                           security_context=client.V1SecurityContext(privileged=True),
+                                           image=self.get_ceph_image(),
+                                           command=["lsmcli",],
+                                           args=['local-disk-%s-led-%s' % (ident_fault,'on' if on else 'off'),
+                                                 '--path', loc.path or loc.dev,],
+                                           volume_mounts=[client.V1VolumeMount(name="devices", mount_path="/dev"),
+                                                          client.V1VolumeMount(name="run-udev", mount_path="/run/udev")])
+        pod_spec = client.V1PodSpec(containers=[pod_container],
+                                    active_deadline_seconds=30, # Max time to terminate pod
+                                    restart_policy="Never",
+                                    node_selector= {"kubernetes.io/hostname": loc.host},
+                                    volumes=[client.V1Volume(name="devices",
+                                                             host_path=client.V1HostPathVolumeSource(path="/dev")),
+                                             client.V1Volume(name="run-udev",
+                                                             host_path=client.V1HostPathVolumeSource(path="/run/udev"))])
+        pod_template = client.V1PodTemplateSpec(metadata=pod_metadata,
+                                                  spec=pod_spec)
+        job_spec = client.V1JobSpec(active_deadline_seconds=60, # Max time to terminate job
+                                    ttl_seconds_after_finished=10, # Alfa. Lifetime after finishing (either Complete or Failed)
+                                    backoff_limit=0,
+                                    template=pod_template)
+        job = client.V1Job(api_version="batch/v1",
+                           kind="Job",
+                           metadata=job_metadata,
+                           spec=job_spec)
+
+        # delete previous job if it exists
+        try:
+            try:
+                api_response = self.batchV1_api.delete_namespaced_job(operation_id,
+                                                                      self.rook_env.namespace,
+                                                                      propagation_policy="Background")
+            except ApiException as e:
+                if e.status != 404: # No problem if the job does not exist
+                    raise
+
+            # wait until the job is not present
+            deleted = False
+            retries = 0
+            while not deleted and retries < 10:
+                api_response = self.batchV1_api.list_namespaced_job(self.rook_env.namespace,
+                                                                    label_selector="ident=%s" % operation_id,
+                                                                    timeout_seconds=10)
+                deleted = not api_response.items
+                if retries > 5:
+                    sleep(0.1)
+                ++retries
+            if retries == 10 and not deleted:
+                raise orchestrator.OrchestratorError(
+                    "Light <{}> in <{}:{}> cannot be executed. Cannot delete previous job <{}>".format(
+                            on, loc.host, loc.path or loc.dev, operation_id))
+
+            # create the job
+            api_response = self.batchV1_api.create_namespaced_job(self.rook_env.namespace, job)
+
+            # get the result
+            finished = False
+            while not finished:
+                api_response = self.batchV1_api.read_namespaced_job(operation_id,
+                                                                    self.rook_env.namespace)
+                finished = api_response.status.succeeded or api_response.status.failed
+                if finished:
+                    message = api_response.status.conditions[-1].message
+
+            # get the result of the lsmcli command
+            api_response=self.coreV1_api.list_namespaced_pod(self.rook_env.namespace,
+                                                             label_selector="ident=%s" % operation_id,
+                                                             timeout_seconds=10)
+            if api_response.items:
+                pod_name = api_response.items[-1].metadata.name
+                message = self.coreV1_api.read_namespaced_pod_log(pod_name,
+                                                                  self.rook_env.namespace)
+
+        except ApiException as e:
+            log.exception('K8s API failed. {}'.format(e))
+            raise
+
+        # Finally, delete the job.
+        # The job uses <ttl_seconds_after_finished>. This makes that the TTL controller delete automatically the job.
+        # This feature is in Alpha state, so extra explicit delete operations trying to delete the Job has been used strategically
+        try:
+            api_response = self.batchV1_api.delete_namespaced_job(operation_id,
+                                                                  self.rook_env.namespace,
+                                                                  propagation_policy="Background")
+        except ApiException as e:
+            if e.status != 404: # No problem if the job does not exist
+                raise
+
+        return message
+
+    def blink_light(self, ident_fault, on, locs):
+        # type: (str, bool, List[orchestrator.DeviceLightLoc]) -> List[str]
+        return [self._execute_blight_job(ident_fault, on, loc) for loc in locs]

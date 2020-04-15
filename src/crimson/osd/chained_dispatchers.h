@@ -25,6 +25,6 @@ public:
   seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m) override;
   seastar::future<> ms_handle_accept(crimson::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
   seastar::future<> ms_handle_remote_reset(crimson::net::ConnectionRef conn) override;
 };

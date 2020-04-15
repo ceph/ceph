@@ -63,11 +63,6 @@
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
-template <typename T>
-static ostream& _prefix(std::ostream *_dout, T *pg) {
-  return pg->gen_prefix(*_dout);
-}
-
 
 #include <sstream>
 #include <utility>
@@ -76,7 +71,34 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
+using std::list;
+using std::ostream;
+using std::pair;
+using std::make_pair;
+using std::map;
+using std::ostringstream;
+using std::set;
+using std::string;
+using std::string_view;
+using std::stringstream;
+using std::unique_ptr;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
+using ceph::decode;
+using ceph::decode_noclear;
+using ceph::encode;
+using ceph::encode_destructively;
+
 using namespace ceph::osd::scheduler;
+using TOPNSPC::common::cmd_getval;
+
+template <typename T>
+static ostream& _prefix(std::ostream *_dout, T *pg) {
+  return pg->gen_prefix(*_dout);
+}
 
 /**
  * The CopyCallback class defines an interface for completions to the
@@ -171,7 +193,7 @@ public:
     else
       c.release()->complete(r);
   }
-  bool sync_finish(int r) {
+  bool sync_finish(int r) override {
     // we assume here all blessed/wrapped Contexts can complete synchronously.
     c.release()->complete(r);
     return true;
@@ -453,7 +475,7 @@ void PrimaryLogPG::on_global_recover(
   recovery_state.object_recovered(soid, stat_diff);
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
-  map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
+  auto i = recovering.find(soid);
   ceph_assert(i != recovering.end());
 
   if (i->second && i->second->rwstate.recovery_read_marker) {
@@ -892,7 +914,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
   try {
     decode(type, iter);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     return { -EINVAL, nullptr };
   }
 
@@ -956,7 +978,7 @@ void PrimaryLogPG::do_command(
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
   string format;
-  cmd_getval(cct, cmdmap, "format", format);
+  cmd_getval(cmdmap, "format", format);
   std::unique_ptr<Formatter> f(Formatter::create(
 				 format, "json-pretty", "json-pretty"));
   int ret = 0;
@@ -968,7 +990,7 @@ void PrimaryLogPG::do_command(
   // - ceph tell <pgid> foo -> prefix=foo
   string prefix(orig_prefix);
   string command;
-  cmd_getval(cct, cmdmap, "cmd", command);
+  cmd_getval(cmdmap, "cmd", command);
   if (command.size()) {
     prefix = command;
   }
@@ -994,7 +1016,7 @@ void PrimaryLogPG::do_command(
 
   else if (prefix == "mark_unfound_lost") {
     string mulcmd;
-    cmd_getval(cct, cmdmap, "mulcmd", mulcmd);
+    cmd_getval(cmdmap, "mulcmd", mulcmd);
     int mode = -1;
     if (mulcmd == "revert") {
       if (pool.info.is_erasure()) {
@@ -1040,7 +1062,7 @@ void PrimaryLogPG::do_command(
     hobject_t offset;
     string offset_json;
     bool show_offset = false;
-    if (cmd_getval(cct, cmdmap, "offset", offset_json)) {
+    if (cmd_getval(cmdmap, "offset", offset_json)) {
       json_spirit::Value v;
       try {
 	if (!json_spirit::read(offset_json, v))
@@ -1101,7 +1123,7 @@ void PrimaryLogPG::do_command(
 	   prefix == "deep_scrub") {
     bool deep = (prefix == "deep_scrub");
     int64_t time;
-    cmd_getval(cct, cmdmap, "time", time, (int64_t)0);
+    cmd_getval(cmdmap, "time", time, (int64_t)0);
 
     if (is_primary()) {
       const pg_pool_t *p = &pool.info;
@@ -1179,7 +1201,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	decode(cname, bp);
 	decode(mname, bp);
       }
-      catch (const buffer::error& e) {
+      catch (const ceph::buffer::error& e) {
 	dout(0) << "unable to decode PGLS_FILTER description in " << *m << dendl;
 	result = -EINVAL;
 	break;
@@ -1214,7 +1236,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	try {
 	  decode(response.handle, bp);
 	}
-	catch (const buffer::error& e) {
+	catch (const ceph::buffer::error& e) {
 	  dout(0) << "unable to decode PGNLS handle in " << *m << dendl;
 	  result = -EINVAL;
 	  break;
@@ -1345,7 +1367,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	decode(cname, bp);
 	decode(mname, bp);
       }
-      catch (const buffer::error& e) {
+      catch (const ceph::buffer::error& e) {
 	dout(0) << "unable to decode PGLS_FILTER description in " << *m << dendl;
 	result = -EINVAL;
 	break;
@@ -1379,7 +1401,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	try {
 	  decode(response.handle, bp);
 	}
-	catch (const buffer::error& e) {
+	catch (const ceph::buffer::error& e) {
 	  dout(0) << "unable to decode PGLS handle in " << *m << dendl;
 	  result = -EINVAL;
 	  break;
@@ -1555,7 +1577,7 @@ int PrimaryLogPG::do_scrub_ls(const MOSDOp *m, OSDOp *osd_op)
   scrub_ls_arg_t arg;
   try {
     arg.decode(bp);
-  } catch (buffer::error&) {
+  } catch (ceph::buffer::error&) {
     dout(10) << " corrupted scrub_ls_arg_t" << dendl;
     return -EINVAL;
   }
@@ -1799,13 +1821,9 @@ void PrimaryLogPG::do_request(
 hobject_t PrimaryLogPG::earliest_backfill() const
 {
   hobject_t e = hobject_t::get_max();
-  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
-       i != get_backfill_targets().end();
-       ++i) {
-    pg_shard_t bt = *i;
+  for (const pg_shard_t& bt : get_backfill_targets()) {
     const pg_info_t &pi = recovery_state.get_peer_info(bt);
-    if (pi.last_backfill < e)
-      e = pi.last_backfill;
+    e = std::min(pi.last_backfill, e);
   }
   return e;
 }
@@ -2567,11 +2585,11 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       object_t fp_oid = [fp_algo, &chunk_data]() -> string {
         switch (fp_algo) {
 	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
-	  return crypto::digest<crypto::SHA1>(chunk_data).to_str();
+	  return ceph::crypto::digest<ceph::crypto::SHA1>(chunk_data).to_str();
 	case pg_pool_t::TYPE_FINGERPRINT_SHA256:
-	  return crypto::digest<crypto::SHA256>(chunk_data).to_str();
+	  return ceph::crypto::digest<ceph::crypto::SHA256>(chunk_data).to_str();
 	case pg_pool_t::TYPE_FINGERPRINT_SHA512:
-	  return crypto::digest<crypto::SHA512>(chunk_data).to_str();
+	  return ceph::crypto::digest<ceph::crypto::SHA512>(chunk_data).to_str();
 	default:
 	  assert(0 == "unrecognized fingerprint type");
 	  return {};
@@ -2579,12 +2597,12 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       }();
       bufferlist in;
       if (fp_oid != tgt_soid.oid) {
-	// decrement old chunk's reference count 
+	// decrement old chunk's reference count
 	ObjectOperation dec_op;
 	cls_chunk_refcount_put_op put_call;
 	put_call.source = soid;
-	::encode(put_call, in);                             
-	dec_op.call("cas", "chunk_put", in);         
+	::encode(put_call, in);
+	dec_op.call("cas", "chunk_put", in);
 	// we don't care dec_op's completion. scrub for dedup will fix this.
 	tid = osd->objecter->mutate(
 	  tgt_soid.oid, oloc, dec_op, snapc,
@@ -3025,8 +3043,9 @@ struct C_ProxyChunkRead : public Context {
 	} else {
 	  copy_offset = 0;
 	}
-	prdop->ops[op_index].outdata.copy_in(copy_offset, obj_op->ops[0].outdata.length(),
-					     obj_op->ops[0].outdata.c_str());
+	prdop->ops[op_index].outdata.begin(copy_offset).copy_in(
+          obj_op->ops[0].outdata.length(),
+          obj_op->ops[0].outdata.c_str());
       } 	
       
       pg->finish_proxy_read(oid, tid, r);
@@ -4186,7 +4205,7 @@ void PrimaryLogPG::do_scan(
 
       // take care to preserve ordering!
       bi.clear_objects();
-      ::decode_noclear(bi.objects, p);
+      decode_noclear(bi.objects, p);
 
       if (waiting_on_backfill.erase(from)) {
 	if (waiting_on_backfill.empty()) {
@@ -4871,7 +4890,7 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDO
 	decode(op, bp);
 	decode(key, bp);
       }
-      catch (buffer::error& e) {
+      catch (ceph::buffer::error& e) {
 	return -EINVAL;
       }
       if (key < last_in_key) {
@@ -4914,7 +4933,7 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDO
 	try {
 	  decode(val, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  return -EINVAL;
 	}
 	encode(key, newkeydata);
@@ -4929,7 +4948,7 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDO
 	try {
 	  decode(val, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  return -EINVAL;
 	}
 	encode(key, newkeydata);
@@ -5067,7 +5086,7 @@ struct ToSparseReadResult : public Context {
     bufferlist outdata;
     map<uint64_t, uint64_t> extents = {{data_offset, r}};
     encode(extents, outdata);
-    ::encode_destructively(*data_bl, outdata);
+    encode_destructively(*data_bl, outdata);
     data_bl->swap(outdata);
   }
 };
@@ -5226,7 +5245,7 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
   bufferlist init_value_bl;
   init_value_bl.substr_of(bl_it->get_bl(), bl_it->get_off(),
 			  csum_init_value_size);
-  bl_it->advance(csum_init_value_size);
+  *bl_it += csum_init_value_size;
 
   if (pool.info.is_erasure() && op.checksum.length > 0) {
     // If there is a data digest and it is possible we are reading
@@ -5299,7 +5318,7 @@ int PrimaryLogPG::finish_checksum(OSDOp& osd_op,
   bufferptr csum_data;
   if (csum_count > 0) {
     size_t csum_value_size = Checksummer::get_csum_value_size(csum_type);
-    csum_data = buffer::create(csum_value_size * csum_count);
+    csum_data = ceph::buffer::create(csum_value_size * csum_count);
     csum_data.zero();
     csum.append(csum_data);
 
@@ -5592,7 +5611,6 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   } else {
     // read into a buffer
     map<uint64_t, uint64_t> m;
-    uint32_t total_read = 0;
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 					      info.pgid.shard),
 			       op.extent.offset, op.extent.length, m);
@@ -5627,7 +5645,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       }
     }
 
-    op.extent.length = total_read;
+    op.extent.length = r;
 
     encode(m, osd_op.outdata); // re-encode since it might be modified
     ::encode_destructively(data_bl, osd_op.outdata);
@@ -5824,7 +5842,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  bp.copy(op.cls.class_len, cname);
 	  bp.copy(op.cls.method_len, mname);
 	  bp.copy(op.cls.indata_len, indata);
-	} catch (buffer::error& e) {
+	} catch (ceph::buffer::error& e) {
 	  dout(10) << "call unable to decode class + method + indata" << dendl;
 	  dout(30) << "in dump: ";
 	  osd_op.indata.hexdump(*_dout);
@@ -6111,7 +6129,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    try {
 	      decode(u64val, bp);
 	    }
-	    catch (buffer::error& e) {
+	    catch (ceph::buffer::error& e) {
 	      result = -EINVAL;
 	      goto fail;
 	    }
@@ -6282,7 +6300,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           decode(ver, bp);
 	  decode(timeout, bp);
           decode(bl, bp);
-	} catch (const buffer::error &e) {
+	} catch (const ceph::buffer::error &e) {
 	  timeout = 0;
 	}
 	tracepoint(osd, do_osd_op_pre_notify, soid.oid.name.c_str(), soid.snap.val, timeout);
@@ -6316,7 +6334,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  tracepoint(osd, do_osd_op_pre_notify_ack, soid.oid.name.c_str(), soid.snap.val, notify_id, watch_cookie, "Y");
 	  OpContext::NotifyAck ack(notify_id, watch_cookie, reply_bl);
 	  ctx->notify_acks.push_back(ack);
-	} catch (const buffer::error &e) {
+	} catch (const ceph::buffer::error &e) {
 	  tracepoint(osd, do_osd_op_pre_notify_ack, soid.oid.name.c_str(), soid.snap.val, op.watch.cookie, 0, "N");
 	  OpContext::NotifyAck ack(
 	    // op.watch.cookie is actually the notify_id for historical reasons
@@ -6551,7 +6569,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    try {
 	      decode(category, p);
 	    }
-	    catch (buffer::error& e) {
+	    catch (ceph::buffer::error& e) {
 	      result = -EINVAL;
 	      goto fail;
 	    }
@@ -6811,7 +6829,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  decode(target_name, bp);
 	  decode(target_oloc, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  goto fail;
 	}
@@ -6920,7 +6938,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  decode(tgt_name, bp);
 	  decode(tgt_offset, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  goto fail;
 	}
@@ -7329,7 +7347,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  decode(start_after, bp);
 	  decode(max_return, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, "???", 0);
 	  goto fail;
@@ -7376,7 +7394,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  decode(max_return, bp);
 	  decode(filter_prefix, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, "???", 0, "???");
 	  goto fail;
@@ -7442,7 +7460,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	try {
 	  decode(keys_to_get, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
@@ -7470,7 +7488,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	try {
 	  decode(assertions, bp);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omap_cmp, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
@@ -7548,7 +7566,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	try {
 	  decode_str_str_map_to_bl(bp, &to_set_bl);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val);
 	  goto fail;
@@ -7633,7 +7651,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	try {
 	  decode_str_set_to_bl(bp, &to_rm_bl);
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val);
 	  goto fail;
@@ -7663,7 +7681,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	try {
 	  decode(key_begin, bp);
 	  decode(key_end, bp);
-	} catch (buffer::error& e) {
+	} catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  goto fail;
 	}
@@ -7715,7 +7733,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    have_truncate = true;
 	  }
 	}
-	catch (buffer::error& e) {
+	catch (ceph::buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd,
 		     do_osd_op_pre_copy_from,
@@ -8780,7 +8798,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
     decode(cursor, bp);
     decode(out_max, bp);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     result = -EINVAL;
     return result;
   }
@@ -10506,14 +10524,8 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
-  const MOSDOp *m = NULL;
-  if (repop->op)
-    m = repop->op->get_req<MOSDOp>();
-
-  if (m)
-    dout(10) << "eval_repop " << *repop << dendl;
-  else
-    dout(10) << "eval_repop " << *repop << " (no op)" << dendl;
+  dout(10) << "eval_repop " << *repop
+    << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)") << dendl;
 
   // ondisk?
   if (repop->all_committed) {
@@ -10597,7 +10609,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     std::move(ctx->op_t),
     recovery_state.get_pg_trim_to(),
     recovery_state.get_min_last_complete_ondisk(),
-    ctx->log,
+    std::move(ctx->log),
     ctx->updated_hset_history,
     on_all_commit,
     repop->rep_tid,
@@ -11440,7 +11452,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
       bufferlist::const_iterator bvp = bv.begin();
       try {
 	ssc->snapset.decode(bvp);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
         dout(0) << __func__ << " Can't decode snapset: " << e << dendl;
 	return NULL;
       }
@@ -12919,15 +12931,10 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 hobject_t PrimaryLogPG::earliest_peer_backfill() const
 {
   hobject_t e = hobject_t::get_max();
-  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
-       i != get_backfill_targets().end();
-       ++i) {
-    pg_shard_t peer = *i;
-    map<pg_shard_t, BackfillInterval>::const_iterator iter =
-      peer_backfill_info.find(peer);
+  for (const pg_shard_t& peer : get_backfill_targets()) {
+    const auto iter = peer_backfill_info.find(peer);
     ceph_assert(iter != peer_backfill_info.end());
-    if (iter->second.begin < e)
-      e = iter->second.begin;
+    e = std::min(e, iter->second.begin);
   }
   return e;
 }
@@ -12937,12 +12944,8 @@ bool PrimaryLogPG::all_peer_done() const
   // Primary hasn't got any more objects
   ceph_assert(backfill_info.empty());
 
-  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
-       i != get_backfill_targets().end();
-       ++i) {
-    pg_shard_t bt = *i;
-    map<pg_shard_t, BackfillInterval>::const_iterator piter =
-      peer_backfill_info.find(bt);
+  for (const pg_shard_t& bt : get_backfill_targets()) {
+    const auto piter = peer_backfill_info.find(bt);
     ceph_assert(piter != peer_backfill_info.end());
     const BackfillInterval& pbi = piter->second;
     // See if peer has more to process
@@ -13537,11 +13540,11 @@ hobject_t PrimaryLogPG::get_hit_set_archive_object(utime_t start,
   ostringstream ss;
   ss << "hit_set_" << info.pgid.pgid << "_archive_";
   if (using_gmt) {
-    start.gmtime(ss) << "_";
-    end.gmtime(ss);
+    start.gmtime(ss, true /* legacy pre-octopus form */) << "_";
+    end.gmtime(ss, true /* legacy pre-octopus form */);
   } else {
-    start.localtime(ss) << "_";
-    end.localtime(ss);
+    start.localtime(ss, true /* legacy pre-octopus form */) << "_";
+    end.localtime(ss, true /* legacy pre-octopus form */);
   }
   hobject_t hoid(sobject_t(ss.str(), CEPH_NOSNAP), "",
 		 info.pgid.ps(), info.pgid.pool(),
@@ -14777,7 +14780,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       try {
 	oi = object_info_t(); // Initialize optional<> before decode into it
 	oi->decode(bv);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
 	oi = std::nullopt;
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
 		<< " : can't decode '" << OI_ATTR << "' attr " << e.what();
@@ -14905,7 +14908,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	  snapset = SnapSet(); // Initialize optional<> before decoding into it
 	  decode(*snapset, blp);
           head_error.ss_bl.push_back(p->second.attrs[SS_ATTR]);
-        } catch (buffer::error& e) {
+        } catch (ceph::buffer::error& e) {
 	  snapset = std::nullopt;
           osd->clog->error() << mode << " " << info.pgid << " " << soid
 		<< " : can't decode '" << SS_ATTR << "' attr " << e.what();

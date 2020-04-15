@@ -5,7 +5,7 @@ try:
 except ImportError:
     from unittest import mock
 
-from orchestrator import InventoryNode
+from orchestrator import HostSpec
 
 from . import ControllerTestCase
 from ..controllers.host import get_hosts, Host
@@ -80,7 +80,7 @@ class TestHosts(unittest.TestCase):
         fake_client = mock.Mock()
         fake_client.available.return_value = True
         fake_client.hosts.list.return_value = [
-            InventoryNode('node1'), InventoryNode('node2')]
+            HostSpec('node1'), HostSpec('node2')]
         instance.return_value = fake_client
 
         hosts = get_hosts()

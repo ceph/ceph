@@ -23,7 +23,7 @@ export class MgrModuleFormComponent implements OnInit {
   error = false;
   loading = false;
   moduleName = '';
-  moduleOptions = [];
+  moduleOptions: any[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -58,7 +58,7 @@ export class MgrModuleFormComponent implements OnInit {
     });
   }
 
-  getValidators(moduleOption): ValidatorFn[] {
+  getValidators(moduleOption: any): ValidatorFn[] {
     const result = [];
     switch (moduleOption.type) {
       case 'addr':

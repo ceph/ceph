@@ -62,7 +62,7 @@ export class SilenceMatcherModalComponent {
     });
   }
 
-  private setPossibleValues(name) {
+  private setPossibleValues(name: string) {
     this.possibleValues = _.sortedUniq(
       this.rules.map((r) => _.get(r, this.silenceMatcher.getAttributePath(name))).filter((x) => x)
     );

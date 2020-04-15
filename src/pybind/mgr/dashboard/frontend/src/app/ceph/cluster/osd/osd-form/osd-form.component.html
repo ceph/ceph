@@ -1,13 +1,6 @@
-<cd-loading-panel *ngIf="loading"
-                  i18n>Loading...</cd-loading-panel>
-<cd-alert-panel type="info"
-                *ngIf="!orchestratorExist && !checkingOrchestrator"
-                i18n>Please consult the
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  configure and enable the orchestrator functionality.</cd-alert-panel>
-<div class="col-sm-10"
-     *ngIf="!loading && orchestratorExist">
+<cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
+<div class="cd-col-form"
+     *ngIf="!loading && hasOrchestrator">
   <form name="form"
         #formDir="ngForm"
         [formGroup]="form"
@@ -44,7 +37,7 @@
           <!-- WAL slots -->
           <div class="form-group row"
                *ngIf="walDeviceSelectionGroups.devices.length !== 0">
-            <label class="col-sm-3 col-form-label"
+            <label class="cd-col-form-label"
                    for="walSlots">
               <ng-container i18n>WAL slots</ng-container>
               <cd-helper>
@@ -53,7 +46,7 @@
                 <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="walSlots"
                      name="walSlots"
@@ -79,7 +72,7 @@
           <!-- DB slots -->
           <div class="form-group row"
                *ngIf="dbDeviceSelectionGroups.devices.length !== 0">
-            <label class="col-sm-3 col-form-label"
+            <label class="cd-col-form-label"
                    for="dbSlots">
               <ng-container i18n>DB slots</ng-container>
               <cd-helper>
@@ -88,7 +81,7 @@
                 <span i18n>Specify 0 to let Orchestrator backend decide it.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="dbSlots"
                      name="dbSlots"
@@ -110,9 +103,9 @@
           <div class="form-group row"
                formGroupName="features">
             <label i18n
-                   class="col-sm-3 col-form-label"
+                   class="cd-col-form-label"
                    for="features">Features</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="custom-control custom-checkbox"
                    *ngFor="let feature of featureList">
                 <input type="checkbox"
@@ -128,7 +121,7 @@
         </fieldset>
       </div>
       <div class="card-footer">
-        <div class="button-group text-right">
+        <div class="text-right">
           <cd-submit-button #previewButton
                             (submitAction)="submit()"
                             i18n

@@ -1,6 +1,6 @@
 <!-- button -->
 <div class="form-group row">
-  <label class="col-sm-3 col-form-label"
+  <label class="cd-col-form-label"
          for="createDeleteButton">
     <ng-container i18n>{{ name }} devices</ng-container>
     <cd-helper>
@@ -12,11 +12,13 @@
             *ngIf="type === 'db'">DB devices can be used for storing BlueStore’s internal metadata.  It is only helpful to provision a DB device if it is faster than the primary device (e.g. NVME devices or SSD).</span>
     </cd-helper>
   </label>
-  <div class="col-sm-9">
+  <div class="cd-col-form-input">
     <ng-container *ngIf="devices.length === 0; else blockClearDevices">
       <button type="button"
               class="btn btn-light"
               (click)="showSelectionModal()"
+              data-toggle="tooltip"
+              [title]="addButtonTooltip"
               [disabled]="availDevices.length === 0 || !canSelect">
         <i [ngClass]="[icons.add]"></i>
         <ng-container i18n>Add</ng-container>
@@ -25,7 +27,7 @@
     <ng-template #blockClearDevices>
       <div class="pb-2 my-2 border-bottom">
         <span *ngFor="let filter of appliedFilters">
-          <span class="badge badge-dark mr-2">{{ filter.label }}: {{ filter.formatValue }}</span>
+          <span class="badge badge-dark mr-2">{{ filter.name }}: {{ filter.value.formatted }}</span>
         </span>
         <a class="tc_clearSelections"
            href=""
@@ -36,9 +38,13 @@
       </div>
       <div>
         <cd-inventory-devices [devices]="devices"
-                              [hiddenColumns]="['available']"
+                              [hiddenColumns]="['available', 'osd_ids']"
                               [filterColumns]="[]">
         </cd-inventory-devices>
+      </div>
+      <div *ngIf="type === 'data'"
+           class="float-right">
+        <span i18n>Raw capacity: {{ capacity | dimlessBinary }}</span>
       </div>
     </ng-template>
   </div>

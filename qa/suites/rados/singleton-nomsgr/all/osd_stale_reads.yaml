@@ -13,6 +13,7 @@ overrides:
       - \(PG_AVAILABILITY\)
       - \(PG_DEGRADED\)
       - application not enabled
+      - slow request
     conf:
       osd:
         osd scrub backoff ratio: 0
@@ -21,6 +22,8 @@ overrides:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
 - exec:
     client.0:
       - ceph_test_osd_stale_read

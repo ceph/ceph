@@ -65,8 +65,8 @@ struct Mock {
     s_instance = this;
   }
 
-  MOCK_METHOD4(can_create_primary_snapshot,
-               bool(librbd::MockTestImageCtx *, bool, bool, uint64_t *));
+  MOCK_METHOD5(can_create_primary_snapshot,
+               bool(librbd::MockTestImageCtx *, bool, bool, bool*, uint64_t *));
 };
 
 Mock *Mock::s_instance = nullptr;
@@ -75,9 +75,11 @@ Mock *Mock::s_instance = nullptr;
 
 template<> bool can_create_primary_snapshot(librbd::MockTestImageCtx *image_ctx,
                                             bool demoted, bool force,
+                                            bool* requires_orphan,
                                             uint64_t *rollback_snap_id) {
   return Mock::s_instance->can_create_primary_snapshot(image_ctx, demoted,
-                                                       force, rollback_snap_id);
+                                                       force, requires_orphan,
+                                                       rollback_snap_id);
 }
 
 } // namespace util
@@ -89,8 +91,10 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
   Context* on_finish = nullptr;
   static CreateNonPrimaryRequest* s_instance;
   static CreateNonPrimaryRequest *create(MockTestImageCtx *image_ctx,
+                                         bool demoted,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
+                                         SnapSeqs snap_seqs,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
@@ -116,12 +120,13 @@ struct CreatePrimaryRequest<MockTestImageCtx> {
   bool force = false;
   Context* on_finish = nullptr;
   static CreatePrimaryRequest* s_instance;
-  static CreatePrimaryRequest *create(MockTestImageCtx *image_ctx, bool demoted,
-                                      bool force, uint64_t *snap_id,
+  static CreatePrimaryRequest *create(MockTestImageCtx *image_ctx,
+                                      const std::string& global_image_id,
+                                      uint32_t flags, uint64_t *snap_id,
                                       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
-    s_instance->demoted = demoted;
-    s_instance->force = force;
+    s_instance->demoted = ((flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0);
+    s_instance->force = ((flags & CREATE_PRIMARY_FLAG_FORCE) != 0);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -154,6 +159,7 @@ using ::testing::Invoke;
 using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
+using ::testing::WithArgs;
 
 class TestMockMirrorSnapshotPromoteRequest : public TestMockFixture {
 public:
@@ -163,25 +169,19 @@ public:
   typedef CreatePrimaryRequest<MockTestImageCtx> MockCreatePrimaryRequest;
   typedef util::Mock MockUtils;
 
-  void expect_refresh_image(MockTestImageCtx &mock_image_ctx,
-                            bool refresh_required, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, is_refresh_required())
-      .WillOnce(Return(refresh_required));
-    if (refresh_required) {
-      EXPECT_CALL(*mock_image_ctx.state, refresh(_))
-        .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
-    }
-  }
-
   void expect_can_create_primary_snapshot(MockUtils &mock_utils, bool force,
+                                          bool requires_orphan,
                                           uint64_t rollback_snap_id,
                                           bool result) {
     EXPECT_CALL(mock_utils,
-                can_create_primary_snapshot(_, false, force, _))
+                can_create_primary_snapshot(_, false, force, _, _))
       .WillOnce(DoAll(
-                  WithArg<3>(Invoke([rollback_snap_id](uint64_t *snap_id) {
-                                      *snap_id = rollback_snap_id;
-                                    })),
+                  WithArgs<3,4 >(Invoke(
+                    [requires_orphan, rollback_snap_id]
+                    (bool* orphan, uint64_t *snap_id) {
+                      *orphan = requires_orphan;
+                      *snap_id = rollback_snap_id;
+                    })),
                   Return(result)));
   }
 
@@ -269,18 +269,54 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, Success) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
 
-  const bool force = false;
-
   InSequence seq;
 
-  expect_refresh_image(mock_image_ctx, true, 0);
   MockUtils mock_utils;
-  expect_can_create_primary_snapshot(mock_utils, true, CEPH_NOSNAP, true);
+  expect_can_create_primary_snapshot(mock_utils, true, false, CEPH_NOSNAP,
+                                     true);
   MockCreatePrimaryRequest mock_create_primary_request;
   expect_create_promote_snapshot(mock_image_ctx, mock_create_primary_request,
                                  0);
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, force, &ctx);
+  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessForce) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
+  InSequence seq;
+
+  MockUtils mock_utils;
+  expect_can_create_primary_snapshot(mock_utils, true, true, CEPH_NOSNAP, true);
+  MockCreateNonPrimaryRequest mock_create_non_primary_request;
+  expect_create_orphan_snapshot(mock_image_ctx, mock_create_non_primary_request,
+                                0);
+  MockListWatchersRequest mock_list_watchers_request;
+  expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
+  expect_acquire_lock(mock_image_ctx, 0);
+
+  SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
+                        {}, 0, 0, {}};
+  MockCreatePrimaryRequest mock_create_primary_request;
+  expect_create_promote_snapshot(mock_image_ctx, mock_create_primary_request,
+                                 0);
+  expect_release_lock(mock_image_ctx, 0);
+
+  C_SaferCond ctx;
+  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -299,13 +335,10 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
     mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
   }
 
-  const bool force = true;
-
   InSequence seq;
 
-  expect_refresh_image(mock_image_ctx, true, 0);
   MockUtils mock_utils;
-  expect_can_create_primary_snapshot(mock_utils, true, 123, true);
+  expect_can_create_primary_snapshot(mock_utils, true, false, 123, true);
   MockCreateNonPrimaryRequest mock_create_non_primary_request;
   expect_create_orphan_snapshot(mock_image_ctx, mock_create_non_primary_request,
                                 0);
@@ -313,7 +346,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
   expect_list_watchers(mock_image_ctx, mock_list_watchers_request, {}, 0);
   expect_acquire_lock(mock_image_ctx, 0);
 
-  SnapInfo snap_info = {"snap", cls::rbd::MirrorPrimarySnapshotNamespace{}, 0,
+  SnapInfo snap_info = {"snap", cls::rbd::MirrorSnapshotNamespace{}, 0,
                         {}, 0, 0, {}};
   expect_rollback(mock_image_ctx, 123, &snap_info, 0);
   MockCreatePrimaryRequest mock_create_primary_request;
@@ -322,27 +355,9 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
   expect_release_lock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, force, &ctx);
+  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
-}
-
-TEST_F(TestMockMirrorSnapshotPromoteRequest, RefreshError) {
-  REQUIRE_FORMAT_V2();
-
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockTestImageCtx mock_image_ctx(*ictx);
-
-  InSequence seq;
-
-  expect_refresh_image(mock_image_ctx, true, -EINVAL);
-
-  C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, false, &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 TEST_F(TestMockMirrorSnapshotPromoteRequest, ErrorCannotRollback) {
@@ -354,16 +369,14 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, ErrorCannotRollback) {
   MockTestImageCtx mock_image_ctx(*ictx);
   expect_op_work_queue(mock_image_ctx);
 
-  const bool force = false;
-
   InSequence seq;
 
-  expect_refresh_image(mock_image_ctx, true, 0);
   MockUtils mock_utils;
-  expect_can_create_primary_snapshot(mock_utils, true, CEPH_NOSNAP, false);
+  expect_can_create_primary_snapshot(mock_utils, true, false, CEPH_NOSNAP,
+                                     false);
 
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, force, &ctx);
+  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }

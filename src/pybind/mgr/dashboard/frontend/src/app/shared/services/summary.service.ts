@@ -1,46 +1,42 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, NgZone } from '@angular/core';
-import { Router } from '@angular/router';
+import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import { BehaviorSubject, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 
 import { ExecutingTask } from '../models/executing-task';
+import { TimerService } from './timer.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class SummaryService {
+  readonly REFRESH_INTERVAL = 5000;
   // Observable sources
   private summaryDataSource = new BehaviorSubject(null);
-
   // Observable streams
   summaryData$ = this.summaryDataSource.asObservable();
 
-  polling: number;
+  constructor(private http: HttpClient, private timerService: TimerService) {}
 
-  constructor(private http: HttpClient, private router: Router, private ngZone: NgZone) {
-    this.enablePolling();
+  startPolling(): Subscription {
+    return this.timerService
+      .get(() => this.retrieveSummaryObservable(), this.REFRESH_INTERVAL)
+      .subscribe(this.retrieveSummaryObserver());
   }
 
-  enablePolling() {
-    this.refresh();
-
-    this.ngZone.runOutsideAngular(() => {
-      this.polling = window.setInterval(() => {
-        this.ngZone.run(() => {
-          this.refresh();
-        });
-      }, 5000);
-    });
+  refresh(): Subscription {
+    return this.retrieveSummaryObservable().subscribe(this.retrieveSummaryObserver());
   }
 
-  refresh() {
-    if (this.router.url !== '/login') {
-      this.http.get('api/summary').subscribe((data) => {
-        this.summaryDataSource.next(data);
-      });
-    }
+  private retrieveSummaryObservable(): Observable<Object> {
+    return this.http.get('api/summary');
+  }
+
+  private retrieveSummaryObserver(): (data: any) => void {
+    return (data: Object) => {
+      this.summaryDataSource.next(data);
+    };
   }
 
   /**
@@ -52,7 +48,7 @@ export class SummaryService {
 
   /**
    * Subscribes to the summaryData,
-   * which is updated once every 5 seconds or when a new task is created.
+   * which is updated periodically or when a new task is created.
    */
   subscribe(next: (summary: any) => void, error?: (error: any) => void): Subscription {
     return this.summaryData$.subscribe(next, error);
@@ -70,7 +66,7 @@ export class SummaryService {
     }
 
     if (_.isArray(current.executing_tasks)) {
-      const exists = current.executing_tasks.find((element) => {
+      const exists = current.executing_tasks.find((element: any) => {
         return element.name === task.name && _.isEqual(element.metadata, task.metadata);
       });
       if (!exists) {

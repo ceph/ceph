@@ -1,15 +1,9 @@
 from __future__ import print_function
 import argparse
-import base64
 import json
 import logging
-import os
 from textwrap import dedent
-from ceph_volume import decorators, terminal, conf, process
-from ceph_volume.api import lvm
-from ceph_volume.systemd import systemctl
-from ceph_volume.util import arg_validators, system, disk, encryption
-from ceph_volume.util.device import Device
+from ceph_volume import decorators, process
 
 
 logger = logging.getLogger(__name__)
@@ -40,16 +34,14 @@ class List(object):
                 'lsblk', '--paths', '--nodeps', '--output=NAME', '--noheadings'
             ])
             assert not ret
-            r = json.loads(''.join(out))
-            for dev in r.get('blockdevices', []):
-                devs.append('/dev/' + dev['name'])
+            devs = out
         result = {}
         for dev in devs:
             logger.debug('Examining %s' % dev)
             # bluestore?
             out, err, ret = process.call([
                 'ceph-bluestore-tool', 'show-label',
-                '--dev', dev])
+                '--dev', dev], verbose_on_failure=False)
             if ret:
                 logger.debug('No label on %s' % dev)
                 continue

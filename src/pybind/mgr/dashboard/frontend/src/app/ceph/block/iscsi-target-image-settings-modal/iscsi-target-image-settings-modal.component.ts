@@ -26,7 +26,7 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
   constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
 
   ngOnInit() {
-    const fg = {
+    const fg: Record<string, FormControl> = {
       backstore: new FormControl(this.imagesSettings[this.image]['backstore']),
       lun: new FormControl(this.imagesSettings[this.image]['lun']),
       wwn: new FormControl(this.imagesSettings[this.image]['wwn'])
@@ -41,7 +41,7 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
     this.settingsForm = new CdFormGroup(fg);
   }
 
-  getDiskControlLimits(backstore, setting) {
+  getDiskControlLimits(backstore: string, setting: string) {
     if (this.disk_controls_limits) {
       return this.disk_controls_limits[backstore][setting];
     }

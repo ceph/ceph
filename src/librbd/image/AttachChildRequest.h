@@ -4,10 +4,10 @@
 #ifndef CEPH_LIBRBD_IMAGE_ATTACH_CHILD_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_ATTACH_CHILD_REQUEST_H
 
+#include "include/common_fwd.h"
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 
-class CephContext;
 class Context;
 
 namespace librbd {

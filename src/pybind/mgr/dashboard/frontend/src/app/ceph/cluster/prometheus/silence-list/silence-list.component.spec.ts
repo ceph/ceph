@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -28,6 +29,7 @@ describe('SilenceListComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       SharedModule,
       BsDropdownModule.forRoot(),
       TabsModule.forRoot(),
@@ -105,7 +107,7 @@ describe('SilenceListComponent', () => {
       deletion.callSubmitAction();
     };
 
-    const expectSilenceToExpire = (silenceId) => {
+    const expectSilenceToExpire = (silenceId: string) => {
       setSelectedSilence(silenceId);
       expireSilence();
       expect(prometheusService.expireSilence).toHaveBeenCalledWith(silenceId);

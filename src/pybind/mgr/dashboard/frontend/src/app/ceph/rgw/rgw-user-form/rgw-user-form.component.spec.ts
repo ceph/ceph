@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
@@ -13,6 +14,8 @@ import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
+import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 
@@ -29,7 +32,8 @@ describe('RgwUserFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      TooltipModule.forRoot()
     ],
     providers: [BsModalService, i18nProviders]
   });
@@ -172,6 +176,97 @@ describe('RgwUserFormComponent', () => {
     }));
   });
 
+  describe('max buckets', () => {
+    it('disable creation (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', -1, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: -1,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('disable creation (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', -1, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: -1,
+        suspended: false
+      });
+    });
+
+    it('unlimited buckets (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', 0, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 0,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('unlimited buckets (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', 0, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 0,
+        suspended: false
+      });
+    });
+
+    it('custom (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', 1, true);
+      formHelper.setValue('max_buckets', 100, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 100,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('custom (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', 1, true);
+      formHelper.setValue('max_buckets', 100, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 100,
+        suspended: false
+      });
+    });
+  });
+
   describe('submit form', () => {
     let notificationService: NotificationService;
 
@@ -214,6 +309,33 @@ describe('RgwUserFormComponent', () => {
         NotificationType.success,
         'Updated Object Gateway user ""'
       );
+    });
+  });
+
+  describe('RgwUserCapabilities', () => {
+    it('capability button disabled when all capabilities are added', () => {
+      component.editing = true;
+      for (const capabilityType of RgwUserCapabilities.getAll()) {
+        const capability = new RgwUserCapability();
+        capability.type = capabilityType;
+        capability.perm = 'read';
+        component.setCapability(capability);
+      }
+
+      fixture.detectChanges();
+
+      expect(component.hasAllCapabilities()).toBeTruthy();
+      const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
+      expect(capabilityButton.disabled).toBeTruthy();
+    });
+
+    it('capability button not disabled when not all capabilities are added', () => {
+      component.editing = true;
+
+      fixture.detectChanges();
+
+      const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
+      expect(capabilityButton.disabled).toBeFalsy();
     });
   });
 });

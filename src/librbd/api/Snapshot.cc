@@ -99,11 +99,11 @@ public:
   }
 };
 
-class GetMirrorPrimaryVisitor : public boost::static_visitor<int> {
+class GetMirrorVisitor : public boost::static_visitor<int> {
 public:
-  snap_mirror_primary_namespace_t *mirror_snap;
+  snap_mirror_namespace_t *mirror_snap;
 
-  explicit GetMirrorPrimaryVisitor(snap_mirror_primary_namespace_t *mirror_snap)
+  explicit GetMirrorVisitor(snap_mirror_namespace_t *mirror_snap)
     : mirror_snap(mirror_snap) {
   }
 
@@ -113,32 +113,12 @@ public:
   }
 
   inline int operator()(
-      const cls::rbd::MirrorPrimarySnapshotNamespace& snap_namespace) {
-    mirror_snap->demoted = snap_namespace.demoted;
+      const cls::rbd::MirrorSnapshotNamespace& snap_namespace) {
+    mirror_snap->state = static_cast<snap_mirror_state_t>(snap_namespace.state);
+    mirror_snap->complete = snap_namespace.complete;
     mirror_snap->mirror_peer_uuids = snap_namespace.mirror_peer_uuids;
-    return 0;
-  }
-};
-
-class GetMirrorNonPrimaryVisitor : public boost::static_visitor<int> {
-public:
-  snap_mirror_non_primary_namespace_t *mirror_snap;
-
-  explicit GetMirrorNonPrimaryVisitor(
-      snap_mirror_non_primary_namespace_t *mirror_snap)
-    : mirror_snap(mirror_snap) {
-  }
-
-  template <typename T>
-  inline int operator()(const T&) const {
-    return -EINVAL;
-  }
-
-  inline int operator()(
-      const cls::rbd::MirrorNonPrimarySnapshotNamespace& snap_namespace) {
     mirror_snap->primary_mirror_uuid = snap_namespace.primary_mirror_uuid;
     mirror_snap->primary_snap_id = snap_namespace.primary_snap_id;
-    mirror_snap->copied = snap_namespace.copied;
     mirror_snap->last_copied_object_number =
       snap_namespace.last_copied_object_number;
     return 0;
@@ -194,8 +174,8 @@ int Snapshot<I>::get_trash_namespace(I *ictx, uint64_t snap_id,
 }
 
 template <typename I>
-int Snapshot<I>::get_mirror_primary_namespace(
-    I *ictx, uint64_t snap_id, snap_mirror_primary_namespace_t *mirror_snap) {
+int Snapshot<I>::get_mirror_namespace(
+    I *ictx, uint64_t snap_id, snap_mirror_namespace_t *mirror_snap) {
   int r = ictx->state->refresh_if_required();
   if (r < 0) {
     return r;
@@ -207,31 +187,7 @@ int Snapshot<I>::get_mirror_primary_namespace(
     return -ENOENT;
   }
 
-  auto gmv = GetMirrorPrimaryVisitor(mirror_snap);
-  r = boost::apply_visitor(gmv, snap_info->snap_namespace);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-template <typename I>
-int Snapshot<I>::get_mirror_non_primary_namespace(
-    I *ictx, uint64_t snap_id,
-    snap_mirror_non_primary_namespace_t *mirror_snap) {
-  int r = ictx->state->refresh_if_required();
-  if (r < 0) {
-    return r;
-  }
-
-  std::shared_lock image_locker{ictx->image_lock};
-  auto snap_info = ictx->get_snap_info(snap_id);
-  if (snap_info == nullptr) {
-    return -ENOENT;
-  }
-
-  auto gmv = GetMirrorNonPrimaryVisitor(mirror_snap);
+  auto gmv = GetMirrorVisitor(mirror_snap);
   r = boost::apply_visitor(gmv, snap_info->snap_namespace);
   if (r < 0) {
     return r;

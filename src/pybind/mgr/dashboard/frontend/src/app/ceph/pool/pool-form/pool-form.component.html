@@ -1,7 +1,7 @@
 <cd-loading-panel *ngIf="!(info && ecProfiles)"
                   i18n>Loading...</cd-loading-panel>
 
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form">
   <form name="form"
         *ngIf="info && ecProfiles"
         #formDir="ngForm"
@@ -14,12 +14,10 @@
       <div class="card-body">
         <!-- Name -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="name">
-            <ng-container i18n>Name</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="name"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
             <input id="name"
                    name="name"
                    type="text"
@@ -46,12 +44,10 @@
 
         <!-- Pool type selection -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="poolType">
-            <ng-container i18n>Pool type</ng-container>
-            <span class="required"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label required"
+                 for="poolType"
+                 i18n>Pool type</label>
+          <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     id="poolType"
                     formControlName="poolType"
@@ -69,13 +65,13 @@
           </div>
         </div>
 
-        <div *ngIf="form.getValue('poolType')">
+        <div *ngIf="isReplicated || isErasure">
           <!-- PG Autoscale Mode -->
           <div class="form-group row">
             <label i18n
-                   class="col-form-label col-sm-3"
+                   class="cd-col-form-label"
                    for="pgAutoscaleMode">PG Autoscale</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       id="pgAutoscaleMode"
                       name="pgAutoscaleMode"
@@ -91,12 +87,10 @@
           <!-- Pg number -->
           <div class="form-group row"
                *ngIf="form.getValue('pgAutoscaleMode') !== 'on'">
-            <label class="col-form-label col-sm-3"
-                   for="pgNum">
-              <ng-container i18n>Placement groups</ng-container>
-              <span class="required"></span>
-            </label>
-            <div class="col-sm-9">
+            <label class="cd-col-form-label required"
+                   for="pgNum"
+                   i18n>Placement groups</label>
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="pgNum"
                      name="pgNum"
@@ -129,13 +123,11 @@
 
           <!-- Replica Size -->
           <div class="form-group row"
-               *ngIf="form.getValue('poolType') === 'replicated'">
-            <label class="col-form-label col-sm-3"
-                   for="size">
-              <ng-container i18n>Replicated size</ng-container>
-              <span class="required"></span>
-            </label>
-            <div class="col-sm-9">
+               *ngIf="isReplicated">
+            <label class="cd-col-form-label required"
+                   for="size"
+                   i18n>Replicated size</label>
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="size"
                      [max]="getMaxSize()"
@@ -159,10 +151,10 @@
 
           <!-- Flags -->
           <div class="form-group row"
-               *ngIf="info.is_all_bluestore && form.getValue('poolType') === 'erasure'">
+               *ngIf="info.is_all_bluestore && isErasure">
             <label i18n
-                   class="col-form-label col-sm-3">Flags</label>
-            <div class="col-sm-9">
+                   class="cd-col-form-label">Flags</label>
+            <div class="cd-col-form-input">
               <div class="custom-control custom-checkbox">
                 <input type="checkbox"
                        class="custom-control-input"
@@ -179,9 +171,9 @@
         <!-- Applications -->
         <div class="form-group row">
           <label i18n
-                 class="col-sm-3 col-form-label"
+                 class="cd-col-form-label"
                  for="applications">Applications</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <cd-select-badges id="applications"
                               [customBadges]="true"
                               [customBadgeValidators]="data.applications.validators"
@@ -195,17 +187,17 @@
         </div>
 
         <!-- CRUSH -->
-        <div *ngIf="form.getValue('poolType')">
+        <div *ngIf="isErasure || isReplicated">
 
           <legend i18n>CRUSH</legend>
 
           <!-- Erasure Profile select -->
           <div class="form-group row"
-               *ngIf="form.getValue('poolType') === 'erasure'">
+               *ngIf="isErasure">
             <label i18n
-                   class="col-form-label col-sm-3"
+                   class="cd-col-form-label"
                    for="erasureProfile">Erasure code profile</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <div class="input-group">
                 <select class="form-control custom-select"
                         id="erasureProfile"
@@ -236,15 +228,15 @@
                   </button>
                   <button class="btn btn-light"
                           type="button"
-                          [disabled]="editing"
+                          *ngIf="!editing"
                           (click)="addErasureCodeProfile()">
                     <i [ngClass]="[icons.add]"
                        aria-hidden="true"></i>
                   </button>
                   <button class="btn btn-light"
                           type="button"
-                          (click)="deleteErasureCodeProfile()"
-                          [disabled]="editing || ecProfiles.length < 1">
+                          *ngIf="!editing"
+                          (click)="deleteErasureCodeProfile()">
                     <i [ngClass]="[icons.trash]"
                        aria-hidden="true"></i>
                   </button>
@@ -262,16 +254,25 @@
           </div>
 
           <!-- Crush ruleset selection -->
-          <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+          <div class="form-group row"
+               *ngIf="isErasure && !editing">
+            <label class="cd-col-form-label"
                    for="crushRule"
                    i18n>Crush ruleset</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
+              <span class="form-text text-muted"
+                    i18n>A new crush ruleset will be implicitly created.</span>
+            </div>
+          </div>
+          <div class="form-group row"
+               *ngIf="isReplicated || editing">
+            <label class="cd-col-form-label"
+                   for="crushRule"
+                   i18n>Crush ruleset</label>
+            <div class="cd-col-form-input">
               <ng-template #noRules>
                 <span class="form-text text-muted">
                   <span i18n>There are no rules.</span>&nbsp;
-                  <span *ngIf="form.getValue('poolType') === 'erasure'"
-                        i18n>A new crush ruleset will be implicitly created.</span>
                 </span>
               </ng-template>
               <div *ngIf="current.rules.length > 0; else noRules">
@@ -296,12 +297,30 @@
                       <i [ngClass]="[icons.questionCircle]"
                          aria-hidden="true"></i>
                     </button>
+                    <button class="btn btn-light"
+                            type="button"
+                            *ngIf="isReplicated && !editing"
+                            (click)="addCrushRule()">
+                      <i [ngClass]="[icons.add]"
+                         aria-hidden="true"></i>
+                    </button>
+                    <button class="btn btn-light"
+                            *ngIf="isReplicated && !editing"
+                            type="button"
+                            tooltip="This rule can't be deleted as it is in use."
+                            i18n-tooltip
+                            triggers=""
+                            #crushDeletionBtn="bs-tooltip"
+                            (click)="deleteCrushRule()">
+                      <i [ngClass]="[icons.trash]"
+                         aria-hidden="true"></i>
+                    </button>
                   </span>
                 </div>
                 <span class="form-text text-muted"
                       id="crush-info-block"
                       *ngIf="data.crushInfo && form.getValue('crushRule')">
-                  <tabset>
+                  <tabset #crushInfoTabs>
                     <tab i18n-heading
                          heading="Crush rule"
                          class="crush-rule-info">
@@ -319,8 +338,23 @@
                         </li>
                       </ol>
                     </tab>
+                    <tab i18n-heading
+                         heading="Used by pools"
+                         class="used-by-pools">
+                      <ng-template #ruleIsNotUsed>
+                        <span i18n>Rule is not in use.</span>
+                      </ng-template>
+                      <ul *ngIf="crushUsage; else ruleIsNotUsed">
+                        <li *ngFor="let pool of crushUsage">
+                          {{ pool }}
+                        </li>
+                      </ul>
+                    </tab>
                   </tabset>
                 </span>
+                <span class="invalid-feedback"
+                      *ngIf="form.showError('crushRule', formDir, 'required')"
+                      i18n>This field is required!</span>
                 <span class="invalid-feedback"
                       *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')"
                       i18n>The rule can't be used in the current cluster as it has
@@ -339,9 +373,9 @@
           <!-- Compression Mode -->
           <div class="form-group row">
             <label i18n
-                   class="col-form-label col-sm-3"
+                   class="cd-col-form-label"
                    for="mode">Mode</label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <select class="form-control custom-select"
                       id="mode"
                       name="mode"
@@ -357,9 +391,9 @@
             <!-- Compression algorithm selection -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="algorithm">Algorithm</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <select class="form-control custom-select"
                         id="algorithm"
                         name="algorithm"
@@ -381,9 +415,9 @@
             <!-- Compression min blob size -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="minBlobSize">Minimum blob size</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input id="minBlobSize"
                        name="minBlobSize"
                        formControlName="minBlobSize"
@@ -406,9 +440,9 @@
             <!-- Compression max blob size -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="maxBlobSize">Maximum blob size</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input id="maxBlobSize"
                        type="text"
                        min="0"
@@ -430,9 +464,9 @@
             <!-- Compression ratio -->
             <div class="form-group row">
               <label i18n
-                     class="col-form-label col-sm-3"
+                     class="cd-col-form-label"
                      for="ratio">Ratio</label>
-              <div class="col-sm-9">
+              <div class="cd-col-form-input">
                 <input id="ratio"
                        name="ratio"
                        formControlName="ratio"
@@ -458,7 +492,7 @@
 
           <!-- Max Bytes -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="max_bytes">
               <ng-container i18n>Max bytes</ng-container>
               <cd-helper>
@@ -467,7 +501,7 @@
                 <span i18n>A valid quota should be greater than 0.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="max_bytes"
                      name="max_bytes"
@@ -482,7 +516,7 @@
 
           <!-- Max Objects -->
           <div class="form-group row">
-            <label class="col-form-label col-sm-3"
+            <label class="cd-col-form-label"
                    for="max_objects">
               <ng-container i18n>Max objects</ng-container>
               <cd-helper>
@@ -491,7 +525,7 @@
                 <span i18n>A valid quota should be greater than 0.</span>
               </cd-helper>
             </label>
-            <div class="col-sm-9">
+            <div class="cd-col-form-input">
               <input class="form-control"
                      id="max_objects"
                      min="0"
@@ -506,7 +540,7 @@
         </div>
 
         <!-- Pool configuration -->
-        <div [hidden]="form.get('poolType').value !== 'replicated' || data.applications.selected.indexOf('rbd') === -1">
+        <div [hidden]="isErasure || data.applications.selected.indexOf('rbd') === -1">
           <cd-rbd-configuration-form [form]="form"
                                      [initializeData]="initializeConfigData"
                                      (changes)="currentConfigurationValues = $event()">
@@ -514,7 +548,7 @@
         </div>
       </div>
       <div class="card-footer">
-        <div class="button-group text-right">
+        <div class="text-right">
           <cd-submit-button [form]="formDir"
                             i18n="form action button|Example: Create Pool@@formActionButton"
                             (submitAction)="submit()">{{ action | titlecase }} {{ resource | upperFirst }}

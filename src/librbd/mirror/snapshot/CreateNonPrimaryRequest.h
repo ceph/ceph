@@ -6,6 +6,7 @@
 
 #include "include/buffer.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/Types.h"
 #include "librbd/mirror/snapshot/Types.h"
 
 #include <string>
@@ -24,24 +25,29 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class CreateNonPrimaryRequest {
 public:
   static CreateNonPrimaryRequest *create(ImageCtxT *image_ctx,
+                                         bool demoted,
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
+                                         const SnapSeqs& snap_seqs,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
-    return new CreateNonPrimaryRequest(image_ctx, primary_mirror_uuid,
-                                       primary_snap_id, image_state, snap_id,
-                                       on_finish);
+    return new CreateNonPrimaryRequest(image_ctx, demoted, primary_mirror_uuid,
+                                       primary_snap_id, snap_seqs, image_state,
+                                       snap_id, on_finish);
   }
 
   CreateNonPrimaryRequest(ImageCtxT *image_ctx,
+                          bool demoted,
                           const std::string &primary_mirror_uuid,
                           uint64_t primary_snap_id,
+                          const SnapSeqs& snap_seqs,
                           const ImageState &image_state, uint64_t *snap_id,
                           Context *on_finish)
-    : m_image_ctx(image_ctx), m_primary_mirror_uuid(primary_mirror_uuid),
-      m_primary_snap_id(primary_snap_id), m_image_state(image_state),
-      m_snap_id(snap_id), m_on_finish(on_finish) {
+    : m_image_ctx(image_ctx), m_demoted(demoted),
+      m_primary_mirror_uuid(primary_mirror_uuid),
+      m_primary_snap_id(primary_snap_id), m_snap_seqs(snap_seqs),
+      m_image_state(image_state), m_snap_id(snap_id), m_on_finish(on_finish) {
   }
 
   void send();
@@ -71,8 +77,10 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
+  bool m_demoted;
   std::string m_primary_mirror_uuid;
   uint64_t m_primary_snap_id;
+  SnapSeqs m_snap_seqs;
   ImageState m_image_state;
   uint64_t *m_snap_id;
   Context *m_on_finish;

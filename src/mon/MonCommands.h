@@ -201,7 +201,7 @@ COMMAND("log name=logtext,type=CephString,n=N",
 COMMAND("log last "
         "name=num,type=CephInt,range=1,req=false "
         "name=level,type=CephChoices,strings=debug|info|sec|warn|error,req=false "
-        "name=channel,type=CephChoices,strings=*|cluster|audit,req=false",
+        "name=channel,type=CephChoices,strings=*|cluster|audit|cephadm,req=false",
 	"print last few lines of the cluster log",
 	"mon", "r")
 
@@ -794,7 +794,7 @@ COMMAND("osd unset "
 	"notieragent|nosnaptrim",
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=luminous|mimic|nautilus|octopus "
+	"name=release,type=CephChoices,strings=luminous|mimic|nautilus|octopus|pacific "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
@@ -999,6 +999,7 @@ COMMAND("osd pool create "
         "name=expected_num_objects,type=CephInt,range=0,req=false "
         "name=size,type=CephInt,range=0,req=false "
 	"name=pg_num_min,type=CephInt,range=0,req=false "
+	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0|1,req=false",\
 	"create pool", "osd", "rw")
@@ -1160,7 +1161,7 @@ COMMAND("mgr dump "
 	"name=epoch,type=CephInt,range=0,req=false",
 	"dump the latest MgrMap",
 	"mgr", "r")
-COMMAND("mgr fail name=who,type=CephString",
+COMMAND("mgr fail name=who,type=CephString,req=false",
 	"treat the named manager daemon as failed", "mgr", "rw")
 COMMAND("mgr module ls",
 	"list active mgr modules", "mgr", "r")

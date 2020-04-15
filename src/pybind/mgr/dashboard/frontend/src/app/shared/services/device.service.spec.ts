@@ -18,7 +18,7 @@ describe('DeviceService', () => {
   });
 
   describe('should test getDevices pipe', () => {
-    let now = null;
+    let now: jasmine.Spy = null;
 
     const newDevice = (data: object): CdDevice => {
       const device: CdDevice = {

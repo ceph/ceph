@@ -39,12 +39,12 @@ describe('PrometheusAlertService', () => {
   });
 
   describe('test failing status codes and verify disabling of the alertmanager', () => {
-    const isDisabledByStatusCode = (statusCode: number, expectedStatus: boolean, done) => {
+    const isDisabledByStatusCode = (statusCode: number, expectedStatus: boolean, done: any) => {
       service = TestBed.get(PrometheusAlertService);
       prometheusService = TestBed.get(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
       spyOn(prometheusService, 'getAlerts').and.returnValue(
-        Observable.create((observer) => observer.error({ status: statusCode, error: {} }))
+        Observable.create((observer: any) => observer.error({ status: statusCode, error: {} }))
       );
       const disableFn = spyOn(prometheusService, 'disableAlertmanagerConfig').and.callFake(() => {
         expect(expectedStatus).toBe(true);

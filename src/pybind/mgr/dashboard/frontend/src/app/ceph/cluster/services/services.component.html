@@ -1,17 +1,17 @@
-<cd-alert-panel type="info"
-                *ngIf="!orchestratorExist && !checkingOrchestrator"
-                i18n>Please consult the
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  configure and enable the orchestrator functionality.</cd-alert-panel>
-
-<ng-container *ngIf="orchestratorExist">
+<cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
+<ng-container *ngIf="hasOrchestrator">
   <cd-table [data]="services"
             [columns]="columns"
-            identifier="uid"
+            identifier="service_name"
             forceIdentifier="true"
             columnMode="flex"
+            selectionType="single"
+            [autoReload]="60000"
             (fetchData)="getServices($event)"
-            selectionType="single">
+            (updateSelection)="updateSelection($event)">
+    <cd-service-details cdTableDetail
+                        [permissions]="permissions"
+                        [selection]="selection">
+    </cd-service-details>
   </cd-table>
 </ng-container>

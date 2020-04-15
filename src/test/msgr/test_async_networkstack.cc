@@ -461,10 +461,12 @@ TEST_P(NetworkWorkerTest, ComplexTest) {
     }
     ConnectedSocket cli_socket, srv_socket;
     if (worker->id == 1) {
-      while (!*listen_p) {
+      while (!*listen_p || stack->support_local_listen_table()) {
         usleep(50);
         r = worker->connect(bind_addr, options, &cli_socket);
         ASSERT_EQ(0, r);
+	if (stack->support_local_listen_table())
+	  break;
       }
     }
 

@@ -3,8 +3,8 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { TreeModule } from 'ng2-tree';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -14,6 +14,7 @@ import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
 
+import { OrchestratorDocModalComponent } from '../../shared/components/orchestrator-doc-modal/orchestrator-doc-modal.component';
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
@@ -47,6 +48,8 @@ import { RulesListComponent } from './prometheus/rules-list/rules-list.component
 import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
 import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
+import { ServiceDaemonListComponent } from './services/service-daemon-list/service-daemon-list.component';
+import { ServiceDetailsComponent } from './services/service-details/service-details.component';
 import { ServicesComponent } from './services/services.component';
 
 @NgModule({
@@ -60,7 +63,8 @@ import { ServicesComponent } from './services/services.component';
     OsdReweightModalComponent,
     SilenceMatcherModalComponent,
     OsdDevicesSelectionModalComponent,
-    OsdCreationPreviewModalComponent
+    OsdCreationPreviewModalComponent,
+    OrchestratorDocModalComponent
   ],
   imports: [
     CommonModule,
@@ -75,10 +79,11 @@ import { ServicesComponent } from './services/services.component';
     ModalModule.forRoot(),
     AlertModule.forRoot(),
     TooltipModule.forRoot(),
-    TreeModule,
     MgrModulesModule,
     TypeaheadModule.forRoot(),
     TimepickerModule.forRoot(),
+    TreeModule.forRoot(),
+    BsDatepickerModule.forRoot(),
     NgBootstrapFormValidationModule,
     CephSharedModule
   ],
@@ -115,7 +120,9 @@ import { ServicesComponent } from './services/services.component';
     RulesListComponent,
     ActiveAlertListComponent,
     MonitoringListComponent,
-    HostFormComponent
+    HostFormComponent,
+    ServiceDetailsComponent,
+    ServiceDaemonListComponent
   ]
 })
 export class ClusterModule {}

@@ -1,44 +1,40 @@
 @import 'defaults';
 
-::ng-deep .ng-sidebar__content {
-  overflow: hidden !important;
-}
-
-::ng-deep .isPwdDisplayed .ng-sidebar {
-  top: 92px !important;
-}
-
-// sidebar
-::ng-deep .ng-sidebar {
-  &.ng-sidebar--opened {
-    margin-right: 20px;
-  }
+:host {
+  position: fixed;
+  top: $navbar-height + 10px;
+  bottom: 10px;
+  right: -350px;
 
   width: 350px;
   max-width: 90vw;
-  z-index: 9 !important;
 
-  top: 54px !important;
-  bottom: 10px !important;
+  z-index: 9;
 
-  .card {
-    height: 100%;
+  transition: all 0.6s;
+}
 
-    .card-body {
-      overflow: auto;
-    }
-  }
+:host.active {
+  right: 20px;
+}
 
-  .separator {
-    padding: 5px 12px;
-    color: $color-popover-seperator-text;
-    background-color: $color-popover-seperator-bg;
-    font-size: 12px;
-  }
+.card {
+  height: 100%;
+}
 
-  .btn-link .fa-trash-o {
-    color: $color-black;
-  }
+ngx-simplebar {
+  height: calc(100% - 42.2px);
+}
+
+.separator {
+  padding: 5px 12px;
+  color: $color-popover-seperator-text;
+  background-color: $color-popover-seperator-bg;
+  font-size: 12px;
+}
+
+.btn-link .fa-trash-o {
+  color: $color-black;
 }
 
 table {

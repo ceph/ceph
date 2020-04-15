@@ -4,8 +4,8 @@ set -e
 
 git clone git://git.ceph.com/xfstests.git
 cd xfstests
-git checkout b7fd3f05d6a7a320d13ff507eda2e5b183cae180
-make
+git checkout 12973fc04fd10d4af086901e10ffa8e48866b735
+make -j4
 cd ..
 cp xfstests/ltp/fsx .
 

@@ -1,4 +1,6 @@
-import fnmatch
+from ceph.deployment.inventory import Device
+from ceph.deployment.service_spec import ServiceSpecValidationError, ServiceSpec, PlacementSpec
+
 try:
     from typing import Optional, List, Dict, Any
 except ImportError:
@@ -31,8 +33,8 @@ class DeviceSelection(object):
         """
         ephemeral drive group device specification
         """
-        #: List of absolute paths to the devices.
-        self.paths = [] if paths is None else paths  # type: List[str]
+        #: List of Device objects for devices paths.
+        self.paths = [] if paths is None else [Device(path) for path in paths]  # type: List[Device]
 
         #: A wildcard string. e.g: "SDD*" or "SanDisk SD8SN8U5"
         self.model = model
@@ -75,12 +77,21 @@ class DeviceSelection(object):
     @classmethod
     def from_json(cls, device_spec):
         # type: (dict) -> DeviceSelection
+        if not device_spec:
+            return  # type: ignore
         for applied_filter in list(device_spec.keys()):
             if applied_filter not in cls._supported_filters:
                 raise DriveGroupValidationError(
                     "Filtering for <{}> is not supported".format(applied_filter))
 
         return cls(**device_spec)
+
+    def to_json(self):
+        # type: () -> Dict[str, Any]
+        c = self.__dict__.copy()
+        if self.paths:
+            c['paths'] = [p.path for p in self.paths]
+        return c
 
     def __repr__(self):
         keys = [
@@ -96,7 +107,7 @@ class DeviceSelection(object):
         return repr(self) == repr(other)
 
 
-class DriveGroupValidationError(Exception):
+class DriveGroupValidationError(ServiceSpecValidationError):
     """
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
     if it was raised in a different mgr module.
@@ -106,7 +117,7 @@ class DriveGroupValidationError(Exception):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
 
 
-class DriveGroupSpec(object):
+class DriveGroupSpec(ServiceSpec):
     """
     Describe a drive group in the same form that ceph-volume
     understands.
@@ -114,14 +125,15 @@ class DriveGroupSpec(object):
 
     _supported_features = [
         "encrypted", "block_wal_size", "osds_per_device",
-        "db_slots", "wal_slots", "block_db_size", "host_pattern",
+        "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size"
+        "journal_size", "unmanaged"
     ]
 
     def __init__(self,
-                 host_pattern,  # type: str
+                 placement=None,  # type: Optional[PlacementSpec]
+                 service_id=None,  # type: str
                  data_devices=None,  # type: Optional[DeviceSelection]
                  db_devices=None,  # type: Optional[DeviceSelection]
                  wal_devices=None,  # type: Optional[DeviceSelection]
@@ -136,13 +148,11 @@ class DriveGroupSpec(object):
                  block_db_size=None,  # type: Optional[int]
                  block_wal_size=None,  # type: Optional[int]
                  journal_size=None,  # type: Optional[int]
+                 service_type=None,  # type: Optional[str]
+                 unmanaged=None,  # type: Optional[bool]
                  ):
-
-        # concept of applying a drive group to a (set) of hosts is tightly
-        # linked to the drive group itself
-        #
-        #: An fnmatch pattern to select hosts. Can also be a single host.
-        self.host_pattern = host_pattern
+        assert service_type is None or service_type == 'osd'
+        super(DriveGroupSpec, self).__init__('osd', service_id=service_id, placement=placement)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
@@ -190,7 +200,7 @@ class DriveGroupSpec(object):
         self.osd_id_claims = osd_id_claims
 
     @classmethod
-    def from_json(cls, json_drive_group):
+    def _from_json_impl(cls, json_drive_group):
         # type: (dict) -> DriveGroupSpec
         """
         Initialize 'Drive group' structure
@@ -198,6 +208,11 @@ class DriveGroupSpec(object):
         :param json_drive_group: A valid json string with a Drive Group
                specification
         """
+        # legacy json (pre Octopus)
+        if 'host_pattern' in json_drive_group and 'placement' not in json_drive_group:
+            json_drive_group['placement'] = {'host_pattern': json_drive_group['host_pattern']}
+            del json_drive_group['host_pattern']
+
         for applied_filter in list(json_drive_group.keys()):
             if applied_filter not in cls._supported_features:
                 raise DriveGroupValidationError(
@@ -209,20 +224,23 @@ class DriveGroupSpec(object):
                     from ceph.deployment.drive_selection import SizeMatcher
                     json_drive_group[key] = SizeMatcher.str_to_byte(json_drive_group[key])
 
+        if 'placement' in json_drive_group:
+            json_drive_group['placement'] = PlacementSpec.from_json(json_drive_group['placement'])
+
         try:
             args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
                     json_drive_group.items()}
+            if not args:
+                raise DriveGroupValidationError("Didn't find Drivegroup specs")
             return DriveGroupSpec(**args)
         except (KeyError, TypeError) as e:
             raise DriveGroupValidationError(str(e))
 
-    def hosts(self, all_hosts):
-        # type: (List[str]) -> List[str]
-        return fnmatch.filter(all_hosts, self.host_pattern)
+    def validate(self):
+        # type: () -> None
+        super(DriveGroupSpec, self).validate()
 
-    def validate(self, all_hosts):
-        # type: (List[str]) -> None
-        if not isinstance(self.host_pattern, six.string_types):
+        if not isinstance(self.placement.host_pattern, six.string_types):
             raise DriveGroupValidationError('host_pattern must be of type string')
 
         specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
@@ -234,9 +252,6 @@ class DriveGroupSpec(object):
 
         if self.objectstore not in ('filestore', 'bluestore'):
             raise DriveGroupValidationError("objectstore not in ('filestore', 'bluestore')")
-        if not self.hosts(all_hosts):
-            raise DriveGroupValidationError(
-                "host_pattern '{}' does not match any hosts".format(self.host_pattern))
 
         if self.block_wal_size is not None and type(self.block_wal_size) != int:
             raise DriveGroupValidationError('block_wal_size must be of type int')
@@ -251,9 +266,24 @@ class DriveGroupSpec(object):
             keys.remove('encrypted')
         if 'objectstore' in keys and self.objectstore == 'bluestore':
             keys.remove('objectstore')
-        return "DriveGroupSpec({})".format(
+        return "DriveGroupSpec(name={}->{})".format(
+            self.service_id,
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
+
+    def to_json(self):
+        # type: () -> Dict[str, Any]
+        c = self.__dict__.copy()
+        if self.placement:
+            c['placement'] = self.placement.to_json()
+        if self.data_devices:
+            c['data_devices'] = self.data_devices.to_json()
+        if self.db_devices:
+            c['db_devices'] = self.db_devices.to_json()
+        if self.wal_devices:
+            c['wal_devices'] = self.wal_devices.to_json()
+        c['service_name'] = self.service_name()
+        return c
 
     def __eq__(self, other):
         return repr(self) == repr(other)

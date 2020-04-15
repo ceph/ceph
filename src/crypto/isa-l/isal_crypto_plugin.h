@@ -31,7 +31,7 @@ public:
   ~ISALCryptoPlugin()
   {}
   virtual int factory(CryptoAccelRef *cs,
-                      ostream *ss)
+                      std::ostream *ss)
   {
     if (cryptoaccel == nullptr)
     {

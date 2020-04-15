@@ -6,6 +6,8 @@
 
 #include "include/buffer.h"
 #include "include/rados/librados_fwd.hpp"
+#include "cls/rbd/cls_rbd_types.h"
+#include "librbd/mirror/Types.h"
 #include <string>
 
 namespace librbd { struct ImageCtx; }
@@ -61,14 +63,11 @@ private:
    * GET_LOCAL_IMAGE_NAME
    *    |
    *    v
-   * GET_MIRROR_IMAGE
+   * GET_MIRROR_INFO
    *    |
-   *    | (journal)
-   *    \-----------> GET_TAG_OWNER
-   *                      |
-   *                      v
-   *                  <finish>
-
+   *    v
+   * <finish>
+   *
    * @endverbatim
    */
 
@@ -81,9 +80,9 @@ private:
 
   bufferlist m_out_bl;
   std::string m_local_image_id;
-
-  // journal-based mirroring
-  std::string m_local_tag_owner;
+  cls::rbd::MirrorImage m_mirror_image;
+  librbd::mirror::PromotionState m_promotion_state;
+  std::string m_primary_mirror_uuid;
 
   void get_local_image_id();
   void handle_get_local_image_id(int r);
@@ -91,11 +90,8 @@ private:
   void get_local_image_name();
   void handle_get_local_image_name(int r);
 
-  void get_mirror_image();
-  void handle_get_mirror_image(int r);
-
-  void get_tag_owner();
-  void handle_get_tag_owner(int r);
+  void get_mirror_info();
+  void handle_get_mirror_info(int r);
 
   void finish(int r);
 

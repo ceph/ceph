@@ -61,6 +61,7 @@
 #include "events/EImportFinish.h"
 #include "events/EFragment.h"
 #include "events/ECommitted.h"
+#include "events/EPurged.h"
 #include "events/ESessions.h"
 
 #include "InoTable.h"
@@ -1165,7 +1166,6 @@ void MDCache::get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir
       frag_vec_t leaves;
       diri->dirfragtree.get_leaves_under(fg, leaves);
       if (leaves.empty()) {
-	bool all = true;
 	frag_t approx_fg = diri->dirfragtree[fg.value()];
         frag_vec_t approx_leaves;
 	tmpdft.get_leaves_under(approx_fg, approx_leaves);
@@ -1173,20 +1173,13 @@ void MDCache::get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir
 	  if (p->second.get().count(leaf) == 0) {
 	    // not bound, so the resolve message is from auth MDS of the dirfrag
 	    force_dir_fragment(diri, leaf);
-	    all = false;
 	  }
 	}
-	if (all)
-	  leaves.push_back(approx_fg);
-	else
-	  diri->dirfragtree.get_leaves_under(fg, leaves);
       }
-      dout(10) << "  frag " << fg << " contains " << leaves << dendl;
-      for (const auto& leaf : leaves) {
-	CDir *dir = diri->get_dirfrag(leaf);
-	if (dir)
-	  bounds.insert(dir);
-      }
+
+      auto&& [complete, sibs] = diri->get_dirfrags_under(fg);
+      for (const auto& sib : sibs)
+	bounds.insert(sib);
     }
   }
 }
@@ -6543,9 +6536,77 @@ void MDCache::start_recovered_truncates()
 }
 
 
+class C_MDS_purge_completed_finish : public MDCacheLogContext {
+  interval_set<inodeno_t> inos;
+  version_t inotablev;
+  LogSegment *ls; 
+public:
+  C_MDS_purge_completed_finish(MDCache *m,
+			       interval_set<inodeno_t> i,
+			       version_t iv,
+			       LogSegment *_ls)
+    : MDCacheLogContext(m),
+      inos(std::move(i)),
+      inotablev(iv),
+      ls(_ls) {}
+  void finish(int r) override {
+    assert(r == 0);
+    if (inotablev) {
+      ls->purge_inodes_finish(inos);      
+      mdcache->mds->inotable->apply_release_ids(inos);
+      assert(mdcache->mds->inotable->get_version() == inotablev);
+    }
+  }
+};
 
+void MDCache::start_purge_inodes(){
+  dout(10) << "start_purge_inodes" << dendl;
+  for (auto& p : mds->mdlog->segments){
+    LogSegment *ls = p.second;
+    if (ls->purge_inodes.size()){
+      purge_inodes(ls->purge_inodes, ls);
+    }
+  }
+}
 
-
+void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegment *ls)
+{
+  auto cb = new LambdaContext([this, inos, ls](int r){
+      assert(r == 0 || r == -2);
+      mds->inotable->project_release_ids(inos);
+      version_t piv = mds->inotable->get_projected_version();
+      assert(piv != 0);
+      mds->mdlog->start_submit_entry(new EPurged(inos, piv, ls->seq),
+				     new C_MDS_purge_completed_finish(this, inos, piv, ls));
+      mds->mdlog->flush();
+    });
+  
+  dout(10) << __func__ << " start purge data : " << inos << dendl;
+  C_GatherBuilder gather(g_ceph_context,
+			  new C_OnFinisher( new MDSIOContextWrapper(mds, cb), mds->finisher));
+  SnapContext nullsnapc;
+  uint64_t num = Striper::get_num_objects(default_file_layout, default_file_layout.get_period());
+  for (auto p = inos.begin();
+       p != inos.end();
+       ++p){
+    dout(10) << __func__
+	     << " prealloc_inos : " << inos.size()
+	     << " start : " << p.get_start().val
+	     << " length : " << p.get_len() << " "
+	     << " seq : " << ls->seq << dendl;
+    
+    for (_inodeno_t i = 0; i < p.get_len(); i++){
+      dout(20) << __func__ << " : " << p.get_start() + i << dendl;
+      filer.purge_range(p.get_start() + i,
+			&default_file_layout,
+			nullsnapc,
+			0, num,
+			ceph::real_clock::now(),
+			0, gather.new_sub());
+    }
+  }
+  gather.activate();
+}
 
 // ================================================================================
 // cache trimming
@@ -9670,7 +9731,8 @@ void MDCache::request_kill(MDRequestRef& mdr)
   mdr->mark_event("killing request");
 
   if (mdr->committing) {
-    dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
+    dout(10) << "request_kill " << *mdr << " -- already committing, remove it from sesssion requests" << dendl;
+    mdr->item_session_request.remove_myself();
   } else {
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);

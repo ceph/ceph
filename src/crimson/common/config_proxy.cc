@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "config_proxy.h"
 
@@ -39,6 +40,10 @@ seastar::future<> ConfigProxy::start()
       return seastar::make_ready_future<>();
     });
   });
+}
+
+void ConfigProxy::show_config(ceph::Formatter* f) const {
+  get_config().show_config(*values, f);
 }
 
 ConfigProxy::ShardedConfig ConfigProxy::sharded_conf;

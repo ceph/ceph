@@ -48,21 +48,54 @@ export class RgwBucketService {
     return this.http.get(`${this.url}/${bucket}`);
   }
 
-  create(bucket: string, uid: string, zonegroup: string, placementTarget: string) {
-    let params = new HttpParams();
-    params = params.append('bucket', bucket);
-    params = params.append('uid', uid);
-    params = params.append('zonegroup', zonegroup);
-    params = params.append('placement_target', placementTarget);
-
-    return this.http.post(this.url, null, { params: params });
+  create(
+    bucket: string,
+    uid: string,
+    zonegroup: string,
+    placementTarget: string,
+    lockEnabled: boolean,
+    lock_mode: 'GOVERNANCE' | 'COMPLIANCE',
+    lock_retention_period_days: string,
+    lock_retention_period_years: string
+  ) {
+    return this.http.post(this.url, null, {
+      params: new HttpParams({
+        fromObject: {
+          bucket,
+          uid,
+          zonegroup,
+          placement_target: placementTarget,
+          lock_enabled: String(lockEnabled),
+          lock_mode,
+          lock_retention_period_days,
+          lock_retention_period_years
+        }
+      })
+    });
   }
 
-  update(bucket: string, bucketId: string, uid: string, versioningState: string) {
+  update(
+    bucket: string,
+    bucketId: string,
+    uid: string,
+    versioningState: string,
+    mfaDelete: string,
+    mfaTokenSerial: string,
+    mfaTokenPin: string,
+    lockMode: 'GOVERNANCE' | 'COMPLIANCE',
+    lockRetentionPeriodDays: string,
+    lockRetentionPeriodYears: string
+  ) {
     let params = new HttpParams();
     params = params.append('bucket_id', bucketId);
     params = params.append('uid', uid);
     params = params.append('versioning_state', versioningState);
+    params = params.append('mfa_delete', mfaDelete);
+    params = params.append('mfa_token_serial', mfaTokenSerial);
+    params = params.append('mfa_token_pin', mfaTokenPin);
+    params = params.append('lock_mode', lockMode);
+    params = params.append('lock_retention_period_days', lockRetentionPeriodDays);
+    params = params.append('lock_retention_period_years', lockRetentionPeriodYears);
     return this.http.put(`${this.url}/${bucket}`, null, { params: params });
   }
 

@@ -102,7 +102,7 @@ bool Entry::is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed)
     *bytes_needed = 0;
     return false;
   }
-  iter.advance(HEADER_FIXED_SIZE - sizeof(bl_preamble));
+  iter += HEADER_FIXED_SIZE - sizeof(bl_preamble);
 
   if (iter.get_remaining() < sizeof(uint32_t)) {
     *bytes_needed = sizeof(uint32_t) - iter.get_remaining();
@@ -115,7 +115,7 @@ bool Entry::is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed)
     *bytes_needed = data_size - iter.get_remaining();
     return false;
   }
-  iter.advance(data_size);
+  iter += data_size;
   uint32_t end_off = iter.get_off();
 
   if (iter.get_remaining() < sizeof(uint32_t)) {

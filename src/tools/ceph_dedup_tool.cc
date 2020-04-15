@@ -352,11 +352,11 @@ uint64_t EstimateDedupRatio::fixed_chunk(string oid, uint64_t offset)
     if (outdata.length() - c_offset > chunk_size) {
       bufferptr bptr(chunk_size);
       chunk.push_back(std::move(bptr));
-      chunk.copy_in(0, chunk_size, outdata.c_str());	  
+      chunk.begin().copy_in(chunk_size, outdata.c_str());
     } else {
       bufferptr bptr(outdata.length() - c_offset);
       chunk.push_back(std::move(bptr));
-      chunk.copy_in(0, outdata.length() - c_offset, outdata.c_str());	  
+      chunk.begin().copy_in(outdata.length() - c_offset, outdata.c_str());
     }
     add_chunk_fp_to_stat(chunk);
     c_offset = c_offset + chunk_size;
@@ -415,7 +415,7 @@ uint64_t EstimateDedupRatio::rabin_chunk(string oid, uint64_t offset)
     bufferptr c_data = buffer::create(p.second);
     c_data.zero();
     chunk.append(c_data);
-    chunk.copy_in(0, p.second, outdata.c_str() + p.first);
+    chunk.begin().copy_in(p.second, outdata.c_str() + p.first);
     add_chunk_fp_to_stat(chunk);
     cout << " oid: " << oid <<  " offset: " << p.first + offset << " length: " << p.second << std::endl;
   }

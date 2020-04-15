@@ -74,6 +74,8 @@ function _common_test() {
     sleep 1
     wait_for_clean
 
+    flush_pg_stats
+
     newprimary=$(ceph pg dump pgs --format=json | jq '.pg_stats[0].up_primary')
     kill_daemons
 
@@ -102,7 +104,7 @@ function _common_test() {
 function TEST_backfill_log_1() {
     local dir=$1
 
-    _common_test $dir "--osd_min_pg_log_entries=1 --osd_max_pg_log_entries=2 --osd_pg_log_dups_tracked=10" 1 9 150
+    _common_test $dir "--osd_min_pg_log_entries=1 --osd_max_pg_log_entries=2 --osd_pg_log_dups_tracked=10" 2 8 150
 }
 
 
@@ -110,7 +112,7 @@ function TEST_backfill_log_1() {
 function TEST_backfill_log_2() {
     local dir=$1
 
-    _common_test $dir "--osd_min_pg_log_entries=1 --osd_max_pg_log_entries=2" 1 149 150
+    _common_test $dir "--osd_min_pg_log_entries=1 --osd_max_pg_log_entries=2" 2 148 150
 }
 
 

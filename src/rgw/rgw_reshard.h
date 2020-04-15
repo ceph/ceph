@@ -13,6 +13,7 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
 
+#include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_time.h"
 #include "common/async/yield_context.h"
@@ -22,7 +23,6 @@
 #include "rgw_common.h"
 
 
-class CephContext;
 class RGWReshard;
 namespace rgw { namespace sal {
   class RGWRadosStore;

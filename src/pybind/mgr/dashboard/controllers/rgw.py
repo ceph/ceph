@@ -10,18 +10,22 @@ from . import ApiController, BaseController, RESTController, Endpoint, \
     ReadPermission
 from ..exceptions import DashboardException
 from ..rest_client import RequestException
-from ..security import Scope
+from ..security import Scope, Permission
+from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
-from ..tools import json_str_to_object
+from ..tools import json_str_to_object, str_to_bool
 
+try:
+    from typing import List
+except ImportError:
+    pass  # Just for type checking
 
 logger = logging.getLogger('controllers.rgw')
 
 
 @ApiController('/rgw', Scope.RGW)
 class Rgw(BaseController):
-
     @Endpoint()
     @ReadPermission
     def status(self):
@@ -44,14 +48,14 @@ class Rgw(BaseController):
                 raise RequestException(msg)
             status['available'] = True
         except (RequestException, LookupError) as ex:
-            status['message'] = str(ex)
+            status['message'] = str(ex)  # type: ignore
         return status
 
 
 @ApiController('/rgw/daemon', Scope.RGW)
 class RgwDaemon(RESTController):
-
     def list(self):
+        # type: () -> List[dict]
         daemons = []
         for hostname, server in CephService.get_service_map('rgw').items():
             for service in server['services']:
@@ -69,6 +73,7 @@ class RgwDaemon(RESTController):
         return sorted(daemons, key=lambda k: k['id'])
 
     def get(self, svc_id):
+        # type: (str) -> dict
         daemon = {
             'rgw_metadata': [],
             'rgw_id': svc_id,
@@ -95,7 +100,6 @@ class RgwDaemon(RESTController):
 
 
 class RgwRESTController(RESTController):
-
     def proxy(self, method, path, params=None, json_response=True):
         try:
             instance = RgwClient.admin_instance()
@@ -109,7 +113,6 @@ class RgwRESTController(RESTController):
 
 @ApiController('/rgw/site', Scope.RGW)
 class RgwSite(RgwRESTController):
-
     def list(self, query=None):
         if query == 'placement-targets':
             instance = RgwClient.admin_instance()
@@ -124,7 +127,6 @@ class RgwSite(RgwRESTController):
 
 @ApiController('/rgw/bucket', Scope.RGW)
 class RgwBucket(RgwRESTController):
-
     def _append_bid(self, bucket):
         """
         Append the bucket identifier that looks like [<tenant>/]<bucket>.
@@ -144,13 +146,29 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner)
         return rgw_client.get_bucket_versioning(bucket_name)
 
-    def _set_versioning(self, owner, bucket_name, versioning_state):
+    def _set_versioning(self, owner, bucket_name, versioning_state, mfa_delete,
+                        mfa_token_serial, mfa_token_pin):
+        bucket_versioning = self._get_versioning(owner, bucket_name)
+        if versioning_state != bucket_versioning['Status']\
+                or (mfa_delete and mfa_delete != bucket_versioning['MfaDelete']):
+            rgw_client = RgwClient.instance(owner)
+            rgw_client.set_bucket_versioning(bucket_name, versioning_state, mfa_delete,
+                                             mfa_token_serial, mfa_token_pin)
+
+    def _get_locking(self, owner, bucket_name):
         rgw_client = RgwClient.instance(owner)
-        return rgw_client.set_bucket_versioning(bucket_name, versioning_state)
+        return rgw_client.get_bucket_locking(bucket_name)
+
+    def _set_locking(self, owner, bucket_name, mode,
+                     retention_period_days, retention_period_years):
+        rgw_client = RgwClient.instance(owner)
+        return rgw_client.set_bucket_locking(bucket_name, mode,
+                                             int(retention_period_days),
+                                             int(retention_period_years))
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
-        # type (str) => str
+        # type (str) -> str
         """
         >>> RgwBucket.strip_tenant_from_bucket_name('tenant/bucket-name')
         'bucket-name'
@@ -161,7 +179,7 @@ class RgwBucket(RgwRESTController):
 
     @staticmethod
     def get_s3_bucket_name(bucket_name, tenant=None):
-        # type (str, str) => str
+        # type (str, str) -> str
         """
         >>> RgwBucket.get_s3_bucket_name('bucket-name', 'tenant')
         'tenant:bucket-name'
@@ -176,42 +194,75 @@ class RgwBucket(RgwRESTController):
         return bucket_name
 
     def list(self):
+        # type: () -> List[str]
         return self.proxy('GET', 'bucket')
 
     def get(self, bucket):
+        # type: (str) -> dict
         result = self.proxy('GET', 'bucket', {'bucket': bucket})
+        bucket_name = RgwBucket.get_s3_bucket_name(result['bucket'],
+                                                   result['tenant'])
 
-        result['versioning'] =\
-            self._get_versioning(result['owner'],
-                                 RgwBucket.get_s3_bucket_name(result['bucket'], result['tenant']))
+        # Append the versioning configuration.
+        versioning = self._get_versioning(result['owner'], bucket_name)
+        result['versioning'] = versioning['Status']
+        result['mfa_delete'] = versioning['MfaDelete']
+
+        # Append the locking configuration.
+        locking = self._get_locking(result['owner'], bucket_name)
+        result.update(locking)
 
         return self._append_bid(result)
 
-    def create(self, bucket, uid, zonegroup=None, placement_target=None):
+    def create(self, bucket, uid, zonegroup=None, placement_target=None,
+               lock_enabled='false', lock_mode=None,
+               lock_retention_period_days=None,
+               lock_retention_period_years=None):
+        lock_enabled = str_to_bool(lock_enabled)
         try:
             rgw_client = RgwClient.instance(uid)
-            return rgw_client.create_bucket(bucket, zonegroup, placement_target)
+            result = rgw_client.create_bucket(bucket, zonegroup,
+                                              placement_target,
+                                              lock_enabled)
+            if lock_enabled:
+                self._set_locking(uid, bucket, lock_mode,
+                                  lock_retention_period_days,
+                                  lock_retention_period_years)
+            return result
         except RequestException as e:
             raise DashboardException(e, http_status_code=500, component='rgw')
 
-    def set(self, bucket, bucket_id, uid, versioning_state=None):
+    def set(self, bucket, bucket_id, uid, versioning_state=None,
+            mfa_delete=None, mfa_token_serial=None, mfa_token_pin=None,
+            lock_mode=None, lock_retention_period_days=None,
+            lock_retention_period_years=None):
         # When linking a non-tenant-user owned bucket to a tenanted user, we
         # need to prefix bucket name with '/'. e.g. photos -> /photos
         if '$' in uid and '/' not in bucket:
             bucket = '/{}'.format(bucket)
 
         # Link bucket to new user:
-        result = self.proxy('PUT', 'bucket', {
-            'bucket': bucket,
-            'bucket-id': bucket_id,
-            'uid': uid
-        }, json_response=False)
+        result = self.proxy('PUT',
+                            'bucket', {
+                                'bucket': bucket,
+                                'bucket-id': bucket_id,
+                                'uid': uid
+                            },
+                            json_response=False)
+
+        uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
 
         if versioning_state:
-            uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
-            self._set_versioning(uid,
-                                 RgwBucket.get_s3_bucket_name(bucket, uid_tenant),
-                                 versioning_state)
+            self._set_versioning(uid, bucket_name, versioning_state,
+                                 mfa_delete, mfa_token_serial, mfa_token_pin)
+
+        # Update locking if it is enabled.
+        locking = self._get_locking(uid, bucket_name)
+        if locking['lock_enabled']:
+            self._set_locking(uid, bucket_name, lock_mode,
+                              lock_retention_period_days,
+                              lock_retention_period_years)
 
         return self._append_bid(result)
 
@@ -224,7 +275,6 @@ class RgwBucket(RgwRESTController):
 
 @ApiController('/rgw/user', Scope.RGW)
 class RgwUser(RgwRESTController):
-
     def _append_uid(self, user):
         """
         Append the user identifier that looks like [<tenant>$]<user>.
@@ -240,11 +290,19 @@ class RgwUser(RgwRESTController):
                 if user['tenant'] else user['user_id']
         return user
 
+    @staticmethod
+    def _keys_allowed():
+        permissions = AuthManager.get_user(JwtManager.get_username()).permissions_dict()
+        edit_permissions = [Permission.CREATE, Permission.UPDATE, Permission.DELETE]
+        return Scope.RGW in permissions and Permission.READ in permissions[Scope.RGW] \
+            and len(set(edit_permissions).intersection(set(permissions[Scope.RGW]))) > 0
+
     def list(self):
-        users = []
+        # type: () -> List[str]
+        users = []  # type: List[str]
         marker = None
         while True:
-            params = {}
+            params = {}  # type: dict
             if marker:
                 params['marker'] = marker
             result = self.proxy('GET', 'user?list', params)
@@ -259,15 +317,20 @@ class RgwUser(RgwRESTController):
         return users
 
     def get(self, uid):
+        # type: (str) -> dict
         result = self.proxy('GET', 'user', {'uid': uid})
+        if not self._keys_allowed():
+            del result['keys']
+            del result['swift_keys']
         return self._append_uid(result)
 
     @Endpoint()
     @ReadPermission
     def get_emails(self):
+        # type: () -> List[str]
         emails = []
-        for uid in json.loads(self.list()):
-            user = json.loads(self.get(uid))
+        for uid in json.loads(self.list()):  # type: ignore
+            user = json.loads(self.get(uid))  # type: ignore
             if user["email"]:
                 emails.append(user["email"])
         return emails

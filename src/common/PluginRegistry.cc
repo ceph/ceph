@@ -20,19 +20,19 @@
 #include "common/ceph_context.h"
 #include "common/errno.h"
 #include "common/debug.h"
-
-#include <dlfcn.h>
+#include "include/dlfcn_compat.h"
 
 #define PLUGIN_PREFIX "libceph_"
-#ifdef __APPLE__
-#define PLUGIN_SUFFIX ".dylib"
-#else
-#define PLUGIN_SUFFIX ".so"
-#endif
+#define PLUGIN_SUFFIX SHARED_LIB_SUFFIX
 #define PLUGIN_INIT_FUNCTION "__ceph_plugin_init"
 #define PLUGIN_VERSION_FUNCTION "__ceph_plugin_version"
 
 #define dout_subsys ceph_subsys_context
+
+using std::map;
+using std::string;
+
+namespace ceph {
 
 PluginRegistry::PluginRegistry(CephContext *cct) :
   cct(cct),
@@ -210,6 +210,7 @@ int PluginRegistry::load(const std::string &type,
   ldout(cct, 1) << __func__ << ": " << type << " " << name
 		<< " loaded and registered" << dendl;
   return 0;
+}
 }
 
 /*

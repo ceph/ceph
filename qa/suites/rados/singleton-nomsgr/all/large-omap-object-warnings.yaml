@@ -6,6 +6,8 @@ roles:
 - [mon.a, mgr.x, osd.0, osd.1, client.0]
 overrides:
   ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     log-whitelist:
       - \(OSDMAP_FLAGS\)
       - \(OSD_FULL\)

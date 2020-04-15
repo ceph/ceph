@@ -39,6 +39,13 @@
 
 #include <unistd.h>
 
+using std::ostringstream;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
+
 static bool getentropy_works()
 {
   char buf;
@@ -167,7 +174,7 @@ std::size_t CryptoKeyHandler::decrypt(
 sha256_digest_t CryptoKeyHandler::hmac_sha256(
   const ceph::bufferlist& in) const
 {
-  ceph::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
+  TOPNSPC::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
 
   for (const auto& bptr : in.buffers()) {
     hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
@@ -476,7 +483,7 @@ void CryptoKey::decode(bufferlist::const_iterator& bl)
   bufferptr tmp;
   bl.copy_deep(len, tmp);
   if (_set_secret(type, tmp) < 0)
-    throw buffer::malformed_input("malformed secret");
+    throw ceph::buffer::malformed_input("malformed secret");
 }
 
 int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)

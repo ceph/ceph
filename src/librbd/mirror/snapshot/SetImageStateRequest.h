@@ -43,10 +43,13 @@ private:
    * GET_SNAP_LIMIT
    *    |
    *    v
-   * GET_METADATA (repeat until
-   *    |          all metadata read)
+   * GET_METADATA
+   *    |
    *    v
    * WRITE_IMAGE_STATE
+   *    |
+   *    v
+   * UPDATE_PRIMARY_SNAPSHOT
    *    |
    *    v
    * <finish>
@@ -62,7 +65,6 @@ private:
 
   bufferlist m_bl;
   bufferlist m_state_bl;
-  std::string m_last_metadata_key;
 
   void get_snap_limit();
   void handle_get_snap_limit(int r);
@@ -72,6 +74,9 @@ private:
 
   void write_image_state();
   void handle_write_image_state(int r);
+
+  void update_primary_snapshot();
+  void handle_update_primary_snapshot(int r);
 
   void finish(int r);
 };

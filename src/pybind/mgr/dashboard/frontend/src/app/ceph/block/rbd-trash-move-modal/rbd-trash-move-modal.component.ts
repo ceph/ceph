@@ -18,9 +18,12 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   styleUrls: ['./rbd-trash-move-modal.component.scss']
 })
 export class RbdTrashMoveModalComponent implements OnInit {
+  // initial state
   poolName: string;
   namespace: string;
   imageName: string;
+  hasSnapshots: boolean;
+
   imageSpec: ImageSpec;
   imageSpecStr: string;
   executingTasks: ExecutingTask[];
@@ -47,11 +50,11 @@ export class RbdTrashMoveModalComponent implements OnInit {
       expiresAt: [
         '',
         [
-          CdValidators.custom('format', (expiresAt) => {
+          CdValidators.custom('format', (expiresAt: string) => {
             const result = expiresAt === '' || moment(expiresAt, 'YYYY-MM-DD HH:mm:ss').isValid();
             return !result;
           }),
-          CdValidators.custom('expired', (expiresAt) => {
+          CdValidators.custom('expired', (expiresAt: string) => {
             const result = moment().isAfter(expiresAt);
             return result;
           })

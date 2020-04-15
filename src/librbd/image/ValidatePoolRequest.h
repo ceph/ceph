@@ -4,10 +4,10 @@
 #ifndef CEPH_LIBRBD_IMAGE_VALIDATE_POOL_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_VALIDATE_POOL_REQUEST_H
 
+#include "include/common_fwd.h"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
 
-class CephContext;
 class Context;
 class ContextWQ;
 

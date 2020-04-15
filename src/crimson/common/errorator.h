@@ -99,6 +99,18 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     };
   }
 
+  struct pass_further {
+    decltype(auto) operator()(const unthrowable_wrapper& e) {
+      return e;
+    }
+  };
+
+  struct discard {
+    decltype(auto) operator()(const unthrowable_wrapper&) {
+    }
+  };
+
+
 private:
   // can be used only to initialize the `instance` member
   explicit unthrowable_wrapper() = default;
@@ -388,8 +400,12 @@ private:
       : base_t(::seastar::make_ready_future<ValuesT...>(std::forward<A>(a)...)) {
     }
     [[gnu::always_inline]]
-    _future(exception_future_marker, std::exception_ptr&& ep)
-      : base_t(::seastar::make_exception_future<ValuesT...>(std::move(ep))) {
+    _future(exception_future_marker, ::seastar::future_state_base&& state) noexcept
+      : base_t(::seastar::futurize<base_t>::make_exception_future(std::move(state))) {
+    }
+    [[gnu::always_inline]]
+    _future(exception_future_marker, std::exception_ptr&& ep) noexcept
+      : base_t(::seastar::futurize<base_t>::make_exception_future(std::move(ep))) {
     }
 
     template <template <class...> class ErroratedFuture,
@@ -610,6 +626,28 @@ private:
     // let seastar::do_with to up-cast us to seastar::future.
     template<typename T, typename F>
     friend inline auto ::seastar::do_with(T&&, F&&);
+    template<typename T1, typename T2, typename T3_or_F, typename... More>
+    friend inline auto ::seastar::do_with(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
+  };
+
+  class Enabler {};
+
+  template <typename T>
+  using EnableIf = typename std::enable_if<contains_once_v<std::decay_t<T>>, Enabler>::type;
+
+  template <typename ErrorFunc>
+  struct all_same_way_t {
+    ErrorFunc func;
+    all_same_way_t(ErrorFunc &&error_func)
+      : func(std::forward<ErrorFunc>(error_func)) {}
+
+    template <typename ErrorT, EnableIf<ErrorT>...>
+    decltype(auto) operator()(ErrorT&& e) {
+      using decayed_t = std::decay_t<decltype(e)>;
+      auto&& handler =
+        decayed_t::error_t::handle(std::forward<ErrorFunc>(func));
+      return std::invoke(std::move(handler), std::forward<ErrorT>(e));
+    }
   };
 
 public:
@@ -626,7 +664,7 @@ public:
 
   // the visitor that forwards handling of all errors to next continuation
   struct pass_further {
-    template <class ErrorT>
+    template <class ErrorT, EnableIf<ErrorT>...>
     decltype(auto) operator()(ErrorT&& e) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "passing further disallowed ErrorT");
@@ -635,7 +673,7 @@ public:
   };
 
   struct discard_all {
-    template <class ErrorT>
+    template <class ErrorT, EnableIf<ErrorT>...>
     decltype(auto) operator()(ErrorT&&) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
@@ -644,14 +682,7 @@ public:
 
   template <class ErrorFunc>
   static decltype(auto) all_same_way(ErrorFunc&& error_func) {
-    return [
-      error_func = std::forward<ErrorFunc>(error_func)
-    ] (auto&& e) mutable -> decltype(auto) {
-      using decayed_t = std::decay_t<decltype(e)>;
-      auto&& handler =
-        decayed_t::error_t::handle(std::forward<ErrorFunc>(error_func));
-      return std::invoke(std::move(handler), std::forward<decltype(e)>(e));
-    };
+    return all_same_way_t<ErrorFunc>{std::forward<ErrorFunc>(error_func)};
   };
 
   // get a new errorator by extending current one with new error
@@ -700,6 +731,11 @@ public:
   static
   future<T...> make_exception_future2(std::exception_ptr&& ex) noexcept {
     return future<T...>(exception_future_marker(), std::move(ex));
+  }
+  template <typename... T>
+  static
+  future<T...> make_exception_future2(seastar::future_state_base&& state) noexcept {
+    return future<T...>(exception_future_marker(), std::move(state));
   }
   template <typename... T, typename Exception>
   static
@@ -842,6 +878,34 @@ namespace ct_error {
   using permission_denied = ct_error_code<std::errc::permission_denied>;
   using operation_not_supported =
     ct_error_code<std::errc::operation_not_supported>;
+  using not_connected = ct_error_code<std::errc::not_connected>;
+  using timed_out = ct_error_code<std::errc::timed_out>;
+  using value_too_large = ct_error_code<std::errc::value_too_large>;
+
+  struct pass_further_all {
+    template <class ErrorT>
+    decltype(auto) operator()(ErrorT&& e) {
+      return std::forward<ErrorT>(e);
+    }
+  };
+
+  struct discard_all {
+    template <class ErrorT>
+    decltype(auto) operator()(ErrorT&&) {
+    }
+  };
+
+  template <class ErrorFunc>
+  static decltype(auto) all_same_way(ErrorFunc&& error_func) {
+    return [
+      error_func = std::forward<ErrorFunc>(error_func)
+    ] (auto&& e) mutable -> decltype(auto) {
+      using decayed_t = std::decay_t<decltype(e)>;
+      auto&& handler =
+        decayed_t::error_t::handle(std::forward<ErrorFunc>(error_func));
+      return std::invoke(std::move(handler), std::forward<decltype(e)>(e));
+    };
+  };
 }
 
 using stateful_errc = stateful_error_t<std::errc>;

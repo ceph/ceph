@@ -115,13 +115,13 @@ seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
   });
 }
 
-store_statfs_t CyanStore::stat() const
+seastar::future<store_statfs_t> CyanStore::stat() const
 {
   logger().debug("{}", __func__);
   store_statfs_t st;
   st.total = crimson::common::local_conf().get_val<Option::size_t>("memstore_device_bytes");
   st.available = st.total - used_bytes;
-  return st;
+  return seastar::make_ready_future<store_statfs_t>(std::move(st));
 }
 
 seastar::future<std::vector<ghobject_t>, ghobject_t>
@@ -274,6 +274,20 @@ CyanStore::omap_get_values(
   }
   return seastar::make_ready_future<bool, omap_values_t>(
     true, values);
+}
+
+seastar::future<ceph::bufferlist>
+CyanStore::omap_get_header(
+    CollectionRef ch,
+    const ghobject_t& oid
+  ) {
+  auto c = static_cast<Collection*>(ch.get());
+  auto o = c->get_object(oid);
+  if (!o) {
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+  }
+
+  return seastar::make_ready_future<ceph::bufferlist>(o->omap_header);
 }
 
 seastar::future<> CyanStore::do_transaction(CollectionRef ch,
@@ -647,4 +661,79 @@ unsigned CyanStore::get_max_attr_name_length() const
   // arbitrary limitation exactly like in the case of MemStore.
   return 256;
 }
+
+seastar::future<FuturizedStore::OmapIteratorRef> CyanStore::get_omap_iterator(
+    CollectionRef ch,
+    const ghobject_t& oid)
+{
+  auto c = static_cast<Collection*>(ch.get());
+  auto o = c->get_object(oid);
+  if (!o) {
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+  }
+  return seastar::make_ready_future<FuturizedStore::OmapIteratorRef>(
+	    new CyanStore::CyanOmapIterator(o));
+}
+
+seastar::future<std::map<uint64_t, uint64_t>>
+CyanStore::fiemap(
+    CollectionRef ch,
+    const ghobject_t& oid,
+    uint64_t off,
+    uint64_t len)
+{
+  auto c = static_cast<Collection*>(ch.get());
+
+  ObjectRef o = c->get_object(oid);
+  if (!o) {
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+  }
+  std::map<uint64_t, uint64_t> m{{0, o->get_size()}};
+  return seastar::make_ready_future<std::map<uint64_t, uint64_t>>(std::move(m));
+}
+
+seastar::future<struct stat>
+CyanStore::stat(
+  CollectionRef ch,
+  const ghobject_t& oid)
+{
+  auto c = static_cast<Collection*>(ch.get());
+  auto o = c->get_object(oid);
+  if (!o) {
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+  }
+  struct stat st;
+  st.st_size = o->get_size();
+  return seastar::make_ready_future<struct stat>(std::move(st));
+}
+
+seastar::future<int> CyanStore::CyanOmapIterator::seek_to_first()
+{
+  iter = obj->omap.begin();
+  return seastar::make_ready_future<int>(0);
+}
+
+seastar::future<int> CyanStore::CyanOmapIterator::upper_bound(const std::string& after)
+{
+  iter = obj->omap.upper_bound(after);
+  return seastar::make_ready_future<int>(0);
+}
+
+seastar::future<int> CyanStore::CyanOmapIterator::lower_bound(const std::string &to)
+{
+  iter = obj->omap.lower_bound(to);
+  return seastar::make_ready_future<int>(0);
+}
+
+bool CyanStore::CyanOmapIterator::valid() const
+{
+  return iter != obj->omap.end();
+}
+
+seastar::future<int> CyanStore::CyanOmapIterator::next()
+{
+  ++iter;
+  return seastar::make_ready_future<int>(0);
+}
+
 }

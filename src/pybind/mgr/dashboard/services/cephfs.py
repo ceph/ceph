@@ -62,26 +62,41 @@ class CephFS(object):
             if d:
                 self.cfs.closedir(d)
 
-    def ls_dir(self, path, level):
+    def ls_dir(self, path, depth):
+        """
+        List directories of specified path with additional information.
+        :param path: The root directory path.
+        :type path: str | bytes
+        :param depth: The number of steps to go down the directory tree.
+        :type depth: int | str
+        :return: A list of directory dicts which consist of name, path,
+            parent, snapshots and quotas.
+        :rtype: list
+        """
+        paths = self._ls_dir(path, int(depth))
+        # Convert (bytes => string), prettify paths (strip slashes)
+        # and append additional information.
+        return [self.get_directory(p) for p in paths if p != path.encode()]
+
+    def _ls_dir(self, path, depth):
         """
         List directories of specified path.
         :param path: The root directory path.
         :type path: str | bytes
-        :param level: The number of steps to go down the directory tree.
-        :type level: int
-        :return: A list of directory paths (bytes encoded). The specified
-            root directory is also included.
+        :param depth: The number of steps to go down the directory tree.
+        :type depth: int
+        :return: A list of directory paths (bytes encoded).
             Example:
             ls_dir('/photos', 1) => [
-                b'/photos', b'/photos/flowers', b'/photos/cars'
+                b'/photos/flowers', b'/photos/cars'
             ]
         :rtype: list
         """
         if isinstance(path, six.string_types):
             path = path.encode()
-        logger.debug("get_dir_list dirpath=%s level=%s", path,
-                     level)
-        if level == 0:
+        logger.debug("get_dir_list dirpath=%s depth=%s", path,
+                     depth)
+        if depth == 0:
             return [path]
         logger.debug("opening dirpath=%s", path)
         with self.opendir(path) as d:
@@ -95,9 +110,27 @@ class CephFS(object):
                 if dent.is_dir():
                     logger.debug("found dir=%s", dent.d_name)
                     subdir_path = os.path.join(path, dent.d_name)
-                    paths.extend(self.ls_dir(subdir_path, level - 1))
+                    paths.extend(self._ls_dir(subdir_path, depth - 1))
                 dent = self.cfs.readdir(d)
         return paths
+
+    def get_directory(self, path):
+        """
+        Transforms path of directory into a meaningful dictionary.
+        :param path: The root directory path.
+        :type path: str | bytes
+        :return: Dict consists of name, path, parent, snapshots and quotas.
+        :rtype: dict
+        """
+        path = path.decode()
+        not_root = path != os.sep
+        return {
+            'name': os.path.basename(path) if not_root else path,
+            'path': path,
+            'parent': os.path.dirname(path) if not_root else None,
+            'snapshots': self.ls_snapshots(path),
+            'quotas': self.get_quotas(path) if not_root else None
+        }
 
     def dir_exists(self, path):
         try:

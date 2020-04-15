@@ -1,24 +1,32 @@
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnDestroy,
+  OnInit,
+  Output,
+  ViewChild
+} from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
-import { getterForProp } from '@swimlane/ngx-datatable/release/utils';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { Subscription } from 'rxjs';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
+import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
+import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
-import { InventoryDeviceFilter } from './inventory-device-filter.interface';
-import { InventoryDeviceFiltersChangeEvent } from './inventory-device-filters-change-event.interface';
 import { InventoryDevice } from './inventory-device.model';
 
 @Component({
@@ -26,7 +34,10 @@ import { InventoryDevice } from './inventory-device.model';
   templateUrl: './inventory-devices.component.html',
   styleUrls: ['./inventory-devices.component.scss']
 })
-export class InventoryDevicesComponent implements OnInit, OnChanges {
+export class InventoryDevicesComponent implements OnInit, OnDestroy {
+  @ViewChild(TableComponent, { static: true })
+  table: TableComponent;
+
   // Devices
   @Input() devices: InventoryDevice[] = [];
 
@@ -46,17 +57,16 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
   // Device table row selection type
   @Input() selectionType: string = undefined;
 
-  @Output() filterChange = new EventEmitter<InventoryDeviceFiltersChangeEvent>();
+  @Output() filterChange = new EventEmitter<CdTableColumnFiltersChange>();
 
-  filterInDevices: InventoryDevice[] = [];
-  filterOutDevices: InventoryDevice[] = [];
+  @Output() fetchInventory = new EventEmitter();
 
   icons = Icons;
   columns: Array<CdTableColumn> = [];
-  filters: InventoryDeviceFilter[] = [];
   selection: CdTableSelection = new CdTableSelection();
   permission: Permission;
   tableActions: CdTableAction[];
+  fetchInventorySub: Subscription;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -140,93 +150,29 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
       return !this.hiddenColumns.includes(col.prop);
     });
 
-    // init filters
-    this.filters = this.columns
-      .filter((col: any) => {
-        return this.filterColumns.includes(col.prop);
-      })
-      .map((col: any) => {
-        return {
-          label: col.name,
-          prop: col.prop,
-          initValue: '*',
-          value: '*',
-          options: [{ value: '*', formatValue: '*' }],
-          pipe: col.pipe
-        };
-      });
-
-    this.filterInDevices = [...this.devices];
-    this.updateFilterOptions(this.devices);
-  }
-
-  ngOnChanges() {
-    this.updateFilterOptions(this.devices);
-    this.filterInDevices = [...this.devices];
-    // TODO: apply filter, columns changes, filter changes
-  }
-
-  updateFilterOptions(devices: InventoryDevice[]) {
-    // update filter options to all possible values in a column, might be time-consuming
-    this.filters.forEach((filter) => {
-      const values = _.sortedUniq(_.map(devices, filter.prop).sort());
-      const options = values.map((v: string) => {
-        return {
-          value: v,
-          formatValue: filter.pipe ? filter.pipe.transform(v) : v
-        };
-      });
-      filter.options = [{ value: '*', formatValue: '*' }, ...options];
-    });
-  }
-
-  doFilter() {
-    this.filterOutDevices = [];
-    const appliedFilters = [];
-    let devices: any = [...this.devices];
-    this.filters.forEach((filter) => {
-      if (filter.value === filter.initValue) {
-        return;
+    // init column filters
+    _.forEach(this.filterColumns, (prop) => {
+      const col = _.find(this.columns, { prop: prop });
+      if (col) {
+        col.filterable = true;
       }
-      appliedFilters.push({
-        label: filter.label,
-        prop: filter.prop,
-        value: filter.value,
-        formatValue: filter.pipe ? filter.pipe.transform(filter.value) : filter.value
-      });
-      // Separate devices to filter-in and filter-out parts.
-      // Cast column value to string type because options are always string.
-      const parts = _.partition(devices, (row) => {
-        // use getter from ngx-datatable for props like 'sys_api.size'
-        const valueGetter = getterForProp(filter.prop);
-        return `${valueGetter(row, filter.prop)}` === filter.value;
-      });
-      devices = parts[0];
-      this.filterOutDevices = [...this.filterOutDevices, ...parts[1]];
     });
-    this.filterInDevices = devices;
-    this.filterChange.emit({
-      filters: appliedFilters,
-      filterInDevices: this.filterInDevices,
-      filterOutDevices: this.filterOutDevices
-    });
+
+    if (this.fetchInventory.observers.length > 0) {
+      this.fetchInventorySub = this.table.fetchData.subscribe(() => {
+        this.fetchInventory.emit();
+      });
+    }
   }
 
-  onFilterChange() {
-    this.doFilter();
+  ngOnDestroy() {
+    if (this.fetchInventorySub) {
+      this.fetchInventorySub.unsubscribe();
+    }
   }
 
-  onFilterReset() {
-    this.filters.forEach((item) => {
-      item.value = item.initValue;
-    });
-    this.filterInDevices = [...this.devices];
-    this.filterOutDevices = [];
-    this.filterChange.emit({
-      filters: [],
-      filterInDevices: this.filterInDevices,
-      filterOutDevices: this.filterOutDevices
-    });
+  onColumnFiltersChanged(event: CdTableColumnFiltersChange) {
+    this.filterChange.emit(event);
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -257,7 +203,7 @@ export class InventoryDevicesComponent implements OnInit, OnChanges {
           }
         ],
         submitButtonText: this.i18n('Execute'),
-        onSubmit: (values) => {
+        onSubmit: (values: any) => {
           this.orchService.identifyDevice(hostname, device, values.duration).subscribe(() => {
             this.notificationService.show(
               NotificationType.success,

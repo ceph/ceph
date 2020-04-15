@@ -20,9 +20,9 @@ export class IscsiComponent implements OnInit {
   @ViewChild('iscsiRelativeDateTpl', { static: true })
   iscsiRelativeDateTpl: TemplateRef<any>;
 
-  gateways = [];
+  gateways: any[] = [];
   gatewaysColumns: any;
-  images = [];
+  images: any[] = [];
   imagesColumns: any;
 
   constructor(
@@ -104,13 +104,13 @@ export class IscsiComponent implements OnInit {
   }
 
   refresh() {
-    this.iscsiService.overview().subscribe((overview: Array<any>) => {
+    this.iscsiService.overview().subscribe((overview: object) => {
       this.gateways = overview['gateways'];
       this.images = overview['images'];
       this.images.map((image) => {
         if (image.stats_history) {
-          image.stats_history.rd_bytes = image.stats_history.rd_bytes.map((i) => i[1]);
-          image.stats_history.wr_bytes = image.stats_history.wr_bytes.map((i) => i[1]);
+          image.stats_history.rd_bytes = image.stats_history.rd_bytes.map((i: any) => i[1]);
+          image.stats_history.wr_bytes = image.stats_history.wr_bytes.map((i: any) => i[1]);
         }
         image.cdIsBinary = true;
         return image;

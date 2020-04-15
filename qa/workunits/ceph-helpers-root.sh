@@ -108,7 +108,7 @@ function pool_read_write() {
 
     ceph osd pool delete $test_pool $test_pool --yes-i-really-really-mean-it || return 1
     ceph osd pool create $test_pool 4 || return 1
-    ceph osd pool set $test_pool size $size || return 1
+    ceph osd pool set $test_pool size $size --yes-i-really-mean-it || return 1
     ceph osd pool set $test_pool min_size $size || return 1
     ceph osd pool application enable $test_pool rados
 

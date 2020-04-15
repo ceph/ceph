@@ -471,6 +471,9 @@ void EventEntry::decode(bufferlist::const_iterator& it) {
   case EVENT_TYPE_DEMOTE_PROMOTE:
     event = DemotePromoteEvent();
     break;
+  case EVENT_TYPE_SNAP_LIMIT:
+    event = SnapLimitEvent();
+    break;
   case EVENT_TYPE_UPDATE_FEATURES:
     event = UpdateFeaturesEvent();
     break;
@@ -830,6 +833,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_DEMOTE_PROMOTE:
     out << "Demote/Promote";
+    break;
+  case EVENT_TYPE_SNAP_LIMIT:
+    out << "SnapLimit";
     break;
   case EVENT_TYPE_UPDATE_FEATURES:
     out << "UpdateFeatures";

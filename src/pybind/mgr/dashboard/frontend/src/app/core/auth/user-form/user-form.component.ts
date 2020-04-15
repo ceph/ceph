@@ -47,7 +47,7 @@ export class UserFormComponent implements OnInit {
   messages = new SelectMessages({ empty: this.i18n('There are no roles.') }, this.i18n);
   action: string;
   resource: string;
-  passwordPolicyHelpText: string;
+  passwordPolicyHelpText = '';
   passwordStrengthLevelClass: string;
   passwordValuation: string;
   icons = Icons;
@@ -79,7 +79,9 @@ export class UserFormComponent implements OnInit {
   }
 
   createForm() {
-    this.passwordPolicyHelpText = this.passwordPolicyService.getHelpText();
+    this.passwordPolicyService.getHelpText().subscribe((helpText: string) => {
+      this.passwordPolicyHelpText = helpText;
+    });
     this.userForm = this.formBuilder.group(
       {
         username: ['', [Validators.required]],
@@ -104,7 +106,8 @@ export class UserFormComponent implements OnInit {
         pwdExpirationDate: [''],
         email: ['', [CdValidators.email]],
         roles: [[]],
-        enabled: [true, [Validators.required]]
+        enabled: [true, [Validators.required]],
+        pwdUpdateRequired: [true]
       },
       {
         validators: [CdValidators.match('password', 'confirmpassword')]
@@ -121,7 +124,7 @@ export class UserFormComponent implements OnInit {
     }
     this.minDate = new Date();
 
-    const observables = [this.roleService.list(), this.settingsService.pwdExpirationSettings()];
+    const observables = [this.roleService.list(), this.settingsService.getStandardSettings()];
     observableForkJoin(observables).subscribe(
       (result: [UserFormRoleModel[], CdPwdExpirationSettings]) => {
         this.allRoles = _.map(result[0], (role) => {
@@ -163,7 +166,7 @@ export class UserFormComponent implements OnInit {
   }
 
   setResponse(response: UserFormModel) {
-    ['username', 'name', 'email', 'roles', 'enabled'].forEach((key) =>
+    ['username', 'name', 'email', 'roles', 'enabled', 'pwdUpdateRequired'].forEach((key) =>
       this.userForm.get(key).setValue(response[key])
     );
     const expirationDate = response['pwdExpirationDate'];
@@ -174,7 +177,7 @@ export class UserFormComponent implements OnInit {
 
   getRequest(): UserFormModel {
     const userFormModel = new UserFormModel();
-    ['username', 'password', 'name', 'email', 'roles', 'enabled'].forEach(
+    ['username', 'password', 'name', 'email', 'roles', 'enabled', 'pwdUpdateRequired'].forEach(
       (key) => (userFormModel[key] = this.userForm.get(key).value)
     );
     const expirationDate = this.userForm.get('pwdExpirationDate').value;
@@ -225,14 +228,6 @@ export class UserFormComponent implements OnInit {
     } else {
       this.doEditAction();
     }
-  }
-
-  showExpirationDateField() {
-    return (
-      this.userForm.getValue('pwdExpirationDate') > 0 ||
-      this.userForm.touched ||
-      this.pwdExpirationSettings.pwdExpirationSpan > 0
-    );
   }
 
   public isCurrentUser(): boolean {

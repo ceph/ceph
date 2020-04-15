@@ -15,13 +15,12 @@
 #ifndef CEPH_AUTHMETHODLIST_H
 #define CEPH_AUTHMETHODLIST_H
 
+#include "include/common_fwd.h"
 #include "include/int_types.h"
 
 #include <list>
 #include <set>
 #include <string>
-
-class CephContext;
 
 class AuthMethodList {
   std::list<__u32> auth_supported;

@@ -1,10 +1,18 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import * as _ from 'lodash';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
-import { CdPwdExpirationSettings } from '../models/cd-pwd-expiration-settings';
 import { ApiModule } from './api.module';
+
+class SettingResponse {
+  name: string;
+  default: any;
+  type: string;
+  value: any;
+}
 
 @Injectable({
   providedIn: ApiModule
@@ -13,6 +21,21 @@ export class SettingsService {
   constructor(private http: HttpClient) {}
 
   private settings: { [url: string]: string } = {};
+
+  getValues(names: string | string[]): Observable<{ [key: string]: any }> {
+    if (_.isArray(names)) {
+      names = names.join(',');
+    }
+    return this.http.get(`api/settings?names=${names}`).pipe(
+      map((resp: SettingResponse[]) => {
+        const result = {};
+        _.forEach(resp, (option: SettingResponse) => {
+          _.set(result, option.name, option.value);
+        });
+        return result;
+      })
+    );
+  }
 
   ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
     const setting = this.settings[url];
@@ -38,7 +61,7 @@ export class SettingsService {
   }
 
   // Easiest way to stop reloading external content that can't be reached
-  disableSetting(url) {
+  disableSetting(url: string) {
     this.settings[url] = '';
   }
 
@@ -46,11 +69,11 @@ export class SettingsService {
     return data.value || data.instance || '';
   }
 
-  validateGrafanaDashboardUrl(uid) {
+  validateGrafanaDashboardUrl(uid: string) {
     return this.http.get(`api/grafana/validation/${uid}`);
   }
 
-  pwdExpirationSettings(): Observable<CdPwdExpirationSettings> {
-    return this.http.get<CdPwdExpirationSettings>('ui-api/standard_settings');
+  getStandardSettings(): Observable<{ [key: string]: any }> {
+    return this.http.get('ui-api/standard_settings');
   }
 }

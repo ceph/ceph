@@ -516,25 +516,22 @@ public:
 
   bool get_obj(rgw_bucket_dir_entry *obj) {
     if (obj_iter == objs.end()) {
-      delay();
-      return false;
-    }
-    if (is_truncated && (obj_iter + 1)==objs.end()) {
-      list_op.params.marker = obj_iter->key;
-
-      int ret = fetch();
-      if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: list_op returned ret=" << ret << dendl;
-        return ret;
-      } 
-      obj_iter = objs.begin();
-      if (obj_iter == objs.end()) {
+      if (!is_truncated) {
+        delay();
         return false;
+      } else {
+        list_op.params.marker = pre_obj.key;
+
+        int ret = fetch();
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: list_op returned ret=" << ret << dendl;
+          return ret;
+        }
       }
       delay();
     }
     *obj = *obj_iter;
-    return true;
+    return obj_iter != objs.end();
   }
 
   rgw_bucket_dir_entry get_prev_obj() {
@@ -772,7 +769,9 @@ public:
       r = remove_expired_obj(oc, !oc.bucket_info.versioned());
     }
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " 
+      << oc.bucket_info.bucket << ":" << o.key 
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << dendl;
@@ -801,7 +800,9 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc, true);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
+      << oc.bucket_info.bucket << ":" << o.key 
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << " (non-current expiration)" << dendl;
@@ -832,7 +833,9 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc, true);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj (delete marker expiration) "
+      << oc.bucket_info.bucket << ":" << o.key
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << " (delete marker expiration)" << dendl;
@@ -902,7 +905,10 @@ public:
     int r = oc.store->getRados()->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
                                      target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp, null_yield);
     if (r < 0) {
-      ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
+      ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
+      << oc.bucket_info.bucket << ":" << o.key 
+      << " -> " << transition.storage_class 
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldpp_dout(oc.dpp, 2) << "TRANSITIONED:" << oc.bucket_info.bucket << ":" << o.key << " -> " << transition.storage_class << dendl;
@@ -1009,7 +1015,9 @@ int LCOpRule::process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp)
 
     int r = (*selected)->process(ctx);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " 
+      << env.bucket_info.bucket << ":" << o.key
+      << " " << cpp_strerror(r) << dendl;
       return r;
     }
     ldpp_dout(dpp, 20) << "processed:" << env.bucket_info.bucket << ":" << o.key << dendl;
@@ -1648,7 +1656,7 @@ std::string s3_expiration_header(
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
 	  boost::optional<ceph::real_time>(
-	    mtime + make_timespan(rule_expiration.get_days()*24*60*60));
+	    mtime + make_timespan(rule_expiration.get_days()*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
       }
     }
 

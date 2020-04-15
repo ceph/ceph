@@ -234,6 +234,7 @@ class tcp {
    public:
     C_handle_delayed_ack(tcb *t): tc(t) { }
     void do_request(uint64_t r) {
+      tc->_delayed_ack_fd.destroy();
       tc->_nr_full_seg_received = 0;
       tc->output();
     }
@@ -245,6 +246,7 @@ class tcp {
    public:
     C_handle_retransmit(tcb *t): tc(t) { }
     void do_request(uint64_t r) {
+      tc->retransmit_fd.destroy();
       tc->retransmit();
     }
   };
@@ -255,6 +257,7 @@ class tcp {
    public:
     C_handle_persist(tcb *t): tc(t) { }
     void do_request(uint64_t r) {
+      tc->persist_fd.destroy();
       tc->persist();
     }
   };

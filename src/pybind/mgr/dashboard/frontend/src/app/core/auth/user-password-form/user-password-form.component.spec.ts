@@ -66,6 +66,7 @@ describe('UserPasswordFormComponent', () => {
   });
 
   it('should submit', () => {
+    spyOn(component, 'onPasswordChange').and.callThrough();
     spyOn(authStorageService, 'getUsername').and.returnValue('xyz');
     formHelper.setMultipleValues({
       oldpassword: 'foo',
@@ -80,6 +81,7 @@ describe('UserPasswordFormComponent', () => {
       new_password: 'bar'
     });
     request.flush({});
+    expect(component.onPasswordChange).toHaveBeenCalled();
     expect(router.navigate).toHaveBeenCalledWith(['/logout']);
   });
 });

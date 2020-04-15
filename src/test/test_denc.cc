@@ -124,7 +124,7 @@ struct denc_counter_t {
     ++counts.num_encode;
   }
   void decode(buffer::ptr::const_iterator &p) {
-    p.advance(1);
+    p += 1;
     ++counts.num_decode;
   }
 };
@@ -140,7 +140,7 @@ struct denc_counter_bounded_t {
     ++counts.num_encode;
   }
   void decode(buffer::ptr::const_iterator &p) {
-    p.advance(1);
+    p += 1;
     ++counts.num_decode;
   }
 };
@@ -712,7 +712,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     ASSERT_GT(segmented.get_num_buffers(), 1u);
     ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
     auto p = segmented.cbegin();
-    p.advance(large_bl.length());
+    p += large_bl.length();
     ASSERT_LT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
     vector<Legacy> v;
     Legacy::reset();
@@ -730,7 +730,7 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     ASSERT_GT(segmented.get_num_buffers(), 1u);
     ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
     auto p = segmented.cbegin();
-    p.advance(small_bl.length());
+    p += small_bl.length();
     ASSERT_GT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
     vector<Legacy> v;
     Legacy::reset();

@@ -73,17 +73,16 @@ namespace librbd {
     std::string group_snap_name;
   } snap_group_namespace_t;
 
-  typedef struct {
-    bool demoted;
-    std::set<std::string> mirror_peer_uuids;
-  } snap_mirror_primary_namespace_t;
+  typedef rbd_snap_mirror_state_t snap_mirror_state_t;
 
   typedef struct {
+    snap_mirror_state_t state;
+    std::set<std::string> mirror_peer_uuids;
+    bool complete;
     std::string primary_mirror_uuid;
     uint64_t primary_snap_id;
-    bool copied;
     uint64_t last_copied_object_number;
-  } snap_mirror_non_primary_namespace_t;
+  } snap_mirror_namespace_t;
 
   typedef struct {
     std::string client;
@@ -103,7 +102,7 @@ namespace librbd {
     std::string uuid;
     mirror_peer_direction_t direction;
     std::string site_name;
-    std::string fsid;
+    std::string mirror_uuid;
     std::string client_name;
     time_t last_seen;
   } mirror_peer_site_t;
@@ -129,7 +128,7 @@ namespace librbd {
   } mirror_image_status_t CEPH_RBD_DEPRECATED;
 
   typedef struct {
-    std::string fsid;
+    std::string mirror_uuid;
     mirror_image_status_state_t state;
     std::string description;
     time_t last_update;
@@ -315,6 +314,8 @@ public:
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
 
+  int mirror_uuid_get(IoCtx& io_ctx, std::string* mirror_uuid);
+
   int mirror_peer_bootstrap_create(IoCtx& io_ctx, std::string* token);
   int mirror_peer_bootstrap_import(IoCtx& io_ctx,
                                    mirror_peer_direction_t direction,
@@ -347,6 +348,10 @@ public:
       std::map<mirror_image_status_state_t, int> *states);
   int mirror_image_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
       size_t max, std::map<std::string, std::string> *sevice_ids);
+  int mirror_image_info_list(IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+      const std::string &start_id, size_t max,
+      std::map<std::string, std::pair<mirror_image_mode_t,
+                                      mirror_image_info_t>> *entries);
 
   /// mirror_peer_ commands are deprecated to mirror_peer_site_ equivalents
   int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
@@ -615,11 +620,8 @@ public:
                                snap_group_namespace_t *group_namespace,
                                size_t snap_group_namespace_size);
   int snap_get_trash_namespace(uint64_t snap_id, std::string* original_name);
-  int snap_get_mirror_primary_namespace(
-      uint64_t snap_id, snap_mirror_primary_namespace_t *mirror_namespace,
-      size_t snap_mirror_namespace_size);
-  int snap_get_mirror_non_primary_namespace(
-      uint64_t snap_id, snap_mirror_non_primary_namespace_t *mirror_namespace,
+  int snap_get_mirror_namespace(
+      uint64_t snap_id, snap_mirror_namespace_t *mirror_namespace,
       size_t snap_mirror_namespace_size);
 
   /* I/O */

@@ -151,7 +151,7 @@ describe('CriticalConfirmationModalComponent', () => {
   });
 
   describe('component functions', () => {
-    const changeValue = (value) => {
+    const changeValue = (value: boolean) => {
       const ctrl = component.deletionForm.get('confirmation');
       ctrl.setValue(value);
       ctrl.markAsDirty();
@@ -202,7 +202,7 @@ describe('CriticalConfirmationModalComponent', () => {
           spyOn(mockComponent.ctrlRef, 'hide').and.callThrough();
         });
 
-        it('should test fake deletion that closes modal', <any>fakeAsync(() => {
+        it('should test fake deletion that closes modal', fakeAsync(() => {
           // Before deletionCall
           expect(component.submitAction).not.toHaveBeenCalled();
           // During deletionCall
@@ -228,7 +228,7 @@ describe('CriticalConfirmationModalComponent', () => {
           spyOn(mockComponent, 'fakeDelete').and.callThrough();
         });
 
-        it('should delete and close modal', <any>fakeAsync(() => {
+        it('should delete and close modal', fakeAsync(() => {
           // During deletionCall
           component.callSubmitAction();
           expect(mockComponent.finished).toBe(undefined);

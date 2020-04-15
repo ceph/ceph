@@ -22,6 +22,8 @@ override:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     log-whitelist:
     - but it is still running
     - missing primary copy of
@@ -35,6 +37,7 @@ tasks:
     - \(OBJECT_
     - \(TOO_FEW_PGS\)
     - \(POOL_BACKFILLFULL\)
+    - slow request
 - thrashosds:
     op_delay: 30
     clean_interval: 120

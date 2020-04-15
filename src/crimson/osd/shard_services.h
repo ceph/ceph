@@ -6,6 +6,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 
+#include "include/common_fwd.h"
 #include "osd_operation.h"
 #include "msg/MessageRef.h"
 #include "crimson/os/futurized_collection.h"
@@ -29,7 +30,6 @@ namespace crimson::os {
   class FuturizedStore;
 }
 
-class PerfCounters;
 class OSDMap;
 class PeeringCtx;
 class BufferedRecoveryMessages;
@@ -48,7 +48,7 @@ class ShardServices {
   crimson::mgr::Client &mgrc;
   crimson::os::FuturizedStore &store;
 
-  CephContext cct;
+  crimson::common::CephContext cct;
 
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
@@ -71,7 +71,7 @@ public:
     return store;
   }
 
-  CephContext *get_cct() {
+  crimson::common::CephContext *get_cct() {
     return &cct;
   }
 
@@ -150,6 +150,16 @@ public:
   seastar::future<> send_pg_created();
   void prune_pg_created();
 
+  unsigned get_pg_num() const {
+    return num_pgs;
+  }
+  void inc_pg_num() {
+    ++num_pgs;
+  }
+  void dec_pg_num() {
+    --num_pgs;
+  }
+
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   // Time state
@@ -161,6 +171,9 @@ public:
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
   crimson::osd::ObjectContextRegistry obc_registry;
+
+private:
+  unsigned num_pgs = 0;
 };
 
 }

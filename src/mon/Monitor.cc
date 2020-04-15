@@ -100,6 +100,38 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+using namespace TOPNSPC::common;
+
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::ErasureCodeProfile;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
+
+
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
@@ -314,7 +346,7 @@ int Monitor::do_admin_command(
     _quorum_status(f, out);
   } else if (command == "sync_force") {
     string validate;
-    if ((!cmd_getval(g_ceph_context, cmdmap, "validate", validate)) ||
+    if ((!cmd_getval(cmdmap, "validate", validate)) ||
 	(validate != "--yes-i-really-mean-it")) {
       err << "are you SURE? this will mean the monitor store will be erased "
 	"the next time the monitor is restarted.  pass "
@@ -340,7 +372,7 @@ int Monitor::do_admin_command(
   } else if (command == "sessions") {
     f->open_array_section("sessions");
     for (auto p : session_map.sessions) {
-      f->dump_stream("session") << *p;
+      f->dump_object("session", *p);
     }
     f->close_section();
   } else if (command == "dump_historic_ops") {
@@ -360,7 +392,7 @@ int Monitor::do_admin_command(
     }
   } else if (command == "quorum") {
     string quorumcmd;
-    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
+    cmd_getval(cmdmap, "quorumcmd", quorumcmd);
     if (quorumcmd == "exit") {
       start_election();
       elector.stop_participating();
@@ -374,7 +406,7 @@ int Monitor::do_admin_command(
     }
   } else if (command == "smart") {
     string want_devid;
-    cmd_getval(cct, cmdmap, "devid", want_devid);
+    cmd_getval(cmdmap, "devid", want_devid);
 
     string devname = store->get_devname();
     set<string> devnames;
@@ -406,7 +438,7 @@ int Monitor::do_admin_command(
       goto abort;
     }
     string cmd;
-    if (!cmd_getval(cct, cmdmap, "heapcmd", cmd)) {
+    if (!cmd_getval(cmdmap, "heapcmd", cmd)) {
       err << "unable to get value for command \"" << cmd << "\"";
       r = -EINVAL;
       goto abort;
@@ -414,7 +446,7 @@ int Monitor::do_admin_command(
     std::vector<std::string> cmd_vec;
     get_str_vec(cmd, cmd_vec);
     string val;
-    if (cmd_getval(cct, cmdmap, "value", val)) {
+    if (cmd_getval(cmdmap, "value", val)) {
       cmd_vec.push_back(val);
     }
     ceph_heap_profiler_handle_command(cmd_vec, out);
@@ -477,6 +509,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_MIMIC);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_PACIFIC);
   return compat;
 }
 
@@ -862,7 +895,7 @@ int Monitor::preinit()
       // not registerd by me
       continue;
     }
-    r = admin_socket->register_command(prefix, admin_hook,
+    r = admin_socket->register_command(command.cmdstring, admin_hook,
 				       command.helpstring);
     ceph_assert(r == 0);
   }
@@ -933,7 +966,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
       auto p = bl.cbegin();
       decode(fingerprint, p);
     }
-    catch (buffer::error& e) {
+    catch (ceph::buffer::error& e) {
       dout(10) << __func__ << " failed to decode cluster_fingerprint" << dendl;
     }
   } else {
@@ -1153,6 +1186,19 @@ void Monitor::bootstrap()
 	    << messenger->get_myaddrs()
 	    << ", monmap is " << monmap->get_addrs(newrank) << ", respawning"
 	    << dendl;
+
+    if (monmap->get_epoch()) {
+      // store this map in temp mon_sync location so that we use it on
+      // our next startup
+      derr << " stashing newest monmap " << monmap->get_epoch()
+	   << " for next startup" << dendl;
+      bufferlist bl;
+      monmap->encode(bl, -1);
+      auto t(std::make_shared<MonitorDBStore::Transaction>());
+      t->put("mon_sync", "temp_newer_monmap", bl);
+      store->apply_transaction(t);
+    }
+
     respawn();
   }
   if (newrank != rank) {
@@ -1218,7 +1264,7 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
 
   entity_addrvec_t addrs;
   string addrstr;
-  if (cmd_getval(g_ceph_context, cmdmap, "addr", addrstr)) {
+  if (cmd_getval(cmdmap, "addr", addrstr)) {
     dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' addr '"
 	     << addrstr << "'" << dendl;
 
@@ -1244,7 +1290,7 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
 	addrs.v[0].set_type(entity_addr_t::TYPE_MSGR2);
       }
     }
-  } else if (cmd_getval(g_ceph_context, cmdmap, "addrv", addrstr)) {
+  } else if (cmd_getval(cmdmap, "addrv", addrstr)) {
     dout(10) << "_add_bootstrap_peer_hintv '" << cmd << "' addrv '"
 	     << addrstr << "'" << dendl;
     const char *end = 0;
@@ -2408,6 +2454,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_OCTOPUS));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_PACIFIC)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_PACIFIC));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_PACIFIC));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_PACIFIC);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2436,6 +2489,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_OCTOPUS;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_PACIFIC)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_PACIFIC;
   }
 
   // monmap
@@ -2963,11 +3019,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       for (auto& p : service_map.services) {
         const std::string &service = p.first;
         // filter out normal ceph entity types
-        if (service == "osd" ||
-            service == "client" ||
-            service == "mon" ||
-            service == "mds" ||
-            service == "mgr") {
+        if (ServiceMap::is_normal_ceph_entity(service)) {
           continue;
         }
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
@@ -3009,7 +3061,7 @@ void Monitor::_generate_command_map(cmdmap_t& cmdmap,
       continue;
     if (p->first == "caps") {
       vector<string> cv;
-      if (cmd_getval(g_ceph_context, cmdmap, "caps", cv) &&
+      if (cmd_getval(cmdmap, "caps", cv) &&
 	  cv.size() % 2 == 0) {
 	for (unsigned i = 0; i < cv.size(); i += 2) {
 	  string k = string("caps_") + cv[i];
@@ -3118,7 +3170,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
   map<string,string> param_str_map;
   _generate_command_map(cmdmap, param_str_map);
   string prefix;
-  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+  if (!cmd_getval(cmdmap, "prefix", prefix)) {
     return reply_tell_command(op, -EINVAL, "no prefix");
   }
   if (auto cmd = _get_moncommand(prefix,
@@ -3187,7 +3239,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // check return value. If no prefix parameter provided,
   // return value will be false, then return error info.
-  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+  if (!cmd_getval(cmdmap, "prefix", prefix)) {
     reply_command(op, -EINVAL, "command prefix not found", 0);
     return;
   }
@@ -3226,6 +3278,19 @@ void Monitor::handle_command(MonOpRequestRef op)
        prefix == "smart" ||
        prefix == "mon_status" ||
        prefix == "heap")) {
+    if (m->get_connection()->get_messenger() == 0) {
+      // Prior to octopus, monitors might forward these messages
+      // around. that was broken at baseline, and if we try to process
+      // this message now, it will assert out when we try to send a
+      // message in reply from the asok/tell worker (see
+      // AnonConnection).  Just reply with an error.
+      dout(5) << __func__ << " failing forwarded command from a (presumably) "
+	      << "pre-octopus peer" << dendl;
+      reply_command(
+	op, -EBUSY,
+	"failing forwarded tell command in mixed-version mon cluster", 0);
+      return;
+    }
     dout(5) << __func__ << " passing command to tell/asok" << dendl;
     cct->get_admin_socket()->queue_tell_command(m);
     return;
@@ -3237,7 +3302,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   dout(0) << "handle_command " << *m << dendl;
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   get_str_vec(prefix, fullcmd);
@@ -3486,7 +3551,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 	     prefix == "health" ||
 	     prefix == "df") {
     string detail;
-    cmd_getval(g_ceph_context, cmdmap, "detail", detail);
+    cmd_getval(cmdmap, "detail", detail);
 
     if (prefix == "status") {
       // get_cluster_status handles f == NULL
@@ -3540,7 +3605,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->dump_stream("timestamp") << ceph_clock_now();
 
     vector<string> tagsvec;
-    cmd_getval(g_ceph_context, cmdmap, "tags", tagsvec);
+    cmd_getval(cmdmap, "tags", tagsvec);
     string tagstr = str_join(tagsvec, " ");
     if (!tagstr.empty())
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
@@ -3565,7 +3630,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "osd last-stat-seq") {
     int64_t osd;
-    cmd_getval(g_ceph_context, cmdmap, "id", osd);
+    cmd_getval(cmdmap, "id", osd);
     uint64_t seq = mgrstatmon()->get_last_osd_stat_seq(osd);
     if (f) {
       f->dump_unsigned("seq", seq);
@@ -3578,7 +3643,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "node ls") {
     string node_type("all");
-    cmd_getval(g_ceph_context, cmdmap, "type", node_type);
+    cmd_getval(cmdmap, "type", node_type);
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     if (node_type == "all") {
@@ -3624,7 +3689,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
 
     string name;
-    bool all = !cmd_getval(g_ceph_context, cmdmap, "id", name);
+    bool all = !cmd_getval(cmdmap, "id", name);
     if (!all) {
       // Dump a single mon's metadata
       int mon = monmap->get_rank(name);
@@ -3675,7 +3740,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     string field;
-    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    cmd_getval(cmdmap, "property", field);
     count_metadata(field, f.get());
     f->flush(ds);
     rdata.append(ds);
@@ -3694,7 +3759,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "mon ok-to-stop") {
     vector<string> ids;
-    if (!cmd_getval(g_ceph_context, cmdmap, "ids", ids)) {
+    if (!cmd_getval(cmdmap, "ids", ids)) {
       r = -EINVAL;
       goto out;
     }
@@ -3726,7 +3791,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "mon ok-to-rm") {
     string id;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+    if (!cmd_getval(cmdmap, "id", id)) {
       r = -EINVAL;
       rs = "must specify a monitor id";
       goto out;
@@ -3797,7 +3862,11 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->close_section();
 
     for (auto& p : mgrstatmon()->get_service_map().services) {
-      f->open_object_section(p.first.c_str());
+      auto &service = p.first;
+      if (ServiceMap::is_normal_ceph_entity(service)) {
+        continue;
+      }
+      f->open_object_section(service.c_str());
       map<string,int> m;
       p.second.count_metadata("ceph_version", &m);
       for (auto& q : m) {
@@ -4245,9 +4314,9 @@ void Monitor::_ms_dispatch(Message *m)
       if (s->item.is_on_list()) {
         // forwarded messages' sessions are not in the sessions map and
         // exist only while the op is being handled.
+        std::lock_guard l(session_map_lock);
         remove_session(s);
       }
-      s->put();
       s = nullptr;
     }
   }
@@ -5824,7 +5893,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
       OSDMap om;
       om.decode(osdmapbl);
     }
-    catch (buffer::error& e) {
+    catch (ceph::buffer::error& e) {
       derr << "error decoding provided osdmap: " << e.what() << dendl;
       return -EINVAL;
     }
@@ -5848,7 +5917,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	  auto i = bl.cbegin();
 	  keyring.decode_plaintext(i);
 	}
-	catch (const buffer::error& e) {
+	catch (const ceph::buffer::error& e) {
 	  derr << "error decoding keyring " << keyring_plaintext
 	       << ": " << e.what() << dendl;
 	  return -EINVAL;
@@ -6185,7 +6254,7 @@ int Monitor::handle_auth_request(
       assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
       decode(entity_name, p);
       decode(con->peer_global_id, p);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       dout(1) << __func__ << " failed to decode, " << e.what() << dendl;
       return -EACCES;
     }
@@ -6326,7 +6395,7 @@ int Monitor::ms_handle_authentication(Connection *con)
     string str;
     try {
       decode(str, p);
-    } catch (const buffer::error &err) {
+    } catch (const ceph::buffer::error &err) {
       derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
 	   << " in auth db" << dendl;
       str.clear();

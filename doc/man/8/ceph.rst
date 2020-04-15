@@ -37,8 +37,6 @@ Synopsis
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
-| **ceph** **mon_status**
-
 | **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
@@ -551,15 +549,6 @@ Usage::
 
 	ceph mon stat
 
-mon_status
-----------
-
-Reports status of monitors.
-
-Usage::
-
-	ceph mon_status
-
 mgr
 ---
 
@@ -1036,7 +1025,7 @@ Subcommand ``create`` creates pool.
 Usage::
 
 	ceph osd pool create <poolname> {<int[0-]>} {<int[0-]>} {replicated|erasure}
-	{<erasure_code_profile>} {<rule>} {<int>}
+	{<erasure_code_profile>} {<rule>} {<int>} {--autoscale-mode=<on,off,warn>}
 
 Subcommand ``delete`` deletes pool.
 
@@ -1575,7 +1564,11 @@ Options
 
 .. option:: -w, --watch
 
-	Watch live cluster changes.
+	Watch live cluster changes on the default 'cluster' channel
+
+.. option:: -W, --watch-channel
+
+	Watch live cluster changes on any channel (cluster, audit, cephadm, or * for all)
 
 .. option:: --watch-debug
 

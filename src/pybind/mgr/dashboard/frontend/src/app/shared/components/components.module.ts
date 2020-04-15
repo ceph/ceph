@@ -4,6 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
+import { ClickOutsideModule } from 'ng-click-outside';
 import { ChartsModule } from 'ng2-charts';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -11,6 +12,7 @@ import { ModalModule } from 'ngx-bootstrap/modal';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
+import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
@@ -26,6 +28,8 @@ import { LanguageSelectorComponent } from './language-selector/language-selector
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
 import { NotificationsSidebarComponent } from './notifications-sidebar/notifications-sidebar.component';
+import { OrchestratorDocModalComponent } from './orchestrator-doc-modal/orchestrator-doc-modal.component';
+import { OrchestratorDocPanelComponent } from './orchestrator-doc-panel/orchestrator-doc-panel.component';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification/pwd-expiration-notification.component';
 import { RefreshSelectorComponent } from './refresh-selector/refresh-selector.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
@@ -51,6 +55,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     DirectivesModule,
     BsDropdownModule,
     NgBootstrapFormValidationModule,
+    ClickOutsideModule,
+    SimplebarAngularModule,
     RouterModule
   ],
   declarations: [
@@ -73,7 +79,9 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     ConfigOptionComponent,
     AlertPanelComponent,
     FormModalComponent,
-    PwdExpirationNotificationComponent
+    PwdExpirationNotificationComponent,
+    OrchestratorDocPanelComponent,
+    OrchestratorDocModalComponent
   ],
   providers: [],
   exports: [
@@ -93,7 +101,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     RefreshSelectorComponent,
     ConfigOptionComponent,
     AlertPanelComponent,
-    PwdExpirationNotificationComponent
+    PwdExpirationNotificationComponent,
+    OrchestratorDocPanelComponent
   ],
   entryComponents: [
     ModalComponent,

@@ -98,7 +98,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     return -EIO;
   }
   bufferlist out_bl, in_bl, temp_in_bl;
-  bl.copy(bl_ofs, bl_len, temp_in_bl); 
+  bl.begin(bl_ofs).copy(bl_len, temp_in_bl);
   bl_ofs = 0;
   int r = 0;
   if (waiting.length() != 0) {
@@ -110,17 +110,24 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
   }
   bl_len = in_bl.length();
   
+  auto iter_in_bl = in_bl.cbegin();
   while (first_block <= last_block) {
     bufferlist tmp;
     off_t ofs_in_bl = first_block->new_ofs - cur_ofs;
     if (ofs_in_bl + (off_t)first_block->len > bl_len) {
       // not complete block, put it to waiting
       unsigned tail = bl_len - ofs_in_bl;
-      in_bl.copy(ofs_in_bl, tail, waiting);
+      if (iter_in_bl.get_off() != ofs_in_bl) {
+        iter_in_bl.seek(ofs_in_bl);
+      }
+      iter_in_bl.copy(tail, waiting);
       cur_ofs -= tail;
       break;
     }
-    in_bl.copy(ofs_in_bl, first_block->len, tmp);
+    if (iter_in_bl.get_off() != ofs_in_bl) {
+      iter_in_bl.seek(ofs_in_bl);
+    }
+    iter_in_bl.copy(first_block->len, tmp);
     int cr = compressor->decompress(tmp, out_bl);
     if (cr < 0) {
       lderr(cct) << "Decompression failed with exit code " << cr << dendl;

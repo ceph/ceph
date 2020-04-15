@@ -40,6 +40,7 @@
 #include "events/ESession.h"
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
+#include "events/EPurged.h"
 
 #include "include/stringify.h"
 #include "include/filepath.h"
@@ -225,17 +226,12 @@ void Server::create_logger()
 Server::Server(MDSRank *m) : 
   mds(m), 
   mdcache(mds->mdcache), mdlog(mds->mdlog),
-  logger(0),
-  is_full(false),
-  reconnect_done(NULL),
-  failed_reconnects(0),
-  reconnect_evicting(false),
-  terminating_sessions(false),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
+  delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -268,7 +264,7 @@ void Server::dispatch(const cref_t<Message> &m)
 	return;
       }
       bool queue_replay = false;
-      if (req->is_replay()) {
+      if (req->is_replay() || req->is_async()) {
 	dout(3) << "queuing replayed op" << dendl;
 	queue_replay = true;
 	if (req->head.ino &&
@@ -340,15 +336,20 @@ class C_MDS_session_finish : public ServerLogContext {
   version_t cmapv;
   interval_set<inodeno_t> inos;
   version_t inotablev;
+  interval_set<inodeno_t> purge_inos;
+  LogSegment *ls = nullptr;
   Context *fin;
 public:
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv, Context *fin_ = NULL) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t> i, version_t iv,
+		       interval_set<inodeno_t> _purge_inos, LogSegment *_ls, Context *fin_ = NULL) :
+    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(std::move(i)), inotablev(iv), purge_inos(std::move(_purge_inos)), ls(_ls), fin(fin_){}
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
+    server->_session_logged(session, state_seq, open, cmapv, inos, inotablev, purge_inos, ls);
     if (fin) {
       fin->complete(r);
     }
@@ -749,15 +750,28 @@ void Server::finish_flush_session(Session *session, version_t seq)
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
-			     interval_set<inodeno_t>& inos, version_t piv)
+			     const interval_set<inodeno_t>& inos, version_t piv,
+			     const interval_set<inodeno_t>& purge_inos, LogSegment *ls)
 {
-  dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
-	   << " " << pv << dendl;
-
+  dout(10) << "_session_logged " << session->info.inst
+	   << " state_seq " << state_seq
+	   << " " << (open ? "open":"close")
+	   << " " << pv
+	   << " purge_inos : " << purge_inos << dendl;
+  
+  if (NULL != ls) {
+    dout(10)  << "_session_logged seq : " << ls->seq << dendl;
+    if (purge_inos.size()){
+      ls->purge_inodes.insert(purge_inos);
+      mdcache->purge_inodes(purge_inos, ls);
+    }
+  }
+  
   if (piv) {
     ceph_assert(session->is_closing() || session->is_killing() ||
 	   session->is_opening()); // re-open closing session
     session->info.prealloc_inos.subtract(inos);
+    session->delegated_inos.clear();
     mds->inotable->apply_release_ids(inos);
     ceph_assert(mds->inotable->get_version() == piv);
   }
@@ -1156,13 +1170,16 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
     dout(20) << __func__ << " max snapshots per directory changed to "
             << max_snaps_per_dir << dendl;
   }
+  if (changed.count("mds_client_delegate_inos_pct")) {
+    delegate_inos_pct = g_conf().get_val<uint64_t>("mds_client_delegate_inos_pct");
+  }
 }
 
 /*
  * XXX bump in the interface here, not using an MDSContext here
  * because all the callers right now happen to use a SaferCond
  */
-void Server::kill_session(Session *session, Context *on_safe)
+void Server::kill_session(Session *session, Context *on_safe, bool need_purge_inos)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
@@ -1171,7 +1188,7 @@ void Server::kill_session(Session *session, Context *on_safe)
        session->is_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
-    journal_close_session(session, Session::STATE_KILLING, on_safe);
+    journal_close_session(session, Session::STATE_KILLING, on_safe, need_purge_inos);
   } else {
     dout(10) << "kill_session importing or already closing/killing " << session << dendl;
     if (session->is_closing() ||
@@ -1229,8 +1246,13 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
   return victims.size();
 }
 
-void Server::journal_close_session(Session *session, int state, Context *on_safe)
+void Server::journal_close_session(Session *session, int state, Context *on_safe, bool need_purge_inos)
 {
+  dout(10) << __func__ << " : "
+	   << "("<< need_purge_inos << ")"
+	   << session->info.inst
+	   << "(" << session->info.prealloc_inos.size() << "|" << session->pending_prealloc_inos.size() << ")" << dendl;
+
   uint64_t sseq = mds->sessionmap.set_state(session, state);
   version_t pv = mds->sessionmap.mark_projected(session);
   version_t piv = 0;
@@ -1238,22 +1260,33 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   // release alloc and pending-alloc inos for this session
   // and wipe out session state, in case the session close aborts for some reason
   interval_set<inodeno_t> both;
-  both.insert(session->info.prealloc_inos);
   both.insert(session->pending_prealloc_inos);
+  if (!need_purge_inos)
+    both.insert(session->info.prealloc_inos);
   if (both.size()) {
     mds->inotable->project_release_ids(both);
     piv = mds->inotable->get_projected_version();
   } else
     piv = 0;
-
-  mdlog->start_submit_entry(new ESession(session->info.inst, false, pv, both, piv),
-			    new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe));
+  
+  if(need_purge_inos && session->info.prealloc_inos.size()) {
+    dout(10) << "start purge indoes " << session->info.prealloc_inos << dendl;
+    LogSegment* ls = mdlog->get_current_segment();
+    LogEvent* e = new ESession(session->info.inst, false, pv, both, piv, session->info.prealloc_inos);
+    MDSLogContextBase* c = new C_MDS_session_finish(this, session, sseq, false, pv, both, piv,
+						    session->info.prealloc_inos, ls, on_safe);
+    mdlog->start_submit_entry(e, c);
+  } else {
+    interval_set<inodeno_t> empty;
+    LogEvent* e = new ESession(session->info.inst, false, pv, both, piv, empty);
+    MDSLogContextBase* c = new C_MDS_session_finish(this, session, sseq, false, pv, both, piv, on_safe);
+    mdlog->start_submit_entry(e, c);
+  }
   mdlog->flush();
 
   // clean up requests, too
-  for (auto p = session->requests.begin(); !p.end(); ) {
-    MDRequestRef mdr(*p);
-    ++p;
+  while(!session->requests.empty()) {
+    auto mdr = MDRequestRef(*session->requests.begin());
     mdcache->request_kill(mdr);
   }
 
@@ -1309,6 +1342,8 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
     return;
   }
 
+  bool reconnect_all_deny = g_conf().get_val<bool>("mds_deny_all_reconnect");
+
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
     dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
     mds->wait_for_reconnect(new C_MDS_RetryMessage(mds, m));
@@ -1319,9 +1354,13 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
   bool deny = false;
-  if (!mds->is_reconnect() || mds->get_want_state() != CEPH_MDS_STATE_RECONNECT || reconnect_evicting) {
+  if (reconnect_all_deny || !mds->is_reconnect() || mds->get_want_state() != CEPH_MDS_STATE_RECONNECT || reconnect_evicting) {
     // XXX maybe in the future we can do better than this?
-    dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
+    if (reconnect_all_deny) {
+      dout(1) << "mds_deny_all_reconnect was set to speed up reboot phase, ignoring reconnect, sending close" << dendl;
+    } else {
+      dout(1) << "no longer in reconnect state, ignoring reconnect, sending close" << dendl;
+    }
     mds->clog->info() << "denied reconnect attempt (mds is "
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
@@ -1357,8 +1396,9 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
   if (deny) {
     auto r = make_message<MClientSession>(CEPH_SESSION_CLOSE);
     mds->send_message_client(r, session);
-    if (session->is_open())
-      kill_session(session, nullptr);
+    if (session->is_open()) {
+      client_reconnect_denied.insert(session->get_client());
+    }
     return;
   }
 
@@ -1534,17 +1574,33 @@ void Server::reconnect_gather_finish()
 
 void Server::reconnect_tick()
 {
+  bool reject_all_reconnect = false;
   if (reconnect_evicting) {
     dout(7) << "reconnect_tick: waiting for evictions" << dendl;
     return;
   }
 
+  /*
+   * Set mds_deny_all_reconnect to reject all the reconnect req ,
+   * then load less meta information in rejoin phase. This will shorten reboot time.
+   * Moreover, loading less meta increases the chance standby with less memory can failover.
+
+   * Why not shorten reconnect period?
+   * Clients may send unsafe or retry requests, which haven't been
+   * completed before old mds stop, to new mds. These requests may
+   * need to be processed during new mds's clientreplay phase,
+   * see: #https://github.com/ceph/ceph/pull/29059.
+   */
+  bool reconnect_all_deny = g_conf().get_val<bool>("mds_deny_all_reconnect");
   if (client_reconnect_gather.empty())
     return;
 
+  if (reconnect_all_deny && (client_reconnect_gather == client_reconnect_denied))
+    reject_all_reconnect = true;
+ 
   auto now = clock::now();
   auto elapse1 = std::chrono::duration<double>(now - reconnect_start).count();
-  if (elapse1 < g_conf()->mds_reconnect_timeout)
+  if (elapse1 < g_conf()->mds_reconnect_timeout && !reject_all_reconnect)
     return;
 
   vector<Session*> remaining_sessions;
@@ -1559,14 +1615,14 @@ void Server::reconnect_tick()
   }
 
   auto elapse2 = std::chrono::duration<double>(now - reconnect_last_seen).count();
-  if (elapse2 < g_conf()->mds_reconnect_timeout / 2) {
+  if (elapse2 < g_conf()->mds_reconnect_timeout / 2 && !reject_all_reconnect) {
     dout(7) << "reconnect_tick: last seen " << elapse2
             << " seconds ago, extending reconnect interval" << dendl;
     return;
   }
 
   dout(7) << "reconnect timed out, " << remaining_sessions.size()
-	  << " clients have not reconnected in time" << dendl;
+          << " clients have not reconnected in time" << dendl;
 
   // If we're doing blacklist evictions, use this to wait for them before
   // proceeding to reconnect_gather_finish
@@ -1595,12 +1651,13 @@ void Server::reconnect_tick()
       mds->evict_client(session->get_client().v, false, true, ss,
 			gather.new_sub());
     } else {
-      kill_session(session, NULL);
+      kill_session(session, NULL, true);
     }
 
     failed_reconnects++;
   }
   client_reconnect_gather.clear();
+  client_reconnect_denied.clear();
 
   if (gather.has_subs()) {
     dout(1) << "reconnect will complete once clients are evicted" << dendl;
@@ -3169,12 +3226,8 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   bool allow_prealloc_inos = mdr->session->is_open();
 
   // assign ino
-  if (allow_prealloc_inos &&
-      mdr->session->info.prealloc_inos.size()) {
-    mdr->used_prealloc_ino = 
-      in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
+  if (allow_prealloc_inos && (mdr->used_prealloc_ino = in->inode.ino = mdr->session->take_ino(useino))) {
     mds->sessionmap.mark_projected(mdr->session);
-
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
 	     << " (" << mdr->session->info.prealloc_inos
 	     << ", " << mdr->session->info.prealloc_inos.size() << " left)"
@@ -4160,7 +4213,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (cur->is_file() || cur->is_dir()) {
     if (mdr->snapid == CEPH_NOSNAP) {
       // register new cap
-      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, 0, req->is_replay());
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr, nullptr);
       if (cap)
 	dout(12) << "open issued caps " << ccap_string(cap->pending())
 		 << " for " << req->get_source()
@@ -4353,13 +4406,13 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   in->first = dn->first;
 
   // do the open
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr, realm);
   in->authlock.set_state(LOCK_EXCL);
   in->xattrlock.set_state(LOCK_EXCL);
 
   if (cap && (cmode & CEPH_FILE_MODE_WR)) {
     in->inode.client_ranges[client].range.first = 0;
-    in->inode.client_ranges[client].range.last = in->inode.get_layout_size_increment();
+    in->inode.client_ranges[client].range.last = in->inode.layout.stripe_unit;
     in->inode.client_ranges[client].follows = follows;
     cap->mark_clientwriteable();
   }
@@ -4378,7 +4431,21 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, in);
 
-  if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+  if (mdr->session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
+    openc_response_t	ocresp;
+
+    dout(10) << "adding created_ino and delegated_inos" << dendl;
+    ocresp.created_ino = in->inode.ino;
+
+    if (delegate_inos_pct && !req->is_queued_for_replay()) {
+      // Try to delegate some prealloc_inos to the client, if it's down to half the max
+      unsigned frac = 100 / delegate_inos_pct;
+      if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
+	mdr->session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
+    }
+
+    encode(ocresp, mdr->reply_extra_bl);
+  } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
     dout(10) << "adding ino to reply to indicate inode was created" << dendl;
     // add the file created flag onto the reply if create_flags features is supported
     encode(in->inode.ino, mdr->reply_extra_bl);
@@ -4988,7 +5055,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   dout(10) << "do_open_truncate " << *in << dendl;
 
   SnapRealm *realm = in->find_snaprealm();
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr, realm);
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
@@ -5766,7 +5833,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   } else {
     bufferptr b = buffer::create(len);
     if (len)
-      req->get_data().copy(0, len, b.c_str());
+      req->get_data().begin().copy(len, b.c_str());
     auto em = px.emplace(std::piecewise_construct, std::forward_as_tuple(mempool::mds_co::string(name)), std::forward_as_tuple(b));
     if (!em.second)
       em.first->second = b;
@@ -5946,7 +6013,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (S_ISREG(newi->inode.mode)) {
     // issue a cap on the file
     int cmode = CEPH_FILE_MODE_RDWR;
-    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+    Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
     if (cap) {
       cap->set_wanted(0);
 
@@ -5957,7 +6024,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
       dout(15) << " setting a client_range too, since this is a regular file" << dendl;
       newi->inode.client_ranges[client].range.first = 0;
-      newi->inode.client_ranges[client].range.last = newi->inode.get_layout_size_increment();
+      newi->inode.client_ranges[client].range.last = newi->inode.layout.stripe_unit;
       newi->inode.client_ranges[client].follows = follows;
       cap->mark_clientwriteable();
     }
@@ -6046,7 +6113,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   
   // issue a cap on the directory
   int cmode = CEPH_FILE_MODE_RDWR;
-  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr, realm);
   if (cap) {
     cap->set_wanted(0);
 
@@ -6140,6 +6207,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
     if (!targeti) {
       dout(10) << "ESTALE on path2, attempting recovery" << dendl;
       mdcache->find_ino_peers(req->get_filepath2().get_ino(), new C_MDS_TryFindInode(this, mdr));
+      return;
     }
     mdr->pin(targeti);
 
@@ -7466,6 +7534,8 @@ bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
   dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
   ceph_assert(in->is_auth());
 
+  if (in->filelock.is_cached())
+    return false; // there can be pending async create/unlink. don't know.
   if (in->snaprealm && in->snaprealm->srnode.snaps.size())
     return true; // in a snapshot!
 

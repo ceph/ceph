@@ -9,11 +9,13 @@
 #include <string>
 
 struct Context;
+namespace journal { class Journaler; }
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
+class PoolMetaCache;
 class ProgressContext;
 template <typename> struct Threads;
 
@@ -32,12 +34,13 @@ public:
       librados::IoCtx& local_io_ctx,
       ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>* state_builder,
       Context* on_finish) {
     return new CreateLocalImageRequest(threads, local_io_ctx, remote_image_ctx,
-                                       global_image_id, progress_ctx,
-                                       state_builder, on_finish);
+                                       global_image_id, pool_meta_cache,
+                                       progress_ctx, state_builder, on_finish);
   }
 
   CreateLocalImageRequest(
@@ -45,6 +48,7 @@ public:
       librados::IoCtx& local_io_ctx,
       ImageCtxT* remote_image_ctx,
       const std::string& global_image_id,
+      PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,
       StateBuilder<ImageCtxT>* state_builder,
       Context* on_finish)
@@ -53,6 +57,7 @@ public:
       m_local_io_ctx(local_io_ctx),
       m_remote_image_ctx(remote_image_ctx),
       m_global_image_id(global_image_id),
+      m_pool_meta_cache(pool_meta_cache),
       m_progress_ctx(progress_ctx),
       m_state_builder(state_builder) {
   }
@@ -66,14 +71,12 @@ private:
    * <start>
    *    |
    *    v
-   * UNREGISTER_CLIENT
-   *    |
-   *    v
-   * REGISTER_CLIENT
-   *    |
-   *    |     . . . . . . . . . UPDATE_CLIENT_IMAGE
-   *    |     .                         ^
-   *    v     v         (id exists)     *
+   * UNREGISTER_CLIENT  < * * * * * * * *
+   *    |                               *
+   *    v                               *
+   * REGISTER_CLIENT                    *
+   *    |                               *
+   *    v               (id exists)     *
    * CREATE_LOCAL_IMAGE * * * * * * * * *
    *    |
    *    v
@@ -86,6 +89,7 @@ private:
   librados::IoCtx& m_local_io_ctx;
   ImageCtxT* m_remote_image_ctx;
   std::string m_global_image_id;
+  PoolMetaCache* m_pool_meta_cache;
   ProgressContext* m_progress_ctx;
   StateBuilder<ImageCtxT>* m_state_builder;
 
@@ -97,9 +101,6 @@ private:
 
   void create_local_image();
   void handle_create_local_image(int r);
-
-  void update_client_image();
-  void handle_update_client_image(int r);
 
   void update_progress(const std::string& description);
 

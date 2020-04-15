@@ -1,26 +1,31 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { AfterViewInit, Component, EventEmitter, Output, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
+import { TableColumnProp } from '@swimlane/ngx-datatable';
 import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { InventoryDeviceFiltersChangeEvent } from '../../inventory/inventory-devices/inventory-device-filters-change-event.interface';
+import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
+import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
 
 @Component({
   selector: 'cd-osd-devices-selection-modal',
   templateUrl: './osd-devices-selection-modal.component.html',
   styleUrls: ['./osd-devices-selection-modal.component.scss']
 })
-export class OsdDevicesSelectionModalComponent {
+export class OsdDevicesSelectionModalComponent implements AfterViewInit {
+  @ViewChild('inventoryDevices', { static: false })
+  inventoryDevices: InventoryDevicesComponent;
+
   @Output()
-  submitAction = new EventEmitter<InventoryDeviceFiltersChangeEvent>();
+  submitAction = new EventEmitter<CdTableColumnFiltersChange>();
 
   icons = Icons;
-  filterColumns: string[] = [];
+  filterColumns: TableColumnProp[] = [];
 
   hostname: string;
   deviceType: string;
@@ -28,12 +33,11 @@ export class OsdDevicesSelectionModalComponent {
   action: string;
 
   devices: InventoryDevice[] = [];
+  filteredDevices: InventoryDevice[] = [];
+  capacity = 0;
+  event: CdTableColumnFiltersChange;
   canSubmit = false;
-  filters = [];
-  filterInDevices: InventoryDevice[] = [];
-  filterOutDevices: InventoryDevice[] = [];
-
-  isFiltered = false;
+  requiredFilters: string[] = [];
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -44,34 +48,40 @@ export class OsdDevicesSelectionModalComponent {
     this.createForm();
   }
 
+  ngAfterViewInit() {
+    // At least one filter other than hostname is required
+    // Extract the name from table columns for i18n strings
+    const cols = _.filter(this.inventoryDevices.columns, (col) => {
+      return this.filterColumns.includes(col.prop) && col.prop !== 'hostname';
+    });
+    this.requiredFilters = _.map(cols, 'name');
+  }
+
   createForm() {
     this.formGroup = this.formBuilder.group({});
   }
 
-  onFilterChange(event: InventoryDeviceFiltersChangeEvent) {
+  onFilterChange(event: CdTableColumnFiltersChange) {
+    this.capacity = 0;
     this.canSubmit = false;
-    this.filters = event.filters;
     if (_.isEmpty(event.filters)) {
       // filters are cleared
-      this.filterInDevices = [];
-      this.filterOutDevices = [];
+      this.filteredDevices = [];
+      this.event = undefined;
     } else {
       // at least one filter is required (except hostname)
-      const filters = this.filters.filter((filter) => {
+      const filters = event.filters.filter((filter) => {
         return filter.prop !== 'hostname';
       });
       this.canSubmit = !_.isEmpty(filters);
-      this.filterInDevices = event.filterInDevices;
-      this.filterOutDevices = event.filterOutDevices;
+      this.filteredDevices = event.data;
+      this.capacity = _.sumBy(this.filteredDevices, 'sys_api.size');
+      this.event = event;
     }
   }
 
   onSubmit() {
-    this.submitAction.emit({
-      filters: this.filters,
-      filterInDevices: this.filterInDevices,
-      filterOutDevices: this.filterOutDevices
-    });
+    this.submitAction.emit(this.event);
     this.bsModalRef.hide();
   }
 }

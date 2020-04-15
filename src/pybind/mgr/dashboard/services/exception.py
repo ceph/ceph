@@ -8,6 +8,7 @@ import six
 
 import cherrypy
 
+from orchestrator import OrchestratorError
 import rbd
 import rados
 
@@ -83,7 +84,7 @@ def serialize_dashboard_exception(e, include_http_status=False, task=None):
     if include_http_status:
         out['status'] = getattr(e, 'status', 500)
     if task:
-        out['task'] = dict(name=task.name, metadata=task.metadata)
+        out['task'] = dict(name=task.name, metadata=task.metadata)  # type: ignore
     return out
 
 
@@ -131,6 +132,5 @@ def handle_send_command_error(component):
 def handle_orchestrator_error(component):
     try:
         yield
-    except RuntimeError as e:
-        # how to catch remote error e.g. NotImplementedError ?
+    except OrchestratorError as e:
         raise DashboardException(e, component=component)

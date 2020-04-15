@@ -8,7 +8,7 @@ export class CrushMapPageHelper extends PageHelper {
     return $('cd-crushmap .card-header').getText();
   }
 
-  getCrushNode(idx) {
+  getCrushNode(idx: number) {
     return $$('.node-name.type-osd').get(idx);
   }
 }

@@ -1,0 +1,13 @@
+tasks:
+- cephadm:
+    conf:
+      mgr:
+        debug ms: 1
+        debug mgr: 20
+- cephadm.shell:
+    mon.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls

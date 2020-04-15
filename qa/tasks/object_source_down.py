@@ -2,10 +2,10 @@
 Test Object locations going down
 """
 import logging
-import ceph_manager
 import time
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks import ceph_manager
+from tasks.util.rados import rados
 
 log = logging.getLogger(__name__)
 

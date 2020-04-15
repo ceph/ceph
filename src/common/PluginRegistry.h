@@ -21,8 +21,7 @@
 #include <map>
 #include <string>
 #include "common/ceph_mutex.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 extern "C" {
   const char *__ceph_plugin_version();

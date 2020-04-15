@@ -777,8 +777,16 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
   std::shared_lock l{m_image_ctx.owner_lock};
   if (m_image_ctx.exclusive_lock != nullptr) {
     int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
+    auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
+
+    // rbd-mirror needs to accept forced promotion orphan snap create requests
+    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+      &payload.snap_namespace);
+    if (mirror_ns != nullptr && mirror_ns->is_orphan()) {
+      request_type = exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION;
+    }
+
+    if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
       ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
 			         << payload.snap_name << dendl;
 

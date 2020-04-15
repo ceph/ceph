@@ -1,7 +1,8 @@
-from cStringIO import StringIO
 import logging
 import json
 import time
+
+from six import StringIO
 
 from teuthology import misc as teuthology
 
@@ -15,9 +16,9 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
     client_with_id = daemon_type + '.' + client_id
     pre = [
         'adjust-ulimits',
-        'ceph-coverage'.format(tdir=testdir),
+        'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
-        'radosgw-admin'.format(tdir=testdir),
+        'radosgw-admin',
         '--log-to-stderr',
         '--format', format,
         '-n',  client_with_id,

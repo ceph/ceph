@@ -21,12 +21,12 @@
 #include "common/errno.h"
 #include "common/dout.h"
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "common/Cond.h"
 #include "common/ceph_context.h"
 #include "common/PriorityCache.h"
 
-class PerfCounters;
 
 enum {
   l_rocksdb_first = 34300,
@@ -72,14 +72,14 @@ extern rocksdb::Logger *create_rocksdb_ceph_logger();
 class RocksDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
-  string path;
-  map<string,string> kv_options;
+  std::string path;
+  std::map<std::string,std::string> kv_options;
   void *priv;
   rocksdb::DB *db;
   rocksdb::Env *env;
   std::shared_ptr<rocksdb::Statistics> dbstats;
   rocksdb::BlockBasedTableOptions bbt_opts;
-  string options_str;
+  std::string options_str;
 
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
@@ -88,17 +88,17 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
-  int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
+  int install_cf_mergeop(const std::string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
   int create_db_dir();
-  int do_open(ostream &out, bool create_if_missing, bool open_readonly,
-	      const vector<ColumnFamily>* cfs = nullptr);
+  int do_open(std::ostream &out, bool create_if_missing, bool open_readonly,
+	      const std::vector<ColumnFamily>* cfs = nullptr);
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
   // manage async compactions
   ceph::mutex compact_queue_lock =
     ceph::make_mutex("RocksDBStore::compact_thread_lock");
   ceph::condition_variable compact_queue_cond;
-  list< pair<string,string> > compact_queue;
+  std::list<std::pair<std::string,std::string>> compact_queue;
   bool compact_queue_stop;
   class CompactThread : public Thread {
     RocksDBStore *db;
@@ -113,9 +113,10 @@ class RocksDBStore : public KeyValueDB {
 
   void compact_thread_entry();
 
-  void compact_range(const string& start, const string& end);
-  void compact_range_async(const string& start, const string& end);
-  int tryInterpret(const string& key, const string& val, rocksdb::Options& opt);
+  void compact_range(const std::string& start, const std::string& end);
+  void compact_range_async(const std::string& start, const std::string& end);
+  int tryInterpret(const std::string& key, const std::string& val,
+		   rocksdb::Options& opt);
 
 public:
   /// compact the underlying rocksdb store
@@ -125,33 +126,35 @@ public:
   void compact() override;
 
   void compact_async() override {
-    compact_range_async(string(), string());
+    compact_range_async({}, {});
   }
 
-  int ParseOptionsFromString(const string& opt_str, rocksdb::Options& opt);
+  int ParseOptionsFromString(const std::string& opt_str, rocksdb::Options& opt);
   static int ParseOptionsFromStringStatic(
     CephContext* cct,
-    const string& opt_str,
+    const std::string& opt_str,
     rocksdb::Options &opt,
-    function<int(const string&, const string&, rocksdb::Options&)> interp);
-  static int _test_init(const string& dir);
-  int init(string options_str) override;
+    std::function<int(const std::string&, const std::string&, rocksdb::Options&)> interp);
+  static int _test_init(const std::string& dir);
+  int init(std::string options_str) override;
   /// compact rocksdb for all keys with a given prefix
-  void compact_prefix(const string& prefix) override {
+  void compact_prefix(const std::string& prefix) override {
     compact_range(prefix, past_prefix(prefix));
   }
-  void compact_prefix_async(const string& prefix) override {
+  void compact_prefix_async(const std::string& prefix) override {
     compact_range_async(prefix, past_prefix(prefix));
   }
 
-  void compact_range(const string& prefix, const string& start, const string& end) override {
+  void compact_range(const std::string& prefix, const std::string& start,
+		     const std::string& end) override {
     compact_range(combine_strings(prefix, start), combine_strings(prefix, end));
   }
-  void compact_range_async(const string& prefix, const string& start, const string& end) override {
+  void compact_range_async(const std::string& prefix, const std::string& start,
+			   const std::string& end) override {
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
 
-  RocksDBStore(CephContext *c, const string &path, map<string,string> opt, void *p) :
+  RocksDBStore(CephContext *c, const std::string &path, std::map<std::string,std::string> opt, void *p) :
     cct(c),
     logger(NULL),
     path(path),
@@ -169,16 +172,16 @@ public:
 
   ~RocksDBStore() override;
 
-  static bool check_omap_dir(string &omap_dir);
+  static bool check_omap_dir(std::string &omap_dir);
   /// Opens underlying db
-  int open(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
+  int open(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) override {
     return do_open(out, false, false, &cfs);
   }
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out,
-		      const vector<ColumnFamily>& cfs = {}) override;
+  int create_and_open(std::ostream &out,
+		      const std::vector<ColumnFamily>& cfs = {}) override;
 
-  int open_read_only(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
+  int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) override {
     return do_open(out, false, true, &cfs);
   }
 
@@ -193,7 +196,7 @@ public:
   }
   int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
-  void get_statistics(Formatter *f) override;
+  void get_statistics(ceph::Formatter *f) override;
 
   PerfCounters *get_perf_counters() override
   {
@@ -204,15 +207,15 @@ public:
     const std::string &property,
     uint64_t *out) final;
 
-  int64_t estimate_prefix_size(const string& prefix,
-			       const string& key_prefix) override;
+  int64_t estimate_prefix_size(const std::string& prefix,
+			       const std::string& key_prefix) override;
 
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;
     int num_seen = 0;
-    static string pretty_binary_string(const string& in) {
+    static std::string pretty_binary_string(const std::string& in) {
       char buf[10];
-      string out;
+      std::string out;
       out.reserve(in.length() * 3);
       enum { NONE, HEX, STRING } mode = NONE;
       unsigned from = 0, i;
@@ -260,8 +263,8 @@ public:
     }
     void Put(const rocksdb::Slice& key,
                     const rocksdb::Slice& value) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
+      std::string prefix ((key.ToString()).substr(0,1));
+      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
       uint64_t size = (value.ToString()).size();
       seen += "\nPut( Prefix = " + prefix + " key = " 
             + pretty_binary_string(key_to_decode) 
@@ -269,15 +272,15 @@ public:
       num_seen++;
     }
     void SingleDelete(const rocksdb::Slice& key) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
+      std::string prefix ((key.ToString()).substr(0,1));
+      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
       seen += "\nSingleDelete(Prefix = "+ prefix + " Key = " 
             + pretty_binary_string(key_to_decode) + ")";
       num_seen++;
     }
     void Delete(const rocksdb::Slice& key) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
+      std::string prefix ((key.ToString()).substr(0,1));
+      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
       seen += "\nDelete( Prefix = " + prefix + " key = " 
             + pretty_binary_string(key_to_decode) + ")";
 
@@ -285,8 +288,8 @@ public:
     }
     void Merge(const rocksdb::Slice& key,
                       const rocksdb::Slice& value) override {
-      string prefix ((key.ToString()).substr(0,1));
-      string key_to_decode ((key.ToString()).substr(2,string::npos));
+      std::string prefix ((key.ToString()).substr(0,1));
+      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
       uint64_t size = (value.ToString()).size();
       seen += "\nMerge( Prefix = " + prefix + " key = " 
             + pretty_binary_string(key_to_decode) + " Value size = " 
@@ -308,39 +311,39 @@ public:
     void put_bat(
       rocksdb::WriteBatch& bat,
       rocksdb::ColumnFamilyHandle *cf,
-      const string &k,
-      const bufferlist &to_set_bl);
+      const std::string &k,
+      const ceph::bufferlist &to_set_bl);
   public:
     void set(
-      const string &prefix,
-      const string &k,
-      const bufferlist &bl) override;
+      const std::string &prefix,
+      const std::string &k,
+      const ceph::bufferlist &bl) override;
     void set(
-      const string &prefix,
+      const std::string &prefix,
       const char *k,
       size_t keylen,
-      const bufferlist &bl) override;
+      const ceph::bufferlist &bl) override;
     void rmkey(
-      const string &prefix,
-      const string &k) override;
+      const std::string &prefix,
+      const std::string &k) override;
     void rmkey(
-      const string &prefix,
+      const std::string &prefix,
       const char *k,
       size_t keylen) override;
     void rm_single_key(
-      const string &prefix,
-      const string &k) override;
+      const std::string &prefix,
+      const std::string &k) override;
     void rmkeys_by_prefix(
-      const string &prefix
+      const std::string &prefix
       ) override;
     void rm_range_keys(
-      const string &prefix,
-      const string &start,
-      const string &end) override;
+      const std::string &prefix,
+      const std::string &start,
+      const std::string &end) override;
     void merge(
-      const string& prefix,
-      const string& k,
-      const bufferlist &bl) override;
+      const std::string& prefix,
+      const std::string& k,
+      const ceph::bufferlist &bl) override;
   };
 
   KeyValueDB::Transaction get_transaction() override {
@@ -350,20 +353,20 @@ public:
   int submit_transaction(KeyValueDB::Transaction t) override;
   int submit_transaction_sync(KeyValueDB::Transaction t) override;
   int get(
-    const string &prefix,
-    const std::set<string> &key,
-    std::map<string, bufferlist> *out
+    const std::string &prefix,
+    const std::set<std::string> &key,
+    std::map<std::string, ceph::bufferlist> *out
     ) override;
   int get(
-    const string &prefix,
-    const string &key,
-    bufferlist *out
+    const std::string &prefix,
+    const std::string &key,
+    ceph::bufferlist *out
     ) override;
   int get(
-    const string &prefix,
+    const std::string &prefix,
     const char *key,
     size_t keylen,
-    bufferlist *out) override;
+    ceph::bufferlist *out) override;
 
 
   class RocksDBWholeSpaceIteratorImpl :
@@ -377,19 +380,19 @@ public:
     ~RocksDBWholeSpaceIteratorImpl() override;
 
     int seek_to_first() override;
-    int seek_to_first(const string &prefix) override;
+    int seek_to_first(const std::string &prefix) override;
     int seek_to_last() override;
-    int seek_to_last(const string &prefix) override;
-    int upper_bound(const string &prefix, const string &after) override;
-    int lower_bound(const string &prefix, const string &to) override;
+    int seek_to_last(const std::string &prefix) override;
+    int upper_bound(const std::string &prefix, const std::string &after) override;
+    int lower_bound(const std::string &prefix, const std::string &to) override;
     bool valid() override;
     int next() override;
     int prev() override;
-    string key() override;
-    pair<string,string> raw_key() override;
-    bool raw_key_is_prefixed(const string &prefix) override;
-    bufferlist value() override;
-    bufferptr value_as_ptr() override;
+    std::string key() override;
+    std::pair<std::string,std::string> raw_key() override;
+    bool raw_key_is_prefixed(const std::string &prefix) override;
+    ceph::bufferlist value() override;
+    ceph::bufferptr value_as_ptr() override;
     int status() override;
     size_t key_size() override;
     size_t value_size() override;
@@ -398,24 +401,24 @@ public:
   Iterator get_iterator(const std::string& prefix) override;
 
   /// Utility
-  static string combine_strings(const string &prefix, const string &value) {
-    string out = prefix;
+  static std::string combine_strings(const std::string &prefix, const std::string &value) {
+    std::string out = prefix;
     out.push_back(0);
     out.append(value);
     return out;
   }
-  static void combine_strings(const string &prefix,
+  static void combine_strings(const std::string &prefix,
 			      const char *key, size_t keylen,
-			      string *out) {
+			      std::string *out) {
     out->reserve(prefix.size() + 1 + keylen);
     *out = prefix;
     out->push_back(0);
     out->append(key, keylen);
   }
 
-  static int split_key(rocksdb::Slice in, string *prefix, string *key);
+  static int split_key(rocksdb::Slice in, std::string *prefix, std::string *key);
 
-  static string past_prefix(const string &prefix);
+  static std::string past_prefix(const std::string &prefix);
 
   class MergeOperatorRouter;
   class MergeOperatorLinker;
@@ -423,9 +426,9 @@ public:
   int set_merge_operator(
     const std::string& prefix,
     std::shared_ptr<KeyValueDB::MergeOperator> mop) override;
-  string assoc_name; ///< Name of associative operator
+  std::string assoc_name; ///< Name of associative operator
 
-  uint64_t get_estimated_size(map<string,uint64_t> &extra) override {
+  uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) override {
     DIR *store_dir = opendir(path.c_str());
     if (!store_dir) {
       lderr(cct) << __func__ << " something happened opening the store: "
@@ -440,12 +443,12 @@ public:
 
     struct dirent *entry = NULL;
     while ((entry = readdir(store_dir)) != NULL) {
-      string n(entry->d_name);
+      std::string n(entry->d_name);
 
       if (n == "." || n == "..")
         continue;
 
-      string fpath = path + '/' + n;
+      std::string fpath = path + '/' + n;
       struct stat s;
       int err = stat(fpath.c_str(), &s);
       if (err < 0)
@@ -464,12 +467,12 @@ public:
       }
 
       size_t pos = n.find_last_of('.');
-      if (pos == string::npos) {
+      if (pos == std::string::npos) {
         misc_size += s.st_size;
         continue;
       }
 
-      string ext = n.substr(pos+1);
+      std::string ext = n.substr(pos+1);
       if (ext == "sst") {
         sst_size += s.st_size;
       } else if (ext == "log") {
@@ -501,12 +504,9 @@ err:
     return 0;
   }
 
-  int set_cache_capacity(int64_t capacity);
-  int64_t get_cache_capacity();
-
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() 
       const override {
-    return dynamic_pointer_cast<PriorityCache::PriCache>(
+    return std::dynamic_pointer_cast<PriorityCache::PriCache>(
         bbt_opts.block_cache);
   }
 

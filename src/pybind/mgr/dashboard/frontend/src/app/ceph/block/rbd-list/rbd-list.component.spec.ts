@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { AlertModule } from 'ngx-bootstrap/alert';
@@ -26,6 +27,7 @@ import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdListComponent } from './rbd-list.component';
 import { RbdModel } from './rbd-model';
 
@@ -35,12 +37,13 @@ describe('RbdListComponent', () => {
   let summaryService: SummaryService;
   let rbdService: RbdService;
 
-  const refresh = (data) => {
+  const refresh = (data: any) => {
     summaryService['summaryDataSource'].next(data);
   };
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       SharedModule,
       BsDropdownModule.forRoot(),
       TabsModule.forRoot(),
@@ -55,7 +58,8 @@ describe('RbdListComponent', () => {
       RbdListComponent,
       RbdDetailsComponent,
       RbdSnapshotListComponent,
-      RbdConfigurationListComponent
+      RbdConfigurationListComponent,
+      RbdTabsComponent
     ],
     providers: [TaskListService, i18nProviders]
   });
@@ -99,10 +103,71 @@ describe('RbdListComponent', () => {
     });
   });
 
+  describe('handling of deletion', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+    });
+
+    it('should check if there are no snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd'
+      });
+      expect(component.hasSnapshots()).toBeFalsy();
+    });
+
+    it('should check if there are snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [{}, {}]
+      });
+      expect(component.hasSnapshots()).toBeTruthy();
+    });
+
+    it('should get delete disable description', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [
+          {
+            children: [{}]
+          }
+        ]
+      });
+      expect(component.getDeleteDisableDesc()).toBe(
+        'This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.'
+      );
+    });
+
+    it('should list all protected snapshots', () => {
+      component.selection.add({
+        id: '-1',
+        name: 'rbd1',
+        pool_name: 'rbd',
+        snapshots: [
+          {
+            name: 'snap1',
+            is_protected: false
+          },
+          {
+            name: 'snap2',
+            is_protected: true
+          }
+        ]
+      });
+
+      expect(component.listProtectedSnapshots()).toEqual(['snap2']);
+    });
+  });
+
   describe('handling of executing tasks', () => {
     let images: RbdModel[];
 
-    const addImage = (name) => {
+    const addImage = (name: string) => {
       const model = new RbdModel();
       model.id = '-1';
       model.name = name;
@@ -152,14 +217,14 @@ describe('RbdListComponent', () => {
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
       spyOn(rbdService, 'list').and.callFake(() =>
-        of([{ poool_name: 'rbd', status: 1, value: images }])
+        of([{ pool_name: 'rbd', status: 1, value: images }])
       );
       fixture.detectChanges();
     });
 
     it('should gets all images without tasks', () => {
       expect(component.images.length).toBe(3);
-      expect(component.images.every((image) => !image.cdExecuting)).toBeTruthy();
+      expect(component.images.every((image: any) => !image.cdExecuting)).toBeTruthy();
     });
 
     it('should add a new image from a task', () => {

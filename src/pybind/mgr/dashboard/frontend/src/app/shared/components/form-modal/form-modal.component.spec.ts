@@ -20,7 +20,7 @@ describe('InputModalComponent', () => {
   let fixture: ComponentFixture<FormModalComponent>;
   let fh: FixtureHelper;
   let formHelper: FormHelper;
-  let submitted;
+  let submitted: object;
 
   const initialState = {
     titleText: 'Some title',
@@ -48,7 +48,7 @@ describe('InputModalComponent', () => {
       }
     ],
     submitButtonText: 'Submit button name',
-    onSubmit: (values) => (submitted = values)
+    onSubmit: (values: object) => (submitted = values)
   };
 
   configureTestBed({
@@ -89,7 +89,7 @@ describe('InputModalComponent', () => {
   });
 
   it('has one defined label field', () => {
-    fh.expectTextToBe('.col-form-label', 'Optional');
+    fh.expectTextToBe('.cd-col-form-label', 'Optional');
   });
 
   it('has a predefined values for requiredField', () => {

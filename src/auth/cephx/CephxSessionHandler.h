@@ -15,8 +15,8 @@
 
 #include "auth/AuthSessionHandler.h"
 #include "auth/Auth.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class Message;
 
 class CephxSessionHandler  : public AuthSessionHandler {

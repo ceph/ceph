@@ -6,19 +6,22 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/journal/cls_journal_client.h"
-#include "cls/rbd/cls_rbd_client.h"
 #include "journal/Journaler.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
-#include "librbd/MirroringWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/PromoteRequest.h"
 #include "librbd/mirror/GetInfoRequest.h"
+#include "librbd/mirror/ImageRemoveRequest.h"
+#include "librbd/mirror/ImageStateUpdateRequest.h"
+#include "librbd/mirror/snapshot/PromoteRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::mirror::DisableRequest: "
+#define dout_prefix *_dout << "librbd::mirror::DisableRequest: " \
+                           << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace mirror {
@@ -40,7 +43,7 @@ void DisableRequest<I>::send() {
 template <typename I>
 void DisableRequest<I>::send_get_mirror_info() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
 
   using klass = DisableRequest<I>;
@@ -48,19 +51,19 @@ void DisableRequest<I>::send_get_mirror_info() {
       klass, &klass::handle_get_mirror_info>(this);
 
   auto req = GetInfoRequest<I>::create(*m_image_ctx, &m_mirror_image,
-                                       &m_promotion_state, ctx);
+                                       &m_promotion_state,
+                                       &m_primary_mirror_uuid, ctx);
   req->send();
 }
 
 template <typename I>
 Context *DisableRequest<I>::handle_get_mirror_info(int *result) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 10) << "r=" << *result << dendl;
 
   if (*result < 0) {
     if (*result == -ENOENT) {
-      ldout(cct, 20) << this << " " << __func__
-                     << ": mirroring is not enabled for this image" << dendl;
+      ldout(cct, 20) << "mirroring is not enabled for this image" << dendl;
       *result = 0;
     } else {
       lderr(cct) << "failed to get mirroring info: " << cpp_strerror(*result)
@@ -69,7 +72,8 @@ Context *DisableRequest<I>::handle_get_mirror_info(int *result) {
     return m_on_finish;
   }
 
-  m_is_primary = (m_promotion_state == PROMOTION_STATE_PRIMARY);
+  m_is_primary = (m_promotion_state == PROMOTION_STATE_PRIMARY ||
+                  m_promotion_state == PROMOTION_STATE_UNKNOWN);
 
   if (!m_is_primary && !m_force) {
     lderr(cct) << "mirrored image is not primary, "
@@ -78,93 +82,33 @@ Context *DisableRequest<I>::handle_get_mirror_info(int *result) {
     return m_on_finish;
   }
 
-  send_set_mirror_image();
+  send_image_state_update();
   return nullptr;
 }
 
 template <typename I>
-void DisableRequest<I>::send_set_mirror_image() {
+void DisableRequest<I>::send_image_state_update() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
-  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
-
-  librados::ObjectWriteOperation op;
-  cls_client::mirror_image_set(&op, m_image_ctx->id, m_mirror_image);
-
-  using klass = DisableRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
+  auto ctx = util::create_context_callback<
+    DisableRequest<I>,
+    &DisableRequest<I>::handle_image_state_update>(this);
+  auto req = ImageStateUpdateRequest<I>::create(
+    m_image_ctx->md_ctx, m_image_ctx->id,
+    cls::rbd::MIRROR_IMAGE_STATE_DISABLING, m_mirror_image, ctx);
+  req->send();
 }
 
 template <typename I>
-Context *DisableRequest<I>::handle_set_mirror_image(int *result) {
+Context *DisableRequest<I>::handle_image_state_update(int *result) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 10) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to disable mirroring: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
-  }
-
-  send_notify_mirroring_watcher();
-  return nullptr;
-}
-
-template <typename I>
-void DisableRequest<I>::send_notify_mirroring_watcher() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  using klass = DisableRequest<I>;
-  Context *ctx = util::create_context_callback<
-    klass, &klass::handle_notify_mirroring_watcher>(this);
-
-  MirroringWatcher<I>::notify_image_updated(
-    m_image_ctx->md_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
-    m_image_ctx->id, m_mirror_image.global_image_id, ctx);
-}
-
-template <typename I>
-Context *DisableRequest<I>::handle_notify_mirroring_watcher(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result < 0) {
-    lderr(cct) << "failed to send update notification: "
-               << cpp_strerror(*result) << dendl;
-    *result = 0;
-  }
-
-  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    // remove mirroring snapshots
-
-    bool removing_snapshots = false;
-    {
-      std::lock_guard locker{m_lock};
-      std::shared_lock image_locker{m_image_ctx->image_lock};
-
-      for (auto &it : m_image_ctx->snap_info) {
-        auto &snap_info = it.second;
-        auto type = cls::rbd::get_snap_namespace_type(
-          snap_info.snap_namespace);
-        if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_PRIMARY ||
-            type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR_NON_PRIMARY) {
-          send_remove_snap("", snap_info.snap_namespace, snap_info.name);
-          removing_snapshots = true;
-        }
-      }
-    }
-
-    if (!removing_snapshots) {
-      send_remove_mirror_image();
-    }
-
-    return nullptr;
   }
 
   send_promote_image();
@@ -174,41 +118,91 @@ Context *DisableRequest<I>::handle_notify_mirroring_watcher(int *result) {
 template <typename I>
 void DisableRequest<I>::send_promote_image() {
   if (m_is_primary) {
-    send_get_clients();
+    clean_mirror_state();
     return;
   }
 
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
-  // Not primary -- shouldn't have the journal open
-  ceph_assert(m_image_ctx->journal == nullptr);
+  auto ctx = util::create_context_callback<
+    DisableRequest<I>, &DisableRequest<I>::handle_promote_image>(this);
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    // Not primary -- shouldn't have the journal open
+    ceph_assert(m_image_ctx->journal == nullptr);
 
-  using klass = DisableRequest<I>;
-  Context *ctx = util::create_context_callback<
-    klass, &klass::handle_promote_image>(this);
-  auto req = journal::PromoteRequest<I>::create(m_image_ctx, true, ctx);
-  req->send();
+    auto req = journal::PromoteRequest<I>::create(m_image_ctx, true, ctx);
+    req->send();
+  } else if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    auto req = mirror::snapshot::PromoteRequest<I>::create(
+      m_image_ctx, m_mirror_image.global_image_id, ctx);
+    req->send();
+  } else {
+    lderr(cct) << "unknown image mirror mode: " << m_mirror_image.mode << dendl;
+    ctx->complete(-EOPNOTSUPP);
+  }
 }
 
 template <typename I>
 Context *DisableRequest<I>::handle_promote_image(int *result) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 10) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to promote image: " << cpp_strerror(*result) << dendl;
     return m_on_finish;
   }
 
-  send_get_clients();
+  send_refresh_image();
   return nullptr;
+}
+
+template <typename I>
+void DisableRequest<I>::send_refresh_image() {
+  if (!m_image_ctx->state->is_refresh_required()) {
+    clean_mirror_state();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<
+    DisableRequest<I>,
+    &DisableRequest<I>::handle_refresh_image>(this);
+  m_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+Context *DisableRequest<I>::handle_refresh_image(int* result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to refresh image: " << cpp_strerror(*result) << dendl;
+    return m_on_finish;
+  }
+
+  clean_mirror_state();
+  return nullptr;
+}
+
+template <typename I>
+void DisableRequest<I>::clean_mirror_state() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    remove_mirror_snapshots();
+  } else {
+    send_get_clients();
+  }
 }
 
 template <typename I>
 void DisableRequest<I>::send_get_clients() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = DisableRequest<I>;
   Context *ctx = util::create_context_callback<
@@ -223,7 +217,7 @@ void DisableRequest<I>::send_get_clients() {
 template <typename I>
 Context *DisableRequest<I>::handle_get_clients(int *result) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 10) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to get registered clients: " << cpp_strerror(*result)
@@ -254,7 +248,7 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
 
     if (m_current_ops.find(client.id) != m_current_ops.end()) {
       // Should not happen.
-      lderr(cct) << this << " " << __func__ << ": clients with the same id "
+      lderr(cct) << "clients with the same id "
                  << client.id << dendl;
       continue;
     }
@@ -291,11 +285,39 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
 }
 
 template <typename I>
-void DisableRequest<I>::send_remove_snap(const std::string &client_id,
-					 const cls::rbd::SnapshotNamespace &snap_namespace,
-					 const std::string &snap_name) {
+void DisableRequest<I>::remove_mirror_snapshots() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": client_id=" << client_id
+  ldout(cct, 10) << dendl;
+
+  // remove snapshot-based mirroring snapshots
+  bool removing_snapshots = false;
+  {
+    std::lock_guard locker{m_lock};
+    std::shared_lock image_locker{m_image_ctx->image_lock};
+
+    for (auto &it : m_image_ctx->snap_info) {
+      auto &snap_info = it.second;
+      auto type = cls::rbd::get_snap_namespace_type(
+        snap_info.snap_namespace);
+      if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
+        send_remove_snap("", snap_info.snap_namespace, snap_info.name);
+        removing_snapshots = true;
+      }
+    }
+  }
+
+  if (!removing_snapshots) {
+    send_remove_mirror_image();
+  }
+}
+
+template <typename I>
+void DisableRequest<I>::send_remove_snap(
+    const std::string &client_id,
+    const cls::rbd::SnapshotNamespace &snap_namespace,
+    const std::string &snap_name) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << "client_id=" << client_id
                  << ", snap_name=" << snap_name << dendl;
 
   ceph_assert(ceph_mutex_is_locked(m_lock));
@@ -318,7 +340,7 @@ template <typename I>
 Context *DisableRequest<I>::handle_remove_snap(int *result,
     const std::string &client_id) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 10) << "r=" << *result << dendl;
 
   std::lock_guard locker{m_lock};
 
@@ -352,7 +374,7 @@ template <typename I>
 void DisableRequest<I>::send_unregister_client(
   const std::string &client_id) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   ceph_assert(ceph_mutex_is_locked(m_lock));
   ceph_assert(m_current_ops[client_id] == 0);
@@ -380,7 +402,7 @@ Context *DisableRequest<I>::handle_unregister_client(
   int *result, const std::string &client_id) {
 
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 10) << "r=" << *result << dendl;
 
   std::lock_guard locker{m_lock};
   ceph_assert(m_current_ops[client_id] == 0);
@@ -408,27 +430,21 @@ Context *DisableRequest<I>::handle_unregister_client(
 template <typename I>
 void DisableRequest<I>::send_remove_mirror_image() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
-  librados::ObjectWriteOperation op;
-  cls_client::mirror_image_remove(&op, m_image_ctx->id);
-
-  using klass = DisableRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_remove_mirror_image>(this);
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
+  auto ctx = util::create_context_callback<
+    DisableRequest<I>,
+    &DisableRequest<I>::handle_remove_mirror_image>(this);
+  auto req = ImageRemoveRequest<I>::create(
+    m_image_ctx->md_ctx, m_mirror_image.global_image_id, m_image_ctx->id,
+    ctx);
+  req->send();
 }
 
 template <typename I>
 Context *DisableRequest<I>::handle_remove_mirror_image(int *result) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result == -ENOENT) {
-    *result = 0;
-  }
+  ldout(cct, 10) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to remove mirror image: " << cpp_strerror(*result)
@@ -436,39 +452,7 @@ Context *DisableRequest<I>::handle_remove_mirror_image(int *result) {
     return m_on_finish;
   }
 
-  ldout(cct, 20) << this << " " << __func__
-                 <<  ": removed image state from rbd_mirroring object" << dendl;
-
-  send_notify_mirroring_watcher_removed();
-  return nullptr;
-}
-
-template <typename I>
-void DisableRequest<I>::send_notify_mirroring_watcher_removed() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  using klass = DisableRequest<I>;
-  Context *ctx = util::create_context_callback<
-    klass, &klass::handle_notify_mirroring_watcher_removed>(this);
-
-  MirroringWatcher<I>::notify_image_updated(
-    m_image_ctx->md_ctx, cls::rbd::MIRROR_IMAGE_STATE_DISABLED, m_image_ctx->id,
-    m_mirror_image.global_image_id, ctx);
-}
-
-template <typename I>
-Context *DisableRequest<I>::handle_notify_mirroring_watcher_removed(
-  int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result < 0) {
-    lderr(cct) << "failed to send update notification: "
-               << cpp_strerror(*result) << dendl;
-    *result = 0;
-  }
-
+  ldout(cct, 20) << "removed image state from rbd_mirroring object" << dendl;
   return m_on_finish;
 }
 

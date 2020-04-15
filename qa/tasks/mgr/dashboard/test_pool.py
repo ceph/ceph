@@ -61,7 +61,7 @@ class PoolTest(DashboardTestCase):
     def _create_pool(self, name, data):
         data = data or {
             'pool': name,
-            'pg_num': '16',
+            'pg_num': '32',
             'pool_type': 'replicated',
             'compression_algorithm': 'snappy',
             'compression_mode': 'passive',
@@ -217,7 +217,7 @@ class PoolTest(DashboardTestCase):
     def test_pool_create_with_two_applications(self):
         self.__yield_pool(None, {
             'pool': 'dashboard_pool1',
-            'pg_num': '16',
+            'pg_num': '32',
             'pool_type': 'replicated',
             'application_metadata': ['rbd', 'sth'],
         })
@@ -228,7 +228,7 @@ class PoolTest(DashboardTestCase):
             ['osd', 'erasure-code-profile', 'set', 'ecprofile', 'crush-failure-domain=osd'])
         self.__yield_pool(None, {
             'pool': 'dashboard_pool2',
-            'pg_num': '16',
+            'pg_num': '32',
             'pool_type': 'erasure',
             'application_metadata': ['rbd'],
             'erasure_code_profile': 'ecprofile',
@@ -239,7 +239,7 @@ class PoolTest(DashboardTestCase):
     def test_pool_create_with_compression(self):
         pool = {
             'pool': 'dashboard_pool3',
-            'pg_num': '16',
+            'pg_num': '32',
             'pool_type': 'replicated',
             'compression_algorithm': 'zstd',
             'compression_mode': 'aggressive',
@@ -269,7 +269,7 @@ class PoolTest(DashboardTestCase):
             {
                 'pool_data': {
                     'pool': 'dashboard_pool_quota1',
-                    'pg_num': '16',
+                    'pg_num': '32',
                     'pool_type': 'replicated',
                 },
                 'pool_quotas_to_check': {
@@ -280,7 +280,7 @@ class PoolTest(DashboardTestCase):
             {
                 'pool_data': {
                     'pool': 'dashboard_pool_quota2',
-                    'pg_num': '16',
+                    'pg_num': '32',
                     'pool_type': 'replicated',
                     'quota_max_objects': 1024,
                     'quota_max_bytes': 1000,
@@ -400,14 +400,18 @@ class PoolTest(DashboardTestCase):
         })
 
     def test_pool_info(self):
-        self._get("/api/pool/_info")
+        self._get("/ui-api/pool/info")
         self.assertSchemaBody(JObj({
             'pool_names': JList(six.string_types),
             'compression_algorithms': JList(six.string_types),
             'compression_modes': JList(six.string_types),
             'is_all_bluestore': bool,
-            "bluestore_compression_algorithm": six.string_types,
+            'bluestore_compression_algorithm': six.string_types,
             'osd_count': int,
             'crush_rules_replicated': JList(JObj({}, allow_unknown=True)),
             'crush_rules_erasure': JList(JObj({}, allow_unknown=True)),
+            'pg_autoscale_default_mode': six.string_types,
+            'pg_autoscale_modes': JList(six.string_types),
+            'erasure_code_profiles': JList(JObj({}, allow_unknown=True)),
+            'used_rules': JObj({}, allow_unknown=True),
         }))

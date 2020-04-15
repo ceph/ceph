@@ -79,6 +79,7 @@
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup placement list   list zonegroup's placement targets
+    zonegroup placement get    get a placement target of a specific zonegroup
     zonegroup placement add    add a placement target id to a zonegroup
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
@@ -91,6 +92,7 @@
     zone list                  list all zones set on this cluster
     zone rename                rename a zone
     zone placement list        list zone's placement targets
+    zone placement get         get a zone placement target
     zone placement add         add a zone placement target
     zone placement modify      modify a zone placement target
     zone placement rm          remove a zone placement target
@@ -243,6 +245,7 @@
                                set list of zones to sync from
      --sync-from-rm=[zone-name][,...]
                                remove zones from list of zones to sync from
+     --bucket-index-max-shards override a zone/zonegroup's default bucket index shard count
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state

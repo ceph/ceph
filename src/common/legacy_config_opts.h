@@ -331,6 +331,7 @@ OPTION(auth_service_ticket_ttl, OPT_DOUBLE)
 OPTION(auth_debug, OPT_BOOL)          // if true, assert when weird things happen
 OPTION(mon_client_hunt_parallel, OPT_U32)   // how many mons to try to connect to in parallel during hunt
 OPTION(mon_client_hunt_interval, OPT_DOUBLE)   // try new mon every N seconds until we connect
+OPTION(mon_client_log_interval, OPT_DOUBLE)  // send logs every N seconds
 OPTION(mon_client_ping_interval, OPT_DOUBLE)  // ping every N seconds
 OPTION(mon_client_ping_timeout, OPT_DOUBLE)   // fail if we don't hear back
 OPTION(mon_client_hunt_interval_backoff, OPT_DOUBLE) // each time we reconnect to a monitor, double our timeout
@@ -346,7 +347,6 @@ OPTION(client_trace, OPT_STR)
 OPTION(client_readahead_min, OPT_LONGLONG)  // readahead at _least_ this much.
 OPTION(client_readahead_max_bytes, OPT_LONGLONG)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG)  // as multiple of file layout period (object size * num stripes)
-OPTION(client_reconnect_stale, OPT_BOOL)  // automatically reconnect stale session
 OPTION(client_snapdir, OPT_STR)
 OPTION(client_mount_uid, OPT_INT)
 OPTION(client_mount_gid, OPT_INT)
@@ -721,6 +721,7 @@ OPTION(osd_kill_backfill_at, OPT_INT)
 // Bounds how infrequently a new map epoch will be persisted for a pg
 OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32) // make this < map_cache_size!
 
+OPTION(osd_target_pg_log_entries_per_osd, OPT_U32)
 OPTION(osd_min_pg_log_entries, OPT_U32)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32) // max entries, say when degraded, before we trim
 OPTION(osd_pg_log_dups_tracked, OPT_U32) // how many versions back to track combined in both pglog's regular + dup logs
@@ -999,6 +1000,7 @@ OPTION(bluestore_cache_size_hdd, OPT_U64)
 OPTION(bluestore_cache_size_ssd, OPT_U64)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE)
+OPTION(bluestore_alloc_stats_dump_interval, OPT_DOUBLE)
 OPTION(bluestore_kvbackend, OPT_STR)
 OPTION(bluestore_allocator, OPT_STR)     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT)

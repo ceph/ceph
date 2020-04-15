@@ -16,7 +16,7 @@ class TestScrubControls(CephFSTestCase):
     Test basic scrub control operations such as abort, pause and resume.
     """
 
-    MDSS_REQUIRED = 1
+    MDSS_REQUIRED = 2
     CLIENTS_REQUIRED = 1
 
     def _abort_scrub(self, expected):
@@ -32,7 +32,9 @@ class TestScrubControls(CephFSTestCase):
         return self.fs.rank_tell(["scrub", "status"])
     def _check_task_status(self, expected_status):
         task_status = self.fs.get_task_status("scrub status")
-        self.assertTrue(task_status['0'].startswith(expected_status))
+        active = self.fs.get_active_names()
+        log.debug("current active={0}".format(active))
+        self.assertTrue(task_status[active[0]].startswith(expected_status))
 
     def test_scrub_abort(self):
         test_dir = "scrub_control_test_path"
@@ -127,6 +129,34 @@ class TestScrubControls(CephFSTestCase):
         time.sleep(10)
         self._check_task_status("idle")
 
+    def test_scrub_task_status_on_mds_failover(self):
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+
+        (original_active, ) = self.fs.get_active_names()
+        original_standbys = self.mds_cluster.get_standby_daemons()
+        self._check_task_status("idle")
+
+        # Kill the rank 0
+        self.fs.mds_stop(original_active)
+
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+
+        def promoted():
+            active = self.fs.get_active_names()
+            return active and active[0] in original_standbys
+
+        log.info("Waiting for promotion of one of the original standbys {0}".format(
+            original_standbys))
+        self.wait_until_true(promoted, timeout=grace*2)
+
+        mgr_beacon_grace = float(self.fs.get_config("mgr_service_beacon_grace", service_type="mon"))
+
+        def status_check():
+            task_status = self.fs.get_task_status("scrub status")
+            return original_active not in task_status
+        self.wait_until_true(status_check, timeout=mgr_beacon_grace*2)
+
 class TestScrubChecks(CephFSTestCase):
     """
     Run flush and scrub commands on the specified files in the filesystem. This
@@ -167,10 +197,9 @@ class TestScrubChecks(CephFSTestCase):
         log.info("Cloning repo into place")
         repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
 
-        log.info("Initiating mds_scrub_checks on mds.{id_}, " +
-                 "test_path {path}, run_seq {seq}".format(
-                     id_=mds_rank, path=abs_test_path, seq=run_seq)
-                 )
+        log.info("Initiating mds_scrub_checks on mds.{id_} test_path {path}, run_seq {seq}".format(
+            id_=mds_rank, path=abs_test_path, seq=run_seq)
+        )
 
 
         success_validator = lambda j, r: self.json_validator(j, r, "return_code", 0)
@@ -327,9 +356,8 @@ class TestScrubChecks(CephFSTestCase):
         else:
             jout = None
 
-        log.info("command '{command}' got response code " +
-                 "'{rout}' and stdout '{sout}'".format(
-                     command=command, rout=rout, sout=sout))
+        log.info("command '{command}' got response code '{rout}' and stdout '{sout}'".format(
+            command=command, rout=rout, sout=sout))
 
         success, errstring = validator(jout, rout)
 
@@ -369,7 +397,5 @@ class AsokCommandFailedError(Exception):
         self.errstring = errstring
 
     def __str__(self):
-        return "Admin socket: {command} failed with rc={rc}," + \
-               "json output={json}, because '{es}'".format(
-                   command=self.command, rc=self.rc,
-                   json=self.json, es=self.errstring)
+        return "Admin socket: {command} failed with rc={rc} json output={json}, because '{es}'".format(
+            command=self.command, rc=self.rc, json=self.json, es=self.errstring)

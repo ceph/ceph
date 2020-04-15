@@ -39,7 +39,7 @@ describe('SettingsService', () => {
   });
 
   describe('getSettingsValue', () => {
-    const testMethod = (data, expected: string) => {
+    const testMethod = (data: object, expected: string) => {
       expect(service['getSettingsValue'](data)).toBe(expected);
     };
 
@@ -65,7 +65,7 @@ describe('SettingsService', () => {
   describe('isSettingConfigured', () => {
     let increment: number;
 
-    const testConfig = (url, value) => {
+    const testConfig = (url: string, value: string) => {
       service.ifSettingConfigured(
         url,
         (setValue) => {
@@ -124,5 +124,34 @@ describe('SettingsService', () => {
     service['settings'] = { [exampleUrl]: exampleValue };
     service.disableSetting(exampleUrl);
     expect(service['settings']).toEqual({ [exampleUrl]: '' });
+  });
+
+  it('should return the specified settings (1)', () => {
+    let result;
+    service.getValues('foo,bar').subscribe((resp) => {
+      result = resp;
+    });
+    const req = httpTesting.expectOne('api/settings?names=foo,bar');
+    expect(req.request.method).toBe('GET');
+    req.flush([
+      { name: 'foo', default: '', type: 'str', value: 'test' },
+      { name: 'bar', default: 0, type: 'int', value: 2 }
+    ]);
+    expect(result).toEqual({
+      foo: 'test',
+      bar: 2
+    });
+  });
+
+  it('should return the specified settings (2)', () => {
+    service.getValues(['abc', 'xyz']).subscribe();
+    const req = httpTesting.expectOne('api/settings?names=abc,xyz');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should return standard settings', () => {
+    service.getStandardSettings().subscribe();
+    const req = httpTesting.expectOne('ui-api/standard_settings');
+    expect(req.request.method).toBe('GET');
   });
 });

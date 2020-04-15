@@ -25,12 +25,12 @@
 
 #include "global/global_init.h"
 
+#include "include/common_fwd.h"
 #include "include/utime.h"
 #include "include/str_list.h"
 
 #include "rgw_sal.h"
 
-class CephContext;
 class RGWSI_RADOS;
 class RGWSI_Zone;
 class RGWBucketInfo;

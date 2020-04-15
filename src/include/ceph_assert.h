@@ -23,7 +23,7 @@
 # include "acconfig.h"
 #endif
 
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace ceph {
 
@@ -70,7 +70,7 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 #define assert_warn(expr)							\
   ((expr)								\
    ? _CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
+   : ::ceph::__ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION))
 
 }
 

@@ -1,45 +1,15 @@
 from __future__ import absolute_import
-import json
 
+from ceph.deployment.service_spec import ServiceSpec
+from test_orchestrator import TestOrchestrator as _TestOrchestrator
 from tests import mock
 
 import pytest
 
 from ceph.deployment import inventory
-from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference
-from orchestrator import InventoryNode, ServiceDescription
+from orchestrator import raise_if_exception, Completion, ProgressReference
+from orchestrator import InventoryHost, DaemonDescription
 from orchestrator import OrchestratorValidationError
-from orchestrator import parse_host_specs
-
-
-@pytest.mark.parametrize("test_input,expected, require_network",
-                         [("myhost", ('myhost', '', ''), False),
-                          ("myhost=sname", ('myhost', '', 'sname'), False),
-                          ("myhost:10.1.1.10", ('myhost', '10.1.1.10', ''), True),
-                          ("myhost:10.1.1.10=sname", ('myhost', '10.1.1.10', 'sname'), True),
-                          ("myhost:10.1.1.0/32", ('myhost', '10.1.1.0/32', ''), True),
-                          ("myhost:10.1.1.0/32=sname", ('myhost', '10.1.1.0/32', 'sname'), True),
-                          ("myhost:[v1:10.1.1.10:6789]", ('myhost', '[v1:10.1.1.10:6789]', ''), True),
-                          ("myhost:[v1:10.1.1.10:6789]=sname", ('myhost', '[v1:10.1.1.10:6789]', 'sname'), True),
-                          ("myhost:[v1:10.1.1.10:6789,v2:10.1.1.11:3000]", ('myhost', '[v1:10.1.1.10:6789,v2:10.1.1.11:3000]', ''), True),
-                          ("myhost:[v1:10.1.1.10:6789,v2:10.1.1.11:3000]=sname", ('myhost', '[v1:10.1.1.10:6789,v2:10.1.1.11:3000]', 'sname'), True),
-                          ])
-def test_parse_host_specs(test_input, expected, require_network):
-    ret = parse_host_specs(test_input, require_network=require_network)
-    assert ret == expected
-    assert str(ret) == test_input
-
-@pytest.mark.parametrize("test_input",
-                         # wrong subnet
-                         [("myhost:1.1.1.1/24"),
-                          # wrong ip format
-                          ("myhost:1"),
-                          # empty string
-                          ("myhost=1"),
-                          ])
-def test_parse_host_specs_raises(test_input):
-    with pytest.raises(ValueError):
-        ret = parse_host_specs(test_input)
 
 
 def _test_resource(data, resource_class, extra=None):
@@ -57,6 +27,7 @@ def _test_resource(data, resource_class, extra=None):
 def test_inventory():
     json_data = {
         'name': 'host0',
+        'addr': '1.2.3.4',
         'devices': [
             {
                 'sys_api': {
@@ -70,23 +41,23 @@ def test_inventory():
             }
         ]
     }
-    _test_resource(json_data, InventoryNode, {'abc': False})
+    _test_resource(json_data, InventoryHost, {'abc': False})
     for devices in json_data['devices']:
         _test_resource(devices, inventory.Device)
 
-    json_data = [{}, {'name': 'host0'}, {'devices': []}]
+    json_data = [{}, {'name': 'host0', 'addr': '1.2.3.4'}, {'devices': []}]
     for data in json_data:
         with pytest.raises(OrchestratorValidationError):
-            InventoryNode.from_json(data)
+            InventoryHost.from_json(data)
 
 
-def test_service_description():
+def test_daemon_description():
     json_data = {
-        'nodename': 'test',
-        'service_type': 'mon',
-        'service_instance': 'a'
+        'hostname': 'test',
+        'daemon_type': 'mon',
+        'daemon_id': 'a'
     }
-    _test_resource(json_data, ServiceDescription, {'abc': False})
+    _test_resource(json_data, DaemonDescription, {'abc': False})
 
 
 def test_raise():
@@ -94,22 +65,6 @@ def test_raise():
     c._exception = ZeroDivisionError()
     with pytest.raises(ZeroDivisionError):
         raise_if_exception(c)
-
-
-def test_rgwspec():
-    """
-    {
-        "rgw_zone": "zonename",
-        "rgw_frontend_port": 8080,
-        "rgw_zonegroup": "group",
-        "rgw_zone_user": "user",
-        "rgw_realm": "realm",
-        "count": 3
-    }
-    """
-    example = json.loads(test_rgwspec.__doc__.strip())
-    spec = RGWSpec.from_json(example)
-    assert spec.validate_add() is None
 
 
 def test_promise():
@@ -273,3 +228,12 @@ def test_pretty_print():
 
     assert p.result == 5
 
+def test_apply():
+    to = _TestOrchestrator('', 0, 0)
+    completion = to.apply([
+        ServiceSpec(service_type='nfs'),
+        ServiceSpec(service_type='nfs'),
+        ServiceSpec(service_type='nfs'),
+    ])
+    completion.finalize(42)
+    assert  completion.result == [None, None, None]

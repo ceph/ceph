@@ -530,20 +530,23 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  continue;
 	}
 	client_t _client = p.is_state_pin() ? lock->get_excl_client() : client;
-	if (p.is_remote_wrlock() && !lock->can_wrlock(_client)) {
-	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
-	  // can't take the wrlock because the scatter lock is gathering. need to
-	  // release the remote wrlock, so that the gathering process can finish.
-	  ceph_assert(it != mdr->locks.end());
-	  remote_wrlock_finish(it, mdr.get());
-	  remote_wrlock_start(lock, p.wrlock_target, mdr);
-	  goto out;
-	}
-	// nowait if we have already gotten remote wrlock
-	if (!wrlock_start(lock, mdr)) {
-	  ceph_assert(!p.is_remote_wrlock());
-	  marker.message = "failed to wrlock, waiting";
-	  goto out;
+	if (p.is_remote_wrlock()) {
+	  // nowait if we have already gotten remote wrlock
+	  if (!wrlock_try(lock, mdr, _client)) {
+	    marker.message = "failed to wrlock, dropping remote wrlock and waiting";
+	    // can't take the wrlock because the scatter lock is gathering. need to
+	    // release the remote wrlock, so that the gathering process can finish.
+	    ceph_assert(it != mdr->locks.end());
+	    remote_wrlock_finish(it, mdr.get());
+	    remote_wrlock_start(lock, p.wrlock_target, mdr);
+	    goto out;
+	  }
+	} else {
+	  if (!wrlock_start(p, mdr)) {
+	    ceph_assert(!p.is_remote_wrlock());
+	    marker.message = "failed to wrlock, waiting";
+	    goto out;
+	  }
 	}
 	dout(10) << " got wrlock on " << *lock << " " << *lock->get_parent() << dendl;
       }
@@ -799,6 +802,8 @@ void Locker::put_lock_cache(MDLockCache* lock_cache)
 
   ceph_assert(lock_cache->invalidating);
 
+  lock_cache->detach_locks();
+
   CInode *diri = lock_cache->get_dir_inode();
   for (auto dir : lock_cache->auth_pinned_dirfrags) {
     if (dir->get_inode() != diri)
@@ -829,7 +834,7 @@ void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
     ceph_assert(!lock_cache->client_cap);
   } else {
     lock_cache->invalidating = true;
-    lock_cache->detach_all();
+    lock_cache->detach_dirfrags();
   }
 
   Capability *cap = lock_cache->client_cap;
@@ -877,8 +882,10 @@ void Locker::invalidate_lock_caches(CDir *dir)
 void Locker::invalidate_lock_caches(SimpleLock *lock)
 {
   dout(10) << "invalidate_lock_caches " << *lock << " on " << *lock->get_parent() << dendl;
-  while (lock->is_cached()) {
-    invalidate_lock_cache(lock->get_first_cache());
+  if (lock->is_cached()) {
+    auto&& lock_caches = lock->get_active_caches();
+    for (auto& lc : lock_caches)
+      invalidate_lock_cache(lc);
   }
 }
 
@@ -1704,14 +1711,17 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
 }
 
-bool Locker::wrlock_try(SimpleLock *lock, MutationRef& mut)
+bool Locker::wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client)
 {
   dout(10) << "wrlock_try " << *lock << " on " << *lock->get_parent() << dendl;
+  if (client == -1)
+    client = mut->get_client();
 
   while (1) {
-    if (lock->can_wrlock(mut->get_client())) {
+    if (lock->can_wrlock(client)) {
       lock->get_wrlock();
-      mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+      auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+      it->flags |= MutationImpl::LockOp::WRLOCK; // may already remote_wrlocked
       return true;
     }
     if (!lock->is_stable())
@@ -1719,16 +1729,18 @@ bool Locker::wrlock_try(SimpleLock *lock, MutationRef& mut)
     CInode *in = static_cast<CInode *>(lock->get_parent());
     if (!in->is_auth())
       break;
-    // don't do nested lock state change if we have dirty scatterdata and
-    // may scatter_writebehind or start_scatter, because nowait==true implies
-    // that the caller already has a log entry open!
+    // caller may already has a log entry open. To avoid calling
+    // scatter_writebehind or start_scatter. don't change nest lock
+    // state if it has dirty scatterdata.
     if (lock->is_dirty())
-      return false;
+      break;
+    // To avoid calling scatter_writebehind or start_scatter. don't
+    // change nest lock state to MIX.
     ScatterLock *slock = static_cast<ScatterLock*>(lock);
-    if (in->has_subtree_or_exporting_dirfrag() || slock->get_scatter_wanted())
-      scatter_mix(slock);
-    else
-      simple_lock(lock);
+    if (slock->get_scatter_wanted() || in->has_subtree_or_exporting_dirfrag())
+      break;
+
+    simple_lock(lock);
   }
   return false;
 }
@@ -2179,17 +2191,16 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
-				   Session *session,
-				   SnapRealm *realm,
-				   bool is_replay)
+				   MDRequestRef& mdr,
+				   SnapRealm *realm)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
-  bool is_new;
+  Session *session = mdr->session;
+  bool new_inode = (mdr->alloc_ino || mdr->used_prealloc_ino);
 
-  // if replay, try to reconnect cap, and otherwise do nothing.
-  if (is_replay)
+  // if replay or async, try to reconnect cap, and otherwise do nothing.
+  if (new_inode && mdr->client_request->is_queued_for_replay())
     return mds->mdcache->try_reconnect_cap(in, session);
-
 
   // my needs
   ceph_assert(session->info.inst.name.is_client());
@@ -2200,19 +2211,17 @@ Capability* Locker::issue_new_caps(CInode *in,
   Capability *cap = in->get_client_cap(my_client);
   if (!cap) {
     // new cap
-    cap = in->add_client_cap(my_client, session, realm);
+    cap = in->add_client_cap(my_client, session, realm, new_inode);
     cap->set_wanted(my_want);
     cap->mark_new();
-    cap->inc_suppress(); // suppress file cap messages for new cap (we'll bundle with the open() reply)
-    is_new = true;
   } else {
-    is_new = false;
     // make sure it wants sufficient caps
     if (my_want & ~cap->wanted()) {
       // augment wanted caps for this client
       cap->set_wanted(cap->wanted() | my_want);
     }
   }
+  cap->inc_suppress(); // suppress file cap messages (we'll bundle with the request reply)
 
   if (in->is_auth()) {
     // [auth] twiddle mode?
@@ -2232,8 +2241,7 @@ Capability* Locker::issue_new_caps(CInode *in,
   // re-issue whatever we can
   //cap->issue(cap->pending());
 
-  if (is_new)
-    cap->dec_suppress();
+  cap->dec_suppress();
 
   return cap;
 }
@@ -5301,8 +5309,8 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	    << " xlocker_issued=" << gcap_string(xlocker_issued)
 	    << dendl;
     if (!((loner_wanted|loner_issued) & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
-	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
-	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
+	(other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
+	(in->is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
       // we should lose it.
       //  loner  other   want
@@ -5330,9 +5338,10 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   else if (lock->get_state() != LOCK_EXCL &&
 	   !lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
-	    (in->inode.is_dir() && !in->has_subtree_or_exporting_dirfrag())) &&
-	   in->get_target_loner() >= 0) {
+	   in->get_target_loner() >= 0 &&
+	   (in->is_dir() ?
+	    !in->has_subtree_or_exporting_dirfrag() :
+	    (wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_excl(lock, need_issue);

@@ -169,7 +169,7 @@ void usage(ostream& out)
 "   cache-try-flush-evict-all        try-flush+evict all objects\n"
 "\n"
 "GLOBAL OPTIONS:\n"
-"   --object_locator object_locator\n"
+"   --object-locator object_locator\n"
 "        set object_locator for operation\n"
 "   -p pool\n"
 "   --pool=pool\n"
@@ -1115,7 +1115,7 @@ protected:
   }
 
   bool completion_is_done(int slot) override {
-    return completions[slot]->is_complete();
+    return completions[slot] && completions[slot]->is_complete();
   }
 
   int completion_wait(int slot) override {
@@ -2216,7 +2216,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   if (oloc.size()) {
     if (!pool_name) {
-      cerr << "pool name must be specified with --object_locator" << std::endl;
+      cerr << "pool name must be specified with --object-locator" << std::endl;
       return 1;
     }
     io_ctx.locator_set_key(oloc);

@@ -23,19 +23,37 @@ describe('MonitorComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(MonitorComponent);
     component = fixture.componentInstance;
-    const getMonitorPayload = {
+    const getMonitorPayload: Record<string, any> = {
       in_quorum: [
         {
           stats: { num_sessions: [[1, 5]] }
         },
         {
-          stats: { num_sessions: [[1, 1], [2, 10], [3, 1]] }
+          stats: {
+            num_sessions: [
+              [1, 1],
+              [2, 10],
+              [3, 1]
+            ]
+          }
         },
         {
-          stats: { num_sessions: [[1, 0], [2, 3]] }
+          stats: {
+            num_sessions: [
+              [1, 0],
+              [2, 3]
+            ]
+          }
         },
         {
-          stats: { num_sessions: [[1, 2], [2, 1], [3, 7], [4, 5]] }
+          stats: {
+            num_sessions: [
+              [1, 2],
+              [2, 1],
+              [3, 7],
+              [4, 5]
+            ]
+          }
         }
       ],
       mon_status: null,

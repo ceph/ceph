@@ -32,7 +32,8 @@ export class AuthService {
           resp.token,
           resp.permissions,
           resp.sso,
-          resp.pwdExpirationDate
+          resp.pwdExpirationDate,
+          resp.pwdUpdateRequired
         );
       })
     );

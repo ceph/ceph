@@ -38,6 +38,7 @@ if(HAVE_RDMA)
 endif()
 
 add_library(common-msg-objs OBJECT ${msg_srcs})
+target_include_directories(common-msg-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 if(WITH_DPDK)
   set(async_dpdk_srcs

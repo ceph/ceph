@@ -25,6 +25,7 @@ cdef class Rados(object):
 
 cdef class Ioctx(object):
     cdef:
+        object rados
         rados_ioctx_t io
         public object name
         public object state

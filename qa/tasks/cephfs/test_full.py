@@ -1,10 +1,13 @@
-
-
 import json
 import logging
 import os
 from textwrap import dedent
 import time
+try:
+    from typing import Optional
+except:
+    # make it work for python2
+    pass
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -20,7 +23,7 @@ class FullnessTestCase(CephFSTestCase):
     data_only = False
 
     # Subclasses define how many bytes should be written to achieve fullness
-    pool_capacity = None
+    pool_capacity = None  # type: Optional[int]
     fill_mb = None
 
     # Subclasses define what fullness means to them
@@ -129,9 +132,9 @@ class FullnessTestCase(CephFSTestCase):
 
         # Fill up the cluster.  This dd may or may not fail, as it depends on
         # how soon the cluster recognises its own fullness
-        self.mount_a.write_n_mb("large_file_a", self.fill_mb / 2)
+        self.mount_a.write_n_mb("large_file_a", self.fill_mb // 2)
         try:
-            self.mount_a.write_n_mb("large_file_b", self.fill_mb / 2)
+            self.mount_a.write_n_mb("large_file_b", self.fill_mb // 2)
         except CommandFailedError:
             log.info("Writing file B failed (full status happened already)")
             assert self.is_full()
@@ -142,7 +145,7 @@ class FullnessTestCase(CephFSTestCase):
 
         # Attempting to write more data should give me ENOSPC
         with self.assertRaises(CommandFailedError) as ar:
-            self.mount_a.write_n_mb("large_file_b", 50, seek=self.fill_mb / 2)
+            self.mount_a.write_n_mb("large_file_b", 50, seek=self.fill_mb // 2)
         self.assertEqual(ar.exception.exitstatus, 1)  # dd returns 1 on "No space"
 
         # Wait for the MDS to see the latest OSD map so that it will reliably
@@ -364,8 +367,8 @@ class TestQuotaFull(FullnessTestCase):
     """
     Test per-pool fullness, which indicates quota limits exceeded
     """
-    pool_capacity = 1024 * 1024 * 32   # arbitrary low-ish limit
-    fill_mb = pool_capacity / (1024 * 1024)
+    pool_capacity = 1024 * 1024 * 32  # arbitrary low-ish limit
+    fill_mb = pool_capacity // (1024 * 1024)  # type: ignore
 
     # We are only testing quota handling on the data pool, not the metadata
     # pool.
@@ -396,7 +399,7 @@ class TestClusterFull(FullnessTestCase):
             max_avail = self.fs.get_pool_df(self._data_pool_name())['max_avail']
             full_ratio = float(self.fs.get_config("mon_osd_full_ratio", service_type="mon"))
             TestClusterFull.pool_capacity = int(max_avail * full_ratio)
-            TestClusterFull.fill_mb = (self.pool_capacity / (1024 * 1024))
+            TestClusterFull.fill_mb = (self.pool_capacity // (1024 * 1024))
 
     def is_full(self):
         return self.fs.is_full()

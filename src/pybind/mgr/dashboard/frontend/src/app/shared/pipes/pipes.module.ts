@@ -19,12 +19,14 @@ import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { JoinPipe } from './join.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
+import { MapPipe } from './map.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
 import { NotAvailablePipe } from './not-available.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
 import { RbdConfigurationSourcePipe } from './rbd-configuration-source.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
 import { RoundPipe } from './round.pipe';
+import { TruncatePipe } from './truncate.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
 
 @NgModule({
@@ -54,7 +56,9 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IopsPipe,
     UpperFirstPipe,
     RbdConfigurationSourcePipe,
-    DurationPipe
+    DurationPipe,
+    MapPipe,
+    TruncatePipe
   ],
   exports: [
     ArrayPipe,
@@ -81,7 +85,9 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IopsPipe,
     UpperFirstPipe,
     RbdConfigurationSourcePipe,
-    DurationPipe
+    DurationPipe,
+    MapPipe,
+    TruncatePipe
   ],
   providers: [
     ArrayPipe,
@@ -104,7 +110,9 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IopsPipe,
     MillisecondsPipe,
     NotAvailablePipe,
-    UpperFirstPipe
+    UpperFirstPipe,
+    MapPipe,
+    TruncatePipe
   ]
 })
 export class PipesModule {}

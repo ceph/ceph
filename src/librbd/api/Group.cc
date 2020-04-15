@@ -39,9 +39,15 @@ template <typename I>
 snap_t get_group_snap_id(I* ictx,
                          const cls::rbd::SnapshotNamespace& in_snap_namespace) {
   ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
-  auto it = ictx->snap_ids.lower_bound({in_snap_namespace, ""});
-  if (it != ictx->snap_ids.end() && it->first.first == in_snap_namespace) {
-    return it->second;
+  auto it = ictx->snap_ids.lower_bound({cls::rbd::GroupSnapshotNamespace{},
+                                        ""});
+  for (; it != ictx->snap_ids.end(); ++it) {
+    if (it->first.first == in_snap_namespace) {
+      return it->second;
+    } else if (boost::get<cls::rbd::GroupSnapshotNamespace>(&it->first.first) ==
+                 nullptr) {
+      break;
+    }
   }
   return CEPH_NOSNAP;
 }

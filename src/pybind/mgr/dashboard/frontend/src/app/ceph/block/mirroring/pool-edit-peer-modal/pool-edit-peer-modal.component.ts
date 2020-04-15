@@ -67,18 +67,24 @@ export class PoolEditPeerModalComponent implements OnInit {
     if (!control.value.match(/^[\w\-_]*$/)) {
       return { invalidClusterName: { value: control.value } };
     }
+
+    return undefined;
   }
 
   validateClientID(control: AbstractControl) {
     if (!control.value.match(/^(?!client\.)[\w\-_.]*$/)) {
       return { invalidClientID: { value: control.value } };
     }
+
+    return undefined;
   }
 
   validateMonAddr(control: AbstractControl) {
     if (!control.value.match(/^[,; ]*([\w.\-_\[\]]+(:[\d]+)?[,; ]*)*$/)) {
       return { invalidMonAddr: { value: control.value } };
     }
+
+    return undefined;
   }
 
   validateKey(control: AbstractControl) {

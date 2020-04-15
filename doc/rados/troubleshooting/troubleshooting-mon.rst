@@ -47,12 +47,11 @@ Initial Troubleshooting
 
   If you haven't gone through all the steps so far, please go back and do.
 
-  For those running on Emperor 0.72-rc1 and forward, you will be able to
-  contact each monitor individually asking them for their status, regardless
-  of a quorum being formed. This can be achieved using ``ceph ping mon.ID``,
-  ID being the monitor's identifier. You should perform this for each monitor
-  in the cluster. In section `Understanding mon_status`_ we will explain how
-  to interpret the output of this command.
+  You can contact each monitor individually asking them for their status,
+  regardless of a quorum being formed. This can be achieved using
+  ``ceph tell mon.ID mon_status``, ID being the monitor's identifier. You should
+  perform this for each monitor in the cluster. In section `Understanding
+  mon_status`_ we will explain how to interpret the output of this command.
 
   For the rest of you who don't tread on the bleeding edge, you will need to
   ssh into the server and use the monitor's admin socket. Please jump to
@@ -79,31 +78,32 @@ still persists, it is likely that the monitor was improperly shutdown.
 Regardless, if the monitor is not running, you will not be able to use the
 admin socket, with ``ceph`` likely returning ``Error 111: Connection Refused``.
 
-Accessing the admin socket is as simple as telling the ``ceph`` tool to use
-the ``asok`` file.  In pre-Dumpling Ceph, this can be achieved by::
+Accessing the admin socket is as simple as running ``ceph tell`` on the daemon
+you are interested in. For example::
 
-  ceph --admin-daemon /var/run/ceph/ceph-mon.<id>.asok <command>
+  ceph tell mon.<id> mon_status
 
-while in Dumpling and beyond you can use the alternate (and recommended)
-format::
+Under the hood, this passes the command ``help`` to the running MON daemon
+``<id>`` via its "admin socket", which is a file ending in ``.asok``
+somewhere under ``/var/run/ceph``. Once you know the full path to the file,
+you can even do this yourself::
 
-  ceph daemon mon.<id> <command>
+  ceph --admin-daemon <full_path_to_asok_file> <command>
 
 Using ``help`` as the command to the ``ceph`` tool will show you the
 supported commands available through the admin socket. Please take a look
-at ``config get``, ``config show``, ``mon_status`` and ``quorum_status``,
+at ``config get``, ``config show``, ``mon stat`` and ``quorum_status``,
 as those can be enlightening when troubleshooting a monitor.
 
 
 Understanding mon_status
 =========================
 
-``mon_status`` can be obtained through the ``ceph`` tool when you have
-a formed quorum, or via the admin socket if you don't. This command will
-output a multitude of information about the monitor, including the same
-output you would get with ``quorum_status``.
+``mon_status`` can always be obtained via the admin socket. This command will
+output a multitude of information about the monitor, including the same output
+you would get with ``quorum_status``.
 
-Take the following example of ``mon_status``::
+Take the following example output of ``ceph tell mon.c mon_status``::
 
   
   { "name": "c",
@@ -439,7 +439,18 @@ information stored in OSDs.::
     --cap mon 'allow *'
   ceph-authtool /path/to/admin.keyring -n client.admin \
     --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
-  ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring
+  # add one or more ceph-mgr's key to the keyring. in this case, an encoded key
+  # for mgr.x is added, you can find the encoded key in
+  # /etc/ceph/${cluster}.${mgr_name}.keyring on the machine where ceph-mgr is
+  # deployed
+  ceph-authtool /path/to/admin.keyring --add-key 'AQDN8kBe9PLWARAAZwxXMr+n85SBYbSlLcZnMA==' -n mgr.x \
+    --cap mon 'allow profile mgr' --cap osd 'allow *' --cap mds 'allow *'
+  # if your monitors' ids are not single characters like 'a', 'b', 'c', please
+  # specify them in the command line by passing them as arguments of the "--mon-ids"
+  # option. if you are not sure, please check your ceph.conf to see if there is any
+  # sections named like '[mon.foo]'. don't pass the "--mon-ids" option, if you are
+  # using DNS SRV for looking up monitors.
+  ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring --mon-ids alpha beta gamma
   
   # make a backup of the corrupted store.db just in case!  repeat for
   # all monitors.

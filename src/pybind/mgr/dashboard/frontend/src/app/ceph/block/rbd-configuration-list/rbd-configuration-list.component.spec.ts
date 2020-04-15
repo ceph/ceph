@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
@@ -24,6 +25,7 @@ describe('RbdConfigurationListComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       FormsModule,
       NgxDatatableModule,
       RouterTestingModule,
@@ -88,7 +90,7 @@ describe('RbdConfigurationListComponent', () => {
         value: '100'
       }
     ];
-    const filter = (keyword) => {
+    const filter = (keyword: string) => {
       poolConfTable.search = keyword;
       poolConfTable.updateFilter();
       return poolConfTable.rows;

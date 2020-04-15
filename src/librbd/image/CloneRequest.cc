@@ -8,6 +8,7 @@
 #include "include/ceph_assert.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/CloneRequest.h"
@@ -30,22 +31,26 @@ using util::create_context_callback;
 using util::create_async_context_callback;
 
 template <typename I>
-CloneRequest<I>::CloneRequest(ConfigProxy& config,
-                              IoCtx& parent_io_ctx,
-                              const std::string& parent_image_id,
-                              const std::string& parent_snap_name,
-                              uint64_t parent_snap_id,
-                              IoCtx &c_ioctx,
-			      const std::string &c_name,
-			      const std::string &c_id,
-			      ImageOptions c_options,
-			      const std::string &non_primary_global_image_id,
-			      const std::string &primary_mirror_uuid,
-			      ContextWQ *op_work_queue, Context *on_finish)
+CloneRequest<I>::CloneRequest(
+    ConfigProxy& config,
+    IoCtx& parent_io_ctx,
+    const std::string& parent_image_id,
+    const std::string& parent_snap_name,
+    const cls::rbd::SnapshotNamespace& parent_snap_namespace,
+    uint64_t parent_snap_id,
+    IoCtx &c_ioctx,
+    const std::string &c_name,
+    const std::string &c_id,
+    ImageOptions c_options,
+    cls::rbd::MirrorImageMode mirror_image_mode,
+    const std::string &non_primary_global_image_id,
+    const std::string &primary_mirror_uuid,
+    ContextWQ *op_work_queue, Context *on_finish)
   : m_config(config), m_parent_io_ctx(parent_io_ctx),
     m_parent_image_id(parent_image_id), m_parent_snap_name(parent_snap_name),
+    m_parent_snap_namespace(parent_snap_namespace),
     m_parent_snap_id(parent_snap_id), m_ioctx(c_ioctx), m_name(c_name),
-    m_id(c_id), m_opts(c_options),
+    m_id(c_id), m_opts(c_options), m_mirror_image_mode(mirror_image_mode),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish),
@@ -137,8 +142,10 @@ void CloneRequest<I>::open_parent() {
                                    m_parent_io_ctx, true);
   } else {
     m_parent_image_ctx = I::create("", m_parent_image_id,
-                                   m_parent_snap_name.c_str(), m_parent_io_ctx,
+                                   m_parent_snap_name.c_str(),
+                                   m_parent_io_ctx,
                                    true);
+    m_parent_image_ctx->snap_namespace = m_parent_snap_namespace;
   }
 
   Context *ctx = create_context_callback<
@@ -274,15 +281,24 @@ void CloneRequest<I>::create_child() {
   }
   m_opts.set(RBD_IMAGE_OPTION_FEATURES, m_features);
 
+  uint64_t stripe_unit = m_parent_image_ctx->stripe_unit;
+  if (m_opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
+    m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+  }
+
+  uint64_t stripe_count = m_parent_image_ctx->stripe_count;
+  if (m_opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
+    m_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+  }
+
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_child>(this);
 
-  std::shared_lock image_locker{m_parent_image_ctx->image_lock};
   CreateRequest<I> *req = CreateRequest<I>::create(
-    m_config, m_ioctx, m_name, m_id, m_size, m_opts,
-    m_non_primary_global_image_id, m_primary_mirror_uuid, true,
-    m_op_work_queue, ctx);
+    m_config, m_ioctx, m_name, m_id, m_size, m_opts, true,
+    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, m_non_primary_global_image_id,
+    m_primary_mirror_uuid, m_op_work_queue, ctx);
   req->send();
 }
 
@@ -386,97 +402,42 @@ void CloneRequest<I>::handle_attach_child(int r) {
     return;
   }
 
-  metadata_list();
+  copy_metadata();
 }
 
 template <typename I>
-void CloneRequest<I>::metadata_list() {
-  ldout(m_cct, 15) << "start_key=" << m_last_metadata_key << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, 0);
-
-  using klass = CloneRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_metadata_list>(this);
-  m_out_bl.clear();
-  m_parent_image_ctx->md_ctx.aio_operate(m_parent_image_ctx->header_oid,
-				comp, &op, &m_out_bl);
-  comp->release();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_metadata_list(int r) {
-  ldout(m_cct, 15) << "r=" << r << dendl;
-
-  map<string, bufferlist> metadata;
-  if (r == 0) {
-    auto it = m_out_bl.cbegin();
-    r = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
-  if (r < 0) {
-    if (r == -EOPNOTSUPP || r == -EIO) {
-      ldout(m_cct, 10) << "config metadata not supported by OSD" << dendl;
-      get_mirror_mode();
-    } else {
-      lderr(m_cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-      m_r_saved = r;
-      close_child();
-    }
-    return;
-  }
-
-  if (!metadata.empty()) {
-    m_pairs.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = m_pairs.rbegin()->first;
-  }
-
-  if (metadata.size() == MAX_KEYS) {
-    metadata_list();
-  } else {
-    metadata_set();
-  }
-}
-
-template <typename I>
-void CloneRequest<I>::metadata_set() {
-  if (m_pairs.empty()) {
-    get_mirror_mode();
-    return;
-  }
-
+void CloneRequest<I>::copy_metadata() {
   ldout(m_cct, 15) << dendl;
 
-  librados::ObjectWriteOperation op;
-  cls_client::metadata_set(&op, m_pairs);
-
-  using klass = CloneRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_metadata_set>(this);
-  int r = m_ioctx.aio_operate(m_imctx->header_oid, comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
+  auto ctx = create_context_callback<
+    CloneRequest<I>, &CloneRequest<I>::handle_copy_metadata>(this);
+  auto req = deep_copy::MetadataCopyRequest<I>::create(
+    m_parent_image_ctx, m_imctx, ctx);
+  req->send();
 }
 
 template <typename I>
-void CloneRequest<I>::handle_metadata_set(int r) {
+void CloneRequest<I>::handle_copy_metadata(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to copy metadata: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
     close_child();
-  } else {
-    get_mirror_mode();
+    return;
   }
+
+  get_mirror_mode();
 }
 
 template <typename I>
 void CloneRequest<I>::get_mirror_mode() {
   ldout(m_cct, 15) << dendl;
 
-  if (!m_imctx->test_features(RBD_FEATURE_JOURNALING)) {
+  if (!m_non_primary_global_image_id.empty()) {
+    enable_mirror();
+    return;
+  } else if (!m_imctx->test_features(RBD_FEATURE_JOURNALING)) {
     close_child();
     return;
   }
@@ -507,15 +468,12 @@ void CloneRequest<I>::handle_get_mirror_mode(int r) {
                  << dendl;
 
     m_r_saved = r;
-    close_child();
-  } else {
-    if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL ||
-	!m_non_primary_global_image_id.empty()) {
-      enable_mirror();
-    } else {
-      close_child();
-    }
+  } else if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
+    enable_mirror();
+    return;
   }
+
+  close_child();
 }
 
 template <typename I>
@@ -525,12 +483,9 @@ void CloneRequest<I>::enable_mirror() {
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_enable_mirror>(this);
-
-  // TODO: in future rbd-mirror will want to enable mirroring
-  // not only in journal mode.
-  mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
-    m_imctx->md_ctx, m_id, RBD_MIRROR_IMAGE_MODE_JOURNAL,
-    m_non_primary_global_image_id, m_imctx->op_work_queue, ctx);
+  auto req = mirror::EnableRequest<I>::create(
+    m_imctx->md_ctx, m_id, m_mirror_image_mode, m_non_primary_global_image_id,
+    m_imctx->op_work_queue, ctx);
   req->send();
 }
 

@@ -32,11 +32,12 @@ else()
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=10.16.0
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=10.18.1
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
   )
   add_custom_target(mgr-dashboard-nodeenv
+    COMMAND . ${mgr-dashboard-nodeenv-dir}/bin/activate && npm config set python ${MGR_PYTHON_EXECUTABLE} && deactivate
     DEPENDS ${mgr-dashboard-nodeenv-dir}/bin/npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )

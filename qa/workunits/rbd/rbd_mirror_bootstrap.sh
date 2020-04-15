@@ -13,12 +13,12 @@ testlog "TEST: bootstrap cluster2 from cluster1"
 # create token on cluster1 and import to cluster2
 TOKEN=${TEMPDIR}/peer-token
 TOKEN_2=${TEMPDIR}/peer-token-2
-rbd --cluster ${CLUSTER1} mirror pool peer bootstrap create ${POOL} > ${TOKEN}
-rbd --cluster ${CLUSTER1} mirror pool peer bootstrap create ${PARENT_POOL} > ${TOKEN_2}
+CEPH_ARGS='' rbd --cluster ${CLUSTER1} mirror pool peer bootstrap create ${POOL} > ${TOKEN}
+CEPH_ARGS='' rbd --cluster ${CLUSTER1} mirror pool peer bootstrap create ${PARENT_POOL} > ${TOKEN_2}
 cmp ${TOKEN} ${TOKEN_2}
 
-rbd --cluster ${CLUSTER2} --pool ${POOL} mirror pool peer bootstrap import ${TOKEN} --direction rx-only
-rbd --cluster ${CLUSTER2} --pool ${PARENT_POOL} mirror pool peer bootstrap import ${TOKEN} --direction rx-tx
+CEPH_ARGS='' rbd --cluster ${CLUSTER2} --pool ${POOL} mirror pool peer bootstrap import ${TOKEN} --direction rx-only
+CEPH_ARGS='' rbd --cluster ${CLUSTER2} --pool ${PARENT_POOL} mirror pool peer bootstrap import ${TOKEN} --direction rx-tx
 
 start_mirrors ${CLUSTER1}
 start_mirrors ${CLUSTER2}

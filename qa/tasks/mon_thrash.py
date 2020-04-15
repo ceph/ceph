@@ -3,13 +3,13 @@ Monitor thrash
 """
 import logging
 import contextlib
-import ceph_manager
 import random
 import time
 import gevent
 import json
 import math
 from teuthology import misc as teuthology
+from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster
 from tasks.thrasher import Thrasher
 
@@ -330,8 +330,8 @@ class MonitorThrasher(Thrasher):
                 self.log('triggering scrub')
                 try:
                     self.manager.raw_cluster_cmd('mon', 'scrub')
-                except Exception:
-                    log.exception("Saw exception while triggering scrub")
+                except Exception as e:
+                    log.warning("Ignoring exception while triggering scrub: %s", e)
 
             if self.thrash_delay > 0.0:
                 self.log('waiting for {delay} secs before continuing thrashing'.format(

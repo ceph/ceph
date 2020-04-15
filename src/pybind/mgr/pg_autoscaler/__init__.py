@@ -1,1 +1,1 @@
-from .module import PgAutoscaler
+from .module import PgAutoscaler, effective_target_ratio

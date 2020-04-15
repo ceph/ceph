@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import * as _ from 'lodash';
@@ -16,6 +17,7 @@ import {
   PermissionHelper
 } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
+import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -45,7 +47,8 @@ describe('OsdListComponent', () => {
     }
   };
 
-  const getTableAction = (name) => component.tableActions.find((action) => action.name === name);
+  const getTableAction = (name: string) =>
+    component.tableActions.find((action) => action.name === name);
 
   const setFakeSelection = () => {
     // Default data and selection
@@ -59,7 +62,7 @@ describe('OsdListComponent', () => {
     component.permissions = fakeAuthStorageService.getPermissions();
   };
 
-  const openActionModal = (actionName) => {
+  const openActionModal = (actionName: string) => {
     setFakeSelection();
     getTableAction(actionName).click();
   };
@@ -71,12 +74,23 @@ describe('OsdListComponent', () => {
    */
   const mockSafeToDestroy = () => {
     spyOn(TestBed.get(OsdService), 'safeToDestroy').and.callFake(() =>
-      of({ 'safe-to-destroy': true })
+      of({ is_safe_to_destroy: true })
     );
+  };
+
+  const mockSafeToDelete = () => {
+    spyOn(TestBed.get(OsdService), 'safeToDelete').and.callFake(() =>
+      of({ is_safe_to_delete: true })
+    );
+  };
+
+  const mockOrchestratorStatus = () => {
+    spyOn(TestBed.get(OrchestratorService), 'status').and.callFake(() => of({ available: true }));
   };
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       PerformanceCounterModule,
       TabsModule.forRoot(),
@@ -84,7 +98,8 @@ describe('OsdListComponent', () => {
       CephModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      CoreModule
+      CoreModule,
+      RouterTestingModule
     ],
     declarations: [],
     providers: [
@@ -117,24 +132,31 @@ describe('OsdListComponent', () => {
   });
 
   describe('getOsdList', () => {
-    let osds;
+    let osds: any[];
 
-    const createOsd = (n: number) => ({
-      in: 'in',
-      up: 'up',
-      tree: {
-        device_class: 'ssd'
-      },
-      stats_history: {
-        op_out_bytes: [[n, n], [n * 2, n * 2]],
-        op_in_bytes: [[n * 3, n * 3], [n * 4, n * 4]]
-      },
-      stats: {
-        stat_bytes_used: n * n,
-        stat_bytes: n * n * n
-      },
-      state: []
-    });
+    const createOsd = (n: number) =>
+      <Record<string, any>>{
+        in: 'in',
+        up: 'up',
+        tree: {
+          device_class: 'ssd'
+        },
+        stats_history: {
+          op_out_bytes: [
+            [n, n],
+            [n * 2, n * 2]
+          ],
+          op_in_bytes: [
+            [n * 3, n * 3],
+            [n * 4, n * 4]
+          ]
+        },
+        stats: {
+          stat_bytes_used: n * n,
+          stat_bytes: n * n * n
+        },
+        state: []
+      };
 
     const expectAttributeOnEveryOsd = (attr: string) =>
       expect(component.osds.every((osd) => Boolean(_.get(osd, attr)))).toBeTruthy();
@@ -254,7 +276,8 @@ describe('OsdListComponent', () => {
           'Mark Down',
           'Mark Lost',
           'Purge',
-          'Destroy'
+          'Destroy',
+          'Delete'
         ],
         primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
@@ -272,7 +295,7 @@ describe('OsdListComponent', () => {
         primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,delete': {
-        actions: ['Create', 'Mark Lost', 'Purge', 'Destroy'],
+        actions: ['Create', 'Mark Lost', 'Purge', 'Destroy', 'Delete'],
         primary: {
           multiple: 'Create',
           executing: 'Mark Lost',
@@ -295,7 +318,8 @@ describe('OsdListComponent', () => {
           'Mark Down',
           'Mark Lost',
           'Purge',
-          'Destroy'
+          'Destroy',
+          'Delete'
         ],
         primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
@@ -304,7 +328,7 @@ describe('OsdListComponent', () => {
         primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       delete: {
-        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        actions: ['Mark Lost', 'Purge', 'Destroy', 'Delete'],
         primary: {
           multiple: 'Mark Lost',
           executing: 'Mark Lost',
@@ -353,7 +377,7 @@ describe('OsdListComponent', () => {
      *
      * @param modalClass - The expected class of the modal
      */
-    const expectOpensModal = (actionName: string, modalClass): void => {
+    const expectOpensModal = (actionName: string, modalClass: any): void => {
       openActionModal(actionName);
 
       // @TODO: check why tsc is complaining when passing 'expectationFailOutput' param.
@@ -384,13 +408,23 @@ describe('OsdListComponent', () => {
       expectOpensModal('Mark Lost', modalClass);
       expectOpensModal('Purge', modalClass);
       expectOpensModal('Destroy', modalClass);
+      mockOrchestratorStatus();
+      mockSafeToDelete();
+      expectOpensModal('Delete', modalClass);
     });
   });
 
   describe('tests if the correct methods are called on confirmation', () => {
     const expectOsdServiceMethodCalled = (
       actionName: string,
-      osdServiceMethodName: 'markOut' | 'markIn' | 'markDown' | 'markLost' | 'purge' | 'destroy'
+      osdServiceMethodName:
+        | 'markOut'
+        | 'markIn'
+        | 'markDown'
+        | 'markLost'
+        | 'purge'
+        | 'destroy'
+        | 'delete'
     ): void => {
       const osdServiceSpy = spyOn(osdService, osdServiceMethodName).and.callFake(() => EMPTY);
       openActionModal(actionName);
@@ -417,6 +451,9 @@ describe('OsdListComponent', () => {
       expectOsdServiceMethodCalled('Mark Lost', 'markLost');
       expectOsdServiceMethodCalled('Purge', 'purge');
       expectOsdServiceMethodCalled('Destroy', 'destroy');
+      mockOrchestratorStatus();
+      mockSafeToDelete();
+      expectOsdServiceMethodCalled('Delete', 'delete');
     });
   });
 });

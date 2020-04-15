@@ -8,8 +8,8 @@ import re
 
 import six
 
-from util import get_remote_for_role
-from util.workunit import get_refspec_after_overrides
+from tasks.util import get_remote_for_role
+from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
@@ -122,7 +122,9 @@ def task(ctx, config):
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'),
                         basedir=config.get('basedir','qa/workunits'),
-                        timeout=timeout,cleanup=cleanup)
+                        timeout=timeout,
+                        cleanup=cleanup,
+                        coverage_and_limits=not config.get('no_coverage_and_limits', None))
 
     if cleanup:
         # Clean up dirs from any non-all workunits
@@ -294,7 +296,8 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
 
 
 def _run_tests(ctx, refspec, role, tests, env, basedir,
-               subdir=None, timeout=None, cleanup=True):
+               subdir=None, timeout=None, cleanup=True,
+               coverage_and_limits=True):
     """
     Run the individual test. Create a scratch directory and then extract the
     workunits from git. Make the executables, and then run the tests.
@@ -355,13 +358,13 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
             run.Raw('&&'),
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
-            'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
+            'find', '-executable', '-type', 'f', '-printf', r'%P\0',
             run.Raw('>{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)),
         ],
     )
 
     workunits_file = '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)
-    workunits = sorted(misc.get_file(remote, workunits_file).split('\0'))
+    workunits = sorted(six.ensure_str(misc.get_file(remote, workunits_file)).split('\0'))
     assert workunits
 
     try:
@@ -393,10 +396,11 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                         quoted_val = pipes.quote(val)
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
-                args.extend([
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    '{tdir}/archive/coverage'.format(tdir=testdir)])
+                if coverage_and_limits:
+                    args.extend([
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir)])
                 if timeout and timeout != '0':
                     args.extend(['timeout', timeout])
                 args.extend([

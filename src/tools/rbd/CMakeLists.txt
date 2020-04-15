@@ -7,6 +7,7 @@ set(rbd_srcs
   IndentStream.cc
   MirrorDaemonServiceInfo.cc
   OptionPrinter.cc
+  Schedule.cc
   Shell.cc
   Utils.cc
   action/Bench.cc
@@ -34,6 +35,7 @@ set(rbd_srcs
   action/Migration.cc
   action/MirrorImage.cc
   action/MirrorPool.cc
+  action/MirrorSnapshotSchedule.cc
   action/Namespace.cc
   action/Nbd.cc
   action/ObjectMap.cc
@@ -45,6 +47,7 @@ set(rbd_srcs
   action/Snap.cc
   action/Sparsify.cc
   action/Status.cc
+  action/TrashPurgeSchedule.cc
   action/Trash.cc
   action/Watch.cc)
 

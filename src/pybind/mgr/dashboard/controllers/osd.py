@@ -2,11 +2,20 @@
 from __future__ import absolute_import
 import json
 import logging
-from . import ApiController, RESTController, Endpoint, ReadPermission, UpdatePermission
+import time
+
+from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
+from mgr_util import get_most_recent_rate
+
+from . import ApiController, RESTController, Endpoint, Task
+from . import CreatePermission, ReadPermission, UpdatePermission, DeletePermission
+from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
-from ..services.exception import handle_send_command_error
+from ..services.exception import handle_send_command_error, handle_orchestrator_error
+from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 try:
     from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
@@ -15,6 +24,10 @@ except ImportError:
 
 
 logger = logging.getLogger('controllers.osd')
+
+
+def osd_task(name, metadata, wait_for=2.0):
+    return Task("osd/{}".format(name), metadata, wait_for)
 
 
 @ApiController('/osd', Scope.OSD)
@@ -48,8 +61,9 @@ class Osd(RESTController):
                 continue
             for stat in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = stat.split('.')[1]
-                osd['stats'][prop] = CephService.get_rate('osd', osd_spec, stat)
-                osd['stats_history'][prop] = CephService.get_rates('osd', osd_spec, stat)
+                rates = CephService.get_rates('osd', osd_spec, stat)
+                osd['stats'][prop] = get_most_recent_rate(rates)
+                osd['stats_history'][prop] = rates
             # Gauge stats
             for stat in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
@@ -58,7 +72,7 @@ class Osd(RESTController):
 
     @staticmethod
     def get_osd_map(svc_id=None):
-        # type: (Union[int, None]) -> Dict[int, Union[Dict[str, Any], Any]]
+        # type: (Union[int, None]) -> Dict[int, Union[dict, Any]]
         def add_id(osd):
             osd['id'] = osd['osd']
             return osd
@@ -116,6 +130,52 @@ class Osd(RESTController):
                     'ids': [svc_id]
                 })
 
+    def _check_delete(self, osd_ids):
+        # type: (List[str]) -> Dict[str, Any]
+        """
+        Check if it's safe to remove OSD(s).
+
+        :param osd_ids: list of OSD IDs
+        :return: a dictionary contains the following attributes:
+            `safe`: bool, indicate if it's safe to remove OSDs.
+            `message`: str, help message if it's not safe to remove OSDs.
+        """
+        _ = osd_ids
+        health_data = mgr.get('health')  # type: ignore
+        health = json.loads(health_data['json'])
+        checks = health['checks'].keys()
+        unsafe_checks = set(['OSD_FULL', 'OSD_BACKFILLFULL', 'OSD_NEARFULL'])
+        failed_checks = checks & unsafe_checks
+        msg = 'Removing OSD(s) is not recommended because of these failed health check(s): {}.'.\
+            format(', '.join(failed_checks)) if failed_checks else ''
+        return {
+            'safe': not bool(failed_checks),
+            'message': msg
+        }
+
+    @DeletePermission
+    @raise_if_no_orchestrator
+    @handle_orchestrator_error('osd')
+    @osd_task('delete', {'svc_id': '{svc_id}'})
+    def delete(self, svc_id, force=None):
+        orch = OrchClient.instance()
+        if not force:
+            logger.info('Check for removing osd.%s...', svc_id)
+            check = self._check_delete([svc_id])
+            if not check['safe']:
+                logger.error('Unable to remove osd.%s: %s', svc_id, check['message'])
+                raise DashboardException(component='osd', msg=check['message'])
+        logger.info('Start removing osd.%s...', svc_id)
+        orch.osds.remove([svc_id])
+        while True:
+            removal_osds = orch.osds.removing_status()
+            logger.info('Current removing OSDs %s', removal_osds)
+            pending = [osd for osd in removal_osds if osd.osd_id == svc_id]
+            if not pending:
+                break
+            logger.info('Wait until osd.%s is removed...', svc_id)
+            time.sleep(60)
+
     @RESTController.Resource('POST', query_params=['deep'])
     @UpdatePermission
     def scrub(self, svc_id, deep=False):
@@ -166,19 +226,47 @@ class Osd(RESTController):
             id=int(svc_id),
             yes_i_really_mean_it=True)
 
-    def create(self, uuid=None, svc_id=None):
+    def _create_bare(self, data):
+        """Create a OSD container that has no associated device.
+
+        :param data: contain attributes to create a bare OSD.
+        :    `uuid`: will be set automatically if the OSD starts up
+        :    `svc_id`: the ID is only used if a valid uuid is given.
         """
-        :param uuid: Will be set automatically if the OSD starts up.
-        :param id: The ID is only used if a valid uuid is given.
-        :return:
-        """
+        try:
+            uuid = data['uuid']
+            svc_id = int(data['svc_id'])
+        except (KeyError, ValueError) as e:
+            raise DashboardException(e, component='osd', http_status_code=400)
+
         result = CephService.send_command(
-            'mon', 'osd create', id=int(svc_id), uuid=uuid)
+            'mon', 'osd create', id=svc_id, uuid=uuid)
         return {
             'result': result,
-            'svc_id': int(svc_id),
+            'svc_id': svc_id,
             'uuid': uuid,
         }
+
+    @raise_if_no_orchestrator
+    @handle_orchestrator_error('osd')
+    def _create_with_drive_groups(self, drive_groups):
+        """Create OSDs with DriveGroups."""
+        orch = OrchClient.instance()
+        try:
+            dg_specs = [DriveGroupSpec.from_json(dg) for dg in drive_groups]
+            orch.osds.create(dg_specs)
+        except (ValueError, TypeError, DriveGroupValidationError) as e:
+            raise DashboardException(e, component='osd')
+
+    @CreatePermission
+    @osd_task('create', {'tracking_id': '{tracking_id}'})
+    def create(self, method, data, tracking_id):  # pylint: disable=W0622
+        if method == 'bare':
+            return self._create_bare(data)
+        if method == 'drive_groups':
+            return self._create_with_drive_groups(data)
+        raise DashboardException(
+            component='osd', http_status_code=400, msg='Unknown method: {}'.format(method))
 
     @RESTController.Resource('POST')
     def purge(self, svc_id):
@@ -224,6 +312,20 @@ class Osd(RESTController):
                 'message': str(e),
                 'is_safe_to_destroy': False,
             }
+
+    @Endpoint('GET', query_params=['svc_ids'])
+    @ReadPermission
+    @raise_if_no_orchestrator
+    @handle_orchestrator_error('osd')
+    def safe_to_delete(self, svc_ids):
+        """
+        :type ids: int|[int]
+        """
+        check = self._check_delete(svc_ids)
+        return {
+            'is_safe_to_delete': check.get('safe', False),
+            'message': check.get('message', '')
+        }
 
     @RESTController.Resource('GET')
     def devices(self, svc_id):

@@ -4,7 +4,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import * as _ from 'lodash';
-import { forkJoin } from 'rxjs';
+import { forkJoin, Observable } from 'rxjs';
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -18,7 +18,7 @@ import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
-import { RbdNamespaceFormComponent } from '../rbd-namespace-form/rbd-namespace-form.component';
+import { RbdNamespaceFormModalComponent } from '../rbd-namespace-form/rbd-namespace-form-modal.component';
 
 @Component({
   selector: 'cd-rbd-namespace-list',
@@ -84,14 +84,16 @@ export class RbdNamespaceListComponent implements OnInit {
 
   refresh() {
     this.poolService.list(['pool_name', 'type', 'application_metadata']).then((pools: any) => {
-      pools = pools.filter((pool) => this.rbdService.isRBDPool(pool) && pool.type === 'replicated');
-      const promisses = [];
-      pools.forEach((pool) => {
+      pools = pools.filter(
+        (pool: any) => this.rbdService.isRBDPool(pool) && pool.type === 'replicated'
+      );
+      const promisses: Observable<any>[] = [];
+      pools.forEach((pool: any) => {
         promisses.push(this.rbdService.listNamespaces(pool['pool_name']));
       });
       if (promisses.length > 0) {
         forkJoin(promisses).subscribe((data: Array<Array<string>>) => {
-          const result = [];
+          const result: any[] = [];
           for (let i = 0; i < data.length; i++) {
             const namespaces = data[i];
             const pool_name = pools[i]['pool_name'];
@@ -117,7 +119,7 @@ export class RbdNamespaceListComponent implements OnInit {
   }
 
   createModal() {
-    this.modalRef = this.modalService.show(RbdNamespaceFormComponent);
+    this.modalRef = this.modalService.show(RbdNamespaceFormModalComponent);
     this.modalRef.content.onSubmit.subscribe(() => {
       this.refresh();
     });
@@ -158,5 +160,7 @@ export class RbdNamespaceListComponent implements OnInit {
         return this.i18n('Namespace contains images');
       }
     }
+
+    return undefined;
   }
 }

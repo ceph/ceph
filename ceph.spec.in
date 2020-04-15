@@ -21,6 +21,7 @@
 # bcond syntax!
 #################################################################################
 %bcond_with make_check
+%bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
 %ifarch s390 s390x
 %bcond_with tcmalloc
@@ -42,25 +43,20 @@
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
-%bcond_with selinux
-%bcond_with cephfs_java
 %bcond_with amqp_endpoint
+%bcond_with cephfs_java
 %bcond_with kafka_endpoint
-#Compat macro for new _fillupdir macro introduced in Nov 2017
-%if ! %{defined _fillupdir}
-%global _fillupdir /var/adm/fillup-templates
-%endif
-%if 0%{?is_opensuse}
-%bcond_without libradosstriper
-%bcond_without ocf
-%else
 %bcond_with libradosstriper
-%bcond_with ocf
-%endif
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
 %else
 %bcond_with lttng
+%endif
+%bcond_with ocf
+%bcond_with selinux
+#Compat macro for _fillupdir macro introduced in Nov 2017
+%if ! %{defined _fillupdir}
+%global _fillupdir /var/adm/fillup-templates
 %endif
 %endif
 %bcond_with seastar
@@ -71,13 +67,13 @@
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
-%if 0%{?fedora} || 0%{?suse_version}
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
 %if %{with selinux}
 # get selinux policy version
 # Force 0.0.0 policy version for centos builds to avoid repository sync issues between rhel and centos
-%if %{?centos}
+%if 0%{?centos}
 %global _selinux_policy_version 0.0.0
 %else
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
@@ -168,7 +164,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libcap-ng-devel
-BuildRequires:	libudev-devel
+BuildRequires:	pkgconfig(libudev)
 BuildRequires:	libnl3-devel
 BuildRequires:	liboath-devel
 BuildRequires:	libtool
@@ -184,7 +180,7 @@ BuildRequires:	python%{python3_pkgversion}
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	snappy-devel
 BuildRequires:	sudo
-BuildRequires:	udev
+BuildRequires:	pkgconfig(udev)
 BuildRequires:	util-linux
 BuildRequires:	valgrind-devel
 BuildRequires:	which
@@ -201,20 +197,34 @@ BuildRequires:  librdkafka-devel
 %if 0%{with make_check}
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-bcrypt
+BuildRequires:	python%{python3_version_nodots}-nose
+BuildRequires:	python%{python3_version_nodots}-requests
+BuildRequires:	python%{python3_version_nodots}-dateutil
+%else
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-nose
-BuildRequires:	python%{python3_pkgversion}-requests
-BuildRequires:	python%{python3_pkgversion}-six
-BuildRequires:	python%{python3_pkgversion}-virtualenv
-%if 0%{?rhel} < 8
-BuildRequires:	python%{python3_pkgversion}-coverage
 BuildRequires:	python%{python3_pkgversion}-pecan
-BuildRequires:	python%{python3_pkgversion}-tox
+BuildRequires:	python%{python3_pkgversion}-requests
+BuildRequires:	python%{python3_pkgversion}-dateutil
 %endif
 %if 0%{?rhel} == 7
-BuildRequires:  pyOpenSSL%{python3_pkgversion}
+BuildRequires:	python%{python3_version_nodots}-six
+BuildRequires:	python%{python3_version_nodots}-virtualenv
 %else
-BuildRequires:  python%{python3_pkgversion}-pyOpenSSL
+BuildRequires:	python%{python3_pkgversion}-six
+BuildRequires:	python%{python3_pkgversion}-virtualenv
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-coverage
+%else
+BuildRequires:	python%{python3_pkgversion}-coverage
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-pyOpenSSL
+%else
+BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
 BuildRequires:	socat
 %endif
@@ -228,6 +238,22 @@ BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  yaml-cpp-devel
+%if 0%{?fedora}
+BuildRequires:  fmt-devel
+BuildRequires:  libubsan
+BuildRequires:  libasan
+BuildRequires:  libatomic
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:  devtoolset-8-libubsan
+BuildRequires:  devtoolset-8-libasan
+BuildRequires:  devtoolset-8-libatomic
+%endif
+%if 0%{?rhel} >= 8
+BuildRequires:  libubsan
+BuildRequires:  libasan
+BuildRequires:  libatomic
+%endif
 %endif
 #################################################################################
 # distro-conditional dependencies
@@ -291,12 +317,20 @@ BuildRequires:	xmlsec1-nss
 %endif
 BuildRequires:	xmlsec1-openssl
 BuildRequires:	xmlsec1-openssl-devel
-BuildRequires:	python%{python3_pkgversion}-jwt
-BuildRequires:	python%{python3_pkgversion}-werkzeug
-BuildRequires:  python%{python3_pkgversion}-pyOpenSSL
-%if 0%{?fedora} || 0%{?rhel} == 7
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-jwt
+BuildRequires:	python%{python3_version_nodots}-scipy
+%else
 BuildRequires:	python%{python3_pkgversion}-cherrypy
+BuildRequires:	python%{python3_pkgversion}-jwt
 BuildRequires:	python%{python3_pkgversion}-routes
+BuildRequires:	python%{python3_pkgversion}-scipy
+BuildRequires:	python%{python3_pkgversion}-werkzeug
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:	python%{python3_version_nodots}-pyOpenSSL
+%else
+BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 %endif
 %endif
 %if 0%{?suse_version}
@@ -396,9 +430,14 @@ Base is the package that includes all the files shared amongst ceph servers
 
 %package -n cephadm
 Summary:        Utility to bootstrap Ceph clusters
-Requires:       podman
 Requires:       lvm2
+%if 0%{?suse_version}
+Requires:       apparmor-abstractions
+%endif
 Requires:       python%{python3_pkgversion}
+%if 0%{?weak_deps}
+Recommends:     podman
+%endif
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed 
 with systemd and podman.
@@ -464,28 +503,20 @@ Summary:        Ceph Manager Daemon
 Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
-Requires:       python%{python3_pkgversion}-bcrypt
-Requires:       python%{python3_pkgversion}-pecan
-Requires:       python%{python3_pkgversion}-requests
+Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?rhel} == 7
+Requires:       python%{python3_version_nodots}-six
+%else
 Requires:       python%{python3_pkgversion}-six
-%if 0%{?fedora} || 0%{?rhel}
-Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-werkzeug
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-Werkzeug
 %endif
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
-Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{python3_pkgversion}-influxdb
 %endif
-Requires:       python%{python3_pkgversion}-pyOpenSSL
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
 module derived from Calamari) and expose CLI hooks.  ceph-mgr gathers
@@ -500,31 +531,31 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-jwt
 Requires:       python%{python3_pkgversion}-routes
 Requires:       python%{python3_pkgversion}-werkzeug
+%if 0%{?weak_deps}
+Recommends:     python%{python3_pkgversion}-saml
+%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-CherryPy
 Requires:       python%{python3_pkgversion}-PyJWT
 Requires:       python%{python3_pkgversion}-Routes
 Requires:       python%{python3_pkgversion}-Werkzeug
-%endif
-%if 0%{?rhel} == 7
-Requires:       pyOpenSSL
-%else
-Requires:       python%{python3_pkgversion}-pyOpenSSL
+Recommends:     python%{python3_pkgversion}-python3-saml
 %endif
 %description mgr-dashboard
-ceph-mgr-dashboard is a manager plugin, providing a web-based application
+ceph-mgr-dashboard is a manager module, providing a web-based application
 to monitor and manage many aspects of a Ceph cluster and related components.
 See the Dashboard documentation at http://docs.ceph.com/ for details and a
 detailed feature overview.
 
 %package mgr-diskprediction-local
-Summary:        Ceph Manager plugin for predicting disk failures
+Summary:        Ceph Manager module for predicting disk failures
 BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -537,11 +568,11 @@ Requires:       numpy
 Requires:       scipy
 %endif
 %description mgr-diskprediction-local
-ceph-mgr-diskprediction-local is a ceph-mgr plugin that tries to predict
+ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
 disk failures using local algorithms and machine-learning databases.
 
 %package mgr-diskprediction-cloud
-Summary:        Ceph Manager plugin for cloud-based disk failure prediction
+Summary:        Ceph Manager module for cloud-based disk failure prediction
 BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -555,41 +586,72 @@ Requires:       python2-grpcio
 Requires:       python2-protobuf
 %endif
 %description mgr-diskprediction-cloud
-ceph-mgr-diskprediction-cloud is a ceph-mgr plugin that tries to predict
+ceph-mgr-diskprediction-cloud is a ceph-mgr module that tries to predict
 disk failures using services in the Google cloud.
+
+%package mgr-modules-core
+Summary:        Ceph Manager modules which are always enabled
+BuildArch:      noarch
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+%if 0%{?rhel} == 7
+Requires:       python%{python3_version_nodots}-bcrypt
+Requires:       python%{python3_version_nodots}-pyOpenSSL
+Requires:       python%{python3_version_nodots}-requests
+Requires:       python%{python3_version_nodots}-PyYAML
+Requires:       python%{python3_version_nodots}-dateutil
+%else
+Requires:       python%{python3_pkgversion}-bcrypt
+Requires:       python%{python3_pkgversion}-pecan
+Requires:       python%{python3_pkgversion}-pyOpenSSL
+Requires:       python%{python3_pkgversion}-requests
+Requires:       python%{python3_pkgversion}-dateutil
+%endif
+%if 0%{?fedora} || 0%{?rhel} >= 8
+Requires:       python%{python3_pkgversion}-cherrypy
+Requires:       python%{python3_pkgversion}-pyyaml
+Requires:       python%{python3_pkgversion}-werkzeug
+%endif
+%if 0%{?suse_version}
+Requires:       python%{python3_pkgversion}-CherryPy
+Requires:       python%{python3_pkgversion}-PyYAML
+Requires:       python%{python3_pkgversion}-Werkzeug
+%endif
+%if 0%{?weak_deps}
+Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
+%endif
+%description mgr-modules-core
+ceph-mgr-modules-core provides a set of modules which are always
+enabled by ceph-mgr.
 
 %package mgr-rook
 BuildArch:      noarch
-Summary:        Ceph Manager plugin for Rook-based orchestration
+Summary:        Ceph Manager module for Rook-based orchestration
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-kubernetes
+Requires:       python%{python3_pkgversion}-jsonpatch
 %description mgr-rook
-ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
+ceph-mgr-rook is a ceph-mgr module for orchestration functions using
 a Rook backend.
 
 %package mgr-k8sevents
 BuildArch:      noarch
-Summary:        Ceph Manager plugin to orchestrate ceph-events to kubernetes' events API
+Summary:        Ceph Manager module to orchestrate ceph-events to kubernetes' events API
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-kubernetes
-%if 0%{?fedora} || 0%{?rhel}
-Requires:       python%{python3_pkgversion}-yaml
-%endif
-%if 0%{?suse_version}
-Requires:       python%{python3_pkgversion}-PyYAML
-%endif
 %description mgr-k8sevents
-ceph-mgr-k8sevents is a ceph-mgr plugin that sends every ceph-events
+ceph-mgr-k8sevents is a ceph-mgr module that sends every ceph-events
 to kubernetes' events API
 
 %package mgr-cephadm
-Summary:        Ceph Manager plugin for cephadm-based orchestration
+Summary:        Ceph Manager module for cephadm-based orchestration
 BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -889,7 +951,7 @@ Summary:	Ceph distributed file system client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Obsoletes:	libcephfs1
+Obsoletes:	libcephfs1 < %{_epoch_prefix}%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-libcephfs
@@ -1060,14 +1122,12 @@ collecting data from Ceph Manager "prometheus" module and Prometheus
 project "node_exporter" module. The dashboards are designed to be
 integrated with the Ceph Manager Dashboard web UI.
 
-%if 0%{?suse_version}
 %package prometheus-alerts
 Summary:        Prometheus alerts for a Ceph deplyoment
 BuildArch:      noarch
 Group:          System/Monitoring
 %description prometheus-alerts
 This package provides Ceph’s default alerts for Prometheus.
-%endif
 
 #################################################################################
 # common
@@ -1187,8 +1247,16 @@ ${CMAKE} .. \
 %else
     -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
 %endif
+%if 0%{with cmake_verbose_logging}
+    -DCMAKE_VERBOSE_MAKEFILE=ON \
+%endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
     -DWITH_GRAFANA=ON
+
+%if %{with cmake_verbose_logging}
+cat ./CMakeFiles/CMakeOutput.log
+cat ./CMakeFiles/CMakeError.log
+%endif
 
 make "$CEPH_MFLAGS_JOBS"
 
@@ -1267,11 +1335,12 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
+# prometheus alerts
+install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
+
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
 %py3_compile %{buildroot}%{python3_sitelib}
-# prometheus alerts
-install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml %{buildroot}/etc/prometheus/SUSE/default_rules/ceph_default_alerts.yml
 # hardlink duplicate files under /usr to save space
 %fdupes %{buildroot}%{_prefix}
 %endif
@@ -1547,33 +1616,8 @@ fi
 %files mgr
 %{_bindir}/ceph-mgr
 %dir %{_datadir}/ceph/mgr
-%{_datadir}/ceph/mgr/alerts
-%{_datadir}/ceph/mgr/ansible
-%{_datadir}/ceph/mgr/balancer
-%{_datadir}/ceph/mgr/crash
-%{_datadir}/ceph/mgr/deepsea
-%{_datadir}/ceph/mgr/devicehealth
-%{_datadir}/ceph/mgr/influx
-%{_datadir}/ceph/mgr/insights
-%{_datadir}/ceph/mgr/iostat
-%{_datadir}/ceph/mgr/localpool
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
-%{_datadir}/ceph/mgr/orchestrator_cli
-%{_datadir}/ceph/mgr/orchestrator.*
-%{_datadir}/ceph/mgr/osd_perf_query
-%{_datadir}/ceph/mgr/pg_autoscaler
-%{_datadir}/ceph/mgr/progress
-%{_datadir}/ceph/mgr/prometheus
-%{_datadir}/ceph/mgr/rbd_support
-%{_datadir}/ceph/mgr/restful
-%{_datadir}/ceph/mgr/selftest
-%{_datadir}/ceph/mgr/status
-%{_datadir}/ceph/mgr/telegraf
-%{_datadir}/ceph/mgr/telemetry
-%{_datadir}/ceph/mgr/test_orchestrator
-%{_datadir}/ceph/mgr/volumes
-%{_datadir}/ceph/mgr/zabbix
 %if 0%{?rhel} == 7
 %{_datadir}/ceph/mgr/__pycache__
 %endif
@@ -1660,6 +1704,32 @@ fi
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
+
+%files mgr-modules-core
+%dir %{_datadir}/ceph/mgr
+%{_datadir}/ceph/mgr/alerts
+%{_datadir}/ceph/mgr/balancer
+%{_datadir}/ceph/mgr/crash
+%{_datadir}/ceph/mgr/devicehealth
+%{_datadir}/ceph/mgr/influx
+%{_datadir}/ceph/mgr/insights
+%{_datadir}/ceph/mgr/iostat
+%{_datadir}/ceph/mgr/localpool
+%{_datadir}/ceph/mgr/orchestrator
+%{_datadir}/ceph/mgr/osd_perf_query
+%{_datadir}/ceph/mgr/osd_support
+%{_datadir}/ceph/mgr/pg_autoscaler
+%{_datadir}/ceph/mgr/progress
+%{_datadir}/ceph/mgr/prometheus
+%{_datadir}/ceph/mgr/rbd_support
+%{_datadir}/ceph/mgr/restful
+%{_datadir}/ceph/mgr/selftest
+%{_datadir}/ceph/mgr/status
+%{_datadir}/ceph/mgr/telegraf
+%{_datadir}/ceph/mgr/telemetry
+%{_datadir}/ceph/mgr/test_orchestrator
+%{_datadir}/ceph/mgr/volumes
+%{_datadir}/ceph/mgr/zabbix
 
 %files mgr-rook
 %{_datadir}/ceph/mgr/rook
@@ -2071,7 +2141,6 @@ fi
 
 %files -n librgw2
 %{_libdir}/librgw.so.*
-%{_libdir}/librgw_admin_user.so.*
 %if %{with lttng}
 %{_libdir}/librgw_op_tp.so.*
 %{_libdir}/librgw_rados_tp.so.*
@@ -2084,10 +2153,8 @@ fi
 %files -n librgw-devel
 %dir %{_includedir}/rados
 %{_includedir}/rados/librgw.h
-%{_includedir}/rados/librgw_admin_user.h
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
-%{_libdir}/librgw_admin_user.so
 %if %{with lttng}
 %{_libdir}/librgw_op_tp.so
 %{_libdir}/librgw_rados_tp.so
@@ -2270,27 +2337,23 @@ if [ $1 -eq 0 ]; then
     fi
 fi
 exit 0
-
-%endif # with selinux
+%endif
 
 %files grafana-dashboards
 %if 0%{?suse_version}
 %attr(0755,root,root) %dir %{_sysconfdir}/grafana
 %attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards
-%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
-%else
-%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %endif
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %config %{_sysconfdir}/grafana/dashboards/ceph-dashboard/*
 %doc monitoring/grafana/dashboards/README
 %doc monitoring/grafana/README.md
 
-%if 0%{?suse_version}
 %files prometheus-alerts
-%dir /etc/prometheus/SUSE/
-%dir /etc/prometheus/SUSE/default_rules/
-%config /etc/prometheus/SUSE/default_rules/ceph_default_alerts.yml
+%if 0%{?suse_version}
+%attr(0755,root,root) %dir %{_sysconfdir}/prometheus
 %endif
-
+%attr(0755,root,root) %dir %{_sysconfdir}/prometheus/ceph
+%config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
 
 %changelog

@@ -19,9 +19,9 @@
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/merge_operator.h"
 
-using std::string;
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
+#include "include/common_fwd.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
@@ -34,6 +34,20 @@ using std::string;
 #define dout_subsys ceph_subsys_rocksdb
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
+
+using std::function;
+using std::list;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::unique_ptr;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
 
 static bufferlist to_bufferlist(rocksdb::Slice in) {
   bufferlist bl;
@@ -354,7 +368,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     }
   }
 
-  if (g_conf()->rocksdb_perf)  {
+  if (cct->_conf->rocksdb_perf)  {
     dbstats = rocksdb::CreateDBStatistics();
     opt.statistics = dbstats;
   }
@@ -393,8 +407,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
     return -e.code().value();
   }
 
-  if (g_conf()->rocksdb_log_to_ceph_log) {
-    opt.info_log.reset(new CephRocksdbLogger(g_ceph_context));
+  if (cct->_conf->rocksdb_log_to_ceph_log) {
+    opt.info_log.reset(new CephRocksdbLogger(cct));
   }
 
   if (priv) {
@@ -406,78 +420,78 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 
   // caches
   if (!set_cache_flag) {
-    cache_size = g_conf()->rocksdb_cache_size;
+    cache_size = cct->_conf->rocksdb_cache_size;
   }
-  uint64_t row_cache_size = cache_size * g_conf()->rocksdb_cache_row_ratio;
+  uint64_t row_cache_size = cache_size * cct->_conf->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
 
-  if (g_conf()->rocksdb_cache_type == "binned_lru") {
+  if (cct->_conf->rocksdb_cache_type == "binned_lru") {
     bbt_opts.block_cache = rocksdb_cache::NewBinnedLRUCache(
       cct,
       block_cache_size,
-      g_conf()->rocksdb_cache_shard_bits);
-  } else if (g_conf()->rocksdb_cache_type == "lru") {
+      cct->_conf->rocksdb_cache_shard_bits);
+  } else if (cct->_conf->rocksdb_cache_type == "lru") {
     bbt_opts.block_cache = rocksdb::NewLRUCache(
       block_cache_size,
-      g_conf()->rocksdb_cache_shard_bits);
-  } else if (g_conf()->rocksdb_cache_type == "clock") {
+      cct->_conf->rocksdb_cache_shard_bits);
+  } else if (cct->_conf->rocksdb_cache_type == "clock") {
     bbt_opts.block_cache = rocksdb::NewClockCache(
       block_cache_size,
-      g_conf()->rocksdb_cache_shard_bits);
+      cct->_conf->rocksdb_cache_shard_bits);
     if (!bbt_opts.block_cache) {
-      derr << "rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
+      derr << "rocksdb_cache_type '" << cct->_conf->rocksdb_cache_type
            << "' chosen, but RocksDB not compiled with LibTBB. "
            << dendl;
       return -EINVAL;
     }
   } else {
-    derr << "unrecognized rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
+    derr << "unrecognized rocksdb_cache_type '" << cct->_conf->rocksdb_cache_type
       << "'" << dendl;
     return -EINVAL;
   }
-  bbt_opts.block_size = g_conf()->rocksdb_block_size;
+  bbt_opts.block_size = cct->_conf->rocksdb_block_size;
 
   if (row_cache_size > 0)
     opt.row_cache = rocksdb::NewLRUCache(row_cache_size,
-				     g_conf()->rocksdb_cache_shard_bits);
-  uint64_t bloom_bits = g_conf().get_val<uint64_t>("rocksdb_bloom_bits_per_key");
+				     cct->_conf->rocksdb_cache_shard_bits);
+  uint64_t bloom_bits = cct->_conf.get_val<uint64_t>("rocksdb_bloom_bits_per_key");
   if (bloom_bits > 0) {
     dout(10) << __func__ << " set bloom filter bits per key to "
 	     << bloom_bits << dendl;
     bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(bloom_bits));
   }
   using std::placeholders::_1;
-  if (g_conf().with_val<std::string>("rocksdb_index_type",
+  if (cct->_conf.with_val<std::string>("rocksdb_index_type",
 				    std::bind(std::equal_to<std::string>(), _1,
 					      "binary_search")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kBinarySearch;
-  if (g_conf().with_val<std::string>("rocksdb_index_type",
+  if (cct->_conf.with_val<std::string>("rocksdb_index_type",
 				    std::bind(std::equal_to<std::string>(), _1,
 					      "hash_search")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kHashSearch;
-  if (g_conf().with_val<std::string>("rocksdb_index_type",
+  if (cct->_conf.with_val<std::string>("rocksdb_index_type",
 				    std::bind(std::equal_to<std::string>(), _1,
 					      "two_level")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
   if (!bbt_opts.no_block_cache) {
     bbt_opts.cache_index_and_filter_blocks =
-        g_conf().get_val<bool>("rocksdb_cache_index_and_filter_blocks");
+        cct->_conf.get_val<bool>("rocksdb_cache_index_and_filter_blocks");
     bbt_opts.cache_index_and_filter_blocks_with_high_priority =
-        g_conf().get_val<bool>("rocksdb_cache_index_and_filter_blocks_with_high_priority");
+        cct->_conf.get_val<bool>("rocksdb_cache_index_and_filter_blocks_with_high_priority");
     bbt_opts.pin_l0_filter_and_index_blocks_in_cache =
-      g_conf().get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
+      cct->_conf.get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
   }
-  bbt_opts.partition_filters = g_conf().get_val<bool>("rocksdb_partition_filters");
-  if (g_conf().get_val<Option::size_t>("rocksdb_metadata_block_size") > 0)
-    bbt_opts.metadata_block_size = g_conf().get_val<Option::size_t>("rocksdb_metadata_block_size");
+  bbt_opts.partition_filters = cct->_conf.get_val<bool>("rocksdb_partition_filters");
+  if (cct->_conf.get_val<Option::size_t>("rocksdb_metadata_block_size") > 0)
+    bbt_opts.metadata_block_size = cct->_conf.get_val<Option::size_t>("rocksdb_metadata_block_size");
 
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
-  dout(10) << __func__ << " block size " << g_conf()->rocksdb_block_size
+  dout(10) << __func__ << " block size " << cct->_conf->rocksdb_block_size
            << ", block_cache size " << byte_u_t(block_cache_size)
 	   << ", row_cache size " << byte_u_t(row_cache_size)
 	   << "; shards "
-	   << (1 << g_conf()->rocksdb_cache_shard_bits)
-	   << ", type " << g_conf()->rocksdb_cache_type
+	   << (1 << cct->_conf->rocksdb_cache_shard_bits)
+	   << ", type " << cct->_conf->rocksdb_cache_type
 	   << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
@@ -607,7 +621,7 @@ int RocksDBStore::do_open(ostream &out,
   }
   ceph_assert(default_cf != nullptr);
   
-  PerfCountersBuilder plb(g_ceph_context, "rocksdb", l_rocksdb_first, l_rocksdb_last);
+  PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
   plb.add_u64_counter(l_rocksdb_gets, "get", "Gets");
   plb.add_u64_counter(l_rocksdb_txns, "submit_transaction", "Submit transactions");
   plb.add_u64_counter(l_rocksdb_txns_sync, "submit_transaction_sync", "Submit transactions sync");
@@ -648,21 +662,6 @@ int RocksDBStore::_test_init(const string& dir)
 RocksDBStore::~RocksDBStore()
 {
   close();
-  delete logger;
-
-  // Ensure db is destroyed before dependent db_cache and filterpolicy
-  for (auto& p : cf_handles) {
-    db->DestroyColumnFamilyHandle(
-      static_cast<rocksdb::ColumnFamilyHandle*>(p.second));
-    p.second = nullptr;
-  }
-  if (must_close_default_cf) {
-    db->DestroyColumnFamilyHandle(default_cf);
-    must_close_default_cf = false;
-  }
-  default_cf = nullptr;
-  delete db;
-  db = nullptr;
 
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
@@ -679,13 +678,30 @@ void RocksDBStore::close()
     compact_queue_cond.notify_all();
     compact_queue_lock.unlock();
     compact_thread.join();
-    dout(1) << __func__ << " compaction thread to stopped" << dendl;    
+    dout(1) << __func__ << " compaction thread to stopped" << dendl;
   } else {
     compact_queue_lock.unlock();
   }
 
-  if (logger)
+  if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
+  }
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  for (auto& p : cf_handles) {
+    db->DestroyColumnFamilyHandle(
+      static_cast<rocksdb::ColumnFamilyHandle*>(p.second));
+    p.second = nullptr;
+  }
+  if (must_close_default_cf) {
+    db->DestroyColumnFamilyHandle(default_cf);
+    must_close_default_cf = false;
+  }
+  default_cf = nullptr;
+  delete db;
+  db = nullptr;
 }
 
 int RocksDBStore::repair(std::ostream &out)
@@ -746,13 +762,13 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
 
 void RocksDBStore::get_statistics(Formatter *f)
 {
-  if (!g_conf()->rocksdb_perf)  {
+  if (!cct->_conf->rocksdb_perf)  {
     dout(20) << __func__ << " RocksDB perf is disabled, can't probe for stats"
 	     << dendl;
     return;
   }
 
-  if (g_conf()->rocksdb_collect_compaction_stats) {
+  if (cct->_conf->rocksdb_collect_compaction_stats) {
     std::string stat_str;
     bool status = db->GetProperty("rocksdb.stats", &stat_str);
     if (status) {
@@ -766,7 +782,7 @@ void RocksDBStore::get_statistics(Formatter *f)
       f->close_section();
     }
   }
-  if (g_conf()->rocksdb_collect_extended_stats) {
+  if (cct->_conf->rocksdb_collect_extended_stats) {
     if (dbstats) {
       f->open_object_section("rocksdb_extended_statistics");
       string stat_str = dbstats->ToString();
@@ -782,7 +798,7 @@ void RocksDBStore::get_statistics(Formatter *f)
     logger->dump_formatted(f,0);
     f->close_section();
   }
-  if (g_conf()->rocksdb_collect_memory_stats) {
+  if (cct->_conf->rocksdb_collect_memory_stats) {
     f->open_object_section("rocksdb_memtable_statistics");
     std::string str;
     if (!bbt_opts.no_block_cache) {
@@ -806,7 +822,7 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
 {
   // enable rocksdb breakdown
   // considering performance overhead, default is disabled
-  if (g_conf()->rocksdb_perf) {
+  if (cct->_conf->rocksdb_perf) {
     rocksdb::SetPerfLevel(rocksdb::PerfLevel::kEnableTimeExceptForMutex);
     rocksdb::get_perf_context()->Reset();
   }
@@ -827,7 +843,7 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
          << " Rocksdb transaction: " << rocks_txc.seen << dendl;
   }
 
-  if (g_conf()->rocksdb_perf) {
+  if (cct->_conf->rocksdb_perf) {
     utime_t write_memtable_time;
     utime_t write_delay_time;
     utime_t write_wal_time;
@@ -899,7 +915,7 @@ void RocksDBStore::RocksDBTransactionImpl::put_bat(
 			   to_set_bl.length()));
   } else {
     rocksdb::Slice key_slice(key);
-    vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
+    vector<rocksdb::Slice> value_slices(to_set_bl.get_num_buffers());
     bat.Put(cf,
 	    rocksdb::SliceParts(&key_slice, 1),
             prepare_sliceparts(to_set_bl, &value_slices));
@@ -1055,7 +1071,7 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
     } else {
       // make a copy
       rocksdb::Slice key_slice(k);
-      vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
+      vector<rocksdb::Slice> value_slices(to_set_bl.get_num_buffers());
       bat.Merge(cf, rocksdb::SliceParts(&key_slice, 1),
 		prepare_sliceparts(to_set_bl, &value_slices));
     }
@@ -1070,7 +1086,7 @@ void RocksDBStore::RocksDBTransactionImpl::merge(
     } else {
       // make a copy
       rocksdb::Slice key_slice(key);
-      vector<rocksdb::Slice> value_slices(to_set_bl.buffers().size());
+      vector<rocksdb::Slice> value_slices(to_set_bl.get_num_buffers());
       bat.Merge(
 	db->default_cf,
 	rocksdb::SliceParts(&key_slice, 1),
@@ -1084,34 +1100,35 @@ int RocksDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  rocksdb::PinnableSlice value;
   utime_t start = ceph_clock_now();
   auto cf = get_cf_handle(prefix);
   if (cf) {
     for (auto& key : keys) {
-      std::string value;
       auto status = db->Get(rocksdb::ReadOptions(),
 			    cf,
 			    rocksdb::Slice(key),
 			    &value);
       if (status.ok()) {
-	(*out)[key].append(value);
+	(*out)[key].append(value.data(), value.size());
       } else if (status.IsIOError()) {
 	ceph_abort_msg(status.getState());
       }
+      value.Reset();
     }
   } else {
     for (auto& key : keys) {
-      std::string value;
       string k = combine_strings(prefix, key);
       auto status = db->Get(rocksdb::ReadOptions(),
 			    default_cf,
 			    rocksdb::Slice(k),
 			    &value);
       if (status.ok()) {
-	(*out)[key].append(value);
+	(*out)[key].append(value.data(), value.size());
       } else if (status.IsIOError()) {
 	ceph_abort_msg(status.getState());
       }
+      value.Reset();
     }
   }
   utime_t lat = ceph_clock_now() - start;
@@ -1128,7 +1145,7 @@ int RocksDBStore::get(
   ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
-  string value;
+  rocksdb::PinnableSlice value;
   rocksdb::Status s;
   auto cf = get_cf_handle(prefix);
   if (cf) {
@@ -1144,7 +1161,7 @@ int RocksDBStore::get(
 		&value);
   }
   if (s.ok()) {
-    out->append(value);
+    out->append(value.data(), value.size());
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
@@ -1165,7 +1182,7 @@ int RocksDBStore::get(
   ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
-  string value;
+  rocksdb::PinnableSlice value;
   rocksdb::Status s;
   auto cf = get_cf_handle(prefix);
   if (cf) {
@@ -1182,7 +1199,7 @@ int RocksDBStore::get(
 		&value);
   }
   if (s.ok()) {
-    out->append(value);
+    out->append(value.data(), value.size());
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
@@ -1234,7 +1251,7 @@ void RocksDBStore::compact_thread_entry()
   dout(10) << __func__ << " enter" << dendl;
   while (!compact_queue_stop) {
     if (!compact_queue.empty()) {
-      pair<string,string> range = compact_queue.front();
+      auto range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
       l.unlock();

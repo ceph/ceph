@@ -8,6 +8,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
 
 @Component({
@@ -73,12 +74,12 @@ export class RgwUserCapabilityModalComponent {
   setCapabilities(capabilities: RgwUserCapability[]) {
     // Parse the configured capabilities to get a list of types that
     // should be displayed.
-    const usedTypes = [];
+    const usedTypes: string[] = [];
     capabilities.forEach((capability) => {
       usedTypes.push(capability.type);
     });
     this.types = [];
-    ['users', 'buckets', 'metadata', 'usage', 'zone'].forEach((type) => {
+    RgwUserCapabilities.getAll().forEach((type) => {
       if (_.indexOf(usedTypes, type) === -1) {
         this.types.push(type);
       }

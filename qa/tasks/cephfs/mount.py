@@ -1,11 +1,13 @@
 from contextlib import contextmanager
+from io import BytesIO
 import json
 import logging
 import datetime
+import six
 import time
+from six import StringIO
 from textwrap import dedent
 import os
-from StringIO import StringIO
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import Filesystem
@@ -58,7 +60,7 @@ class CephFSMount(object):
         self.fs.wait_for_daemons()
         log.info('Ready to start {}...'.format(type(self).__name__))
 
-    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         raise NotImplementedError()
 
     def umount(self):
@@ -189,7 +191,7 @@ class CephFSMount(object):
     def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
         p.wait()
-        return p.stdout.getvalue().strip()
+        return six.ensure_str(p.stdout.getvalue().strip())
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
                   omit_sudo=True):

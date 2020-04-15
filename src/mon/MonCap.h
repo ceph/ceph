@@ -6,10 +6,9 @@
 
 #include <ostream>
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/entity_name.h"
-
-class CephContext;
 
 static const __u8 MON_CAP_R     = (1 << 1);      // read
 static const __u8 MON_CAP_W     = (1 << 2);      // write

@@ -24,13 +24,16 @@ namespace snapshot {
 template <typename ImageCtxT = librbd::ImageCtx>
 class PromoteRequest {
 public:
-  static PromoteRequest *create(ImageCtxT *image_ctx, bool force,
+  static PromoteRequest *create(ImageCtxT *image_ctx,
+                                const std::string& global_image_id,
                                 Context *on_finish) {
-    return new PromoteRequest(image_ctx, force, on_finish);
+    return new PromoteRequest(image_ctx, global_image_id, on_finish);
   }
 
-  PromoteRequest(ImageCtxT *image_ctx, bool force, Context *on_finish)
-    : m_image_ctx(image_ctx), m_force(force), m_on_finish(on_finish) {
+  PromoteRequest(ImageCtxT *image_ctx, const std::string& global_image_id,
+                 Context *on_finish)
+    : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
+      m_on_finish(on_finish) {
   }
 
   void send();
@@ -41,11 +44,11 @@ private:
    *
    * <start>
    *    |
-   *    v          (can promote)
-   * REFRESH_IMAGE -------------------------------\
+   *    |          (can promote)
+   *    |\----------------------------------------\
    *    |                                         |
-   *    | (needs rollback)                        |
-   *    v                                         |
+   *    |                                         |
+   *    v (skip if not needed)                    |
    * CREATE_ORPHAN_SNAPSHOT                       |
    *    |                                         |
    *    |     /-- UNREGISTER_UPDATE_WATCHER <-\   |
@@ -63,6 +66,9 @@ private:
    * CREATE_PROMOTE_SNAPSHOT <--------------------/
    *    |
    *    v
+   * DISABLE_NON_PRIMARY_FEATURE
+   *    |
+   *    v
    * RELEASE_EXCLUSIVE_LOCK (skip if not needed)
    *    |
    *    v
@@ -72,7 +78,7 @@ private:
    */
 
   ImageCtxT *m_image_ctx;
-  bool m_force;
+  std::string m_global_image_id;
   Context *m_on_finish;
 
   uint64_t m_rollback_snap_id = CEPH_NOSNAP;
@@ -124,6 +130,9 @@ private:
 
   void create_promote_snapshot();
   void handle_create_promote_snapshot(int r);
+
+  void disable_non_primary_feature();
+  void handle_disable_non_primary_feature(int r);
 
   void release_exclusive_lock();
   void handle_release_exclusive_lock(int r);

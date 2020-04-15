@@ -33,6 +33,21 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostringstream;
+using std::set;
+using std::pair;
+using std::string;
+using std::unique_ptr;
+using std::vector;
+
+using ceph::bufferhash;
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 namespace {
 class PG_SendMessageOnConn: public Context {
   PGBackend::Listener *pg;
@@ -451,7 +466,7 @@ void ReplicatedBackend::submit_transaction(
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
   const eversion_t &min_last_complete_ondisk,
-  const vector<pg_log_entry_t> &_log_entries,
+  vector<pg_log_entry_t>&& _log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
   ceph_tid_t tid,
@@ -510,7 +525,7 @@ void ReplicatedBackend::submit_transaction(
   clear_temp_objs(removed);
 
   parent->log_operation(
-    log_entries,
+    std::move(log_entries),
     hset_history,
     trim_to,
     at_version,
@@ -1108,7 +1123,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   parent->update_stats(m->pg_stats);
   parent->log_operation(
-    log,
+    std::move(log),
     m->updated_hit_set_history,
     m->pg_trim_to,
     m->version, /* Replicated PGs don't have rollback info */
@@ -1360,8 +1375,8 @@ void ReplicatedBackend::prepare_pull(
     // probably because user feed a wrong pullee
     p = q->second.begin();
     std::advance(p,
-                 util::generate_random_number<int>(0,
-                                                   q->second.size() - 1));
+                 ceph::util::generate_random_number<int>(0,
+							 q->second.size() - 1));
   }
   ceph_assert(get_osdmap()->is_up(p->osd));
   pg_shard_t fromshard = *p;

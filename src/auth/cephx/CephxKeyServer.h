@@ -17,28 +17,26 @@
 
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
-#include "CephxKeyServer.h"
 #include "common/ceph_mutex.h"
-
-class CephContext;
+#include "include/common_fwd.h"
 
 struct KeyServerData {
   version_t version;
 
   /* for each entity */
-  map<EntityName, EntityAuth> secrets;
+  std::map<EntityName, EntityAuth> secrets;
   KeyRing *extra_secrets;
 
   /* for each service type */
   version_t rotating_ver;
-  map<uint32_t, RotatingSecrets> rotating_secrets;
+  std::map<uint32_t, RotatingSecrets> rotating_secrets;
 
   explicit KeyServerData(KeyRing *extra)
     : version(0),
       extra_secrets(extra),
       rotating_ver(0) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
      __u8 struct_v = 1;
     using ceph::encode;
     encode(struct_v, bl);
@@ -47,7 +45,7 @@ struct KeyServerData {
     encode(secrets, bl);
     encode(rotating_secrets, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -57,14 +55,14 @@ struct KeyServerData {
     decode(rotating_secrets, bl);
   }
 
-  void encode_rotating(bufferlist& bl) const {
+  void encode_rotating(ceph::buffer::list& bl) const {
     using ceph::encode;
      __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(rotating_ver, bl);
     encode(rotating_secrets, bl);
   }
-  void decode_rotating(bufferlist& rotating_bl) {
+  void decode_rotating(ceph::buffer::list& rotating_bl) {
     using ceph::decode;
     auto iter = rotating_bl.cbegin();
     __u8 struct_v;
@@ -89,7 +87,7 @@ struct KeyServerData {
   }
 
   void remove_secret(const EntityName& name) {
-    map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
+    auto iter = secrets.find(name);
     if (iter == secrets.end())
       return;
     secrets.erase(iter);
@@ -106,17 +104,17 @@ struct KeyServerData {
   bool get_caps(CephContext *cct, const EntityName& name,
 		const std::string& type, AuthCapsInfo& caps) const;
 
-  map<EntityName, EntityAuth>::iterator secrets_begin()
+  std::map<EntityName, EntityAuth>::iterator secrets_begin()
   { return secrets.begin(); }
-  map<EntityName, EntityAuth>::const_iterator secrets_begin() const 
+  std::map<EntityName, EntityAuth>::const_iterator secrets_begin() const 
   { return secrets.begin(); }
-  map<EntityName, EntityAuth>::iterator secrets_end()
+  std::map<EntityName, EntityAuth>::iterator secrets_end()
   { return secrets.end(); }
-  map<EntityName, EntityAuth>::const_iterator secrets_end() const
+  std::map<EntityName, EntityAuth>::const_iterator secrets_end() const
   { return secrets.end(); }
-  map<EntityName, EntityAuth>::iterator find_name(const EntityName& name)
+  std::map<EntityName, EntityAuth>::iterator find_name(const EntityName& name)
   { return secrets.find(name); }
-  map<EntityName, EntityAuth>::const_iterator find_name(const EntityName& name) const
+  std::map<EntityName, EntityAuth>::const_iterator find_name(const EntityName& name) const
   { return secrets.find(name); }
 
 
@@ -130,11 +128,11 @@ struct KeyServerData {
 
   struct Incremental {
     IncrementalOp op;
-    bufferlist rotating_bl;  // if SET_ROTATING.  otherwise,
+    ceph::buffer::list rotating_bl;  // if SET_ROTATING.  otherwise,
     EntityName name;
     EntityAuth auth;
-    
-    void encode(bufferlist& bl) const {
+
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       __u8 struct_v = 1;
       encode(struct_v, bl);
@@ -147,7 +145,7 @@ struct KeyServerData {
 	encode(auth, bl);
       }
     }
-    void decode(bufferlist::const_iterator& bl) {
+    void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       __u8 struct_v;
       decode(struct_v, bl);
@@ -212,7 +210,7 @@ public:
 
   bool get_secret(const EntityName& name, CryptoKey& secret) const override;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
-  bool get_caps(const EntityName& name, const string& type, AuthCapsInfo& caps) const;
+  bool get_caps(const EntityName& name, const std::string& type, AuthCapsInfo& caps) const;
   bool get_active_rotating_secret(const EntityName& name, CryptoKey& secret) const;
   int start_server();
   void rotate_timeout(double timeout);
@@ -234,25 +232,25 @@ public:
 
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(data, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     std::scoped_lock l{lock};
     using ceph::decode;
     decode(data, bl);
   }
   bool contains(const EntityName& name) const;
-  int encode_secrets(Formatter *f, stringstream *ds) const;
-  void encode_formatted(string label, Formatter *f, bufferlist &bl);
-  void encode_plaintext(bufferlist &bl);
-  int list_secrets(stringstream& ds) const {
+  int encode_secrets(ceph::Formatter *f, std::stringstream *ds) const;
+  void encode_formatted(std::string label, ceph::Formatter *f, ceph::buffer::list &bl);
+  void encode_plaintext(ceph::buffer::list &bl);
+  int list_secrets(std::stringstream& ds) const {
     return encode_secrets(NULL, &ds);
   }
   version_t get_ver() const {
     std::scoped_lock l{lock};
-    return data.version;    
+    return data.version;
   }
 
   void clear_secrets() {
@@ -280,7 +278,7 @@ public:
   }
 
   bool has_secrets() {
-    map<EntityName, EntityAuth>::const_iterator b = data.secrets_begin();
+    auto b = data.secrets_begin();
     return (b != data.secrets_end());
   }
   int get_num_secrets() {
@@ -294,24 +292,22 @@ public:
   }
   void export_keyring(KeyRing& keyring) {
     std::scoped_lock l{lock};
-    for (map<EntityName, EntityAuth>::iterator p = data.secrets.begin();
-	 p != data.secrets.end();
-	 ++p) {
+    for (auto p = data.secrets.begin(); p != data.secrets.end(); ++p) {
       keyring.add(p->first, p->second);
     }
   }
 
-  bool updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver);
+  bool updated_rotating(ceph::buffer::list& rotating_bl, version_t& rotating_ver);
 
-  bool get_rotating_encrypted(const EntityName& name, bufferlist& enc_bl) const;
+  bool get_rotating_encrypted(const EntityName& name, ceph::buffer::list& enc_bl) const;
 
   ceph::mutex& get_lock() const { return lock; }
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
 
-  map<EntityName, EntityAuth>::iterator secrets_begin()
+  std::map<EntityName, EntityAuth>::iterator secrets_begin()
   { return data.secrets_begin(); }
-  map<EntityName, EntityAuth>::iterator secrets_end()
+  std::map<EntityName, EntityAuth>::iterator secrets_end()
   { return data.secrets_end(); }
 };
 WRITE_CLASS_ENCODER(KeyServer)

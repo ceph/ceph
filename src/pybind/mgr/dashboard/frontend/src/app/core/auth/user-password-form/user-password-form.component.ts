@@ -25,20 +25,20 @@ export class UserPasswordFormComponent {
   userForm: CdFormGroup;
   action: string;
   resource: string;
-  passwordPolicyHelpText: string;
+  passwordPolicyHelpText = '';
   passwordStrengthLevelClass: string;
   passwordValuation: string;
   icons = Icons;
 
   constructor(
-    private i18n: I18n,
+    public i18n: I18n,
     public actionLabels: ActionLabelsI18n,
-    private notificationService: NotificationService,
-    private userService: UserService,
-    private authStorageService: AuthStorageService,
-    private formBuilder: CdFormBuilder,
-    private router: Router,
-    private passwordPolicyService: PasswordPolicyService
+    public notificationService: NotificationService,
+    public userService: UserService,
+    public authStorageService: AuthStorageService,
+    public formBuilder: CdFormBuilder,
+    public router: Router,
+    public passwordPolicyService: PasswordPolicyService
   ) {
     this.action = this.actionLabels.CHANGE;
     this.resource = this.i18n('password');
@@ -46,7 +46,9 @@ export class UserPasswordFormComponent {
   }
 
   createForm() {
-    this.passwordPolicyHelpText = this.passwordPolicyService.getHelpText();
+    this.passwordPolicyService.getHelpText().subscribe((helpText: string) => {
+      this.passwordPolicyHelpText = helpText;
+    });
     this.userForm = this.formBuilder.group(
       {
         oldpassword: [
@@ -101,20 +103,23 @@ export class UserPasswordFormComponent {
     const oldPassword = this.userForm.getValue('oldpassword');
     const newPassword = this.userForm.getValue('newpassword');
     this.userService.changePassword(username, oldPassword, newPassword).subscribe(
-      () => {
-        this.notificationService.show(
-          NotificationType.success,
-          this.i18n('Updated user password"')
-        );
-        // Theoretically it is not necessary to navigate to '/logout' because
-        // the auth token gets invalid after changing the password in the
-        // backend, thus the user would be automatically logged out after the
-        // next periodically API request is executed.
-        this.router.navigate(['/logout']);
-      },
+      () => this.onPasswordChange(),
       () => {
         this.userForm.setErrors({ cdSubmitButton: true });
       }
     );
+  }
+
+  /**
+   * The function that is called after the password has been changed.
+   * Override this in derived classes to change the behaviour.
+   */
+  onPasswordChange() {
+    this.notificationService.show(NotificationType.success, this.i18n('Updated user password"'));
+    // Theoretically it is not necessary to navigate to '/logout' because
+    // the auth token gets invalid after changing the password in the
+    // backend, thus the user would be automatically logged out after the
+    // next periodically API request is executed.
+    this.router.navigate(['/logout']);
   }
 }

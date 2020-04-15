@@ -21,7 +21,11 @@ namespace rgw {
 namespace auth {
 
 std::unique_ptr<rgw::auth::Identity>
-transform_old_authinfo(const req_state* const s)
+transform_old_authinfo(CephContext* const cct,
+                       const rgw_user& auth_id,
+                       const int perm_mask,
+                       const bool is_admin,
+                       const uint32_t type)
 {
   /* This class is not intended for public use. Should be removed altogether
    * with this function after moving all our APIs to the new authentication
@@ -38,14 +42,15 @@ transform_old_authinfo(const req_state* const s)
     const uint32_t type;
   public:
     DummyIdentityApplier(CephContext* const cct,
-                         const sal::RGWUser* user,
+                         const rgw_user& auth_id,
                          const int perm_mask,
-                         const bool is_admin)
+                         const bool is_admin,
+                         const uint32_t type)
       : cct(cct),
-        id(user->get_id()),
+        id(auth_id),
         perm_mask(perm_mask),
         is_admin(is_admin),
-        type(user->get_type()) {
+        type(type) {
     }
 
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
@@ -95,12 +100,23 @@ transform_old_authinfo(const req_state* const s)
   };
 
   return std::unique_ptr<rgw::auth::Identity>(
-        new DummyIdentityApplier(s->cct,
-                                 s->user,
-                                 s->perm_mask,
+        new DummyIdentityApplier(cct,
+                                 auth_id,
+                                 perm_mask,
+                                 is_admin,
+                                 type));
+}
+
+std::unique_ptr<rgw::auth::Identity>
+transform_old_authinfo(const req_state* const s)
+{
+  return transform_old_authinfo(s->cct,
+                                s->user->get_id(),
+                                s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
-                                 s->system_request));
+                                s->system_request,
+                                s->user->get_type());
 }
 
 } /* namespace auth */
@@ -597,9 +613,18 @@ bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
 	       id.get_tenant() == user_info.user_id.tenant) {
       return true;
     } else if (id.is_user() &&
-	       (id.get_tenant() == user_info.user_id.tenant) &&
-	       (id.get_id() == user_info.user_id.id)) {
-      return true;
+	       (id.get_tenant() == user_info.user_id.tenant)) {
+      if (id.get_id() == user_info.user_id.id) {
+        return true;
+      }
+      if (subuser != NO_SUBUSER) {
+        std::string user = user_info.user_id.id;
+        user.append(":");
+        user.append(subuser);
+        if (user == id.get_id()) {
+          return true;
+        }
+      }
     }
   }
   return false;

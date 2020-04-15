@@ -36,7 +36,7 @@ export class SparklineComponent implements OnInit, OnChanges {
     }
   ];
 
-  options = {
+  options: Record<string, any> = {
     animation: {
       duration: 0
     },
@@ -56,7 +56,7 @@ export class SparklineComponent implements OnInit, OnChanges {
       intersect: false,
       custom: undefined,
       callbacks: {
-        label: (tooltipItem) => {
+        label: (tooltipItem: any) => {
           if (this.isBinary) {
             return this.dimlessBinaryPipe.transform(tooltipItem.yLabel);
           } else {
@@ -91,11 +91,11 @@ export class SparklineComponent implements OnInit, OnChanges {
   constructor(private dimlessBinaryPipe: DimlessBinaryPipe) {}
 
   ngOnInit() {
-    const getStyleTop = (tooltip) => {
+    const getStyleTop = (tooltip: any) => {
       return tooltip.caretY - tooltip.height - tooltip.yPadding - 5 + 'px';
     };
 
-    const getStyleLeft = (tooltip, positionX) => {
+    const getStyleLeft = (tooltip: any, positionX: number) => {
       return positionX + tooltip.caretX + 'px';
     };
 
@@ -111,7 +111,7 @@ export class SparklineComponent implements OnInit, OnChanges {
       borderColor: this.colors[0].pointBorderColor
     };
 
-    this.options.tooltips.custom = (tooltip) => {
+    this.options.tooltips.custom = (tooltip: any) => {
       chartTooltip.customTooltips(tooltip);
     };
   }

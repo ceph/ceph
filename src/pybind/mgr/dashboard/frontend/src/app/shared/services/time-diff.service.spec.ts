@@ -49,7 +49,7 @@ describe('TimeDiffService', () => {
     const days = 24 * hours;
 
     it('should allow different writings', () => {
-      const expectDurationToBeMs = (duration, ms) =>
+      const expectDurationToBeMs = (duration: string, ms: number) =>
         expect(service['getDurationMs'](duration)).toBe(ms);
       expectDurationToBeMs('2h', 2 * hours);
       expectDurationToBeMs('4 Days', 4 * days);
@@ -59,7 +59,7 @@ describe('TimeDiffService', () => {
     });
 
     it('should create duration string from ms', () => {
-      const expectMsToBeDuration = (ms, duration) =>
+      const expectMsToBeDuration = (ms: number, duration: string) =>
         expect(service['getDuration'](ms)).toBe(duration);
       expectMsToBeDuration(2 * hours, '2h');
       expectMsToBeDuration(4 * days, '4d');

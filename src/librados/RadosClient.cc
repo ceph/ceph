@@ -444,7 +444,7 @@ int librados::RadosClient::get_min_compatible_osd(int8_t* require_osd_release)
 
   objecter->with_osdmap(
     [require_osd_release](const OSDMap& o) {
-      *require_osd_release = ceph::to_integer<int8_t>(o.require_osd_release);
+      *require_osd_release = to_integer<int8_t>(o.require_osd_release);
     });
   return 0;
 }
@@ -459,10 +459,9 @@ int librados::RadosClient::get_min_compatible_client(int8_t* min_compat_client,
 
   objecter->with_osdmap(
     [min_compat_client, require_min_compat_client](const OSDMap& o) {
-      *min_compat_client =
-	ceph::to_integer<int8_t>(o.get_min_compat_client());
+      *min_compat_client = to_integer<int8_t>(o.get_min_compat_client());
       *require_min_compat_client =
-	ceph::to_integer<int8_t>(o.get_require_min_compat_client());
+	to_integer<int8_t>(o.get_require_min_compat_client());
     });
   return 0;
 }

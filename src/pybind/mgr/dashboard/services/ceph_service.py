@@ -2,28 +2,19 @@
 from __future__ import absolute_import
 import json
 import logging
-from six.moves import reduce
 
 import rados
 
 from mgr_module import CommandResult
-
-try:
-    from more_itertools import pairwise
-except ImportError:
-    def pairwise(iterable):
-        from itertools import tee
-        a, b = tee(iterable)
-        next(b, None)
-        return zip(a, b)
+from mgr_util import get_time_series_rates, get_most_recent_rate
 
 from .. import mgr
+from ..exceptions import DashboardException
 
 try:
-    from typing import Dict, Any  # pylint: disable=unused-import
+    from typing import Dict  # pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
-
 
 logger = logging.getLogger('ceph_service')
 
@@ -49,7 +40,7 @@ class CephService(object):
 
     @classmethod
     def get_service_map(cls, service_name):
-        service_map = {}  # type: Dict[str, Dict[str, Any]]
+        service_map = {}  # type: Dict[str, dict]
         for server in mgr.list_servers():
             for service in server['services']:
                 if service['type'] == service_name:
@@ -116,20 +107,34 @@ class CephService(object):
             stats = pool_stats[pool['pool']]
             s = {}
 
-            def get_rate(series):
-                if len(series) >= 2:
-                    return differentiate(*list(series)[-2:])
-                return 0
-
             for stat_name, stat_series in stats.items():
+                rates = get_time_series_rates(stat_series)
                 s[stat_name] = {
                     'latest': stat_series[0][1],
-                    'rate': get_rate(stat_series),
-                    'rates': get_rates_from_data(stat_series)
+                    'rate': get_most_recent_rate(rates),
+                    'rates': rates
                 }
             pool['stats'] = s
             pools_w_stats.append(pool)
         return pools_w_stats
+
+    @classmethod
+    def get_erasure_code_profiles(cls):
+        def _serialize_ecp(name, ecp):
+            def serialize_numbers(key):
+                value = ecp.get(key)
+                if value is not None:
+                    ecp[key] = int(value)
+
+            ecp['name'] = name
+            serialize_numbers('k')
+            serialize_numbers('m')
+            return ecp
+
+        ret = []
+        for name, ecp in mgr.get('osd_map').get('erasure_code_profiles', {}).items():
+            ret.append(_serialize_ecp(name, ecp))
+        return ret
 
     @classmethod
     def get_pool_name_from_id(cls, pool_id):
@@ -173,50 +178,112 @@ class CephService(object):
             raise SendCommandError(outs, prefix, argdict, r)
 
         try:
-            return json.loads(outb)
+            return json.loads(outb or outs)
         except Exception:  # pylint: disable=broad-except
             return outb
 
     @staticmethod
-    def get_smart_data_by_device(device):
-        dev_id = device['devid']
+    def _get_smart_data_by_device(device):
+        # type: (dict) -> Dict[str, dict]
+        # Check whether the device is associated with daemons.
         if 'daemons' in device and device['daemons']:
-            daemons = [daemon for daemon in device['daemons'] if daemon.startswith('osd')]
-            if daemons:
-                svc_type, svc_id = daemons[0].split('.')
-                dev_smart_data = CephService.send_command(svc_type, 'smart', svc_id, devid=dev_id)
+            dev_smart_data = None
+
+            # The daemons associated with the device. Note, the list may
+            # contain daemons that are 'down' or 'destroyed'.
+            daemons = device.get('daemons')
+
+            # Get a list of all OSD daemons on all hosts that are 'up'
+            # because SMART data can not be retrieved from daemons that
+            # are 'down' or 'destroyed'.
+            osd_tree = CephService.send_command('mon', 'osd tree')
+            osd_daemons_up = [
+                node['name'] for node in osd_tree.get('nodes', {})
+                if node.get('status') == 'up'
+            ]
+
+            # Finally get the daemons on the host of the given device
+            # that are 'up'. All daemons on the same host can deliver
+            # SMART data, thus it is not relevant for us which daemon
+            # we are using.
+            daemons = list(set(daemons) & set(osd_daemons_up))  # type: ignore
+
+            for daemon in daemons:
+                svc_type, svc_id = daemon.split('.')
+                try:
+                    dev_smart_data = CephService.send_command(
+                        svc_type, 'smart', svc_id, devid=device['devid'])
+                except SendCommandError:
+                    # Try to retrieve SMART data from another daemon.
+                    continue
                 for dev_id, dev_data in dev_smart_data.items():
                     if 'error' in dev_data:
                         logger.warning(
-                            '[SMART] error retrieving smartctl data for device ID "%s": %s', dev_id,
-                            dev_data)
-                return dev_smart_data
-            logger.warning('[SMART] no OSD service found for device ID "%s"', dev_id)
-            return {}
-        logger.warning('[SMART] key "daemon" not found for device ID "%s"', dev_id)
+                            '[SMART] Error retrieving smartctl data for device ID "%s": %s',
+                            dev_id, dev_data)
+                break
+            if dev_smart_data is None:
+                raise DashboardException(
+                    'Failed to retrieve SMART data for device ID "{}"'.format(
+                        device['devid']))
+            return dev_smart_data
+        logger.warning('[SMART] No daemons associated with device ID "%s"',
+                       device['devid'])
         return {}
 
     @staticmethod
     def get_devices_by_host(hostname):
         # (str) -> dict
-        return CephService.send_command('mon', 'device ls-by-host', host=hostname)
+        return CephService.send_command('mon',
+                                        'device ls-by-host',
+                                        host=hostname)
+
+    @staticmethod
+    def get_devices_by_daemon(daemon_type, daemon_id):
+        # (str, str) -> dict
+        return CephService.send_command('mon',
+                                        'device ls-by-daemon',
+                                        who='{}.{}'.format(
+                                            daemon_type, daemon_id))
 
     @staticmethod
     def get_smart_data_by_host(hostname):
         # type: (str) -> dict
-        return reduce(lambda a, b: a.update(b) or a, [
-            CephService.get_smart_data_by_device(device)
-            for device in CephService.get_devices_by_host(hostname)
-        ], {})
+        """
+        Get the SMART data of all devices on the given host, regardless
+        of the daemon (osd, mon, ...).
+        :param hostname: The name of the host.
+        :return: A dictionary containing the SMART data of every device
+          on the given host. The device name is used as the key in the
+          dictionary.
+        """
+        devices = CephService.get_devices_by_host(hostname)
+        smart_data = {}  # type: dict
+        if devices:
+            for device in devices:
+                if device['devid'] not in smart_data:
+                    smart_data.update(
+                        CephService._get_smart_data_by_device(device))
+        return smart_data
 
     @staticmethod
     def get_smart_data_by_daemon(daemon_type, daemon_id):
-        # type: (str, str) -> dict
-        smart_data = CephService.send_command(daemon_type, 'smart', daemon_id)
-        for _, dev_data in smart_data.items():
-            if 'error' in dev_data:
-                logger.warning('[SMART] Error retrieving smartctl data for daemon "%s.%s"',
-                               daemon_type, daemon_id)
+        # type: (str, str) -> Dict[str, dict]
+        """
+        Get the SMART data of the devices associated with the given daemon.
+        :param daemon_type: The daemon type, e.g. 'osd' or 'mon'.
+        :param daemon_id: The daemon identifier.
+        :return: A dictionary containing the SMART data of every device
+          associated with the given daemon. The device name is used as the
+          key in the dictionary.
+        """
+        devices = CephService.get_devices_by_daemon(daemon_type, daemon_id)
+        smart_data = {}  # type: Dict[str, dict]
+        if devices:
+            for device in devices:
+                if device['devid'] not in smart_data:
+                    smart_data.update(
+                        CephService._get_smart_data_by_device(device))
         return smart_data
 
     @classmethod
@@ -225,16 +292,12 @@ class CephService(object):
         :return: the derivative of mgr.get_counter()
         :rtype: list[tuple[int, float]]"""
         data = mgr.get_counter(svc_type, svc_name, path)[path]
-        return get_rates_from_data(data)
+        return get_time_series_rates(data)
 
     @classmethod
     def get_rate(cls, svc_type, svc_name, path):
         """returns most recent rate"""
-        data = mgr.get_counter(svc_type, svc_name, path)[path]
-
-        if data and len(data) > 1:
-            return differentiate(*data[-2:])
-        return 0.0
+        return get_most_recent_rate(cls.get_rates(svc_type, svc_name, path))
 
     @classmethod
     def get_client_perf(cls):
@@ -300,33 +363,3 @@ class CephService(object):
             'statuses': pg_summary['all'],
             'pgs_per_osd': pgs_per_osd,
         }
-
-
-def get_rates_from_data(data):
-    """
-    >>> get_rates_from_data([])
-    [(0, 0.0)]
-    >>> get_rates_from_data([[1, 42]])
-    [(1, 0.0)]
-    >>> get_rates_from_data([[0, 100], [2, 101], [3, 100], [4, 100]])
-    [(2, 0.5), (3, 1.0), (4, 0.0)]
-    """
-    if not data:
-        return [(0, 0.0)]
-    if len(data) == 1:
-        return [(data[0][0], 0.0)]
-    return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
-
-
-def differentiate(data1, data2):
-    """
-    >>> times = [0, 2]
-    >>> values = [100, 101]
-    >>> differentiate(*zip(times, values))
-    0.5
-    >>> times = [0, 2]
-    >>> values = [100, 99]
-    >>> differentiate(*zip(times, values))
-    0.5
-    """
-    return abs((data2[1] - data1[1]) / float(data2[0] - data1[0]))

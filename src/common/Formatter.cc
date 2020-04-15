@@ -117,7 +117,7 @@ void Formatter::flush(bufferlist &bl)
   bl.append(os.str());
 }
 
-void Formatter::dump_format(const char *name, const char *fmt, ...)
+void Formatter::dump_format(std::string_view name, const char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -125,7 +125,7 @@ void Formatter::dump_format(const char *name, const char *fmt, ...)
   va_end(ap);
 }
 
-void Formatter::dump_format_ns(const char *name, const char *ns, const char *fmt, ...)
+void Formatter::dump_format_ns(std::string_view name, const char *ns, const char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -134,7 +134,7 @@ void Formatter::dump_format_ns(const char *name, const char *ns, const char *fmt
 
 }
 
-void Formatter::dump_format_unquoted(const char *name, const char *fmt, ...)
+void Formatter::dump_format_unquoted(std::string_view name, const char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -193,7 +193,7 @@ void JSONFormatter::print_quoted_string(std::string_view s)
   m_ss << '\"' << json_stream_escaper(s) << '\"';
 }
 
-void JSONFormatter::print_name(const char *name)
+void JSONFormatter::print_name(std::string_view name)
 {
   finish_pending_string();
   if (m_stack.empty())
@@ -213,7 +213,7 @@ void JSONFormatter::print_name(const char *name)
   ++entry.size;
 }
 
-void JSONFormatter::open_section(const char *name, const char *ns, bool is_array)
+void JSONFormatter::open_section(std::string_view name, const char *ns, bool is_array)
 {
   if (handle_open_section(name, ns, is_array)) {
     return;
@@ -235,22 +235,22 @@ void JSONFormatter::open_section(const char *name, const char *ns, bool is_array
   m_stack.push_back(n);
 }
 
-void JSONFormatter::open_array_section(const char *name)
+void JSONFormatter::open_array_section(std::string_view name)
 {
   open_section(name, nullptr, true);
 }
 
-void JSONFormatter::open_array_section_in_ns(const char *name, const char *ns)
+void JSONFormatter::open_array_section_in_ns(std::string_view name, const char *ns)
 {
   open_section(name, ns, true);
 }
 
-void JSONFormatter::open_object_section(const char *name)
+void JSONFormatter::open_object_section(std::string_view name)
 {
   open_section(name, nullptr, false);
 }
 
-void JSONFormatter::open_object_section_in_ns(const char *name, const char *ns)
+void JSONFormatter::open_object_section_in_ns(std::string_view name, const char *ns)
 {
   open_section(name, ns, false);
 }
@@ -286,7 +286,7 @@ void JSONFormatter::finish_pending_string()
 }
 
 template <class T>
-void JSONFormatter::add_value(const char *name, T val)
+void JSONFormatter::add_value(std::string_view name, T val)
 {
   std::stringstream ss;
   ss.precision(std::numeric_limits<T>::max_digits10);
@@ -294,7 +294,7 @@ void JSONFormatter::add_value(const char *name, T val)
   add_value(name, ss.str(), false);
 }
 
-void JSONFormatter::add_value(const char *name, std::string_view val, bool quoted)
+void JSONFormatter::add_value(std::string_view name, std::string_view val, bool quoted)
 {
   if (handle_value(name, val, quoted)) {
     return;
@@ -307,27 +307,27 @@ void JSONFormatter::add_value(const char *name, std::string_view val, bool quote
   }
 }
 
-void JSONFormatter::dump_unsigned(const char *name, uint64_t u)
+void JSONFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
   add_value(name, u);
 }
 
-void JSONFormatter::dump_int(const char *name, int64_t s)
+void JSONFormatter::dump_int(std::string_view name, int64_t s)
 {
   add_value(name, s);
 }
 
-void JSONFormatter::dump_float(const char *name, double d)
+void JSONFormatter::dump_float(std::string_view name, double d)
 {
   add_value(name, d);
 }
 
-void JSONFormatter::dump_string(const char *name, std::string_view s)
+void JSONFormatter::dump_string(std::string_view name, std::string_view s)
 {
   add_value(name, s, true);
 }
 
-std::ostream& JSONFormatter::dump_stream(const char *name)
+std::ostream& JSONFormatter::dump_stream(std::string_view name)
 {
   finish_pending_string();
   m_pending_name = name;
@@ -335,7 +335,7 @@ std::ostream& JSONFormatter::dump_stream(const char *name)
   return m_pending_string;
 }
 
-void JSONFormatter::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
+void JSONFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
@@ -407,32 +407,32 @@ void XMLFormatter::output_footer()
   }
 }
 
-void XMLFormatter::open_object_section(const char *name)
+void XMLFormatter::open_object_section(std::string_view name)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void XMLFormatter::open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+void XMLFormatter::open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs)
 {
   open_section_in_ns(name, NULL, &attrs);
 }
 
-void XMLFormatter::open_object_section_in_ns(const char *name, const char *ns)
+void XMLFormatter::open_object_section_in_ns(std::string_view name, const char *ns)
 {
   open_section_in_ns(name, ns, NULL);
 }
 
-void XMLFormatter::open_array_section(const char *name)
+void XMLFormatter::open_array_section(std::string_view name)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void XMLFormatter::open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+void XMLFormatter::open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs)
 {
   open_section_in_ns(name, NULL, &attrs);
 }
 
-void XMLFormatter::open_array_section_in_ns(const char *name, const char *ns)
+void XMLFormatter::open_array_section_in_ns(std::string_view name, const char *ns)
 {
   open_section_in_ns(name, ns, NULL);
 }
@@ -453,7 +453,7 @@ void XMLFormatter::close_section()
 }
 
 template <class T>
-void XMLFormatter::add_value(const char *name, T val)
+void XMLFormatter::add_value(std::string_view name, T val)
 {
   std::string e(name);
   std::transform(e.begin(), e.end(), e.begin(),
@@ -466,22 +466,22 @@ void XMLFormatter::add_value(const char *name, T val)
     m_ss << "\n";
 }
 
-void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
+void XMLFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
   add_value(name, u);
 }
 
-void XMLFormatter::dump_int(const char *name, int64_t s)
+void XMLFormatter::dump_int(std::string_view name, int64_t s)
 {
   add_value(name, s);
 }
 
-void XMLFormatter::dump_float(const char *name, double d)
+void XMLFormatter::dump_float(std::string_view name, double d)
 {
   add_value(name, d);
 }
 
-void XMLFormatter::dump_string(const char *name, std::string_view s)
+void XMLFormatter::dump_string(std::string_view name, std::string_view s)
 {
   std::string e(name);
   std::transform(e.begin(), e.end(), e.begin(),
@@ -493,7 +493,7 @@ void XMLFormatter::dump_string(const char *name, std::string_view s)
     m_ss << "\n";
 }
 
-void XMLFormatter::dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs)
+void XMLFormatter::dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs)
 {
   std::string e(name);
   std::transform(e.begin(), e.end(), e.begin(),
@@ -507,7 +507,7 @@ void XMLFormatter::dump_string_with_attrs(const char *name, std::string_view s, 
     m_ss << "\n";
 }
 
-std::ostream& XMLFormatter::dump_stream(const char *name)
+std::ostream& XMLFormatter::dump_stream(std::string_view name)
 {
   print_spaces();
   m_pending_string_name = name;
@@ -515,7 +515,7 @@ std::ostream& XMLFormatter::dump_stream(const char *name)
   return m_pending_string;
 }
 
-void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted, const char *fmt, va_list ap)
+void XMLFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
   size_t len = vsnprintf(buf, LARGE_SIZE, fmt, ap);
@@ -557,7 +557,7 @@ void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs
   attrs_str = attrs_ss.str();
 }
 
-void XMLFormatter::open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs)
+void XMLFormatter::open_section_in_ns(std::string_view name, const char *ns, const FormatterAttrs *attrs)
 {
   print_spaces();
   std::string attrs_str;
@@ -577,7 +577,7 @@ void XMLFormatter::open_section_in_ns(const char *name, const char *ns, const Fo
   }
   if (m_pretty)
     m_ss << "\n";
-  m_sections.push_back(name);
+  m_sections.push_back(std::string(name));
 }
 
 void XMLFormatter::finish_pending_string()
@@ -746,39 +746,39 @@ void TableFormatter::reset()
   m_section_open = 0;
 }
 
-void TableFormatter::open_object_section(const char *name)
+void TableFormatter::open_object_section(std::string_view name)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void TableFormatter::open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+void TableFormatter::open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void TableFormatter::open_object_section_in_ns(const char *name, const char *ns)
+void TableFormatter::open_object_section_in_ns(std::string_view name, const char *ns)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void TableFormatter::open_array_section(const char *name)
+void TableFormatter::open_array_section(std::string_view name)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void TableFormatter::open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs)
+void TableFormatter::open_array_section_with_attrs(std::string_view name, const FormatterAttrs& attrs)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void TableFormatter::open_array_section_in_ns(const char *name, const char *ns)
+void TableFormatter::open_array_section_in_ns(std::string_view name, const char *ns)
 {
   open_section_in_ns(name, NULL, NULL);
 }
 
-void TableFormatter::open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs)
+void TableFormatter::open_section_in_ns(std::string_view name, const char *ns, const FormatterAttrs *attrs)
 {
-  m_section.push_back(name);
+  m_section.push_back(std::string(name));
   m_section_open++;
 }
 
@@ -792,7 +792,7 @@ void TableFormatter::close_section()
   }
 }
 
-size_t TableFormatter::m_vec_index(const char *name)
+size_t TableFormatter::m_vec_index(std::string_view name)
 {
   std::string key(name);
 
@@ -817,9 +817,9 @@ size_t TableFormatter::m_vec_index(const char *name)
   return i;
 }
 
-std::string TableFormatter::get_section_name(const char* name)
+std::string TableFormatter::get_section_name(std::string_view name)
 {
-  std::string t_name = name;
+  std::string t_name{name};
   for (size_t i = 0; i < m_section.size(); i++) {
     t_name.insert(0, ":");
     t_name.insert(0, m_section[i]);
@@ -837,7 +837,7 @@ std::string TableFormatter::get_section_name(const char* name)
 }
 
 template <class T>
-void TableFormatter::add_value(const char *name, T val) {
+void TableFormatter::add_value(std::string_view name, T val) {
   finish_pending_string();
   size_t i = m_vec_index(name);
   m_ss.precision(std::numeric_limits<double>::max_digits10);
@@ -848,22 +848,22 @@ void TableFormatter::add_value(const char *name, T val) {
   m_ss.str("");
 }
 
-void TableFormatter::dump_unsigned(const char *name, uint64_t u)
+void TableFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
   add_value(name, u);
 }
 
-void TableFormatter::dump_int(const char *name, int64_t s)
+void TableFormatter::dump_int(std::string_view name, int64_t s)
 {
   add_value(name, s);
 }
 
-void TableFormatter::dump_float(const char *name, double d)
+void TableFormatter::dump_float(std::string_view name, double d)
 {
   add_value(name, d);
 }
 
-void TableFormatter::dump_string(const char *name, std::string_view s)
+void TableFormatter::dump_string(std::string_view name, std::string_view s)
 {
   finish_pending_string();
   size_t i = m_vec_index(name);
@@ -874,7 +874,7 @@ void TableFormatter::dump_string(const char *name, std::string_view s)
   m_ss.str("");
 }
 
-void TableFormatter::dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs)
+void TableFormatter::dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs)
 {
   finish_pending_string();
   size_t i = m_vec_index(name);
@@ -888,7 +888,9 @@ void TableFormatter::dump_string_with_attrs(const char *name, std::string_view s
   m_ss.str("");
 }
 
-void TableFormatter::dump_format_va(const char* name, const char *ns, bool quoted, const char *fmt, va_list ap)
+void TableFormatter::dump_format_va(std::string_view name,
+				    const char *ns, bool quoted,
+				    const char *fmt, va_list ap)
 {
   finish_pending_string();
   char buf[LARGE_SIZE];
@@ -905,7 +907,7 @@ void TableFormatter::dump_format_va(const char* name, const char *ns, bool quote
   m_ss.str("");
 }
 
-std::ostream& TableFormatter::dump_stream(const char *name)
+std::ostream& TableFormatter::dump_stream(std::string_view name)
 {
   finish_pending_string();
   // we don't support this

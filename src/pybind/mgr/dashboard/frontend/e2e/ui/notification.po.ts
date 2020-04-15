@@ -8,7 +8,7 @@ export class NotificationSidebarPageHelper extends PageHelper {
   }
 
   getSidebar() {
-    return element(by.css('aside.ng-sidebar--opened cd-notifications-sidebar'));
+    return element(by.css('cd-notifications-sidebar'));
   }
 
   getTasks() {

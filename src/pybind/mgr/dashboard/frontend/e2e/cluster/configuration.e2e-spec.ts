@@ -42,13 +42,21 @@ describe('Configuration page', () => {
   });
 
   describe('edit configuration test', () => {
+    const configName = 'client_cache_size';
+
     beforeAll(async () => {
       await configuration.navigateTo();
     });
 
-    it('should click and edit a configuration and results should appear in the table', async () => {
-      const configName = 'client_cache_size';
+    beforeEach(async () => {
+      await configuration.clearTableSearchInput();
+    });
 
+    afterAll(async () => {
+      await configuration.configClear(configName);
+    });
+
+    it('should click and edit a configuration and results should appear in the table', async () => {
       await configuration.edit(
         configName,
         ['global', '1'],
@@ -58,7 +66,16 @@ describe('Configuration page', () => {
         ['mds', '5'],
         ['client', '6']
       );
-      await configuration.configClear(configName);
+    });
+
+    it('should show only modified configurations', async () => {
+      await configuration.filterTable('Modified', 'yes');
+      expect(await configuration.getTableFoundCount()).toBe(1);
+    });
+
+    it('should hide all modified configurations', async () => {
+      await configuration.filterTable('Modified', 'no');
+      expect(await configuration.getTableFoundCount()).toBeGreaterThan(1);
     });
   });
 });

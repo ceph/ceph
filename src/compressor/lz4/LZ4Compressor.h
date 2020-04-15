@@ -35,15 +35,29 @@ class LZ4Compressor : public Compressor {
 #endif
   }
 
-  int compress(const bufferlist &src, bufferlist &dst) override {
+  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst) override {
+    // older versions of liblz4 introduce bit errors when compressing
+    // fragmented buffers.  this was fixed in lz4 commit
+    // af127334670a5e7b710bbd6adb71aa7c3ef0cd72, which first
+    // appeared in v1.8.2.
+    //
+    // workaround: rebuild if not contiguous.
+    if (!src.is_contiguous()) {
+      ceph::buffer::list new_src = src;
+      new_src.rebuild();
+      return compress(new_src, dst);
+    }
+
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.compress(src, dst);
 #endif
-    bufferptr outptr = buffer::create_small_page_aligned(
+    ceph::buffer::ptr outptr = ceph::buffer::create_small_page_aligned(
       LZ4_compressBound(src.length()));
     LZ4_stream_t lz4_stream;
     LZ4_resetStream(&lz4_stream);
+
+    using ceph::encode;
 
     auto p = src.begin();
     size_t left = src.length();
@@ -69,7 +83,7 @@ class LZ4Compressor : public Compressor {
     return 0;
   }
 
-  int decompress(const bufferlist &src, bufferlist &dst) override {
+  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst) override {
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.decompress(src, dst);
@@ -78,13 +92,14 @@ class LZ4Compressor : public Compressor {
     return decompress(i, src.length(), dst);
   }
 
-  int decompress(bufferlist::const_iterator &p,
+  int decompress(ceph::buffer::list::const_iterator &p,
 		 size_t compressed_len,
-		 bufferlist &dst) override {
+		 ceph::buffer::list &dst) override {
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.decompress(p, compressed_len, dst);
 #endif
+    using ceph::decode;
     uint32_t count;
     std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs;
     decode(count, p);
@@ -97,13 +112,13 @@ class LZ4Compressor : public Compressor {
     }
     compressed_len -= (sizeof(uint32_t) + sizeof(uint32_t) * count * 2);
 
-    bufferptr dstptr(total_origin);
+    ceph::buffer::ptr dstptr(total_origin);
     LZ4_streamDecode_t lz4_stream_decode;
     LZ4_setStreamDecode(&lz4_stream_decode, nullptr, 0);
 
-    bufferptr cur_ptr = p.get_current_ptr();
-    bufferptr *ptr = &cur_ptr;
-    Tub<bufferptr> data_holder;
+    ceph::buffer::ptr cur_ptr = p.get_current_ptr();
+    ceph::buffer::ptr *ptr = &cur_ptr;
+    Tub<ceph::buffer::ptr> data_holder;
     if (compressed_len != cur_ptr.length()) {
       data_holder.construct(compressed_len);
       p.copy_deep(compressed_len, *data_holder);

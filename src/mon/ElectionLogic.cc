@@ -20,6 +20,32 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, epoch, elector)
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
 static ostream& _prefix(std::ostream *_dout, epoch_t epoch, ElectionOwner* elector) {
   return *_dout << "paxos." << elector->get_my_rank()
 		<< ").electionLogic(" <<  epoch << ") ";
@@ -147,8 +173,8 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
       elector->trigger_new_election();
     } else {
       ldout(cct, 5) << " ignoring old propose" << dendl;
-      return;
     }
+    return;
   }
 
   if (elector->get_my_rank() < from) {

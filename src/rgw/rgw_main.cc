@@ -9,6 +9,7 @@
 #include "common/Timer.h"
 #include "common/safe_io.h"
 #include "common/TracepointProvider.h"
+#include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
@@ -201,15 +202,24 @@ int radosgw_Main(int argc, const char **argv)
     exit(0);
   }
 
-  // First, let's determine which frontends are configured.
   int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
   global_pre_init(
     &defaults, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
     flags);
 
+  // Now that we've determined which frontend(s) to use, continue with global
+  // initialization. Passing false as the final argument ensures that
+  // global_pre_init() is not invoked twice.
+  // claim the reference and release it after subsequent destructors have fired
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_DAEMON,
+			 flags, "rgw_data", false);
+
+  // First, let's determine which frontends are configured.
   list<string> frontends;
-  g_conf().early_expand_meta(g_conf()->rgw_frontends, &cerr);
-  get_str_list(g_conf()->rgw_frontends, ",", frontends);
+  string rgw_frontends_str = g_conf().get_val<string>("rgw_frontends");
+  g_conf().early_expand_meta(rgw_frontends_str, &cerr);
+  get_str_list(rgw_frontends_str, ",", frontends);
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
   if (frontends.empty()) {
@@ -247,13 +257,26 @@ int radosgw_Main(int argc, const char **argv)
     fe_map.insert(pair<string, RGWFrontendConfig*>(framework, config));
   }
 
-  // Now that we've determined which frontend(s) to use, continue with global
-  // initialization. Passing false as the final argument ensures that
-  // global_pre_init() is not invoked twice.
-  // claim the reference and release it after subsequent destructors have fired
-  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_DAEMON,
-			 flags, "rgw_data", false);
+  int numa_node = g_conf().get_val<int64_t>("rgw_numa_node");
+  size_t numa_cpu_set_size = 0;
+  cpu_set_t numa_cpu_set;
+
+  if (numa_node >= 0) {
+    int r = get_numa_node_cpu_set(numa_node, &numa_cpu_set_size, &numa_cpu_set);
+    if (r < 0) {
+      dout(1) << __func__ << " unable to determine rgw numa node " << numa_node
+              << " CPUs" << dendl;
+      numa_node = -1;
+    } else {
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
+      if (r < 0) {
+        derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
+        << dendl;
+      }
+    }
+  } else {
+    dout(1) << __func__ << " not setting numa affinity" << dendl;
+  }
 
   // maintain existing region root pool for new multisite objects
   if (!g_conf()->rgw_region_root_pool.empty()) {
@@ -477,12 +500,36 @@ int radosgw_Main(int argc, const char **argv)
 
   list<RGWFrontend *> fes;
 
+  string frontend_defs_str = g_conf().get_val<string>("rgw_frontend_defaults");
+
+  list<string> frontends_def;
+  get_str_list(frontend_defs_str, ",", frontends_def);
+
+  map<string, std::unique_ptr<RGWFrontendConfig> > fe_def_map;
+  for (auto& f : frontends_def) {
+    RGWFrontendConfig *config = new RGWFrontendConfig(f);
+    int r = config->init();
+    if (r < 0) {
+      delete config;
+      cerr << "ERROR: failed to init default config: " << f << std::endl;
+      return EINVAL;
+    }
+
+    fe_def_map[config->get_framework()].reset(config);
+  }
+
   int fe_count = 0;
 
   for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin();
        fiter != fe_map.end(); ++fiter, ++fe_count) {
     RGWFrontendConfig *config = fiter->second;
     string framework = config->get_framework();
+
+    auto def_iter = fe_def_map.find(framework);
+    if (def_iter != fe_def_map.end()) {
+      config->set_default_config(*def_iter->second);
+    }
+
     RGWFrontend *fe = NULL;
 
     if (framework == "civetweb" || framework == "mongoose") {

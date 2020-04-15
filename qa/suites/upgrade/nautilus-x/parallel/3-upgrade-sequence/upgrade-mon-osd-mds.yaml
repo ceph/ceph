@@ -9,12 +9,12 @@ meta:
 upgrade-sequence:
    sequential:
    - ceph.restart:
-       daemons: [mon.a]
+       daemons: [mgr.x, mon.a]
        wait-for-healthy: true
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [mon.b, mgr.x]
+       daemons: [mon.b]
        wait-for-healthy: true
        mon-health-to-clog: false
    - sleep:

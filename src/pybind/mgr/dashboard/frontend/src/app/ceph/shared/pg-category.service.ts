@@ -52,7 +52,7 @@ export class PgCategoryService {
     );
   }
 
-  private getPgStatesFromText(pgStatesText) {
+  private getPgStatesFromText(pgStatesText: string) {
     const pgStates = pgStatesText
       .replace(/[^a-z]+/g, ' ')
       .trim()

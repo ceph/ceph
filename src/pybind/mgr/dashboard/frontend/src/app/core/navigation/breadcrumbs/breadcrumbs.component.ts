@@ -109,7 +109,7 @@ export class BreadcrumbsComponent implements OnDestroy {
   }
 
   postProcess(breadcrumbs: IBreadcrumb[]) {
-    const result = [];
+    const result: IBreadcrumb[] = [];
     breadcrumbs.forEach((element) => {
       const split = element.text.split('/');
       if (split.length > 1) {

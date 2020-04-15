@@ -10,6 +10,7 @@
 #include "osd/osd_types.h"
 
 namespace crimson::os {
+class FuturizedStore;
 
 class FuturizedCollection
   : public boost::intrusive_ref_counter<FuturizedCollection,
@@ -20,7 +21,7 @@ public:
     : cid{cid} {}
   virtual ~FuturizedCollection() {}
   virtual seastar::future<> flush() {
-    return seastar::now();
+    return seastar::make_ready_future<>();
   }
   virtual seastar::future<bool> flush_commit() {
     return seastar::make_ready_future<bool>(true);

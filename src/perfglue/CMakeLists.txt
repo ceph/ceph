@@ -1,4 +1,4 @@
-if(ALLOCATOR STREQUAL "tcmalloc")
+if(ALLOCATOR STREQUAL "tcmalloc" AND NOT WITH_SEASTAR)
   add_library(heap_profiler STATIC
     heap_profiler.cc)
   target_link_libraries(heap_profiler

@@ -1,0 +1,11 @@
+os_type: ubuntu
+os_version: "18.04"
+
+# feel free to remove this test, if ppa:projectatomic is no longer maintained.
+tasks:
+- exec:
+    all:
+    - sudo apt -y install software-properties-common
+    - sudo add-apt-repository -y ppa:projectatomic/ppa
+    - sudo apt -y install podman
+    - echo -e "[registries.search]\nregistries = ['docker.io']" | sudo tee /etc/containers/registries.conf

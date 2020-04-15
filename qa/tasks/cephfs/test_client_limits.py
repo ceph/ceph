@@ -50,7 +50,7 @@ class TestClientLimits(CephFSTestCase):
 
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
         mds_max_caps_per_client = int(self.fs.get_config("mds_max_caps_per_client"))
-        mds_recall_warning_decay_rate = self.fs.get_config("mds_recall_warning_decay_rate")
+        mds_recall_warning_decay_rate = float(self.fs.get_config("mds_recall_warning_decay_rate"))
         self.assertTrue(open_files >= mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
@@ -176,7 +176,7 @@ class TestClientLimits(CephFSTestCase):
         self.mount_a.create_n_files("testdir/file2", 5, True)
 
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
-        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests / 10)
+        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests // 10)
 
     def _test_client_cache_size(self, mount_subdir):
         """
@@ -217,7 +217,7 @@ class TestClientLimits(CephFSTestCase):
         self.assertGreaterEqual(dentry_count, num_dirs)
         self.assertGreaterEqual(dentry_pinned_count, num_dirs)
 
-        cache_size = num_dirs / 10
+        cache_size = num_dirs // 10
         self.mount_a.set_cache_size(cache_size)
 
         def trimmed():

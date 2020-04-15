@@ -80,7 +80,7 @@ export class TableActionsComponent implements OnInit {
    */
   getCurrentButton(): CdTableAction {
     if (this.dropDownOnly) {
-      return;
+      return undefined;
     }
     let buttonAction = this.dropDownActions.find((tableAction) => this.showableAction(tableAction));
     if (!buttonAction && this.dropDownActions.length > 0) {
@@ -104,7 +104,7 @@ export class TableActionsComponent implements OnInit {
 
   useRouterLink(action: CdTableAction): string {
     if (!action.routerLink || this.disableSelectionAction(action)) {
-      return;
+      return undefined;
     }
     return _.isString(action.routerLink) ? action.routerLink : action.routerLink();
   }

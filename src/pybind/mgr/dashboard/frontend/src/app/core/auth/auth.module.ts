@@ -6,12 +6,12 @@ import { RouterModule, Routes } from '@angular/router';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ButtonsModule } from 'ngx-bootstrap/buttons';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { SharedModule } from '../../shared/shared.module';
+import { LoginPasswordFormComponent } from './login-password-form/login-password-form.component';
 import { LoginComponent } from './login/login.component';
 import { RoleDetailsComponent } from './role-details/role-details.component';
 import { RoleFormComponent } from './role-form/role-form.component';
@@ -24,7 +24,6 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
 
 @NgModule({
   imports: [
-    BsDropdownModule.forRoot(),
     ButtonsModule.forRoot(),
     CommonModule,
     FormsModule,
@@ -38,6 +37,7 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
   ],
   declarations: [
     LoginComponent,
+    LoginPasswordFormComponent,
     RoleDetailsComponent,
     RoleFormComponent,
     RoleListComponent,

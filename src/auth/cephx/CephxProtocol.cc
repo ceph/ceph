@@ -23,7 +23,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx: "
 
+using std::dec;
+using std::hex;
+using std::vector;
 
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
 
 void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uint64_t server_challenge, 
 		  uint64_t client_challenge, uint64_t *key, std::string &error)
@@ -92,6 +98,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
                      bufferlist& reply)
 {
   __u8 service_ticket_reply_v = 1;
+  using ceph::encode;
   encode(service_ticket_reply_v, reply);
 
   uint32_t num = ticket_info_vec.size();
@@ -99,7 +106,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
   ldout(cct, 10) << "build_service_ticket_reply encoding " << num
 	   << " tickets with secret " << principal_secret << dendl;
 
-  for (vector<CephXSessionAuthInfo>::iterator ticket_iter = ticket_info_vec.begin(); 
+  for (auto ticket_iter = ticket_info_vec.begin(); 
        ticket_iter != ticket_info_vec.end();
        ++ticket_iter) {
     CephXSessionAuthInfo& info = *ticket_iter;
@@ -149,6 +156,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(
   CryptoKey& secret,
   bufferlist::const_iterator& indata)
 {
+  using ceph::decode;
   try {
     __u8 service_ticket_v;
     decode(service_ticket_v, indata);
@@ -198,7 +206,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(
 
     have_key_flag = true;
     return true;
-  } catch (buffer::error& e) {
+  } catch (ceph::buffer::error& e) {
     ldout(cct, 1) << __func__ << " decode error: " << e.what() << dendl;
     return false;
   }
@@ -224,7 +232,7 @@ bool CephXTicketHandler::need_key() const
 
 bool CephXTicketManager::have_key(uint32_t service_id)
 {
-  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  auto iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
     return false;
   return iter->second.have_key();
@@ -232,7 +240,7 @@ bool CephXTicketManager::have_key(uint32_t service_id)
 
 bool CephXTicketManager::need_key(uint32_t service_id) const
 {
-  map<uint32_t, CephXTicketHandler>::const_iterator iter = tickets_map.find(service_id);
+  auto iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
     return true;
   return iter->second.need_key();
@@ -240,7 +248,7 @@ bool CephXTicketManager::need_key(uint32_t service_id) const
 
 void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, uint32_t& need)
 {
-  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  auto iter = tickets_map.find(service_id);
   if (iter == tickets_map.end()) {
     have &= ~service_id;
     need |= service_id;
@@ -265,7 +273,7 @@ void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, 
 
 void CephXTicketManager::invalidate_ticket(uint32_t service_id)
 {
-  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  auto iter = tickets_map.find(service_id);
   if (iter != tickets_map.end())
     iter->second.invalidate_ticket();
 }
@@ -282,7 +290,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
   try {
     decode(service_ticket_reply_v, indata);
     decode(num, indata);
-  } catch (buffer::error& e) {
+  } catch (ceph::buffer::error& e) {
     ldout(cct, 10) << __func__ << " failed to decode ticket v or count: "
 		   << e.what() << dendl;
   }
@@ -292,7 +300,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
     uint32_t type = 0;
     try {
       decode(type, indata);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       ldout(cct, 10) << __func__ << " failed to decode ticket type: " << e.what()
 		     << dendl;
     }
@@ -345,7 +353,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
  */
 CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id) const
 {
-  map<uint32_t, CephXTicketHandler>::const_iterator iter = tickets_map.find(service_id);
+  auto iter = tickets_map.find(service_id);
   if (iter == tickets_map.end()) {
     ldout(cct, 0) << "no TicketHandler for service "
 		  << ceph_entity_type_name(service_id) << dendl;
@@ -429,7 +437,7 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
     decode(global_id, indata);
     decode(service_id, indata);
     decode(ticket, indata);
-  } catch (buffer::end_of_buffer &e) {
+  } catch (ceph::buffer::end_of_buffer &e) {
     // Unable to decode!
     return false;
   }

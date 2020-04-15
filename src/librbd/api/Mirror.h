@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+class ContextWQ;
+
 struct Context;
 
 namespace librbd {
@@ -29,6 +31,10 @@ struct Mirror {
 
   static int mode_get(librados::IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   static int mode_set(librados::IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+
+  static int uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid);
+  static void uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid,
+                       Context* on_finish);
 
   static int peer_bootstrap_create(librados::IoCtx& io_ctx, std::string* token);
   static int peer_bootstrap_import(librados::IoCtx& io_ctx,
@@ -69,6 +75,12 @@ struct Mirror {
                                     size_t max,
                                     std::map<std::string, std::string> *ids);
 
+  static int image_info_list(
+      librados::IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+      const std::string &start_id, size_t max,
+      std::map<std::string, std::pair<mirror_image_mode_t,
+                                      mirror_image_info_t>> *entries);
+
   static int image_enable(ImageCtxT *ictx, mirror_image_mode_t mode,
                           bool relax_same_pool_parent_check);
   static int image_disable(ImageCtxT *ictx, bool force);
@@ -80,6 +92,15 @@ struct Mirror {
   static int image_get_info(ImageCtxT *ictx,
                             mirror_image_info_t *mirror_image_info);
   static void image_get_info(ImageCtxT *ictx,
+                             mirror_image_info_t *mirror_image_info,
+                             Context *on_finish);
+  static int image_get_info(librados::IoCtx& io_ctx,
+                            ContextWQ *op_work_queue,
+                            const std::string &image_id,
+                            mirror_image_info_t *mirror_image_info);
+  static void image_get_info(librados::IoCtx& io_ctx,
+                             ContextWQ *op_work_queue,
+                             const std::string &image_id,
                              mirror_image_info_t *mirror_image_info,
                              Context *on_finish);
   static int image_get_mode(ImageCtxT *ictx, mirror_image_mode_t *mode);

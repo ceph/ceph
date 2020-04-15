@@ -82,4 +82,4 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining omapbench')
-        run.wait(omapbench.itervalues())
+        run.wait(omapbench.values())

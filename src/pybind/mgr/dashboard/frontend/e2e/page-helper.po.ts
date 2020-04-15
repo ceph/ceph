@@ -26,10 +26,7 @@ export abstract class PageHelper {
    * @memberof Helper
    */
   static async checkConsole() {
-    let browserLog = await browser
-      .manage()
-      .logs()
-      .get('browser');
+    let browserLog = await browser.manage().logs().get('browser');
 
     browserLog = browserLog.filter((log) => log.level.value > 900);
 
@@ -45,10 +42,10 @@ export abstract class PageHelper {
    * help developers to prevent and highlight mistakes.  It also reduces boilerplate code and by
    * thus, increases readability.
    */
-  static restrictTo(page): Function {
+  static restrictTo(page: string): Function {
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
       const fn: Function = descriptor.value;
-      descriptor.value = function(...args) {
+      descriptor.value = function (...args: any) {
         return browser
           .getCurrentUrl()
           .then((url) =>
@@ -70,10 +67,8 @@ export abstract class PageHelper {
     return $('.breadcrumb-item.active');
   }
 
-  async getTabText(index): Promise<string> {
-    return $$('.nav.nav-tabs li')
-      .get(index)
-      .getText();
+  async getTabText(index: number): Promise<string> {
+    return $$('.nav.nav-tabs li').get(index).getText();
   }
 
   async getTableTotalCount(): Promise<number> {
@@ -92,11 +87,19 @@ export abstract class PageHelper {
     return Number(text.match(/(\d+)\s+selected/)[1]);
   }
 
+  async getTableFoundCount(): Promise<number> {
+    const text = await $$('.datatable-footer-inner .page-count span')
+      .filter(async (e) => (await e.getText()).includes('found'))
+      .first()
+      .getText();
+    return Number(text.match(/(\d+)\s+found/)[1]);
+  }
+
   getFirstTableCellWithText(content: string): ElementFinder {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
-  getTableRow(content) {
+  getTableRow(content: string) {
     return element(by.cssContainingText('.datatable-body-row', content));
   }
 
@@ -146,6 +149,7 @@ export abstract class PageHelper {
   /**
    * Helper method to select an option inside a select element.
    * This method will also expect that the option was set.
+   * @param option The option text (not value) to be selected.
    */
   async selectOption(selectionName: string, option: string) {
     await element(by.cssContainingText(`select[name=${selectionName}] option`, option)).click();
@@ -154,6 +158,8 @@ export abstract class PageHelper {
 
   /**
    * Helper method to expect a set option inside a select element.
+   * @param option The selected option text (not value) that is to
+   *   be expected.
    */
   async expectSelectOption(selectionName: string, option: string) {
     return expect(
@@ -197,7 +203,7 @@ export abstract class PageHelper {
   async clearInput(elem: ElementFinder) {
     const types = ['text', 'number'];
     if ((await elem.getTagName()) === 'input' && types.includes(await elem.getAttribute('type'))) {
-      await elem.sendKeys(
+      return await elem.sendKeys(
         protractor.Key.chord(protractor.Key.CONTROL, 'a'),
         protractor.Key.BACK_SPACE
       );
@@ -206,7 +212,7 @@ export abstract class PageHelper {
     }
   }
 
-  async navigateTo(page = null) {
+  async navigateTo(page: string = null) {
     page = page || 'index';
     const url = this.pages[page];
     await browser.get(url);
@@ -241,6 +247,10 @@ export abstract class PageHelper {
     return $$('legend');
   }
 
+  getToast() {
+    return $('.ngx-toastr');
+  }
+
   async waitPresence(elem: ElementFinder, message?: string) {
     return browser.wait(EC.presenceOf(elem), TIMEOUT, message);
   }
@@ -273,8 +283,8 @@ export abstract class PageHelper {
     return browser.wait(EC.not(EC.textToBePresentInElement(elem, text)), TIMEOUT, message);
   }
 
-  async waitFn(func: Function, message?: string) {
-    return browser.wait(func, TIMEOUT, message);
+  async waitFn(func: Function, message?: string, timeout: number = TIMEOUT) {
+    return browser.wait(func, timeout, message);
   }
 
   getFirstCell(): ElementFinder {
@@ -291,9 +301,7 @@ export abstract class PageHelper {
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
 
     // Clicks on table Delete button
-    await $$('.table-actions button.dropdown-toggle')
-      .first()
-      .click(); // open submenu
+    await $$('.table-actions button.dropdown-toggle').first().click(); // open submenu
     await $('li.delete a').click(); // click on "delete" menu item
 
     // Confirms deletion
@@ -312,8 +320,20 @@ export abstract class PageHelper {
    * Uncheck all checked table rows.
    */
   async uncheckAllTableRows() {
-    await $$('.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked').each(
-      (e: ElementFinder) => e.click()
-    );
+    await $$(
+      '.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked'
+    ).each((e: ElementFinder) => e.click());
+  }
+
+  async filterTable(name: string, option: string) {
+    await this.waitClickableAndClick($('.tc_filter_name > a'));
+    await element(by.cssContainingText(`.tc_filter_name .dropdown-item`, name)).click();
+
+    await this.waitClickableAndClick($('.tc_filter_option > a'));
+    await element(by.cssContainingText(`.tc_filter_option .dropdown-item`, option)).click();
+  }
+
+  async clearTableSearchInput() {
+    return this.waitClickableAndClick($('cd-table .search button'));
   }
 }

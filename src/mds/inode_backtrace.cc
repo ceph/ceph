@@ -7,7 +7,7 @@
 
 /* inode_backpointer_t */
 
-void inode_backpointer_t::encode(bufferlist& bl) const
+void inode_backpointer_t::encode(ceph::buffer::list& bl) const
 {
   ENCODE_START(2, 2, bl);
   encode(dirino, bl);
@@ -16,7 +16,7 @@ void inode_backpointer_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_backpointer_t::decode(bufferlist::const_iterator& bl)
+void inode_backpointer_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(dirino, bl);
@@ -25,7 +25,7 @@ void inode_backpointer_t::decode(bufferlist::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void inode_backpointer_t::decode_old(bufferlist::const_iterator& bl)
+void inode_backpointer_t::decode_old(ceph::buffer::list::const_iterator& bl)
 {
   using ceph::decode;
   decode(dirino, bl);
@@ -33,7 +33,7 @@ void inode_backpointer_t::decode_old(bufferlist::const_iterator& bl)
   decode(version, bl);
 }
 
-void inode_backpointer_t::dump(Formatter *f) const
+void inode_backpointer_t::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("dirino", dirino);
   f->dump_string("dname", dname);
@@ -54,7 +54,7 @@ void inode_backpointer_t::generate_test_instances(std::list<inode_backpointer_t*
  * inode_backtrace_t
  */
 
-void inode_backtrace_t::encode(bufferlist& bl) const
+void inode_backtrace_t::encode(ceph::buffer::list& bl) const
 {
   ENCODE_START(5, 4, bl);
   encode(ino, bl);
@@ -64,7 +64,7 @@ void inode_backtrace_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_backtrace_t::decode(bufferlist::const_iterator& bl)
+void inode_backtrace_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   if (struct_v < 3)
@@ -87,11 +87,11 @@ void inode_backtrace_t::decode(bufferlist::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void inode_backtrace_t::dump(Formatter *f) const
+void inode_backtrace_t::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("ino", ino);
   f->open_array_section("ancestors");
-  for (vector<inode_backpointer_t>::const_iterator p = ancestors.begin(); p != ancestors.end(); ++p) {
+  for (auto p = ancestors.begin(); p != ancestors.end(); ++p) {
     f->open_object_section("backpointer");
     p->dump(f);
     f->close_section();
@@ -99,7 +99,7 @@ void inode_backtrace_t::dump(Formatter *f) const
   f->close_section();
   f->dump_int("pool", pool);
   f->open_array_section("old_pools");
-  for (set<int64_t>::iterator p = old_pools.begin(); p != old_pools.end(); ++p) {
+  for (auto p = old_pools.begin(); p != old_pools.end(); ++p) {
     f->dump_int("old_pool", *p);
   }
   f->close_section();

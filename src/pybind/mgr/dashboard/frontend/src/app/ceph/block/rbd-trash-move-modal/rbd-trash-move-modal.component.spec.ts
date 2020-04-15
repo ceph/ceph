@@ -52,7 +52,7 @@ describe('RbdTrashMoveModalComponent', () => {
   });
 
   describe('should call moveImage', () => {
-    let notificationService;
+    let notificationService: NotificationService;
 
     beforeEach(() => {
       notificationService = TestBed.get(NotificationService);
@@ -73,9 +73,7 @@ describe('RbdTrashMoveModalComponent', () => {
     });
 
     it('with delay < 0', () => {
-      const oldDate = moment()
-        .subtract(24, 'hour')
-        .toDate();
+      const oldDate = moment().subtract(24, 'hour').toDate();
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();
@@ -85,9 +83,7 @@ describe('RbdTrashMoveModalComponent', () => {
     });
 
     it('with delay < 0', () => {
-      const oldDate = moment()
-        .add(24, 'hour')
-        .toISOString();
+      const oldDate = moment().add(24, 'hour').toISOString();
       component.moveForm.patchValue({ expiresAt: oldDate });
 
       component.moveImage();

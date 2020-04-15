@@ -321,11 +321,6 @@ bool MDRequestImpl::slave_rolling_back()
   return has_more() && more()->slave_rolling_back;
 }
 
-bool MDRequestImpl::did_ino_allocation() const
-{
-  return alloc_ino || used_prealloc_ino || prealloc_inos.size();
-}      
-
 bool MDRequestImpl::freeze_auth_pin(CInode *inode)
 {
   ceph_assert(!more()->rename_inode || more()->rename_inode == inode);
@@ -583,7 +578,7 @@ void MDLockCache::attach_dirfrags(std::vector<CDir*>&& dfv)
   }
 }
 
-void MDLockCache::detach_all()
+void MDLockCache::detach_locks()
 {
   ceph_assert(items_lock);
   int i = 0;
@@ -593,9 +588,12 @@ void MDLockCache::detach_all()
     ++i;
   }
   items_lock.reset();
+}
 
+void MDLockCache::detach_dirfrags()
+{
   ceph_assert(items_dir);
-  i = 0;
+  int i = 0;
   for (auto dir : auth_pinned_dirfrags) {
     (void)dir;
     items_dir[i].item_dir.remove_myself();

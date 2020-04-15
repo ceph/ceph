@@ -105,7 +105,9 @@
   </div>
 </ng-template>
 
-<div class="card">
+<div class="card"
+     (clickOutside)="closeSidebar()"
+     [clickOutsideEnabled]="isSidebarOpened">
   <div class="card-header">
     <ng-container i18n>Tasks and Notifications</ng-container>
 
@@ -117,9 +119,11 @@
     </button>
   </div>
 
-  <div class="card-body">
-    <ng-container *ngTemplateOutlet="tasksTpl"></ng-container>
-    <ng-container *ngTemplateOutlet="notificationsTpl"></ng-container>
-    <ng-container *ngTemplateOutlet="emptyTpl"></ng-container>
-  </div>
+  <ngx-simplebar [options]="simplebar">
+    <div class="card-body">
+      <ng-container *ngTemplateOutlet="tasksTpl"></ng-container>
+      <ng-container *ngTemplateOutlet="notificationsTpl"></ng-container>
+      <ng-container *ngTemplateOutlet="emptyTpl"></ng-container>
+    </div>
+  </ngx-simplebar>
 </div>

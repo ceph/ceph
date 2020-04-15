@@ -34,7 +34,6 @@
 #include "messages/MOSDPGNotify.h"
 // #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGInfo.h"
-#include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
@@ -76,6 +75,22 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+
+using std::list;
+using std::map;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::unique_ptr;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
 
 using namespace ceph::osd::scheduler;
 
@@ -785,8 +800,10 @@ void PG::send_cluster_message(
 {
   ConnectionRef con = osd->get_con_osd_cluster(
     target, get_osdmap_epoch());
-  if (!con)
+  if (!con) {
+    m->put();
     return;
+  }
 
   if (share_map_update) {
     osd->maybe_share_map(con.get(), get_osdmap());
@@ -847,6 +864,11 @@ void PG::publish_stats_to_osd()
     pg_stats_publish = stats.value();
     pg_stats_publish_valid = true;
   }
+}
+
+unsigned PG::get_target_pg_log_entries() const
+{
+  return osd->get_target_pg_log_entries();
 }
 
 void PG::clear_publish_stats()
@@ -1256,9 +1278,7 @@ void PG::filter_snapc(vector<snapid_t> &snaps)
 
 void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m)
 {
-  for (map<hobject_t, list<OpRequestRef>>::iterator it = m.begin();
-       it != m.end();
-       ++it)
+  for (auto it = m.begin(); it != m.end(); ++it)
     requeue_ops(it->second);
   m.clear();
 }

@@ -32,6 +32,7 @@
 
 using std::ostream;
 using std::string;
+using std::vector;
 namespace qi = boost::spirit::qi;
 namespace ascii = boost::spirit::ascii;
 namespace phoenix = boost::phoenix;

@@ -16,7 +16,7 @@ export class DeviceListComponent implements OnInit {
   @Input()
   hostname = '';
   @Input()
-  osdId = null;
+  osdId: number = null;
 
   @ViewChild('deviceLocation', { static: true })
   locationTemplate: TemplateRef<any>;
@@ -40,7 +40,7 @@ export class DeviceListComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    const updateDevicesFn = (devices) => (this.devices = devices);
+    const updateDevicesFn = (devices: CdDevice[]) => (this.devices = devices);
     if (this.hostname) {
       this.hostService.getDevices(this.hostname).subscribe(updateDevicesFn);
     } else if (this.osdId !== null) {

@@ -1,16 +1,14 @@
+# flake8: noqa
 import pytest
 
 from ceph.deployment.inventory import Devices, Device
 
-from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError, DeviceSelection
-
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch  # type: ignore
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 
 from ceph.deployment import drive_selection
+from ceph.deployment.service_spec import PlacementSpec
 from ceph.tests.factories import InventoryFactory
+from ceph.tests.utils import _mk_inventory, _mk_device
 
 
 class TestMatcher(object):
@@ -278,7 +276,8 @@ class TestDriveGroup(object):
                              osds_per_device='',
                              disk_format='bluestore'):
             raw_sample_bluestore = {
-                'host_pattern': 'data*',
+                'service_type': 'osd',
+                'placement': {'host_pattern': 'data*'},
                 'data_devices': {
                     'size': '30G:50G',
                     'model': '42-RGB',
@@ -302,7 +301,8 @@ class TestDriveGroup(object):
                 'encrypted': True,
             }
             raw_sample_filestore = {
-                'host_pattern': 'data*',
+                'service_type': 'osd',
+                'placement': {'host_pattern': 'data*'},
                 'objectstore': 'filestore',
                 'data_devices': {
                     'size': '30G:50G',
@@ -323,7 +323,10 @@ class TestDriveGroup(object):
                 raw_sample = raw_sample_bluestore
 
             if empty:
-                raw_sample = {'host_pattern': 'data*'}
+                raw_sample = {
+                    'service_type': 'osd',
+                    'placement': {'host_pattern': 'data*'}
+                }
 
             dgo = DriveGroupSpec.from_json(raw_sample)
             return dgo
@@ -478,246 +481,18 @@ class TestDriveGroup(object):
 
         return make_sample_data
 
-    if False:
-        def test_filter_devices_10_size_min_max(self, test_fix, inventory):
-            """ Test_fix's data_device_attrs is configured to take any disk from
-            30G - 50G or with vendor samsung or with model 42-RGB
-            The default inventory setup is configured to have 10 data devices(50G)
-            and 2 wal devices(20G).
-            The expected match is 12
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(test_fix.data_device_attrs)
-            assert len(ret) == 12
-
-        def test_filter_devices_size_exact(self, test_fix, inventory):
-            """
-            Configure to only take disks with 20G (exact)
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(size='20G'))
-            assert len(ret) == 2
-
-        def test_filter_devices_2_max(self, test_fix, inventory):
-            """
-            Configure to only take disks with a max of 30G
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(size=':30G'))
-            assert len(ret) == 2
-
-        def test_filter_devices_0_max(self, test_fix, inventory):
-            """
-            Configure to only take disks with a max of 10G
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(size=':10G'))
-            assert len(ret) == 0
-
-        def test_filter_devices_12_min(self, test_fix, inventory):
-            """
-            Configure to only take disks with a min of 10G
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(size='10G:'))
-            assert len(ret) == 12
-
-        def test_filter_devices_12_min_20G(self, test_fix, inventory):
-            """
-            Configure to only take disks with a min of 20G
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(size='20G:'))
-            assert len(ret) == 12
-
-        def test_filter_devices_0_model(self, test_fix, inventory):
-            """
-            Configure to only take disks with a model of modelA
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(model='unknown'))
-            assert len(ret) == 0
-
-        def test_filter_devices_2_model(self, test_fix, inventory):
-            """
-            Configure to only take disks with a model of model*(wildcard)
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(model='ssd_type_model'))
-            assert len(ret) == 2
-
-        def test_filter_devices_12_vendor(self, test_fix, inventory):
-            """
-            Configure to only take disks with a vendor of samsung
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(vendor='samsung'))
-            assert len(ret) == 12
-
-        def test_filter_devices_2_rotational(self, test_fix, inventory):
-            """
-            Configure to only take disks with a rotational flag of 0
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(rotational='0'))
-            assert len(ret) == 2
-
-        def test_filter_devices_10_rotational(self, test_fix, inventory):
-            """
-            Configure to only take disks with a rotational flag of 1
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(rotational='1'))
-            assert len(ret) == 10
-
-        def test_filter_devices_limit(self, test_fix, inventory):
-            """
-            Configure to only take disks with a rotational flag of 1
-            This should take two disks, but limit=1 is in place
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(rotational='1', limit=1))
-            assert len(ret) == 1
-
-        def test_filter_devices_all_limit_2(self, test_fix, inventory):
-            """
-            Configure to take all disks
-            limiting to two
-            """
-            inventory()
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(all=True, limit=2))
-            assert len(ret) == 2
-
-        def test_filter_devices_empty_list_eq_matcher(self, test_fix, inventory):
-            """
-            Configure to only take disks with a rotational flag of 1
-            This should take 10 disks, but limit=1 is in place
-            Available is set to False. No disks are assigned
-            """
-            inventory(available=False)
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(rotational='1', limit=1))
-            assert len(ret) == 0
-
-        def test_filter_devices_empty_string_matcher(self, test_fix, inventory):
-            """
-            Configure to only take disks with a rotational flag of 1
-            This should take two disks, but limit=1 is in place
-            Available is set to False. No disks are assigned
-            """
-            inventory(available=False)
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(vendor='samsung', limit=1))
-            assert len(ret) == 0
-
-        def test_filter_devices_empty_size_matcher(self, test_fix, inventory):
-            """
-            Configure to only take disks with a rotational flag of 1
-            This should take two disks, but limit=1 is in place
-            Available is set to False. No disks are assigned
-            """
-            inventory(available=False)
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(size='10G:100G', limit=1))
-            assert len(ret) == 0
-
-        def test_filter_devices_empty_all_matcher(self, test_fix, inventory):
-            """
-            Configure to only take disks with a rotational flag of 1
-            This should take two disks, but limit=1 is in place
-            Available is set to False. No disks are assigned
-            """
-            inventory(available=False)
-            test_fix = test_fix()
-            ret = test_fix._filter_devices(dict(all=True, limit=1))
-            assert len(ret) == 0
-
-        @patch('ceph.deployment.drive_selection.DriveGroup._check_filter')
-        def test_check_filter_support(self, check_filter_mock, test_fix):
-            test_fix = test_fix()
-            test_fix._check_filter_support()
-            check_filter_mock.assert_called
-
-        def test_check_filter(self, test_fix):
-            test_fix = test_fix()
-            ret = test_fix._check_filter(dict(model='foo'))
-            assert ret is None
-
-        def test_check_filter_raise(self, test_fix):
-            test_fix = test_fix()
-            with pytest.raises(DriveGroupValidationError):
-                test_fix._check_filter(dict(unknown='foo'))
-                pytest.fail("Filter unknown is not supported")
-
-        def test_list_devices(self):
-            pass
-
-
-class TestFilter(object):
-    def test_is_matchable(self):
-        ret = drive_selection.Filter(name='name', matcher=None)
-        assert ret.is_matchable is False
-
-
-def _mk_device(rotational=True, locked=False):
-    return [Device(
-        path='??',
-        sys_api={
-            "rotational": '1' if rotational else '0',
-            "vendor": "Vendor",
-            "human_readable_size": "394.27 GB",
-            "partitions": {},
-            "locked": int(locked),
-            "sectorsize": "512",
-            "removable": "0",
-            "path": "??",
-            "support_discard": "",
-            "model": "Model",
-            "ro": "0",
-            "nr_requests": "128",
-            "size": 423347879936
-        },
-        available=not locked,
-        rejected_reasons=['locked'] if locked else [],
-        lvs=[],
-        device_id="Model-Vendor-foobar"
-    )]
-
-
-def _mk_inventory(devices):
-    devs = []
-    for dev_, name in zip(devices, map(chr, range(ord('a'), ord('z')))):
-        dev = Device.from_json(dev_.to_json())
-        dev.path = '/dev/sd' + name
-        dev.sys_api = dict(dev_.sys_api, path='/dev/sd' + name)
-        devs.append(dev)
-    return Devices(devices=devs)
-
 
 class TestDriveSelection(object):
 
     testdata = [
         (
-            DriveGroupSpec(host_pattern='*', data_devices=DeviceSelection(all=True)),
+            DriveGroupSpec(placement=PlacementSpec(host_pattern='*'), data_devices=DeviceSelection(all=True)),
             _mk_inventory(_mk_device() * 5),
             ['/dev/sda', '/dev/sdb', '/dev/sdc', '/dev/sdd', '/dev/sde'], []
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(all=True, limit=3),
                 db_devices=DeviceSelection(all=True)
             ),
@@ -726,7 +501,7 @@ class TestDriveSelection(object):
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),
@@ -735,7 +510,7 @@ class TestDriveSelection(object):
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),
@@ -744,7 +519,7 @@ class TestDriveSelection(object):
         ),
         (
             DriveGroupSpec(
-                host_pattern='*',
+                placement=PlacementSpec(host_pattern='*'),
                 data_devices=DeviceSelection(rotational=True),
                 db_devices=DeviceSelection(rotational=False)
             ),

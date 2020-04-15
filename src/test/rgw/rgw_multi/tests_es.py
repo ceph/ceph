@@ -8,10 +8,11 @@ import datetime
 import dateutil
 
 from nose.tools import eq_ as eq
+from six.moves import range
 
-from rgw_multi.multisite import *
-from rgw_multi.tests import *
-from rgw_multi.zone_es import *
+from .multisite import *
+from .tests import *
+from .zone_es import *
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ def init_env(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = No
 
     # don't wait for meta sync just yet
     for zone, bucket in zone_bucket:
-        for count in xrange(0, num_keys):
+        for count in range(num_keys):
             objname = obj_prefix + str(count)
             k = new_key(zone, bucket.name, objname)
             # k.set_contents_from_string(content + 'x' * count)
@@ -226,16 +227,16 @@ def test_es_object_search_custom():
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-date > ' + sval, lambda k: date_from_str(k.get_metadata('foo-date')) > val)
 
             # 'or' query
-            for i in xrange(len(src_keys) / 2):
+            for i in range(len(src_keys) // 2):
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str <= ' + str_vals[i] + ' or x-amz-meta-foo-str >= ' + str_vals[-i],
                         lambda k: k.get_metadata('foo-str') <= str_vals[i] or k.get_metadata('foo-str') >= str_vals[-i] )
 
             # 'and' query
-            for i in xrange(len(src_keys) / 2):
+            for i in range(len(src_keys) // 2):
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str >= ' + str_vals[i] + ' and x-amz-meta-foo-str <= ' + str_vals[i + 1],
                         lambda k: k.get_metadata('foo-str') >= str_vals[i] and k.get_metadata('foo-str') <= str_vals[i + 1] )
             # more complicated query
-            for i in xrange(len(src_keys) / 2):
+            for i in range(len(src_keys) // 2):
                 do_check_mdsearch(target_conn.conn, None, src_keys , 'bucket == ' + bucket.name + ' and x-amz-meta-foo-str >= ' + str_vals[i] +
                                                                      ' and (x-amz-meta-foo-str <= ' + str_vals[i + 1] + ')',
                         lambda k: k.bucket.name == bucket.name and (k.get_metadata('foo-str') >= str_vals[i] and

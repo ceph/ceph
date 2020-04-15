@@ -1232,8 +1232,8 @@ int Migration<I>::create_dst_image() {
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
       config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
-      m_image_options, "", "", true /* skip_mirror_enable */, op_work_queue,
-      &on_create);
+      m_image_options, true /* skip_mirror_enable */,
+      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
     req->send();
   } else {
     r = util::create_ioctx(m_src_image_ctx->md_ctx, "destination image",
@@ -1244,9 +1244,9 @@ int Migration<I>::create_dst_image() {
     }
 
     auto *req = image::CloneRequest<I>::create(
-      config, parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
-      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options, "", "",
-      op_work_queue, &on_create);
+      config, parent_io_ctx, parent_spec.image_id, "", {}, parent_spec.snap_id,
+      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options,
+      cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
     req->send();
   }
 
@@ -1287,7 +1287,7 @@ int Migration<I>::create_dst_image() {
 
   C_SaferCond on_snapshot_copy;
   auto snapshot_copy_req = librbd::deep_copy::SnapshotCopyRequest<I>::create(
-      m_src_image_ctx, dst_image_ctx, CEPH_NOSNAP, m_flatten,
+      m_src_image_ctx, dst_image_ctx, 0, CEPH_NOSNAP, 0, m_flatten,
       m_src_image_ctx->op_work_queue, &snap_seqs, &on_snapshot_copy);
   snapshot_copy_req->send();
   r = on_snapshot_copy.wait();
@@ -1495,9 +1495,7 @@ int Migration<I>::enable_mirroring(
 
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<I>::create(
-    image_ctx->md_ctx, image_ctx->id,
-    static_cast<mirror_image_mode_t>(mirror_image_mode), "",
-    image_ctx->op_work_queue, &ctx);
+    image_ctx, mirror_image_mode, &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {

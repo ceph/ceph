@@ -7,8 +7,6 @@
 #include <string>
 #include <cerrno>
 
-using std::string;
-
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
@@ -19,6 +17,15 @@ using std::string;
 #define dout_subsys ceph_subsys_leveldb
 #undef dout_prefix
 #define dout_prefix *_dout << "leveldb: "
+
+using std::list;
+using std::string;
+using std::ostream;
+using std::pair;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
 
 class CephLevelDBLogger : public leveldb::Logger {
   CephContext *cct;
@@ -170,11 +177,6 @@ int LevelDBStore::_test_init(const string& dir)
 LevelDBStore::~LevelDBStore()
 {
   close();
-  delete logger;
-
-  // Ensure db is destroyed before dependent db_cache and filterpolicy
-  db.reset();
-  delete ceph_logger;
 }
 
 void LevelDBStore::close()
@@ -190,8 +192,15 @@ void LevelDBStore::close()
     compact_queue_lock.unlock();
   }
 
-  if (logger)
+  if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
+  }
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  db.reset();
+  delete ceph_logger;
 }
 
 int LevelDBStore::repair(std::ostream &out)

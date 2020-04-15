@@ -47,7 +47,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   //
   // REQUIRES: External synchronization
   rocksdb::Status Read(size_t n, rocksdb::Slice* result, char* scratch) override {
-    int r = fs->read(h, &h->buf, h->buf.pos, n, NULL, scratch);
+    int r = fs->read(h, h->buf.pos, n, NULL, scratch);
     ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
@@ -69,6 +69,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    h->buf.invalidate_cache(offset, length);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -123,7 +124,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
 
   // Readahead the file starting from offset by n bytes for caching.
   rocksdb::Status Prefetch(uint64_t offset, size_t n) override {
-    fs->read(h, &h->buf, offset, n, nullptr, nullptr);
+    fs->read(h, offset, n, nullptr, nullptr);
     return rocksdb::Status::OK();
   }
 
@@ -140,6 +141,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    h->buf.invalidate_cache(offset, length);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -255,6 +257,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   // If the system is not caching the file contents, then this is a noop.
   // This call has no effect on dirty pages in the cache.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    fs->fsync(h);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -299,7 +302,7 @@ class BlueRocksDirectory : public rocksdb::Directory {
   // Fsync directory. Can be called concurrently from multiple threads.
   rocksdb::Status Fsync() override {
     // it is sufficient to flush the log.
-    fs->sync_metadata();
+    fs->sync_metadata(false);
     return rocksdb::Status::OK();
   }
 };

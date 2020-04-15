@@ -160,17 +160,16 @@ seastar::future<> CompoundPeeringRequest::start()
 	boost::static_pointer_cast<MOSDPGCreate2>(m));
     }());
 
-  add_blocker(blocker.get());
   IRef ref = this;
   logger().info("{}: about to fork future", *this);
-  return state->promise.get_future().then(
-    [this, blocker=std::move(blocker)](auto &&ctx) {
-      clear_blocker(blocker.get());
-      logger().info("{}: sub events complete", *this);
-      return osd.get_shard_services().dispatch_context_messages(std::move(ctx));
-    }).then([this, ref=std::move(ref)] {
-      logger().info("{}: complete", *this);
-    });
+  return with_blocking_future(
+    blocker->make_blocking_future(state->promise.get_future())
+  ).then([this, blocker=std::move(blocker)](auto &&ctx) {
+    logger().info("{}: sub events complete", *this);
+    return osd.get_shard_services().dispatch_context_messages(std::move(ctx));
+  }).then([this, ref=std::move(ref)] {
+    logger().info("{}: complete", *this);
+  });
 }
 
 } // namespace crimson::osd

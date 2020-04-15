@@ -1,7 +1,6 @@
 """
 ceph manager -- Thrasher and CephManager objects
 """
-from cStringIO import StringIO
 from functools import wraps
 import contextlib
 import random
@@ -14,21 +13,25 @@ import logging
 import threading
 import traceback
 import os
+import six
+
+from io import BytesIO
+from six import StringIO
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
-from util.rados import cmd_erasure_code_profile
-from util import get_remote
+from tasks.util.rados import cmd_erasure_code_profile
+from tasks.util import get_remote
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
 from tasks.thrasher import Thrasher
-import six
+from six import StringIO
 
 try:
     from subprocess import DEVNULL # py3k
 except ImportError:
-    DEVNULL = open(os.devnull, 'r+')
+    DEVNULL = open(os.devnull, 'r+')  # type: ignore
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
 
@@ -40,8 +43,6 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
     extra_args = []
     if name:
         extra_args = ['-n', name]
-    else:
-        extra_args = ['-c', '{}/{}.conf'.format(testdir, cluster_name)]
     return remote.run(
         args=[
             'sudo',
@@ -49,7 +50,6 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
             '--image', ctx.ceph[cluster_name].image,
             'shell',
         ] + extra_args + [
-            '-k', '{}/{}.keyring'.format(testdir, cluster_name),
             '--fsid', ctx.ceph[cluster_name].fsid,
             '--',
         ] + args,
@@ -57,7 +57,7 @@ def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
     )
 
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
-    conf_fp = StringIO()
+    conf_fp = BytesIO()
     ctx.ceph[cluster].conf.write(conf_fp)
     conf_fp.seek(0)
     writes = ctx.cluster.run(
@@ -113,6 +113,17 @@ def mount_osd_data(ctx, remote, cluster, osd):
                 mnt,
             ]
             )
+
+
+def log_exc(func):
+    @wraps(func)
+    def wrapper(self):
+        try:
+            return func(self)
+        except:
+            self.log(traceback.format_exc())
+            raise
+    return wrapper
 
 
 class PoolType:
@@ -212,8 +223,8 @@ class OSDThrasher(Thrasher):
         allremotes = list(set(allremotes))
         for remote in allremotes:
             proc = remote.run(args=['type', cmd], wait=True,
-                              check_status=False, stdout=StringIO(),
-                              stderr=StringIO())
+                              check_status=False, stdout=BytesIO(),
+                              stderr=BytesIO())
             if proc.exitstatus != 0:
                 return False;
         return True;
@@ -230,7 +241,8 @@ class OSDThrasher(Thrasher):
         else:
             return remote.run(
                 args=['sudo', 'adjust-ulimits', 'ceph-objectstore-tool'] + cmd,
-                wait=True, check_status=False, stdout=StringIO(),
+                wait=True, check_status=False,
+                stdout=StringIO(),
                 stderr=StringIO())
 
     def kill_osd(self, osd=None, mark_down=False, mark_out=False):
@@ -275,8 +287,8 @@ class OSDThrasher(Thrasher):
                 with safe_while(sleep=15, tries=40, action="type ceph-objectstore-tool") as proceed:
                     while proceed():
                         proc = exp_remote.run(args=['type', 'ceph-objectstore-tool'],
-                                              wait=True, check_status=False, stdout=StringIO(),
-                                              stderr=StringIO())
+                                              wait=True, check_status=False, stdout=BytesIO(),
+                                              stderr=BytesIO())
                         if proc.exitstatus == 0:
                             break
                         log.debug("ceph-objectstore-tool binary not present, trying again")
@@ -294,14 +306,15 @@ class OSDThrasher(Thrasher):
                         ])
                     if proc.exitstatus == 0:
                         break
-                    elif proc.exitstatus == 1 and proc.stderr == "OSD has the store locked":
+                    elif (proc.exitstatus == 1 and
+                          proc.stderr.getvalue() == "OSD has the store locked"):
                         continue
                     else:
                         raise Exception("ceph-objectstore-tool: "
                                         "exp list-pgs failure with status {ret}".
                                         format(ret=proc.exitstatus))
 
-            pgs = proc.stdout.getvalue().split('\n')[:-1]
+            pgs = six.ensure_str(proc.stdout.getvalue()).split('\n')[:-1]
             if len(pgs) == 0:
                 self.log("No PGs found for osd.{osd}".format(osd=exp_osd))
                 return
@@ -366,7 +379,7 @@ class OSDThrasher(Thrasher):
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
                                     format(ret=proc.exitstatus))
-                pgs = proc.stdout.getvalue().split('\n')[:-1]
+                pgs = six.ensure_str(proc.stdout.getvalue()).split('\n')[:-1]
                 if pg not in pgs:
                     self.log("Moving pg {pg} from osd.{fosd} to osd.{tosd}".
                              format(pg=pg, fosd=exp_osd, tosd=imp_osd))
@@ -374,8 +387,21 @@ class OSDThrasher(Thrasher):
                         # Copy export file to the other machine
                         self.log("Transfer export file from {srem} to {trem}".
                                  format(srem=exp_remote, trem=imp_remote))
-                        tmpexport = Remote.get_file(exp_remote, exp_host_path)
-                        Remote.put_file(imp_remote, tmpexport, exp_host_path)
+                        # just in case an upgrade make /var/log/ceph unreadable by non-root,
+                        exp_remote.run(args=['sudo', 'chmod', '777',
+                                             '/var/log/ceph'])
+                        imp_remote.run(args=['sudo', 'chmod', '777',
+                                             '/var/log/ceph'])
+                        tmpexport = Remote.get_file(exp_remote, exp_host_path,
+                                                    sudo=True)
+                        if exp_host_path != exp_path:
+                            # push to /var/log/ceph, then rename (we can't
+                            # chmod 777 the /var/log/ceph/$fsid mountpoint)
+                            Remote.put_file(imp_remote, tmpexport, exp_path)
+                            imp_remote.run(args=[
+                                'sudo', 'mv', exp_path, exp_host_path])
+                        else:
+                            Remote.put_file(imp_remote, tmpexport, exp_host_path)
                         os.remove(tmpexport)
                 else:
                     # Can't move the pg after all
@@ -428,9 +454,10 @@ class OSDThrasher(Thrasher):
                                '--journal-path', JPATH.format(id=imp_osd),
                            ])
                            + " --op apply-layout-settings --pool " + pool).format(id=osd)
-                    proc = imp_remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
-                    output = proc.stderr.getvalue()
-                    if 'Couldn\'t find pool' in output:
+                    proc = imp_remote.run(args=cmd,
+                                          wait=True, check_status=False,
+                                          stderr=StringIO())
+                    if 'Couldn\'t find pool' in proc.stderr.getvalue():
                         continue
                     if proc.exitstatus:
                         raise Exception("ceph-objectstore-tool apply-layout-settings"
@@ -750,6 +777,8 @@ class OSDThrasher(Thrasher):
         """
         if pool is None:
             pool = self.ceph_manager.get_pool()
+            if not pool:
+                return
             force = False
         else:
             force = True
@@ -1052,16 +1081,6 @@ class OSDThrasher(Thrasher):
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.
 
-    def log_exc(func):
-        @wraps(func)
-        def wrapper(self):
-            try:
-                return func(self)
-            except:
-                self.log(traceback.format_exc())
-                raise
-        return wrapper
-
     @log_exc
     def do_sighup(self):
         """
@@ -1221,8 +1240,8 @@ class ObjectStoreTool:
             self.pgid = self.manager.get_object_pg_with_shard(self.pool,
                                                               self.object_name,
                                                               self.osd)
-        self.remote = self.manager.ctx.\
-            cluster.only('osd.{o}'.format(o=self.osd)).remotes.keys()[0]
+        self.remote = next(iter(self.manager.ctx.\
+            cluster.only('osd.{o}'.format(o=self.osd)).remotes.keys()))
         path = self.manager.get_filepath().format(id=self.osd)
         self.paths = ("--data-path {path} --journal-path {path}/journal".
                       format(path=path))
@@ -1251,7 +1270,7 @@ class ObjectStoreTool:
 
     def run(self, options, args, stdin=None, stdout=None):
         if stdout is None:
-            stdout = StringIO()
+            stdout = BytesIO()
         self.manager.kill_osd(self.osd)
         cmd = self.build_cmd(options, args, stdin)
         self.manager.log(cmd)
@@ -1259,11 +1278,12 @@ class ObjectStoreTool:
             proc = self.remote.run(args=['bash', '-e', '-x', '-c', cmd],
                                    check_status=False,
                                    stdout=stdout,
-                                   stderr=StringIO())
+                                   stderr=BytesIO())
             proc.wait()
             if proc.exitstatus != 0:
                 self.manager.log("failed with " + str(proc.exitstatus))
-                error = proc.stdout.getvalue() + " " + proc.stderr.getvalue()
+                error = six.ensure_str(proc.stdout.getvalue())  + " " + \
+                        six.ensure_str(proc.stderr.getvalue())
                 raise Exception(error)
         finally:
             if self.do_revive:
@@ -1322,7 +1342,7 @@ class CephManager:
         if self.cephadm:
             proc = shell(self.ctx, self.cluster, self.controller,
                          args=['ceph'] + list(args),
-                         stdout=StringIO())
+                         stdout=BytesIO())
         else:
             testdir = teuthology.get_testdir(self.ctx)
             ceph_args = [
@@ -1335,13 +1355,14 @@ class CephManager:
                 'ceph',
                 '--cluster',
                 self.cluster,
+                '--log-early',
             ]
             ceph_args.extend(args)
             proc = self.controller.run(
                 args=ceph_args,
-                stdout=StringIO(),
+                stdout=BytesIO(),
             )
-        return proc.stdout.getvalue()
+        return six.ensure_str(proc.stdout.getvalue())
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
@@ -1372,7 +1393,7 @@ class CephManager:
 
     def run_ceph_w(self, watch_channel=None):
         """
-        Execute "ceph -w" in the background with stdout connected to a StringIO,
+        Execute "ceph -w" in the background with stdout connected to a BytesIO,
         and return the RemoteProcess.
 
         :param watch_channel: Specifies the channel to be watched. This can be
@@ -1799,9 +1820,9 @@ class CephManager:
         """
         Get osd statuses sorted by states that the osds are in.
         """
-        osd_lines = filter(
+        osd_lines = list(filter(
             lambda x: x.startswith('osd.') and (("up" in x) or ("down" in x)),
-            self.raw_osd_status().split('\n'))
+            self.raw_osd_status().split('\n')))
         self.log(osd_lines)
         in_osds = [int(i[4:].split()[0])
                    for i in filter(lambda x: " in " in x, osd_lines)]
@@ -1945,7 +1966,7 @@ class CephManager:
         """
         with self.lock:
             if self.pools:
-                return random.choice(self.pools.keys())
+                return random.sample(self.pools.keys(), 1)[0]
 
     def get_pool_pg_num(self, pool_name):
         """
@@ -2162,13 +2183,13 @@ class CephManager:
                 ret[status] += 1
         return ret
 
-    @wait_for_pg_stats
+    @wait_for_pg_stats # type: ignore
     def with_pg_state(self, pool, pgnum, check):
         pgstr = self.get_pgid(pool, pgnum)
         stats = self.get_single_pg_stats(pgstr)
         assert(check(stats['state']))
 
-    @wait_for_pg_stats
+    @wait_for_pg_stats # type: ignore
     def with_pg(self, pool, pgnum, check):
         pgstr = self.get_pgid(pool, pgnum)
         stats = self.get_single_pg_stats(pgstr)

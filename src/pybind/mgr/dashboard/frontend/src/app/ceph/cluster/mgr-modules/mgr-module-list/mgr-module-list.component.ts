@@ -52,6 +52,14 @@ export class MgrModuleListComponent {
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
+      },
+      {
+        name: this.i18n('Always-On'),
+        prop: 'always_on',
+        isHidden: true,
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.checkIcon
       }
     ];
     const getModuleUri = () =>
@@ -139,6 +147,8 @@ export class MgrModuleListComponent {
         return this.i18n('This Manager module is always on.');
       }
     }
+
+    return undefined;
   }
 
   /**

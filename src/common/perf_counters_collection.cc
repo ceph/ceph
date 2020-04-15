@@ -2,6 +2,7 @@
 #include "common/ceph_mutex.h"
 #include "common/ceph_context.h"
 
+namespace ceph::common {
 /* PerfcounterCollection hold the lock for PerfCounterCollectionImp */
 PerfCountersCollection::PerfCountersCollection(CephContext *cct)
   : m_cct(cct),
@@ -58,3 +59,4 @@ void PerfCountersDeleter::operator()(PerfCounters* p) noexcept
   delete p;
 }
 
+}

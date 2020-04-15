@@ -23,7 +23,7 @@ describe('NfsFormClientComponent', () => {
     const formBuilder = TestBed.get(CdFormBuilder);
     component = fixture.componentInstance;
 
-    component.form = this.nfsForm = new CdFormGroup({
+    component.form = new CdFormGroup({
       access_type: new FormControl(''),
       clients: formBuilder.array([]),
       squash: new FormControl('')

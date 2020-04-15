@@ -74,9 +74,8 @@ or find out if a ``tox.ini`` exists.
 
 Currently the following modules use tox:
 
-- Ansible (``./src/pybind/mgr/ansible``)
+- Cephadm (``./src/pybind/mgr/cephadm``)
 - Insights (``./src/pybind/mgr/insights``)
-- Orchestrator cli (``./src/pybind/mgr/orchestrator_cli``)
 - Manager core (``./src/pybind/mgr``)
 - Dashboard (``./src/pybind/mgr/dashboard``)
 - Python common (``./src/python-common/tox.ini``)

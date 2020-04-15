@@ -119,8 +119,30 @@ function TEST_network_ping_test2() {
     run_osd $dir 2 || return 1
 
     sleep 5
+    ceph osd crush add-bucket dc1 datacenter
+    ceph osd crush add-bucket dc2 datacenter
+    ceph osd crush add-bucket dc3 datacenter
+    ceph osd crush add-bucket rack1 rack
+    ceph osd crush add-bucket rack2 rack
+    ceph osd crush add-bucket rack3 rack
+    ceph osd crush add-bucket host1 host
+    ceph osd crush add-bucket host2 host
+    ceph osd crush add-bucket host3 host
+    ceph osd crush move dc1 root=default
+    ceph osd crush move dc2 root=default
+    ceph osd crush move dc3 root=default
+    ceph osd crush move rack1 datacenter=dc1
+    ceph osd crush move rack2 datacenter=dc2
+    ceph osd crush move rack3 datacenter=dc3
+    ceph osd crush move host1 rack=rack1
+    ceph osd crush move host2 rack=rack2
+    ceph osd crush move host3 rack=rack3
+    ceph osd crush set osd.0 1.0 host=host1
+    ceph osd crush set osd.1 1.0 host=host2
+    ceph osd crush set osd.2 1.0 host=host3
+    ceph osd crush rule create-simple myrule default host firstn
 
-    create_pool foo 16
+    create_pool foo 16 16 replicated myrule
 
     # write some objects
     timeout 20 rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
@@ -130,11 +152,13 @@ function TEST_network_ping_test2() {
     flush_pg_stats
 
     ceph health | tee $dir/health
-    grep -q "Long heartbeat" $dir/health || return 1
+    grep -q "Slow OSD heartbeats" $dir/health || return 1
 
     ceph health detail | tee $dir/health
     grep -q "OSD_SLOW_PING_TIME_BACK" $dir/health || return 1
     grep -q "OSD_SLOW_PING_TIME_FRONT" $dir/health || return 1
+    grep -q "Slow OSD heartbeats on front from osd[.][0-2] [[]dc[1-3],rack[1-3][]] \
+to osd[.][0-2] [[]dc[1-3],rack[1-3][]]" $dir/health || return 1
     rm -f $dir/health
 }
 

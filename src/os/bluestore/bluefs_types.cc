@@ -7,6 +7,12 @@
 #include "include/uuid.h"
 #include "include/stringify.h"
 
+using std::list;
+using std::ostream;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 // bluefs_extent_t
 void bluefs_extent_t::dump(Formatter *f) const
 {
@@ -204,7 +210,7 @@ void bluefs_transaction_t::decode(bufferlist::const_iterator& p)
   DECODE_FINISH(p);
   uint32_t actual = op_bl.crc32c(-1);
   if (actual != crc)
-    throw buffer::malformed_input("bad crc " + stringify(actual)
+    throw ceph::buffer::malformed_input("bad crc " + stringify(actual)
 				  + " expected " + stringify(crc));
 }
 

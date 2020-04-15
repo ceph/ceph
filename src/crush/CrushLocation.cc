@@ -9,11 +9,14 @@
 #include "include/str_list.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/common_fwd.h"
 #include "include/compat.h"
 
 #include "common/SubProcess.h"
 
 #include <vector>
+
+namespace TOPNSPC::crush {
 
 int CrushLocation::update_from_conf()
 {
@@ -89,7 +92,7 @@ int CrushLocation::update_from_hook()
     return ret;
 
   std::string out;
-  bl.copy(0, bl.length(), out);
+  bl.begin().copy(bl.length(), out);
   out.erase(out.find_last_not_of(" \n\r\t")+1);
   return _parse(out);
 }
@@ -105,7 +108,7 @@ int CrushLocation::init_on_startup()
 
   // start with a sane default
   char hostname[HOST_NAME_MAX + 1];
-  int r = gethostname(hostname, sizeof(hostname)-1);
+  int r = gethostname(hostname, sizeof(hostname));
   if (r < 0)
     strcpy(hostname, "unknown_host");
   // use short hostname
@@ -141,4 +144,6 @@ std::ostream& operator<<(std::ostream& os, const CrushLocation& loc)
     os << '"' << type << '=' << pos << '"';
   }
   return os;
+}
+
 }

@@ -34,7 +34,7 @@ describe('LanguageSelectorComponent', () => {
     expect(listLocales()).toEqual([]);
   });
 
-  const expectLanguageChange = (lang) => {
+  const expectLanguageChange = (lang: string) => {
     component.changeLanguage(lang);
     const cookie = document.cookie.split(';').filter((item) => item.includes(`cd-lang=${lang}`));
     expect(cookie.length).toBe(1);

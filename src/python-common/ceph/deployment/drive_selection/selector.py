@@ -23,10 +23,18 @@ class DriveSelection(object):
         self.disks = disks.copy()
         self.spec = spec
 
-        self._data = self.assign_devices(self.spec.data_devices)
-        self._wal = self.assign_devices(self.spec.wal_devices)
-        self._db = self.assign_devices(self.spec.db_devices)
-        self._jornal = self.assign_devices(self.spec.journal_devices)
+        if self.spec.data_devices.paths:  # type: ignore
+            # re: type: ignore there is *always* a path attribute assigned to DeviceSelection
+            # it's just None if actual drivegroups are used
+            self._data = self.spec.data_devices.paths  # type: ignore
+            self._db = []  # type: List
+            self._wal = []  # type: List
+            self._journal = []  # type: List
+        else:
+            self._data = self.assign_devices(self.spec.data_devices)
+            self._wal = self.assign_devices(self.spec.wal_devices)
+            self._db = self.assign_devices(self.spec.db_devices)
+            self._journal = self.assign_devices(self.spec.journal_devices)
 
     def data_devices(self):
         # type: () -> List[Device]
@@ -42,7 +50,7 @@ class DriveSelection(object):
 
     def journal_devices(self):
         # type: () -> List[Device]
-        return self._jornal
+        return self._journal
 
     @staticmethod
     def _limit_reached(device_filter, len_devices,
@@ -71,7 +79,7 @@ class DriveSelection(object):
     @staticmethod
     def _has_mandatory_idents(disk):
         # type: (Device) -> bool
-        """ Check for mandatory indentification fields
+        """ Check for mandatory identification fields
         """
         if disk.path:
             logger.debug("Found matching disk: {}".format(disk.path))
@@ -95,47 +103,51 @@ class DriveSelection(object):
 
         return a sorted(by path) list of devices
         """
-        if device_filter is None:
+
+        if not device_filter:
             logger.debug('device_filter is None')
             return []
+
+        if not self.spec.data_devices:
+            logger.debug('data_devices is None')
+            return []
+
         devices = list()  # type: List[Device]
-        for _filter in FilterGenerator(device_filter):
-            if not _filter.is_matchable:
+        for disk in self.disks:
+            logger.debug("Processing disk {}".format(disk.path))
+
+            if not disk.available:
                 logger.debug(
-                    "Ignoring disk {}. Filter is not matchable".format(
-                        device_filter))
+                    "Ignoring disk {}. Disk is not available".format(disk.path))
                 continue
 
-            for disk in self.disks.devices:
-                logger.debug("Processing disk {}".format(disk.path))
-
-                # continue criterias
-                assert _filter.matcher is not None
-                if not _filter.matcher.compare(disk):
-                    logger.debug(
-                        "Ignoring disk {}. Filter did not match".format(
-                            disk.path))
-                    continue
-
-                if not self._has_mandatory_idents(disk):
-                    logger.debug(
-                        "Ignoring disk {}. Missing mandatory idents".format(
-                            disk.path))
-                    continue
-
-                # break on this condition.
-                if self._limit_reached(device_filter, len(devices), disk.path):
-                    logger.debug("Ignoring disk {}. Limit reached".format(
+            if not self._has_mandatory_idents(disk):
+                logger.debug(
+                    "Ignoring disk {}. Missing mandatory idents".format(
                         disk.path))
-                    break
+                continue
 
-                if disk not in devices:
-                    logger.debug('Adding disk {}'.format(disk.path))
-                    devices.append(disk)
+            # break on this condition.
+            if self._limit_reached(device_filter, len(devices), disk.path):
+                logger.debug("Ignoring disk {}. Limit reached".format(
+                    disk.path))
+                break
+
+            if disk in devices:
+                continue
+
+            if not all(m.compare(disk) for m in FilterGenerator(device_filter)):
+                logger.debug(
+                    "Ignoring disk {}. Filter did not match".format(
+                        disk.path))
+                continue
+
+            logger.debug('Adding disk {}'.format(disk.path))
+            devices.append(disk)
 
         # This disk is already taken and must not be re-assigned.
         for taken_device in devices:
-            if taken_device in self.disks.devices:
-                self.disks.devices.remove(taken_device)
+            if taken_device in self.disks:
+                self.disks.remove(taken_device)
 
         return sorted([x for x in devices], key=lambda dev: dev.path)

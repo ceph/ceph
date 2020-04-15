@@ -121,7 +121,12 @@ Release timeline
 
 .. ceph_timeline:: releases.yml development nautilus mimic luminous kraken jewel infernalis hammer giant firefly emperor
 
+.. _Octopus: ../octopus
+.. _15.2.0: ../octopus#v15-2-0-octopus
+
 .. _Nautilus: ../nautilus
+.. _14.2.8: ../nautilus#v14-2-8-nautilus
+.. _14.2.7: ../nautilus#v14-2-7-nautilus
 .. _14.2.6: ../nautilus#v14-2-6-nautilus
 .. _14.2.5: ../nautilus#v14-2-5-nautilus
 .. _14.2.4: ../nautilus#v14-2-4-nautilus
@@ -142,6 +147,7 @@ Release timeline
 .. _13.2.0: ../mimic#v13-2-0-mimic
 
 .. _Luminous: ../luminous
+.. _12.2.13: ../luminous#v12-2-13-luminous
 .. _12.2.12: ../luminous#v12-2-12-luminous
 .. _12.2.11: ../luminous#v12-2-11-luminous
 .. _12.2.10: ../luminous#v12-2-10-luminous

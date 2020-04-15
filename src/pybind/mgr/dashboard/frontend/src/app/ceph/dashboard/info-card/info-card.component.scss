@@ -1,4 +1,4 @@
-@import 'styles';
+@import 'defaults.scss';
 
 $card-font-min-width: 320px;
 $card-font-max-width: 2048px;
@@ -7,7 +7,6 @@ $card-font-max-size: 21px;
 
 .card {
   height: 100%;
-  @extend .pb-2;
   border: 0.5px solid $color-info-card-border;
   border-radius: 3px;
   box-shadow: 0 1px 1px $color-shadow-gray;
@@ -25,10 +24,6 @@ $card-font-max-size: 21px;
       position: absolute;
       left: 0;
       top: 0;
-    }
-
-    .card-text {
-      @extend .pt-2;
     }
   }
 }

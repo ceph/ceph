@@ -14,6 +14,7 @@
 #include "crimson/common/shared_lru.h"
 #include "osd/osd_types.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/osd_operations/osdop_params.h"
 
 struct hobject_t;
 class MOSDRepOpReply;
@@ -45,7 +46,6 @@ public:
 					   const ec_profile_t& ec_profile);
 
   using read_errorator = ll_read_errorator::extend<
-    crimson::ct_error::input_output_error,
     crimson::ct_error::object_corrupted>;
   read_errorator::future<ceph::bufferlist> read(
     const object_info_t& oi,
@@ -79,10 +79,10 @@ public:
     std::set<pg_shard_t> pg_shards,
     crimson::osd::ObjectContextRef &&obc,
     ceph::os::Transaction&& txn,
-    const MOSDOp& m,
+    const osd_op_params_t& osd_op_p,
     epoch_t min_epoch,
     epoch_t map_epoch,
-    eversion_t ver);
+    std::vector<pg_log_entry_t>&& log_entries);
   seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
     const hobject_t& start,
     uint64_t limit) const;
@@ -143,7 +143,7 @@ private:
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
 		      const hobject_t& hoid,
 		      ceph::os::Transaction&& txn,
-		      osd_reqid_t req_id,
+		      const osd_op_params_t& osd_op_p,
 		      epoch_t min_epoch, epoch_t max_epoch,
-		      eversion_t ver) = 0;
+		      std::vector<pg_log_entry_t>&& log_entries) = 0;
 };

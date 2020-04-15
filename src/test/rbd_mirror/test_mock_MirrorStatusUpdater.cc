@@ -168,7 +168,7 @@ public:
 
   void expect_mirror_status_update(
       const MirrorImageSiteStatuses& mirror_image_site_statuses,
-      const std::string& fsid, int r) {
+      const std::string& mirror_uuid, int r) {
     EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _))
       .WillOnce(Invoke([this](auto&&... args) {
           int r = m_mock_local_io_ctx->do_aio_operate(decltype(args)(args)...);
@@ -178,7 +178,7 @@ public:
 
     for (auto [global_image_id, mirror_image_status] :
            mirror_image_site_statuses) {
-      mirror_image_status.fsid = fsid;
+      mirror_image_status.mirror_uuid = mirror_uuid;
       expect_mirror_status_update(global_image_id, mirror_image_status, r);
       if (r < 0) {
         break;
@@ -541,11 +541,9 @@ TEST_F(TestMockMirrorStatusUpdater, ShutDownWhileUpdating) {
 }
 
 TEST_F(TestMockMirrorStatusUpdater, MirrorPeerSitePing) {
-  std::string fsid;
-  ASSERT_EQ(0, _rados->cluster_fsid(&fsid));
-
   MockMirrorStatusUpdater mock_mirror_status_updater(m_local_io_ctx,
-                                                     m_mock_threads, fsid);
+                                                     m_mock_threads,
+                                                     "mirror uuid");
   MockMirrorStatusWatcher* mock_mirror_status_watcher =
     new MockMirrorStatusWatcher();
 
@@ -567,7 +565,7 @@ TEST_F(TestMockMirrorStatusUpdater, MirrorPeerSitePing) {
   Context* update_task = nullptr;
   fire_timer_event(&timer_event, &update_task);
 
-  expect_mirror_status_update(mirror_image_site_statuses, fsid, 0);
+  expect_mirror_status_update(mirror_image_site_statuses, "mirror uuid", 0);
   update_task->complete(0);
 
   shut_down_mirror_status_updater(mock_mirror_status_updater,

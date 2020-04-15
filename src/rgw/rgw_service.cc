@@ -7,7 +7,9 @@
 #include "services/svc_bi_rados.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bucket_sobj.h"
+#include "services/svc_bucket_sync_sobj.h"
 #include "services/svc_cls.h"
+#include "services/svc_config_key_rados.h"
 #include "services/svc_datalog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
@@ -49,9 +51,11 @@ int RGWServices_Def::init(CephContext *cct,
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
+  bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
   bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
+  config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWSI_DataLog_RADOS>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
   meta = std::make_unique<RGWSI_Meta>(cct);
@@ -79,8 +83,13 @@ int RGWServices_Def::init(CephContext *cct,
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
-                    sync_modules.get());
+                    sync_modules.get(), bucket_sync_sobj.get());
+  bucket_sync_sobj->init(zone.get(),
+                         sysobj.get(),
+                         sysobj_cache.get(),
+                         bucket_sobj.get());
   cls->init(zone.get(), rados.get());
+  config_key_rados->init(rados.get());
   datalog_rados->init(zone.get(), cls.get());
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
@@ -89,7 +98,7 @@ int RGWServices_Def::init(CephContext *cct,
   notify->init(zone.get(), rados.get(), finisher.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
-  zone->init(sysobj.get(), rados.get(), sync_modules.get());
+  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());
@@ -151,6 +160,12 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
+  r = config_key_rados->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start config_key service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
   r = zone_utils->start();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start zone_utils service (" << cpp_strerror(-r) << dendl;
@@ -205,6 +220,12 @@ int RGWServices_Def::init(CephContext *cct,
     r = bucket_sobj->start();
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to start bucket service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = bucket_sync_sobj->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start bucket_sync service (" << cpp_strerror(-r) << dendl;
       return r;
     }
 
@@ -269,7 +290,11 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   bilog_rados = _svc.bilog_rados.get();
   bucket_sobj = _svc.bucket_sobj.get();
   bucket = bucket_sobj;
+  bucket_sync_sobj = _svc.bucket_sync_sobj.get();
+  bucket_sync = bucket_sync_sobj;
   cls = _svc.cls.get();
+  config_key_rados = _svc.config_key_rados.get();
+  config_key = config_key_rados;
   datalog_rados = _svc.datalog_rados.get();
   mdlog = _svc.mdlog.get();
   meta = _svc.meta.get();
@@ -335,6 +360,7 @@ int RGWCtlDef::init(RGWServices& svc)
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.bucket,
+                                svc.bucket_sync,
                                 svc.bi));
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
 
@@ -350,7 +376,8 @@ int RGWCtlDef::init(RGWServices& svc)
   user->init(bucket.get());
   bucket->init(user.get(),
                (RGWBucketMetadataHandler *)bucket_meta_handler,
-               (RGWBucketInstanceMetadataHandler *)bi_meta_handler);
+               (RGWBucketInstanceMetadataHandler *)bi_meta_handler,
+	       svc.datalog_rados->get_log());
 
   otp->init((RGWOTPMetadataHandler *)meta.otp.get());
 

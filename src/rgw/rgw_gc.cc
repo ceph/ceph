@@ -190,7 +190,7 @@ int RGWGC::remove(int index, int num_entries)
   return store->gc_operate(obj_names[index], &op);
 }
 
-int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
+int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
 {
   result.clear();
   string next_marker;
@@ -200,7 +200,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     std::list<cls_rgw_gc_obj_info> entries, queue_entries;
     int ret = 0;
 
-    if (! transitioned_objects_cache[*index] && ! check_queue) {
+    //processing_queue is set to true from previous iteration if the queue was under process and probably has more elements in it.
+    if (! transitioned_objects_cache[*index] && ! check_queue && ! processing_queue) {
       ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
       if (ret != -ENOENT && ret < 0) {
         return ret;
@@ -229,7 +230,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
         marker.clear();
       }
     }
-    if (transitioned_objects_cache[*index] || check_queue) {
+    if (transitioned_objects_cache[*index] || check_queue || processing_queue) {
+      processing_queue = false;
       ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[*index], marker, (max - result.size()) - entries.size(), expired_only, queue_entries, truncated, next_marker);
       if (ret < 0) {
         return ret;
@@ -255,6 +257,13 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     }
 
     if (result.size() == max) {
+      if (queue_entries.size() > 0 && *truncated) {
+        processing_queue = true;
+      } else {
+        processing_queue = false;
+        *index += 1; //move to next gc object
+      }
+
       /* close approximation, it might be that the next of the objects don't hold
        * anything, in this case truncated should have been false, but we can find
        * that out on the next iteration
@@ -264,6 +273,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     }
   }
   *truncated = false;
+  processing_queue = false;
 
   return 0;
 }

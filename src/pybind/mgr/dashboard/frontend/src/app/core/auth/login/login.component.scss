@@ -1,48 +1,24 @@
 @import 'defaults';
 
-::ng-deep .login {
-  height: 100vh;
-  color: $color-login-row-text;
-  background-color: $color-login-row-bg;
-  margin: 0 -30px;
-
-  header {
-    position: absolute;
-    width: 100vw;
-
-    .navbar {
-      padding: 1rem 2rem;
-
-      .dropdown-menu {
-        margin-top: 0.2rem;
-
-        li a {
-          &:hover {
-            background-color: $color-brand-teal;
-          }
-        }
-      }
-    }
+::ng-deep cd-login {
+  h1 {
+    margin: 0 0 30px 0;
   }
 
-  section {
-    display: inline-flex;
-    width: 100vw;
-    min-height: 100vh;
+  .btn-password,
+  .btn-password:focus,
+  .form-control,
+  .form-control:focus {
+    color: $color-password-toggle-text;
+    background-color: $color-password-toggle-bg;
+  }
 
-    h1 {
-      margin: 0 0 30px 0;
-    }
+  .form-control::placeholder {
+    color: $color-password-toggle-placeholder-text;
+  }
 
-    .btn-password,
-    .form-control {
-      color: $color-password-toggle-text;
-      background-color: $color-password-toggle-bg;
-    }
-
-    .btn-password:focus {
-      outline-color: $color-password-toggle-focus;
-    }
+  .btn-password:focus {
+    outline-color: $color-password-toggle-focus;
   }
 }
 

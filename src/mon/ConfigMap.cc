@@ -7,6 +7,35 @@
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
 
+using namespace std::literals;
+
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
+
 int MaskedOption::get_precision(const CrushWrapper *crush)
 {
   // 0 = most precise
@@ -174,6 +203,7 @@ bool ConfigMap::parse_mask(
   for (unsigned j = 0; j < split.size(); ++j) {
     auto& i = split[j];
     if (i == "global") {
+      *section = "global";
       continue;
     }
     size_t delim = i.find(':');

@@ -27,7 +27,7 @@
 #  include <openssl/err.h>
 #endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 
-namespace ceph::crypto::ssl {
+namespace TOPNSPC::crypto::ssl {
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static std::atomic_uint32_t crypto_refs;
@@ -166,42 +166,45 @@ void zeroize_for_security(void* const s, const size_t n) {
   OPENSSL_cleanse(s, n);
 }
 
-} // namespace ceph::crypto::openssl
+} // namespace TOPNSPC::crypto::openssl
 
 
-void ceph::crypto::init() {
-  ceph::crypto::ssl::init();
+namespace TOPNSPC::crypto {
+void init() {
+  ssl::init();
 }
 
-void ceph::crypto::shutdown([[maybe_unused]] const bool shared) {
-  ceph::crypto::ssl::shutdown();
+void shutdown([[maybe_unused]] const bool shared) {
+  ssl::shutdown();
 }
 
-void ceph::crypto::zeroize_for_security(void* const s, const size_t n) {
-  ceph::crypto::ssl::zeroize_for_security(s, n);
+void zeroize_for_security(void* const s, const size_t n) {
+  ssl::zeroize_for_security(s, n);
 }
 
-ceph::crypto::ssl::OpenSSLDigest::OpenSSLDigest(const EVP_MD * _type)
+ssl::OpenSSLDigest::OpenSSLDigest(const EVP_MD * _type)
   : mpContext(EVP_MD_CTX_create())
   , mpType(_type) {
   this->Restart();
 }
 
-ceph::crypto::ssl::OpenSSLDigest::~OpenSSLDigest() {
+ssl::OpenSSLDigest::~OpenSSLDigest() {
   EVP_MD_CTX_destroy(mpContext);
 }
 
-void ceph::crypto::ssl::OpenSSLDigest::Restart() {
+void ssl::OpenSSLDigest::Restart() {
   EVP_DigestInit_ex(mpContext, mpType, NULL);
 }
 
-void ceph::crypto::ssl::OpenSSLDigest::Update(const unsigned char *input, size_t length) {
+void ssl::OpenSSLDigest::Update(const unsigned char *input, size_t length) {
   if (length) {
     EVP_DigestUpdate(mpContext, const_cast<void *>(reinterpret_cast<const void *>(input)), length);
   }
 }
 
-void ceph::crypto::ssl::OpenSSLDigest::Final(unsigned char *digest) {
+void ssl::OpenSSLDigest::Final(unsigned char *digest) {
   unsigned int s;
   EVP_DigestFinal_ex(mpContext, digest, &s);
+}
+
 }

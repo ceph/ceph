@@ -15,7 +15,7 @@
 #ifndef CEPH_WORKQUEUE_H
 #define CEPH_WORKQUEUE_H
 
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 // for ObjectStore.h
 struct ThreadPool {
   struct TPHandle {
@@ -35,10 +35,10 @@ struct ThreadPool {
 #include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 #include "common/Thread.h"
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include "common/HBHandle.h"
 
-class CephContext;
 
 /// Pool of threads that share work submitted to multiple work queues.
 class ThreadPool : public md_config_obs_t {

@@ -142,17 +142,18 @@ static void get_bucket_instance_ids(const RGWBucketInfo& bucket_info,
 {
   const rgw_bucket& bucket = bucket_info.bucket;
   string plain_id = bucket.name + ":" + bucket.bucket_id;
-  if (!bucket_info.num_shards) {
+
+  if (!bucket_info.layout.current_index.layout.normal.num_shards) {
     (*result)[0] = plain_id;
   } else {
     char buf[16];
     if (shard_id < 0) {
-      for (uint32_t i = 0; i < bucket_info.num_shards; ++i) {
+      for (uint32_t i = 0; i < bucket_info.layout.current_index.layout.normal.num_shards; ++i) {
         snprintf(buf, sizeof(buf), ":%d", i);
         (*result)[i] = plain_id + buf;
       }
     } else {
-      if ((uint32_t)shard_id > bucket_info.num_shards) {
+      if ((uint32_t)shard_id > bucket_info.layout.current_index.layout.normal.num_shards) {
         return;
       }
       snprintf(buf, sizeof(buf), ":%d", shard_id);
@@ -176,7 +177,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
     return ret;
   }
 
-  get_bucket_index_objects(bucket_oid_base, bucket_info.num_shards, bucket_objs, shard_id);
+  get_bucket_index_objects(bucket_oid_base, bucket_info.layout.current_index.layout.normal.num_shards, bucket_objs, shard_id);
   if (bucket_instance_ids) {
     get_bucket_instance_ids(bucket_info, shard_id, bucket_instance_ids);
   }
@@ -245,8 +246,8 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 
   string oid;
 
-  ret = get_bucket_index_object(bucket_oid_base, obj_key, bucket_info.num_shards,
-        (RGWBucketInfo::BIShardsHashType)bucket_info.bucket_index_shard_hash_type, &oid, shard_id);
+  ret = get_bucket_index_object(bucket_oid_base, obj_key, bucket_info.layout.current_index.layout.normal.num_shards,
+        (RGWBucketInfo::BIShardsHashType)bucket_info.layout.current_index.layout.normal.hash_type, &oid, shard_id);
   if (ret < 0) {
     ldout(cct, 10) << "get_bucket_index_object() returned ret=" << ret << dendl;
     return ret;
@@ -272,7 +273,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 
   string oid;
 
-  get_bucket_index_object(bucket_oid_base, bucket_info.num_shards,
+  get_bucket_index_object(bucket_oid_base, bucket_info.layout.current_index.layout.normal.num_shards,
                           shard_id, &oid);
 
   *bucket_obj = svc.rados->obj(index_pool, oid);
@@ -322,7 +323,7 @@ int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
   dir_oid.append(bucket_info.bucket.bucket_id);
 
   map<int, string> bucket_objs;
-  get_bucket_index_objects(dir_oid, bucket_info.num_shards, &bucket_objs);
+  get_bucket_index_objects(dir_oid, bucket_info.layout.current_index.layout.normal.num_shards, &bucket_objs);
 
   return CLSRGWIssueBucketIndexInit(index_pool.ioctx(),
 				    bucket_objs,
@@ -342,7 +343,7 @@ int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info)
   dir_oid.append(bucket_info.bucket.bucket_id);
 
   std::map<int, std::string> bucket_objs;
-  get_bucket_index_objects(dir_oid, bucket_info.num_shards, &bucket_objs);
+  get_bucket_index_objects(dir_oid, bucket_info.layout.current_index.layout.normal.num_shards, &bucket_objs);
 
   return CLSRGWIssueBucketIndexClean(index_pool.ioctx(),
 				     bucket_objs,
@@ -411,12 +412,15 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info)
 {
-  if (orig_info.datasync_flag_enabled() != info.datasync_flag_enabled()) {
-    int shards_num = info.num_shards? info.num_shards : 1;
-    int shard_id = info.num_shards? 0 : -1;
+  bool new_sync_enabled = info.datasync_flag_enabled();
+  bool old_sync_enabled = orig_info.datasync_flag_enabled();
+
+  if (old_sync_enabled != new_sync_enabled) {
+    int shards_num = info.layout.current_index.layout.normal.num_shards? info.layout.current_index.layout.normal.num_shards : 1;
+    int shard_id = info.layout.current_index.layout.normal.num_shards? 0 : -1;
 
     int ret;
-    if (!info.datasync_flag_enabled()) {
+    if (!new_sync_enabled) {
       ret = svc.bilog->log_stop(info, -1);
     } else {
       ret = svc.bilog->log_start(info, -1);
@@ -427,7 +431,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
     }
 
     for (int i = 0; i < shards_num; ++i, ++shard_id) {
-      ret = svc.datalog_rados->add_entry(info.bucket, shard_id);
+      ret = svc.datalog_rados->add_entry(info, shard_id);
       if (ret < 0) {
         lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
         return ret;

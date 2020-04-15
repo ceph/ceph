@@ -44,7 +44,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
 		     cct->_conf.get_val<std::string>("ms_type"),
 		     entity_name_t::MGR(),
 		     "mgr",
-		     getpid(),
+		     Messenger::get_pid_nonce(),
 		     0)),
   objecter{g_ceph_context, client_messenger.get(), &monc, NULL, 0, 0},
   client{client_messenger.get(), &monc, &objecter},

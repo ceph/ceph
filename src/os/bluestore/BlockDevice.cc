@@ -42,6 +42,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev "
 
+using std::string;
+
 void IOContext::aio_wait()
 {
   std::unique_lock l(lock);
@@ -125,12 +127,13 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
     return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
   }
 #endif
+#ifndef WITH_SEASTAR
 #if defined(HAVE_SPDK)
   if (type == "ust-nvme") {
     return new NVMEDevice(cct, cb, cbpriv);
   }
 #endif
-
+#endif
 
   derr << __func__ << " unknown backend " << type << dendl;
   ceph_abort();

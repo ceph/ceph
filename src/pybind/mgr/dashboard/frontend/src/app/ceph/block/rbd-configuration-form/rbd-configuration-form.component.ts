@@ -49,12 +49,14 @@ export class RbdConfigurationFormComponent implements OnInit {
     });
 
     if (this.initializeData) {
-      this.initializeData.subscribe((data) => {
+      this.initializeData.subscribe((data: Record<string, any>) => {
         this.initialData = data.initialData;
         const dataType = data.sourceType;
 
         this.rbdConfigurationService.getWritableOptionFields().forEach((option) => {
-          const optionData = data.initialData.filter((entry) => entry.name === option.name).pop();
+          const optionData = data.initialData
+            .filter((entry: Record<string, any>) => entry.name === option.name)
+            .pop();
           if (optionData && optionData['source'] === dataType) {
             this.form.get(`configuration.${option.name}`).setValue(optionData['value']);
           }
@@ -77,7 +79,7 @@ export class RbdConfigurationFormComponent implements OnInit {
     const result = {};
 
     this.rbdConfigurationService.getWritableOptionFields().forEach((config) => {
-      const control = this.form.get('configuration').get(config.name);
+      const control: any = this.form.get('configuration').get(config.name);
       const dirty = control.dirty;
 
       if (this.initialData && this.initialData[config.name] === control.value) {
@@ -131,7 +133,7 @@ export class RbdConfigurationFormComponent implements OnInit {
    * Reset the value. The inherited value will be used instead.
    */
   reset(optionName: string) {
-    const formControl = this.form.get('configuration').get(optionName);
+    const formControl: any = this.form.get('configuration').get(optionName);
     if (formControl.disabled) {
       formControl.setValue(formControl['previousValue'] || 0);
       formControl.enable();
@@ -150,7 +152,7 @@ export class RbdConfigurationFormComponent implements OnInit {
     return this.form.get('configuration').get(optionName).disabled;
   }
 
-  toggleSectionVisibility(className) {
+  toggleSectionVisibility(className: string) {
     this.sectionVisibility[className] = !this.sectionVisibility[className];
   }
 }

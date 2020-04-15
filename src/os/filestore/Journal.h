@@ -19,13 +19,13 @@
 #include <errno.h>
 
 #include "include/buffer_fwd.h"
+#include "include/common_fwd.h"
 #include "include/Context.h"
 #include "common/Finisher.h"
 #include "common/TrackedOp.h"
 #include "os/ObjectStore.h"
 #include "common/zipkin_trace.h"
 
-class PerfCounters;
 
 class Journal {
 protected:
@@ -52,8 +52,8 @@ public:
 
   virtual void flush() = 0;
 
-  virtual void get_devices(set<string> *ls) {}
-  virtual void collect_metadata(map<string,string> *pm) {}
+  virtual void get_devices(std::set<std::string> *ls) {}
+  virtual void collect_metadata(std::map<std::string,std::string> *pm) {}
   /**
    * reserve_throttle_and_backoff
    *
@@ -62,14 +62,14 @@ public:
    */
   virtual void reserve_throttle_and_backoff(uint64_t count) = 0;
 
-  virtual int dump(ostream& out) { return -EOPNOTSUPP; }
+  virtual int dump(std::ostream& out) { return -EOPNOTSUPP; }
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
 
   // writes
   virtual bool is_writeable() = 0;
   virtual int make_writeable() = 0;
-  virtual void submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
+  virtual void submit_entry(uint64_t seq, ceph::buffer::list& e, uint32_t orig_len,
 			    Context *oncommit,
 			    TrackedOpRef osd_op = TrackedOpRef()) = 0;
   virtual void commit_start(uint64_t seq) = 0;
@@ -77,13 +77,13 @@ public:
 
   /// Read next journal entry - asserts on invalid journal
   virtual bool read_entry(
-    bufferlist &bl, ///< [out] payload on successful read
+    ceph::buffer::list &bl, ///< [out] payload on successful read
     uint64_t &seq   ///< [in,out] sequence number on last successful read
     ) = 0; ///< @return true on successful read, false on journal end
 
   virtual bool should_commit_now() = 0;
 
-  virtual int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) = 0;
+  virtual int prepare_entry(std::vector<ObjectStore::Transaction>& tls, ceph::buffer::list* tbl) = 0;
 
   virtual off64_t get_journal_size_estimate() { return 0; }
 

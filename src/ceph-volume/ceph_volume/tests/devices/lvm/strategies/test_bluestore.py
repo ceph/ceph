@@ -14,7 +14,7 @@ class TestSingleType(object):
         computed_osd = bluestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 100
         assert computed_osd['data']['parts'] == 1
-        assert computed_osd['data']['human_readable_size'] == '5.66 GB'
+        assert computed_osd['data']['human_readable_size'] == '5.00 GB'
         assert computed_osd['data']['path'] == '/dev/sda'
 
     def test_sdd_device_is_large_enough(self, fakedevice, factory):
@@ -26,7 +26,7 @@ class TestSingleType(object):
         computed_osd = bluestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 100
         assert computed_osd['data']['parts'] == 1
-        assert computed_osd['data']['human_readable_size'] == '5.66 GB'
+        assert computed_osd['data']['human_readable_size'] == '5.00 GB'
         assert computed_osd['data']['path'] == '/dev/sda'
 
     def test_device_cannot_have_many_osds_per_device(self, fakedevice, factory):

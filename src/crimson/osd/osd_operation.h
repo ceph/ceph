@@ -115,18 +115,7 @@ public:
  */
 class Operation : public boost::intrusive_ref_counter<
   Operation, boost::thread_unsafe_counter> {
-  friend class OperationRegistry;
-  registry_hook_t registry_hook;
-
-  std::vector<Blocker*> blockers;
-  uint64_t id = 0;
-  void set_id(uint64_t in_id) {
-    id = in_id;
-  }
-protected:
-  virtual void dump_detail(ceph::Formatter *f) const = 0;
-
-public:
+ public:
   uint64_t get_id() const {
     return id;
   }
@@ -134,17 +123,6 @@ public:
   virtual OperationTypeCode get_type() const = 0;
   virtual const char *get_type_name() const = 0;
   virtual void print(std::ostream &) const = 0;
-
-  void add_blocker(Blocker *b) {
-    blockers.push_back(b);
-  }
-
-  void clear_blocker(Blocker *b) {
-    auto iter = std::find(blockers.begin(), blockers.end(), b);
-    if (iter != blockers.end()) {
-      blockers.erase(iter);
-    }
-  }
 
   template <typename... T>
   seastar::future<T...> with_blocking_future(blocking_future<T...> &&f) {
@@ -162,6 +140,31 @@ public:
   void dump(ceph::Formatter *f);
   void dump_brief(ceph::Formatter *f);
   virtual ~Operation() = default;
+
+ protected:
+  virtual void dump_detail(ceph::Formatter *f) const = 0;
+
+ private:
+  registry_hook_t registry_hook;
+
+  std::vector<Blocker*> blockers;
+  uint64_t id = 0;
+  void set_id(uint64_t in_id) {
+    id = in_id;
+  }
+
+  void add_blocker(Blocker *b) {
+    blockers.push_back(b);
+  }
+
+  void clear_blocker(Blocker *b) {
+    auto iter = std::find(blockers.begin(), blockers.end(), b);
+    if (iter != blockers.end()) {
+      blockers.erase(iter);
+    }
+  }
+
+  friend class OperationRegistry;
 };
 using OperationRef = boost::intrusive_ptr<Operation>;
 

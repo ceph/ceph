@@ -41,15 +41,15 @@ describe('SilenceFormComponent', () => {
   let notificationService: NotificationService;
   let router: Router;
   // Spies
-  let rulesSpy;
-  let ifPrometheusSpy;
+  let rulesSpy: jasmine.Spy;
+  let ifPrometheusSpy: jasmine.Spy;
   // Helper
   let prometheus: PrometheusHelper;
   let formHelper: FormHelper;
   let fixtureH: FixtureHelper;
-  let params;
+  let params: Record<string, any>;
   // Date mocking related
-  let originalDate;
+  let originalDate: any;
   const baseTime = new Date('2022-02-22T00:00:00');
   const beginningDate = new Date('2022-02-22T00:00:12.35');
 
@@ -69,14 +69,14 @@ describe('SilenceFormComponent', () => {
       i18nProviders,
       {
         provide: ActivatedRoute,
-        useValue: { params: { subscribe: (fn) => fn(params) } }
+        useValue: { params: { subscribe: (fn: Function) => fn(params) } }
       }
     ]
   });
 
-  const createMatcher = (name, value, isRegex) => ({ name, value, isRegex });
+  const createMatcher = (name: string, value: any, isRegex: boolean) => ({ name, value, isRegex });
 
-  const addMatcher = (name, value, isRegex) =>
+  const addMatcher = (name: string, value: any, isRegex: boolean) =>
     component['setMatcher'](createMatcher(name, value, isRegex));
 
   const callInit = () =>
@@ -160,7 +160,7 @@ describe('SilenceFormComponent', () => {
   });
 
   it('should remind user if prometheus is not set when it is not configured', () => {
-    ifPrometheusSpy.and.callFake((_x, fn) => fn());
+    ifPrometheusSpy.and.callFake((_x: any, fn: Function) => fn());
     callInit();
     expect(component.rules).toEqual([]);
     expect(notificationService.show).toHaveBeenCalledWith(
@@ -174,7 +174,7 @@ describe('SilenceFormComponent', () => {
 
   describe('redirect not allowed users', () => {
     let prometheusPermissions: Permission;
-    let navigateSpy;
+    let navigateSpy: jasmine.Spy;
 
     const expectRedirect = (action: string, redirected: boolean) => {
       changeAction(action);
@@ -300,13 +300,13 @@ describe('SilenceFormComponent', () => {
   describe('time', () => {
     // Can't be used to set accurate UTC dates in unit tests as Date uses timezones,
     // this means the UTC time changes depending on the timezone you are in.
-    const changeDatePicker = (el, text) => {
+    const changeDatePicker = (el: any, text: string) => {
       el.triggerEventHandler('change', { target: { value: text } });
     };
-    const getDatePicker = (i) =>
+    const getDatePicker = (i: number) =>
       fixture.debugElement.queryAll(By.directive(BsDatepickerDirective))[i];
-    const changeEndDate = (text) => changeDatePicker(getDatePicker(1), text);
-    const changeStartDate = (text) => changeDatePicker(getDatePicker(0), text);
+    const changeEndDate = (text: string) => changeDatePicker(getDatePicker(1), text);
+    const changeStartDate = (text: string) => changeDatePicker(getDatePicker(0), text);
 
     it('have all dates set at beginning', () => {
       expect(form.getValue('startsAt')).toEqual(baseTime);
@@ -390,7 +390,7 @@ describe('SilenceFormComponent', () => {
   });
 
   describe('matchers', () => {
-    const expectMatch = (helpText) => {
+    const expectMatch = (helpText: string) => {
       expect(fixtureH.getText('#match-state')).toBe(helpText);
     };
 
@@ -464,7 +464,7 @@ describe('SilenceFormComponent', () => {
       spyOn(modalService, 'show').and.callFake(() => {
         return {
           content: {
-            preFillControls: (matcher) => {
+            preFillControls: (matcher: any) => {
               expect(matcher).toBe(component.matchers[0]);
             },
             submitAction: of({ name: 'alertname', value: 'alert0', isRegex: false })
@@ -514,7 +514,7 @@ describe('SilenceFormComponent', () => {
     let silence: AlertmanagerSilence;
     const silenceId = '50M3-10N6-1D';
 
-    const expectSuccessNotification = (titleStartsWith) =>
+    const expectSuccessNotification = (titleStartsWith: string) =>
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
         `${titleStartsWith} silence ${silenceId}`,

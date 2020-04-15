@@ -29,6 +29,7 @@
 #include <string>
 #include <vector>
 
+#include "include/common_fwd.h"
 #include "include/int_types.h"
 #include "include/page.h"
 #include "include/scope_guard.h"
@@ -57,7 +58,6 @@ struct ib_cm_meta_t {
 } __attribute__((packed));
 
 class RDMAStack;
-class CephContext;
 
 class Port {
   struct ibv_context* ctxt;
@@ -549,7 +549,7 @@ class Infiniband {
     uint32_t     max_recv_wr;
     uint32_t     q_key;
     bool dead;
-    vector<Chunk*> recv_queue;
+    std::vector<Chunk*> recv_queue;
     ceph::mutex lock = ceph::make_mutex("queue_pair_lock");
   };
 

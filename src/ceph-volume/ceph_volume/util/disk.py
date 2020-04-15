@@ -454,15 +454,27 @@ class Size(object):
         Total size: 2.16 GB
     """
 
+    @classmethod
+    def parse(cls, size):
+        if (len(size) > 2 and
+            size[-2].lower() in ['k', 'm', 'g', 't'] and
+            size[-1].lower() == 'b'):
+            return cls(**{size[-2:].lower(): float(size[0:-2])})
+        elif size[-1].lower() in ['b', 'k', 'm', 'g', 't']:
+            return cls(**{size[-1].lower(): float(size[0:-1])})
+        else:
+            return cls(b=float(size))
+
+
     def __init__(self, multiplier=1024, **kw):
         self._multiplier = multiplier
         # create a mapping of units-to-multiplier, skip bytes as that is
         # calculated initially always and does not need to convert
         aliases = [
-            [('kb', 'kilobytes'), self._multiplier],
-            [('mb', 'megabytes'), self._multiplier ** 2],
-            [('gb', 'gigabytes'), self._multiplier ** 3],
-            [('tb', 'terabytes'), self._multiplier ** 4],
+            [('k', 'kb', 'kilobytes'), self._multiplier],
+            [('m', 'mb', 'megabytes'), self._multiplier ** 2],
+            [('g', 'gb', 'gigabytes'), self._multiplier ** 3],
+            [('t', 'tb', 'terabytes'), self._multiplier ** 4],
         ]
         # and mappings for units-to-formatters, including bytes and aliases for
         # each
@@ -519,23 +531,47 @@ class Size(object):
     def __format__(self, spec):
         return str(self._get_best_format()).__format__(spec)
 
+    def __int__(self):
+        return int(self._b)
+
+    def __float__(self):
+        return self._b
+
     def __lt__(self, other):
-        return self._b < other._b
+        if isinstance(other, Size):
+            return self._b < other._b
+        else:
+            return self.b < other
 
     def __le__(self, other):
-        return self._b <= other._b
+        if isinstance(other, Size):
+            return self._b <= other._b
+        else:
+            return self.b <= other
 
     def __eq__(self, other):
-        return self._b == other._b
+        if isinstance(other, Size):
+            return self._b == other._b
+        else:
+            return self.b == other
 
     def __ne__(self, other):
-        return self._b != other._b
+        if isinstance(other, Size):
+            return self._b != other._b
+        else:
+            return self.b != other
 
     def __ge__(self, other):
-        return self._b >= other._b
+        if isinstance(other, Size):
+            return self._b >= other._b
+        else:
+            return self.b >= other
 
     def __gt__(self, other):
-        return self._b > other._b
+        if isinstance(other, Size):
+            return self._b > other._b
+        else:
+            return self.b > other
 
     def __add__(self, other):
         if isinstance(other, Size):

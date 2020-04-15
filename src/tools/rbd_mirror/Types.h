@@ -53,6 +53,18 @@ std::ostream &operator<<(std::ostream &, const ImageId &image_id);
 
 typedef std::set<ImageId> ImageIds;
 
+struct LocalPoolMeta {
+  LocalPoolMeta() {}
+  LocalPoolMeta(const std::string& mirror_uuid)
+    : mirror_uuid(mirror_uuid) {
+  }
+
+  std::string mirror_uuid;
+};
+
+std::ostream& operator<<(std::ostream& lhs,
+                         const LocalPoolMeta& local_pool_meta);
+
 struct RemotePoolMeta {
   RemotePoolMeta() {}
   RemotePoolMeta(const std::string& mirror_uuid,

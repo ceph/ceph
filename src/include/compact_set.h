@@ -271,7 +271,7 @@ public:
     decode(n, p);
     if (n > 0) {
       alloc_internal();
-      decode_nohead(n, *set, p);
+      ceph::decode_nohead(n, *set, p);
     } else
       free_internal();
   }

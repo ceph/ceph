@@ -1703,13 +1703,6 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   // fail if the user exists already
   if (op_state.has_existing_user()) {
-    if (!op_state.exclusive &&
-        (user_email.empty() ||
-	 boost::iequals(user_email, old_info.user_email)) &&
-        old_info.display_name == display_name) {
-      return execute_modify(op_state, err_msg);
-    }
-
     if (op_state.found_by_email) {
       set_err_msg(err_msg, "email: " + user_email +
 		  " is the email address an existing user");
@@ -1778,6 +1771,14 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
     user_info.user_quota = op_state.get_user_quota();
   } else {
     rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+  }
+
+  if (op_state.default_placement_specified) {
+    user_info.default_placement = op_state.default_placement;
+  }
+
+  if (op_state.placement_tags_specified) {
+    user_info.placement_tags = op_state.placement_tags;
   }
 
   // update the request
@@ -2060,6 +2061,15 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.mfa_ids_specified) {
     user_info.mfa_ids = op_state.mfa_ids;
   }
+
+  if (op_state.default_placement_specified) {
+    user_info.default_placement = op_state.default_placement;
+  }
+
+  if (op_state.placement_tags_specified) {
+    user_info.placement_tags = op_state.placement_tags;
+  }
+
   op_state.set_user_info(user_info);
 
   // if we're supposed to modify keys, do so

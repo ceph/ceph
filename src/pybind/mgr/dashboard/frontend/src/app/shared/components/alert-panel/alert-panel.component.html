@@ -9,7 +9,8 @@
              class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>
-        <td class="alert-panel-title">{{ title }}</td>
+        <td *ngIf="showTitle"
+            class="alert-panel-title">{{ title }}</td>
       </tr>
       <tr>
         <td class="alert-panel-text">
@@ -24,7 +25,8 @@
           <i class="alert-{{ bootstrapClass }} {{ typeIcon }}"
              aria-hidden="true"></i>
         </td>
-        <td class="alert-panel-title">{{ title }}</td>
+        <td *ngIf="showTitle"
+            class="alert-panel-title">{{ title }}</td>
         <td class="alert-panel-text">
           <ng-container *ngTemplateOutlet="content"></ng-container>
         </td>
@@ -37,7 +39,7 @@
   <ng-content></ng-content>
 </ng-template>
 
-<div class="button-group text-right"
+<div class="text-right"
      *ngIf="backAction.observers.length > 0">
   <button class="btn btn-light tc_backButton"
           type="button"

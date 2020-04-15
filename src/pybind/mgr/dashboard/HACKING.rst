@@ -3,6 +3,187 @@ Ceph Dashboard Developer Documentation
 
 .. contents:: Table of Contents
 
+Preliminary Steps
+-----------------
+
+The following documentation chapters expect a running Ceph cluster and at
+least a running ``dashboard`` manager module (with few exceptions). This
+chapter gives an introduction on how to set up such a system for development,
+without the need to set up a full-blown production environment. All options
+introduced in this chapter are based on a so called ``vstart`` environment.
+
+.. note::
+
+  Every ``vstart`` environment needs Ceph `to be compiled`_ from its Github
+  repository, though Docker environments simplify that step by providing a
+  shell script that contains those instructions.
+
+  One exception to this rule are the `build-free`_ capabilities of
+  `ceph-dev`_. See below for more information.
+
+.. _to be compiled: https://docs.ceph.com/docs/master/install/build-ceph/
+
+vstart
+~~~~~~
+
+"vstart" is actually a shell script in the ``src/`` directory of the Ceph
+repository (``src/vstart.sh``). It is used to start a single node Ceph
+cluster on the machine where it is executed. Several required and some
+optional Ceph internal services are started automatically when it is used to
+start a Ceph cluster. vstart is the basis for the three most commonly used
+development environments in Ceph Dashboard.
+
+You can read more about vstart in `Deploying a development cluster`_.
+Additional information for developers can also be found in the `Developer
+Guide`_.
+
+.. _Deploying a development cluster: https://docs.ceph.com/docs/master/dev/dev_cluster_deployement/
+.. _Developer Guide: https://docs.ceph.com/docs/master/dev/quick_guide/
+
+Host-based vs Docker-based Development Environments
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This document introduces you to three different development environments, all
+based on vstart. Those are:
+
+- vstart running on your host system
+
+- vstart running in a Docker environment
+
+  * ceph-dev-docker_
+  * ceph-dev_
+
+  Besides their independent development branches and sometimes slightly
+  different approaches, they also differ with respect to their underlying
+  operating systems.
+
+  ========= ======================  ========
+  Release   ceph-dev-docker         ceph-dev
+  ========= ======================  ========
+  Mimic     openSUSE Leap 15        CentOS 7
+  Nautilus  openSUSE Leap 15        CentOS 7
+  Octopus   openSUSE Leap 15.2      CentOS 8
+  --------- ----------------------  --------
+  Master    openSUSE Tumbleweed     CentOS 8
+  ========= ======================  ========
+
+.. note::
+
+  Independently of which of these environments you will choose, you need to
+  compile Ceph in that environment. If you compiled Ceph on your host system,
+  you would have to recompile it on Docker to be able to switch to a Docker
+  based solution. The same is true vice versa. If you previously used a
+  Docker development environment and compiled Ceph there and you now want to
+  switch to your host system, you will also need to recompile Ceph (or
+  compile Ceph using another separate repository).
+
+  `ceph-dev`_ is an exception to this rule as one of the options it provides
+  is `build-free`_. This is accomplished through a Ceph installation using
+  RPM system packages. You will still be able to work with a local Github
+  repository like you are used to.
+
+
+Development environment on your host system
+...........................................
+
+- No need to learn or have experience with Docker, jump in right away.
+
+- Limited amount of scripts to support automation (like Ceph compilation).
+
+- No pre-configured easy-to-start services (Prometheus, Grafana, etc).
+
+- Limited amount of host operating systems supported, depending on which
+  Ceph version is supposed to be used.
+
+- Dependencies need to be installed on your host.
+
+- You might find yourself in the situation where you need to upgrade your
+  host operating system (for instance due to a change of the GCC version used
+  to compile Ceph).
+
+
+Development environments based on Docker
+........................................
+
+- Some overhead in learning Docker if you are not used to it yet.
+
+- Both Docker projects provide you with scripts that help you getting started
+  and automate recurring tasks.
+
+- Both Docker environments come with partly pre-configured external services
+  which can be used to attach to or complement Ceph Dashboard features, like
+
+  - Prometheus
+  - Grafana
+  - Node-Exporter
+  - Shibboleth
+  - HAProxy
+
+- Works independently of the operating system you use on your host.
+
+
+.. _build-free: https://github.com/rhcs-dashboard/ceph-dev#quick-install-rpm-based
+
+vstart on your host system
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The vstart script is usually called from your `build/` directory like so:
+
+.. code::
+
+  ../src/vstart.sh -n -d
+
+In this case ``-n`` ensures that a new vstart cluster is created and that a
+possibly previously created cluster isn't re-used. ``-d`` enables debug
+messages in log files. There are several more options to chose from. You can
+get a list using the ``--help`` argument.
+
+At the end of the output of vstart, there should be information about the
+dashboard and its URLs::
+
+  vstart cluster complete. Use stop.sh to stop. See out/* (e.g. 'tail -f out/????') for debug output.
+
+  dashboard urls: https://192.168.178.84:41259, https://192.168.178.84:43259, https://192.168.178.84:45259
+    w/ user/pass: admin / admin
+  restful urls: https://192.168.178.84:42259, https://192.168.178.84:44259, https://192.168.178.84:46259
+    w/ user/pass: admin / 598da51f-8cd1-4161-a970-b2944d5ad200
+
+During development (especially in backend development), you also want to
+check on occasions if the dashboard manager module is still running. To do so
+you can call `./bin/ceph mgr services` manually. It will list all the URLs of
+successfully enabled services. Only URLs of services which are available over
+HTTP(S) will be listed there. Ceph Dashboard is one of these services. It
+should look similar to the following output:
+
+.. code::
+
+  $ ./bin/ceph mgr services
+  {
+      "dashboard": "https://home:41931/",
+      "restful": "https://home:42931/"
+  }
+
+By default, this environment uses a randomly chosen port for Ceph Dashboard
+and you need to use this command to find out which one it has become.
+
+Docker
+~~~~~~
+
+Docker development environments usually ship with a lot of useful scripts.
+``ceph-dev-docker`` for instance contains a file called `start-ceph.sh`,
+which cleans up log files, always starts a Rados Gateway service, sets some
+Ceph Dashboard configuration options and automatically runs a frontend proxy,
+all before or after starting up your vstart cluster.
+
+Instructions on how to use those environments are contained in their
+respective repository README files.
+
+- ceph-dev-docker_
+- ceph-dev_
+
+.. _ceph-dev-docker: https://github.com/ricardoasmarques/ceph-dev-docker
+.. _ceph-dev: https://github.com/rhcs-dashboard/ceph-dev
+
 Frontend Development
 --------------------
 
@@ -17,7 +198,7 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 8.9.0 or higher
+ * Node 10.0.0 or higher
  * NPM 5.7.0 or higher
 
 nodeenv:
@@ -39,8 +220,20 @@ Angular CLI:
 Package installation
 ~~~~~~~~~~~~~~~~~~~~
 
-Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
+Run ``npm ci`` in directory ``src/pybind/mgr/dashboard/frontend`` to
 install the required packages locally.
+
+Adding or updating packages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run the following commands to add/update a package::
+
+  npm install <PACKAGE_NAME>
+  npm run fix:audit
+  npm ci
+
+``fix:audit`` is required because we have some packages that need to be fixed
+to a specific version and npm install tends to overwrite this.
 
 Setting up a Development Server
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,6 +275,7 @@ HTML files:
 
 - `codelyzer <http://codelyzer.com/>`_
 - `html-linter <https://github.com/chinchiheather/html-linter>`_
+- `htmllint-cli <https://github.com/htmllint/htmllint-cli>`_
 - `Prettier <https://prettier.io/>`_
 - `TSLint <https://palantir.github.io/tslint/>`_
 
@@ -162,9 +356,9 @@ Device:
 
 Remote:
   If you want to run the tests outside the ceph environment, you will need to
-  manually define the dashboard url using ``-r``::
+  manually define the dashboard url using ``-r`` and, optionally, credentials (``-u``, ``-p``)::
 
-    $ ./run-frontend-e2e-tests.sh -r <DASHBOARD_URL>
+    $ ./run-frontend-e2e-tests.sh -r <DASHBOARD_URL> -u <E2E_LOGIN_USER> -p <E2E_LOGIN_PWD>
 
 Note:
   When using docker, as your device, you might need to run the script with sudo
@@ -335,7 +529,7 @@ what it expects to happen.
 Differences between Frontend Unit Tests and End-to-End (E2E) Tests / FAQ
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-General introduction about testing and E2E/unit tests 
+General introduction about testing and E2E/unit tests
 
 
 What are E2E/unit tests designed for?

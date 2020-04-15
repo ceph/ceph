@@ -1,5 +1,6 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { of } from 'rxjs';
 
@@ -17,18 +18,18 @@ describe('IscsiComponent', () => {
   let component: IscsiComponent;
   let fixture: ComponentFixture<IscsiComponent>;
   let iscsiService: IscsiService;
-  let tcmuiscsiData;
+  let tcmuiscsiData: Record<string, any>;
 
   const fakeService = {
     overview: () => {
-      return new Promise(function() {
+      return new Promise(function () {
         return;
       });
     }
   };
 
   configureTestBed({
-    imports: [SharedModule],
+    imports: [BrowserAnimationsModule, SharedModule],
     declarations: [IscsiComponent],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
@@ -66,8 +67,16 @@ describe('IscsiComponent', () => {
   it('should refresh with stats', () => {
     tcmuiscsiData.images.push({
       stats_history: {
-        rd_bytes: [[1540551220, 0.0], [1540551225, 0.0], [1540551230, 0.0]],
-        wr_bytes: [[1540551220, 0.0], [1540551225, 0.0], [1540551230, 0.0]]
+        rd_bytes: [
+          [1540551220, 0.0],
+          [1540551225, 0.0],
+          [1540551230, 0.0]
+        ],
+        wr_bytes: [
+          [1540551220, 0.0],
+          [1540551225, 0.0],
+          [1540551230, 0.0]
+        ]
       }
     });
     component.refresh();

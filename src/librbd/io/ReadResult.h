@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_READ_RESULT_H
 #define CEPH_LIBRBD_IO_READ_RESULT_H
 
+#include "include/common_fwd.h"
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
@@ -12,7 +13,6 @@
 #include <sys/uio.h>
 #include <boost/variant/variant.hpp>
 
-struct CephContext;
 
 namespace librbd {
 

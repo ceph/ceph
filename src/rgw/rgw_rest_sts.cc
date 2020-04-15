@@ -183,7 +183,12 @@ int RGWSTSGetSessionToken::get_params()
   tokenCode = s->info.args.get("TokenCode");
 
   if (! duration.empty()) {
-    uint64_t duration_in_secs = stoull(duration);
+    string err;
+    uint64_t duration_in_secs = strict_strtoll(duration.c_str(), 10, &err);
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+
     if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
             duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
       return -EINVAL;
@@ -349,13 +354,8 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
       for (const auto& t : tokens) {
         auto pos = t.find("=");
         if (pos != string::npos) {
-          const auto key = t.substr(0, pos);
-          if (key == "Action") {
-            s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
-          } else if (key == "RoleArn" || key == "Policy") {
-            const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
-            s->info.args.append(key, value);
-          }
+          s->info.args.append(t.substr(0,pos),
+                              url_decode(t.substr(pos+1, t.size() -1)));
         }
       }
     } 

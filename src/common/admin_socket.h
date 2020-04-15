@@ -15,6 +15,10 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include "crimson/admin/admin_socket.h"
+#else
+
 #include <condition_variable>
 #include <mutex>
 #include <string>
@@ -22,17 +26,14 @@
 #include <thread>
 
 #include "include/buffer.h"
+#include "include/common_fwd.h"
 #include "common/ref.h"
 #include "common/cmdparse.h"
 
-class AdminSocket;
-class CephContext;
 class MCommand;
 class MMonCommand;
 
-using namespace std::literals;
-
-inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
+inline constexpr auto CEPH_ADMIN_SOCK_VERSION = std::string_view("2");
 
 class AdminSocketHook {
 public:
@@ -59,7 +60,7 @@ public:
   virtual int call(
     std::string_view command,
     const cmdmap_t& cmdmap,
-    Formatter *f,
+    ceph::Formatter *f,
     std::ostream& errss,
     ceph::buffer::list& out) = 0;
 
@@ -89,11 +90,11 @@ public:
   virtual void call_async(
     std::string_view command,
     const cmdmap_t& cmdmap,
-    Formatter *f,
-    const bufferlist& inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish) {
+    ceph::Formatter *f,
+    const ceph::buffer::list& inbl,
+    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) {
     // by default, call the synchronous handler and then finish
-    bufferlist out;
+    ceph::buffer::list out;
     std::ostringstream errss;
     int r = call(command, cmdmap, f, errss, out);
     on_finish(r, errss.str(), out);
@@ -148,18 +149,18 @@ public:
   /// execute (async)
   void execute_command(
     const std::vector<std::string>& cmd,
-    const bufferlist& inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_fin);
+    const ceph::buffer::list& inbl,
+    std::function<void(int,const std::string&,ceph::buffer::list&)> on_fin);
 
   /// execute (blocking)
   int execute_command(
     const std::vector<std::string>& cmd,
-    const bufferlist& inbl,
+    const ceph::buffer::list& inbl,
     std::ostream& errss,
-    bufferlist *outbl);
+    ceph::buffer::list *outbl);
 
-  void queue_tell_command(cref_t<MCommand> m);
-  void queue_tell_command(cref_t<MMonCommand> m); // for compat
+  void queue_tell_command(ceph::cref_t<MCommand> m);
+  void queue_tell_command(ceph::cref_t<MMonCommand> m); // for compat
 
 private:
 
@@ -190,8 +191,8 @@ private:
   std::unique_ptr<AdminSocketHook> getdescs_hook;
 
   std::mutex tell_lock;
-  std::list<cref_t<MCommand>> tell_queue;
-  std::list<cref_t<MMonCommand>> tell_legacy_queue;
+  std::list<ceph::cref_t<MCommand>> tell_queue;
+  std::list<ceph::cref_t<MMonCommand>> tell_legacy_queue;
 
   struct hook_info {
     AdminSocketHook* hook;
@@ -210,4 +211,5 @@ private:
   friend class GetdescsHook;
 };
 
+#endif
 #endif

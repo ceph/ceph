@@ -85,8 +85,6 @@ using rgw::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
-using rgw::IAM::Policy;
-
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
@@ -292,6 +290,23 @@ static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
   } else {
     return none;
   }
+}
+
+static boost::optional<PublicAccessBlockConfiguration>
+get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
+{
+  if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+      aiter != attrs.end()) {
+    bufferlist::const_iterator iter{&aiter->second};
+    PublicAccessBlockConfiguration access_conf;
+    try {
+      access_conf.decode(iter);
+    } catch (const buffer::error& e) {
+      return boost::none;
+    }
+    return access_conf;
+  }
+  return boost::none;
 }
 
 vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
@@ -680,6 +695,10 @@ int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* 
         ldpp_dout(s, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
         return -EINVAL;
       }
+    }
+
+    if(s->bucket_exists) {
+      s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
     }
   }
 
@@ -1249,6 +1268,106 @@ void RGWDeleteBucketTags::execute()
   });
 }
 
+int RGWGetBucketReplication::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetReplicationConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketReplication::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketReplication::execute()
+{
+  send_response_data();
+}
+
+int RGWPutBucketReplication::verify_permission() {
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
+}
+
+void RGWPutBucketReplication::execute() {
+
+  op_ret = get_params();
+  if (op_ret < 0) 
+    return;
+
+  if (!store->svc()->zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+    auto sync_policy = (s->bucket_info.sync_policy ? *s->bucket_info.sync_policy : rgw_sync_policy_info());
+
+    for (auto& group : sync_policy_groups) {
+      sync_policy.groups[group.id] = group;
+    }
+
+    s->bucket_info.set_sync_policy(std::move(sync_policy));
+
+    int ret = store->getRados()->put_bucket_instance_info(s->bucket_info, false, real_time(),
+                                                          &s->bucket_attrs);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket_info.bucket.get_key() << ") returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    return 0;
+  });
+}
+
+void RGWDeleteBucketReplication::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWDeleteBucketReplication::verify_permission()
+{
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
+}
+
+void RGWDeleteBucketReplication::execute()
+{
+  if (!store->svc()->zone->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+    if (!s->bucket_info.sync_policy) {
+      return 0;
+    }
+
+    rgw_sync_policy_info sync_policy = *s->bucket_info.sync_policy;
+
+    update_sync_policy(&sync_policy);
+
+    s->bucket_info.set_sync_policy(std::move(sync_policy));
+
+    int ret = store->getRados()->put_bucket_instance_info(s->bucket_info, false, real_time(),
+                                                          &s->bucket_attrs);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket_info.bucket.get_key() << ") returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    return 0;
+  });
+}
+
 int RGWOp::do_aws4_auth_completion()
 {
   ldpp_dout(this, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;
@@ -1419,8 +1538,9 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 
   /* Custom: */
   origin = orig;
-  op_ret = read_bucket_cors();
-  if (op_ret < 0) {
+  int temp_op_ret = read_bucket_cors();
+  if (temp_op_ret < 0) {
+    op_ret = temp_op_ret;
     return false;
   }
 
@@ -2027,22 +2147,14 @@ bool RGWGetObj::prefetch_data()
     return false;
   }
 
-  bool prefetch_first_chunk = true;
   range_str = s->info.env->get("HTTP_RANGE");
-
+  // TODO: add range prefetch
   if (range_str) {
-    int r = parse_range();
-    /* error on parsing the range, stop prefetch and will fail in execute() */
-    if (r < 0) {
-      return false; /* range_parsed==false */
-    }
-    /* range get goes to shadow objects, stop prefetch */
-    if (ofs >= s->cct->_conf->rgw_max_chunk_size) {
-      prefetch_first_chunk = false;
-    }
+    parse_range();
+    return false;
   }
 
-  return get_data && prefetch_first_chunk;
+  return get_data;
 }
 
 void RGWGetObj::pre_exec()
@@ -3166,7 +3278,7 @@ void RGWCreateBucket::execute()
     ldpp_dout(this, 20) << "got creation time: << " << master_info.creation_time << dendl;
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.num_shards;
+    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
     pobjv = &objv;
     obj_lock_enabled = master_info.obj_lock_enabled();
   } else {
@@ -3514,6 +3626,13 @@ int RGWPutObj::verify_permission()
     }
   }
 
+  if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls()) {
+    if (s->canned_acl.compare("public-read") ||
+        s->canned_acl.compare("public-read-write") ||
+        s->canned_acl.compare("authenticated-read"))
+      return -EACCES;
+  }
+
   auto op_ret = get_params();
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "get_params() returned ret=" << op_ret << dendl;
@@ -3596,7 +3715,7 @@ public:
 int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   bufferlist bl_tmp;
-  bl.copy(bl_ofs, bl_len, bl_tmp);
+  bl.begin(bl_ofs).copy(bl_len, bl_tmp);
 
   bl_aux.append(bl_tmp);
 
@@ -4061,7 +4180,7 @@ void RGWPutObj::execute()
   }
 
   // send request to notification manager
-  const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedPut, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, mtime, etag, rgw::notify::ObjectCreatedPut, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -4289,7 +4408,7 @@ void RGWPostObj::execute()
     }
   } while (is_next_file_to_upload());
 
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedPost, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedPost, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -4851,7 +4970,7 @@ void RGWDeleteObj::execute()
     op_ret = -EINVAL;
   }
 
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(),
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(),
           delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
           store);
   if (ret < 0) {
@@ -5165,7 +5284,7 @@ void RGWCopyObj::execute()
 	   this,
 	   s->yield);
 
-  const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -5408,16 +5527,20 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
+  if (s->bucket_access_conf &&
+      s->bucket_access_conf->block_public_acls() &&
+      new_policy.is_public()) {
+    op_ret = -EACCES;
+    return;
+  }
   new_policy.encode(bl);
-  map<string, bufferlist> attrs;
-
   if (!s->object.empty()) {
     obj = rgw_obj(s->bucket, s->object);
     store->getRados()->set_atomic(s->obj_ctx, obj);
     //if instance is empty, we should modify the latest object
     op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_ACL, bl);
   } else {
-    attrs = s->bucket_attrs;
+    map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
 							  &s->bucket_info.objv_tracker,
@@ -5531,16 +5654,6 @@ void RGWDeleteLC::execute()
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
-  }
-  map<string, bufferlist> attrs = s->bucket_attrs;
-  attrs.erase(RGW_ATTR_LC);
-  op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							&s->bucket_info.objv_tracker,
-							s->yield);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
-        << s->bucket.name << " returned err=" << op_ret << dendl;
-    return;
   }
 
   op_ret = store->getRados()->get_lc()->remove_bucket_config(s->bucket_info, s->bucket_attrs);
@@ -5843,7 +5956,7 @@ void RGWInitMultipart::execute()
     op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield);
   } while (op_ret == -EEXIST);
   
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), rgw::notify::ObjectCreatedPost, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), rgw::notify::ObjectCreatedPost, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -6157,7 +6270,7 @@ void RGWCompleteMultipart::execute()
     ldpp_dout(this, 0) << "WARNING: failed to remove object " << meta_obj << dendl;
   }
   
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedCompleteMultipartUpload, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedCompleteMultipartUpload, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -6513,6 +6626,20 @@ void RGWDeleteMultiObj::execute()
 
     send_partial_response(*iter, del_op.result.delete_marker,
 			  del_op.result.version_id, op_ret);
+
+    const auto obj_state = obj_ctx->get_state(obj);
+    bufferlist etag_bl;
+    const auto etag = obj_state->get_attr(RGW_ATTR_ETAG, etag_bl) ? etag_bl.to_str() : "";
+
+    const auto ret = rgw::notify::publish(s, obj.key, obj_state->size, ceph::real_clock::now(), etag, 
+            del_op.result.delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
+            store);
+    if (ret < 0) {
+        ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	    // TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	    // this should be global conf (probably returnign a different handler)
+        // so we don't need to read the configured values before we perform it
+    }
   }
 
   /*  set the return code to zero, errors at this point will be
@@ -6887,7 +7014,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.num_shards;
+    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
     pobjv = &objv;
   } else {
     pmaster_bucket = nullptr;
@@ -7560,8 +7687,15 @@ void RGWPutBucketPolicy::execute()
 
   try {
     const Policy p(s->cct, s->bucket_tenant, data);
-    op_ret = retry_raced_bucket_write(store->getRados(), s, [&p, this] {
-	auto attrs = s->bucket_attrs;
+    auto attrs = s->bucket_attrs;
+    if (s->bucket_access_conf &&
+        s->bucket_access_conf->block_public_policy() &&
+        rgw::IAM::is_public(p)) {
+      op_ret = -EACCES;
+      return;
+    }
+
+    op_ret = retry_raced_bucket_write(store->getRados(), s, [&p, this, &attrs] {
 	attrs[RGW_ATTR_IAM_POLICY].clear();
 	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
 	op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
@@ -7962,3 +8096,138 @@ void RGWGetClusterStat::execute()
 }
 
 
+int RGWGetBucketPolicyStatus::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicyStatus)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketPolicyStatus::execute()
+{
+  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl->is_public();
+}
+
+int RGWPutBucketPublicAccessBlock::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketPublicAccessBlock)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+int RGWPutBucketPublicAccessBlock::get_params()
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+void RGWPutBucketPublicAccessBlock::execute()
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize parser" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    ldpp_dout(this, 0) << "ERROR: malformed XML" << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("PublicAccessBlockConfiguration", access_conf, &parser, true);
+  } catch (RGWXMLDecoder::err &err) {
+    ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  if (!store->svc()->zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  bufferlist bl;
+  access_conf.encode(bl);
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this, &bl] {
+      map<string, bufferlist> attrs = s->bucket_attrs;
+      attrs[RGW_ATTR_PUBLIC_ACCESS] = bl;
+      return store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs, &s->bucket_info.objv_tracker, s->yield);
+    });
+
+}
+
+int RGWGetBucketPublicAccessBlock::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicy)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketPublicAccessBlock::execute()
+{
+  auto attrs = s->bucket_attrs;
+  if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+      aiter == attrs.end()) {
+    ldpp_dout(this, 0) << "can't find bucket IAM POLICY attr bucket_name = "
+		       << s->bucket_name << dendl;
+    // return the default;
+    return;
+  } else {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      access_conf.decode(iter);
+    } catch (const buffer::error& e) {
+      ldpp_dout(this, 0) << __func__ <<  "decode access_conf failed" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
+}
+
+
+void RGWDeleteBucketPublicAccessBlock::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWDeleteBucketPublicAccessBlock::verify_permission()
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketPublicAccessBlock)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWDeleteBucketPublicAccessBlock::execute()
+{
+  op_ret = retry_raced_bucket_write(store->getRados(), s, [this] {
+      auto attrs = s->bucket_attrs;
+      attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
+      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							       &s->bucket_info.objv_tracker,
+							       s->yield);
+      return op_ret;
+    });
+}

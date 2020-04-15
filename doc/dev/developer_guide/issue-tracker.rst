@@ -34,4 +34,4 @@ simply update the issue with a brief note.
    Resolved         Fix and backports (if any) have been merged
    ================ ===========================================
 
-.. _Redmine issue tracker: tracker.ceph.com
+.. _Redmine issue tracker: https://tracker.ceph.com

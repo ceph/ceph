@@ -27,7 +27,8 @@ class MDSRank;
 class OpenFileTable
 {
 public:
-  explicit OpenFileTable(MDSRank *m) : mds(m) {}
+  explicit OpenFileTable(MDSRank *m);
+  ~OpenFileTable();
 
   void add_inode(CInode *in);
   void remove_inode(CInode *in);
@@ -71,8 +72,8 @@ protected:
   friend class C_IO_OFT_Journal;
   friend class C_OFT_OpenInoFinish;
 
-  static const unsigned MAX_ITEMS_PER_OBJ = 1024 * 1024;
-  static const unsigned MAX_OBJECTS = 1024; // billion items at most
+  uint64_t MAX_ITEMS_PER_OBJ = g_conf().get_val<uint64_t>("osd_deep_scrub_large_omap_object_key_threshold");
+  static const unsigned MAX_OBJECTS = 1024; // (1024 * osd_deep_scrub_large_omap_object_key_threshold) items at most
 
   static const int DIRTY_NEW	= -1;
   static const int DIRTY_UNDEF	= -2;
@@ -146,6 +147,8 @@ protected:
 
   std::map<uint64_t, vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;
+
+  std::unique_ptr<PerfCounters> logger;
 };
 
 #endif

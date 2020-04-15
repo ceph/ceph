@@ -832,8 +832,14 @@ public:
 
 void RGWOp_BILog_Status::execute()
 {
+  const auto options = s->info.args.get("options");
+  bool merge = (options == "merge");
   const auto source_zone = s->info.args.get("source-zone");
-  const auto key = s->info.args.get("bucket");
+  const auto source_key = s->info.args.get("source-bucket");
+  auto key = s->info.args.get("bucket");
+  if (key.empty()) {
+    key = source_key;
+  }
   if (key.empty()) {
     ldpp_dout(s, 4) << "no 'bucket' provided" << dendl;
     http_ret = -EINVAL;
@@ -844,7 +850,7 @@ void RGWOp_BILog_Status::execute()
   int shard_id{-1}; // unused
   http_ret = rgw_bucket_parse_bucket_key(s->cct, key, &bucket, &shard_id);
   if (http_ret < 0) {
-    ldpp_dout(s, 4) << "no 'bucket' provided" << dendl;
+    ldpp_dout(s, 4) << "invalid 'bucket' provided" << dendl;
     http_ret = -EINVAL;
     return;
   }
@@ -857,7 +863,110 @@ void RGWOp_BILog_Status::execute()
     ldpp_dout(s, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
     return;
   }
-  http_ret = rgw_bucket_sync_status(this, store, source_zone, info, &status);
+
+  rgw_bucket source_bucket;
+
+  if (source_key.empty() ||
+      source_key == key) {
+    source_bucket = info.bucket;
+  } else {
+    http_ret = rgw_bucket_parse_bucket_key(s->cct, source_key, &source_bucket, nullptr);
+    if (http_ret < 0) {
+      ldpp_dout(s, 4) << "invalid 'source-bucket' provided (key=" << source_key << ")" << dendl;
+      return;
+    }
+  }
+
+  const auto& local_zone_id = store->svc()->zone->zone_id();
+
+  if (!merge) {
+    rgw_sync_bucket_pipe pipe;
+    pipe.source.zone = source_zone;
+    pipe.source.bucket = source_bucket;
+    pipe.dest.zone = local_zone_id;
+    pipe.dest.bucket = info.bucket;
+
+    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(): getting sync status for pipe=" << pipe << dendl;
+
+    http_ret = rgw_bucket_sync_status(this, store, pipe, info, nullptr, &status);
+
+    if (http_ret < 0) {
+      lderr(s->cct) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << http_ret << dendl;
+    }
+    return;
+  }
+
+  rgw_zone_id source_zone_id(source_zone);
+
+  RGWBucketSyncPolicyHandlerRef source_handler;
+  http_ret = store->ctl()->bucket->get_sync_policy_handler(source_zone_id, source_bucket, &source_handler, null_yield);
+  if (http_ret < 0) {
+    lderr(s->cct) << "could not get bucket sync policy handler (r=" << http_ret << ")" << dendl;
+    return;
+  }
+
+  auto local_dests = source_handler->get_all_dests_in_zone(local_zone_id);
+
+  std::vector<rgw_bucket_shard_sync_info> current_status;
+  for (auto& entry : local_dests) {
+    auto pipe = entry.second;
+
+    ldout(s->cct, 20) << "RGWOp_BILog_Status::execute(): getting sync status for pipe=" << pipe << dendl;
+
+    RGWBucketInfo *pinfo = &info;
+    std::optional<RGWBucketInfo> opt_dest_info;
+
+    if (!pipe.dest.bucket) {
+      /* Uh oh, something went wrong */
+      ldout(s->cct, 20) << "ERROR: RGWOp_BILog_Status::execute(): BUG: pipe.dest.bucket was not initialized" << pipe << dendl;
+      http_ret = -EIO;
+      return;
+    }
+
+    if (*pipe.dest.bucket != info.bucket) {
+      opt_dest_info.emplace();
+      pinfo = &(*opt_dest_info);
+
+      /* dest bucket might not have a bucket id */
+      http_ret = store->ctl()->bucket->read_bucket_info(*pipe.dest.bucket,
+                                                        pinfo,
+                                                        s->yield,
+                                                        RGWBucketCtl::BucketInstance::GetParams(),
+                                                        nullptr);
+      if (http_ret < 0) {
+        ldpp_dout(s, 4) << "failed to read target bucket info (bucket=: " << cpp_strerror(http_ret) << dendl;
+        return;
+      }
+
+      pipe.dest.bucket = pinfo->bucket;
+    }
+
+    int r = rgw_bucket_sync_status(this, store, pipe, *pinfo, &info, &current_status);
+    if (r < 0) {
+      lderr(s->cct) << "ERROR: rgw_bucket_sync_status() on pipe=" << pipe << " returned ret=" << r << dendl;
+      http_ret = r;
+      return;
+    }
+
+    if (status.empty()) {
+      status = std::move(current_status);
+    } else {
+      if (current_status.size() !=
+          status.size()) {
+        http_ret = -EINVAL;
+        lderr(s->cct) << "ERROR: different number of shards for sync status of buckets syncing from the same source: status.size()= " << status.size() << " current_status.size()=" << current_status.size() << dendl;
+        return;
+      }
+      auto m = status.begin();
+      for (auto& cur_shard_status : current_status) {
+        auto& result_shard_status = *m++;
+        // always take the first marker, or any later marker that's smaller
+        if (cur_shard_status.inc_marker.position < result_shard_status.inc_marker.position) {
+          result_shard_status = std::move(cur_shard_status);
+        }
+      }
+    }
+  }
 }
 
 void RGWOp_BILog_Status::send_response()

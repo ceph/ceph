@@ -24,12 +24,20 @@
 #include "common/Timer.h"
 #include "messages/PaxosServiceMessage.h"
 
+using std::string;
+using std::unique_lock;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::to_timespan;
+
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mon->name, mon->rank, paxos_name, state, first_committed, last_committed)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
-		        int rank, const string& paxos_name, int state,
-			version_t first_committed, version_t last_committed)
+static std::ostream& _prefix(std::ostream *_dout, Monitor *mon, const string& name,
+			     int rank, const string& paxos_name, int state,
+			     version_t first_committed, version_t last_committed)
 {
   return *_dout << "mon." << name << "@" << rank
 		<< "(" << mon->get_state_name() << ")"
@@ -186,11 +194,11 @@ void Paxos::collect(version_t oldpn)
   dout(10) << "collect with pn " << accepted_pn << dendl;
 
   // send collect
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
     if (*p == mon->rank) continue;
-    
+
     MMonPaxos *collect = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_COLLECT,
 				       ceph_clock_now());
     collect->last_committed = last_committed;
@@ -369,7 +377,7 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
 bool Paxos::store_state(MMonPaxos *m)
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
-  map<version_t,bufferlist>::iterator start = m->values.begin();
+  auto start = m->values.begin();
   bool changed = false;
 
   // build map of values to store
@@ -390,7 +398,7 @@ bool Paxos::store_state(MMonPaxos *m)
 
   // make sure we get the right interval of values to apply by pushing forward
   // the 'end' iterator until it matches the message's 'last_committed'.
-  map<version_t,bufferlist>::iterator end = start;
+  auto end = start;
   while (end != m->values.end() && end->first <= m->last_committed) {
     last_committed = end->first;
     ++end;
@@ -405,8 +413,7 @@ bool Paxos::store_state(MMonPaxos *m)
 
     // we should apply the state here -- decode every single bufferlist in the
     // map and append the transactions to 't'.
-    map<version_t,bufferlist>::iterator it;
-    for (it = start; it != end; ++it) {
+    for (auto it = start; it != end; ++it) {
       // write the bufferlist as the version's value
       t->put(get_name(), it->first, it->second);
       // decode the bufferlist and append it to the transaction we will shortly
@@ -496,7 +503,7 @@ void Paxos::handle_last(MonOpRequestRef op)
   ceph_assert(g_conf()->paxos_kill_at != 2);
 
   // is everyone contiguous and up to date?
-  for (map<int,version_t>::iterator p = peer_last_committed.begin();
+  for (auto p = peer_last_committed.begin();
        p != peer_last_committed.end();
        ++p) {
     if (p->second + 1 < first_committed && first_committed > 1) {
@@ -676,7 +683,7 @@ void Paxos::begin(bufferlist& v)
   }
 
   // ask others to accept it too!
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
     if (*p == mon->rank) continue;
@@ -902,7 +909,7 @@ void Paxos::commit_finish()
   _sanity_check_store();
 
   // tell everyone
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
        p != mon->get_quorum().end();
        ++p) {
     if (*p == mon->rank) continue;
@@ -978,7 +985,7 @@ void Paxos::extend_lease()
 	  << " (" << lease_expire << ")" << dendl;
 
   // bcast
-  for (set<int>::const_iterator p = mon->get_quorum().begin();
+  for (auto p = mon->get_quorum().begin();
       p != mon->get_quorum().end(); ++p) {
 
     if (*p == mon->rank) continue;

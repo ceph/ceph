@@ -34,7 +34,8 @@ and ``[osd]`` or ``[global]`` section of your Ceph configuration file,
 or by setting the value at runtime.
 
 
-.. ditaa:: +---------+          +---------+
+.. ditaa::
+           +---------+          +---------+
            |  OSD 1  |          |  OSD 2  |
            +---------+          +---------+
                 |                    |
@@ -89,7 +90,9 @@ and ``mon osd reporter subtree level`` settings  under the ``[mon]`` section of
 your Ceph configuration file, or by setting the value at runtime.
 
 
-.. ditaa:: +---------+     +---------+      +---------+
+.. ditaa::
+
+           +---------+     +---------+      +---------+
            |  OSD 1  |     |  OSD 2  |      | Monitor |
            +---------+     +---------+      +---------+
                 |               |                |
@@ -118,7 +121,9 @@ Ceph Monitor heartbeat interval by adding an ``osd mon heartbeat interval``
 setting under the ``[osd]`` section of your Ceph configuration file, or by
 setting the value at runtime.
 
-.. ditaa:: +---------+     +---------+     +-------+     +---------+
+.. ditaa::
+
+           +---------+     +---------+     +-------+     +---------+
            |  OSD 1  |     |  OSD 2  |     | OSD 3 |     | Monitor |
            +---------+     +---------+     +-------+     +---------+
                 |               |              |              |
@@ -161,7 +166,9 @@ interval max`` setting under the ``[osd]`` section of your Ceph configuration
 file, or by setting the value at runtime.
 
 
-.. ditaa:: +---------+          +---------+
+.. ditaa::
+
+           +---------+          +---------+
            |  OSD 1  |          | Monitor |
            +---------+          +---------+
                 |                    |

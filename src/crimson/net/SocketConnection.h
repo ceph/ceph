@@ -33,20 +33,6 @@ class SocketConnection : public Connection {
   SocketMessenger& messenger;
   std::unique_ptr<Protocol> protocol;
 
-  // if acceptor side, ephemeral_port is different from peer_addr.get_port();
-  // if connector side, ephemeral_port is different from my_addr.get_port().
-  enum class side_t {
-    none,
-    acceptor,
-    connector
-  };
-  side_t side = side_t::none;
-  uint16_t ephemeral_port = 0;
-  void set_ephemeral_port(uint16_t port, side_t _side) {
-    ephemeral_port = port;
-    side = _side;
-  }
-
   ceph::net::Policy<crimson::thread::Throttle> policy;
 
   /// the seq num of the last transmitted message
@@ -64,6 +50,8 @@ class SocketConnection : public Connection {
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
 
+  seastar::shard_id shard_id() const;
+
  public:
   SocketConnection(SocketMessenger& messenger,
                    Dispatcher& dispatcher,
@@ -75,6 +63,8 @@ class SocketConnection : public Connection {
   bool is_connected() const override;
 
 #ifdef UNIT_TESTS_BUILT
+  bool is_closed_clean() const override;
+
   bool is_closed() const override;
 
   bool peer_wins() const override;
@@ -86,20 +76,20 @@ class SocketConnection : public Connection {
 
   seastar::future<> keepalive() override;
 
-  seastar::future<> close() override;
-
-  seastar::shard_id shard_id() const override;
+  void mark_down() override;
 
   void print(ostream& out) const override;
 
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
   void start_connect(const entity_addr_t& peer_addr,
-                     const entity_type_t& peer_type);
+                     const entity_name_t& peer_name);
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
-  void start_accept(SocketFRef&& socket,
+  void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr);
+
+  seastar::future<> close_clean(bool dispatch_reset);
 
   bool is_server_side() const {
     return policy.server;

@@ -33,12 +33,15 @@ and major events. ::
 Execute the following to show the monitor quorum, including which monitors are
 participating and which one is the leader. ::
 
+	ceph mon stat
 	ceph quorum_status
 
 Execute the following to query the status of a single monitor, including whether
 or not it is in the quorum. ::
 
-	ceph [-m monhost] mon_status
+	ceph tell mon.[id] mon_status
+
+where the value of ``[id]`` can be determined, e.g., from ``ceph -s``.
 
 
 Authentication Subsystem
@@ -60,7 +63,7 @@ To display the statistics for all placement groups, execute the following::
 
 	ceph pg dump [--format {format}]
 
-The valid formats are ``plain`` (default) and ``json``.
+The valid formats are ``plain`` (default), ``json`` ``json-pretty``, ``xml``, and ``xml-pretty``.
 
 To display the statistics for all placement groups stuck in a specified state, 
 execute the following:: 
@@ -68,7 +71,7 @@ execute the following::
 	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
 
-``--format`` may be ``plain`` (default) or ``json``
+``--format`` may be ``plain`` (default), ``json``, ``json-pretty``, ``xml``, or ``xml-pretty``.
 
 ``--threshold`` defines how many seconds "stuck" is (default: 300)
 
@@ -110,8 +113,9 @@ The foregoing is functionally equivalent to ::
 	ceph osd getmap -o /tmp/osdmap
 	osdmaptool /tmp/osdmap --export-crush file
 
-Dump the OSD map. Valid formats for ``-f`` are ``plain`` and ``json``. If no
-``--format`` option is given, the OSD map is dumped as plain text. ::
+Dump the OSD map. Valid formats for ``-f`` are ``plain``, ``json``, ``json-pretty``,
+``xml``, and ``xml-pretty``. If no ``--format`` option is given, the OSD map is 
+dumped as plain text. ::
 
 	ceph osd dump [--format {format}]
 
@@ -395,13 +399,12 @@ This is also available more directly::
 
 The above will block until a quorum is reached.
 
-For a status of just the monitor you connect to (use ``-m HOST:PORT``
-to select)::
+For a status of just a single monitor::
 
-	ceph mon_status -f json-pretty
+	ceph tell mon.[name] mon_status
 	
-	
-.. code-block:: javascript
+where the value of ``[name]`` can be taken from ``ceph quorum_status``. Sample
+output::
 	
 	{
 	    "name": "b",

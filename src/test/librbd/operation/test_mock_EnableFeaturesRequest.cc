@@ -95,7 +95,7 @@ public:
   Context *on_finish = nullptr;
 
   static EnableRequest *create(MockOperationImageCtx *image_ctx,
-                               mirror_image_mode_t mirror_image_mode,
+                               cls::rbd::MirrorImageMode mirror_image_mode,
                                Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

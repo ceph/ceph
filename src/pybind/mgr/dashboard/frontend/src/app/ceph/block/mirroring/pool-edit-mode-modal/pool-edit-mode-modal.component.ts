@@ -66,7 +66,7 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
       }
 
       const poolData = data.content_data.pools;
-      const pool = poolData.find((o) => this.poolName === o['name']);
+      const pool = poolData.find((o: any) => this.poolName === o['name']);
       this.peerExists = pool && pool['peer_uuids'].length;
     });
   }

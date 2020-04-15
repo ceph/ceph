@@ -1,3 +1,5 @@
+<cd-rbd-tabs></cd-rbd-tabs>
+
 <cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
                [status]="viewCacheStatus.status"
                [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
@@ -15,10 +17,10 @@
                       [selection]="selection"
                       [tableActions]="tableActions">
     </cd-table-actions>
-
     <button class="btn btn-light"
             type="button"
             (click)="purgeModal()"
+            [disabled]="disablePurgeBtn"
             *ngIf="permission.delete">
       <i [ngClass]="[icons.destroy]"
          aria-hidden="true"></i>

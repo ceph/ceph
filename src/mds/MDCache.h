@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "common/DecayCounter.h"
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "include/filepath.h"
 #include "include/elist.h"
@@ -60,8 +61,6 @@
 #include "MDSContext.h"
 #include "MDSMap.h"
 #include "Mutation.h"
-
-class PerfCounters;
 
 class MDSRank;
 class Session;
@@ -725,6 +724,10 @@ class MDCache {
   void add_recovered_truncate(CInode *in, LogSegment *ls);
   void remove_recovered_truncate(CInode *in, LogSegment *ls);
   void start_recovered_truncates();
+
+  // purge unsafe inodes
+  void start_purge_inodes();
+  void purge_inodes(const interval_set<inodeno_t>& i, LogSegment *ls);
 
   CDir *get_auth_container(CDir *in);
   CDir *get_export_container(CDir *dir);

@@ -14,6 +14,8 @@
 #ifndef CEPH_MDLOG_H
 #define CEPH_MDLOG_H
 
+#include "include/common_fwd.h"
+
 enum {
   l_mdl_first = 5000,
   l_mdl_evadd,
@@ -55,7 +57,6 @@ class LogEvent;
 class MDSRank;
 class LogSegment;
 class ESubtreeMap;
-class PerfCounters;
 
 class MDLog {
 public:

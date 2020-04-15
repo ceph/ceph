@@ -10,6 +10,7 @@ import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.servic
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { FinishedTask } from '../../../../shared/models/finished-task';
 import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { Pool } from '../../../pool/pool';
 
 @Component({
   selector: 'cd-bootstrap-import-modal',
@@ -67,7 +68,7 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       }
 
       const pools = data.content_data.pools;
-      this.pools = pools.reduce((acc, pool) => {
+      this.pools = pools.reduce((acc: any[], pool: Pool) => {
         acc.push({
           name: pool['name'],
           mirror_mode: pool['mirror_mode']

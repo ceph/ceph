@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #pragma once
 
@@ -106,7 +107,7 @@ private:
 			  const ceph::bufferlist& payload,
 			  ceph::bufferlist *reply) final;
 
-  CephContext cct; // for auth_registry
+  crimson::common::CephContext cct; // for auth_registry
   AuthRegistry auth_registry;
   crimson::common::AuthHandler& auth_handler;
 
@@ -140,7 +141,7 @@ private:
 
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				MessageRef m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
   seastar::future<> handle_monmap(crimson::net::Connection* conn,
 				  Ref<MMonMap> m);

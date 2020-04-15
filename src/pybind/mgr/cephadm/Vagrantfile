@@ -17,8 +17,8 @@ Vagrant.configure("2") do |config|
     config.vm.define "osd#{i}" do |osd|
       osd.vm.hostname = "osd#{i}"
       osd.vm.provider :libvirt do |libvirt|
-        libvirt.storage :file, :size => '5G'
-        libvirt.storage :file, :size => '5G'
+        libvirt.storage :file, :size => '20G'
+        libvirt.storage :file, :size => '20G'
       end
     end
   end

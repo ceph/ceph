@@ -673,25 +673,20 @@ template<class T, class Alloc, typename traits>
 inline std::enable_if_t<!traits::supported>
   encode(const std::list<T,Alloc>& ls, bufferlist& bl, uint64_t features)
 {
-  // should i pre- or post- count?
-  if (!ls.empty()) {
-    unsigned pos = bl.length();
-    unsigned n = 0;
-    encode(n, bl);
-    for (auto p = ls.begin(); p != ls.end(); ++p) {
-      n++;
-      encode(*p, bl, features);
-    }
-    ceph_le32 en;
-    en = n;
-    bl.copy_in(pos, sizeof(en), (char*)&en);
-  } else {
-    __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
-    encode(n, bl);
-    for (auto p = ls.begin(); p != ls.end(); ++p)
-      encode(*p, bl, features);
+  using counter_encode_t = ceph_le32;
+  unsigned n = 0;
+  auto filler = bl.append_hole(sizeof(counter_encode_t));
+  for (const auto& item : ls) {
+    // we count on our own because of buggy std::list::size() implementation
+    // which doesn't follow the O(1) complexity constraint C++11 has brought.
+    ++n;
+    encode(item, bl, features);
   }
+  counter_encode_t en;
+  en = n;
+  filler.copy_in(sizeof(en), reinterpret_cast<char*>(&en));
 }
+
 template<class T, class Alloc, typename traits>
 inline std::enable_if_t<!traits::supported>
   decode(std::list<T,Alloc>& ls, bufferlist::const_iterator& p)
@@ -1387,7 +1382,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   } else if (skip_v) {							\
     if (bl.get_remaining() < skip_v)					\
       throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
-    bl.advance(skip_v);							\
+    bl +=  skip_v;							\
   }									\
   unsigned struct_end = 0;						\
   if (struct_v >= lenv) {						\
@@ -1472,7 +1467,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     if (bl.get_off() > struct_end)					\
       throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     if (bl.get_off() < struct_end)					\
-      bl.advance(struct_end - bl.get_off());				\
+      bl += struct_end - bl.get_off();					\
   }
 
 namespace ceph {

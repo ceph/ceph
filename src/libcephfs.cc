@@ -1657,7 +1657,7 @@ extern "C" int ceph_ll_read(class ceph_mount_info *cmount, Fh* filehandle,
   r = cmount->get_client()->ll_read(filehandle, off, len, &bl);
   if (r >= 0)
     {
-      bl.copy(0, bl.length(), buf);
+      bl.begin().copy(bl.length(), buf);
       r = bl.length();
     }
   return r;

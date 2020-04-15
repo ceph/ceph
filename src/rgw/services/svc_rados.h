@@ -68,10 +68,13 @@ public:
   void shutdown() override;
 
   uint64_t instance_id();
+  bool check_secure_mon_conn() const;
 
   RGWAsyncRadosProcessor *get_async_processor() {
     return async_processor.get();
   }
+
+  int clog_warn(const string& msg);
 
   class Handle;
 
@@ -203,6 +206,11 @@ public:
     }
 
     int watch_flush();
+
+    int mon_command(std::string cmd,
+                    const bufferlist& inbl,
+                    bufferlist *outbl,
+                    std::string *outs);
   };
 
   Handle handle() {

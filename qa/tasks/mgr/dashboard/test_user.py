@@ -11,8 +11,29 @@ from .helper import DashboardTestCase, JObj, JLeaf
 
 class UserTest(DashboardTestCase):
     @classmethod
+    def setUpClass(cls):
+        super(UserTest, cls).setUpClass()
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-length-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-oldpwd-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-username-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-exclusion-list-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-complexity-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-sequential-chars-enabled', 'true'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-repetitive-chars-enabled', 'true'])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-username-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-exclusion-list-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-complexity-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-sequential-chars-enabled', 'false'])
+        cls._ceph_cmd(['dashboard', 'set-pwd-policy-check-repetitive-chars-enabled', 'false'])
+        super(UserTest, cls).tearDownClass()
+
+    @classmethod
     def _create_user(cls, username=None, password=None, name=None, email=None, roles=None,
-                     enabled=True, pwd_expiration_date=None):
+                     enabled=True, pwd_expiration_date=None, pwd_update_required=False):
         data = {}
         if username:
             data['username'] = username
@@ -26,6 +47,7 @@ class UserTest(DashboardTestCase):
             data['roles'] = roles
         if pwd_expiration_date:
             data['pwdExpirationDate'] = pwd_expiration_date
+        data['pwdUpdateRequired'] = pwd_update_required
         data['enabled'] = enabled
         cls._post("/api/user", data)
 
@@ -54,7 +76,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         })
 
         self._put('/api/user/user1', {
@@ -71,7 +94,8 @@ class UserTest(DashboardTestCase):
             'roles': ['block-manager'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         })
 
         self._delete('/api/user/user1')
@@ -101,7 +125,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': False,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         })
 
         self._delete('/api/user/klara')
@@ -120,7 +145,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': None
+            'pwdExpirationDate': None,
+            'pwdUpdateRequired': False
         }])
 
     def test_create_user_already_exists(self):
@@ -220,7 +246,7 @@ class UserTest(DashboardTestCase):
         })
         self.assertStatus(400)
         self.assertError('password_policy_validation_failed', 'user',
-                         'Password must not contain keywords.')
+                         'Password must not contain the keyword "OSD".')
         self._reset_login_to_admin('test1')
 
     def test_change_password_contains_sequential_characters(self):
@@ -247,9 +273,8 @@ class UserTest(DashboardTestCase):
                          'Password must not contain repetitive characters.')
         self._reset_login_to_admin('test1')
 
+    @DashboardTestCase.RunAs('test1', 'mypassword10#', ['read-only'], False)
     def test_change_password(self):
-        self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
-        self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
             'old_password': 'mypassword10#',
             'new_password': 'newpassword01#'
@@ -259,8 +284,6 @@ class UserTest(DashboardTestCase):
         self._post('/api/auth', {'username': 'test1', 'password': 'mypassword10#'})
         self.assertStatus(400)
         self.assertError(code='invalid_credentials', component='auth')
-        self.delete_user('test1')
-        self.login('admin', 'admin')
 
     def test_create_user_password_cli(self):
         exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create',
@@ -268,12 +291,11 @@ class UserTest(DashboardTestCase):
         self.assertEqual(exitcode, 0)
         self.delete_user('test1')
 
+    @DashboardTestCase.RunAs('test2', 'foo_bar_10#', force_password=False, login=False)
     def test_change_user_password_cli(self):
-        self.create_user('test2', 'foo_bar_10#', force_password=False)
         exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
                                           'test2', 'foo_new-password01#'])
         self.assertEqual(exitcode, 0)
-        self.delete_user('test2')
 
     def test_create_user_password_force_cli(self):
         exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create',
@@ -282,24 +304,22 @@ class UserTest(DashboardTestCase):
         self.assertEqual(exitcode, 0)
         self.delete_user('test11')
 
+    @DashboardTestCase.RunAs('test22', 'foo_bar_10#', force_password=False, login=False)
     def test_change_user_password_force_cli(self):
-        self.create_user('test22', 'foo_bar_10#', force_password=False)
         exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
                                           '--force-password', 'test22',
                                           'bar'])
         self.assertEqual(exitcode, 0)
-        self.delete_user('test22')
 
     def test_create_user_password_cli_fail(self):
         exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-create', 'test3', 'foo'])
         self.assertNotEqual(exitcode, 0)
 
+    @DashboardTestCase.RunAs('test4', 'x1z_tst+_10#', force_password=False, login=False)
     def test_change_user_password_cli_fail(self):
-        self.create_user('test4', 'x1z_tst+_10#', force_password=False)
         exitcode = self._ceph_cmd_result(['dashboard', 'ac-user-set-password',
                                           'test4', 'bar'])
         self.assertNotEqual(exitcode, 0)
-        self.delete_user('test4')
 
     def test_create_user_with_pwd_expiration_date(self):
         future_date = datetime.utcnow() + timedelta(days=10)
@@ -323,7 +343,8 @@ class UserTest(DashboardTestCase):
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
             'enabled': True,
-            'pwdExpirationDate': future_date
+            'pwdExpirationDate': future_date,
+            'pwdUpdateRequired': False
         })
         self._delete('/api/user/user1')
 
@@ -365,31 +386,70 @@ class UserTest(DashboardTestCase):
 
     def test_pwd_expiration_date_update(self):
         self._ceph_cmd(['dashboard', 'set-user-pwd-expiration-span', '10'])
-        self._create_user(username='user1',
-                          password='mypassword10#',
-                          name='My Name',
-                          email='my@email.com',
-                          roles=['administrator'])
-        self.assertStatus(201)
+        self.create_user('user1', 'mypassword10#', ['administrator'])
 
         user_1 = self._get('/api/user/user1')
         self.assertStatus(200)
 
-        time.sleep(10)
         self.login('user1', 'mypassword10#')
         self._post('/api/user/user1/change_password', {
             'old_password': 'mypassword10#',
             'new_password': 'newpassword01#'
         })
         self.assertStatus(200)
-        self._reset_login_to_admin()
 
+        # Compare password expiration dates.
+        self._reset_login_to_admin()
         user_1_pwd_changed = self._get('/api/user/user1')
         self.assertStatus(200)
         self.assertLess(user_1['pwdExpirationDate'], user_1_pwd_changed['pwdExpirationDate'])
 
-        self._delete('/api/user/user1')
+        # Cleanup
+        self.delete_user('user1')
         self._ceph_cmd(['dashboard', 'set-user-pwd-expiration-span', '0'])
+
+    def test_pwd_update_required(self):
+        self._create_user(username='user1',
+                          password='mypassword10#',
+                          name='My Name',
+                          email='my@email.com',
+                          roles=['administrator'],
+                          pwd_update_required=True)
+        self.assertStatus(201)
+
+        user_1 = self._get('/api/user/user1')
+        self.assertStatus(200)
+        self.assertEqual(user_1['pwdUpdateRequired'], True)
+
+        self.login('user1', 'mypassword10#')
+        self.assertStatus(201)
+
+        self._get('/api/osd')
+        self.assertStatus(403)
+        self._reset_login_to_admin('user1')
+
+    def test_pwd_update_required_change_pwd(self):
+        self._create_user(username='user1',
+                          password='mypassword10#',
+                          name='My Name',
+                          email='my@email.com',
+                          roles=['administrator'],
+                          pwd_update_required=True)
+        self.assertStatus(201)
+
+        self.login('user1', 'mypassword10#')
+        self._post('/api/user/user1/change_password', {
+            'old_password': 'mypassword10#',
+            'new_password': 'newpassword01#'
+        })
+
+        self.login('user1', 'newpassword01#')
+        user_1 = self._get('/api/user/user1')
+        self.assertStatus(200)
+        self.assertEqual(user_1['pwdUpdateRequired'], False)
+        self._get('/api/osd')
+        self.assertStatus(200)
+        self._reset_login_to_admin('user1')
 
     def test_validate_password_weak(self):
         self._post('/api/user/validate_password', {
@@ -469,3 +529,13 @@ class UserTest(DashboardTestCase):
             'credits': 0,
             'valuation': 'Password must not be the same as the previous one.'
         })
+
+    def test_create_user_pwd_update_required(self):
+        self.create_user('foo', 'bar', cmd_args=['--pwd_update_required'])
+        self._get('/api/user/foo')
+        self.assertStatus(200)
+        self.assertJsonSubset({
+            'username': 'foo',
+            'pwdUpdateRequired': True
+        })
+        self.delete_user('foo')

@@ -14,13 +14,14 @@ class ConfigMonitor : public PaxosService
 {
   version_t version = 0;
   ConfigMap config_map;
-  map<string,boost::optional<bufferlist>> pending;
-  string pending_description;
+  std::map<std::string,boost::optional<ceph::buffer::list>> pending;
+  std::string pending_description;
+  std::map<std::string,boost::optional<ceph::buffer::list>> pending_cleanup;
 
-  map<string,bufferlist> current;
+  std::map<std::string,ceph::buffer::list> current;
 
 public:
-  ConfigMonitor(Monitor *m, Paxos *p, const string& service_name);
+  ConfigMonitor(Monitor *m, Paxos *p, const std::string& service_name);
 
   void init() override;
 

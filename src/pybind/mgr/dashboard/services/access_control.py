@@ -57,9 +57,7 @@ class PasswordPolicy(object):
         self.password = password
         self.username = username
         self.old_password = old_password
-        self.forbidden_words = ['osd', 'host', 'dashboard', 'pool',
-                                'block', 'nfs', 'ceph', 'monitors',
-                                'gateway', 'logs', 'crush', 'maps']
+        self.forbidden_words = Settings.PWD_POLICY_EXCLUSION_LIST.split(',')
         self.complexity_credits = 0
 
     @staticmethod
@@ -67,7 +65,9 @@ class PasswordPolicy(object):
         return re.compile('(?:{0})'.format(word),
                           flags=re.IGNORECASE).search(password)
 
-    def check_password_characters(self):
+    def check_password_complexity(self):
+        if not Settings.PWD_POLICY_CHECK_COMPLEXITY_ENABLED:
+            return Settings.PWD_POLICY_MIN_COMPLEXITY
         digit_credit = 1
         small_letter_credit = 1
         big_letter_credit = 2
@@ -88,47 +88,65 @@ class PasswordPolicy(object):
         return self.complexity_credits
 
     def check_is_old_password(self):
+        if not Settings.PWD_POLICY_CHECK_OLDPWD_ENABLED:
+            return False
         return self.old_password and self.password == self.old_password
 
     def check_if_contains_username(self):
+        if not Settings.PWD_POLICY_CHECK_USERNAME_ENABLED:
+            return False
         if not self.username:
             return False
         return self._check_if_contains_word(self.password, self.username)
 
     def check_if_contains_forbidden_words(self):
+        if not Settings.PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED:
+            return False
         return self._check_if_contains_word(self.password,
                                             '|'.join(self.forbidden_words))
 
     def check_if_sequential_characters(self):
+        if not Settings.PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED:
+            return False
         for i in range(1, len(self.password) - 1):
             if ord(self.password[i - 1]) + 1 == ord(self.password[i])\
                == ord(self.password[i + 1]) - 1:
                 return True
         return False
 
-    def check_if_repetetive_characters(self):
+    def check_if_repetitive_characters(self):
+        if not Settings.PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED:
+            return False
         for i in range(1, len(self.password) - 1):
             if self.password[i - 1] == self.password[i] == self.password[i + 1]:
                 return True
         return False
 
-    def check_password_length(self, min_length=8):
-        return len(self.password) >= min_length
+    def check_password_length(self):
+        if not Settings.PWD_POLICY_CHECK_LENGTH_ENABLED:
+            return True
+        return len(self.password) >= Settings.PWD_POLICY_MIN_LENGTH
 
     def check_all(self):
         """
         Perform all password policy checks.
         :raise PasswordPolicyException: If a password policy check fails.
         """
-        if self.check_password_characters() < 10 or not self.check_password_length():
+        if not Settings.PWD_POLICY_ENABLED:
+            return
+        if self.check_password_complexity() < Settings.PWD_POLICY_MIN_COMPLEXITY:
+            raise PasswordPolicyException('Password is too weak.')
+        if not self.check_password_length():
             raise PasswordPolicyException('Password is too weak.')
         if self.check_is_old_password():
             raise PasswordPolicyException('Password must not be the same as the previous one.')
         if self.check_if_contains_username():
             raise PasswordPolicyException('Password must not contain username.')
-        if self.check_if_contains_forbidden_words():
-            raise PasswordPolicyException('Password must not contain keywords.')
-        if self.check_if_repetetive_characters():
+        result = self.check_if_contains_forbidden_words()
+        if result:
+            raise PasswordPolicyException('Password must not contain the keyword "{}".'.format(
+                result.group(0)))
+        if self.check_if_repetitive_characters():
             raise PasswordPolicyException('Password must not contain repetitive characters.')
         if self.check_if_sequential_characters():
             raise PasswordPolicyException('Password must not contain sequential characters.')
@@ -219,7 +237,6 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
 # RadosGW manager role provides all permissions for block related scopes
 RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CONFIG_OPT: [_P.READ],
     Scope.GRAFANA: [_P.READ],
 })
 
@@ -240,14 +257,12 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
 # Pool manager role provides all permissions for pool related scopes
 POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
     Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CONFIG_OPT: [_P.READ],
     Scope.GRAFANA: [_P.READ],
 })
 
-# Pool manager role provides all permissions for CephFS related scopes
+# CephFS manager role provides all permissions for CephFS related scopes
 CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CONFIG_OPT: [_P.READ],
     Scope.GRAFANA: [_P.READ],
 })
 
@@ -255,7 +270,6 @@ GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
     Scope.NFS_GANESHA: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
-    Scope.CONFIG_OPT: [_P.READ],
     Scope.GRAFANA: [_P.READ],
 })
 
@@ -274,7 +288,8 @@ SYSTEM_ROLES = {
 
 class User(object):
     def __init__(self, username, password, name=None, email=None, roles=None,
-                 last_update=None, enabled=True, pwd_expiration_date=None):
+                 last_update=None, enabled=True, pwd_expiration_date=None,
+                 pwd_update_required=False):
         self.username = username
         self.password = password
         self.name = name
@@ -291,6 +306,7 @@ class User(object):
         self.pwd_expiration_date = pwd_expiration_date
         if self.pwd_expiration_date is None:
             self.refresh_pwd_expiration_date()
+        self.pwd_update_required = pwd_update_required
 
     def refresh_last_update(self):
         self.last_update = int(time.time())
@@ -319,6 +335,7 @@ class User(object):
         self.password = hashed_password
         self.refresh_last_update()
         self.refresh_pwd_expiration_date()
+        self.pwd_update_required = False
 
     def compare_password(self, password):
         """
@@ -353,13 +370,17 @@ class User(object):
         self.refresh_last_update()
 
     def authorize(self, scope, permissions):
+        if self.pwd_update_required:
+            return False
+
         for role in self.roles:
             if role.authorize(scope, permissions):
                 return True
         return False
 
     def permissions_dict(self):
-        perms = {}
+        # type: () -> dict
+        perms = {}  # type: dict
         for role in self.roles:
             for scope, perms_list in role.scopes_permissions.items():
                 if scope in perms:
@@ -379,14 +400,16 @@ class User(object):
             'email': self.email,
             'lastUpdate': self.last_update,
             'enabled': self.enabled,
-            'pwdExpirationDate': self.pwd_expiration_date
+            'pwdExpirationDate': self.pwd_expiration_date,
+            'pwdUpdateRequired': self.pwd_update_required
         }
 
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'], u_dict['enabled'], u_dict['pwdExpirationDate'])
+                    u_dict['lastUpdate'], u_dict['enabled'],
+                    u_dict['pwdExpirationDate'], u_dict['pwdUpdateRequired'])
 
 
 class AccessControlDB(object):
@@ -426,7 +449,8 @@ class AccessControlDB(object):
 
             del self.roles[name]
 
-    def create_user(self, username, password, name, email, enabled=True, pwd_expiration_date=None):
+    def create_user(self, username, password, name, email, enabled=True,
+                    pwd_expiration_date=None, pwd_update_required=False):
         logger.debug("creating user: username=%s", username)
         with self.lock:
             if username in self.users:
@@ -435,7 +459,8 @@ class AccessControlDB(object):
                (pwd_expiration_date < int(time.mktime(datetime.utcnow().timetuple()))):
                 raise PwdExpirationDateNotValid()
             user = User(username, password_hash(password), name, email, enabled=enabled,
-                        pwd_expiration_date=pwd_expiration_date)
+                        pwd_expiration_date=pwd_expiration_date,
+                        pwd_update_required=pwd_update_required)
             self.users[username] = user
             return user
 
@@ -500,6 +525,7 @@ class AccessControlDB(object):
                 for user, _ in v1_db['users'].items():
                     v1_db['users'][user]['enabled'] = True
                     v1_db['users'][user]['pwdExpirationDate'] = None
+                    v1_db['users'][user]['pwdUpdateRequired'] = False
 
                 self.roles = {rn: Role.from_dict(r) for rn, r in v1_db.get('roles', {}).items()}
                 self.users = {un: User.from_dict(u, dict(self.roles, **SYSTEM_ROLES))
@@ -524,12 +550,12 @@ class AccessControlDB(object):
             db.check_and_update_db()
             return db
 
-        db = json.loads(json_db)
+        dict_db = json.loads(json_db)
         roles = {rn: Role.from_dict(r)
-                 for rn, r in db.get('roles', {}).items()}
+                 for rn, r in dict_db.get('roles', {}).items()}
         users = {un: User.from_dict(u, dict(roles, **SYSTEM_ROLES))
-                 for un, u in db.get('users', {}).items()}
-        return cls(db['version'], users, roles)
+                 for un, u in dict_db.get('users', {}).items()}
+        return cls(dict_db['version'], users, roles)
 
 
 def load_access_control_db():
@@ -678,11 +704,12 @@ def ac_user_show_cmd(_, username=None):
                  'name=email,type=CephString,req=false '
                  'name=enabled,type=CephBool,req=false '
                  'name=force_password,type=CephBool,req=false '
-                 'name=pwd_expiration_date,type=CephInt,req=false',
+                 'name=pwd_expiration_date,type=CephInt,req=false '
+                 'name=pwd_update_required,type=CephBool,req=false',
                  'Create a user')
 def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
                        email=None, enabled=True, force_password=False,
-                       pwd_expiration_date=None):
+                       pwd_expiration_date=None, pwd_update_required=False):
     try:
         role = mgr.ACCESS_CTRL_DB.get_role(rolename) if rolename else None
     except RoleDoesNotExist as ex:
@@ -695,11 +722,12 @@ def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
             pw_check = PasswordPolicy(password, username)
             pw_check.check_all()
         user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email,
-                                              enabled, pwd_expiration_date)
+                                              enabled, pwd_expiration_date,
+                                              pwd_update_required)
     except PasswordPolicyException as ex:
         return -errno.EINVAL, '', str(ex)
     except UserAlreadyExists as ex:
-        return -errno.EEXIST, '', str(ex)
+        return 0, str(ex), ''
 
     if role:
         user.set_roles([role])
@@ -889,7 +917,8 @@ class LocalAuthenticator(object):
                 if user.enabled and user.compare_password(password) \
                    and not user.is_pwd_expired():
                     return {'permissions': user.permissions_dict(),
-                            'pwdExpirationDate': user.pwd_expiration_date}
+                            'pwdExpirationDate': user.pwd_expiration_date,
+                            'pwdUpdateRequired': user.pwd_update_required}
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)
         return None

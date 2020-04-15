@@ -1,11 +1,9 @@
 from __future__ import print_function
-import argparse
 import json
 import logging
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
-from ceph_volume.util import encryption as encryption_utils
-from ceph_volume.util import system, disk
+from ceph_volume.util import system
 from ceph_volume import conf, decorators, terminal
 from ceph_volume.devices.lvm.common import rollback_osd
 from .common import create_parser
@@ -13,7 +11,7 @@ from .common import create_parser
 logger = logging.getLogger(__name__)
 
 
-def prepare_bluestore(block, secrets, osd_id, fsid, tmpfs):
+def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -36,6 +34,8 @@ def prepare_bluestore(block, secrets, osd_id, fsid, tmpfs):
     prepare_utils.osd_mkfs_bluestore(
         osd_id, fsid,
         keyring=cephx_secret,
+        wal=wal,
+        db=db
     )
 
 
@@ -73,23 +73,31 @@ class Prepare(object):
         """
         if self.args.cluster_fsid:
             return self.args.cluster_fsid
-        else:
-            return conf.ceph.get('global', 'fsid')
+
+        return conf.ceph.get('global', 'fsid')
 
     @decorators.needs_root
     def prepare(self):
         secrets = {'cephx_secret': prepare_utils.create_key()}
-        cluster_fsid = self.get_cluster_fsid()
-        osd_fsid = self.args.osd_fsid or system.generate_uuid()
+        osd_fsid = system.generate_uuid()
         crush_device_class = self.args.crush_device_class
         if crush_device_class:
             secrets['crush_device_class'] = crush_device_class
         tmpfs = not self.args.no_tmpfs
+        wal = ""
+        db = ""
+        if self.args.block_wal:
+            wal = self.args.block_wal
+        if self.args.block_db:
+            db = self.args.block_db
+
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
-            osd_fsid, json.dumps(secrets), osd_id=self.args.osd_id)
+            osd_fsid, json.dumps(secrets))
         prepare_bluestore(
             self.args.data,
+            wal,
+            db,
             secrets,
             self.osd_id,
             osd_fsid,
@@ -106,16 +114,18 @@ class Prepare(object):
 
         Encryption is not supported.
 
-        DB and WAL devices are not supported.
-
             ceph-volume raw prepare --bluestore --data {device}
+
+        DB and WAL devices are supported.
+
+            ceph-volume raw prepare --bluestore --data {device} --block.db {device} --block.wal {device}
 
         """)
         parser = create_parser(
             prog='ceph-volume raw prepare',
             description=sub_command_help,
         )
-        if len(self.argv) == 0:
+        if not self.argv:
             print(sub_command_help)
             return
         self.args = parser.parse_args(self.argv)

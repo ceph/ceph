@@ -1,7 +1,7 @@
 overrides:
   ceph:
     log-whitelist:
-      - not responding, replacing
+      - Replacing daemon mds
 
 tasks:
 - mds_thrash:

@@ -6,7 +6,7 @@ from . import PLUGIN_MANAGER as PM, Interface, Mixin  # pylint: disable=cyclic-i
 
 class CanMgr(Mixin):
     from .. import mgr
-    mgr = mgr
+    mgr = mgr  # type: ignore
 
 
 class CanCherrypy(Mixin):

@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include <string>
 #include <vector>
+#include <boost/algorithm/string.hpp>
 #include <boost/program_options.hpp>
 
 namespace rbd {
@@ -20,13 +21,15 @@ public:
 
   static const size_t LINE_WIDTH = 80;
   static const size_t MIN_NAME_WIDTH = 20;
-  static const size_t MAX_DESCRIPTION_OFFSET = LINE_WIDTH / 2;
+  static const size_t MAX_DESCRIPTION_OFFSET = 37;
 
   OptionPrinter(const OptionsDescription &positional,
                 const OptionsDescription &optional);
 
   void print_short(std::ostream &os, size_t initial_offset);
   void print_detailed(std::ostream &os);
+  static void print_optional(const OptionsDescription &global_opts,
+                             size_t &name_width, std::ostream &os);
 
 private:
   const OptionsDescription &m_positional;

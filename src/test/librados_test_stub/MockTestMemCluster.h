@@ -4,11 +4,11 @@
 #ifndef LIBRADOS_MOCK_TEST_MEM_CLUSTER_H
 #define LIBRADOS_MOCK_TEST_MEM_CLUSTER_H
 
+#include "include/common_fwd.h"
 #include "test/librados_test_stub/TestMemCluster.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "gmock/gmock.h"
 
-struct CephContext;
 
 namespace librados {
 

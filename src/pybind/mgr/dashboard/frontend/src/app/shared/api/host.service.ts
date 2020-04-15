@@ -4,7 +4,9 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
+import { Daemon } from '../models/daemon.interface';
 import { CdDevice } from '../models/devices';
+import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
 import { ApiModule } from './api.module';
 
@@ -20,11 +22,11 @@ export class HostService {
     return this.http.get(this.baseURL);
   }
 
-  add(hostname) {
+  create(hostname: string) {
     return this.http.post(this.baseURL, { hostname: hostname }, { observe: 'response' });
   }
 
-  remove(hostname) {
+  delete(hostname: string) {
     return this.http.delete(`${this.baseURL}/${hostname}`, { observe: 'response' });
   }
 
@@ -34,7 +36,11 @@ export class HostService {
       .pipe(map((devices) => devices.map((device) => this.deviceService.prepareDevice(device))));
   }
 
-  getSmartData(hostname) {
-    return this.http.get(`${this.baseURL}/${hostname}/smart`);
+  getSmartData(hostname: string) {
+    return this.http.get<SmartDataResponseV1>(`${this.baseURL}/${hostname}/smart`);
+  }
+
+  getDaemons(hostname: string): Observable<Daemon[]> {
+    return this.http.get<Daemon[]>(`${this.baseURL}/${hostname}/daemons`);
   }
 }

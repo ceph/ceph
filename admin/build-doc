@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/sh
 
 cd "$(dirname "$0")"
 cd ..
@@ -31,17 +31,15 @@ elif command -v yum >/dev/null; then
         exit 1
     fi
 else
-    for command in virtualenv doxygen ant ditaa cython; do
-	command -v "$command" > /dev/null;
-	ret_code=$?
-	if [ $ret_code -ne 0 ]; then
+    for command in dot virtualenv doxygen ant ditaa cython; do
+        if ! command -v "$command" > /dev/null; then
             # add a space after old values
-	    missing="${missing:+$missing }$command"
-	fi
+            missing="${missing:+$missing }$command"
+        fi
     done
     if [ -n "$missing" ]; then
-	echo "$0: missing required command, please install them:" 1>&2
-	echo "$missing"
+        echo "$0: missing required command, please install them:" 1>&2
+        echo "$missing" 1>&2
 	exit 1
     fi
 fi
@@ -82,10 +80,14 @@ for bind in rados rbd cephfs rgw; do
     fi
     ln -sf lib${bind}.so.1 $vdir/lib/lib${bind}.so
     gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc /dev/null
+    ld_flags="-Wl,-rpath,$vdir/lib"
+    if [ $(uname) != Darwin ]; then
+        ld_flags="${ld_flags},--no-as-needed"
+    fi
     BUILD_DOC=1 \
         CFLAGS="-iquote$TOPDIR/src/include" \
         CPPFLAGS="-iquote$TOPDIR/src/include" \
-        LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
+        LDFLAGS="-L$vdir/lib ${ld_flags}" \
         $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
     # rgwfile_version(), librgw_create(), rgw_mount()
     # since py3.5, distutils adds postfix in between ${bind} and so
@@ -93,8 +95,13 @@ for bind in rados rbd cephfs rgw; do
     if [ ! -e $lib_fn ]; then
        lib_fn=$vdir/lib/python*/*-packages/${bind}.so
     fi
-    nm $lib_fn | grep -E "U (lib)?${bind}" | \
-        awk '{ print "void "$2"(void) {}" }' | \
+    if [ ${bind} = "cephfs" ]; then
+        func_prefix="ceph"
+    else
+        func_prefix="(lib)?${bind}"
+    fi
+    nm $lib_fn | grep -E "U (_)?${func_prefix}" | \
+        awk '{ gsub(/^_/,"",$2); print "void "$2"(void) {}" }' | \
         gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc -
     if [ ${bind} != rados ]; then
         rm -f $TOPDIR/src/pybind/${bind}/rados.pxd
@@ -152,7 +159,7 @@ rm -rf $JAVADIR/doc
 ant -buildfile $JAVADIR/build.xml docs
 
 # Create clean target directory
-JAVA_OUTDIR=$TOPDIR/build-doc/output/html/api/libcephfs-java/javadoc
+JAVA_OUTDIR=$TOPDIR/build-doc/output/html/cephfs/api/libcephfs-java/javadoc
 rm -rf $JAVA_OUTDIR
 mkdir $JAVA_OUTDIR
 

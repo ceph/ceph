@@ -11,16 +11,11 @@ describe('Notification page', () => {
   });
 
   afterEach(async () => {
-    NotificationSidebarPageHelper.checkConsole();
-
-    if (await notification.getCloseBtn().isPresent()) {
-      await notification.waitClickableAndClick(notification.getCloseBtn());
-      await notification.waitStaleness(notification.getSidebar());
-    }
+    await NotificationSidebarPageHelper.checkConsole();
   });
 
   it('should open notification sidebar', async () => {
-    await notification.waitStaleness(notification.getSidebar());
+    await notification.waitInvisibility(notification.getSidebar());
     await notification.open();
     await notification.waitVisibility(notification.getSidebar());
   });
@@ -29,13 +24,27 @@ describe('Notification page', () => {
     const poolName = 'e2e_notification_pool';
 
     await pools.navigateTo('create');
-    await pools.create(poolName, 16);
-    await pools.edit_pool_pg(poolName, 8, false);
+    await pools.create(poolName, 8);
+    await pools.edit_pool_pg(poolName, 4, false);
+    await notification.waitStaleness(notification.getToast());
 
+    // Check that running task is shown.
     await notification.open();
-    await notification.waitVisibility(notification.getTasks().first());
-    await expect((await notification.getTasks()).length).toBeGreaterThan(0);
+    await notification.waitFn(async () => {
+      const task = await notification.getTasks().first();
+      const text = await task.getText();
+      return text.includes(poolName);
+    }, 'Timed out verifying task.');
 
+    // Delete pool after task is complete (otherwise we get an error).
+    await notification.waitFn(
+      async () => {
+        const tasks = await notification.getTasks();
+        return tasks.length === 0 ? true : !(await tasks[0].getText()).includes(poolName);
+      },
+      'Timed out waiting for task to complete.',
+      40000
+    );
     await pools.delete(poolName);
   });
 
@@ -45,10 +54,20 @@ describe('Notification page', () => {
   });
 
   it('should clear notifications', async () => {
-    await notification.open();
+    await notification.waitStaleness(notification.getToast());
     await expect((await notification.getNotifications()).length).toBeGreaterThan(0);
+    await notification.waitVisibility(notification.getClearNotficationsBtn());
+
+    // It can happen that although notifications are cleared, by the time we check the
+    // notifications amount, another notification can appear, so we check it more than once (if needed).
     await notification.waitClickableAndClick(notification.getClearNotficationsBtn());
-    await notification.waitStaleness(notification.getNotifications().first());
-    await expect((await notification.getNotifications()).length).toBe(0);
+    await notification.waitFn(async () => {
+      const notifications = await notification.getNotifications();
+      if (notifications.length > 0) {
+        await notification.waitClickableAndClick(notification.getClearNotficationsBtn());
+        return false;
+      }
+      return true;
+    }, 'Timed out checking that notifications are cleared.');
   });
 });

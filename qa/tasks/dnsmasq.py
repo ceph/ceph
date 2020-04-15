@@ -8,7 +8,7 @@ from teuthology import misc
 from teuthology.exceptions import ConfigError
 from teuthology import contextutil
 from teuthology import packaging
-from util import get_remote_for_role
+from tasks.util import get_remote_for_role
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def setup_dnsmasq(remote, testdir, cnames):
     # restart dnsmasq
     remote.run(args=['sudo', 'systemctl', 'restart', 'dnsmasq'])
     # verify dns name is set
-    remote.run(args=['ping', '-c', '4', cnames.keys()[0]])
+    remote.run(args=['ping', '-c', '4', next(iter(cnames.keys()))])
 
     try:
         yield

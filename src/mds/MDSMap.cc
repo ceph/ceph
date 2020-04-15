@@ -12,13 +12,27 @@
  * 
  */
 
+#include <sstream>
+
 #include "common/debug.h"
 #include "mon/health_check.h"
 
 #include "MDSMap.h"
 
-#include <sstream>
+using std::dec;
+using std::hex;
+using std::list;
+using std::make_pair;
+using std::map;
+using std::multimap;
+using std::ostream;
+using std::pair;
+using std::string;
+using std::set;
 using std::stringstream;
+
+using ceph::bufferlist;
+using ceph::Formatter;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
@@ -79,6 +93,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->dump_int("state_seq", state_seq);
   f->dump_stream("addr") << addrs.get_legacy_str();
   f->dump_object("addrs", addrs);
+  f->dump_int("join_fscid", join_fscid);
   if (laggy_since != utime_t())
     f->dump_stream("laggy_since") << laggy_since;
   
@@ -106,6 +121,9 @@ void MDSMap::mds_info_t::dump(std::ostream& o) const
   if (is_frozen()) {
     o << " frozen";
   }
+  if (join_fscid != FS_CLUSTER_ID_NONE) {
+    o << " join_fscid=" << join_fscid;
+  }
   o << " addr " << addrs << "]";
 }
 
@@ -132,7 +150,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("root", root);
   f->dump_int("session_timeout", session_timeout);
   f->dump_int("session_autoclose", session_autoclose);
-  f->dump_stream("min_compat_client") << ceph::to_integer<int>(min_compat_client) << " ("
+  f->dump_stream("min_compat_client") << to_integer<int>(min_compat_client) << " ("
 				      << min_compat_client << ")";
   f->dump_int("max_file_size", max_file_size);
   f->dump_int("last_failure", last_failure);
@@ -212,7 +230,7 @@ void MDSMap::print(ostream& out) const
   out << "session_timeout\t" << session_timeout << "\n"
       << "session_autoclose\t" << session_autoclose << "\n";
   out << "max_file_size\t" << max_file_size << "\n";
-  out << "min_compat_client\t" << ceph::to_integer<int>(min_compat_client) << " ("
+  out << "min_compat_client\t" << to_integer<int>(min_compat_client) << " ("
 			       << min_compat_client << ")\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
@@ -436,7 +454,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
     health_check_t& fscheck = checks->get_or_add(
       "FS_DEGRADED", HEALTH_WARN,
       "%num% filesystem%plurals% %isorare% degraded", 1);
-    ostringstream ss;
+    std::ostringstream ss;
     ss << "fs " << fs_name << " is degraded";
     fscheck.detail.push_back(ss.str());
 
@@ -526,7 +544,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   encode(std::string(), bl); /* standby_for_name */
   encode(export_targets, bl);
   encode(mds_features, bl);
-  encode(FS_CLUSTER_ID_NONE, bl); /* standby_for_fscid */
+  encode(join_fscid, bl); /* formerly: standby_for_fscid */
   encode(false, bl);
   if (v >= 9) {
     encode(flags, bl);
@@ -576,8 +594,7 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   if (struct_v >= 5)
     decode(mds_features, bl);
   if (struct_v >= 6) {
-    fs_cluster_id_t standby_for_fscid;
-    decode(standby_for_fscid, bl);
+    decode(join_fscid, bl);
   }
   if (struct_v >= 7) {
     bool standby_replay;

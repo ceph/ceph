@@ -164,6 +164,49 @@ class TestSizeFromHumanReadable(object):
         assert result == disk.Size(tb=1.8)
 
 
+class TestSizeParse(object):
+
+    def test_bytes(self):
+        result = disk.Size.parse('2')
+        assert result == disk.Size(b=2)
+
+    def test_kilobytes(self):
+        result = disk.Size.parse('2K')
+        assert result == disk.Size(kb=2)
+
+    def test_megabytes(self):
+        result = disk.Size.parse('2M')
+        assert result == disk.Size(mb=2)
+
+    def test_gigabytes(self):
+        result = disk.Size.parse('2G')
+        assert result == disk.Size(gb=2)
+
+    def test_terrabytes(self):
+        result = disk.Size.parse('2T')
+        assert result == disk.Size(tb=2)
+
+    def test_tb(self):
+        result = disk.Size.parse('2Tb')
+        assert result == disk.Size(tb=2)
+
+    def test_case(self):
+        result = disk.Size.parse('2t')
+        assert result == disk.Size(tb=2)
+
+    def test_space(self):
+        result = disk.Size.parse('2T')
+        assert result == disk.Size(tb=2)
+
+    def test_float(self):
+        result = disk.Size.parse('2.0')
+        assert result == disk.Size(b=2)
+        result = disk.Size.parse('2.0T')
+        assert result == disk.Size(tb=2)
+        result = disk.Size.parse('1.8T')
+        assert result == disk.Size(tb=1.8)
+
+
 class TestGetBlockDevsLsblk(object):
 
     @patch('ceph_volume.process.call')

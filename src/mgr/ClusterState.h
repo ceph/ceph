@@ -59,9 +59,6 @@ public:
 
   void update_delta_stats();
 
-  const bufferlist &get_health() const {return health_json;}
-  const bufferlist &get_mon_status() const {return mon_status_json;}
-
   ClusterState(MonClient *monc_, Objecter *objecter_, const MgrMap& mgrmap);
 
   void set_objecter(Objecter *objecter_);
@@ -139,6 +136,21 @@ public:
       pg_map,
       std::forward<Args>(args)...);
   }
+
+  template<typename Callback, typename...Args>
+  void with_health(Callback&& cb, Args&&...args) const
+  {
+    std::lock_guard l(lock);
+    std::forward<Callback>(cb)(health_json, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
+  void with_mon_status(Callback&& cb, Args&&...args) const
+  {
+    std::lock_guard l(lock);
+    std::forward<Callback>(cb)(mon_status_json, std::forward<Args>(args)...);
+  }
+
   void final_init();
   void shutdown();
   bool asok_command(std::string_view admin_command,

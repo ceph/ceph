@@ -22,6 +22,7 @@
 #include "mgr/OSDPerfMetricTypes.h"
 
 #include "common/perf_counters.h"
+#include "include/common_fwd.h"
 #include "mgr/DaemonHealthMetric.h"
 
 class PerfCounterType

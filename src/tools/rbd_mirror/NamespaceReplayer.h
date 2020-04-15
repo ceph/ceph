@@ -32,6 +32,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+struct PoolMetaCache;
 template <typename> class ServiceDaemon;
 template <typename> class Throttler;
 template <typename> struct Threads;
@@ -53,12 +54,14 @@ public:
       Throttler<ImageCtxT> *image_sync_throttler,
       Throttler<ImageCtxT> *image_deletion_throttler,
       ServiceDaemon<ImageCtxT> *service_daemon,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     return new NamespaceReplayer(name, local_ioctx, remote_ioctx,
                                  local_mirror_uuid, local_mirror_peer_uuid,
                                  remote_pool_meta, threads,
                                  image_sync_throttler, image_deletion_throttler,
-                                 service_daemon, cache_manager_handler);
+                                 service_daemon, cache_manager_handler,
+                                 pool_meta_cache);
   }
 
   NamespaceReplayer(const std::string &name,
@@ -71,7 +74,8 @@ public:
                     Throttler<ImageCtxT> *image_sync_throttler,
                     Throttler<ImageCtxT> *image_deletion_throttler,
                     ServiceDaemon<ImageCtxT> *service_daemon,
-                    journal::CacheManagerHandler *cache_manager_handler);
+                    journal::CacheManagerHandler *cache_manager_handler,
+                    PoolMetaCache* pool_meta_cache);
   NamespaceReplayer(const NamespaceReplayer&) = delete;
   NamespaceReplayer& operator=(const NamespaceReplayer&) = delete;
 
@@ -229,7 +233,8 @@ private:
   void handle_shut_down_local_status_updater(int r);
 
   void init_image_map(Context *on_finish);
-  void handle_init_image_map(int r, Context *on_finish);
+  void handle_init_image_map(int r, ImageMap<ImageCtxT> *image_map,
+                             Context *on_finish);
 
   void init_local_pool_watcher(Context *on_finish);
   void handle_init_local_pool_watcher(int r, Context *on_finish);
@@ -271,6 +276,7 @@ private:
   Throttler<ImageCtxT> *m_image_deletion_throttler;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
 
   mutable ceph::mutex m_lock;
 

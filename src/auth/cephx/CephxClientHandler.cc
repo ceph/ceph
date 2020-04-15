@@ -28,6 +28,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx client: "
 
+using std::string;
+
+using ceph::bufferlist;
+
 void CephxClientHandler::reset()
 {
   ldout(cct,10) << __func__ << dendl;
@@ -130,7 +134,7 @@ int CephxClientHandler::handle_response(
     CephXServerChallenge ch;
     try {
       decode(ch, indata);
-    } catch (buffer::error& e) {
+    } catch (ceph::buffer::error& e) {
       ldout(cct, 1) << __func__ << " failed to decode CephXServerChallenge: "
 		    << e.what() << dendl;
       return -EPERM;
@@ -147,7 +151,7 @@ int CephxClientHandler::handle_response(
   struct CephXResponseHeader header;
   try {
     decode(header, indata);
-  } catch (buffer::error& e) {
+  } catch (ceph::buffer::error& e) {
     ldout(cct, 1) << __func__ << " failed to decode CephXResponseHeader: "
 		  << e.what() << dendl;
     return -EPERM;
@@ -171,10 +175,11 @@ int CephxClientHandler::handle_response(
       ldout(cct, 10) << " want=" << want << " need=" << need << " have=" << have << dendl;
       if (!indata.end()) {
 	bufferlist cbl, extra_tickets;
+	using ceph::decode;
 	try {
 	  decode(cbl, indata);
 	  decode(extra_tickets, indata);
-	} catch (buffer::error& e) {
+	} catch (ceph::buffer::error& e) {
 	  ldout(cct, 1) << __func__ << " failed to decode tickets: "
 			<< e.what() << dendl;
 	  return -EPERM;

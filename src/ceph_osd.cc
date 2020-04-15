@@ -53,6 +53,15 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 
+using std::cerr;
+using std::cout;
+using std::map;
+using std::ostringstream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
 namespace {
 
 TracepointProvider::Traits osd_tracepoint_traits("libosd_tp.so",
@@ -241,7 +250,7 @@ int main(int argc, const char **argv)
 	try {
 	  decode(e, p);
 	}
-	catch (const buffer::error &e) {
+	catch (const ceph::buffer::error &e) {
 	  derr << "failed to decode LogEntry at offset " << pos << dendl;
 	  forker.exit(1);
 	}
@@ -524,31 +533,32 @@ flushjournal_out:
 
   public_msg_type = public_msg_type.empty() ? msg_type : public_msg_type;
   cluster_msg_type = cluster_msg_type.empty() ? msg_type : cluster_msg_type;
+  uint64_t nonce = Messenger::get_pid_nonce();
   Messenger *ms_public = Messenger::create(g_ceph_context, public_msg_type,
 					   entity_name_t::OSD(whoami), "client",
-					   getpid(),
+					   nonce,
 					   Messenger::HAS_HEAVY_TRAFFIC |
 					   Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msg_type,
 					    entity_name_t::OSD(whoami), "cluster",
-					    getpid(),
+					    nonce,
 					    Messenger::HAS_HEAVY_TRAFFIC |
 					    Messenger::HAS_MANY_CONNECTIONS);
   Messenger *ms_hb_back_client = Messenger::create(g_ceph_context, cluster_msg_type,
 					     entity_name_t::OSD(whoami), "hb_back_client",
-					     getpid(), Messenger::HEARTBEAT);
+					     nonce, Messenger::HEARTBEAT);
   Messenger *ms_hb_front_client = Messenger::create(g_ceph_context, public_msg_type,
 					     entity_name_t::OSD(whoami), "hb_front_client",
-					     getpid(), Messenger::HEARTBEAT);
+					     nonce, Messenger::HEARTBEAT);
   Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, cluster_msg_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
-						   getpid(), Messenger::HEARTBEAT);
+						   nonce, Messenger::HEARTBEAT);
   Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, public_msg_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
-						    getpid(), Messenger::HEARTBEAT);
+						    nonce, Messenger::HEARTBEAT);
   Messenger *ms_objecter = Messenger::create(g_ceph_context, public_msg_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
-					     getpid(), 0);
+					     nonce, 0);
   if (!ms_public || !ms_cluster || !ms_hb_front_client || !ms_hb_back_client || !ms_hb_back_server || !ms_hb_front_server || !ms_objecter)
     forker.exit(1);
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
@@ -574,7 +584,7 @@ flushjournal_out:
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_OSDENC;
 
-  ms_public->set_default_policy(Messenger::Policy::stateless_server(0));
+  ms_public->set_default_policy(Messenger::Policy::stateless_registered_server(0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				   client_byte_throttler.get(),
 				   nullptr);
@@ -582,10 +592,6 @@ flushjournal_out:
                         Messenger::Policy::lossy_client(osd_required));
   ms_public->set_policy(entity_name_t::TYPE_MGR,
                         Messenger::Policy::lossy_client(osd_required));
-
-  //try to poison pill any OSD connections on the wrong address
-  ms_public->set_policy(entity_name_t::TYPE_OSD,
-			Messenger::Policy::stateless_server(0));
 
   ms_cluster->set_default_policy(Messenger::Policy::stateless_server(0));
   ms_cluster->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0));

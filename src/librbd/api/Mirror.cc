@@ -21,11 +21,14 @@
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/GetStatusRequest.h"
+#include "librbd/mirror/GetUuidRequest.h"
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
+#include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
+#include "librbd/mirror/snapshot/Utils.h"
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/scope_exit.hpp>
@@ -282,6 +285,7 @@ struct C_ImageGetInfo : public Context {
 
   cls::rbd::MirrorImage mirror_image;
   mirror::PromotionState promotion_state = mirror::PROMOTION_STATE_PRIMARY;
+  std::string primary_mirror_uuid;
 
   C_ImageGetInfo(mirror_image_info_t *mirror_image_info,
                  mirror_image_mode_t *mirror_image_mode,  Context *on_finish)
@@ -340,7 +344,7 @@ struct C_ImageGetGlobalStatus : public C_ImageGetInfo {
     for (auto& site_status :
            mirror_image_status_internal.mirror_image_site_statuses) {
       mirror_image_global_status->site_statuses.push_back({
-        site_status.fsid,
+        site_status.mirror_uuid,
         static_cast<mirror_image_status_state_t>(site_status.state),
         site_status.description, site_status.last_update.sec(),
         site_status.up});
@@ -410,7 +414,8 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
   }
 
   C_SaferCond ctx;
-  auto req = mirror::EnableRequest<ImageCtx>::create(ictx, mode, &ctx);
+  auto req = mirror::EnableRequest<ImageCtx>::create(
+    ictx, static_cast<cls::rbd::MirrorImageMode>(mode), &ctx);
   req->send();
 
   r = ctx.wait();
@@ -470,89 +475,126 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
   if (r < 0) {
     lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
     return r;
-  } else {
-    bool rollback = false;
-    BOOST_SCOPE_EXIT_ALL(ictx, &mirror_image_internal, &rollback) {
-      if (rollback) {
-        CephContext *cct = ictx->cct;
-        mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
-        int r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
-                                             mirror_image_internal);
-        if (r < 0) {
-          lderr(cct) << "failed to re-enable image mirroring: "
-                     << cpp_strerror(r) << dendl;
-        }
-      }
-    };
+  }
 
-    {
-      std::shared_lock l{ictx->image_lock};
-      map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
-      for (auto &info : snap_info) {
-        cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
-                                              ictx->md_ctx.get_namespace(),
-                                              ictx->id, info.first};
-        std::vector<librbd::linked_image_spec_t> child_images;
-        r = Image<I>::list_children(ictx, parent_spec, &child_images);
+  bool rollback = false;
+  BOOST_SCOPE_EXIT_ALL(ictx, &mirror_image_internal, &rollback) {
+    if (rollback) {
+      // restore the mask bit for treating the non-primary feature as read-only
+      ictx->image_lock.lock();
+      ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+      ictx->image_lock.unlock();
+
+      ictx->state->handle_update_notification();
+
+      // attempt to restore the image state
+      CephContext *cct = ictx->cct;
+      mirror_image_internal.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+      int r = cls_client::mirror_image_set(&ictx->md_ctx, ictx->id,
+                                           mirror_image_internal);
+      if (r < 0) {
+        lderr(cct) << "failed to re-enable image mirroring: "
+                   << cpp_strerror(r) << dendl;
+      }
+    }
+  };
+
+  std::unique_lock image_locker{ictx->image_lock};
+  map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
+  for (auto &info : snap_info) {
+    cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                          ictx->md_ctx.get_namespace(),
+                                          ictx->id, info.first};
+    std::vector<librbd::linked_image_spec_t> child_images;
+    r = Image<I>::list_children(ictx, parent_spec, &child_images);
+    if (r < 0) {
+      rollback = true;
+      return r;
+    }
+
+    if (child_images.empty()) {
+      continue;
+    }
+
+    librados::IoCtx child_io_ctx;
+    int64_t child_pool_id = -1;
+    for (auto &child_image : child_images){
+      std::string pool = child_image.pool_name;
+      if (child_pool_id == -1 ||
+          child_pool_id != child_image.pool_id ||
+          child_io_ctx.get_namespace() != child_image.pool_namespace) {
+        r = util::create_ioctx(ictx->md_ctx, "child image",
+                               child_image.pool_id,
+                               child_image.pool_namespace,
+                               &child_io_ctx);
         if (r < 0) {
           rollback = true;
           return r;
         }
 
-        if (child_images.empty()) {
-          continue;
-        }
+        child_pool_id = child_image.pool_id;
+      }
 
-        librados::IoCtx child_io_ctx;
-        int64_t child_pool_id = -1;
-        for (auto &child_image : child_images){
-          std::string pool = child_image.pool_name;
-          if (child_pool_id == -1 ||
-              child_pool_id != child_image.pool_id ||
-              child_io_ctx.get_namespace() != child_image.pool_namespace) {
-            r = util::create_ioctx(ictx->md_ctx, "child image",
-                                   child_image.pool_id,
-                                   child_image.pool_namespace,
-                                   &child_io_ctx);
-            if (r < 0) {
-              rollback = true;
-              return r;
-            }
-
-            child_pool_id = child_image.pool_id;
-          }
-
-          cls::rbd::MirrorImage mirror_image_internal;
-          r = cls_client::mirror_image_get(&child_io_ctx, child_image.image_id,
-                                           &mirror_image_internal);
-          if (r != -ENOENT) {
-            rollback = true;
-            lderr(cct) << "mirroring is enabled on one or more children "
-                       << dendl;
-            return -EBUSY;
-          }
-        }
+      cls::rbd::MirrorImage child_mirror_image_internal;
+      r = cls_client::mirror_image_get(&child_io_ctx, child_image.image_id,
+                                       &child_mirror_image_internal);
+      if (r != -ENOENT) {
+        rollback = true;
+        lderr(cct) << "mirroring is enabled on one or more children "
+                   << dendl;
+        return -EBUSY;
       }
     }
+  }
+  image_locker.unlock();
 
-    C_SaferCond ctx;
-    auto req = mirror::DisableRequest<ImageCtx>::create(ictx, force, true,
-                                                        &ctx);
-    req->send();
+  if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    // don't let the non-primary feature bit prevent image updates
+    ictx->image_lock.lock();
+    ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+    ictx->image_lock.unlock();
 
-    r = ctx.wait();
+    r = ictx->state->refresh();
     if (r < 0) {
-      lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
       rollback = true;
       return r;
     }
 
-    if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
-      r = ictx->operations->update_features(RBD_FEATURE_JOURNALING, false);
-      if (r < 0) {
-        lderr(cct) << "cannot disable journaling: " << cpp_strerror(r) << dendl;
-        // not fatal
-      }
+    // remove any snapshot-based mirroring image-meta from image
+    std::string mirror_uuid;
+    r = uuid_get(ictx->md_ctx, &mirror_uuid);
+    if (r < 0) {
+      rollback = true;
+      return r;
+    }
+
+    r = ictx->operations->metadata_remove(
+      mirror::snapshot::util::get_image_meta_key(mirror_uuid));
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "cannot remove snapshot image-meta key: " << cpp_strerror(r)
+                 << dendl;
+      rollback = true;
+      return r;
+    }
+  }
+
+  C_SaferCond ctx;
+  auto req = mirror::DisableRequest<ImageCtx>::create(ictx, force, true,
+                                                      &ctx);
+  req->send();
+
+  r = ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
+    rollback = true;
+    return r;
+  }
+
+  if (mirror_image_internal.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    r = ictx->operations->update_features(RBD_FEATURE_JOURNALING, false);
+    if (r < 0) {
+      lderr(cct) << "cannot disable journaling: " << cpp_strerror(r) << dendl;
+      // not fatal
     }
   }
 
@@ -580,8 +622,31 @@ void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
   ldout(cct, 20) << "ictx=" << ictx << ", "
                  << "force=" << force << dendl;
 
-  auto req = mirror::PromoteRequest<>::create(*ictx, force, on_finish);
-  req->send();
+  // don't let the non-primary feature bit prevent image updates
+  ictx->image_lock.lock();
+  ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  ictx->image_lock.unlock();
+
+  auto on_promote = new LambdaContext([ictx, on_finish](int r) {
+      ictx->image_lock.lock();
+      ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+      ictx->image_lock.unlock();
+
+      ictx->state->handle_update_notification();
+      on_finish->complete(r);
+    });
+
+  auto on_refresh = new LambdaContext([ictx, force, on_promote](int r) {
+      if (r < 0) {
+        lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
+        on_promote->complete(r);
+        return;
+      }
+
+      auto req = mirror::PromoteRequest<>::create(*ictx, force, on_promote);
+      req->send();
+    });
+  ictx->state->refresh(on_refresh);
 }
 
 template <typename I>
@@ -604,8 +669,21 @@ void Mirror<I>::image_demote(I *ictx, Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  auto req = mirror::DemoteRequest<>::create(*ictx, on_finish);
-  req->send();
+  auto on_refresh = new LambdaContext([ictx, on_finish](int r) {
+      if (r < 0) {
+        lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
+        on_finish->complete(r);
+        return;
+      }
+
+      auto req = mirror::DemoteRequest<>::create(*ictx, on_finish);
+      req->send();
+    });
+  if (ictx->state->is_refresh_required()) {
+    ictx->state->refresh(on_refresh);
+  } else {
+    on_refresh->complete(0);
+  }
 }
 
 template <typename I>
@@ -618,24 +696,63 @@ int Mirror<I>::image_resync(I *ictx) {
     return r;
   }
 
-  C_SaferCond tag_owner_ctx;
-  bool is_tag_owner;
-  Journal<I>::is_tag_owner(ictx, &is_tag_owner, &tag_owner_ctx);
-  r = tag_owner_ctx.wait();
+  cls::rbd::MirrorImage mirror_image;
+  mirror::PromotionState promotion_state;
+  std::string primary_mirror_uuid;
+  C_SaferCond get_info_ctx;
+  auto req = mirror::GetInfoRequest<I>::create(*ictx, &mirror_image,
+                                               &promotion_state,
+                                               &primary_mirror_uuid,
+                                               &get_info_ctx);
+  req->send();
+
+  r = get_info_ctx.wait();
   if (r < 0) {
-    lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-               << dendl;
     return r;
-  } else if (is_tag_owner) {
+  }
+
+  if (promotion_state == mirror::PROMOTION_STATE_PRIMARY) {
     lderr(cct) << "image is primary, cannot resync to itself" << dendl;
     return -EINVAL;
   }
 
-  // flag the journal indicating that we want to rebuild the local image
-  r = Journal<I>::request_resync(ictx);
-  if (r < 0) {
-    lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
-    return r;
+  if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    // flag the journal indicating that we want to rebuild the local image
+    r = Journal<I>::request_resync(ictx);
+    if (r < 0) {
+      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    std::string mirror_uuid;
+    r = uuid_get(ictx->md_ctx, &mirror_uuid);
+    if (r < 0) {
+      return r;
+    }
+
+    mirror::snapshot::ImageMeta image_meta(ictx, mirror_uuid);
+
+    C_SaferCond load_meta_ctx;
+    image_meta.load(&load_meta_ctx);
+    r = load_meta_ctx.wait();
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to load mirror image-meta: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    image_meta.resync_requested = true;
+
+    C_SaferCond save_meta_ctx;
+    image_meta.save(&save_meta_ctx);
+    r = save_meta_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else {
+    lderr(cct) << "unknown mirror mode" << dendl;
+    return -EINVAL;
   }
 
   return 0;
@@ -647,17 +764,66 @@ void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
-  auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
-                                               &ctx->promotion_state,
-                                               ctx);
-  req->send();
+  auto on_refresh = new LambdaContext(
+    [ictx, mirror_image_info, on_finish](int r) {
+      if (r < 0) {
+        lderr(ictx->cct) << "refresh failed: " << cpp_strerror(r) << dendl;
+        on_finish->complete(r);
+        return;
+      }
+
+      auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
+      auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
+                                                   &ctx->promotion_state,
+                                                   &ctx->primary_mirror_uuid,
+                                                   ctx);
+      req->send();
+    });
+
+  if (ictx->state->is_refresh_required()) {
+    ictx->state->refresh(on_refresh);
+  } else {
+    on_refresh->complete(0);
+  }
 }
 
 template <typename I>
 int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info) {
   C_SaferCond ctx;
   image_get_info(ictx, mirror_image_info, &ctx);
+
+  int r = ctx.wait();
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+template <typename I>
+void Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
+                               ContextWQ *op_work_queue,
+                               const std::string &image_id,
+                               mirror_image_info_t *mirror_image_info,
+                               Context *on_finish) {
+  auto cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "pool_id=" << io_ctx.get_id() << ", image_id=" << image_id
+                 << dendl;
+
+  auto ctx = new C_ImageGetInfo(mirror_image_info, nullptr, on_finish);
+  auto req = mirror::GetInfoRequest<I>::create(io_ctx, op_work_queue, image_id,
+                                               &ctx->mirror_image,
+                                               &ctx->promotion_state,
+                                               &ctx->primary_mirror_uuid, ctx);
+  req->send();
+}
+
+template <typename I>
+int Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
+                              ContextWQ *op_work_queue,
+                              const std::string &image_id,
+                              mirror_image_info_t *mirror_image_info) {
+  C_SaferCond ctx;
+  image_get_info(io_ctx, op_work_queue, image_id, mirror_image_info, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {
@@ -675,7 +841,7 @@ void Mirror<I>::image_get_mode(I *ictx, mirror_image_mode_t *mode,
   auto ctx = new C_ImageGetInfo(nullptr, mode, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
                                                &ctx->promotion_state,
-                                               ctx);
+                                               &ctx->primary_mirror_uuid, ctx);
   req->send();
 }
 
@@ -1021,6 +1187,35 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
 }
 
 template <typename I>
+int Mirror<I>::uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  C_SaferCond ctx;
+  uuid_get(io_ctx, mirror_uuid, &ctx);
+  int r = ctx.wait();
+  if (r < 0) {
+    if (r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring uuid: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+void Mirror<I>::uuid_get(librados::IoCtx& io_ctx, std::string* mirror_uuid,
+                         Context* on_finish) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << dendl;
+
+  auto req = mirror::GetUuidRequest<I>::create(io_ctx, mirror_uuid, on_finish);
+  req->send();
+}
+
+template <typename I>
 int Mirror<I>::peer_bootstrap_create(librados::IoCtx& io_ctx,
                                      std::string* token) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
@@ -1349,6 +1544,8 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
       // TODO: optimize.
 
       I *img_ctx = I::create("", image_id, nullptr, ns_io_ctx, false);
+      img_ctx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
       r = img_ctx->state->open(0);
       if (r == -ENOENT) {
         continue;
@@ -1363,7 +1560,7 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
       {
         std::shared_lock image_locker{img_ctx->image_lock};
         for (auto &it : img_ctx->snap_info) {
-          auto info = boost::get<cls::rbd::MirrorPrimarySnapshotNamespace>(
+          auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
             &it.second.snap_namespace);
           if (info && info->mirror_peer_uuids.count(uuid)) {
             snap_ids.push_back(it.first);
@@ -1421,7 +1618,7 @@ int Mirror<I>::peer_site_list(librados::IoCtx& io_ctx,
     peer.direction = static_cast<mirror_peer_direction_t>(
       mirror_peer.mirror_peer_direction);
     peer.site_name = mirror_peer.site_name;
-    peer.fsid = mirror_peer.fsid;
+    peer.mirror_uuid = mirror_peer.mirror_uuid;
     peer.client_name = mirror_peer.client_name;
     peer.last_seen = mirror_peer.last_seen.sec();
     peers->push_back(peer);
@@ -1635,7 +1832,7 @@ int Mirror<I>::image_global_status_list(
         status.mirror_image_site_statuses.size());
       for (auto& site_status : status.mirror_image_site_statuses) {
         global_status.site_statuses.push_back(mirror_image_site_status_t{
-          site_status.fsid,
+          site_status.mirror_uuid,
           static_cast<mirror_image_status_state_t>(site_status.state),
           site_status.state == cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN ?
             STATUS_NOT_FOUND : site_status.description,
@@ -1644,7 +1841,7 @@ int Mirror<I>::image_global_status_list(
     } else {
       // older OSD that only returns local status
       global_status.site_statuses.push_back(mirror_image_site_status_t{
-        cls::rbd::MirrorImageSiteStatus::LOCAL_FSID,
+        cls::rbd::MirrorImageSiteStatus::LOCAL_MIRROR_UUID,
         MIRROR_IMAGE_STATUS_STATE_UNKNOWN, STATUS_NOT_FOUND, 0, false});
     }
   }
@@ -1664,7 +1861,7 @@ int Mirror<I>::image_status_summary(librados::IoCtx& io_ctx,
     return r;
   }
 
-  std::map<cls::rbd::MirrorImageStatusState, int> states_;
+  std::map<cls::rbd::MirrorImageStatusState, int32_t> states_;
   r = cls_client::mirror_image_status_get_summary(&io_ctx, mirror_peers,
                                                   &states_);
   if (r < 0 && r != -ENOENT) {
@@ -1701,13 +1898,94 @@ int Mirror<I>::image_instance_id_list(
 }
 
 template <typename I>
+int Mirror<I>::image_info_list(
+    librados::IoCtx& io_ctx, mirror_image_mode_t *mode_filter,
+    const std::string &start_id, size_t max,
+    std::map<std::string, std::pair<mirror_image_mode_t,
+                                    mirror_image_info_t>> *entries) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "pool=" << io_ctx.get_pool_name() << ", mode_filter="
+                 << (mode_filter ? stringify(*mode_filter) : "null")
+                 << ", start_id=" << start_id << ", max=" << max << dendl;
+
+  std::string last_read = start_id;
+  entries->clear();
+
+  while (entries->size() < max) {
+    map<std::string, cls::rbd::MirrorImage> images;
+    map<std::string, cls::rbd::MirrorImageStatus> statuses;
+
+    int r = librbd::cls_client::mirror_image_status_list(&io_ctx, last_read,
+                                                         max, &images,
+                                                         &statuses);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to list mirror image statuses: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (images.empty()) {
+      break;
+    }
+
+    ThreadPool *thread_pool;
+    ContextWQ *op_work_queue;
+    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
+    for (auto &it : images) {
+      auto &image_id = it.first;
+      auto &image = it.second;
+      auto mode = static_cast<mirror_image_mode_t>(image.mode);
+
+      if ((mode_filter && mode != *mode_filter) ||
+          image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+        continue;
+      }
+
+      // need to call get_info for every image to retrieve promotion state
+
+      mirror_image_info_t info;
+      r = image_get_info(io_ctx, op_work_queue, image_id, &info);
+      if (r >= 0) {
+        (*entries)[image_id] = std::make_pair(mode, info);
+      }
+    }
+
+    last_read = images.rbegin()->first;
+  }
+
+  return 0;
+}
+
+template <typename I>
 int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
+  int r = ictx->state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  cls::rbd::MirrorImage mirror_image;
+  r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                   &mirror_image);
+  if (r == -ENOENT) {
+    return -EINVAL;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve mirror image" << dendl;
+    return r;
+  }
+
+  if (mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
+      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+    lderr(cct) << "snapshot based mirroring is not enabled" << dendl;
+    return -EINVAL;
+  }
+
   C_SaferCond on_finish;
   auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
-    ictx, false, false, snap_id, &on_finish);
+    ictx, mirror_image.global_image_id, 0U, snap_id, &on_finish);
   req->send();
   return on_finish.wait();
 }

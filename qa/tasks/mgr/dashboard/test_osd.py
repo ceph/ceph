@@ -11,6 +11,13 @@ class OsdTest(DashboardTestCase):
 
     AUTH_ROLES = ['cluster-manager']
 
+    @classmethod
+    def setUpClass(cls):
+        super(OsdTest, cls).setUpClass()
+        cls._load_module('test_orchestrator')
+        cmd = ['orch', 'set', 'backend', 'test_orchestrator']
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
+
     def tearDown(self):
         self._post('/api/osd/0/mark_in')
 
@@ -82,9 +89,13 @@ class OsdTest(DashboardTestCase):
 
     def test_create_lost_destroy_remove(self):
         # Create
-        self._post('/api/osd', {
-            'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
-            'svc_id': 5
+        self._task_post('/api/osd', {
+            'method': 'bare',
+            'data': {
+                'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
+                'svc_id': 5
+            },
+            'tracking_id': 'bare-5'
         })
         self.assertStatus(201)
         # Lost
@@ -97,13 +108,56 @@ class OsdTest(DashboardTestCase):
         self._post('/api/osd/5/purge')
         self.assertStatus(200)
 
+    def test_create_with_drive_group(self):
+        data = {
+            'method': 'drive_groups',
+            'data': [
+                {
+                    'service_type': 'osd',
+                    'service_id': 'test',
+                    'host_pattern': '*',
+                    'data_devices': {
+                        'vendor': 'abc',
+                        'model': 'cba',
+                        'rotational': True,
+                        'size': '4 TB'
+                    },
+                    'wal_devices': {
+                        'vendor': 'def',
+                        'model': 'fed',
+                        'rotational': False,
+                        'size': '1 TB'
+                    },
+                    'db_devices': {
+                        'vendor': 'ghi',
+                        'model': 'ihg',
+                        'rotational': False,
+                        'size': '512 GB'
+                    },
+                    'wal_slots': 5,
+                    'db_slots': 5,
+                    'encrypted': True
+                }
+            ],
+            'tracking_id': 'test'
+        }
+        self._post('/api/osd', data)
+        self.assertStatus(201)
+
     def test_safe_to_destroy(self):
         osd_dump = json.loads(self._ceph_cmd(['osd', 'dump', '-f', 'json']))
         max_id = max(map(lambda e: e['osd'], osd_dump['osds']))
 
+        def get_pg_status_equal_unknown(osd_ids):
+            self._get('/api/osd/safe_to_destroy?ids={}'.format(osd_ids))
+            if 'message' in self.jsonBody():
+                return 'pgs have unknown state' in self.jsonBody()['message']
+            return False
+
         # 1 OSD safe to destroy
         unused_osd_id = max_id + 10
-        self._get('/api/osd/safe_to_destroy?ids={}'.format(unused_osd_id))
+        self.wait_until_equal(
+            lambda: get_pg_status_equal_unknown(unused_osd_id), False, 30)
         self.assertStatus(200)
         self.assertJsonBody({
             'is_safe_to_destroy': True,
@@ -115,7 +169,8 @@ class OsdTest(DashboardTestCase):
 
         # multiple OSDs safe to destroy
         unused_osd_ids = [max_id + 11, max_id + 12]
-        self._get('/api/osd/safe_to_destroy?ids={}'.format(str(unused_osd_ids)))
+        self.wait_until_equal(
+            lambda: get_pg_status_equal_unknown(str(unused_osd_ids)), False, 30)
         self.assertStatus(200)
         self.assertJsonBody({
             'is_safe_to_destroy': True,

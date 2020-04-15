@@ -62,11 +62,13 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
 
   bool accept_blocked_request(
       librbd::exclusive_lock::OperationRequestType request_type) override {
-    if (request_type ==
-        librbd::exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE) {
+    switch (request_type) {
+    case librbd::exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE:
+    case librbd::exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION:
       return true;
+    default:
+      return false;
     }
-    return false;
   }
 };
 
@@ -114,6 +116,11 @@ void OpenLocalImageRequest<I>::send_open_image() {
 
   *m_local_image_ctx = I::create("", m_local_image_id, nullptr,
                                  m_local_io_ctx, false);
+
+  // ensure non-primary images can be modified
+  (*m_local_image_ctx)->read_only_mask =
+    ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
   {
     std::scoped_lock locker{(*m_local_image_ctx)->owner_lock,
 			    (*m_local_image_ctx)->image_lock};
@@ -158,7 +165,8 @@ void OpenLocalImageRequest<I>::send_get_mirror_info() {
     &OpenLocalImageRequest<I>::handle_get_mirror_info>(
       this);
   auto request = librbd::mirror::GetInfoRequest<I>::create(
-    **m_local_image_ctx, &m_mirror_image, &m_promotion_state, ctx);
+    **m_local_image_ctx, &m_mirror_image, &m_promotion_state,
+    &m_primary_mirror_uuid, ctx);
   request->send();
 }
 
@@ -183,13 +191,6 @@ void OpenLocalImageRequest<I>::handle_get_mirror_info(int r) {
     return;
   }
 
-  if (m_mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
-    dout(5) << ": local image is in unsupported mode: " << m_mirror_image.mode
-            << dendl;
-    send_close_image(-EOPNOTSUPP);
-    return;
-  }
-
   // if the local image owns the tag -- don't steal the lock since
   // we aren't going to mirror peer data into this image anyway
   if (m_promotion_state == librbd::mirror::PROMOTION_STATE_PRIMARY) {
@@ -203,14 +204,19 @@ void OpenLocalImageRequest<I>::handle_get_mirror_info(int r) {
 
 template <typename I>
 void OpenLocalImageRequest<I>::send_lock_image() {
-  dout(20) << dendl;
-
   std::shared_lock owner_locker{(*m_local_image_ctx)->owner_lock};
   if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
-    derr << ": image does not support exclusive lock" << dendl;
-    send_close_image(-EINVAL);
+    owner_locker.unlock();
+    if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      finish(0);
+    } else {
+      derr << ": image does not support exclusive lock" << dendl;
+      send_close_image(-EINVAL);
+    }
     return;
   }
+
+  dout(20) << dendl;
 
   // disallow any proxied maintenance operations before grabbing lock
   (*m_local_image_ctx)->exclusive_lock->block_requests(-EROFS);

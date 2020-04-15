@@ -138,3 +138,8 @@ class RoleTest(DashboardTestCase):
         self.assertStatus(400)
         self.assertError(code='cannot_update_system_role',
                          component='role')
+
+    def test_clone_role(self):
+        self._post('/api/role/read-only/clone', {'new_name': 'foo'})
+        self.assertStatus(201)
+        self._delete('/api/role/foo')

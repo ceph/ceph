@@ -40,10 +40,8 @@ sensible.
     Telegraf module <telegraf>
     Telemetry module <telemetry>
     Iostat module <iostat>
+    OSD Support module <osd_support>
     Crash module <crash>
     Insights module <insights>
-    Orchestrator CLI module <orchestrator_cli>
-    Cephadm orchestrator <cephadm>
+    Orchestrator module <orchestrator>
     Rook module <rook>
-    DeepSea module <deepsea>
-    Ansible module <ansible>

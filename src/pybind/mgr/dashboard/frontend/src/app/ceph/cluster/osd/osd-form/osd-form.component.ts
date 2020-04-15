@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService, ModalOptions } from 'ngx-bootstrap/modal';
+import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';
@@ -12,8 +12,7 @@ import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CephReleaseNamePipe } from '../../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../../shared/services/summary.service';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { OsdCreationPreviewModalComponent } from '../osd-creation-preview-modal/osd-creation-preview-modal.component';
 import { DevicesSelectionChangeEvent } from '../osd-devices-selection-groups/devices-selection-change-event.interface';
@@ -49,9 +48,9 @@ export class OsdFormComponent implements OnInit {
   allDevices: InventoryDevice[] = [];
 
   availDevices: InventoryDevice[] = [];
-  dataDeviceFilters = [];
-  dbDeviceFilters = [];
-  walDeviceFilters = [];
+  dataDeviceFilters: any[] = [];
+  dbDeviceFilters: any[] = [];
+  walDeviceFilters: any[] = [];
   hostname = '';
   driveGroup = new DriveGroup();
 
@@ -61,18 +60,16 @@ export class OsdFormComponent implements OnInit {
   features: { [key: string]: OsdFeature };
   featureList: OsdFeature[] = [];
 
-  checkingOrchestrator = true;
-  orchestratorExist = false;
+  hasOrchestrator = false;
   docsUrl: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
+    private authStorageService: AuthStorageService,
     private i18n: I18n,
     private orchService: OrchestratorService,
     private router: Router,
-    private bsModalService: BsModalService,
-    private summaryService: SummaryService,
-    private cephReleaseNamePipe: CephReleaseNamePipe
+    private bsModalService: BsModalService
   ) {
     this.resource = this.i18n('OSDs');
     this.action = this.actionLabels.CREATE;
@@ -87,23 +84,9 @@ export class OsdFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator_cli/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
-    });
-
-    this.orchService.status().subscribe((data: { available: boolean }) => {
-      this.orchestratorExist = data.available;
-      this.checkingOrchestrator = false;
-      if (this.orchestratorExist) {
+    this.orchService.status().subscribe((status) => {
+      this.hasOrchestrator = status.available;
+      if (this.hasOrchestrator) {
         this.getDataDevices();
       }
     });
@@ -129,7 +112,7 @@ export class OsdFormComponent implements OnInit {
         validators: [Validators.min(0)]
       }),
       features: new CdFormGroup(
-        this.featureList.reduce((acc, e) => {
+        this.featureList.reduce((acc: object, e) => {
           // disable initially because no data devices are selected
           acc[e.key] = new FormControl({ value: false, disabled: true });
           return acc;
@@ -185,15 +168,15 @@ export class OsdFormComponent implements OnInit {
   }
 
   onDevicesSelected(event: DevicesSelectionChangeEvent) {
-    this.availDevices = event.filterOutDevices;
+    this.availDevices = event.dataOut;
 
     if (event.type === 'data') {
       // If user selects data devices for a single host, make only remaining devices on
       // that host as available.
       const hostnameFilter = _.find(event.filters, { prop: 'hostname' });
       if (hostnameFilter) {
-        this.hostname = hostnameFilter.value;
-        this.availDevices = event.filterOutDevices.filter((device: InventoryDevice) => {
+        this.hostname = hostnameFilter.value.raw;
+        this.availDevices = event.dataOut.filter((device: InventoryDevice) => {
           return device.hostname === this.hostname;
         });
         this.driveGroup.setHostPattern(this.hostname);
@@ -223,12 +206,12 @@ export class OsdFormComponent implements OnInit {
   }
 
   submit() {
-    const options: ModalOptions = {
-      initialState: {
-        driveGroup: this.driveGroup
-      }
-    };
-    const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, options);
+    // use user name and timestamp for drive group name
+    const user = this.authStorageService.getUsername();
+    this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
+    const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, {
+      initialState: { driveGroups: [this.driveGroup.spec] }
+    });
     modalRef.content.submitAction.subscribe(() => {
       this.router.navigate(['/osd']);
     });

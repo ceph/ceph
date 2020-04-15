@@ -99,7 +99,7 @@ class DaemonWatchdog(Greenlet):
                     bark = True
 
             # If a daemon is no longer failed, remove it from tracking:
-            for name in daemon_failure_time.keys():
+            for name in list(daemon_failure_time.keys()):
                 if name not in [d.role + '.' + d.id_ for d in daemon_failures]:
                     self.log("daemon {name} has been restored".format(name=name))
                     del daemon_failure_time[name]

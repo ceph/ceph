@@ -56,7 +56,7 @@ class Module(MgrModule):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_module_option(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']))
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))
 
@@ -210,7 +210,7 @@ class Module(MgrModule):
             table = PrettyTable(['ID', 'ENTITY', 'NEW'],
                                 border=False)
             table.left_padding_width = 0
-            table.right_padding_width = 1
+            table.right_padding_width = 2
             table.align['ID'] = 'l'
             table.align['ENTITY'] = 'l'
             for c in r:

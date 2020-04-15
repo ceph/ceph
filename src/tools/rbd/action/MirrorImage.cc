@@ -316,11 +316,13 @@ int execute_status(const po::variables_map &vm,
   librados::IoCtx default_ns_io_ctx;
   default_ns_io_ctx.dup(io_ctx);
   default_ns_io_ctx.set_namespace("");
+
   std::vector<librbd::mirror_peer_site_t> mirror_peers;
   utils::get_mirror_peer_sites(default_ns_io_ctx, &mirror_peers);
 
-  std::map<std::string, std::string> peer_fsid_to_name;
-  utils::get_mirror_peer_fsid_to_names(mirror_peers, &peer_fsid_to_name);
+  std::map<std::string, std::string> peer_mirror_uuids_to_name;
+  utils::get_mirror_peer_mirror_uuids_to_names(mirror_peers,
+                                               &peer_mirror_uuids_to_name);
 
   librbd::mirror_image_global_status_t status;
   r = image.mirror_image_get_global_status(&status, sizeof(status));
@@ -342,7 +344,8 @@ int execute_status(const po::variables_map &vm,
     std::remove_if(status.site_statuses.begin(),
                    status.site_statuses.end(),
                    [](auto& status) {
-        return (status.fsid == RBD_MIRROR_IMAGE_STATUS_LOCAL_FSID);
+        return (status.mirror_uuid ==
+                  RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
       }),
     status.site_statuses.end());
 
@@ -382,7 +385,7 @@ int execute_status(const po::variables_map &vm,
                     if (r < 0) {
                       return false;
                     }
-                    return type != RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY;
+                    return type != RBD_SNAP_NAMESPACE_TYPE_MIRROR;
                   }),
         snaps.end());
     }
@@ -409,10 +412,10 @@ int execute_status(const po::variables_map &vm,
       for (auto& status : status.site_statuses) {
         formatter->open_object_section("peer_site");
 
-        auto name_it = peer_fsid_to_name.find(status.fsid);
+        auto name_it = peer_mirror_uuids_to_name.find(status.mirror_uuid);
         formatter->dump_string("site_name",
-          (name_it != peer_fsid_to_name.end() ? name_it->second : ""));
-        formatter->dump_string("fsid", status.fsid);
+          (name_it != peer_mirror_uuids_to_name.end() ? name_it->second : ""));
+        formatter->dump_string("mirror_uuids", status.mirror_uuid);
 
         formatter->dump_string("state", utils::mirror_image_site_status_state(
           status));
@@ -426,16 +429,18 @@ int execute_status(const po::variables_map &vm,
     if (!snaps.empty()) {
       formatter->open_array_section("snapshots");
       for (auto &snap : snaps) {
-        librbd::snap_mirror_primary_namespace_t info;
-        r = image.snap_get_mirror_primary_namespace(snap.id, &info,
-                                                    sizeof(info));
-        if (r < 0) {
+        librbd::snap_mirror_namespace_t info;
+        r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
+        if (r < 0 ||
+            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
+             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
           continue;
         }
         formatter->open_object_section("snapshot");
         formatter->dump_unsigned("id", snap.id);
         formatter->dump_string("name", snap.name);
-        formatter->dump_bool("demoted", info.demoted);
+        formatter->dump_bool("demoted",
+                             info.state == RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED);
         formatter->open_array_section("mirror_peer_uuids");
         for (auto &peer : info.mirror_peer_uuids) {
           formatter->dump_string("peer_uuid", peer);
@@ -471,10 +476,10 @@ int execute_status(const po::variables_map &vm,
         }
         first_site = false;
 
-        auto name_it = peer_fsid_to_name.find(site.fsid);
+        auto name_it = peer_mirror_uuids_to_name.find(site.mirror_uuid);
         std::cout << "    name: "
-                  << (name_it != peer_fsid_to_name.end() ? name_it->second :
-                                                           site.fsid)
+                  << (name_it != peer_mirror_uuids_to_name.end() ?
+                        name_it->second : site.mirror_uuid)
                   << std::endl
                   << "    state: " << utils::mirror_image_site_status_state(
                     site) << std::endl
@@ -488,10 +493,11 @@ int execute_status(const po::variables_map &vm,
 
       bool first_site = true;
       for (auto &snap : snaps) {
-        librbd::snap_mirror_primary_namespace_t info;
-        r = image.snap_get_mirror_primary_namespace(snap.id, &info,
-                                                    sizeof(info));
-        if (r < 0) {
+        librbd::snap_mirror_namespace_t info;
+        r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
+        if (r < 0 ||
+            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
+             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
           continue;
         }
 
@@ -501,8 +507,9 @@ int execute_status(const po::variables_map &vm,
 
         first_site = false;
         std::cout << "    " << snap.id << " " << snap.name << " ("
-                  << (info.demoted ? "demoted " : "") << "peer_uuids:["
-                  << info.mirror_peer_uuids << "])";
+                  << (info.state == RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED ?
+                        "demoted " : "")
+                  << "peer_uuids:[" << info.mirror_peer_uuids << "])";
       }
       std::cout << std::endl;
     }

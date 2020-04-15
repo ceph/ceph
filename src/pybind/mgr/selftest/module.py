@@ -1,5 +1,5 @@
 
-from mgr_module import MgrModule, CommandResult, PersistentStoreDict
+from mgr_module import MgrModule, CommandResult
 import threading
 import random
 import json
@@ -215,7 +215,6 @@ class Module(MgrModule):
         self._self_test_store()
         self._self_test_misc()
         self._self_test_perf_counters()
-        self._self_persistent_store_dict()
 
     def _self_test_getters(self):
         self.version
@@ -237,8 +236,12 @@ class Module(MgrModule):
                 "pg_summary",
                 "pg_status",
                 "pg_dump",
+                "pg_ready",
                 "df",
+                "pg_stats",
+                "pool_stats",
                 "osd_stats",
+                "osd_ping_times",
                 "health",
                 "mon_status",
                 "mgr_map"
@@ -387,25 +390,6 @@ class Module(MgrModule):
         #inc.set_crush_compat_weight_set_weights
 
         self.log.info("Finished self-test procedure.")
-
-    def _self_persistent_store_dict(self):
-        self.test_dict = PersistentStoreDict(self, 'test_dict')
-        for i in "abcde":
-            self.test_dict[i] = {i:1}
-        assert self.test_dict.keys() == set("abcde")
-        assert 'a' in self.test_dict
-        del self.test_dict['a']
-        assert self.test_dict.keys() == set("bcde"), self.test_dict.keys()
-        assert 'a' not in self.test_dict
-        self.test_dict.clear()
-        assert not self.test_dict, dict(self.test_dict.items())
-        self.set_store('test_dict.a', 'invalid json')
-        try:
-            self.test_dict['a']
-            assert False
-        except ValueError:
-            pass
-        assert not self.test_dict, dict(self.test_dict.items())
 
     def _test_remote_calls(self):
         # Test making valid call

@@ -22,6 +22,8 @@
 #include "common/Timer.h"
 #include "common/TrackedOp.h"
 
+#include "include/common_fwd.h"
+
 #include "messages/MClientRequest.h"
 #include "messages/MCommand.h"
 #include "messages/MMDSMap.h"
@@ -136,7 +138,7 @@ class MDSRank {
     friend class C_ScrubExecAndReply;
     friend class C_ScrubControlExecAndReply;
 
-    class CephContext *cct;
+    CephContext *cct;
 
     MDSRank(
         mds_rank_t whoami_,
@@ -419,7 +421,8 @@ class MDSRank {
     void inc_dispatch_depth() { ++dispatch_depth; }
     void dec_dispatch_depth() { --dispatch_depth; }
     void retry_dispatch(const cref_t<Message> &m);
-    bool handle_deferrable_message(const cref_t<Message> &m);
+    bool is_valid_message(const cref_t<Message> &m);
+    void handle_message(const cref_t<Message> &m);
     void _advance_queues();
     bool _dispatch(const cref_t<Message> &m, bool new_msg);
     bool is_stale_message(const cref_t<Message> &m) const;
@@ -650,16 +653,6 @@ public:
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(const cref_t<Message> &m);
 };
-
-// This utility for MDS and MDSRank dispatchers.
-#define ALLOW_MESSAGES_FROM(peers) \
-do { \
-  if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
-    dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
-           << " allowing=" << #peers << " message=" << *m << dendl; \
-    return true; \
-  } \
-} while (0)
 
 #endif // MDS_RANK_H_
 

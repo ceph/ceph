@@ -143,7 +143,7 @@ function TEST_backfill_sizeup() {
     run_osd $dir 5 || return 1
 
     create_pool $poolname 1 1
-    ceph osd pool set $poolname size 1
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
 
     wait_for_clean || return 1
 
@@ -189,7 +189,7 @@ function TEST_backfill_sizeup_out() {
     run_osd $dir 5 || return 1
 
     create_pool $poolname 1 1
-    ceph osd pool set $poolname size 1
+    ceph osd pool set $poolname size 1 --yes-i-really-mean-it
 
     wait_for_clean || return 1
 
@@ -353,6 +353,7 @@ function TEST_backfill_out2() {
     sleep 2
     primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
+    ceph tell osd.$primary get_latest_osdmap
     ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
@@ -410,6 +411,7 @@ function TEST_backfill_sizeup4_allout() {
     sleep 2
     primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
+    ceph tell osd.$primary get_latest_osdmap
     ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
@@ -474,6 +476,7 @@ function TEST_backfill_remapped() {
     primary=$(get_primary $poolname obj1)
 
     ceph osd unset nobackfill
+    ceph tell osd.$primary get_latest_osdmap
     ceph tell osd.$primary debug kick_recovery_wq 0
 
     sleep 2
@@ -534,6 +537,7 @@ function TEST_backfill_ec_all_out() {
     sleep 2
     primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
+    ceph tell osd.$primary get_latest_osdmap
     ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
@@ -584,6 +588,7 @@ function TEST_backfill_ec_prim_out() {
     sleep 2
     primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
+    ceph tell osd.$primary get_latest_osdmap
     ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 
@@ -642,6 +647,7 @@ function TEST_backfill_ec_down_all_out() {
     sleep 2
     primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
+    ceph tell osd.$primary get_latest_osdmap
     ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
     flush_pg_stats
@@ -726,6 +732,7 @@ function TEST_backfill_ec_down_out() {
     sleep 2
     primary=$(get_primary $poolname obj1)
     ceph osd unset nobackfill
+    ceph tell osd.$primary get_latest_osdmap
     ceph tell osd.$primary debug kick_recovery_wq 0
     sleep 2
 

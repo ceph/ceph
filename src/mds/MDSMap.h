@@ -27,6 +27,7 @@
 #include "include/ceph_features.h"
 #include "include/health.h"
 #include "include/CompatSet.h"
+#include "include/common_fwd.h"
 
 #include "common/Clock.h"
 #include "common/Formatter.h"
@@ -48,7 +49,6 @@
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
-class CephContext;
 class health_check_map_t;
 
 class MDSMap {
@@ -125,12 +125,12 @@ public:
       return addrs;
     }
 
-    void encode(bufferlist& bl, uint64_t features) const {
+    void encode(ceph::buffer::list& bl, uint64_t features) const {
       if ((features & CEPH_FEATURE_MDSENC) == 0 ) encode_unversioned(bl);
       else encode_versioned(bl, features);
     }
-    void decode(bufferlist::const_iterator& p);
-    void dump(Formatter *f) const;
+    void decode(ceph::buffer::list::const_iterator& p);
+    void dump(ceph::Formatter *f) const;
     void dump(std::ostream&) const;
 
     // The long form name for use in cluster log messages`
@@ -147,14 +147,15 @@ public:
     entity_addrvec_t addrs;
     utime_t laggy_since;
     std::set<mds_rank_t> export_targets;
+    fs_cluster_id_t join_fscid = FS_CLUSTER_ID_NONE;
     uint64_t mds_features = 0;
     uint64_t flags = 0;
     enum mds_flags : uint64_t {
       FROZEN = 1 << 0,
     };
   private:
-    void encode_versioned(bufferlist& bl, uint64_t features) const;
-    void encode_unversioned(bufferlist& bl) const;
+    void encode_versioned(ceph::buffer::list& bl, uint64_t features) const;
+    void encode_unversioned(ceph::buffer::list& bl) const;
   };
 
   friend class MDSMonitor;
@@ -347,8 +348,8 @@ public:
   void get_mds_set_lower_bound(std::set<mds_rank_t>& s, DaemonState first) const;
   void get_mds_set(std::set<mds_rank_t>& s, DaemonState state) const;
 
-  void get_health(list<pair<health_status_t,std::string> >& summary,
-		  list<pair<health_status_t,std::string> > *detail) const;
+  void get_health(std::list<std::pair<health_status_t,std::string> >& summary,
+		  std::list<std::pair<health_status_t,std::string> > *detail) const;
 
   void get_health_checks(health_check_map_t *checks) const;
 
@@ -524,18 +525,18 @@ public:
       return mds_info_entry->second.inc;
     return -1;
   }
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
-  void decode(const bufferlist& bl) {
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void decode(const ceph::buffer::list& bl) {
     auto p = bl.cbegin();
     decode(p);
   }
   void sanitize(const std::function<bool(int64_t pool)>& pool_exists);
 
-  void print(ostream& out) const;
-  void print_summary(Formatter *f, ostream *out) const;
+  void print(std::ostream& out) const;
+  void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<MDSMap*>& ls);
 
   static bool state_transition_valid(DaemonState prev, DaemonState next);
@@ -579,7 +580,7 @@ protected:
   mds_rank_t max_mds = 1; /* The maximum number of active MDSes. Also, the maximum rank. */
   mds_rank_t old_max_mds = 0; /* Value to restore when MDS cluster is marked up */
   mds_rank_t standby_count_wanted = -1;
-  string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
+  std::string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
 
   std::set<mds_rank_t> in;              // currently defined cluster
 
@@ -599,7 +600,7 @@ protected:
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
-inline ostream& operator<<(ostream &out, const MDSMap &m) {
+inline std::ostream& operator<<(std::ostream &out, const MDSMap &m) {
   m.print_summary(NULL, &out);
   return out;
 }

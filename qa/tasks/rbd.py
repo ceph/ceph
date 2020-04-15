@@ -7,7 +7,7 @@ import os
 import tempfile
 import sys
 
-from cStringIO import StringIO
+from io import BytesIO
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -65,7 +65,7 @@ def create_image(ctx, config):
                                                                  size=size))
         args = [
                 'adjust-ulimits',
-                'ceph-coverage'.format(tdir=testdir),
+                'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'rbd',
                 '-p', 'rbd',
@@ -140,7 +140,7 @@ def clone_image(ctx, config):
                     ('clone', parent_spec, name)]:
             args = [
                     'adjust-ulimits',
-                    'ceph-coverage'.format(tdir=testdir),
+                    'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'rbd', '-p', 'rbd'
                     ]
@@ -165,7 +165,7 @@ def clone_image(ctx, config):
                         ('snap', 'rm', parent_spec)]:
                 args = [
                         'adjust-ulimits',
-                        'ceph-coverage'.format(tdir=testdir),
+                        'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'rbd', '-p', 'rbd'
                         ]
@@ -303,12 +303,12 @@ def canonical_path(ctx, role, path):
     representing the given role.  A canonical path contains no
     . or .. components, and includes no symbolic links.
     """
-    version_fp = StringIO()
+    version_fp = BytesIO()
     ctx.cluster.only(role).run(
         args=[ 'readlink', '-f', path ],
         stdout=version_fp,
         )
-    canonical_path = version_fp.getvalue().rstrip('\n')
+    canonical_path = six.ensure_str(version_fp.getvalue()).rstrip('\n')
     version_fp.close()
     return canonical_path
 

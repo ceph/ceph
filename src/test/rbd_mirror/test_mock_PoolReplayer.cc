@@ -13,6 +13,7 @@
 #include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/NamespaceReplayer.h"
+#include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/PoolReplayer.h"
 #include "tools/rbd_mirror/RemotePoolPoller.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
@@ -138,7 +139,8 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
       Throttler<librbd::MockTestImageCtx> *image_sync_throttler,
       Throttler<librbd::MockTestImageCtx> *image_deletion_throttler,
       ServiceDaemon<librbd::MockTestImageCtx> *service_daemon,
-      journal::CacheManagerHandler *cache_manager_handler) {
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
     ceph_assert(s_instances.count(name));
     auto namespace_replayer = s_instances[name];
     s_instances.erase(name);
@@ -184,6 +186,7 @@ struct LeaderWatcher<librbd::MockTestImageCtx> {
     return s_instance;
   }
 
+  MOCK_METHOD0(is_blacklisted, bool());
   MOCK_METHOD0(is_leader, bool());
   MOCK_METHOD0(release_leader, void());
 
@@ -211,7 +214,7 @@ struct RemotePoolPoller<librbd::MockTestImageCtx> {
       Threads<librbd::MockTestImageCtx>* threads,
       librados::IoCtx& remote_io_ctx,
       const std::string& local_site_name,
-      const std::string& local_fsid,
+      const std::string& local_mirror_uuid,
       remote_pool_poller::Listener& listener) {
     ceph_assert(s_instance != nullptr);
     s_instance->listener = &listener;
@@ -407,6 +410,12 @@ public:
                 }));
   }
 
+  void expect_leader_watcher_is_blacklisted(
+      MockLeaderWatcher &mock_leader_watcher, bool blacklisted) {
+    EXPECT_CALL(mock_leader_watcher, is_blacklisted())
+      .WillRepeatedly(Return(blacklisted));
+  }
+
   void expect_namespace_replayer_is_blacklisted(
       MockNamespaceReplayer &mock_namespace_replayer,
       bool blacklisted) {
@@ -523,6 +532,8 @@ public:
     expect_service_daemon_add_or_update_attribute(
         mock_service_daemon, "instance_id", {instance_id});
   }
+
+  PoolMetaCache m_pool_meta_cache{g_ceph_context};
 };
 
 TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
@@ -539,6 +550,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
 
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   InSequence seq;
 
@@ -570,6 +582,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
     mock_service_daemon, instance_id);
 
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
+                                 &m_pool_meta_cache,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init("siteA");
 
@@ -600,6 +613,7 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   InSequence seq;
 
@@ -630,6 +644,7 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
     mock_service_daemon, instance_id);
 
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
+                                 &m_pool_meta_cache,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init("siteA");
 
@@ -686,6 +701,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   auto& mock_cluster = get_mock_cluster();
   auto mock_local_rados_client = mock_cluster.do_create_rados_client(
@@ -716,6 +732,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
     mock_service_daemon, instance_id);
 
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
+                                 &m_pool_meta_cache,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init("siteA");
 
@@ -802,6 +819,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
   expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
 
   auto& mock_cluster = get_mock_cluster();
   auto mock_local_rados_client = mock_cluster.do_create_rados_client(
@@ -832,6 +850,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
     mock_service_daemon, instance_id);
 
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
+                                 &m_pool_meta_cache,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init("siteA");
 

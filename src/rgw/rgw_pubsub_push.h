@@ -6,13 +6,13 @@
 #include <memory>
 #include <stdexcept>
 #include "include/buffer_fwd.h"
+#include "include/common_fwd.h"
 #include "common/async/yield_context.h"
 
 // TODO the env should be used as a template parameter to differentiate the source that triggers the pushes
 class RGWDataSyncEnv;
 class RGWCoroutine;
 class RGWHTTPArgs;
-class CephContext;
 struct rgw_pubsub_event;
 struct rgw_pubsub_s3_record;
 

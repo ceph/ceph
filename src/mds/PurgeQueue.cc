@@ -57,15 +57,39 @@ void PurgeItem::encode(bufferlist &bl) const
 void PurgeItem::decode(bufferlist::const_iterator &p)
 {
   DECODE_START(2, p);
-  decode((uint8_t&)action, p);
-  decode(ino, p);
-  decode(size, p);
-  decode(layout, p);
-  decode(old_pools, p);
-  decode(snapc, p);
-  decode(fragtree, p);
-  if (struct_v >= 2) {
-    decode(stamp, p);
+  bool done = false;
+  if (struct_v == 1) {
+    auto p_start = p;
+    try {
+      // bad encoding introduced by v13.2.2
+      decode(stamp, p);
+      decode(pad_size, p);
+      p += pad_size;
+      decode((uint8_t&)action, p);
+      decode(ino, p);
+      decode(size, p);
+      decode(layout, p);
+      decode(old_pools, p);
+      decode(snapc, p);
+      decode(fragtree, p);
+      if (p.get_off() > struct_end)
+	throw buffer::end_of_buffer();
+      done = true;
+    } catch (const buffer::error &e) {
+      p = p_start;
+    }
+  }
+  if (!done) {
+    decode((uint8_t&)action, p);
+    decode(ino, p);
+    decode(size, p);
+    decode(layout, p);
+    decode(old_pools, p);
+    decode(snapc, p);
+    decode(fragtree, p);
+    if (struct_v >= 2) {
+      decode(stamp, p);
+    }
   }
   DECODE_FINISH(p);
 }
@@ -477,7 +501,8 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water, in_flight.size());
+  files_high_water = std::max(files_high_water,
+                              static_cast<uint64_t>(in_flight.size()));
   logger->set(l_pq_executing_high_water, files_high_water);
   auto ops = _calculate_ops(item);
   ops_in_flight += ops;
@@ -555,7 +580,8 @@ void PurgeQueue::_execute_item(
     logger->set(l_pq_executing_ops_high_water, ops_high_water);
     in_flight.erase(expire_to);
     logger->set(l_pq_executing, in_flight.size());
-    files_high_water = std::max(files_high_water, in_flight.size());
+    files_high_water = std::max(files_high_water,
+                                static_cast<uint64_t>(in_flight.size()));
     logger->set(l_pq_executing_high_water, files_high_water);
     return;
   }
@@ -627,7 +653,8 @@ void PurgeQueue::_execute_item_complete(
 
   in_flight.erase(iter);
   logger->set(l_pq_executing, in_flight.size());
-  files_high_water = std::max(files_high_water, in_flight.size());
+  files_high_water = std::max(files_high_water,
+                              static_cast<uint64_t>(in_flight.size()));
   logger->set(l_pq_executing_high_water, files_high_water);
   dout(10) << "in_flight.size() now " << in_flight.size() << dendl;
 

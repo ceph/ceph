@@ -8,6 +8,7 @@ namespace librbd {
 namespace mirror {
 
 enum PromotionState {
+  PROMOTION_STATE_UNKNOWN,
   PROMOTION_STATE_PRIMARY,
   PROMOTION_STATE_NON_PRIMARY,
   PROMOTION_STATE_ORPHAN

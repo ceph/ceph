@@ -24,7 +24,7 @@ describe('TaskListService', () => {
   let apiResp: any;
   let tasks: any[];
 
-  const addItem = (name) => {
+  const addItem = (name: string) => {
     apiResp.push({ name: name });
   };
 
@@ -58,7 +58,7 @@ describe('TaskListService', () => {
       (task) => task.name.startsWith('test'),
       (item, task) => item.name === task.metadata['name'],
       {
-        default: (metadata) => ({ name: metadata['name'] })
+        default: (metadata: object) => ({ name: metadata['name'] })
       }
     );
   });

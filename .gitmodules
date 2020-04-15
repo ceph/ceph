@@ -1,6 +1,3 @@
-[submodule "cephadm-adoption-corpus"]
-	path = cephadm-adoption-corpus
-	url = https://github.com/ceph/cephadm-adoption-corpus.git
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
 	url = https://github.com/ceph/ceph-object-corpus.git
@@ -67,3 +64,6 @@
 [submodule "src/spawn"]
 	path = src/spawn
 	url = https://github.com/ceph/spawn.git
+[submodule "src/pybind/mgr/rook/rook-client-python"]
+	path = src/pybind/mgr/rook/rook-client-python
+	url = https://github.com/ceph/rook-client-python.git

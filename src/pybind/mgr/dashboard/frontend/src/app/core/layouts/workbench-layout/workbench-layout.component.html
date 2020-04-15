@@ -1,0 +1,9 @@
+<block-ui>
+  <cd-navigation>
+    <div class="container-fluid h-100"
+         [ngClass]="{'dashboard':isDashboardPage()} ">
+      <cd-breadcrumbs></cd-breadcrumbs>
+      <router-outlet></router-outlet>
+    </div>
+  </cd-navigation>
+</block-ui>

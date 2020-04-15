@@ -38,7 +38,7 @@ function TEST_mute() {
     ceph -s
     ceph health | grep HEALTH_OK || return 1
     # test warning on setting pool size=1
-    ceph osd pool set foo size 1
+    ceph osd pool set foo size 1 --yes-i-really-mean-it
     ceph -s
     ceph health | grep HEALTH_WARN || return 1
     ceph health detail | grep POOL_NO_REDUNDANCY || return 1

@@ -1,3 +1,5 @@
+.. _containers:
+
 Ceph Container Images
 =====================
 

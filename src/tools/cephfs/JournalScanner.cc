@@ -201,7 +201,7 @@ int JournalScanner::scan_events()
       dout(4) << "Read 0x" << std::hex << this_object.length() << std::dec
               << " bytes from " << oid << " gap=" << gap << dendl;
       objects_valid.push_back(oid);
-      this_object.copy(0, this_object.length(), read_buf);
+      this_object.begin().copy(this_object.length(), read_buf);
     }
 
     if (gap) {

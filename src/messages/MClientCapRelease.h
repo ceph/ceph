@@ -21,14 +21,15 @@
 class MClientCapRelease : public SafeMessage {
  public:
   std::string_view get_type_name() const override { return "client_cap_release";}
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "client_cap_release(" << caps.size() << ")";
   }
-  
+
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(head, p);
-    decode_nohead(head.num, caps, p);
+    ceph::decode_nohead(head.num, caps, p);
     if (header.version >= 2) {
       decode(osd_epoch_barrier, p);
     }
@@ -37,12 +38,12 @@ class MClientCapRelease : public SafeMessage {
     using ceph::encode;
     head.num = caps.size();
     encode(head, payload);
-    encode_nohead(caps, payload);
+    ceph::encode_nohead(caps, payload);
     encode(osd_epoch_barrier, payload);
   }
 
   struct ceph_mds_cap_release head;
-  vector<ceph_mds_cap_item> caps;
+  std::vector<ceph_mds_cap_item> caps;
 
   // The message receiver must wait for this OSD epoch
   // before actioning this cap release.

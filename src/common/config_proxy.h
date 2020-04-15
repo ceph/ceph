@@ -11,6 +11,7 @@
 // @c ConfigProxy is a facade of multiple config related classes. it exposes
 // the legacy settings with arrow operator, and the new-style config with its
 // member methods.
+namespace ceph::common{
 class ConfigProxy {
   static ConfigValues get_config_values(const ConfigProxy &config_proxy) {
     std::lock_guard locker(config_proxy.lock);
@@ -123,6 +124,11 @@ public:
   ConfigValues* operator->() noexcept {
     return &values;
   }
+#ifdef WITH_SEASTAR
+  void set_config_values(const ConfigValues& val) {
+    values = val;
+  }
+#endif
   int get_val(const std::string_view key, char** buf, int len) const {
     std::lock_guard l{lock};
     return config.get_val(values, key, buf, len);
@@ -336,3 +342,5 @@ public:
     config.get_defaults_bl(values, bl);
   }
 };
+
+}

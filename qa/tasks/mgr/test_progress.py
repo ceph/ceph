@@ -3,7 +3,7 @@ import json
 import logging
 import time
 
-from mgr_test_case import MgrTestCase
+from .mgr_test_case import MgrTestCase
 
 
 log = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ class TestProgress(MgrTestCase):
         return len(osd_map['osds'])
 
     def setUp(self):
+        super(TestProgress, self).setUp()
         # Ensure we have at least four OSDs
         if self._osd_count() < 4:
             self.skipTest("Not enough OSDS!")

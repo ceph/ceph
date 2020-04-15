@@ -18,7 +18,7 @@ import { NotificationService } from '../../../../shared/services/notification.se
 export class OsdScrubModalComponent implements OnInit {
   deep: boolean;
   scrubForm: FormGroup;
-  selected = [];
+  selected: any[] = [];
 
   constructor(
     public bsModalRef: BsModalRef,

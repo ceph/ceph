@@ -18,6 +18,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_tier_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -106,7 +107,7 @@ public:
     store(_store), bucket_info(_bucket_info), bs(store->getRados()),
     aio_completions(_completions)
   {
-    num_shard = (bucket_info.num_shards > 0 ? _num_shard : -1);
+    num_shard = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? _num_shard : -1);
     bs.init(bucket_info.bucket, num_shard, nullptr /* no RGWBucketInfo */);
 
     max_aio_completions =
@@ -303,13 +304,13 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RGWRadosStore* store,
 int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
 						       const RGWBucketInfo& bucket_info)
 {
-  uint32_t num_shards = bucket_info.num_shards;
+  uint32_t num_shards = bucket_info.layout.current_index.layout.normal.num_shards;
 
   if (num_shards < std::numeric_limits<uint32_t>::max()) {
     int ret = set_resharding_status(store, bucket_info,
 				    bucket_info.bucket.bucket_id,
 				    (num_shards < 1 ? 1 : num_shards),
-				    CLS_RGW_RESHARD_NOT_RESHARDING);
+				    cls_rgw_reshard_status::NOT_RESHARDING);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
 	" ERROR: error clearing reshard status from index shard " <<
@@ -331,11 +332,11 @@ static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
 
   store->getRados()->create_bucket_id(&new_bucket_info.bucket.bucket_id);
 
-  new_bucket_info.num_shards = new_num_shards;
+  new_bucket_info.layout.current_index.layout.normal.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
 
   new_bucket_info.new_bucket_instance_id.clear();
-  new_bucket_info.reshard_status = 0;
+  new_bucket_info.reshard_status = cls_rgw_reshard_status::NOT_RESHARDING;
 
   int ret = store->svc()->bi->init_index(new_bucket_info);
   if (ret < 0) {
@@ -412,12 +413,14 @@ public:
 	  " clear_index_shard_status returned " << ret << dendl;
       }
       bucket_info.new_bucket_instance_id.clear();
-      set_status(CLS_RGW_RESHARD_NOT_RESHARDING); // clears new_bucket_instance as well
+
+      // clears new_bucket_instance as well
+      set_status(cls_rgw_reshard_status::NOT_RESHARDING);
     }
   }
 
   int start() {
-    int ret = set_status(CLS_RGW_RESHARD_IN_PROGRESS);
+    int ret = set_status(cls_rgw_reshard_status::IN_PROGRESS);
     if (ret < 0) {
       return ret;
     }
@@ -426,7 +429,7 @@ public:
   }
 
   int complete() {
-    int ret = set_status(CLS_RGW_RESHARD_DONE);
+    int ret = set_status(cls_rgw_reshard_status::DONE);
     if (ret < 0) {
       return ret;
     }
@@ -522,6 +525,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 				 Formatter *formatter)
 {
   rgw_bucket& bucket = bucket_info.bucket;
+  rgw::bucket_index_normal_layout layout;
 
   int ret = 0;
 
@@ -553,7 +557,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
     return ret;
   }
 
-  int num_target_shards = (new_bucket_info.num_shards > 0 ? new_bucket_info.num_shards : 1);
+  int num_target_shards = (new_bucket_info.layout.current_index.layout.normal.num_shards > 0 ? new_bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
   BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
 
@@ -570,7 +574,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   const int num_source_shards =
-    (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+    (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
   string marker;
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
@@ -603,7 +607,12 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	bool account = entry.get_info(&cls_key, &category, &stats);
 	rgw_obj_key key(cls_key);
 	rgw_obj obj(new_bucket_info.bucket, key);
-	int ret = store->getRados()->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
+	RGWMPObj mp;
+	if (key.ns == RGW_OBJ_NS_MULTIPART && mp.from_meta(key.name)) {
+	  // place the multipart .meta object on the same shard as its head object
+	  obj.index_hash_source = mp.get_key();
+	}
+	int ret = store->getRados()->get_target_shard_id(layout, obj.get_hash_object(), &target_shard_id);
 	if (ret < 0) {
 	  lderr(store->ctx()) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
 	  return ret;
@@ -705,10 +714,9 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   // set resharding status of current bucket_info & shards with
   // information about planned resharding
   ret = set_resharding_status(new_bucket_info.bucket.bucket_id,
-			      num_shards, CLS_RGW_RESHARD_IN_PROGRESS);
+			      num_shards, cls_rgw_reshard_status::IN_PROGRESS);
   if (ret < 0) {
-    reshard_lock.unlock();
-    return ret;
+    goto error_out;
   }
 
   ret = do_reshard(num_shards,
@@ -985,12 +993,12 @@ int RGWReshard::process_single_logshard(int logshard_num)
   RGWBucketReshardLock logshard_lock(store, logshard_oid, false);
 
   int ret = logshard_lock.lock();
-  if (ret == -EBUSY) { /* already locked by another processor */
+  if (ret < 0) { 
     ldout(store->ctx(), 5) << __func__ << "(): failed to acquire lock on " <<
-      logshard_oid << dendl;
+      logshard_oid << ", ret = " << ret <<dendl;
     return ret;
   }
-
+  
   do {
     std::list<cls_rgw_reshard_entry> entries;
     ret = list(logshard_num, marker, max_entries, entries, &truncated);
@@ -1108,9 +1116,8 @@ int RGWReshard::process_all_logshards()
     ldout(store->ctx(), 20) << "processing logshard = " << logshard << dendl;
 
     ret = process_single_logshard(i);
-    if (ret <0) {
-      return ret;
-    }
+
+    ldout(store->ctx(), 20) << "finish processing logshard = " << logshard << " , ret = " << ret << dendl;
   }
 
   return 0;

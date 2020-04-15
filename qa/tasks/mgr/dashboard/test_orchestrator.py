@@ -9,6 +9,7 @@ test_data = {
     'inventory': [
         {
             'name': 'test-host0',
+            'addr': '1.2.3.4',
             'devices': [
                 {
                     'path': '/dev/sda',
@@ -17,6 +18,7 @@ test_data = {
         },
         {
             'name': 'test-host1',
+            'addr': '1.2.3.5',
             'devices': [
                 {
                     'path': '/dev/sdb',
@@ -24,26 +26,26 @@ test_data = {
             ]
         }
     ],
-    'services': [
+    'daemons': [
         {
             'nodename': 'test-host0',
-            'service_type': 'mon',
-            'service_instance': 'a'
+            'daemon_type': 'mon',
+            'daemon_id': 'a'
         },
         {
             'nodename': 'test-host0',
-            'service_type': 'mgr',
-            'service_instance': 'x'
+            'daemon_type': 'mgr',
+            'daemon_id': 'x'
         },
         {
             'nodename': 'test-host0',
-            'service_type': 'osd',
-            'service_instance': '0'
+            'daemon_type': 'osd',
+            'daemon_id': '0'
         },
         {
             'nodename': 'test-host1',
-            'service_type': 'osd',
-            'service_instance': '1'
+            'daemon_type': 'osd',
+            'daemon_id': '1'
         }
     ]
 }
@@ -55,7 +57,6 @@ class OrchestratorControllerTest(DashboardTestCase):
 
     URL_STATUS = '/api/orchestrator/status'
     URL_INVENTORY = '/api/orchestrator/inventory'
-    URL_SERVICE = '/api/orchestrator/service'
     URL_OSD = '/api/orchestrator/osd'
 
 
@@ -64,14 +65,14 @@ class OrchestratorControllerTest(DashboardTestCase):
         return test_data['inventory']
 
     @property
-    def test_data_services(self):
-        return test_data['services']
+    def test_data_daemons(self):
+        return test_data['daemons']
 
     @classmethod
     def setUpClass(cls):
         super(OrchestratorControllerTest, cls).setUpClass()
         cls._load_module('test_orchestrator')
-        cmd = ['orchestrator', 'set', 'backend', 'test_orchestrator']
+        cmd = ['orch', 'set', 'backend', 'test_orchestrator']
         cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
 
         cmd = ['test_orchestrator', 'load_data', '-i', '-']
@@ -98,7 +99,7 @@ class OrchestratorControllerTest(DashboardTestCase):
         for key, value in data.items():
             self.assertEqual(value, resp_data[key])
 
-    def _validate_service(self, data, resp_data):
+    def _validate_daemon(self, data, resp_data):
         for key, value in data.items():
             self.assertEqual(value, resp_data[key])
 
@@ -107,8 +108,6 @@ class OrchestratorControllerTest(DashboardTestCase):
         self._get(self.URL_STATUS)
         self.assertStatus(200)
         self._get(self.URL_INVENTORY)
-        self.assertStatus(403)
-        self._get(self.URL_SERVICE)
         self.assertStatus(403)
 
     def test_status_get(self):
@@ -133,54 +132,3 @@ class OrchestratorControllerTest(DashboardTestCase):
         self.assertStatus(200)
         self.assertEqual(len(data), 1)
         self._validate_inventory(node, data[0])
-
-    def test_service_list(self):
-        # get all services
-        data = self._get(self.URL_SERVICE)
-        self.assertStatus(200)
-
-        sorting_key = lambda svc: '%(nodename)s.%(service_type)s.%(service_instance)s' % svc
-        test_services = sorted(self.test_data_services, key=sorting_key)
-        resp_services = sorted(data, key=sorting_key)
-        self.assertEqual(len(test_services), len(resp_services))
-        for test, resp in zip(test_services, resp_services):
-            self._validate_service(test, resp)
-
-        # get service by hostname
-        nodename = self.test_data_services[-1]['nodename']
-        test_services = sorted(filter(lambda svc: svc['nodename'] == nodename, test_services),
-                          key=sorting_key)
-        data = self._get('{}?hostname={}'.format(self.URL_SERVICE, nodename))
-        resp_services = sorted(data, key=sorting_key)
-        for test, resp in zip(test_services, resp_services):
-            self._validate_service(test, resp)
-
-    def test_create_osds(self):
-        data = {
-            'drive_group': {
-                'host_pattern': '*',
-                'data_devices': {
-                    'vendor': 'abc',
-                    'model': 'cba',
-                    'rotational': True,
-                    'size': '4 TB'
-                },
-                'wal_devices': {
-                    'vendor': 'def',
-                    'model': 'fed',
-                    'rotational': False,
-                    'size': '1 TB'
-                },
-                'db_devices': {
-                    'vendor': 'ghi',
-                    'model': 'ihg',
-                    'rotational': False,
-                    'size': '512 GB'
-                },
-                'wal_slots': 5,
-                'db_slots': 5,
-                'encrypted': True
-            }
-        }
-        self._post(self.URL_OSD, data)
-        self.assertStatus(201)

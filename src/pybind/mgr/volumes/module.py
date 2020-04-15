@@ -5,6 +5,7 @@ from mgr_module import MgrModule
 import orchestrator
 
 from .fs.volume import VolumeClient
+from .fs.nfs import NFSCluster, FSExport
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
@@ -15,7 +16,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs volume create '
-                   'name=name,type=CephString ',
+                   'name=name,type=CephString '
+                   'name=placement,type=CephString,req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
         },
@@ -163,7 +165,79 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Resize a CephFS subvolume",
             'perm': 'rw'
         },
-
+        {
+            'cmd': 'fs subvolume snapshot protect '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Protect snapshot of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot unprotect '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Unprotect a snapshot of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot clone '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=target_sub_name,type=CephString '
+                   'name=pool_layout,type=CephString,req=false '
+                   'name=group_name,type=CephString,req=false '
+                   'name=target_group_name,type=CephString,req=false ',
+            'desc': "Clone a snapshot to target subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs clone status '
+                   'name=vol_name,type=CephString '
+                   'name=clone_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get status on a cloned subvolume.",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'fs clone cancel '
+                   'name=vol_name,type=CephString '
+                   'name=clone_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Cancel an pending or ongoing clone operation.",
+            'perm': 'r'
+        },
+        {
+            'cmd': 'nfs export create '
+            'name=type,type=CephString '
+            'name=fsname,type=CephString '
+            'name=binding,type=CephString '
+            'name=attach,type=CephString '
+            'name=readonly,type=CephBool,req=false '
+            'name=path,type=CephString,req=false ',
+            'desc': "Create a cephfs export",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs nfs export delete '
+                   'name=export_id,type=CephInt,req=true ',
+            'desc': "Delete a cephfs export",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'nfs cluster create '
+                   'name=type,type=CephString '
+                   'name=clusterid,type=CephString '
+                   'name=size,type=CephInt,req=false ',
+            'desc': "Create an NFS Cluster",
+            'perm': 'rw'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -184,6 +258,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
+        self.fs_export = FSExport(self)
 
     def __del__(self):
         self.vc.shutdown()
@@ -202,7 +277,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
-        return self.vc.create_fs_volume(vol_id)
+        placement = cmd.get('placement', '')
+        return self.vc.create_fs_volume(vol_id, placement)
 
     def _cmd_fs_volume_rm(self, inbuf, cmd):
         vol_name = cmd['vol_name']
@@ -304,3 +380,39 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.resize_subvolume(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                         new_size=cmd['new_size'], group_name=cmd.get('group_name', None),
                                         no_shrink=cmd.get('no_shrink', False))
+
+    def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
+        return self.vc.protect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
+                                                  snap_name=cmd['snap_name'], group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_subvolume_snapshot_unprotect(self, inbuf, cmd):
+        return self.vc.unprotect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
+                                                    snap_name=cmd['snap_name'], group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_subvolume_snapshot_clone(self, inbuf, cmd):
+        return self.vc.clone_subvolume_snapshot(
+            vol_name=cmd['vol_name'], sub_name=cmd['sub_name'], snap_name=cmd['snap_name'],
+            group_name=cmd.get('group_name', None), pool_layout=cmd.get('pool_layout', None),
+            target_sub_name=cmd['target_sub_name'], target_group_name=cmd.get('target_group_name', None))
+
+    def _cmd_fs_clone_status(self, inbuf, cmd):
+        return self.vc.clone_status(
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_clone_cancel(self, inbuf, cmd):
+        return self.vc.clone_cancel(
+            vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
+
+    def _cmd_nfs_export_create(self, inbuf, cmd):
+        #TODO Extend export creation for rgw.
+        return self.fs_export.create_export(export_type=cmd['type'], fs_name=cmd['fsname'],
+                pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False),
+                path=cmd.get('path', '/'), cluster_id=cmd.get('attach'))
+
+    def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
+        return self.fs_export.delete_export(cmd['export_id'])
+
+    def _cmd_nfs_cluster_create(self, inbuf, cmd):
+        #TODO add placement option
+        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
+        return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'], size=cmd.get('size', 1))

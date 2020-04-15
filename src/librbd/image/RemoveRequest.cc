@@ -8,7 +8,6 @@
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
-#include "librbd/MirroringWatcher.h"
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/PreRemoveRequest.h"
 #include "librbd/journal/RemoveRequest.h"
@@ -218,6 +217,14 @@ void RemoveRequest<I>::handle_disable_mirror(int r) {
     lderr(m_cct) << "error disabling image mirroring: "
                  << cpp_strerror(r) << dendl;
   }
+
+  // one last chance to ensure all snapshots have been deleted
+  m_image_ctx->image_lock.lock_shared();
+  if (!m_image_ctx->snap_info.empty()) {
+    ldout(m_cct, 5) << "image has snapshots - not removing" << dendl;
+    m_ret_val = -ENOTEMPTY;
+  }
+  m_image_ctx->image_lock.unlock_shared();
 
   send_close_image(r);
 }

@@ -97,11 +97,7 @@ public:
     set_connection(std::move(con));
   }
   ~Session() override {
-    if (state == STATE_CLOSED) {
-      item_session_list.remove_myself();
-    } else {
-      ceph_assert(!item_session_list.is_on_list());
-    }
+    ceph_assert(!item_session_list.is_on_list());
     preopen_out_queue.clear();
   }
 
@@ -117,7 +113,7 @@ public:
     }
   }
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   void push_pv(version_t pv)
   {
     ceph_assert(projected.empty() || projected.back() != pv);
@@ -142,7 +138,7 @@ public:
 
   void set_reconnecting(bool s) { reconnecting = s; }
 
-  void decode(bufferlist::const_iterator &p);
+  void decode(ceph::buffer::list::const_iterator &p);
   template<typename T>
   void set_client_metadata(T&& meta)
   {
@@ -172,29 +168,62 @@ public:
     return session_cache_liveness.get();
   }
 
-  inodeno_t next_ino() const {
-    if (info.prealloc_inos.empty())
-      return 0;
-    return info.prealloc_inos.range_start();
-  }
   inodeno_t take_ino(inodeno_t ino = 0) {
-    ceph_assert(!info.prealloc_inos.empty());
-
     if (ino) {
-      if (info.prealloc_inos.contains(ino))
-	info.prealloc_inos.erase(ino);
-      else
-	ino = 0;
-    }
-    if (!ino) {
-      ino = info.prealloc_inos.range_start();
+      if (!info.prealloc_inos.contains(ino))
+	return 0;
       info.prealloc_inos.erase(ino);
+      if (delegated_inos.contains(ino))
+	delegated_inos.erase(ino);
+    } else {
+      /* Grab first prealloc_ino that isn't delegated */
+      for (const auto& [start, len] : info.prealloc_inos) {
+	for (auto i = start ; i < start + len ; i += 1) {
+	  inodeno_t dstart, dlen;
+	  if (!delegated_inos.contains(i, &dstart, &dlen)) {
+	    ino = i;
+	    info.prealloc_inos.erase(ino);
+	    break;
+	  }
+	  /* skip to end of delegated interval */
+	  i = dstart + dlen - 1;
+	}
+	if (ino)
+	  break;
+      }
     }
-    info.used_inos.insert(ino, 1);
+    if (ino)
+      info.used_inos.insert(ino, 1);
     return ino;
   }
+  void delegate_inos(int want, interval_set<inodeno_t>& newinos) {
+    want -= (int)delegated_inos.size();
+    if (want <= 0)
+      return;
+
+    for (const auto& [start, len] : info.prealloc_inos) {
+      for (auto i = start ; i < start + len ; i += 1) {
+	inodeno_t dstart, dlen;
+	if (!delegated_inos.contains(i, &dstart, &dlen)) {
+	  delegated_inos.insert(i);
+	  newinos.insert(i);
+	  if (--want == 0)
+	     return;
+	} else {
+	  /* skip to end of delegated interval */
+	  i = dstart + dlen - 1;
+	}
+      }
+    }
+  }
+
+  // sans any delegated ones
+  int get_num_prealloc_inos() const {
+    return info.prealloc_inos.size() - delegated_inos.size();
+  }
+
   int get_num_projected_prealloc_inos() const {
-    return info.prealloc_inos.size() + pending_prealloc_inos.size();
+    return get_num_prealloc_inos() + pending_prealloc_inos.size();
   }
 
   client_t get_client() const {
@@ -231,7 +260,7 @@ public:
   }
 
   double get_session_uptime() const {
-    chrono::duration<double> uptime = clock::now() - birth_time;
+    std::chrono::duration<double> uptime = clock::now() - birth_time;
     return uptime.count();
   }
 
@@ -298,7 +327,7 @@ public:
     return erased_any;
   }
   bool have_completed_request(ceph_tid_t tid, inodeno_t *pcreated) const {
-    map<ceph_tid_t,inodeno_t>::const_iterator p = info.completed_requests.find(tid);
+    auto p = info.completed_requests.find(tid);
     if (p == info.completed_requests.end())
       return false;
     if (pcreated)
@@ -350,7 +379,7 @@ public:
   }
 
   int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
-		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
+		   const std::vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
   void set_connection(ConnectionRef con) {
     connection = std::move(con);
@@ -367,6 +396,7 @@ public:
 
   void clear() {
     pending_prealloc_inos.clear();
+    delegated_inos.clear();
     info.clear_meta();
 
     cap_push_seq = 0;
@@ -379,7 +409,7 @@ public:
 
   xlist<Session*>::item item_session_list;
 
-  list<ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
+  std::list<ceph::ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
 
   /* This is mutable to allow get_request_count to be const. elist does not
    * support const iterators yet.
@@ -387,6 +417,7 @@ public:
   mutable elist<MDRequestImpl*> requests;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
+  interval_set<inodeno_t> delegated_inos; // hand these out to client
 
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
@@ -442,7 +473,7 @@ private:
   // -- caps --
   uint32_t cap_gen = 0;
   version_t cap_push_seq = 0;        // cap push seq #
-  map<version_t, MDSContext::vec > waitfor_flush; // flush session messages
+  std::map<version_t, MDSContext::vec > waitfor_flush; // flush session messages
 
   // Has completed_requests been modified since the last time we
   // wrote this session out?
@@ -496,11 +527,11 @@ public:
 
   version_t get_version() const {return version;}
 
-  virtual void encode_header(bufferlist *header_bl);
-  virtual void decode_header(bufferlist &header_bl);
-  virtual void decode_values(std::map<std::string, bufferlist> &session_vals);
-  virtual void decode_legacy(bufferlist::const_iterator& blp);
-  void dump(Formatter *f) const;
+  virtual void encode_header(ceph::buffer::list *header_bl);
+  virtual void decode_header(ceph::buffer::list &header_bl);
+  virtual void decode_values(std::map<std::string, ceph::buffer::list> &session_vals);
+  virtual void decode_legacy(ceph::buffer::list::const_iterator& blp);
+  void dump(ceph::Formatter *f) const;
 
   void set_rank(mds_rank_t r)
   {
@@ -592,7 +623,7 @@ public:
   }
 
   // sessions
-  void decode_legacy(bufferlist::const_iterator& blp) override;
+  void decode_legacy(ceph::buffer::list::const_iterator& blp) override;
   bool empty() const { return session_map.empty(); }
   const auto& get_sessions() const {
     return session_map;
@@ -688,12 +719,12 @@ public:
       int header_r,
       int values_r,
       bool first,
-      bufferlist &header_bl,
-      std::map<std::string, bufferlist> &session_vals,
+      ceph::buffer::list &header_bl,
+      std::map<std::string, ceph::buffer::list> &session_vals,
       bool more_session_vals);
 
   void load_legacy();
-  void _load_legacy_finish(int r, bufferlist &bl);
+  void _load_legacy_finish(int r, ceph::buffer::list &bl);
 
   void save(MDSContext *onsave, version_t needv=0);
   void _save_finish(version_t v);
@@ -739,8 +770,8 @@ public:
    * mark these sessions as dirty.
    */
   void replay_open_sessions(version_t event_cmapv,
-			    map<client_t,entity_inst_t>& client_map,
-			    map<client_t,client_metadata_t>& client_metadata_map);
+			    std::map<client_t,entity_inst_t>& client_map,
+			    std::map<client_t,client_metadata_t>& client_metadata_map);
 
   /**
    * For these session IDs, if a session exists with this ID, and it has
@@ -755,8 +786,8 @@ public:
   void handle_conf_change(const std::set <std::string> &changed);
 
   MDSRank *mds;
-  map<int,xlist<Session*>* > by_state;
-  map<version_t, MDSContext::vec > commit_waiters;
+  std::map<int,xlist<Session*>*> by_state;
+  std::map<version_t, MDSContext::vec> commit_waiters;
 
   // -- loading, saving --
   inodeno_t ino;

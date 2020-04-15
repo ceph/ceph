@@ -62,17 +62,21 @@ describe('RgwBucketService', () => {
   });
 
   it('should call create', () => {
-    service.create('foo', 'bar', 'default', 'default-placement').subscribe();
+    service
+      .create('foo', 'bar', 'default', 'default-placement', false, 'COMPLIANCE', '10', '0')
+      .subscribe();
     const req = httpTesting.expectOne(
-      'api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement'
+      'api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=10&lock_retention_period_years=0'
     );
     expect(req.request.method).toBe('POST');
   });
 
   it('should call update', () => {
-    service.update('foo', 'bar', 'baz', 'Enabled').subscribe();
+    service
+      .update('foo', 'bar', 'baz', 'Enabled', 'Enabled', '1', '223344', 'GOVERNANCE', '0', '1')
+      .subscribe();
     const req = httpTesting.expectOne(
-      'api/rgw/bucket/foo?bucket_id=bar&uid=baz&versioning_state=Enabled'
+      'api/rgw/bucket/foo?bucket_id=bar&uid=baz&versioning_state=Enabled&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=0&lock_retention_period_years=1'
     );
     expect(req.request.method).toBe('PUT');
   });

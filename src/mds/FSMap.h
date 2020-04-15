@@ -30,10 +30,10 @@
 
 #include "include/CompatSet.h"
 #include "include/ceph_features.h"
+#include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "mds/mdstypes.h"
 
-class CephContext;
 class health_check_map_t;
 
 /**
@@ -52,10 +52,10 @@ public:
     return std::make_shared<Filesystem>(std::forward<Args>(args)...);
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
 
   /**
@@ -86,6 +86,7 @@ class FSMap {
 public:
   friend class MDSMonitor;
   friend class PaxosFSMap;
+  using mds_info_t = MDSMap::mds_info_t;
 
   FSMap() : compat(MDSMap::get_compat_set_default()) {}
 
@@ -99,8 +100,7 @@ public:
       ever_enabled_multiple(rhs.ever_enabled_multiple),
       mds_roles(rhs.mds_roles),
       standby_daemons(rhs.standby_daemons),
-      standby_epochs(rhs.standby_epochs),
-      standby_daemon_fscid(rhs.standby_daemon_fscid)
+      standby_epochs(rhs.standby_epochs)
   {
     filesystems.clear();
     for (const auto &i : rhs.filesystems) {
@@ -146,9 +146,9 @@ public:
   /**
    * Get state of all daemons (for all filesystems, including all standbys)
    */
-  std::map<mds_gid_t, MDSMap::mds_info_t> get_mds_info() const;
+  std::map<mds_gid_t, mds_info_t> get_mds_info() const;
 
-  mds_gid_t get_available_standby(fs_cluster_id_t fscid) const;
+  const mds_info_t* get_available_standby(fs_cluster_id_t fscid) const;
 
   /**
    * Resolve daemon name to GID
@@ -158,7 +158,7 @@ public:
   /**
    * Resolve daemon name to status
    */
-  const MDSMap::mds_info_t* find_by_name(std::string_view name) const;
+  const mds_info_t* find_by_name(std::string_view name) const;
 
   /**
    * Does a daemon exist with this GID?
@@ -176,17 +176,15 @@ public:
     return gid_exists(gid) && mds_roles.at(gid) != FS_CLUSTER_ID_NONE;
   }
 
+  fs_cluster_id_t gid_fscid(mds_gid_t gid) const
+  {
+    return mds_roles.at(gid);
+  }
+
   /**
    * Insert a new MDS daemon, as a standby
    */
-  void insert(const MDSMap::mds_info_t &new_info);
-
-  /**
-   * Adjust an MDS daemon's fscid
-   */
-  void adjust_standby_fscid(mds_gid_t standby_gid,
-			    fs_cluster_id_t fscid);
-  std::size_t clear_standby_fscid(mds_gid_t standby_gid);
+  void insert(const mds_info_t& new_info);
 
   /**
    * Assign an MDS cluster standby replay rank to a standby daemon
@@ -245,15 +243,7 @@ public:
    * Remove the filesystem (it must exist).  Caller should already
    * have failed out any MDSs that were assigned to the filesystem.
    */
-  void erase_filesystem(fs_cluster_id_t fscid)
-  {
-    filesystems.erase(fscid);
-    for (auto& p : standby_daemon_fscid) {
-      if (p.second == fscid) {
-	p.second = FS_CLUSTER_ID_NONE;
-      }
-    }
-  }
+  void erase_filesystem(fs_cluster_id_t fscid);
 
   /**
    * Reset all the state information (not configuration information)
@@ -299,7 +289,7 @@ public:
    * Given that gid exists in a filesystem or as a standby, return
    * a reference to its info.
    */
-  const MDSMap::mds_info_t& get_info_gid(mds_gid_t gid) const
+  const mds_info_t& get_info_gid(mds_gid_t gid) const
   {
     auto fscid = mds_roles.at(gid);
     if (fscid == FS_CLUSTER_ID_NONE) {
@@ -373,10 +363,10 @@ public:
    */
   bool pool_in_use(int64_t poolid) const;
 
-  mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name) const;
+  const mds_info_t* find_replacement_for(mds_role_t role) const;
 
-  void get_health(list<pair<health_status_t,std::string> >& summary,
-		  list<pair<health_status_t,std::string> > *detail) const;
+  void get_health(std::list<std::pair<health_status_t,std::string> >& summary,
+		  std::list<std::pair<health_status_t,std::string> > *detail) const;
 
   void get_health_checks(health_check_map_t *checks) const;
 
@@ -388,18 +378,18 @@ public:
    */
   void sanity() const;
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
-  void decode(bufferlist& bl) {
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void decode(ceph::buffer::list& bl) {
     auto p = bl.cbegin();
     decode(p);
   }
   void sanitize(const std::function<bool(int64_t pool)>& pool_exists);
 
-  void print(ostream& out) const;
-  void print_summary(Formatter *f, ostream *out) const;
+  void print(std::ostream& out) const;
+  void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<FSMap*>& ls);
 
 protected:
@@ -417,15 +407,12 @@ protected:
   std::map<mds_gid_t, fs_cluster_id_t> mds_roles;
 
   // For MDS daemons not yet assigned to a Filesystem
-  std::map<mds_gid_t, MDSMap::mds_info_t> standby_daemons;
+  std::map<mds_gid_t, mds_info_t> standby_daemons;
   std::map<mds_gid_t, epoch_t> standby_epochs;
-
-  // Missing entry implies no preference for a fs; NONE means assign to no fs
-  std::map<mds_gid_t, fs_cluster_id_t> standby_daemon_fscid;
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 
-inline ostream& operator<<(ostream& out, const FSMap& m) {
+inline std::ostream& operator<<(std::ostream& out, const FSMap& m) {
   m.print_summary(NULL, &out);
   return out;
 }

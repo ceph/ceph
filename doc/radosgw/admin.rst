@@ -22,7 +22,8 @@ There are two user types:
 - **Subuser:** The term 'subuser' reflects a user of the Swift interface. A subuser
   is associated to a user .
   
-.. ditaa:: +---------+
+.. ditaa::
+           +---------+
            |   User  |
            +----+----+  
                 |     
@@ -415,6 +416,7 @@ the latest quota stats. ::
 
 	radosgw-admin user stats --uid=<uid> --sync-stats
 
+.. _rgw_user_usage_stats:
 
 Get User Usage Stats
 --------------------

@@ -44,15 +44,20 @@ For most deployments of Ceph, setting up a CephFS file system is as simple as:
 
     ceph fs volume create <fs name>
 
-The Ceph `Orchestrator`_  will automatically create and configure MDS for your
-file system if the back-end deployment technology supports it (see
-`Orchestrator deployment table`_). Otherwise, please :doc:`deploy MDS manually
-as needed </cephfs/add-remove-mds>`.
+The Ceph `Orchestrator`_  will automatically create and configure MDS for
+your file system if the back-end deployment technology supports it (see
+`Orchestrator deployment table`_). Otherwise, please `deploy MDS manually
+as needed`_.
 
-Finally, to mount CephFS on your client nodes, setup a :doc:`FUSE mount
-</cephfs/fuse>` or :doc:`kernel mount </cephfs/kernel>`. Additionally, a
-command-line shell utility is available for interactive access or scripting via
-the :doc:`cephfs-shell </cephfs/cephfs-shell>`.
+Finally, to mount CephFS on your client nodes, see `Mount CephFS:
+Prerequisites`_ page. Additionally, a command-line shell utility is available
+for interactive access or scripting via the `cephfs-shell`_.
+
+.. _Orchestrator: ../mgr/orchestrator
+.. _deploy MDS manually as needed: add-remove-mds
+.. _Orchestrator deployment table: ../mgr/orchestrator/#current-implementation-status
+.. _Mount CephFS\: Prerequisites: mount-prerequisites
+.. _cephfs-shell: cephfs-shell
 
 
 .. raw:: html
@@ -70,7 +75,6 @@ Administration
    :maxdepth: 1
    :hidden:
 
-    Deployment best practices <best-practices>
     Create a CephFS file system <createfs>
     Administrative commands <administration>
 	Provision/Add/Remove MDS(s) <add-remove-mds>
@@ -79,6 +83,7 @@ Administration
     MDS Configuration Settings <mds-config-ref>
     Manual: ceph-mds <../../man/8/ceph-mds>
     Export over NFS <nfs>
+    Export over NFS with volume nfs interface <fs-nfs-exports>
     Application best practices <app-best-practices>
     FS volume and subvolumes <fs-volumes>
     CephFS Quotas <quota>
@@ -102,9 +107,10 @@ Mounting CephFS
    :hidden:
 
     Client Configuration Settings <client-config-ref>
-    Client authentication <client-auth>
-    Mount CephFS using Kernel Driver <kernel>
-    Mount CephFS using FUSE <fuse>
+    Client Authentication <client-auth>
+    Mount CephFS: Prerequisites <mount-prerequisites>
+    Mount CephFS using Kernel Driver <mount-using-kernel-driver>
+    Mount CephFS using FUSE <mount-using-fuse>
     Use the CephFS Shell <cephfs-shell>
     Supported Features of Kernel Driver <kernel-features>
     Manual: ceph-fuse <../../man/8/ceph-fuse>
@@ -179,7 +185,7 @@ Developer Guides
 
     Journaler Configuration <journaler>
     Client's Capabilities <capabilities>
-    libcephfs for Java <../../api/libcephfs-java/>
+    Java and Python bindings <api/index>
     Mantle <mantle>
 
 
@@ -199,8 +205,3 @@ Additional Details
    :hidden:
 
     Experimental Features <experimental-features>
-    Using Ceph with Hadoop <hadoop>
-
-
-.. _Orchestrator: ../mgr/orchestrator_cli
-.. _Orchestrator deployment table: ..//mgr/orchestrator_cli/#current-implementation-status

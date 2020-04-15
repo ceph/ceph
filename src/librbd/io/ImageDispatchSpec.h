@@ -153,6 +153,7 @@ public:
   }
 
   uint64_t get_tid();
+  bool blocked = false;
 
 private:
   typedef boost::variant<Read,

@@ -167,7 +167,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
     unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;
     bufferptr buf(buffer::create_aligned(blocksize, SIMD_ALIGN));
 
-    raw.copy((k - padded_chunks) * blocksize, remainder, buf.c_str());
+    raw.begin((k - padded_chunks) * blocksize).copy(remainder, buf.c_str());
     buf.zero(remainder, blocksize - remainder);
     encoded[chunk_index(k-padded_chunks)].push_back(std::move(buf));
 

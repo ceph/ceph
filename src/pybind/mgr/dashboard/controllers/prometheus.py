@@ -27,22 +27,27 @@ class PrometheusReceiver(BaseController):
 
 class PrometheusRESTController(RESTController):
     def prometheus_proxy(self, method, path, params=None, payload=None):
+        # type (str, str, dict, dict)
         return self._proxy(self._get_api_url(Settings.PROMETHEUS_API_HOST),
-                           method, path, params, payload)
+                           method, path, 'Prometheus', params, payload)
 
     def alert_proxy(self, method, path, params=None, payload=None):
+        # type (str, str, dict, dict)
         return self._proxy(self._get_api_url(Settings.ALERTMANAGER_API_HOST),
-                           method, path, params, payload)
+                           method, path, 'Alertmanager', params, payload)
 
     def _get_api_url(self, host):
         return host.rstrip('/') + '/api/v1'
 
-    def _proxy(self, base_url, method, path, params=None, payload=None):
+    def _proxy(self, base_url, method, path, api_name, params=None, payload=None):
+        # type (str, str, str, str, dict, dict)
         try:
             response = requests.request(method, base_url + path, params=params, json=payload)
         except Exception:
-            raise DashboardException('Could not reach external API', http_status_code=404,
-                                     component='prometheus')
+            raise DashboardException(
+                "Could not reach {}'s API on {}".format(api_name, base_url),
+                http_status_code=404,
+                component='prometheus')
         content = json.loads(response.content)
         if content['status'] == 'success':
             if 'data' in content:

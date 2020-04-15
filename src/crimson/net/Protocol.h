@@ -6,6 +6,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_future.hh>
 
+#include "crimson/common/log.h"
 #include "Fwd.h"
 #include "SocketConnection.h"
 
@@ -22,17 +23,27 @@ class Protocol {
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
-  bool is_connected() const;
+  virtual bool is_connected() const = 0;
 
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed_clean = false;
   bool is_closed() const { return closed; }
+#endif
 
   // Reentrant closing
-  seastar::future<> close();
+  void close(bool dispatch_reset, std::optional<std::function<void()>> f_accept_new=std::nullopt);
+  seastar::future<> close_clean(bool dispatch_reset) {
+    close(dispatch_reset);
+    // it can happen if close_clean() is called inside Dispatcher::ms_handle_reset()
+    // which will otherwise result in deadlock
+    assert(close_ready.valid());
+    return close_ready.get_future();
+  }
 
   virtual void start_connect(const entity_addr_t& peer_addr,
-                             const entity_type_t& peer_type) = 0;
+                             const entity_name_t& peer_name) = 0;
 
-  virtual void start_accept(SocketFRef&& socket,
+  virtual void start_accept(SocketRef&& socket,
                             const entity_addr_t& peer_addr) = 0;
 
  protected:
@@ -53,19 +64,29 @@ class Protocol {
 
  public:
   const proto_t proto_type;
+  SocketRef socket;
 
  protected:
+  template <typename Func>
+  void gated_dispatch(const char* what, Func&& func) {
+    (void) seastar::with_gate(pending_dispatch, std::forward<Func>(func)
+    ).handle_exception([this, what] (std::exception_ptr eptr) {
+      crimson::get_logger(ceph_subsys_ms).error(
+          "{} gated_dispatch() {} caught exception: {}", conn, what, eptr);
+      ceph_abort("unexpected exception from gated_dispatch()");
+    });
+  }
+
   Dispatcher &dispatcher;
   SocketConnection &conn;
 
-  SocketFRef socket;
-  seastar::gate pending_dispatch;
   AuthConnectionMetaRef auth_meta;
 
  private:
   bool closed = false;
   // become valid only after closed == true
   seastar::shared_future<> close_ready;
+  seastar::gate pending_dispatch;
 
 // the write state-machine
  public:

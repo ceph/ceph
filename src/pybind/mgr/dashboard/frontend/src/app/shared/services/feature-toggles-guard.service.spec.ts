@@ -46,7 +46,7 @@ describe('FeatureTogglesGuardService', () => {
     expect(service).toBeTruthy();
   });
 
-  function testCanActivate(path, feature_toggles_map) {
+  function testCanActivate(path: string, feature_toggles_map: object) {
     let result: boolean;
     spyOn(fakeFeatureTogglesService, 'get').and.returnValue(observableOf(feature_toggles_map));
 

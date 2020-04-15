@@ -181,7 +181,7 @@ struct RWState {
   }
 };
 
-inline ostream& operator<<(ostream& out, const RWState& rw)
+inline std::ostream& operator<<(std::ostream& out, const RWState& rw)
 {
   return out << "rwstate(" << rw.get_state_name()
 	     << " n=" << rw.count

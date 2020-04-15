@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { of as observableOf, Subscriber } from 'rxjs';
+import { of as observableOf, Subscriber, Subscription } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
@@ -12,8 +12,9 @@ import { SummaryService } from './summary.service';
 describe('SummaryService', () => {
   let summaryService: SummaryService;
   let authStorageService: AuthStorageService;
+  let subs: Subscription;
 
-  const summary = {
+  const summary: Record<string, any> = {
     executing_tasks: [],
     health_status: 'HEALTH_OK',
     mgr_id: 'x',
@@ -47,20 +48,22 @@ describe('SummaryService', () => {
   });
 
   it('should call refresh', fakeAsync(() => {
-    summaryService.enablePolling();
     authStorageService.set('foobar', undefined, undefined);
-    const calledWith = [];
-    summaryService.subscribe((data) => {
-      calledWith.push(data);
-    });
+    const calledWith: any[] = [];
+    subs = new Subscription();
+    subs.add(summaryService.startPolling());
+    tick();
+    subs.add(
+      summaryService.subscribe((data) => {
+        calledWith.push(data);
+      })
+    );
     expect(calledWith).toEqual([summary]);
-    summaryService.refresh();
+    subs.add(summaryService.refresh());
     expect(calledWith).toEqual([summary, summary]);
-    tick(10000);
+    tick(summaryService.REFRESH_INTERVAL * 2);
     expect(calledWith.length).toEqual(4);
-    // In order to not trigger setInterval again,
-    // which would raise 'Error: 1 timer(s) still in the queue.'
-    window.clearInterval(summaryService.polling);
+    subs.unsubscribe();
   }));
 
   describe('Should test methods after first refresh', () => {

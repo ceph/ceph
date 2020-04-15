@@ -1,23 +1,34 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
+set(crimson_cflag_definitions "WITH_SEASTAR=1")
+# disable concepts to address https://github.com/boostorg/asio/issues/312
+if((CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 10) OR
+   (CMAKE_CXX_COMPILER_ID STREQUAL Clang))
+ list(APPEND crimson_cflag_definitions
+   "BOOST_ASIO_DISABLE_CONCEPTS")
+endif()
 set_target_properties(crimson::cflags PROPERTIES
-  INTERFACE_COMPILE_DEFINITIONS "WITH_SEASTAR=1"
+  INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
+  INTERFACE_COMPILE_OPTIONS "-Wno-non-virtual-dtor"
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
+  admin/admin_socket.cc
+  admin/osd_admin.cc
+  common/assert.cc
   common/buffer_io.cc
   common/config_proxy.cc
+  common/formatter.cc
   common/perf_counters_collection.cc
-  common/assert.cc
   common/log.cc)
 
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
-  ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/buffer.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
@@ -38,12 +49,11 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/hex.cc
   ${PROJECT_SOURCE_DIR}/src/common/fs_types.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ceph_json.cc
   ${PROJECT_SOURCE_DIR}/src/common/histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/hobject.cc
   ${PROJECT_SOURCE_DIR}/src/common/hostname.cc
   ${PROJECT_SOURCE_DIR}/src/common/ipaddr.cc
-  ${PROJECT_SOURCE_DIR}/src/common/lockdep.cc
-  ${PROJECT_SOURCE_DIR}/src/common/mutex_debug.cc
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
   ${PROJECT_SOURCE_DIR}/src/common/options.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
@@ -70,9 +80,17 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
-  ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
+  ${PROJECT_SOURCE_DIR}/src/common/util.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/builder.c
+  ${PROJECT_SOURCE_DIR}/src/crush/mapper.c
+  ${PROJECT_SOURCE_DIR}/src/crush/crush.c
+  ${PROJECT_SOURCE_DIR}/src/crush/hash.c
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushWrapper.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushCompiler.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
+  ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
@@ -93,11 +111,9 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
+  ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
-  $<TARGET_OBJECTS:crimson-auth>
-  $<TARGET_OBJECTS:common_buffer_obj>
-  $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:crimson-crush>)
+  $<TARGET_OBJECTS:common_mountcephfs_objs>)
 
 target_compile_definitions(crimson-common PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
@@ -115,14 +131,26 @@ endif()
 target_link_libraries(crimson-common
   PUBLIC
     json_spirit
+    crimson::cflags
   PRIVATE
     crc32
-    crimson::cflags
     ${crimson_common_deps}
     OpenSSL::Crypto)
 
 set(crimson_auth_srcs
-  auth/KeyRing.cc)
+  auth/KeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthClientHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthMethodList.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthRegistry.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/AuthSessionHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/KeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/RotatingKeyRing.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxAuthorizeHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxClientHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxProtocol.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/cephx/CephxSessionHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/auth/none/AuthNoneAuthorizeHandler.cc)
 set(crimson_mgr_srcs
   mgr/client.cc)
 set(crimson_mon_srcs

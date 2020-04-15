@@ -280,6 +280,9 @@ private:
   void handle_auth(MAuthReply *m);
 
   // monitor session
+  utime_t last_keepalive;
+  utime_t last_send_log;
+
   void tick();
   void schedule_tick();
 
@@ -425,6 +428,9 @@ public:
 
   void set_log_client(LogClient *clog) {
     log_client = clog;
+  }
+  LogClient *get_log_client() {
+    return log_client;
   }
 
   int build_initial_monmap();

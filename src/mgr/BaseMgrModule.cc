@@ -399,13 +399,23 @@ ceph_option_get(BaseMgrModule *self, PyObject *args)
   const Option *opt = g_conf().find_option(string(what));
   if (opt) {
     std::string value;
-    int r = g_conf().get_val(string(what), &value);
-    assert(r >= 0);
+    switch (int r = g_conf().get_val(string(what), &value); r) {
+    case -ENOMEM:
+      PyErr_NoMemory();
+      return nullptr;
+    case -ENAMETOOLONG:
+      PyErr_SetString(PyExc_ValueError, "value too long");
+      return nullptr;
+    default:
+      ceph_assert(r == 0);
+      break;
+    }
     dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
     return get_python_typed_option_value(opt->type, value);
   } else {
     dout(4) << "ceph_option_get " << what << " not found " << dendl;
-    Py_RETURN_NONE;
+    PyErr_Format(PyExc_KeyError, "option not found: %s", what);
+    return nullptr;
   }
 }
 
@@ -548,16 +558,8 @@ ceph_cluster_log(BaseMgrModule *self, PyObject *args)
   int prio = 0;
   char *channel = nullptr;
   char *message = nullptr;
-  std::vector<std::string> channels = { "audit", "cluster" };
 
   if (!PyArg_ParseTuple(args, "sis:ceph_cluster_log", &channel, &prio, &message)) {
-    return nullptr;
-  }
-
-  if (std::find(channels.begin(), channels.end(), std::string(channel)) == channels.end()) {
-    std::string msg("Unknown channel: ");
-    msg.append(channel);
-    PyErr_SetString(PyExc_ValueError, msg.c_str());
     return nullptr;
   }
 
@@ -1045,10 +1047,13 @@ ceph_is_authorized(BaseMgrModule *self, PyObject *args)
     arguments[arg_key] = arg_value;
   }
 
-  if (self->this_module->is_authorized(arguments)) {
+  PyThreadState *tstate = PyEval_SaveThread();
+  bool r = self->this_module->is_authorized(arguments);
+  PyEval_RestoreThread(tstate);
+
+  if (r) {
     Py_RETURN_TRUE;
   }
-
   Py_RETURN_FALSE;
 }
 
@@ -1059,9 +1064,9 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
     return nullptr;
   }
-
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->register_client(self->this_module->get_name(), addrs);
-
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 
@@ -1072,9 +1077,9 @@ ceph_unregister_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
     return nullptr;
   }
-
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->unregister_client(self->this_module->get_name(), addrs);
-
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 

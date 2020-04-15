@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 retries=0
 until [ $retries -ge 5 ]
 do

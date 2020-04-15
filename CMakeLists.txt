@@ -2,33 +2,23 @@ cmake_minimum_required(VERSION 3.10.2)
 # remove cmake/modules/FindPython* once 3.12 is required
 
 project(ceph
-  VERSION 15.0.0
+  VERSION 16.0.0
   LANGUAGES CXX C ASM)
 
-if(POLICY CMP0028)
-  cmake_policy(SET CMP0028 NEW)
-endif()
-if(POLICY CMP0046)
-  cmake_policy(SET CMP0046 NEW)
-endif()
-if(POLICY CMP0048)
-  cmake_policy(SET CMP0048 NEW)
-endif()
-if(POLICY CMP0054)
-  cmake_policy(SET CMP0054 NEW)
-endif()
-if(POLICY CMP0056)
-  cmake_policy(SET CMP0056 NEW)
-endif()
-if(POLICY CMP0065)
-  cmake_policy(SET CMP0065 NEW)
-endif()
-if(POLICY CMP0051)
-  cmake_policy(SET CMP0051 NEW)
-endif()
-if(POLICY CMP0075)
-  cmake_policy(SET CMP0075 NEW)
-endif()
+foreach(policy
+    CMP0028
+    CMP0046
+    CMP0048
+    CMP0051
+    CMP0054
+    CMP0056
+    CMP0065
+    CMP0075)
+  if(POLICY ${policy})
+    cmake_policy(SET ${policy} NEW)
+  endif()
+endforeach()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -39,19 +29,31 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
   FIND_PACKAGE(Threads)
 endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
+if(WIN32)
+  # The Windows headers (e.g. coming from mingw or the Windows SDK) check
+  # the targeted Windows version. The availability of certain functions and
+  # structures will depend on it.
+  set(WIN32_WINNT "0x0A00" CACHE STRING "Targeted Windows version.")
+  add_definitions(-D_WIN32_WINNT=${WIN32_WINNT})
+endif()
+
+if(MINGW)
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-allow-multiple-definition")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-allow-multiple-definition")
+endif()
+
 option(WITH_CCACHE "Build with ccache.")
 if(WITH_CCACHE)
   find_program(CCACHE_FOUND ccache)
-  if(CCACHE_FOUND)
-    message(STATUS "Building with ccache: ${CCACHE_FOUND}, CCACHE_DIR=$ENV{CCACHE_DIR}")
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
-    # ccache does not accelerate link (ld), but let it handle it. by passing it
-    # along with cc to python's distutils, we are able to workaround
-    # https://bugs.python.org/issue8027.
-    set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
-  else(CCACHE_FOUND)
+  if(NOT CCACHE_FOUND)
     message(FATAL_ERROR "Can't find ccache. Is it installed?")
-  endif(CCACHE_FOUND)
+  endif()
+  message(STATUS "Building with ccache: ${CCACHE_FOUND}, CCACHE_DIR=$ENV{CCACHE_DIR}")
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+  # ccache does not accelerate link (ld), but let it handle it. by passing it
+  # along with cc to python's distutils, we are able to workaround
+  # https://bugs.python.org/issue8027.
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
 endif(WITH_CCACHE)
 
 option(WITH_MANPAGE "Build man pages." ON)
@@ -98,15 +100,14 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
 option(WITH_STATIC_LIBSTDCXX "Link against libstdc++ statically" OFF)
 if(WITH_STATIC_LIBSTDCXX)
-  if(CMAKE_COMPILER_IS_GNUCXX)
-    set(static_linker_flags "-static-libstdc++ -static-libgcc")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${static_linker_flags}")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${static_linker_flags}")
-    unset(static_linker_flags)
-    set(GPERFTOOLS_USE_STATIC_LIBS TRUE)
-  else()
+  if(NOT CMAKE_COMPILER_IS_GNUCXX)
     message(FATAL_ERROR "Please use GCC to enable WITH_STATIC_LIBSTDCXX")
   endif()
+  set(static_linker_flags "-static-libstdc++ -static-libgcc")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${static_linker_flags}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${static_linker_flags}")
+  unset(static_linker_flags)
+  set(GPERFTOOLS_USE_STATIC_LIBS TRUE)
 endif()
 include(CheckCxxAtomic)
 if(NOT HAVE_CXX11_ATOMIC)
@@ -590,7 +591,6 @@ else()
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
-set(Boost_USE_MULTITHREADED ON)
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
@@ -604,6 +604,9 @@ endif()
 set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
   "List of comma separated ceph-dashboard frontend languages to build. \
   Use value `ALL` to build all languages")
+
+# TODO: make this an option and set it to the same value as WITH_MGR_DASHBOARD_FRONTEND
+set(WITH_MGR_ROOK_CLIENT WITH_MGR_DASHBOARD_FRONTEND)
 
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
@@ -652,6 +655,9 @@ if(WITH_GRAFANA)
   add_subdirectory(monitoring/grafana/dashboards)
 endif()
 
+CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
+  "NOT WITH_SYSTEM_BOOST" OFF)
+
 include(CTags)
 option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
 add_tags(ctags
@@ -663,3 +669,4 @@ add_custom_target(tags DEPENDS ctags)
 
 find_package(CppCheck)
 find_package(IWYU)
+set(VERSION 15.2.0)

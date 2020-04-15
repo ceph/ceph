@@ -1,6 +1,6 @@
 import os
 import pytest
-from mock.mock import patch
+from mock.mock import patch, PropertyMock
 from ceph_volume.util import disk
 from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume.api import lvm as lvm_api
@@ -166,12 +166,14 @@ def stub_vgs(monkeypatch, volume_groups):
     return apply
 
 
+# TODO: allow init-ing pvolumes to list we want
 @pytest.fixture
 def pvolumes(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
     pvolumes = lvm_api.PVolumes()
     pvolumes._purge()
     return pvolumes
+
 @pytest.fixture
 def pvolumes_empty(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
@@ -270,8 +272,16 @@ def patched_get_block_devs_lsblk():
         yield p
 
 @pytest.fixture
-def device_info(monkeypatch):
-    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None):
+def patch_bluestore_label():
+    with patch('ceph_volume.util.device.Device.has_bluestore_label',
+               new_callable=PropertyMock) as p:
+        p.return_value = False
+        yield p
+
+@pytest.fixture
+def device_info(monkeypatch, patch_bluestore_label):
+    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None,
+              has_bluestore_label=False):
         devices = devices if devices else {}
         lsblk = lsblk if lsblk else {}
         blkid = blkid if blkid else {}
@@ -283,6 +293,8 @@ def device_info(monkeypatch):
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
         else:
             monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_device_lvs",
+                                lambda path: [lv])
         monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: lv)
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)

@@ -4,11 +4,6 @@ import os.path
 
 import time
 
-try:
-    from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
-except ImportError:
-    pass
-
 from . import ApiController, Endpoint, ReadPermission, UpdatePermission
 from . import RESTController, Task
 from .. import mgr
@@ -36,7 +31,7 @@ def get_device_osd_map():
              }
     :rtype: dict
     """
-    result = {}
+    result: dict = {}
     for osd_id, osd_metadata in mgr.get('osd_metadata').items():
         hostname = osd_metadata.get('hostname')
         devices = osd_metadata.get('devices')
@@ -88,7 +83,8 @@ class Orchestrator(RESTController):
         """
         Identify a device by switching on the device light for N seconds.
         :param hostname: The hostname of the device to process.
-        :param device: The device identifier to process, e.g. ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+        :param device: The device identifier to process, e.g. ``/dev/dm-0`` or
+          ``ABC1234DEF567-1R1234_ABC8DE0Q``.
         :param duration: The duration in seconds how long the LED should flash.
         """
         orch = OrchClient.instance()
@@ -109,35 +105,14 @@ class OrchestratorInventory(RESTController):
     def list(self, hostname=None):
         orch = OrchClient.instance()
         hosts = [hostname] if hostname else None
-        inventory_nodes = [node.to_json() for node in orch.inventory.list(hosts)]
+        inventory_hosts = [host.to_json() for host in orch.inventory.list(hosts)]
         device_osd_map = get_device_osd_map()
-        for inventory_node in inventory_nodes:
-            node_osds = device_osd_map.get(inventory_node['name'])
-            for device in inventory_node['devices']:
-                if node_osds:
+        for inventory_host in inventory_hosts:
+            host_osds = device_osd_map.get(inventory_host['name'])
+            for device in inventory_host['devices']:
+                if host_osds:
                     dev_name = os.path.basename(device['path'])
-                    device['osd_ids'] = sorted(node_osds.get(dev_name, []))
+                    device['osd_ids'] = sorted(host_osds.get(dev_name, []))
                 else:
                     device['osd_ids'] = []
-        return inventory_nodes
-
-
-@ApiController('/orchestrator/service', Scope.HOSTS)
-class OrchestratorService(RESTController):
-
-    @raise_if_no_orchestrator
-    def list(self, hostname=None):
-        orch = OrchClient.instance()
-        return [service.to_json() for service in orch.services.list(None, None, hostname)]
-
-
-@ApiController('/orchestrator/osd', Scope.OSD)
-class OrchestratorOsd(RESTController):
-
-    @raise_if_no_orchestrator
-    def create(self, drive_group):
-        orch = OrchClient.instance()
-        try:
-            orch.osds.create(DriveGroupSpec.from_json(drive_group))
-        except (ValueError, TypeError, DriveGroupValidationError) as e:
-            raise DashboardException(e, component='osd')
+        return inventory_hosts

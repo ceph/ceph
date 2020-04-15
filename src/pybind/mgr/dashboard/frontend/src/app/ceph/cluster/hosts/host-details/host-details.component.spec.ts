@@ -1,16 +1,15 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
-import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -24,6 +23,7 @@ describe('HostDetailsComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       TabsModule.forRoot(),
       BsDropdownModule.forRoot(),
@@ -47,10 +47,6 @@ describe('HostDetailsComponent', () => {
       hosts: ['read'],
       grafana: ['read']
     });
-    const orchService = TestBed.get(OrchestratorService);
-    spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-    spyOn(orchService, 'inventoryDeviceList').and.returnValue(of([]));
-    spyOn(orchService, 'serviceList').and.returnValue(of([]));
   });
 
   it('should create', () => {
@@ -73,7 +69,7 @@ describe('HostDetailsComponent', () => {
         'Devices',
         'Device health',
         'Inventory',
-        'Services',
+        'Daemons',
         'Performance Details'
       ]);
     });

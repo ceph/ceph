@@ -246,7 +246,7 @@ double buffer_copy()
   char copy[10];
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    b.copy(2, 6, copy);
+    b.cbegin(2).copy(6, copy);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;

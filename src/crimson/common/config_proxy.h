@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #pragma once
 
@@ -8,6 +9,10 @@
 #include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
 #include "common/errno.h"
+
+namespace ceph {
+class Formatter;
+}
 
 namespace crimson::common {
 
@@ -67,10 +72,9 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
 
             ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
             proxy.obs_mgr.for_each_change(proxy.values->changed, proxy,
-                                          [&rev_obs](md_config_obs_t *obs,
-                                                     const std::string &key) {
-                                            rev_obs[obs].insert(key);
-                                          }, nullptr);
+              [&rev_obs](ConfigObserver *obs, const std::string& key) {
+                rev_obs[obs].insert(key);
+              }, nullptr);
             for (auto& obs_keys : rev_obs) {
               obs_keys.first->handle_conf_change(proxy, obs_keys.second);
             }
@@ -84,6 +88,9 @@ public:
   ConfigProxy(const EntityName& name, std::string_view cluster);
   const ConfigValues* operator->() const noexcept {
     return values.get();
+  }
+  const ConfigValues get_config_values() {
+     return *values.get();
   }
   ConfigValues* operator->() noexcept {
     return values.get();
@@ -147,6 +154,8 @@ public:
       get_config().set_mon_vals(nullptr, values, obs_mgr, kv, nullptr);
     });
   }
+
+  void show_config(ceph::Formatter* f) const;
 
   seastar::future<> parse_argv(std::vector<const char*>& argv) {
     // we could pass whatever is unparsed to seastar, but seastar::app_template

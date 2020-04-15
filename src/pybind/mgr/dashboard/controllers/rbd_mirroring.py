@@ -13,14 +13,19 @@ import rbd
 
 from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
     UpdatePermission, RESTController
-from .rbd import _rbd_call
 
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.rbd import rbd_call
 from ..tools import ViewCache
 from ..services.exception import handle_rados_error, handle_rbd_error, \
     serialize_dashboard_exception
+
+try:
+    from typing import no_type_check
+except ImportError:
+    no_type_check = object()  # Just for type checking
 
 
 logger = logging.getLogger('controllers.rbd_mirror')
@@ -148,7 +153,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
         for daemon in daemons:
             for _, pool_data in daemon['status'].items():
-                stats = pool_stats.get(pool_data['name'], None)
+                stats = pool_stats.get(pool_data['name'], None)  # type: ignore
                 if stats is None:
                     continue
 
@@ -191,6 +196,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
 
 @ViewCache()
+@no_type_check
 def _get_pool_datum(pool_name):
     data = {}
     logger.debug("Constructing IOCtx %s", pool_name)
@@ -397,7 +403,7 @@ class RbdMirroringPoolMode(RESTController):
                     rbd.RBD().mirror_mode_set(ioctx, mode_enum)
                 _reset_view_cache()
 
-        return _rbd_call(pool_name, None, _edit, mirror_mode)
+        return rbd_call(pool_name, None, _edit, mirror_mode)
 
 
 @ApiController('/block/mirroring/pool/{pool_name}/bootstrap',

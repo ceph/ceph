@@ -22,6 +22,7 @@
 #include "common/ceph_mutex.h"
 #include "common/cmdparse.h"
 #include "common/compiler_extensions.h"
+#include "include/common_fwd.h"
 #include "include/cephfs/ceph_statx.h"
 #include "include/filepath.h"
 #include "include/interval_set.h"
@@ -53,7 +54,6 @@ class FSMap;
 class FSMapUser;
 class MonClient;
 
-class CephContext;
 
 struct DirStat;
 struct LeaseStat;
@@ -63,7 +63,6 @@ class Filer;
 class Objecter;
 class WritebackHandler;
 
-class PerfCounters;
 class MDSMap;
 class Message;
 
@@ -649,14 +648,14 @@ public:
 		      inodeno_t realm, int flags, const UserPerm& perms);
   void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
-  void remove_session_caps(MetaSession *session);
+  void remove_session_caps(MetaSession *session, int err);
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps_sync();
   void kick_flushing_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
-  int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
+  int get_caps(Fh *fh, int need, int want, int *have, loff_t endoff);
   int get_caps_used(Inode *in);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
@@ -784,7 +783,7 @@ protected:
   MetaSession *_get_or_open_mds_session(mds_rank_t mds);
   MetaSession *_open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
-  void _closed_mds_session(MetaSession *s);
+  void _closed_mds_session(MetaSession *s, int err=0, bool rejected=false);
   bool _any_stale_sessions() const;
   void _kick_stale_sessions();
   void handle_client_session(const MConstRef<MClientSession>& m);
@@ -803,7 +802,8 @@ protected:
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
-  int verify_reply_trace(int r, MetaRequest *request, const MConstRef<MClientReply>& reply,
+  int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
+			 const MConstRef<MClientReply>& reply,
 			 InodeRef *ptarget, bool *pcreated,
 			 const UserPerm& perms);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
@@ -952,6 +952,8 @@ protected:
   void _handle_full_flag(int64_t pool);
 
   void _close_sessions();
+
+  void _pre_init();
 
   /**
    * The basic housekeeping parts of init (perf counters, admin socket)
@@ -1245,6 +1247,7 @@ private:
   ceph::unordered_map<int, Fh*> fd_map;
   set<Fh*> ll_unclosed_fh_set;
   ceph::unordered_set<dir_result_t*> opened_dirs;
+  uint64_t fd_gen = 1;
 
   bool   initialized = false;
   bool   mounted = false;
@@ -1256,12 +1259,6 @@ private:
   interval_set<ino_t> free_faked_inos;
   ino_t last_used_faked_ino;
   ino_t last_used_faked_root;
-
-  // When an MDS has sent us a REJECT, remember that and don't
-  // contact it again.  Remember which inst rejected us, so that
-  // when we talk to another inst with the same rank we can
-  // try again.
-  std::map<mds_rank_t, entity_addrvec_t> rejected_by_mds;
 
   int local_osd = -ENXIO;
   epoch_t local_osd_epoch = 0;
@@ -1281,6 +1278,8 @@ private:
   int num_flushing_caps = 0;
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
+
+  utime_t last_auto_reconnect;
 
   // trace generation
   ofstream traceout;

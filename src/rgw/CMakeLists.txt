@@ -25,7 +25,9 @@ set(librgw_common_srcs
   services/svc_bilog_rados.cc
   services/svc_bucket.cc
   services/svc_bucket_sobj.cc
+  services/svc_bucket_sync_sobj.cc
   services/svc_cls.cc
+  services/svc_config_key_rados.cc
   services/svc_datalog_rados.cc
   services/svc_mdlog.cc
   services/svc_meta.cc
@@ -56,6 +58,8 @@ set(librgw_common_srcs
   rgw_arn.cc
   rgw_basic_types.cc
   rgw_bucket.cc
+  rgw_bucket_layout.cc
+  rgw_bucket_sync.cc
   rgw_cache.cc
   rgw_common.cc
   rgw_compression.cc
@@ -87,6 +91,7 @@ set(librgw_common_srcs
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
   rgw_sync_module_pubsub.cc
+  rgw_sync_policy.cc
   rgw_pubsub_push.cc
   rgw_notify.cc
   rgw_notify_event_type.cc
@@ -106,6 +111,7 @@ set(librgw_common_srcs
   rgw_op.cc
   rgw_otp.cc
   rgw_policy_s3.cc
+  rgw_public_access.cc
   rgw_putobj.cc
   rgw_putobj_processor.cc
   rgw_quota.cc
@@ -387,45 +393,6 @@ endif()
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-set(librgw_admin_user_srcs
-  librgw_admin_user.cc
-  rgw_admin_user.cc
-)
-add_library(rgw_admin_user SHARED
-    ${librgw_admin_user_srcs}
-    $<TARGET_OBJECTS:rgw_common>)
-
-add_dependencies(rgw_admin_user civetweb_h)
-
-target_link_libraries(rgw_admin_user PRIVATE
-  librados
-  cls_rgw_client
-  cls_otp_client
-  cls_lock_client
-  cls_refcount_client
-  cls_log_client
-  cls_timeindex_client
-  cls_version_client
-  cls_user_client
-  cls_rgw_gc_client
-  global
-  ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES}
-  ${OPENLDAP_LIBRARIES}
-  dmclock::dmclock)
-set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
-  SOVERSION 0)
-install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  target_link_libraries(rgw_admin_user PRIVATE RabbitMQ::RabbitMQ)
-endif()
-if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  target_link_libraries(rgw_admin_user PRIVATE RDKafka::RDKafka)
-endif()
-if(WITH_BOOST_CONTEXT)
-  target_link_libraries(rgw_admin_user PRIVATE spawn)
-endif()
 
 if(WITH_TESTS)
   add_executable(ceph_rgw_jsonparser

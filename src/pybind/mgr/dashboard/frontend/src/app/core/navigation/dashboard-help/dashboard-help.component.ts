@@ -15,7 +15,7 @@ import { AboutComponent } from '../about/about.component';
 })
 export class DashboardHelpComponent implements OnInit {
   @ViewChild('docsForm', { static: true })
-  docsFormElement;
+  docsFormElement: any;
   docsUrl: string;
   modalRef: BsModalRef;
   icons = Icons;

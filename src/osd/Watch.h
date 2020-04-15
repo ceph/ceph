@@ -192,6 +192,7 @@ public:
     return last_ping;
   }
 
+  /// True if currently connected
   bool is_connected() const {
     return conn.get() != NULL;
   }
@@ -226,9 +227,6 @@ public:
 
   /// Generates context for use if watch timeout is delayed by scrub or recovery
   Context *get_delayed_cb();
-
-  /// True if currently connected
-  bool connected();
 
   /// Transitions Watch to connected, unregister_cb, resends pending Notifies
   void connect(

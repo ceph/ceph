@@ -24,19 +24,19 @@ class ConfigKeyService : public QuorumService
 {
   Paxos *paxos;
 
-  int store_get(const string &key, bufferlist &bl);
-  void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
-  void store_delete(MonitorDBStore::TransactionRef t, const string &key);
-  void store_delete(const string &key, Context *cb = NULL);
+  int store_get(const std::string &key, ceph::buffer::list &bl);
+  void store_put(const std::string &key, ceph::buffer::list &bl, Context *cb = NULL);
+  void store_delete(MonitorDBStore::TransactionRef t, const std::string &key);
+  void store_delete(const std::string &key, Context *cb = NULL);
   void store_delete_prefix(
       MonitorDBStore::TransactionRef t,
-      const string &prefix);
-  void store_list(stringstream &ss);
-  void store_dump(stringstream &ss, const string& prefix);
-  bool store_exists(const string &key);
-  bool store_has_prefix(const string &prefix);
+      const std::string &prefix);
+  void store_list(std::stringstream &ss);
+  void store_dump(std::stringstream &ss, const std::string& prefix);
+  bool store_exists(const std::string &key);
+  bool store_has_prefix(const std::string &prefix);
 
-  static const string STORE_PREFIX;
+  static const std::string STORE_PREFIX;
 
 protected:
   void service_shutdown() override { }
@@ -65,18 +65,18 @@ public:
   void do_osd_destroy(int32_t id, uuid_d& uuid);
   int validate_osd_new(
       const uuid_d& uuid,
-      const string& dmcrypt_key,
-      stringstream& ss);
-  void do_osd_new(const uuid_d& uuid, const string& dmcrypt_key);
+      const std::string& dmcrypt_key,
+      std::stringstream& ss);
+  void do_osd_new(const uuid_d& uuid, const std::string& dmcrypt_key);
 
   int get_type() override {
     return QuorumService::SERVICE_CONFIG_KEY;
   }
 
-  string get_name() const override {
+  std::string get_name() const override {
     return "config_key";
   }
-  void get_store_prefixes(set<string>& s) const;
+  void get_store_prefixes(std::set<std::string>& s) const;
   /**
    * @} // ConfigKeyService_Inherited_h
    */

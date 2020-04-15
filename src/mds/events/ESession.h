@@ -29,6 +29,8 @@ class ESession : public LogEvent {
   interval_set<inodeno_t> inos;
   version_t inotablev{0};
 
+  interval_set<inodeno_t> purge_inos;
+  
   // Client metadata stored during open
   client_metadata_t client_metadata;
 
@@ -40,9 +42,11 @@ class ESession : public LogEvent {
     client_inst(inst), open(o), cmapv(v), inotablev(0),
     client_metadata(cm) { }
   ESession(const entity_inst_t& inst, bool o, version_t v,
-	   const interval_set<inodeno_t>& i, version_t iv) :
+	   interval_set<inodeno_t> i, version_t iv,
+	   interval_set<inodeno_t> _purge_inos) :
     LogEvent(EVENT_SESSION),
-    client_inst(inst), open(o), cmapv(v), inos(i), inotablev(iv) { }
+    client_inst(inst), open(o), cmapv(v), inos(std::move(i)), inotablev(iv),
+    purge_inos(std::move(_purge_inos)) {}
 
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;

@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
@@ -61,8 +62,8 @@ describe('OsdFormComponent', () => {
     const event: DevicesSelectionChangeEvent = {
       type: type,
       filters: [],
-      filterInDevices: devices,
-      filterOutDevices: []
+      data: devices,
+      dataOut: []
     };
     component.onDevicesSelected(event);
     if (type === 'data') {
@@ -95,6 +96,7 @@ describe('OsdFormComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       FormsModule,
       SharedModule,
@@ -149,7 +151,7 @@ describe('OsdFormComponent', () => {
 
     it('should display form', () => {
       fixtureHelper.expectElementVisible('cd-alert-panel', false);
-      fixtureHelper.expectElementVisible('.col-sm-10 form', true);
+      fixtureHelper.expectElementVisible('.cd-col-form form', true);
     });
 
     describe('without data devices selected', () => {

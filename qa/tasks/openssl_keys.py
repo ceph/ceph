@@ -64,8 +64,9 @@ class OpenSSLKeys(Task):
 
         # use testdir/ca as a working directory
         self.cadir = '/'.join((misc.get_testdir(self.ctx), 'ca'))
-
-        for name, config in self.config.items():
+        # make sure self-signed certs get added first, they don't have 'ca' field
+        configs = sorted(self.config.items(), key=lambda x: 'ca' in x[1])
+        for name, config in configs:
             # names must be unique to avoid clobbering each others files
             if name in self.ctx.ssl_certificates:
                 raise ConfigError('ssl: duplicate certificate name {}'.format(name))

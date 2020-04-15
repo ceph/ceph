@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_VERSION_TYPES_H
 #define CEPH_CLS_VERSION_TYPES_H
 
@@ -9,18 +12,18 @@ class JSONObj;
 
 struct obj_version {
   uint64_t ver;
-  string tag;
+  std::string tag;
 
   obj_version() : ver(0) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(ver, bl);
     encode(tag, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(ver, bl);
     decode(tag, bl);
@@ -36,18 +39,23 @@ struct obj_version {
     tag.clear();
   }
 
-  bool empty() {
+  bool empty() const {
     return tag.empty();
   }
 
-  bool compare(struct obj_version *v) {
+  bool compare(struct obj_version *v) const {
     return (ver == v->ver &&
             tag.compare(v->tag) == 0);
   }
 
-  void dump(Formatter *f) const;
+  bool operator==(const struct obj_version& v) const {
+    return (ver == v.ver &&
+            tag.compare(v.tag) == 0);
+  }
+
+  void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(list<obj_version*>& o);
+  static void generate_test_instances(std::list<obj_version*>& o);
 };
 WRITE_CLASS_ENCODER(obj_version)
 
@@ -66,7 +74,7 @@ struct obj_version_cond {
   struct obj_version ver;
   VersionCond cond;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(ver, bl);
     uint32_t c = (uint32_t)cond;
@@ -74,7 +82,7 @@ struct obj_version_cond {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(ver, bl);
     uint32_t c;

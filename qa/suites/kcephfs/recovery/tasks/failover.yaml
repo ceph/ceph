@@ -1,7 +1,7 @@
 overrides:
   ceph:
     log-whitelist:
-      - not responding, replacing
+      - Replacing daemon mds
       - \(MDS_INSUFFICIENT_STANDBY\)
       - \(MDS_ALL_DOWN\)
       - \(MDS_UP_LESS_THAN_MAX\)

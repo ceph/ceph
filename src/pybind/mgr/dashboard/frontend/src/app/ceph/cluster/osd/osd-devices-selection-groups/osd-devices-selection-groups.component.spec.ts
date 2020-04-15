@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastrModule } from 'ngx-toastr';
 
@@ -10,6 +11,7 @@ import {
   i18nProviders
 } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
+import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inventory-devices.component';
 import { OsdDevicesSelectionGroupsComponent } from './osd-devices-selection-groups.component';
 
@@ -17,7 +19,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   let component: OsdDevicesSelectionGroupsComponent;
   let fixture: ComponentFixture<OsdDevicesSelectionGroupsComponent>;
   let fixtureHelper: FixtureHelper;
-  const devices = [
+  const devices: InventoryDevice[] = [
     {
       hostname: 'node0',
       uid: '1',
@@ -37,7 +39,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
     }
   ];
 
-  const buttonSelector = '.col-sm-9 button';
+  const buttonSelector = '.cd-col-form-input button';
   const getButton = () => {
     const debugElement = fixtureHelper.getElementByCss(buttonSelector);
     return debugElement.nativeElement;
@@ -49,7 +51,13 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
   };
 
   configureTestBed({
-    imports: [FormsModule, HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
+    imports: [
+      BrowserAnimationsModule,
+      FormsModule,
+      HttpClientTestingModule,
+      SharedModule,
+      ToastrModule.forRoot()
+    ],
     providers: [i18nProviders],
     declarations: [OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });
@@ -126,7 +134,7 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       spyOn(component.cleared, 'emit');
       fixtureHelper.clickElement(clearTextSelector);
       fixtureHelper.expectElementVisible('cd-inventory-devices', false);
-      const event = {
+      const event: Record<string, any> = {
         type: undefined,
         clearedDevices: devices
       };

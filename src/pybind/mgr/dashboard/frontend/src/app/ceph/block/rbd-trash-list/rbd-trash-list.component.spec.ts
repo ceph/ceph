@@ -1,7 +1,9 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -17,6 +19,7 @@ import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdTrashListComponent } from './rbd-trash-list.component';
 
 describe('RbdTrashListComponent', () => {
@@ -26,8 +29,15 @@ describe('RbdTrashListComponent', () => {
   let rbdService: RbdService;
 
   configureTestBed({
-    declarations: [RbdTrashListComponent],
-    imports: [SharedModule, HttpClientTestingModule, RouterTestingModule, ToastrModule.forRoot()],
+    declarations: [RbdTrashListComponent, RbdTabsComponent],
+    imports: [
+      BrowserAnimationsModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      SharedModule,
+      TabsModule.forRoot(),
+      ToastrModule.forRoot()
+    ],
     providers: [TaskListService, i18nProviders]
   });
 
@@ -59,7 +69,7 @@ describe('RbdTrashListComponent', () => {
   describe('handling of executing tasks', () => {
     let images: any[];
 
-    const addImage = (id) => {
+    const addImage = (id: string) => {
       images.push({
         id: id,
         pool_name: 'pl'
@@ -82,14 +92,16 @@ describe('RbdTrashListComponent', () => {
       component.images = images;
       summaryService['summaryDataSource'].next({ executingTasks: [] });
       spyOn(rbdService, 'listTrash').and.callFake(() =>
-        of([{ poool_name: 'rbd', status: 1, value: images }])
+        of([{ pool_name: 'rbd', status: 1, value: images }])
       );
       fixture.detectChanges();
     });
 
     it('should gets all images without tasks', () => {
       expect(component.images.length).toBe(2);
-      expect(component.images.every((image) => !image.cdExecuting)).toBeTruthy();
+      expect(
+        component.images.every((image: Record<string, any>) => !image.cdExecuting)
+      ).toBeTruthy();
     });
 
     it('should show when an existing image is being modified', () => {
@@ -102,7 +114,34 @@ describe('RbdTrashListComponent', () => {
   });
 
   describe('display purge button', () => {
-    beforeEach(() => {});
+    let images: any[];
+    const addImage = (id: string) => {
+      images.push({
+        id: id,
+        pool_name: 'pl',
+        deferment_end_time: 'abc'
+      });
+    };
+
+    beforeEach(() => {
+      summaryService['summaryDataSource'].next({ executingTasks: [] });
+      spyOn(rbdService, 'listTrash').and.callFake(() => {
+        of([{ pool_name: 'rbd', status: 1, value: images }]);
+      });
+      fixture.detectChanges();
+    });
+
+    it('should show button disabled when no image is in trash', () => {
+      expect(component.disablePurgeBtn).toBeTruthy();
+    });
+
+    it('should show button enabled when an existing image is in trash', () => {
+      images = [];
+      addImage('1');
+      const payload = [{ pool_name: 'rbd', status: 1, value: images }];
+      component.prepareResponse(payload);
+      expect(component.disablePurgeBtn).toBeFalsy();
+    });
 
     it('should show button with delete permission', () => {
       component.permission = {

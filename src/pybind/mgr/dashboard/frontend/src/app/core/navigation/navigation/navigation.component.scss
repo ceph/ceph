@@ -1,7 +1,5 @@
 @import 'defaults';
 
-$pwd-exp-height: 37.6px;
-
 /* ---------------------------------------------------
     NAVBAR STYLE
 --------------------------------------------------- */
@@ -141,7 +139,6 @@ $pwd-exp-height: 37.6px;
 --------------------------------------------------- */
 
 $sidebar-width: 200px;
-$navbar-height: 43px;
 
 .cd-navbar-primary .active > a,
 .cd-navbar-primary > .active > a:focus,
@@ -169,10 +166,6 @@ $navbar-height: 43px;
 
     &.active {
       margin-left: -$sidebar-width;
-    }
-
-    &.isPwdDisplayed {
-      top: $navbar-height + $pwd-exp-height;
     }
 
     ul {
@@ -251,13 +244,29 @@ $navbar-height: 43px;
   top: $navbar-height;
   bottom: 0;
   right: 0;
-  overflow: auto;
 
   &.active {
     width: 100vw;
   }
+}
 
-  &.isPwdDisplayed {
+/* ---------------------------------------------------
+    isPwdDisplayed
+--------------------------------------------------- */
+:host.isPwdDisplayed {
+  .cd-navbar-top .cd-navbar-brand {
+    top: $pwd-exp-height;
+  }
+
+  #sidebar {
     top: $navbar-height + $pwd-exp-height;
+  }
+
+  #content {
+    top: $navbar-height + $pwd-exp-height;
+  }
+
+  cd-notifications-sidebar {
+    top: $navbar-height + $pwd-exp-height + 10px;
   }
 }

@@ -15,9 +15,9 @@ from six.moves.urllib import parse
 from .. import mgr
 from ..tools import prepare_url_prefix
 
+
 if six.PY2:
     FileNotFoundError = IOError  # pylint: disable=redefined-builtin
-
 
 logger = logging.getLogger('sso')
 
@@ -91,8 +91,9 @@ class SsoDB(object):
             db.check_and_update_db()
             return db
 
-        db = json.loads(json_db)
-        return cls(db['version'], db.get('protocol'), Saml2.from_dict(db.get('saml2')))
+        dict_db = json.loads(json_db)  # type: dict
+        return cls(dict_db['version'], dict_db.get('protocol'),
+                   Saml2.from_dict(dict_db.get('saml2')))
 
 
 def load_sso_db():
@@ -190,12 +191,12 @@ def handle_sso_command(cmd):
         has_sp_cert = sp_x_509_cert_path != "" and sp_private_key_path != ""
         if has_sp_cert:
             try:
-                with open(sp_x_509_cert_path, 'r') as f:
+                with open(sp_x_509_cert_path, 'r', encoding='utf-8') as f:
                     sp_x_509_cert = f.read()
             except FileNotFoundError:
                 return -errno.EINVAL, '', '`{}` not found.'.format(sp_x_509_cert_path)
             try:
-                with open(sp_private_key_path, 'r') as f:
+                with open(sp_private_key_path, 'r', encoding='utf-8') as f:
                     sp_private_key = f.read()
             except FileNotFoundError:
                 return -errno.EINVAL, '', '`{}` not found.'.format(sp_private_key_path)
@@ -206,7 +207,7 @@ def handle_sso_command(cmd):
         if os.path.isfile(idp_metadata):
             warnings.warn(
                 "Please prepend 'file://' to indicate a local SAML2 IdP file", DeprecationWarning)
-            with open(idp_metadata, 'r') as f:
+            with open(idp_metadata, 'r', encoding='utf-8') as f:
                 idp_settings = Saml2Parser.parse(f.read(), entity_id=idp_entity_id)
         elif parse.urlparse(idp_metadata)[0] in ('http', 'https', 'file'):
             idp_settings = Saml2Parser.parse_remote(
@@ -248,7 +249,7 @@ def handle_sso_command(cmd):
                 "wantMessagesSigned": has_sp_cert,
                 "wantAssertionsSigned": has_sp_cert,
                 "wantAssertionsEncrypted": has_sp_cert,
-                "wantNameIdEncrypted": has_sp_cert,
+                "wantNameIdEncrypted": False,  # Not all Identity Providers support this.
                 "metadataValidUntil": '',
                 "wantAttributeStatement": False
             }

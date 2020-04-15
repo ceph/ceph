@@ -15,6 +15,7 @@ from ..security import Scope, Permission
 from ..services.access_control import load_access_control_db, \
                                       password_hash, AccessControlDB, \
                                       SYSTEM_ROLES, PasswordPolicy
+from ..settings import Settings
 
 
 class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
@@ -289,6 +290,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'username': username,
             'password': pass_hash,
             'pwdExpirationDate': pwdExpirationDate,
+            'pwdUpdateRequired': False,
             'lastUpdate': user['lastUpdate'],
             'name': '{} User'.format(username),
             'email': '{}@user.com'.format(username),
@@ -326,13 +328,9 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_create_duplicate_user(self):
         self.test_create_user()
-
-        with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('ac-user-create', username='admin', password='admin',
-                          force_password=True)
-
-        self.assertEqual(ctx.exception.retcode, -errno.EEXIST)
-        self.assertEqual(str(ctx.exception), "User 'admin' already exists")
+        ret = self.exec_cmd('ac-user-create', username='admin', password='admin',
+                            force_password=True)
+        self.assertEqual(ret, "User 'admin' already exists")
 
     def test_create_users_with_dne_role(self):
         # one time call to setup our persistent db
@@ -503,6 +501,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'lastUpdate': user['lastUpdate'],
             'password': pass_hash,
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'pool-manager'],
@@ -545,6 +544,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'username': 'admin',
             'password': pass_hash,
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': 'Admin Name',
             'email': 'admin@admin.com',
             'lastUpdate': user['lastUpdate'],
@@ -572,6 +572,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'username': 'admin',
             'password': pass_hash,
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': 'admin User',
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
@@ -600,6 +601,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'username': 'admin',
             'password': pass_hash,
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': 'admin User',
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
@@ -637,6 +639,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'username': 'admin',
             'password': pass_hash,
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': None,
             'email': None,
             'lastUpdate': user['lastUpdate'],
@@ -656,6 +659,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'username': 'admin',
             'password': pass_hash,
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': 'admin User',
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
@@ -711,6 +715,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'password':
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'test_role'],
@@ -718,10 +723,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         })
 
     def test_load_v2(self):
-        """
-        The `enabled` and `pwdExpirationDate` attributes of a user have been added in v2
-        """
-        self.CONFIG_KEY_DICT['accessdb_v1'] = '''
+        self.CONFIG_KEY_DICT['accessdb_v2'] = '''
             {{
                 "users": {{
                     "admin": {{
@@ -729,6 +731,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                         "password":
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
                         "pwdExpirationDate": null,
+                        "pwdUpdateRequired": false,
                         "roles": ["block-manager", "test_role"],
                         "name": "admin User",
                         "email": "admin@user.com",
@@ -746,7 +749,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                         }}
                     }}
                 }},
-                "version": 1
+                "version": 2
             }}
         '''.format(int(round(time.time())), Scope.ISCSI, Permission.READ,
                    Permission.UPDATE, Scope.POOL, Permission.CREATE)
@@ -768,6 +771,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'password':
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'test_role'],
@@ -786,6 +790,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'password':
                 "$2b$12$sd0Az7mm3FaJl8kN3b/xwOuztaN0sWUwC1SJqjM4wcDw/s5cmGbLK",
             'pwdExpirationDate': None,
+            'pwdUpdateRequired': False,
             'name': None,
             'email': None,
             'roles': ['administrator'],
@@ -793,54 +798,73 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         })
 
     def test_password_policy_pw_length(self):
+        Settings.PWD_POLICY_CHECK_LENGTH_ENABLED = True
+        Settings.PWD_POLICY_MIN_LENGTH = 3
         pw_policy = PasswordPolicy('foo')
-        self.assertTrue(pw_policy.check_password_length(3))
+        self.assertTrue(pw_policy.check_password_length())
 
     def test_password_policy_pw_length_fail(self):
+        Settings.PWD_POLICY_CHECK_LENGTH_ENABLED = True
         pw_policy = PasswordPolicy('bar')
         self.assertFalse(pw_policy.check_password_length())
 
     def test_password_policy_credits_too_weak(self):
+        Settings.PWD_POLICY_CHECK_COMPLEXITY_ENABLED = True
         pw_policy = PasswordPolicy('foo')
-        pw_credits = pw_policy.check_password_characters()
+        pw_credits = pw_policy.check_password_complexity()
         self.assertEqual(pw_credits, 3)
 
     def test_password_policy_credits_weak(self):
+        Settings.PWD_POLICY_CHECK_COMPLEXITY_ENABLED = True
         pw_policy = PasswordPolicy('mypassword1')
-        pw_credits = pw_policy.check_password_characters()
+        pw_credits = pw_policy.check_password_complexity()
         self.assertEqual(pw_credits, 11)
 
     def test_password_policy_credits_ok(self):
+        Settings.PWD_POLICY_CHECK_COMPLEXITY_ENABLED = True
         pw_policy = PasswordPolicy('mypassword1!@')
-        pw_credits = pw_policy.check_password_characters()
+        pw_credits = pw_policy.check_password_complexity()
         self.assertEqual(pw_credits, 17)
 
     def test_password_policy_credits_strong(self):
+        Settings.PWD_POLICY_CHECK_COMPLEXITY_ENABLED = True
         pw_policy = PasswordPolicy('testpassword0047!@')
-        pw_credits = pw_policy.check_password_characters()
+        pw_credits = pw_policy.check_password_complexity()
         self.assertEqual(pw_credits, 22)
 
     def test_password_policy_credits_very_strong(self):
+        Settings.PWD_POLICY_CHECK_COMPLEXITY_ENABLED = True
         pw_policy = PasswordPolicy('testpassword#!$!@$')
-        pw_credits = pw_policy.check_password_characters()
+        pw_credits = pw_policy.check_password_complexity()
         self.assertEqual(pw_credits, 30)
 
     def test_password_policy_forbidden_words(self):
+        Settings.PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED = True
         pw_policy = PasswordPolicy('!@$testdashboard#!$')
         self.assertTrue(pw_policy.check_if_contains_forbidden_words())
 
+    def test_password_policy_forbidden_words_custom(self):
+        Settings.PWD_POLICY_CHECK_EXCLUSION_LIST_ENABLED = True
+        Settings.PWD_POLICY_EXCLUSION_LIST = 'foo,bar'
+        pw_policy = PasswordPolicy('foo123bar')
+        self.assertTrue(pw_policy.check_if_contains_forbidden_words())
+
     def test_password_policy_sequential_chars(self):
+        Settings.PWD_POLICY_CHECK_SEQUENTIAL_CHARS_ENABLED = True
         pw_policy = PasswordPolicy('!@$test123#!$')
         self.assertTrue(pw_policy.check_if_sequential_characters())
 
-    def test_password_policy_repetetive_chars(self):
+    def test_password_policy_repetitive_chars(self):
+        Settings.PWD_POLICY_CHECK_REPETITIVE_CHARS_ENABLED = True
         pw_policy = PasswordPolicy('!@$testfooo#!$')
-        self.assertTrue(pw_policy.check_if_repetetive_characters())
+        self.assertTrue(pw_policy.check_if_repetitive_characters())
 
     def test_password_policy_contain_username(self):
+        Settings.PWD_POLICY_CHECK_USERNAME_ENABLED = True
         pw_policy = PasswordPolicy('%admin135)', 'admin')
         self.assertTrue(pw_policy.check_if_contains_username())
 
     def test_password_policy_is_old_pwd(self):
+        Settings.PWD_POLICY_CHECK_OLDPWD_ENABLED = True
         pw_policy = PasswordPolicy('foo', old_password='foo')
         self.assertTrue(pw_policy.check_is_old_password())

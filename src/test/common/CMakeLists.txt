@@ -23,10 +23,9 @@ endif()
 
 # unittest_lockdep
 add_executable(unittest_lockdep
-  test_lockdep.cc
-  )
+  test_lockdep.cc)
 add_ceph_unittest(unittest_lockdep)
-target_link_libraries(unittest_lockdep ceph-common global)
+target_link_libraries(unittest_lockdep ceph-common)
 
 # FreeBSD only has shims to support NUMA, no functional code.
 if(LINUX)
@@ -304,6 +303,9 @@ add_executable(unittest_bounded_key_counter
 target_link_libraries(unittest_bounded_key_counter global)
 add_ceph_unittest(unittest_bounded_key_counter)
 
+add_executable(unittest_split test_split.cc)
+add_ceph_unittest(unittest_split)
+
 add_executable(unittest_static_ptr test_static_ptr.cc)
 add_ceph_unittest(unittest_static_ptr)
 
@@ -325,4 +327,6 @@ add_executable(unittest_rabin_chunk test_rabin_chunk.cc
 target_link_libraries(unittest_rabin_chunk global ceph-common)
 add_ceph_unittest(unittest_rabin_chunk)
 
-
+add_executable(unittest_ceph_timer test_ceph_timer.cc)
+target_link_libraries(unittest_rabin_chunk GTest::GTest)
+add_ceph_unittest(unittest_ceph_timer)

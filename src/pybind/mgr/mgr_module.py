@@ -150,6 +150,10 @@ class OSDMap(ceph_module.BasePyOSDMap):
         d = self._dump()
         return d['erasure_code_profiles'].get(name, None)
 
+    def get_require_osd_release(self):
+        d = self._dump()
+        return d['require_osd_release']
+
 
 class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
     def get_epoch(self):
@@ -223,7 +227,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
         try:
             first_take = [s for s in rule['steps'] if s['op'] == 'take'][0]
         except IndexError:
-            self.log.warn("CRUSH rule '{0}' has no 'take' step".format(
+            logging.warning("CRUSH rule '{0}' has no 'take' step".format(
                 rule_name))
             return None
         else:
@@ -303,13 +307,16 @@ class CLICommand(object):
         assert self.func
         return self.func(mgr, **kwargs)
 
+    def dump_cmd(self):
+        return {
+            'cmd': '{} {}'.format(self.prefix, self.args),
+            'desc': self.desc,
+            'perm': self.perm
+        }
+
     @classmethod
     def dump_cmd_list(cls):
-        return [{
-            'cmd': '{} {}'.format(cmd.prefix, cmd.args),
-            'desc': cmd.desc,
-            'perm': cmd.perm
-        } for _, cmd in cls.COMMANDS.items()]
+        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
 
 
 def CLIReadCommand(prefix, args="", desc=""):
@@ -405,13 +412,32 @@ class CPlusPlusHandler(logging.Handler):
     def __init__(self, module_inst):
         super(CPlusPlusHandler, self).__init__()
         self._module = module_inst
-        self.setFormatter(logging.Formatter("[{}] [%(levelname)-4s] [%(name)s] %(message)s"
+        self.setFormatter(logging.Formatter("[{} %(levelname)-4s %(name)s] %(message)s"
                           .format(module_inst.module_name)))
 
     def emit(self, record):
         if record.levelno >= self.level:
             self._module._ceph_log(self.format(record))
 
+class ClusterLogHandler(logging.Handler):
+    def __init__(self, module_inst):
+        super().__init__()
+        self._module = module_inst
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record):
+        levelmap = {
+            'DEBUG': MgrModule.CLUSTER_LOG_PRIO_DEBUG,
+            'INFO': MgrModule.CLUSTER_LOG_PRIO_INFO,
+            'WARNING': MgrModule.CLUSTER_LOG_PRIO_WARN,
+            'ERROR': MgrModule.CLUSTER_LOG_PRIO_ERROR,
+            'CRITICAL': MgrModule.CLUSTER_LOG_PRIO_ERROR,
+        }
+        level = levelmap[record.levelname]
+        if record.levelno >= self.level:
+            self._module.cluster_log(self._module.module_name,
+                                     level,
+                                     self.format(record))
 
 class FileHandler(logging.FileHandler):
     def __init__(self, module_inst):
@@ -426,7 +452,8 @@ class FileHandler(logging.FileHandler):
 
 
 class MgrModuleLoggingMixin(object):
-    def _configure_logging(self, mgr_level, module_level, log_to_file):
+    def _configure_logging(self, mgr_level, module_level, cluster_level,
+                           log_to_file, log_to_cluster):
         self._mgr_level = None
         self._module_level = None
         self._root_logger = logging.getLogger()
@@ -434,27 +461,35 @@ class MgrModuleLoggingMixin(object):
         self._unconfigure_logging()
 
         # the ceph log handler is initialized only once
-        self._ceph_log_handler = CPlusPlusHandler(self)
+        self._mgr_log_handler = CPlusPlusHandler(self)
+        self._cluster_log_handler = ClusterLogHandler(self)
         self._file_log_handler = FileHandler(self)
 
         self.log_to_file = log_to_file
+        self.log_to_cluster = log_to_cluster
+
+        self._root_logger.addHandler(self._mgr_log_handler)
         if log_to_file:
             self._root_logger.addHandler(self._file_log_handler)
-        else:
-            self._root_logger.addHandler(self._ceph_log_handler)
+        if log_to_cluster:
+            self._root_logger.addHandler(self._cluster_log_handler)
 
         self._root_logger.setLevel(logging.NOTSET)
-        self._set_log_level(mgr_level, module_level)
+        self._set_log_level(mgr_level, module_level, cluster_level)
+
 
     def _unconfigure_logging(self):
         # remove existing handlers:
         rm_handlers = [
-            h for h in self._root_logger.handlers if isinstance(h, CPlusPlusHandler) or isinstance(h, FileHandler)]
+            h for h in self._root_logger.handlers if isinstance(h, CPlusPlusHandler) or isinstance(h, FileHandler) or isinstance(h, ClusterLogHandler)]
         for h in rm_handlers:
             self._root_logger.removeHandler(h)
         self.log_to_file = False
+        self.log_to_cluster = False
 
-    def _set_log_level(self, mgr_level, module_level):
+    def _set_log_level(self, mgr_level, module_level, cluster_level):
+        self._cluster_log_handler.setLevel(cluster_level.upper())
+
         module_level = module_level.upper() if module_level else ''
         if not self._module_level:
             # using debug_mgr level
@@ -468,34 +503,44 @@ class MgrModuleLoggingMixin(object):
 
         if not self._module_level and not module_level:
             level = self._ceph_log_level_to_python(mgr_level)
-            self.getLogger().warning("setting log level based on debug_mgr: %s (%s)", level, mgr_level)
+            self.getLogger().debug("setting log level based on debug_mgr: %s (%s)", level, mgr_level)
         elif self._module_level and not module_level:
             level = self._ceph_log_level_to_python(mgr_level)
             self.getLogger().warning("unsetting module log level, falling back to "
                                      "debug_mgr level: %s (%s)", level, mgr_level)
         elif module_level:
             level = module_level
-            self.getLogger().warning("setting log level: %s", level)
+            self.getLogger().debug("setting log level: %s", level)
 
         self._module_level = module_level
         self._mgr_level = mgr_level
 
-        self._ceph_log_handler.setLevel(level)
+        self._mgr_log_handler.setLevel(level)
         self._file_log_handler.setLevel(level)
 
     def _enable_file_log(self):
-        # disable ceph log and enable file log
+        # enable file log
         self.getLogger().warning("enabling logging to file")
         self.log_to_file = True
         self._root_logger.addHandler(self._file_log_handler)
-        self._root_logger.removeHandler(self._ceph_log_handler)
 
     def _disable_file_log(self):
-        # disable file log and enable ceph log
+        # disable file log
         self.getLogger().warning("disabling logging to file")
         self.log_to_file = False
-        self._root_logger.addHandler(self._ceph_log_handler)
         self._root_logger.removeHandler(self._file_log_handler)
+
+    def _enable_cluster_log(self):
+        # enable cluster log
+        self.getLogger().warning("enabling logging to cluster")
+        self.log_to_cluster = True
+        self._root_logger.addHandler(self._cluster_log_handler)
+
+    def _disable_cluster_log(self):
+        # disable cluster log
+        self.getLogger().warning("disabling logging to cluster")
+        self.log_to_cluster = False
+        self._root_logger.removeHandler(self._cluster_log_handler)
 
     def _ceph_log_level_to_python(self, ceph_log_level):
         if ceph_log_level:
@@ -536,13 +581,6 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
 
-        mgr_level = self.get_ceph_option("debug_mgr")
-        log_level = self.get_module_option("log_level")
-        self._configure_logging(mgr_level, log_level, False)
-
-        # for backwards compatibility
-        self._logger = self.getLogger()
-
         # see also MgrModule.__init__()
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
@@ -551,8 +589,39 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
                 else:
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
+        mgr_level = self.get_ceph_option("debug_mgr")
+        log_level = self.get_module_option("log_level")
+        cluster_level = self.get_module_option('log_to_cluster_level')
+        self._configure_logging(mgr_level, log_level, cluster_level,
+                                False, False)
+
+        # for backwards compatibility
+        self._logger = self.getLogger()
+
     def __del__(self):
+        self._cleanup()
         self._unconfigure_logging()
+
+    def _cleanup(self):
+        pass
+
+    @classmethod
+    def _register_options(cls, module_name):
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_level', type='str', default="", runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_file', type='bool', default=False, runtime=True))
+        if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
+            cls.MODULE_OPTIONS.append(
+                Option(name='log_to_cluster', type='bool', default=False,
+                       runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_cluster_level', type='str', default='info',
+                   runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
 
     @property
     def log(self):
@@ -642,21 +711,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self.module_name = module_name
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
 
-        mgr_level = self.get_ceph_option("debug_mgr")
-        log_level = self.get_module_option("log_level")
-        self._configure_logging(mgr_level, log_level,
-                                self.get_module_option("log_to_file", False))
-
-        # for backwards compatibility
-        self._logger = self.getLogger()
-
-        self._version = self._ceph_get_version()
-
-        self._perf_schema_cache = None
-
-        # Keep a librados instance for those that need it.
-        self._rados = None
-
         for o in self.MODULE_OPTIONS:
             if 'default' in o:
                 if 'type' in o:
@@ -669,15 +723,48 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     # with default and user-supplied option values.
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
+        mgr_level = self.get_ceph_option("debug_mgr")
+        log_level = self.get_module_option("log_level")
+        cluster_level = self.get_module_option('log_to_cluster_level')
+        log_to_file = self.get_module_option("log_to_file")
+        log_to_cluster = self.get_module_option("log_to_cluster")
+        self._configure_logging(mgr_level, log_level, cluster_level,
+                                log_to_file, log_to_cluster)
+
+        # for backwards compatibility
+        self._logger = self.getLogger()
+
+        self._version = self._ceph_get_version()
+
+        self._perf_schema_cache = None
+
+        # Keep a librados instance for those that need it.
+        self._rados = None
+
+
     def __del__(self):
         self._unconfigure_logging()
 
     @classmethod
-    def _register_commands(cls, module_name):
-        cls.MODULE_OPTIONS.append(Option(name='log_level', type='str', default="", runtime=True,
-                                         enum_allowed=['info', 'debug', 'critical', 'error', 'warning', '']))
-        cls.MODULE_OPTIONS.append(Option(name='log_to_file', type='bool', default=False, runtime=True))
+    def _register_options(cls, module_name):
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_level', type='str', default="", runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_file', type='bool', default=False, runtime=True))
+        if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
+            cls.MODULE_OPTIONS.append(
+                Option(name='log_to_cluster', type='bool', default=False,
+                       runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='log_to_cluster_level', type='str', default='info',
+                   runtime=True,
+                   enum_allowed=['info', 'debug', 'critical', 'error',
+                                 'warning', '']))
 
+    @classmethod
+    def _register_commands(cls, module_name):
         cls.COMMANDS.extend(CLICommand.dump_cmd_list())
 
     @property
@@ -736,15 +823,22 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # check logging options for changes
         mgr_level = self.get_ceph_option("debug_mgr")
         module_level = self.get_module_option("log_level")
+        cluster_level = self.get_module_option("log_to_cluster_level")
         log_to_file = self.get_module_option("log_to_file", False)
+        log_to_cluster = self.get_module_option("log_to_cluster", False)
 
-        self._set_log_level(mgr_level, module_level)
+        self._set_log_level(mgr_level, module_level, cluster_level)
 
         if log_to_file != self.log_to_file:
             if log_to_file:
                 self._enable_file_log()
             else:
                 self._disable_file_log()
+        if log_to_cluster != self.log_to_cluster:
+            if log_to_cluster:
+                self._enable_cluster_log()
+            else:
+                self._disable_cluster_log()
 
         # call module subclass implementations
         self.config_notify()
@@ -787,7 +881,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param str data_name: Valid things to fetch are osd_crush_map_text,
                 osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
                 osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
-                health, mon_status, devices, device <devid>.
+                health, mon_status, devices, device <devid>, pg_stats,
+                pool_stats, pg_ready, osd_ping_times.
 
         Note:
             All these structures have their own JSON representations: experiment
@@ -1479,69 +1574,3 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param arguments: dict of key/value arguments to test
         """
         return self._ceph_is_authorized(arguments)
-
-
-class PersistentStoreDict(object):
-    def __init__(self, mgr, prefix):
-        # type: (MgrModule, str) -> None
-        self.mgr = mgr
-        self.prefix = prefix + '.'
-
-    def _mk_store_key(self, key):
-        return self.prefix + key
-
-    def __missing__(self, key):
-        # KeyError won't work for the `in` operator.
-        # https://docs.python.org/3/reference/expressions.html#membership-test-details
-        raise IndexError('PersistentStoreDict: "{}" not found'.format(key))
-
-    def clear(self):
-        # Don't make any assumptions about the content of the values.
-        for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
-            k, _ = item
-            self.mgr.set_store(k, None)
-
-    def __getitem__(self, item):
-        # type: (str) -> Any
-        key = self._mk_store_key(item)
-        try:
-            val = self.mgr.get_store(key)
-            if val is None:
-                self.__missing__(key)
-            return json.loads(val)
-        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
-            logging.getLogger(__name__).exception('failed to deserialize')
-            self.mgr.set_store(key, None)
-            raise
-
-    def __setitem__(self, item, value):
-        # type: (str, Any) -> None
-        """
-        value=None is not allowed, as it will remove the key.
-        """
-        key = self._mk_store_key(item)
-        self.mgr.set_store(key, json.dumps(value) if value is not None else None)
-
-    def __delitem__(self, item):
-        self[item] = None
-
-    def __len__(self):
-        return len(self.keys())
-
-    def items(self):
-        # type: () -> Iterator[Tuple[str, Any]]
-        prefix_len = len(self.prefix)
-        try:
-            for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
-                k, v = item
-                yield k[prefix_len:], json.loads(v)
-        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
-            logging.getLogger(__name__).exception('failed to deserialize')
-            self.clear()
-
-    def keys(self):
-        # type: () -> Set[str]
-        return {item[0] for item in self.items()}
-
-    def __iter__(self):
-        return iter(self.keys())

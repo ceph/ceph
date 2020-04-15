@@ -2,7 +2,7 @@
 
 set -e
 
-wget -O linux.tar.gz http://download.ceph.com/qa/linux-4.17.tar.gz
+wget -O linux.tar.gz http://download.ceph.com/qa/linux-5.4.tar.gz
 
 mkdir t
 cd t

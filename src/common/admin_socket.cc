@@ -41,8 +41,18 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "asok(" << (void*)m_cct << ") "
 
+using namespace std::literals;
 
 using std::ostringstream;
+using std::string;
+using std::stringstream;
+
+using namespace TOPNSPC::common;
+
+using ceph::bufferlist;
+using ceph::cref_t;
+using ceph::Formatter;
+
 
 /*
  * UNIX domain sockets created by an application persist even after that
@@ -371,6 +381,7 @@ void AdminSocket::do_accept()
   if (rval < 0) {
     ostringstream ss;
     ss << "ERROR: " << cpp_strerror(rval) << "\n";
+    ss << err.str() << "\n";
     bufferlist o;
     o.append(ss.str());
     o.claim_append(out);
@@ -481,14 +492,14 @@ void AdminSocket::execute_command(
   }
   string prefix;
   try {
-    cmd_getval(m_cct, cmdmap, "format", format);
-    cmd_getval(m_cct, cmdmap, "prefix", prefix);
+    cmd_getval(cmdmap, "format", format);
+    cmd_getval(cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
     return on_finish(-EINVAL, "invalid json, missing format and/or prefix",
 		     empty);
   }
 
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+  auto f = Formatter::create(format, "json-pretty", "json-pretty");
 
   std::unique_lock l(lock);
   decltype(hooks)::iterator p;
@@ -649,7 +660,7 @@ public:
       // do what you'd expect. GCC 7 does not.
       (void)command;
       ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      secname << "cmd" << std::setfill('0') << std::setw(3) << cmdnum;
       dump_cmd_and_help_to_json(f,
                                 CEPH_FEATURES_ALL,
 				secname.str().c_str(),

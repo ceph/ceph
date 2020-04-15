@@ -37,11 +37,22 @@
 // set set_mon_vals()
 #define dout_subsys ceph_subsys_monc
 
+using std::cerr;
+using std::cout;
 using std::map;
+using std::less;
 using std::list;
+using std::ostream;
 using std::ostringstream;
 using std::pair;
 using std::string;
+using std::string_view;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
 
 static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, $home/.ceph/$cluster.conf, $cluster.conf"
 #if defined(__FreeBSD__)
@@ -1031,8 +1042,7 @@ Option::value_t md_config_t::get_val_generic(
   const ConfigValues& values,
   const std::string_view key) const
 {
-  string k(ConfFile::normalize_key_name(key));
-  return _get_val(values, k);
+  return _get_val(values, key);
 }
 
 Option::value_t md_config_t::_get_val(
@@ -1048,7 +1058,7 @@ Option::value_t md_config_t::_get_val(
   // In key names, leading and trailing whitespace are not significant.
   string k(ConfFile::normalize_key_name(key));
 
-  const Option *o = find_option(key);
+  const Option *o = find_option(k);
   if (!o) {
     // not a valid config option
     return Option::value_t(boost::blank());
@@ -1274,8 +1284,6 @@ int md_config_t::_get_val_cstr(
     snprintf(*buf, len, "%s", val.c_str());
     return (l > len) ? -ENAMETOOLONG : 0;
   }
-
-  string k(ConfFile::normalize_key_name(key));
 
   // couldn't find a configuration option with key 'k'
   return -ENOENT;

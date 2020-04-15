@@ -28,6 +28,7 @@ class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
+class RGWSI_Bucket_Sync;
 
 struct rgw_cache_entry_info;
 
@@ -75,6 +76,7 @@ public:
     RGWSI_Meta *meta{nullptr};
     RGWSI_MetaBackend *meta_be{nullptr};
     RGWSI_SyncModules *sync_modules{nullptr};
+    RGWSI_Bucket_Sync *bucket_sync{nullptr};
   } svc;
 
   RGWSI_Bucket_SObj(CephContext *cct);
@@ -94,7 +96,8 @@ public:
             RGWSI_BucketIndex *_bi,
             RGWSI_Meta *_meta_svc,
             RGWSI_MetaBackend *_meta_be_svc,
-	    RGWSI_SyncModules *_sync_modules);
+	    RGWSI_SyncModules *_sync_modules_svc,
+	    RGWSI_Bucket_Sync *_bucket_sync_svc);
 
 
   int read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
@@ -150,6 +153,7 @@ public:
 
   int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                   const string& key,
+                                  const RGWBucketInfo& bucket_info,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y) override;
 

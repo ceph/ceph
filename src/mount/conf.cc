@@ -71,7 +71,7 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
   if (monaddrs.length())
     strcpy(cci->cci_mons, monaddrs.c_str());
   else
-    mount_ceph_debug("Could not discover monitor addresses");
+    mount_ceph_debug("Could not discover monitor addresses\n");
 
 scrape_keyring:
   err = keyring.from_ceph_context(cct.get());

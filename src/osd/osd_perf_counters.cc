@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "osd_perf_counters.h"
+#include "include/common_fwd.h"
+
 
 PerfCounters *build_osd_logger(CephContext *cct) {
   PerfCountersBuilder osd_plb(cct, "osd", l_osd_first, l_osd_last);
