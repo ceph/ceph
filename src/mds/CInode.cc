@@ -5553,6 +5553,51 @@ bool CInode::is_exportable(mds_rank_t dest) const
   }
 }
 
+void CInode::set_expected_files(uint64_t files)
+{
+  ceph_assert(is_dir());
+  ceph_assert(is_projected());
+
+  // Convert file count into directory fragment split bits
+  uint32_t bits = 0;
+  if (files > 0) {
+    auto fragments = files / g_conf().get_val<int64_t>("mds_bal_split_size") + 1;
+    while (fragments > 0) {
+      bits++;
+      fragments >>= 1;
+    }
+  }
+
+  get_projected_inode()->expected_files = files;
+  get_projected_inode()->expected_file_bits = bits;
+}
+
+uint64_t CInode::get_expected_files() const
+{
+  const CInode *in = this;
+  if (in->is_system()) {
+    return 0;
+  }
+  // No expected files for unlinked directory
+  if (in->get_inode().nlink == 0) {
+    return 0;
+  }
+  return in->get_inode().expected_files;
+}
+
+uint32_t CInode::get_expected_file_bits() const
+{
+  const CInode *in = this;
+  if (in->is_system()) {
+    return 0;
+  }
+  // No expected files for unlinked directory
+  if (in->get_inode().nlink == 0) {
+    return 0;
+  }
+  return in->get_inode().expected_file_bits;
+}
+
 void CInode::get_nested_dirfrags(std::vector<CDir*>& v) const
 {
   for (const auto &p : dirfrags) {

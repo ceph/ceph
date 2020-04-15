@@ -1166,7 +1166,10 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
       !dir->inode->is_stray()) { // not straydir
 
     // split
-    if (dir->should_split() || hot) {
+    if (dir->frag.bits() < dir->inode->get_expected_file_bits()) {
+      // fast-path pre-split based on expected directory size
+      queue_split(dir, true);
+    } else if (g_conf()->mds_bal_split_size > 0 && (dir->should_split() || hot)) {
       if (split_pending.count(dir->dirfrag()) == 0) {
         queue_split(dir, false);
       } else {
@@ -1180,8 +1183,10 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
     }
 
     // merge?
-    if (dir->get_frag() != frag_t() && dir->should_merge() &&
-	merge_pending.count(dir->dirfrag()) == 0) {
+    if (dir->frag.bits() > dir->inode->get_expected_file_bits() &&
+        dir->get_frag() != frag_t() &&
+        dir->should_merge() &&
+        merge_pending.count(dir->dirfrag()) == 0) {
       queue_merge(dir);
     }
   }

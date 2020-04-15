@@ -5645,7 +5645,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       respond_to_request(mdr, -EINVAL);
       return;
     }
-
     double val;
     try {
       val = boost::lexical_cast<double>(value);
@@ -5689,6 +5688,25 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
 
     auto &pi = cur->project_inode();
     cur->setxattr_ephemeral_dist(val);
+    pip = &pi.inode;
+  } else if (name == "ceph.dir.expected_files"sv) {
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+    uint64_t files;
+    try {
+      files = boost::lexical_cast<uint64_t>(value);
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse uint64_t for " << name << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+    if (!xlock_policylock(mdr, cur)) {
+      return;
+    }
+    auto &pi = cur->project_inode();
+    cur->set_expected_files(files);
     pip = &pi.inode;
   } else {
     dout(10) << " unknown vxattr " << name << dendl;

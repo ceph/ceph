@@ -595,6 +595,8 @@ struct inode_t {
   quota_info_t quota;
 
   mds_rank_t export_pin = MDS_RANK_NONE;
+  uint64_t expected_files = 0;
+  uint32_t expected_file_bits = 0;
 
   double export_ephemeral_random_pin = 0;
   bool export_ephemeral_distributed_pin = false;
@@ -621,7 +623,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(16, 6, bl);
+  ENCODE_START(17, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -676,13 +678,15 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_ephemeral_random_pin, bl);
   encode(export_ephemeral_distributed_pin, bl);
 
+  encode(expected_files, bl);
+  encode(expected_file_bits, bl);
   ENCODE_FINISH(bl);
 }
 
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(16, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(17, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -780,6 +784,13 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
     export_ephemeral_distributed_pin = false;
   }
 
+  if (struct_v >= 17) {
+    decode(expected_files, p);
+    decode(expected_file_bits, p);
+  } else {
+    expected_files = 0;
+    expected_file_bits = 0;
+  }
   DECODE_FINISH(p);
 }
 
