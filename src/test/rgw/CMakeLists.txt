@@ -18,6 +18,11 @@ add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
 target_link_libraries(unittest_rgw_bencode ${rgw_libs})
 
+# unittest_rgw_bucket_sync_cache
+add_executable(unittest_rgw_bucket_sync_cache test_rgw_bucket_sync_cache.cc)
+add_ceph_unittest(unittest_rgw_bucket_sync_cache)
+target_link_libraries(unittest_rgw_bucket_sync_cache ${rgw_libs})
+
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
