@@ -32,6 +32,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
+#include "include/ceph_fuse.h"
 
 #include "global/global_init.h"
 #include "global/global_context.h"
@@ -244,7 +245,11 @@ static int count_images(void)
 
 extern "C" {
 
-static int rbdfs_getattr(const char *path, struct stat *stbuf)
+static int rbdfs_getattr(const char *path, struct stat *stbuf
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+                         , struct fuse_file_info *fi
+#endif
+                        )
 {
 	int fd;
 	time_t now;
@@ -456,11 +461,15 @@ static void rbdfs_readdir_cb(void *_info, const char *name)
 {
 	struct rbdfs_readdir_info *info = (struct rbdfs_readdir_info*) _info;
 
-	info->filler(info->buf, name, NULL, 0);
+        filler_compat(info->filler, info->buf, name, NULL, 0);
 }
 
 static int rbdfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-			   off_t offset, struct fuse_file_info *fi)
+			 off_t offset, struct fuse_file_info *fi
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+                         , enum fuse_readdir_flags
+#endif
+                         )
 {
 	struct rbdfs_readdir_info info = { buf, filler };
 
@@ -472,8 +481,8 @@ static int rbdfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	if (strcmp(path, "/") != 0)
 		return -ENOENT;
 
-	filler(buf, ".", NULL, 0);
-	filler(buf, "..", NULL, 0);
+	filler_compat(filler, buf, ".", NULL, 0);
+	filler_compat(filler, buf, "..", NULL, 0);
 	iter_images(&info, rbdfs_readdir_cb);
 
 	return 0;
@@ -488,7 +497,11 @@ static int rbdfs_releasedir(const char *path, struct fuse_file_info *fi)
 }
 
 void *
-rbdfs_init(struct fuse_conn_info *conn)
+rbdfs_init(struct fuse_conn_info *conn
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+           , struct fuse_config *cfg
+#endif
+          )
 {
 	int ret;
 
@@ -570,7 +583,11 @@ rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 }
 
 int
-rbdfs_rename(const char *path, const char *destname)
+rbdfs_rename(const char *path, const char *destname
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+             , unsigned int flags
+#endif
+            )
 {
     int r;
 
@@ -587,7 +604,11 @@ rbdfs_rename(const char *path, const char *destname)
 }
 
 int
-rbdfs_utimens(const char *path, const struct timespec tv[2])
+rbdfs_utimens(const char *path, const struct timespec tv[2]
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+              , struct fuse_file_info *fi
+#endif
+             )
 {
 	// called on create; not relevant
 	return 0;
@@ -609,7 +630,11 @@ rbdfs_unlink(const char *path)
 
 
 int
-rbdfs_truncate(const char *path, off_t size)
+rbdfs_truncate(const char *path, off_t size
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+               , struct fuse_file_info *fi
+#endif
+              )
 {
 	int fd;
 	int r;
@@ -724,7 +749,9 @@ rbdfs_listxattr(const char *path, char *list, size_t len)
 const static struct fuse_operations rbdfs_oper = {
   getattr:    rbdfs_getattr,
   readlink:   0,
+#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   getdir:     0,
+#endif
   mknod:      0,
   mkdir:      0,
   unlink:     rbdfs_unlink,
@@ -757,8 +784,10 @@ const static struct fuse_operations rbdfs_oper = {
   destroy:    rbdfs_destroy,
   access:     0,
   create:     rbdfs_create,
+#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   ftruncate:  0,
   fgetattr:   0,
+#endif
   lock:       0,
   utimens:    rbdfs_utimens,
   /* skip unimplemented */

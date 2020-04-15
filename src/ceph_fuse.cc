@@ -41,6 +41,7 @@
 #include <fcntl.h>
 
 #include <fuse.h>
+#include <fuse_lowlevel.h>
 
 #define dout_context g_ceph_context
 
@@ -51,7 +52,12 @@ static void fuse_usage()
     "-h",
   };
   struct fuse_args args = FUSE_ARGS_INIT(2, (char**)argv);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+  struct fuse_cmdline_opts opts = {};
+  if (fuse_parse_cmdline(&args, &opts) == -1) {
+#else
   if (fuse_parse_cmdline(&args, nullptr, nullptr, nullptr) == -1) {
+#endif
     derr << "fuse_parse_cmdline failed." << dendl;
   }
   ceph_assert(args.allocated);
@@ -105,7 +111,12 @@ int main(int argc, const char **argv, const char *envp[]) {
       };
 
       struct fuse_args fargs = FUSE_ARGS_INIT(2, (char**)tmpargv);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+      struct fuse_cmdline_opts opts = {};
+      if (fuse_parse_cmdline(&fargs, &opts) == -1) {
+#else
       if (fuse_parse_cmdline(&fargs, nullptr, nullptr, nullptr) == -1) {
+#endif
        derr << "fuse_parse_cmdline failed." << dendl;
       }
       ceph_assert(fargs.allocated);
