@@ -65,6 +65,7 @@ setup(
                       'ansible>=2.0',
                       'prettytable',
                       'manhole',
+                      'humanfriendly',
                       ],
     extras_require = {
         'coverage': [ 'mysqlclient == 1.4.2'],

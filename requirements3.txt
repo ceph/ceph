@@ -34,7 +34,9 @@ docutils==0.14            # via botocore
 gevent==1.4.0
 greenlet==0.4.15          # via gevent
 httplib2==0.10.3
+humanfriendly==8.1
 idna==2.5                 # via requests
+ipy==1.0
 iso8601==0.1.11           # via keystoneauth1, oslo.utils, python-neutronclient, python-novaclient
 jinja2==2.10.1            # via ansible
 jmespath==0.9.4           # via boto3, botocore
@@ -99,7 +101,6 @@ virtualenv==15.1.0        # via tox
 warlock==1.2.0            # via python-glanceclient
 wrapt==1.10.10            # via debtcollector, positional, python-glanceclient
 xmltodict==0.12.0
-ipy==1.0
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
