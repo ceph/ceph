@@ -148,6 +148,129 @@ public:
 WRITE_CLASS_ENCODER(BasicProvider::Marker)
 WRITE_CLASS_ENCODER(BasicProvider::Data)
 
+class LogProvider : public SIProvider
+{
+  int id;
+
+  uint32_t min_val;
+  uint32_t max_val;
+
+  bool done;
+
+
+  string gen_data(uint32_t val) {
+    stringstream ss;
+    ss << id << ": log test data (" << min_val << "-" << max_val << ") -- " << val;
+    return ss.str();
+  }
+
+public: 
+  LogProvider(int _id,
+              uint32_t _min_val,
+              uint32_t _max_val) : id(_id),
+                                   min_val(_min_val),
+                                   max_val(_max_val) {}
+
+  struct Marker {
+    uint32_t val{0};
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(val, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      decode(val, bl);
+      DECODE_FINISH(bl);
+    }
+  };
+
+  SIProvider::Type get_type() const {
+    return SIProvider::Type::INC;
+  }
+
+  void add_entries(int count) {
+    max_val += count;
+  }
+
+  void trim(int new_min) {
+    min_val = new_min;
+  }
+
+  void set_done(bool _done) {
+    done = _done;
+  }
+
+  struct Data {
+    string val;
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(val, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      decode(val, bl);
+      DECODE_FINISH(bl);
+    }
+  };
+
+
+  int fetch(std::string marker, int max, fetch_result *result) override {
+    Marker pos;
+
+    result->entries.clear();
+
+    if (!decode_marker(marker, &pos)) {
+      return -EINVAL;
+    }
+
+    uint32_t val = pos.val;
+
+    if (marker.empty()) {
+      val = min_val;
+    } else {
+      if (val >= max_val) {
+        result->more = false;
+        result->done = done;
+        return 0;
+      }
+      val++;
+    }
+
+    for (int i = 0; i < max && val <= max_val; ++i, ++val) {
+      SIProvider::info e;
+
+      Data d{gen_data(val)};
+      d.encode(e.data);
+      e.key = encode_marker(Marker{val});
+
+      result->entries.push_back(std::move(e));
+    }
+
+    result->more = (val <= max_val);
+    result->done = (!result->more && done);
+
+    return 0;
+  }
+
+  int get_start_marker(std::string *marker) const override {
+    marker->clear();
+    return 0;
+  }
+
+  int get_cur_state(std::string *marker) const override {
+    return max_val;
+  }
+};
+WRITE_CLASS_ENCODER(LogProvider::Marker)
+WRITE_CLASS_ENCODER(LogProvider::Data)
+
+
+
 TEST(TestRGWSIP, test_basic_provider)
 {
   int max_entries = 25;
@@ -181,6 +304,48 @@ TEST(TestRGWSIP, test_basic_provider)
     }
 
     ASSERT_TRUE((total < max_entries) != (result.done));
+  } while (total < max_entries);
+
+  ASSERT_TRUE(total == max_entries);
+}
+
+TEST(TestRGWSIP, test_log_provider)
+{
+  int min_val = 12;
+  int max_val = 33;
+
+  int max_entries = max_val - min_val + 1;
+
+  LogProvider lp(0, min_val, max_val);
+
+  string marker;
+  ASSERT_EQ(0, lp.get_start_marker(&marker));
+
+  int total = 0;
+
+  int chunk_size = 10;
+
+  do {
+    SIProvider::fetch_result result;
+    ASSERT_EQ(0, lp.fetch(marker, chunk_size, &result));
+
+    total += result.entries.size();
+
+    for (auto& e : result.entries) {
+      marker = e.key;
+
+      LogProvider::Data d;
+      try {
+        decode(d, e.data);
+      } catch (buffer::error& err) {
+        cerr << "ERROR: failed to decode data" << std::endl;
+        ASSERT_TRUE(false);
+      }
+      cout << "entry: " << d.val << std::endl;
+    }
+    cout << "result.more=" << result.more << " total=" << total << std::endl;
+    ASSERT_TRUE((total < max_entries) == (result.more));
+
   } while (total < max_entries);
 
   ASSERT_TRUE(total == max_entries);
