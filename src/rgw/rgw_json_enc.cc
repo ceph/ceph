@@ -1768,11 +1768,13 @@ void rgw_bucket_shard_full_sync_marker::dump(Formatter *f) const
 void rgw_bucket_shard_inc_sync_marker::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("position", position, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
 }
 
 void rgw_bucket_shard_inc_sync_marker::dump(Formatter *f) const
 {
   encode_json("position", position, f);
+  encode_json("timestamp", timestamp, f);
 }
 
 void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
