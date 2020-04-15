@@ -437,7 +437,8 @@ class Completion(_Promise):
     call one completion from another completion. I.e. making them re-usable
     using Promises E.g.::
 
-        >>> return Orchestrator().get_hosts().then(self._create_osd)
+        >>> #doctest: +SKIP
+        ... return Orchestrator().get_hosts().then(self._create_osd)
 
     where ``get_hosts`` returns a Completion of list of hosts and
     ``_create_osd`` takes a list of hosts.
@@ -445,7 +446,8 @@ class Completion(_Promise):
     The concept behind this is to store the computation steps
     explicit and then explicitly evaluate the chain:
 
-        >>> p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
+        >>> #doctest: +SKIP
+        ... p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
         ... p.finalize(2)
         ... assert p.result = "4"
 
@@ -695,7 +697,8 @@ class Orchestrator(object):
             is actually available in the orchestrator. I.e. this
             won't work as expected::
 
-                >>> if OrchestratorClientMixin().available()[0]:  # wrong.
+                >>> #doctest: +SKIP
+                ... if OrchestratorClientMixin().available()[0]:  # wrong.
                 ...     OrchestratorClientMixin().get_hosts()
 
         :return: two-tuple of boolean, string
@@ -727,13 +730,15 @@ class Orchestrator(object):
             is actually possible in the orchestrator. I.e. this
             won't work as expected::
 
-                >>> api = OrchestratorClientMixin()
+                >>> #doctest: +SKIP
+                ... api = OrchestratorClientMixin()
                 ... if api.get_feature_set()['get_hosts']['available']:  # wrong.
                 ...     api.get_hosts()
 
             It's better to ask for forgiveness instead::
 
-                >>> try:
+                >>> #doctest: +SKIP
+                ... try:
                 ...     OrchestratorClientMixin().get_hosts()
                 ... except (OrchestratorError, NotImplementedError):
                 ...     ...
@@ -1549,7 +1554,8 @@ class OrchestratorClientMixin(Orchestrator):
 
 
     >>> import mgr_module
-    >>> class MyImplentation(mgr_module.MgrModule, Orchestrator):
+    >>> #doctest: +SKIP
+    ... class MyImplentation(mgr_module.MgrModule, Orchestrator):
     ...     def __init__(self, ...):
     ...         self.orch_client = OrchestratorClientMixin()
     ...         self.orch_client.set_mgr(self.mgr))
