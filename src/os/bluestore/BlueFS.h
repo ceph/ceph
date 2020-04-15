@@ -80,8 +80,8 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
-  virtual void* get_hint_by_device(uint8_t dev) const = 0;
-  virtual void* get_hint_by_dir(const string& dirname) const = 0;
+  virtual void* get_hint_for_log() const = 0;
+  virtual void* get_hint_by_dir(const std::string& dirname) const = 0;
 
   virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
   virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
@@ -610,8 +610,8 @@ public:
     uint64_t _slow_total)
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
-  void* get_hint_by_device(uint8_t dev) const override;
-  void* get_hint_by_dir(const string& dirname) const override;
+  void* get_hint_for_log() const override;
+  void* get_hint_by_dir(const std::string& dirname) const override;
 
   void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
     // do nothing
