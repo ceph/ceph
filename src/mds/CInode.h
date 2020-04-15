@@ -229,6 +229,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
     /// my own (temporary) stamps and versions for each dirfrag we have
     std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps; // XXX not part of mempool
+    std::set<frag_t> scrubing_dirfrag; // scrubing dirfrag
 
     ScrubHeaderRef header;
   };
@@ -281,7 +282,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
-  static const int PIN_SCRUBQUEUE =       25;
 
   // -- dump flags --
   static const int DUMP_INODE_STORE_BASE = (1 << 0);
@@ -429,6 +429,10 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     scrub_infop->on_finish = c;
   }
 
+  void scrub_dirfrag(frag_t dirfrag){
+    scrub_infop->scrubing_dirfrag.insert(dirfrag);
+  }
+  
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
       inode.is_dir() ||  // links to me in other snaps
@@ -953,7 +957,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
-  elist<CInode*>::item item_scrub;
 
   // also update RecoveryQueue::RecoveryQueue() if you change this
   elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;

@@ -33,11 +33,11 @@ public:
     mdcache(mdc),
     clog(clog),
     finisher(finisher_),
-    inode_stack(member_offset(CInode, item_scrub)),
+    scrub_stack(member_offset(CInode, item_scrub)),
     scrubstack(this),
     scrub_kick(mdc, this) {}
   ~ScrubStack() {
-    ceph_assert(inode_stack.empty());
+    ceph_assert(scrub_stack.empty());
     ceph_assert(!scrubs_in_progress);
   }
   /**
@@ -48,20 +48,28 @@ public:
    * @param header The ScrubHeader propagated from wherever this scrub
    *               was initiated
    */
-  void enqueue_inode_top(CInode *in, ScrubHeaderRef& header,
+  void enqueue_inode_top(MDSCacheObject *it, ScrubHeaderRef& header,
 			 MDSContext *on_finish) {
-    enqueue_inode(in, header, on_finish, true);
-    scrub_origins.emplace(in);
-    clog_scrub_summary(in);
+    enqueue_inode(it, header, on_finish, true);
+
+    CInode *in = NULL;
+    if ((in = dynamic_cast<CInode*>(it))){
+      scrub_origins.emplace(in);
+      clog_scrub_summary(in);
+    }
   }
   /** Like enqueue_inode_top, but we wait for all pending scrubs before
    * starting this one.
    */
-  void enqueue_inode_bottom(CInode *in, ScrubHeaderRef& header,
+  void enqueue_inode_bottom(MDSCacheObject *it, ScrubHeaderRef& header,
 			    MDSContext *on_finish) {
-    enqueue_inode(in, header, on_finish, false);
-    scrub_origins.emplace(in);
-    clog_scrub_summary(in);
+    enqueue_inode(it, header, on_finish, false);
+    
+    CInode *in = NULL;
+    if ((in = dynamic_cast<CInode*>(it)))  {
+      scrub_origins.emplace(in);
+      clog_scrub_summary(in);
+    }
   }
 
   /**
@@ -105,7 +113,7 @@ public:
    */
   std::string_view scrub_summary();
 
-  bool is_scrubbing() const { return !inode_stack.empty(); }
+  bool is_scrubbing() const { return !scrub_stack.empty(); }
 
   MDCache *mdcache;
 
@@ -134,7 +142,7 @@ protected:
   Finisher *finisher;
 
   /// The stack of inodes we want to scrub
-  elist<CInode*> inode_stack;
+  elist<MDSCacheObject*> scrub_stack;
   /// current number of dentries we're actually scrubbing
   int scrubs_in_progress = 0;
   ScrubStack *scrubstack; // hack for dout
@@ -159,9 +167,9 @@ private:
    * Put the inode at either the top or bottom of the stack, with
    * the given scrub params, and then try and kick off more scrubbing.
    */
-  void enqueue_inode(CInode *in, ScrubHeaderRef& header,
+  void enqueue_inode(MDSCacheObject *it, ScrubHeaderRef& header,
                       MDSContext *on_finish, bool top);
-  void _enqueue_inode(CInode *in, CDentry *parent, ScrubHeaderRef& header,
+  void _enqueue_inode(MDSCacheObject *it, CDentry *parent, ScrubHeaderRef& header,
                       MDSContext *on_finish, bool top);
   /**
    * Kick off as many scrubs as are appropriate, based on the current
@@ -171,15 +179,15 @@ private:
   /**
    * Push a inode on top of the stack.
    */
-  inline void push_inode(CInode *in);
+  inline void push_inode(MDSCacheObject *it);
   /**
    * Push a inode to the bottom of the stack.
    */
-  inline void push_inode_bottom(CInode *in);
+  inline void push_inode_bottom(MDSCacheObject *it);
   /**
    * Pop the given inode off the stack.
    */
-  inline void pop_inode(CInode *in);
+  inline void pop_inode(MDSCacheObject *it);
 
   /**
    * Scrub a file inode.
@@ -216,8 +224,7 @@ private:
    * remaining to start scrubbing.
    * @param done set to true if we and all our children have finished scrubbing
    */
-  void scrub_dir_inode(CInode *in, bool *added_children, bool *is_terminal,
-                       bool *done);
+  void scrub_dir_inode(CInode *in, bool *done);
   /**
    * Make progress on scrubbing a dirfrag. It may return after each of the
    * following steps, but will report making progress on each one.
@@ -232,7 +239,7 @@ private:
    * progress. Try again later.
    *
    */
-  void scrub_dirfrag(CDir *dir, ScrubHeaderRef& header,
+  void scrub_dirfrag(CDir *dir, 
 		     bool *added_children, bool *is_terminal, bool *done);
   /**
    * Scrub a directory-representing dentry.

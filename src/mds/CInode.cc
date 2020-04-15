@@ -100,7 +100,6 @@ std::string_view CInode::pin_name(int p) const
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
-    case PIN_SCRUBQUEUE: return "scrubqueue";
     default: return generic_pin_name(p);
   }
 }
@@ -5123,6 +5122,8 @@ void CInode::scrub_finished(MDSContext **c) {
     clog->info() << "scrub complete with tag '"
                  << scrub_infop->header->get_tag() << "'";
   }
+
+  scrub_infop->scrubing_dirfrag.clear();
 }
 
 int64_t CInode::get_backtrace_pool() const

@@ -44,13 +44,13 @@ public:
 
   // Set after construction because it won't be known until we've
   // started resolving path and locking
-  void set_origin(CInode *origin_) { origin = origin_; }
+  void set_origin(MDSCacheObject *origin_) { origin = origin_; }
 
   bool get_recursive() const { return recursive; }
   bool get_repair() const { return repair; }
   bool get_force() const { return force; }
   bool is_internal_tag() const { return is_tag_internal; }
-  CInode *get_origin() const { return origin; }
+  MDSCacheObject *get_origin() const { return origin; }
   std::string_view get_tag() const { return tag; }
   ceph::Formatter& get_formatter() const { return *formatter; }
 
@@ -64,7 +64,7 @@ protected:
   const bool recursive;
   const bool repair;
   ceph::Formatter* const formatter;
-  CInode *origin = nullptr;
+  MDSCacheObject *origin = nullptr;
 
   bool repaired = false;  // May be set during scrub if repairs happened
 };

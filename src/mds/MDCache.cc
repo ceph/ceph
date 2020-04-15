@@ -12674,21 +12674,23 @@ public:
   }
 
   void finish(int r) override {
-    if (r == 0) {
-      // since recursive scrub is asynchronous, dump minimal output
-      // to not upset cli tools.
-      if (header && header->get_recursive()) {
-        formatter->open_object_section("results");
-        formatter->dump_int("return_code", 0);
-        formatter->dump_string("scrub_tag", tag);
-        formatter->dump_string("mode", "asynchronous");
-        formatter->close_section(); // results
+    if (formatter){
+      if (r == 0) {
+	// since recursive scrub is asynchronous, dump minimal output
+	// to not upset cli tools.
+	if (header && header->get_recursive()) {
+	  formatter->open_object_section("results");
+	  formatter->dump_int("return_code", 0);
+	  formatter->dump_string("scrub_tag", tag);
+	  formatter->dump_string("mode", "asynchronous");
+	  formatter->close_section(); // results
+	}
+      } else { // we failed the lookup or something; dump ourselves
+	formatter->open_object_section("results");
+	formatter->dump_int("return_code", r);
+	formatter->close_section(); // results
+	r = 0; // already dumped in formatter
       }
-    } else { // we failed the lookup or something; dump ourselves
-      formatter->open_object_section("results");
-      formatter->dump_int("return_code", r);
-      formatter->close_section(); // results
-      r = 0; // already dumped in formatter
     }
     if (on_finish)
       on_finish->complete(r);
@@ -12725,6 +12727,7 @@ void MDCache::enqueue_scrub(
     tag_str, is_internal, force, recursive, repair, f);
 
   mdr->internal_op_finish = cs;
+  mdr->more()->frag = frag_t();
   enqueue_scrub_work(mdr);
 }
 
@@ -12740,15 +12743,36 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
   ScrubHeaderRef header = cs->header;
 
-  // Cannot scrub same dentry twice at same time
-  if (in->scrub_is_in_progress()) {
-    mds->server->respond_to_request(mdr, -EBUSY);
-    return;
-  } else {
-    in->scrub_info();
-  }
+  // scrub cdir or cinode
+  // If cdir, it must be an edge directory, so it must be in the cache.
+  MDSCacheObject *it = NULL;
+  if (mdr->has_more() && mdr->more()->scrub_frag){
+    CDir* dir = in->get_or_open_dirfrag(this, mdr->more()->frag);
+    dout(20) << "enqueue_scrub_work dir : " << *dir << dendl;
+    it = dir;
+    
+    // Cannot scrub same dentry twice at same time
+    if (dir->scrub_infop) {
+      mds->server->respond_to_request(mdr, 0);
+      return;
+    } else {
+      dir->scrub_info();
+    }
+  }else{
+    dout(20) << "enqueue_scrub_work scrub inode " << *in << dendl;
+    it = in;
 
-  header->set_origin(in);
+    
+    // Cannot scrub same dentry twice at same time
+    if (in->scrub_infop && in->scrub_infop->scrub_in_progress) {
+      mds->server->respond_to_request(mdr, -EBUSY);
+      return;
+    } else {
+      in->scrub_info();
+    }
+  }
+   
+  header->set_origin(it);
 
   Context *fin;
   if (header->get_recursive()) {
@@ -12794,13 +12818,8 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     mds->mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, flush_finish));
   });
 
-  if (!header->get_recursive()) {
-    mds->scrubstack->enqueue_inode_top(in, header,
-				       new MDSInternalContextWrapper(mds, scrub_finish));
-  } else {
-    mds->scrubstack->enqueue_inode_bottom(in, header, 
-				       new MDSInternalContextWrapper(mds, scrub_finish));
-  }
+  mds->scrubstack->enqueue_inode_top(it, header,
+                                      new MDSInternalContextWrapper(mds, scrub_finish));
 
   mds->server->respond_to_request(mdr, 0);
   return;
@@ -12808,7 +12827,10 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
 void MDCache::recursive_scrub_finish(const ScrubHeaderRef& header)
 {
-  if (header->get_origin()->is_base() &&
+  CInode* in = NULL;
+      
+  if ((in = dynamic_cast<CInode*>(header->get_origin())) &&
+      in->is_base() &&
       header->get_force() && header->get_repair()) {
     // notify snapserver that base directory is recursively scrubbed.
     // After both root and mdsdir are recursively scrubbed, snapserver
@@ -12817,7 +12839,7 @@ void MDCache::recursive_scrub_finish(const ScrubHeaderRef& header)
     if (mds->mdsmap->get_num_in_mds() == 1 &&
 	mds->mdsmap->get_num_failed_mds() == 0 &&
 	mds->mdsmap->get_tableserver() == mds->get_nodeid()) {
-      mds->mark_base_recursively_scrubbed(header->get_origin()->ino());
+      mds->mark_base_recursively_scrubbed(in->ino());
     }
   }
 }

@@ -330,6 +330,10 @@ struct MDRequestImpl : public MutationImpl {
     // for internal ops doing lookup
     filepath filepath1;
     filepath filepath2;
+
+    // for internal ops doing scrubing
+    bool scrub_frag = false;
+    frag_t frag;
   } *_more = nullptr;
 
   // ---------------------------------------------------
