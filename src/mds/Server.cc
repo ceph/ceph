@@ -3302,7 +3302,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
     // xattrs on new inode?
     CInode::mempool_xattr_map xattrs;
-    decode(xattrs, p);
+    decode_noshare(xattrs, p);
     for (const auto &p : xattrs) {
       dout(10) << "prepare_new_inode setting xattr " << p.first << dendl;
       auto em = in->xattrs.emplace(std::piecewise_construct, std::forward_as_tuple(p.first), std::forward_as_tuple(p.second));
