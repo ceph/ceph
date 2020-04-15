@@ -285,7 +285,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    mempool::bluestore_cache_other::map<uint32_t, std::unique_ptr<Buffer>>
+    mempool::bluestore_cache_meta::map<uint32_t, std::unique_ptr<Buffer>>
       buffer_map;
 
     // we use a bare intrusive list here instead of std::map because
@@ -474,7 +474,7 @@ public:
 
     // we use a bare pointer because we don't want to affect the ref
     // count
-    mempool::bluestore_cache_other::unordered_map<uint64_t,SharedBlob*> sb_map;
+    mempool::bluestore_cache_meta::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
       std::lock_guard l(lock);
@@ -689,7 +689,7 @@ public:
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_cache_other::map<int,BlobRef> blob_map_t;
+  typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
@@ -797,7 +797,7 @@ public:
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
-    mempool::bluestore_cache_other::vector<Shard> shards;    ///< shards
+    mempool::bluestore_cache_meta::vector<Shard> shards;    ///< shards
 
     ceph::buffer::list inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
@@ -1064,7 +1064,7 @@ public:
     ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
-    mempool::bluestore_cache_other::string key;
+    mempool::bluestore_cache_meta::string key;
 
     boost::intrusive::list_member_hook<> lru_item;
 
@@ -1086,7 +1086,7 @@ public:
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
 
     Onode(Collection *c, const ghobject_t& o,
-	  const mempool::bluestore_cache_other::string& k)
+	  const mempool::bluestore_cache_meta::string& k)
       : nref(0),
 	c(c),
 	oid(o),
@@ -1288,7 +1288,7 @@ public:
 
   private:
     /// forward lookups
-    mempool::bluestore_cache_other::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_onode::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     friend struct Collection; // for split_cache()
 
@@ -1304,7 +1304,7 @@ public:
     OnodeRef lookup(const ghobject_t& o);
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
-		const mempool::bluestore_cache_other::string& new_okey);
+		const mempool::bluestore_cache_meta::string& new_okey);
     void clear();
     bool empty();
 
@@ -2211,8 +2211,9 @@ private:
       MetaCache(BlueStore *s) : MempoolCache(s) {};
 
       virtual uint64_t _get_used_bytes() const {
-        return mempool::bluestore_cache_other::allocated_bytes() +
-            mempool::bluestore_cache_onode::allocated_bytes();
+	return mempool::bluestore_cache_meta::allocated_bytes() +
+	       mempool::bluestore_cache_other::allocated_bytes() +
+	       mempool::bluestore_cache_onode::allocated_bytes();
       }
 
       virtual std::string get_cache_name() const {
