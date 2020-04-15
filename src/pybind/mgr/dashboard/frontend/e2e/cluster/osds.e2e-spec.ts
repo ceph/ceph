@@ -45,7 +45,7 @@ describe('OSDs page', () => {
 
     describe('by selecting one row in OSDs List', () => {
       beforeAll(async () => {
-        await osds.getFirstCell().click();
+        await osds.waitClickableAndClick(osds.getFirstExpandCollapseElement());
       });
 
       it('should verify that selected footer increases', async () => {

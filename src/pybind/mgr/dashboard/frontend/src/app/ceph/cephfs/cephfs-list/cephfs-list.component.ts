@@ -3,6 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
@@ -14,7 +15,7 @@ import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
   templateUrl: './cephfs-list.component.html',
   styleUrls: ['./cephfs-list.component.scss']
 })
-export class CephfsListComponent implements OnInit {
+export class CephfsListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[];
   filesystems: any = [];
   selection = new CdTableSelection();
@@ -23,7 +24,9 @@ export class CephfsListComponent implements OnInit {
     private cephfsService: CephfsService,
     private cdDatePipe: CdDatePipe,
     private i18n: I18n
-  ) {}
+  ) {
+    super();
+  }
 
   ngOnInit() {
     this.columns = [

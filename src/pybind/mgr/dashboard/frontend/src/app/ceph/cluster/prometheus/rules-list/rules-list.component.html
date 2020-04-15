@@ -1,12 +1,13 @@
 <cd-table [data]="data"
           [columns]="columns"
-          (updateSelection)="selectionUpdated($event)"
+          [hasDetails]="true"
+          (updateSelection)="setExpandedRow($event)"
           [selectionType]="'single'">
   <tabset cdTableDetail
-          *ngIf="selectedRule">
+          *ngIf="expandedRow">
     <tab i18n-heading
          heading="Details">
-      <cd-table-key-value [data]="selectedRule"
+      <cd-table-key-value [data]="expandedRow"
                           [renderObjects]="true"
                           [hideKeys]="hideKeys"></cd-table-key-value>
     </tab>

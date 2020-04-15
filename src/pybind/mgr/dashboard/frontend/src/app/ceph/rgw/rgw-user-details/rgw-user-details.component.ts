@@ -25,7 +25,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   public secretKeyTpl: TemplateRef<any>;
 
   @Input()
-  selection: CdTableSelection;
+  selection: any;
 
   // Details tab
   user: any;
@@ -64,8 +64,8 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
-    if (this.selection.hasSelection) {
-      this.user = this.selection.first();
+    if (this.selection) {
+      this.user = this.selection;
 
       // Sort subusers and capabilities.
       this.user.subusers = _.sortBy(this.user.subusers, 'id');
