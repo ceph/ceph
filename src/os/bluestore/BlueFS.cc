@@ -37,10 +37,10 @@ using ceph::Formatter;
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::File, bluefs_file, bluefs);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::Dir, bluefs_dir, bluefs);
-MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileWriter, bluefs_file_writer, bluefs);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileWriter, bluefs_file_writer, bluefs_file_writer);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReaderBuffer,
-			      bluefs_file_reader_buffer, bluefs);
-MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReader, bluefs_file_reader, bluefs);
+			      bluefs_file_reader_buffer, bluefs_file_reader);
+MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReader, bluefs_file_reader, bluefs_file_reader);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileLock, bluefs_file_lock, bluefs);
 
 static void wal_discard_cb(void *priv, void* priv2) {
@@ -1694,6 +1694,7 @@ int BlueFS::device_migrate_to_existing(
 	ceph_assert(cur_len > 0);
 	cur.substr_of(bl, off, cur_len);
 	int r = bdev[dev_target]->write(i.offset, cur, buffered);
+	cur.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
 	ceph_assert(r == 0);
 	off += cur_len;
       }
@@ -2008,6 +2009,7 @@ int64_t BlueFS::_read_random(
       buf->pos += r;
     }
   }
+  buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   dout(20) << __func__ << " got " << ret << dendl;
   --h->file->num_reading;
   return ret;
@@ -2115,6 +2117,8 @@ int64_t BlueFS::_read(
     ret += r;
     buf->pos += r;
   }
+
+  buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   dout(20) << __func__ << " got " << ret << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
   --h->file->num_reading;
@@ -3359,6 +3363,7 @@ int BlueFS::open_for_write(
     }
   }
 
+  (*h)->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
