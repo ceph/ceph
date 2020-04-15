@@ -63,7 +63,7 @@ public:
         delete hook;
         hook = nullptr;
       } else {
-        r = admin_socket->register_command("bluestore bluefs stats",
+        r = admin_socket->register_command("bluefs stats",
                                            hook,
                                            "Dump internal statistics for bluefs."
                                            "");
