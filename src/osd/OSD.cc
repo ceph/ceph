@@ -10425,8 +10425,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	sdata->shard_lock.unlock();
 	return;
       }
+      // found a work item; reapply default wq timeouts
       osd->cct->get_heartbeat_map()->reset_timeout(hb,
-	  osd->cct->_conf->threadpool_default_timeout, 0);
+        timeout_interval, suicide_interval);
     } else {
       dout(20) << __func__ << " need return immediately" << dendl;
       wait_lock.unlock();
