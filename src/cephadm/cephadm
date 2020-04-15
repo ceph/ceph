@@ -3291,6 +3291,19 @@ def command_rm_cluster():
     # rm logrotate config
     call_throws(['rm', '-f', args.logrotate_dir + '/ceph-%s' % args.fsid])
 
+    # clean up config, keyring, and pub key files
+    files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
+
+    if os.path.exists(files[0]):
+        valid_fsid = False
+        with open(files[0]) as f:
+            if args.fsid in f.read():
+                valid_fsid = True
+        if valid_fsid:
+            for n in range(0, len(files)):
+                if os.path.exists(files[n]):
+                    os.remove(files[n])
+
 
 ##################################
 
