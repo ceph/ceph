@@ -151,12 +151,15 @@ namespace mempool {
   f(bluestore_alloc)		      \
   f(bluestore_cache_data)	      \
   f(bluestore_cache_onode)	      \
+  f(bluestore_cache_meta)	      \
   f(bluestore_cache_other)	      \
   f(bluestore_fsck)		      \
   f(bluestore_txc)		      \
-  f(bluestore_writing_deferred)	      \
+  f(bluestore_writing_deferred)      \
   f(bluestore_writing)		      \
   f(bluefs)			      \
+  f(bluefs_file_reader)              \
+  f(bluefs_file_writer)              \
   f(buffer_anon)		      \
   f(buffer_meta)		      \
   f(osd)			      \
