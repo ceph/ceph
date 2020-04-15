@@ -1664,7 +1664,7 @@ std::vector<Option> get_global_options() {
     .set_description("nearfull ratio for OSDs to be set during initial creation of cluster"),
 
     Option("mon_osd_initial_require_min_compat_client", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("jewel")
+    .set_default("luminous")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
