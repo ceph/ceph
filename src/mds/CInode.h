@@ -113,6 +113,12 @@ public:
   frag_t pick_dirfrag(std::string_view dn);
 };
 
+inline void decode_noshare(InodeStoreBase::mempool_xattr_map& xattrs,
+                          ceph::buffer::list::const_iterator &p)
+{
+  decode_noshare<mempool::mds_co::pool_allocator>(xattrs, p);
+}
+
 class InodeStore : public InodeStoreBase {
 public:
   // FIXME bufferlist not part of mempool
