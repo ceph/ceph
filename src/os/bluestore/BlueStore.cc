@@ -1866,7 +1866,7 @@ void BlueStore::OnodeSpace::rename(
   OnodeRef& oldo,
   const ghobject_t& old_oid,
   const ghobject_t& new_oid,
-  const mempool::bluestore_cache_other::string& new_okey)
+  const mempool::bluestore_cache_meta::string& new_okey)
 {
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
@@ -3432,7 +3432,7 @@ BlueStore::Onode* BlueStore::Onode::decode(
   auto p = v.front().begin_deep();
   on->onode.decode(p);
   for (auto& i : on->onode.attrs) {
-    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_onode);
   }
 
   // initialize extent_map
@@ -3441,7 +3441,7 @@ BlueStore::Onode* BlueStore::Onode::decode(
     denc(on->extent_map.inline_bl, p);
     on->extent_map.decode_some(on->extent_map.inline_bl);
     on->extent_map.inline_bl.reassign_to_mempool(
-      mempool::mempool_bluestore_cache_other);
+      mempool::mempool_bluestore_cache_onode);
   }
   else {
     on->extent_map.init_shards(false, false);
@@ -9880,7 +9880,7 @@ int BlueStore::getattr(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    mempool::bluestore_cache_other::string k(name);
+    mempool::bluestore_cache_meta::string k(name);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -13743,10 +13743,10 @@ int BlueStore::_setattr(TransContext *txc,
   if (val.is_partial()) {
     auto& b = o->onode.attrs[name.c_str()] = bufferptr(val.c_str(),
 						       val.length());
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_onode);
   } else {
     auto& b = o->onode.attrs[name.c_str()] = val;
-    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_onode);
   }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -13769,10 +13769,10 @@ int BlueStore::_setattrs(TransContext *txc,
     if (p->second.is_partial()) {
       auto& b = o->onode.attrs[p->first.c_str()] =
 	bufferptr(p->second.c_str(), p->second.length());
-      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_onode);
     } else {
       auto& b = o->onode.attrs[p->first.c_str()] = p->second;
-      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_onode);
     }
   }
   txc->write_onode(o);
@@ -14193,7 +14193,7 @@ int BlueStore::_rename(TransContext *txc,
 	   << new_oid << dendl;
   int r;
   ghobject_t old_oid = oldo->oid;
-  mempool::bluestore_cache_other::string new_okey;
+  mempool::bluestore_cache_meta::string new_okey;
 
   if (newo) {
     if (newo->exists) {
