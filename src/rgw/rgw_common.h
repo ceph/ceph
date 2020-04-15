@@ -1094,10 +1094,6 @@ enum RGWBucketFlags {
 class RGWSI_Zone;
 
 struct RGWBucketInfo {
-  enum BIShardsHashType {
-    MOD = 0
-  };
-
   rgw_bucket bucket;
   rgw_user owner;
   uint32_t flags{0};
