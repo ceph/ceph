@@ -15,11 +15,13 @@ class to_ceph_volume(object):
 
     def __init__(self,
                  spec,  # type: DriveGroupSpec
-                 selection  # type: DriveSelection
+                 selection,  # type: DriveSelection
+                 preview=False
                  ):
 
         self.spec = spec
         self.selection = selection
+        self.preview = preview
 
     def run(self):
         # type: () -> Optional[str]
@@ -54,6 +56,12 @@ class to_ceph_volume(object):
            not db_devices and \
            not wal_devices:
             cmd = "lvm prepare --bluestore --data %s --no-systemd" % (' '.join(data_devices))
+            if self.preview:
+                # Like every horrible hack, this has sideffects on other features.
+                # In this case, 'lvm prepare' has neither a '--report' nor a '--format json' option
+                # which essentially doesn't allow for a proper previews here.
+                # Fall back to lvm batch in order to get a preview.
+                return f"lvm batch --no-auto {' '.join(data_devices)} --report --format json"
             return cmd
 
         if self.spec.objectstore == 'bluestore':
@@ -80,5 +88,9 @@ class to_ceph_volume(object):
 
         cmd += " --yes"
         cmd += " --no-systemd"
+
+        if self.preview:
+            cmd += " --report"
+            cmd += " --format json"
 
         return cmd
