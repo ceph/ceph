@@ -115,42 +115,45 @@ private:
    *    v (skip if not needed)                          |
    * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
+   *    | (unused non-primary snapshot)                 |
+   *    |\--------------> PRUNE_NON_PRIMARY_SNAPSHOT---/|
+   *    |                                               |
    *    | (interrupted sync)                            |
    *    |\--------------> GET_LOCAL_IMAGE_STATE ------\ |
    *    |                                             | |
    *    | (new snapshot)                              | |
    *    |\--------------> COPY_SNAPSHOTS              | |
-   *    |                     |                       | |
-   *    |                     v                       | |
+   *    |                       |                     | |
+   *    |                       v                     | |
    *    |                 GET_REMOTE_IMAGE_STATE      | |
-   *    |                     |                       | |
-   *    |                     v                       | |
+   *    |                       |                     | |
+   *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
-   *    |                     |                       | |
-   *    |                     |/----------------------/ |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                     | |
+   *    |                       |/--------------------/ |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 REQUEST_SYNC                  |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 COPY_IMAGE                    |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 APPLY_IMAGE_STATE             |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 UPDATE_NON_PRIMARY_SNAPSHOT   |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 NOTIFY_IMAGE_UPDATE           |
-   *    |                     |                         |
-   *    |                     v                         |
-   *    |                 UNLINK_PEER                   |
-   *    |                     |                         |
-   *    |                     v                         |
+   *    |                       |                       |
+   *    | (interrupted unlink)  v                       |
+   *    |\--------------> UNLINK_PEER                   |
+   *    |                       |                       |
+   *    |                       v                       |
    *    |                 NOTIFY_LISTENER               |
-   *    |                     |                         |
-   *    |                     \------------------------/|
+   *    |                       |                       |
+   *    |                       \----------------------/|
    *    |                                               |
    *    | (remote demoted)                              |
    *    \---------------> NOTIFY_LISTENER               |
@@ -252,6 +255,9 @@ private:
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
+  void prune_non_primary_snapshot(uint64_t snap_id);
+  void handle_prune_non_primary_snapshot(int r);
+
   void copy_snapshots();
   void handle_copy_snapshots(int r);
 
@@ -282,7 +288,7 @@ private:
   void notify_image_update();
   void handle_notify_image_update(int r);
 
-  void unlink_peer();
+  void unlink_peer(uint64_t remote_snap_id);
   void handle_unlink_peer(int r);
 
   void finish_sync();
