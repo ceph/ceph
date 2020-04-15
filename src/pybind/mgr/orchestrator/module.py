@@ -1,24 +1,17 @@
 import datetime
 import errno
 import json
+from typing import List, Set, Optional, Iterator
+
 import yaml
-
 import six
-
-from ceph.deployment.inventory import Device
 from prettytable import PrettyTable
 
-from mgr_util import format_bytes, to_pretty_timedelta
-
-try:
-    from typing import List, Set, Optional, Dict, Iterator
-except ImportError:
-    pass  # just for type checking.
-
-
+from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+
+from mgr_util import format_bytes, to_pretty_timedelta
 from mgr_module import MgrModule, HandleCommandResult
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
