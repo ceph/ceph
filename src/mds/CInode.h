@@ -108,6 +108,12 @@ public:
   damage_flags_t damage_flags = 0;
 };
 
+inline void decode_noshare(InodeStoreBase::mempool_xattr_map& xattrs,
+                          ceph::buffer::list::const_iterator &p)
+{
+  decode_noshare<mempool::mds_co::pool_allocator>(xattrs, p);
+}
+
 class InodeStore : public InodeStoreBase {
 public:
   void encode(ceph::buffer::list &bl, uint64_t features) const {

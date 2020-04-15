@@ -1541,7 +1541,7 @@ void InodeStoreBase::decode_bare(bufferlist::const_iterator &bl,
     symlink = std::string_view(tmp);
   }
   decode(dirfragtree, bl);
-  decode(xattrs, bl);
+  decode_noshare(xattrs, bl);
   decode(snap_blob, bl);
 
   decode(old_inodes, bl);
@@ -1965,7 +1965,7 @@ void CInode::decode_lock_ixattr(bufferlist::const_iterator& p)
   utime_t tm;
   decode(tm, p);
   if (inode.ctime < tm) inode.ctime = tm;
-  decode(xattrs, p);
+  decode_noshare(xattrs, p);
   DECODE_FINISH(p);
 }
 
@@ -4066,7 +4066,7 @@ void CInode::_decode_base(bufferlist::const_iterator& p)
     symlink = std::string_view(tmp);
   }
   decode(dirfragtree, p);
-  decode(xattrs, p);
+  decode_noshare(xattrs, p);
   decode(old_inodes, p);
   decode(damage_flags, p);
   decode_snap(p);

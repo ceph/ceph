@@ -997,6 +997,20 @@ using xattr_map = compact_map<alloc_string<Allocator>,
 			      Allocator<std::pair<const alloc_string<Allocator>,
 						  ceph::bufferptr>>>; // FIXME bufferptr not in mempool
 
+template<template<typename> class Allocator>
+inline void decode_noshare(xattr_map<Allocator>& xattrs, ceph::buffer::list::const_iterator &p)
+{
+  __u32 n;
+  decode(n, p);
+  while (n-- > 0) {
+    alloc_string<Allocator> key;
+    decode(key, p);
+    __u32 len;
+    decode(len, p);
+    p.copy_deep(len, xattrs[key]);
+  }
+}
+
 template<template<typename> class Allocator = std::allocator>
 struct old_inode_t {
   snapid_t first;
@@ -1026,7 +1040,7 @@ void old_inode_t<Allocator>::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(first, bl);
   decode(inode, bl);
-  decode(xattrs, bl);
+  decode_noshare<Allocator>(xattrs, bl);
   DECODE_FINISH(bl);
 }
 
