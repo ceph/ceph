@@ -29,7 +29,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     // Checks if edits appear
     await this.navigateTo();
     await this.waitVisibility(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.getExpandCollapseElement(name).click();
     for (const entry of tuple) {
       await this.waitTextToBePresent($$('.datatable-body').last(), entry[0]);
     }
@@ -48,7 +48,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     await element(by.cssContainingText('button', 'Update')).click();
     await this.navigateTo();
     await this.waitVisibility(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.getExpandCollapseElement(name).click();
     for (const entry of tuple) {
       await this.waitTextNotPresent($$('.datatable-body').last(), entry[0]);
     }
@@ -91,7 +91,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     await this.navigateTo();
     await this.waitVisibility(this.getFirstTableCellWithText('devicehealth'));
     // Checks for visibility of devicehealth in table
-    await this.getFirstTableCellWithText('devicehealth').click();
+    await this.getExpandCollapseElement('devicehealth').click();
     for (let i = 0, devHealthTuple: [string, string]; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
         await this.waitFn(async () => {
@@ -131,7 +131,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     await this.waitClickableAndClick(element(by.cssContainingText('button', 'Update')));
     await this.navigateTo();
     await this.waitVisibility(this.getFirstTableCellWithText('devicehealth'));
-    await this.getFirstTableCellWithText('devicehealth').click();
+    await this.getExpandCollapseElement('devicehealth').click();
     for (let i = 0, devHealthTuple: [string, string]; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
         await this.waitFn(async () => {

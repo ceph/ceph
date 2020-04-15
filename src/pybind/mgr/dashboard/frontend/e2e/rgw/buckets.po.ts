@@ -65,7 +65,7 @@ export class BucketsPageHelper extends PageHelper {
 
     // wait to be back on buckets page with table visible and click
     await this.waitClickableAndClick(
-      this.getFirstTableCellWithText(name),
+      this.getExpandCollapseElement(name),
       'Could not return to buckets page and load table after editing bucket'
     );
 
@@ -90,7 +90,7 @@ export class BucketsPageHelper extends PageHelper {
 
     // Check versioning suspended:
     await this.waitClickableAndClick(
-      this.getFirstTableCellWithText(name),
+      this.getExpandCollapseElement(name),
       'Could not return to buckets page and load table after editing bucket'
     );
     bucketDataTable = element.all(by.css('.table.table-striped.table-bordered')).first();

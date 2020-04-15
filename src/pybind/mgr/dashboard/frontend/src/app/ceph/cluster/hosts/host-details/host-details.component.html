@@ -1,7 +1,7 @@
-<tabset *ngIf="selection.hasSingleSelection">
+<tabset *ngIf="selection">
   <tab i18n-heading
        heading="Devices">
-    <cd-device-list [hostname]="selection.first()['hostname']"></cd-device-list>
+    <cd-device-list [hostname]="selection['hostname']"></cd-device-list>
   </tab>
   <tab i18n-heading
        heading="Inventory"

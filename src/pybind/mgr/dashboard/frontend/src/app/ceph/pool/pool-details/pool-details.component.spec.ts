@@ -6,7 +6,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../shared/models/permissions';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
@@ -31,7 +30,7 @@ describe('PoolDetailsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(PoolDetailsComponent);
     poolDetailsComponent = fixture.componentInstance;
-    poolDetailsComponent.selection = new CdTableSelection();
+    poolDetailsComponent.selection = undefined;
     poolDetailsComponent.permissions = new Permissions({
       grafana: ['read']
     });
@@ -44,12 +43,10 @@ describe('PoolDetailsComponent', () => {
 
   describe('Pool details tabset', () => {
     beforeEach(() => {
-      poolDetailsComponent.selection.selected = [
-        {
-          tiers: [0],
-          pool: 0
-        }
-      ];
+      poolDetailsComponent.selection = {
+        tiers: [0],
+        pool: 0
+      };
     });
 
     it('should recognize a tabset child', () => {
@@ -67,11 +64,9 @@ describe('PoolDetailsComponent', () => {
     });
 
     it('should not show "Cache Tiers Details" tab if selected pool has no "tiers"', () => {
-      poolDetailsComponent.selection.selected = [
-        {
-          tiers: []
-        }
-      ];
+      poolDetailsComponent.selection = {
+        tiers: []
+      };
       fixture.detectChanges();
       const tabs = poolDetailsComponent.tabsetChild.tabs;
       expect(tabs.length).toEqual(2);

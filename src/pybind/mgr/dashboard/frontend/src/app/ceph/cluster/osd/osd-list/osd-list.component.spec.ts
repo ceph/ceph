@@ -126,7 +126,7 @@ describe('OsdListComponent', () => {
     fixture.detectChanges();
     expect(
       component.columns
-        .filter((column) => !column.checkboxable)
+        .filter((column) => !(column.prop === undefined))
         .every((column) => Boolean(column.prop))
     ).toBeTruthy();
   });

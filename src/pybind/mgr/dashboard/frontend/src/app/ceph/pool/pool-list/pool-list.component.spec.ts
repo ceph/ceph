@@ -74,7 +74,11 @@ describe('PoolListComponent', () => {
   });
 
   it('should have columns that are sortable', () => {
-    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+    expect(
+      component.columns
+        .filter((column) => !(column.prop === undefined))
+        .every((column) => Boolean(column.prop))
+    ).toBeTruthy();
   });
 
   describe('monAllowPoolDelete', () => {
@@ -429,7 +433,7 @@ describe('PoolListComponent', () => {
 
   describe('getSelectionTiers', () => {
     const setSelectionTiers = (tiers: number[]) => {
-      component.selection.selected = [{ tiers }];
+      component.expandedRow = { tiers };
       component.getSelectionTiers();
     };
 
@@ -439,31 +443,31 @@ describe('PoolListComponent', () => {
 
     it('should select multiple existing cache tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(getPoolList());
+      expect(component.cacheTiers).toEqual(getPoolList());
     });
 
     it('should select correct existing cache tier', () => {
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
     });
 
     it('should not select cache tier if id is invalid', () => {
       setSelectionTiers([-1]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
 
     it('should not select cache tier if empty', () => {
       setSelectionTiers([]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
 
     it('should be able to selected one pool with multiple tiers, than with a single tier, than with no tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(getPoolList());
+      expect(component.cacheTiers).toEqual(getPoolList());
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
       setSelectionTiers([]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
   });
 

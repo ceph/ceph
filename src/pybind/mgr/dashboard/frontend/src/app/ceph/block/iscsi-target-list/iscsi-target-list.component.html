@@ -23,6 +23,8 @@
           identifier="target_iqn"
           forceIdentifier="true"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
     <cd-table-actions class="btn-group"
@@ -42,8 +44,8 @@
   </div>
 
   <cd-iscsi-target-details cdTableDetail
-                           *ngIf="selection.hasSingleSelection"
+                           *ngIf="expandedRow"
                            [cephIscsiConfigVersion]="cephIscsiConfigVersion"
-                           [selection]="selection"
+                           [selection]="expandedRow"
                            [settings]="settings"></cd-iscsi-target-details>
 </cd-table>

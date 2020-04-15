@@ -4,6 +4,8 @@
           [columns]="columns"
           columnMode="flex"
           selectionType="multiClick"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)"
           identifier="bid"
           (fetchData)="getBucketList($event)">
@@ -13,6 +15,6 @@
                     [tableActions]="tableActions">
   </cd-table-actions>
   <cd-rgw-bucket-details cdTableDetail
-                         [selection]="selection">
+                         [selection]="expandedRow">
   </cd-rgw-bucket-details>
 </cd-table>
