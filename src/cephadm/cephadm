@@ -3277,7 +3277,7 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
     c = get_container(fsid, daemon_type, daemon_id)
     deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                         enable=True,  # unconditionally enable the new unit
-                        start=(state == 'running'),
+                        start=(state == 'running' or args.force_start),
                         osd_fsid=osd_fsid)
     update_firewalld(daemon_type)
 
@@ -4174,6 +4174,10 @@ def _get_parser():
         '--skip-pull',
         action='store_true',
         help='do not pull the latest image before adopting')
+    parser_adopt.add_argument(
+        '--force-start',
+        action='store_true',
+        help="start newly adoped daemon, even if it wasn't running previously")
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
