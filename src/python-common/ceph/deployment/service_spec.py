@@ -110,7 +110,9 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         if ',' in network:
             networks = [x for x in network.split(',')]
         else:
-            networks.append(network)
+            if network != '':
+                networks.append(network)
+
         for network in networks:
             # only if we have versioned network configs
             if network.startswith('v') or network.startswith('[v'):
@@ -207,7 +209,11 @@ class PlacementSpec(object):
         c = data.copy()
         hosts = c.get('hosts', [])
         if hosts:
-            c['hosts'] = [HostPlacementSpec.from_json(host) for host in hosts]
+            c['hosts'] = []
+            for host in hosts:
+                c['hosts'].append(HostPlacementSpec.parse(host) if
+                                  isinstance(host, str) else
+                                  HostPlacementSpec.from_json(host))
         _cls = cls(**c)
         _cls.validate()
         return _cls
@@ -338,7 +344,7 @@ class ServiceSpec(object):
     start the services.
 
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana mds mgr mon nfs ' \
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw'.split()
 
     @classmethod
@@ -348,7 +354,8 @@ class ServiceSpec(object):
         ret = {
             'rgw': RGWSpec,
             'nfs': NFSServiceSpec,
-            'osd': DriveGroupSpec
+            'osd': DriveGroupSpec,
+            'iscsi': IscsiServiceSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
@@ -426,7 +433,9 @@ class ServiceSpec(object):
                 args.update(v)
                 continue
             args.update({k: v})
-        return cls(**args)
+        _cls = cls(**args)
+        _cls.validate()
+        return _cls
 
     def service_name(self):
         n = self.service_type
@@ -464,7 +473,7 @@ def servicespec_validate_add(self: ServiceSpec):
     # This must not be a method of ServiceSpec, otherwise you'll hunt
     # sub-interpreter affinity bugs.
     ServiceSpec.validate(self)
-    if self.service_type in ['mds', 'rgw', 'nfs'] and not self.service_id:
+    if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
         raise ServiceSpecValidationError('Cannot add Service: id required')
 
 
@@ -487,6 +496,18 @@ class NFSServiceSpec(ServiceSpec):
 
         if not self.pool:
             raise ServiceSpecValidationError('Cannot add NFS: No Pool specified')
+
+    def rados_config_name(self):
+        # type: () -> str
+        return 'conf-' + self.service_name()
+
+    def rados_config_location(self):
+        # type: () -> str
+        url = 'rados://' + self.pool + '/'
+        if self.namespace:
+            url += self.namespace + '/'
+        url += self.rados_config_name()
+        return url
 
 
 class RGWSpec(ServiceSpec):
@@ -534,3 +555,39 @@ class RGWSpec(ServiceSpec):
             return 443
         else:
             return 80
+
+
+class IscsiServiceSpec(ServiceSpec):
+    def __init__(self, service_id, pool=None,
+                 placement=None,
+                 trusted_ip_list=None,
+                 fqdn_enabled=None,
+                 api_port=None,
+                 api_user=None,
+                 api_password=None,
+                 api_secure=None,
+                 ssl_cert=None,
+                 ssl_key=None,
+                 service_type='iscsi',
+                 unmanaged=False):
+        assert service_type == 'iscsi'
+        super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
+                                               placement=placement, unmanaged=unmanaged)
+
+        #: RADOS pool where ceph-iscsi config data is stored.
+        self.pool = pool
+        self.trusted_ip_list = trusted_ip_list
+        self.fqdn_enabled = fqdn_enabled
+        self.api_port = api_port
+        self.api_user = api_user
+        self.api_password = api_password
+        self.api_secure = api_secure
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+
+    def validate_add(self):
+        servicespec_validate_add(self)
+
+        if not self.pool:
+            raise ServiceSpecValidationError(
+                'Cannot add ISCSI: No Pool specified')

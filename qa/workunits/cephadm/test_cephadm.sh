@@ -14,7 +14,7 @@ TMPDIR=$(mktemp -d)
 
 function cleanup()
 {
-    dump_all_logs
+    dump_all_logs $FSID
     rm -rf $TMPDIR
 }
 trap cleanup EXIT
@@ -114,8 +114,9 @@ function is_available()
 
 function dump_log()
 {
-    local name="$1"
-    local num_lines="$2"
+    local fsid="$1"
+    local name="$2"
+    local num_lines="$3"
 
     if [ -z $num_lines ]; then
         num_lines=100
@@ -125,16 +126,17 @@ function dump_log()
     echo 'dump daemon log:' $name
     echo '-------------------------'
 
-    $CEPHADM logs --name $name -- --no-pager -n $num_lines
+    $CEPHADM logs --fsid $fsid --name $name -- --no-pager -n $num_lines
 }
 
 function dump_all_logs()
 {
-    names=$($CEPHADM ls | jq -r '.[].name')
+    local fsid="$1"
+    local names=$($CEPHADM ls | jq -r '.[] | select(.fsid == "'$fsid'").name')
 
     echo 'dumping logs for daemons: ' $names
     for name in $names; do
-        dump_log $name
+        dump_log $fsid $name
     done
 }
 
@@ -288,16 +290,17 @@ done
 
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     device_name=/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
+    CEPH_VOLUME="$CEPHADM ceph-volume \
+                       --fsid $FSID \
+                       --config $CONFIG \
+                       --keyring $TMPDIR/keyring.bootstrap.osd --"
 
     # prepare the osd
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
-            lvm prepare --bluestore --data $device_name --no-systemd
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
-            lvm batch --no-auto $device_name --yes --no-systemd
+    $CEPH_VOLUME lvm prepare --bluestore --data $device_name --no-systemd
+    $CEPH_VOLUME lvm batch --no-auto $device_name --yes --no-systemd
 
     # osd id and osd fsid
-    $CEPHADM ceph-volume --config $CONFIG --keyring $TMPDIR/keyring.bootstrap.osd -- \
-            lvm list --format json $device_name > $TMPDIR/osd.map
+    $CEPH_VOLUME lvm list --format json $device_name > $TMPDIR/osd.map
     osd_id=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_id"? | select(.)')
     osd_fsid=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_fsid"? | select(.)')
 

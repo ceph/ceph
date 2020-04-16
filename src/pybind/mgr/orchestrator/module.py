@@ -25,7 +25,7 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription
+    ServiceDescription, DaemonDescription, IscsiServiceSpec
 
 def nice_delta(now, t, suffix=''):
     if t:
@@ -410,7 +410,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                                        refresh=refresh)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
-        daemons = completion.result
+        daemons: List[DaemonDescription] = completion.result
 
         def ukn(s):
             return '<unknown>' if s is None else s
@@ -432,12 +432,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table.left_padding_width = 0
             table.right_padding_width = 2
             for s in sorted(daemons, key=lambda s: s.name()):
-                status = {
-                    -1: 'error',
-                    0: 'stopped',
-                    1: 'running',
-                    None: '<unknown>'
-                }[s.status]
+                if s.status_desc:
+                    status = s.status_desc
+                else:
+                    status = {
+                        -1: 'error',
+                        0: 'stopped',
+                        1: 'running',
+                        None: '<unknown>'
+                    }[s.status]
                 if s.status == 1 and s.started:
                     status += ' (%s)' % to_pretty_timedelta(now - s.started)
 
@@ -590,6 +593,8 @@ Usage:
             completion = self.add_node_exporter(spec)
         elif daemon_type == 'prometheus':
             completion = self.add_prometheus(spec)
+        elif daemon_type == 'iscsi':
+            completion = self.add_iscsi(spec)
         else:
             raise OrchestratorValidationError(f'unknown daemon type `{daemon_type}`')
 
@@ -637,6 +642,39 @@ Usage:
         )
 
         completion = self.add_rgw(rgw_spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch daemon add iscsi',
+        'name=pool,type=CephString '
+        'name=fqdn_enabled,type=CephString,req=false '
+        'name=trusted_ip_list,type=CephString,req=false '
+        'name=placement,type=CephString,req=false',
+        'Start iscsi daemon(s)')
+    def _iscsi_add(self, pool, fqdn_enabled=None, trusted_ip_list=None, placement=None, inbuf=None):
+        usage = """
+        Usage:
+          ceph orch daemon add iscsi -i <json_file>
+          ceph orch daemon add iscsi <pool>
+                """
+        if inbuf:
+            try:
+                iscsi_spec = IscsiServiceSpec.from_json(json.loads(inbuf))
+            except ValueError as e:
+                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+        else:
+            iscsi_spec = IscsiServiceSpec(
+                service_id='iscsi',
+                pool=pool,
+                fqdn_enabled=fqdn_enabled,
+                trusted_ip_list=trusted_ip_list,
+                placement=PlacementSpec.from_string(placement),
+            )
+
+        completion = self.add_iscsi(iscsi_spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

@@ -2,6 +2,7 @@ import datetime
 import threading
 import functools
 import os
+import json
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
@@ -232,16 +233,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for host_name, host_devs in devs.items():
             devs = []
             for d in host_devs:
-                dev = inventory.Device(
-                    path='/dev/' + d['name'],
-                    sys_api=dict(
-                        rotational='1' if d['rotational'] else '0',
-                        size=d['size']
-                    ),
-                    available=d['empty'],
-                    rejected_reasons=[] if d['empty'] else ['not empty'],
-                )
-                devs.append(dev)
+                if 'cephVolumeData' in d and d['cephVolumeData']:
+                    devs.append(inventory.Device.from_json(json.loads(d['cephVolumeData'])))
+                else:
+                    devs.append(inventory.Device(
+                        path = '/dev/' + d['name'],
+                        sys_api = dict(
+                            rotational = '1' if d['rotational'] else '0',
+                            size = d['size']
+                            ),
+                        available = False,
+                        rejected_reasons=['device data coming from ceph-volume not provided'],
+                    ))
 
             result.append(orchestrator.InventoryHost(host_name, inventory.Devices(devs)))
 
