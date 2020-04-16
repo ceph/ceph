@@ -6729,8 +6729,6 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     return;
 
   size_t block_size = 4096;
-  // this will enable continuous allocations
-  SetVal(g_conf(), "bluestore_allocator", "avl");
   StartDeferred(block_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
   SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
@@ -7166,8 +7164,6 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 
   size_t alloc_size = 4096;
   size_t large_object_size = 1 * 1024 * 1024;
-  // this will enable continuous allocations
-  SetVal(g_conf(), "bluestore_allocator", "avl");
   StartDeferred(alloc_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
   SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
