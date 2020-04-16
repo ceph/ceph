@@ -126,7 +126,8 @@ class ceph_lock_state_t;
 typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
 
 typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
-					 vinodeno_t ino, string& name);
+					 vinodeno_t ino, const char *name,
+					 size_t len);
 typedef int (*client_remount_callback_t)(void *handle);
 
 typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
