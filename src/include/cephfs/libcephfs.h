@@ -1852,6 +1852,16 @@ int ceph_start_reclaim(struct ceph_mount_info *cmount,
  */
 void ceph_finish_reclaim(struct ceph_mount_info *cmount);
 
+/**
+ * Register a set of callbacks to be used with this cmount
+ * @param cmount the ceph mount handle on which the cb's should be registerd
+ * @param args   callback arguments to register with the cmount
+ *
+ * Any fields set to NULL will be ignored. There currently is no way to
+ * unregister these callbacks, so this is a one-way change.
+ */
+void ceph_ll_register_callbacks(struct ceph_mount_info *cmount,
+				struct ceph_client_callback_args *args);
 #ifdef __cplusplus
 }
 #endif
