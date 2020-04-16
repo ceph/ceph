@@ -255,7 +255,7 @@ class Filer {
 		  uint64_t first_obj, uint64_t num_obj,
 		  ceph::real_time mtime,
 		  int flags, Context *oncommit);
-  void _do_purge_range(struct PurgeRange *pr, int fin);
+  void _do_purge_range(struct PurgeRange *pr, int fin, int err);
 
   /*
    * probe
