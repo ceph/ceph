@@ -1426,7 +1426,7 @@ class ServiceDescription(object):
 
         c_status = status.copy()
         for k in ['last_refresh', 'created']:
-            if k in c:
+            if k in c_status:
                 c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
         return cls(spec=spec, **c_status)
 
@@ -1487,10 +1487,10 @@ class InventoryHost(object):
             name = _data.pop('name')
             addr = _data.pop('addr', None) or name
             devices = inventory.Devices.from_json(_data.pop('devices'))
+            labels = _data.pop('labels', list())
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
-            labels = _data.get('labels', list())
             return cls(name, devices, labels, addr)
         except KeyError as e:
             error_msg = '{} is required for {}'.format(e, cls.__name__)
