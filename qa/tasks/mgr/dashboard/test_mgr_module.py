@@ -99,8 +99,6 @@ class MgrModuleTest(MgrModuleTestCase):
         self.assertIsNotNone(module_info)
         self.assertTrue(module_info['enabled'])
 
-
-class MgrModuleTelemetryTest(MgrModuleTestCase):
     def test_get(self):
         data = self._get('/api/mgr/module/telemetry')
         self.assertStatus(200)
@@ -125,38 +123,24 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
                 }))
 
     def test_put(self):
-        self.set_config_key('config/mgr/mgr/telemetry/contact', '')
-        self.set_config_key('config/mgr/mgr/telemetry/description', '')
-        self.set_config_key('config/mgr/mgr/telemetry/interval', '72')
-        self.set_config_key('config/mgr/mgr/telemetry/leaderboard', 'False')
-        self.set_config_key('config/mgr/mgr/telemetry/organization', '')
-        self.set_config_key('config/mgr/mgr/telemetry/proxy', '')
-        self.set_config_key('config/mgr/mgr/telemetry/url', '')
-        self.set_config_key('config/mgr/mgr/telemetry/last_opt_revision', '2')
-        self.set_config_key('config/mgr/mgr/telemetry/enabled', 'True')
+        self.set_config_key('config/mgr/mgr/iostat/log_level', 'critical')
+        self.set_config_key('config/mgr/mgr/iostat/log_to_cluster', 'False')
+        self.set_config_key('config/mgr/mgr/iostat/log_to_cluster_level', 'info')
+        self.set_config_key('config/mgr/mgr/iostat/log_to_file', 'True')
         self._put(
-            '/api/mgr/module/telemetry',
+            '/api/mgr/module/iostat',
             data={
                 'config': {
-                    'contact': 'tux@suse.com',
-                    'description': 'test',
-                    'last_opt_revision': 1,
-                    'enabled': False,
-                    'interval': 4711,
-                    'leaderboard': True,
-                    'organization': 'SUSE Linux',
-                    'proxy': 'foo',
-                    'url': 'https://foo.bar/report'
+                    'log_level': 'debug',
+                    'log_to_cluster': True,
+                    'log_to_cluster_level': 'warning',
+                    'log_to_file': False
                 }
             })
         self.assertStatus(200)
-        data = self._get('/api/mgr/module/telemetry')
+        data = self._get('/api/mgr/module/iostat')
         self.assertStatus(200)
-        self.assertEqual(data['contact'], 'tux@suse.com')
-        self.assertEqual(data['description'], 'test')
-        self.assertFalse(data['enabled'])
-        self.assertEqual(data['interval'], 4711)
-        self.assertTrue(data['leaderboard'])
-        self.assertEqual(data['organization'], 'SUSE Linux')
-        self.assertEqual(data['proxy'], 'foo')
-        self.assertEqual(data['url'], 'https://foo.bar/report')
+        self.assertEqual(data['log_level'], 'debug')
+        self.assertTrue(data['log_to_cluster'])
+        self.assertEqual(data['log_to_cluster_level'], 'warning')
+        self.assertFalse(data['log_to_file'])
