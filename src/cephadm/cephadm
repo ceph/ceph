@@ -3241,6 +3241,7 @@ def command_adopt_prometheus(daemon_id, fsid):
     config_src = '/etc/prometheus/prometheus.yml'
     config_src = os.path.abspath(args.legacy_dir + config_src)
     config_dst = os.path.join(data_dir_dst, 'etc/prometheus')
+    makedirs(config_dst, uid, gid, 0o755)
     copy_files([config_src], config_dst, uid=uid, gid=gid)
 
     # data
