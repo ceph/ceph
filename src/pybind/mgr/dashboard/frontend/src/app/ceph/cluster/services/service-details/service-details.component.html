@@ -1,7 +1,7 @@
-<tabset *ngIf="selection.hasSingleSelection">
+<tabset *ngIf="selection">
   <tab i18n-heading
        heading="Daemons">
-    <cd-service-daemon-list [serviceName]="selection.first()['service_name']">
+    <cd-service-daemon-list [serviceName]="selection['service_name']">
     </cd-service-daemon-list>
   </tab>
 </tabset>
