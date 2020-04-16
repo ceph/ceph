@@ -188,10 +188,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
     @_cli_write_command(
         'orch host rm',
-        "name=hostname,type=CephString,req=true",
+        "name=hostname,type=CephString,req=true "
+        'name=force,type=CephBool,req=false',
         'Remove a host')
-    def _remove_host(self, hostname):
-        completion = self.remove_host(hostname)
+    def _remove_host(self, hostname, force=False):
+        completion = self.remove_host(hostname, force)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

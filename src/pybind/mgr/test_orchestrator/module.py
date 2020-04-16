@@ -348,7 +348,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert isinstance(host, six.string_types)
 
     @deferred_write("remove_host")
-    def remove_host(self, host):
+    def remove_host(self, host, force=False):
         assert isinstance(host, six.string_types)
 
     @deferred_write("apply_mgr")

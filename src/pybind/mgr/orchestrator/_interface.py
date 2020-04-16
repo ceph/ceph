@@ -779,12 +779,10 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_host(self, host):
-        # type: (str) -> Completion
+    def remove_host(self, host, force=False):
+        # type: (str, bool) -> Completion
         """
         Remove a host from the orchestrator inventory.
-
-        :param host: hostname
         """
         raise NotImplementedError()
 

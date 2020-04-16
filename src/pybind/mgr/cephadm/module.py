@@ -1040,17 +1040,34 @@ you may want to run:
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
 
+    def _verify_host_is_empty(self, host):
+        daemons = dict(self.cache.get_daemons_with_volatile_status())
+        daemons_on_host = daemons.get(host)
+        if daemons_on_host:
+            names = ', '.join(daemons_on_host.keys())
+            s = f'Daemons still on host `{host}`: {names}\n'
+            s += 'Please remove all daemons from this host, before removing the host.\n'
+            s += '(Add --force to ignore this message)'
+            raise OrchestratorValidationError(s)
+
+        specs = self.spec_store.specs.values()
+        placements = [(s.service_name(), s.placement) for s in specs if s.placement is not None]
+        for name, placement in placements:
+            if any([host == h.hostname for h in placement.hosts]):
+                s = f'Service {name} still specifies its placement to be on host `{host}`\n'
+                s += 'Please alter the placement specification, before removing the host.\n'
+                s += '(Add --force to ignore this message)'
+                raise OrchestratorValidationError(s)
+
     @trivial_completion
     def add_host(self, spec: HostSpec) -> str:
         return self._add_host(spec)
 
     @trivial_completion
-    def remove_host(self, host):
-        # type: (str) -> str
-        """
-        Remove a host from orchestrator management.
-
-        :param host: host name
+    def remove_host(self, host, force=False):
+        # type: (str, bool) -> str
+        if not force:
+            self._verify_host_is_empty(host)
         """
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
