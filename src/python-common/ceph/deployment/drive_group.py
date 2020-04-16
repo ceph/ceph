@@ -144,7 +144,7 @@ class DriveGroupSpec(ServiceSpec):
                  encrypted=False,  # type: bool
                  db_slots=None,  # type: Optional[int]
                  wal_slots=None,  # type: Optional[int]
-                 osd_id_claims=None,  # type: Optional[Dict[str, DeviceSelection]]
+                 osd_id_claims=None,  # type: Optional[Dict[str, List[str]]]
                  block_db_size=None,  # type: Optional[int]
                  block_wal_size=None,  # type: Optional[int]
                  journal_size=None,  # type: Optional[int]
@@ -196,10 +196,9 @@ class DriveGroupSpec(ServiceSpec):
         #: How many OSDs per WAL device
         self.wal_slots = wal_slots
 
-        #: Optional: mapping of OSD id to DeviceSelection, used when the
-        #: created OSDs are meant to replace previous OSDs on
-        #: the same node. See :ref:`orchestrator-osd-replace`
-        self.osd_id_claims = osd_id_claims
+        #: Optional: mapping of host -> List of osd_ids that should be replaced
+        #: See :ref:`orchestrator-osd-replace`
+        self.osd_id_claims = osd_id_claims or dict()
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):

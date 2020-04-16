@@ -178,6 +178,57 @@ class TestCephadm(object):
             r = cephadm_module._apply_service(ServiceSpec('mgr', placement=ps))
             assert r
 
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    def test_find_destroyed_osds(self, _mon_cmd, cephadm_module):
+        dict_out = {
+            "nodes": [
+                {
+                    "id": -1,
+                    "name": "default",
+                    "type": "root",
+                    "type_id": 11,
+                    "children": [
+                        -3
+                    ]
+                },
+                {
+                    "id": -3,
+                    "name": "host1",
+                    "type": "host",
+                    "type_id": 1,
+                    "pool_weights": {},
+                    "children": [
+                        0
+                    ]
+                },
+                {
+                    "id": 0,
+                    "device_class": "hdd",
+                    "name": "osd.0",
+                    "type": "osd",
+                    "type_id": 0,
+                    "crush_weight": 0.0243988037109375,
+                    "depth": 2,
+                    "pool_weights": {},
+                    "exists": 1,
+                    "status": "destroyed",
+                    "reweight": 1,
+                    "primary_affinity": 1
+                }
+            ],
+            "stray": []
+        }
+        json_out = json.dumps(dict_out)
+        _mon_cmd.return_value = (0, json_out, '')
+        out = cephadm_module.find_destroyed_osds()
+        assert out == {'host1': ['0']}
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
+        _mon_cmd.return_value = (1, "", "fail_msg")
+        with pytest.raises(OrchestratorError):
+            out = cephadm_module.find_destroyed_osds()
+
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
     def test_apply_osd_save(self, _save_spec, cephadm_module):
@@ -237,7 +288,7 @@ class TestCephadm(object):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
-            out = cephadm_module.driveselection_to_ceph_volume(dg, ds, preview)
+            out = cephadm_module.driveselection_to_ceph_volume(dg, ds, [], preview)
             assert out in exp_command
 
     @mock.patch("cephadm.module.SpecStore.find")
