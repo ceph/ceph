@@ -3251,9 +3251,8 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
             logger.info('Renaming %s -> %s', simple_fn, new_fn)
             os.rename(simple_fn, new_fn)
             logger.info('Disabling host unit ceph-volume@ simple unit...')
-            call_throws(['systemctl', 'disable',
-                         'ceph-volume@simple-%s-%s.service' % (
-                             daemon_id, osd_fsid)])
+            call(['systemctl', 'disable',
+                  'ceph-volume@simple-%s-%s.service' % (daemon_id, osd_fsid)])
         else:
             # assume this is an 'lvm' c-v for now, but don't error
             # out if it's not.
