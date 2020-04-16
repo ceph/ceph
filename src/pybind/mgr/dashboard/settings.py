@@ -98,6 +98,10 @@ class SettingsMeta(type):
             value = False
         else:
             value = stype(mgr.get_module_option(attr, default))
+
+        if value == default and attr in ['GRAFANA_API_URL']:
+            value = stype(mgr.get_module_option_ex('orchestrator', attr, default))
+
         return value
 
     def __setattr__(cls, attr, value):

@@ -61,16 +61,15 @@ class GrafanaService(CephadmService):
         return daemon_descrs[-1]
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
-        # TODO: signed cert
         dd = self.get_active_daemon(daemon_descrs)
         service_url = 'https://{}:{}'.format(
             self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
-        self._set_service_url_on_dashboard(
-            'Grafana',
-            'dashboard get-grafana-api-url',
-            'dashboard set-grafana-api-url',
-            service_url
-        )
+
+        current_url = self.mgr.get_module_option_ex('orchestrator', 'GRAFANA_API_URL')
+        if current_url != service_url:
+            logger.info('Setting dashboard grafana config to %s' % service_url)
+            self.mgr.set_module_option_ex('orchestrator', 'GRAFANA_API_URL', service_url)
+
 
 class AlertmanagerService(CephadmService):
     DEFAULT_SERVICE_PORT = 9093
