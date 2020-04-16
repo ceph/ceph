@@ -102,3 +102,16 @@ Manually running containers
 Cephadm writes small wrappers that run a containers. Refer to
 ``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the
 container execution command.
+
+Failed to infer CIDR network error
+----------------------------------
+
+If you see this error::
+
+   ERROR: Failed to infer CIDR network for mon ip ***; pass --skip-mon-network to configure it later
+
+This means that you must run a command of this form::
+
+  ceph config set mon public_network <mon_network>
+
+For more detail on operations of this kind, see https://docs.ceph.com/docs/master/cephadm/install/?highlight=public_network#deploy-additional-monitors-optional
