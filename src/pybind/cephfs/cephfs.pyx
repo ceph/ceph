@@ -106,7 +106,7 @@ cdef extern from "sys/time.h":
         long tv_sec
         long tv_usec
 
-cdef extern from "cephfs/ceph_statx.h":
+cdef extern from "cephfs/ceph_ll_client.h":
     cdef struct statx "ceph_statx":
         uint32_t    stx_mask
         uint32_t    stx_blksize
