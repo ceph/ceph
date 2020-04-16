@@ -27,7 +27,7 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
-#include "ceph_statx.h"
+#include "ceph_ll_client.h"
 
 #ifdef __cplusplus
 extern "C" {

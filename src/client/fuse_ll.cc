@@ -33,7 +33,7 @@
 #include "ioctl.h"
 #include "common/config.h"
 #include "include/ceph_assert.h"
-#include "include/cephfs/ceph_statx.h"
+#include "include/cephfs/ceph_ll_client.h"
 
 #include "fuse_ll.h"
 #include <fuse.h>

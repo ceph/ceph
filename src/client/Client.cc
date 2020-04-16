@@ -97,7 +97,7 @@
 #include "include/ceph_assert.h"
 #include "include/stat.h"
 
-#include "include/cephfs/ceph_statx.h"
+#include "include/cephfs/ceph_ll_client.h"
 
 #if HAVE_GETGROUPLIST
 #include <grp.h>
