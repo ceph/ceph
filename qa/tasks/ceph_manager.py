@@ -1803,6 +1803,9 @@ class CephManager:
         self.log('Canceling any pending splits or merges...')
         osd_dump = self.get_osd_dump_json()
         for pool in osd_dump['pools']:
+            if 'pg_num_target' not in pool:
+                # mimic does not adjust pg num automatically
+                continue
             if pool['pg_num'] != pool['pg_num_target']:
                 self.log('Setting pool %s (%d) pg_num %d -> %d' %
                          (pool['pool_name'], pool['pool'],
