@@ -111,6 +111,10 @@ function bench_run() {
     k2ms[4]="2 3"
     k2ms[6]="2 3 4"
     k2ms[10]="3 4"
+    local isa2technique_vandermonde='reed_sol_van'
+    local isa2technique_cauchy='cauchy'
+    local jerasure2technique_vandermonde='reed_sol_van'
+    local jerasure2technique_cauchy='cauchy_good'
     for technique in ${TECHNIQUES} ; do
         for plugin in ${PLUGINS} ; do
             eval technique_parameter=\$${plugin}2technique_${technique}
