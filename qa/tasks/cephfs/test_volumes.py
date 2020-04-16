@@ -156,6 +156,14 @@ class TestVolumes(CephFSTestCase):
         # remove the leading '/', and trailing whitespaces
         return path[1:].rstrip()
 
+    def  _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
+        args = ["subvolume", "info", vol_name, subvol_name]
+        if group_name:
+            args.append(group_name)
+        args = tuple(args)
+        subvol_md = self._fs_cmd(*args)
+        return subvol_md
+
     def _delete_test_volume(self):
         self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
@@ -732,6 +740,106 @@ class TestVolumes(CephFSTestCase):
         except CommandFailedError:
             raise RuntimeError("expected filling subvolume {0} with {1} file of size {2}MB "
                                "to succeed".format(subvolname, number_of_files, file_size))
+
+    def test_subvolume_info(self):
+        # tests the 'fs subvolume info' command
+
+        subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "type", "uid"]
+
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # get subvolume metadata
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+        if len(subvol_info) == 0:
+            raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
+        for md in subvol_md:
+            if md not in subvol_info.keys():
+                raise RuntimeError("%s not present in the metadata of subvolume" % md)
+
+        if subvol_info["bytes_pcent"] != "undefined":
+            raise RuntimeError("bytes_pcent should be set to undefined if quota is not set")
+
+        if subvol_info["bytes_quota"] != "infinite":
+            raise RuntimeError("bytes_quota should be set to infinite if quota is not set")
+
+        nsize = self.DEFAULT_FILE_SIZE*1024*1024
+        try:
+            self._fs_cmd("subvolume", "resize", self.volname, subvolume, str(nsize))
+        except CommandFailedError:
+            raise RuntimeError("expected the 'fs subvolume resize' command to succeed")
+
+        # get subvolume metadata after quota set
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+        if len(subvol_info) == 0:
+            raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
+        if subvol_info["bytes_pcent"] == "undefined":
+            raise RuntimeError("bytes_pcent should not be set to undefined if quota is set")
+
+        if subvol_info["bytes_quota"] == "infinite":
+            raise RuntimeError("bytes_quota should not be set to infinite if quota is set")
+
+        if subvol_info["type"] != "subvolume":
+            raise RuntimeError("type should be set to subvolume")
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_clone_subvolume_info(self):
+
+        # tests the 'fs subvolume info' command for a clone
+        subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "type", "uid"]
+
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, clone))
+        if len(subvol_info) == 0:
+            raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
+        for md in subvol_md:
+            if md not in subvol_info.keys():
+                raise RuntimeError("%s not present in the metadata of subvolume" % md)
+        if subvol_info["type"] != "clone":
+            raise RuntimeError("type should be set to clone")
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
 
     ### subvolume group operations
 
