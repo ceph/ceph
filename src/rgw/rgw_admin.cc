@@ -1940,12 +1940,6 @@ static void get_md_sync_status(list<string>& status)
   map<int, RGWMetadataLogInfo> master_shards_info;
   string master_period = store->svc()->zone->get_current_period_id();
 
-  ret = sync.read_master_log_shards_info(master_period, &master_shards_info);
-  if (ret < 0) {
-    status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
-    return;
-  }
-
   map<int, string> shards_behind;
   if (sync_status.sync_info.period != master_period) {
     status.push_back(string("master is on a different period: master_period=" +
@@ -1978,7 +1972,8 @@ static void get_md_sync_status(list<string>& status)
     push_ss(ss, status) << "behind shards: " << "[" << shards_behind_set << "]";
 
     map<int, rgw_mdlog_shard_data> master_pos;
-    ret = sync.read_master_log_shards_next(sync_status.sync_info.period, shards_behind, &master_pos);
+    rgw_mdlog_info log_info;
+    int ret = sync.read_log_info(&log_info);
     if (ret < 0) {
       derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {

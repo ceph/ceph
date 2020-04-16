@@ -815,6 +815,129 @@ void RGWOp_MDLog_Status::send_response()
   flusher.flush();
 }
 
+class RGWOp_MDLog_CompareStatus : public RGWRESTOp {
+  rgw_meta_sync_status status;
+  RGWMetadataLogInfo info;
+  list<cls_log_entry> entries;
+  string last_marker;
+  bool truncated;
+  std::vector <ceph::real_time> current_timestamp, latest_timestamp;
+public:
+  RGWOp_MDLog_CompareStatus() {}
+  ~RGWOp_MDLog_CompareStatus() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("mdlog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->get_caps());
+  }
+  void execute() override;
+  void send_response() override;
+  const char* name() const override {
+    return "compare_timestamps";
+  }
+};
+
+void RGWOp_MDLog_CompareStatus::execute() {
+  for(int i=0;i<64;i++) {
+    auto sync = store->getRados()->get_meta_sync_manager();
+    if (sync == nullptr) {
+      ldout(s->cct, 1) << "no sync manager" << dendl;
+      http_ret = -ENOENT;
+      return;
+    }
+    string   period = s->info.args.get("period");
+    string   shard = s->info.args.get("id");
+    string   max_entries_str = s->info.args.get("max-entries");
+    string   st = s->info.args.get("start-time"),
+             et = s->info.args.get("end-time"),
+             marker = s->info.args.get("marker"),
+             err;
+    real_time   ut_st, 
+                ut_et;
+    void    *handle;
+    unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+
+    shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
+    if (!err.empty()) {
+      dout(5) << "Error parsing shard_id " << shard << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+
+    if (parse_date_str(st, ut_st) < 0) {
+      http_ret = -EINVAL;
+      return;
+    }
+
+    if (parse_date_str(et, ut_et) < 0) {
+      http_ret = -EINVAL;
+      return;
+    }
+
+    if (!max_entries_str.empty()) {
+      max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+        http_ret = -EINVAL;
+        return;
+      }
+      if (max_entries > LOG_CLASS_LIST_MAX_ENTRIES) {
+        max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
+      }
+    } 
+
+    if (period.empty()) {
+      ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
+      period = store->svc()->zone->get_current_period_id();
+
+      if (period.empty()) {
+        ldout(s->cct, 5) << "Missing period id" << dendl;
+        http_ret = -EINVAL;
+        return;
+      }
+    }
+    RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+
+    http_ret = meta_log.get_info(shard_id, &info); 
+
+    set_req_state_err(s, http_ret);
+    dump_errno(s);
+    end_header(s);
+
+    latest_timestamp.push_back(info->last_update);
+
+    meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
+    http_ret = meta_log.list_entries(handle, max_entries, entries,
+                                   &last_marker, &truncated);
+
+    meta_log.complete_list_entries(handle);
+    current_timestamp.push_back(ut_et);
+
+  }
+
+}
+
+void RGWOp_MDLog_CompareStatus::send_response() {   
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret < 0)
+    return;
+  s->formatter->open_object_section("");
+  for(int i=1;i<=64;i++){
+    s->formatter->dump_int("shard_id",i);                     
+    dump_time(s,"current_timestamp", current_timestamp[i]);
+    dump_time(s,"latest_timestamp", latest_timestamp[i]);   
+    s->formatter->close_section();
+  }
+  s->formatter->close_section();
+
+  flusher.flush();
+}
+
 // not in header to avoid pulling in rgw_data_sync.h
 class RGWOp_BILog_Status : public RGWRESTOp {
   std::vector<rgw_bucket_shard_sync_info> status;
@@ -1032,11 +1155,8 @@ RGWOp *RGWHandler_Log::op_get() {
   if (type.compare("metadata") == 0) {
     if (s->info.args.exists("id")) {
       if (s->info.args.exists("info")) {
-        return new RGWOp_MDLog_ShardInfo;
-      } else {
-        return new RGWOp_MDLog_List;
-      }
-    } else if (s->info.args.exists("status")) {
+        return new RGWOp_MDLog_CompareStatus;
+      } else if (s->info.args.exists("status")) {
       return new RGWOp_MDLog_Status;
     } else {
       return new RGWOp_MDLog_Info;
