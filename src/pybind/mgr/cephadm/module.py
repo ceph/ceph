@@ -2569,19 +2569,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         # make sure the dashboard [does not] references grafana
         try:
-            current_url = self.get_module_option_ex('dashboard',
-                                                    'GRAFANA_API_URL')
+
+            ret, current_url, err = self.check_mon_command({"prefix": "get-grafana-api-url"})
             if grafanas:
                 host = grafanas[0].hostname
                 url = f'https://{self.inventory.get_addr(host)}:3000'
                 if current_url != url:
                     self.log.info('Setting dashboard grafana config to %s' % url)
-                    self.set_module_option_ex('dashboard', 'GRAFANA_API_URL',
-                                              url)
+                    ret, outs, err = self.check_mon_command({
+                        "prefix": "set-grafana-api-url",
+                        "value": url,
+                    })
                     # FIXME: is it a signed cert??
         except Exception as e:
-            self.log.debug('got exception fetching dashboard grafana state: %s',
-                           e)
+            self.log.exception('unable to set dashboard grafana setting')
 
     def _add_daemon(self, daemon_type, spec,
                     create_func, config_func=None):
