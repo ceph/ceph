@@ -105,9 +105,11 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
 
 template <typename I>
 void EnableRequest<I>::get_tag_owner() {
-  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
-      !m_non_primary_global_image_id.empty()) {
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
     create_primary_snapshot();
+    return;
+  } else if (!m_non_primary_global_image_id.empty()) {
+    image_state_update();
     return;
   }
 
@@ -143,7 +145,8 @@ void EnableRequest<I>::handle_get_tag_owner(int r) {
 template <typename I>
 void EnableRequest<I>::create_primary_snapshot() {
   if (!m_non_primary_global_image_id.empty()) {
-    image_state_update();
+    // special case for rbd-mirror creating a non-primary image
+    enable_non_primary_feature();
     return;
   }
 
@@ -162,6 +165,50 @@ void EnableRequest<I>::create_primary_snapshot() {
 template <typename I>
 void EnableRequest<I>::handle_create_primary_snapshot(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to create initial primary snapshot: "
+                 << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  image_state_update();
+}
+
+template <typename I>
+void EnableRequest<I>::enable_non_primary_feature() {
+  if (m_mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    image_state_update();
+    return;
+  }
+
+  ldout(m_cct, 10) << dendl;
+
+  // ensure image is flagged with non-primary feature so that
+  // standard RBD clients cannot write to it.
+  librados::ObjectWriteOperation op;
+  cls_client::set_features(&op, RBD_FEATURE_NON_PRIMARY,
+                           RBD_FEATURE_NON_PRIMARY);
+
+  auto aio_comp = create_rados_callback<
+    EnableRequest<I>,
+    &EnableRequest<I>::handle_enable_non_primary_feature>(this);
+  int r = m_io_ctx.aio_operate(util::header_name(m_image_id), aio_comp, &op);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void EnableRequest<I>::handle_enable_non_primary_feature(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to enable non-primary feature: "
+                 << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
 
   image_state_update();
 }

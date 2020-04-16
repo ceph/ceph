@@ -81,16 +81,12 @@ class TrashPurgeScheduleHandler:
 
         self.load_schedules()
 
-        with self.lock:
-            if not self.schedules:
-                self.images = {}
-                self.queue = {}
-                self.last_refresh_pools = datetime.now()
-                return
-
         pools = {}
 
         for pool_id, pool_name in get_rbd_pools(self.module).items():
+            if not self.schedules.intersects(
+                    LevelSpec.from_pool_spec(pool_id, pool_name)):
+                continue
             with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                 self.load_pool(ioctx, pools)
 
@@ -105,6 +101,8 @@ class TrashPurgeScheduleHandler:
         pool_name = ioctx.get_pool_name()
         pools[pool_id] = {}
         pool_namespaces = ['']
+
+        self.log.debug("load_pool: {}".format(pool_name))
 
         try:
             pool_namespaces += rbd.RBD().namespace_list(ioctx)
@@ -163,7 +161,7 @@ class TrashPurgeScheduleHandler:
         schedule_time = schedule.next_run(now)
         if schedule_time not in self.queue:
             self.queue[schedule_time] = []
-        self.log.debug("schedule image {}/{} at {}".format(
+        self.log.debug("schedule {}/{} at {}".format(
             pool_id, namespace, schedule_time))
         ns_spec = (pool_id, namespace)
         if ns_spec not in self.queue[schedule_time]:

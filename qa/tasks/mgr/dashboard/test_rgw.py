@@ -4,11 +4,11 @@ from __future__ import absolute_import
 import base64
 import logging
 import time
-import urllib
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.twofactor.totp import TOTP
 from cryptography.hazmat.primitives.hashes import SHA1
+from six.moves.urllib import parse
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
 
@@ -265,7 +265,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
 
-    def test_create_get_update_delete_w_tenant(self):
+    def test_crud_w_tenant(self):
         # Create a new bucket. The tenant of the user is used when
         # the bucket is created.
         self._post(
@@ -292,7 +292,7 @@ class RgwBucketTest(RgwTestCase):
         def _verify_tenant_bucket(bucket, tenant, uid):
             full_bucket_name = '{}/{}'.format(tenant, bucket)
             _data = self._get('/api/rgw/bucket/{}'.format(
-                urllib.quote_plus(full_bucket_name)))
+                parse.quote_plus(full_bucket_name)))
             self.assertStatus(200)
             self.assertSchema(_data, JObj(sub_elems={
                 'owner': JLeaf(str),
@@ -314,7 +314,7 @@ class RgwBucketTest(RgwTestCase):
         # Update bucket: different user with different tenant, enable versioning.
         self._put(
             '/api/rgw/bucket/{}'.format(
-                urllib.quote_plus('testx/teuth-test-bucket')),
+                parse.quote_plus('testx/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
                 'uid': 'testx2$teuth-test-user2',
@@ -326,7 +326,7 @@ class RgwBucketTest(RgwTestCase):
         # Change owner to a non-tenanted user
         self._put(
             '/api/rgw/bucket/{}'.format(
-                urllib.quote_plus('testx2/teuth-test-bucket')),
+                parse.quote_plus('testx2/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
                 'uid': 'admin'
@@ -355,11 +355,61 @@ class RgwBucketTest(RgwTestCase):
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
+            parse.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
         self.assertEqual(len(data), 0)
+
+    def test_crud_w_locking(self):
+        # Create
+        self._post('/api/rgw/bucket',
+                   params={
+                       'bucket': 'teuth-test-bucket',
+                       'uid': 'teuth-test-user',
+                       'zonegroup': 'default',
+                       'placement_target': 'default-placement',
+                       'lock_enabled': 'true',
+                       'lock_mode': 'GOVERNANCE',
+                       'lock_retention_period_days': '0',
+                       'lock_retention_period_years': '1'
+                   })
+        self.assertStatus(201)
+        # Read
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(200)
+        self.assertSchema(
+            data,
+            JObj(sub_elems={
+                'lock_enabled': JLeaf(bool),
+                'lock_mode': JLeaf(str),
+                'lock_retention_period_days': JLeaf(int),
+                'lock_retention_period_years': JLeaf(int)
+            },
+                 allow_unknown=True))
+        self.assertTrue(data['lock_enabled'])
+        self.assertEqual(data['lock_mode'], 'GOVERNANCE')
+        self.assertEqual(data['lock_retention_period_days'], 0)
+        self.assertEqual(data['lock_retention_period_years'], 1)
+        # Update
+        self._put('/api/rgw/bucket/teuth-test-bucket',
+                  params={
+                      'bucket_id': data['id'],
+                      'uid': 'teuth-test-user',
+                      'lock_mode': 'COMPLIANCE',
+                      'lock_retention_period_days': '15',
+                      'lock_retention_period_years': '0'
+                  })
+        self.assertStatus(200)
+        data = self._get('/api/rgw/bucket/teuth-test-bucket')
+        self.assertTrue(data['lock_enabled'])
+        self.assertEqual(data['lock_mode'], 'COMPLIANCE')
+        self.assertEqual(data['lock_retention_period_days'], 15)
+        self.assertEqual(data['lock_retention_period_years'], 0)
+        self.assertStatus(200)
+        # Delete
+        self._delete('/api/rgw/bucket/teuth-test-bucket')
+        self.assertStatus(204)
 
 
 class RgwDaemonTest(RgwTestCase):

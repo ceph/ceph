@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
@@ -27,25 +28,38 @@ describe('ServicesComponent', () => {
 
   const services = [
     {
-      container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-      container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+      service_type: 'osd',
       service_name: 'osd',
-      size: 3,
-      running: 3,
-      last_refresh: '2020-02-25T04:33:26.465699'
+      status: {
+        container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
+        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+        size: 3,
+        running: 3,
+        last_refresh: '2020-02-25T04:33:26.465699'
+      }
     },
     {
-      container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
-      container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+      service_type: 'crash',
       service_name: 'crash',
-      size: 1,
-      running: 1,
-      last_refresh: '2020-02-25T04:33:26.465766'
+      status: {
+        container_image_id: 'e70344c77bcbf3ee389b9bf5128f635cf95f3d59e005c5d8e67fc19bcc74ed23',
+        container_image_name: 'docker.io/ceph/daemon-base:latest-master-devel',
+        size: 1,
+        running: 1,
+        last_refresh: '2020-02-25T04:33:26.465766'
+      }
     }
   ];
 
   configureTestBed({
-    imports: [CephModule, CoreModule, SharedModule, HttpClientTestingModule, RouterTestingModule],
+    imports: [
+      BrowserAnimationsModule,
+      CephModule,
+      CoreModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule
+    ],
     providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }, i18nProviders],
     declarations: []
   });

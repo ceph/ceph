@@ -19,7 +19,6 @@
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/merge_operator.h"
 
-using std::string;
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "include/common_fwd.h"
@@ -35,6 +34,20 @@ using std::string;
 #define dout_subsys ceph_subsys_rocksdb
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
+
+using std::function;
+using std::list;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::unique_ptr;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
 
 static bufferlist to_bufferlist(rocksdb::Slice in) {
   bufferlist bl;
@@ -649,21 +662,6 @@ int RocksDBStore::_test_init(const string& dir)
 RocksDBStore::~RocksDBStore()
 {
   close();
-  delete logger;
-
-  // Ensure db is destroyed before dependent db_cache and filterpolicy
-  for (auto& p : cf_handles) {
-    db->DestroyColumnFamilyHandle(
-      static_cast<rocksdb::ColumnFamilyHandle*>(p.second));
-    p.second = nullptr;
-  }
-  if (must_close_default_cf) {
-    db->DestroyColumnFamilyHandle(default_cf);
-    must_close_default_cf = false;
-  }
-  default_cf = nullptr;
-  delete db;
-  db = nullptr;
 
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
@@ -680,13 +678,30 @@ void RocksDBStore::close()
     compact_queue_cond.notify_all();
     compact_queue_lock.unlock();
     compact_thread.join();
-    dout(1) << __func__ << " compaction thread to stopped" << dendl;    
+    dout(1) << __func__ << " compaction thread to stopped" << dendl;
   } else {
     compact_queue_lock.unlock();
   }
 
-  if (logger)
+  if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = nullptr;
+  }
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  for (auto& p : cf_handles) {
+    db->DestroyColumnFamilyHandle(
+      static_cast<rocksdb::ColumnFamilyHandle*>(p.second));
+    p.second = nullptr;
+  }
+  if (must_close_default_cf) {
+    db->DestroyColumnFamilyHandle(default_cf);
+    must_close_default_cf = false;
+  }
+  default_cf = nullptr;
+  delete db;
+  db = nullptr;
 }
 
 int RocksDBStore::repair(std::ostream &out)
@@ -1085,34 +1100,35 @@ int RocksDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  rocksdb::PinnableSlice value;
   utime_t start = ceph_clock_now();
   auto cf = get_cf_handle(prefix);
   if (cf) {
     for (auto& key : keys) {
-      std::string value;
       auto status = db->Get(rocksdb::ReadOptions(),
 			    cf,
 			    rocksdb::Slice(key),
 			    &value);
       if (status.ok()) {
-	(*out)[key].append(value);
+	(*out)[key].append(value.data(), value.size());
       } else if (status.IsIOError()) {
 	ceph_abort_msg(status.getState());
       }
+      value.Reset();
     }
   } else {
     for (auto& key : keys) {
-      std::string value;
       string k = combine_strings(prefix, key);
       auto status = db->Get(rocksdb::ReadOptions(),
 			    default_cf,
 			    rocksdb::Slice(k),
 			    &value);
       if (status.ok()) {
-	(*out)[key].append(value);
+	(*out)[key].append(value.data(), value.size());
       } else if (status.IsIOError()) {
 	ceph_abort_msg(status.getState());
       }
+      value.Reset();
     }
   }
   utime_t lat = ceph_clock_now() - start;
@@ -1129,7 +1145,7 @@ int RocksDBStore::get(
   ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
-  string value;
+  rocksdb::PinnableSlice value;
   rocksdb::Status s;
   auto cf = get_cf_handle(prefix);
   if (cf) {
@@ -1145,7 +1161,7 @@ int RocksDBStore::get(
 		&value);
   }
   if (s.ok()) {
-    out->append(value);
+    out->append(value.data(), value.size());
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
@@ -1166,7 +1182,7 @@ int RocksDBStore::get(
   ceph_assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now();
   int r = 0;
-  string value;
+  rocksdb::PinnableSlice value;
   rocksdb::Status s;
   auto cf = get_cf_handle(prefix);
   if (cf) {
@@ -1183,7 +1199,7 @@ int RocksDBStore::get(
 		&value);
   }
   if (s.ok()) {
-    out->append(value);
+    out->append(value.data(), value.size());
   } else if (s.IsNotFound()) {
     r = -ENOENT;
   } else {
@@ -1235,7 +1251,7 @@ void RocksDBStore::compact_thread_entry()
   dout(10) << __func__ << " enter" << dendl;
   while (!compact_queue_stop) {
     if (!compact_queue.empty()) {
-      pair<string,string> range = compact_queue.front();
+      auto range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
       l.unlock();

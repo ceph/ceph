@@ -30,6 +30,33 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
 using namespace TOPNSPC::common;
+
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
 static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -181,7 +208,7 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features,
   }
   if (min_mon_release > pending_map.min_mon_release) {
     dout(1) << __func__ << " increasing min_mon_release to "
-	    << ceph::to_integer<int>(min_mon_release) << " (" << min_mon_release
+	    << to_integer<int>(min_mon_release) << " (" << min_mon_release
 	    << ")" << dendl;
     pending_map.min_mon_release = min_mon_release;
   }

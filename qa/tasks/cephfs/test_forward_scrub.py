@@ -10,7 +10,10 @@ how the functionality responds to damaged metadata.
 import json
 
 import logging
+import six
+
 from collections import namedtuple
+from io import BytesIO
 from textwrap import dedent
 
 from teuthology.orchestra.run import CommandFailedError
@@ -31,9 +34,10 @@ class TestForwardScrub(CephFSTestCase):
         """
         Read a ceph-encoded string from a rados xattr
         """
-        output = self.fs.rados(["getxattr", obj, attr], pool=pool)
+        output = self.fs.rados(["getxattr", obj, attr], pool=pool,
+                               stdout_data=BytesIO())
         strlen = struct.unpack('i', output[0:4])[0]
-        return output[4:(4 + strlen)]
+        return six.ensure_str(output[4:(4 + strlen)], encoding='ascii')
 
     def _get_paths_to_ino(self):
         inos = {}

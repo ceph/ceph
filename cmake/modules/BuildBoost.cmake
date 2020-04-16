@@ -131,6 +131,9 @@ function(do_build_boost version)
     list(APPEND b2 architecture=arm)
     list(APPEND b2 binary-format=elf)
   endif()
+  if(WITH_BOOST_VALGRIND)
+    list(APPEND b2 valgrind=on)
+  endif()
   set(build_command
     ${b2} headers stage
     #"--buildid=ceph" # changes lib names--can omit for static
@@ -224,6 +227,10 @@ macro(build_boost version)
       INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}"
       IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
       IMPORTED_LOCATION "${Boost_${upper_c}_LIBRARY}")
+    if((c MATCHES "coroutine|context") AND (WITH_BOOST_VALGRIND))
+      set_target_properties(Boost::${c} PROPERTIES
+	INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
+    endif()
     list(APPEND Boost_LIBRARIES ${Boost_${upper_c}_LIBRARY})
   endforeach()
   foreach(c ${Boost_BUILD_COMPONENTS})

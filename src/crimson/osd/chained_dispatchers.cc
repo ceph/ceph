@@ -26,9 +26,9 @@ ChainedDispatchers::ms_handle_connect(crimson::net::ConnectionRef conn) {
 }
 
 seastar::future<>
-ChainedDispatchers::ms_handle_reset(crimson::net::ConnectionRef conn) {
-  return seastar::do_for_each(dispatchers, [conn](Dispatcher* dispatcher) {
-    return dispatcher->ms_handle_reset(conn);
+ChainedDispatchers::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) {
+  return seastar::do_for_each(dispatchers, [conn, is_replace](Dispatcher* dispatcher) {
+    return dispatcher->ms_handle_reset(conn, is_replace);
   });
 }
 

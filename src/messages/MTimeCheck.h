@@ -52,7 +52,7 @@ public:
     }
     return "???";
   }
-  void print(ostream &o) const override {
+  void print(std::ostream &o) const override {
     o << "time_check( " << get_op_name()
       << " e " << epoch << " r " << round;
     if (op == OP_PONG) {
@@ -65,6 +65,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(op, p);
     decode(epoch, p);

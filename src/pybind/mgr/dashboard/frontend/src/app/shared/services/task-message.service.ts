@@ -162,8 +162,10 @@ export class TaskMessageService {
 
   messages = {
     // Host tasks
-    'host/add': this.newTaskMessage(this.commonOperations.add, (metadata) => this.host(metadata)),
-    'host/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+    'host/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.host(metadata)
+    ),
+    'host/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.host(metadata)
     ),
     // OSD tasks
@@ -171,6 +173,9 @@ export class TaskMessageService {
       this.i18n(`OSDs (DriveGroups: {{tracking_id}})`, {
         tracking_id: metadata.tracking_id
       })
+    ),
+    'osd/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.osd(metadata)
     ),
     // Pool tasks
     'pool/create': this.newTaskMessage(
@@ -438,6 +443,12 @@ export class TaskMessageService {
   host(metadata: any) {
     return this.i18n(`host '{{hostname}}'`, {
       hostname: metadata.hostname
+    });
+  }
+
+  osd(metadata: any) {
+    return this.i18n(`OSD '{{svc_id}}'`, {
+      svc_id: metadata.svc_id
     });
   }
 

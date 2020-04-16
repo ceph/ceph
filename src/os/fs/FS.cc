@@ -168,7 +168,7 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
 
   {
     // fall back to writing zeros
-    bufferlist bl;
+    ceph::bufferlist bl;
     bl.append_zero(length);
     r = ::lseek64(fd, offset, SEEK_SET);
     if (r < 0) {

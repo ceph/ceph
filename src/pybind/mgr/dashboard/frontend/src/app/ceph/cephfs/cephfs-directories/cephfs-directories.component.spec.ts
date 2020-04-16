@@ -4,7 +4,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { Validators } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TREE_ACTIONS, TreeComponent, TreeModule } from 'angular-tree-component';
+import { TreeComponent, TreeModule, TREE_ACTIONS } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
@@ -434,8 +434,14 @@ describe('CephfsDirectoriesComponent', () => {
 
     it('tests dir mock', () => {
       const path = '/a/b/c';
-      mockData.createdSnaps = [{ path, name: 's1' }, { path, name: 's2' }];
-      mockData.deletedSnaps = [{ path, name: 'someSnapshot2' }, { path, name: 's2' }];
+      mockData.createdSnaps = [
+        { path, name: 's1' },
+        { path, name: 's2' }
+      ];
+      mockData.deletedSnaps = [
+        { path, name: 'someSnapshot2' },
+        { path, name: 's2' }
+      ];
       const dir = mockLib.dir('/a/b', 'c', 2);
       expect(dir.path).toBe('/a/b/c');
       expect(dir.parent).toBe('/a/b');
@@ -623,28 +629,48 @@ describe('CephfsDirectoriesComponent', () => {
 
     describe('used quotas', () => {
       it('should use no quota if none is set', () => {
-        mockLib.setFourQuotaDirs([[0, 0], [0, 0], [0, 0], [0, 0]]);
+        mockLib.setFourQuotaDirs([
+          [0, 0],
+          [0, 0],
+          [0, 0],
+          [0, 0]
+        ]);
         assert.noQuota('files');
         assert.noQuota('bytes');
         assert.dirQuotas(0, 0);
       });
 
       it('should use quota from upper parents', () => {
-        mockLib.setFourQuotaDirs([[100, 0], [0, 8], [0, 0], [0, 0]]);
+        mockLib.setFourQuotaDirs([
+          [100, 0],
+          [0, 8],
+          [0, 0],
+          [0, 0]
+        ]);
         assert.quotaIsInherited('files', 100, '/1');
         assert.quotaIsInherited('bytes', '8 KiB', '/1/2');
         assert.dirQuotas(0, 0);
       });
 
       it('should use quota from the parent with the lowest value (deep inheritance)', () => {
-        mockLib.setFourQuotaDirs([[200, 1], [100, 4], [400, 3], [300, 2]]);
+        mockLib.setFourQuotaDirs([
+          [200, 1],
+          [100, 4],
+          [400, 3],
+          [300, 2]
+        ]);
         assert.quotaIsInherited('files', 100, '/1/2');
         assert.quotaIsInherited('bytes', '1 KiB', '/1');
         assert.dirQuotas(2048, 300);
       });
 
       it('should use current value', () => {
-        mockLib.setFourQuotaDirs([[200, 2], [300, 4], [400, 3], [100, 1]]);
+        mockLib.setFourQuotaDirs([
+          [200, 2],
+          [300, 4],
+          [400, 3],
+          [100, 1]
+        ]);
         assert.quotaIsNotInherited('files', 100, 200);
         assert.quotaIsNotInherited('bytes', '1 KiB', 2048);
         assert.dirQuotas(1024, 100);

@@ -86,6 +86,7 @@ NS1=ns1
 NS2=ns2
 TEMPDIR=
 CEPH_ID=${CEPH_ID:-mirror}
+RBD_IMAGE_FEATURES=${RBD_IMAGE_FEATURES:-layering,exclusive-lock,journaling}
 MIRROR_USER_ID_PREFIX=${MIRROR_USER_ID_PREFIX:-${CEPH_ID}.}
 MIRROR_POOL_MODE=${MIRROR_POOL_MODE:-pool}
 MIRROR_IMAGE_MODE=${MIRROR_IMAGE_MODE:-journal}
@@ -847,7 +848,7 @@ create_image()
     fi
 
     rbd --cluster ${cluster} create --size ${size} \
-        --image-feature layering,exclusive-lock,journaling $@ ${pool}/${image}
+        --image-feature "${RBD_IMAGE_FEATURES}" $@ ${pool}/${image}
 }
 
 create_image_and_enable_mirror()
@@ -957,8 +958,7 @@ clone_image()
 
     rbd --cluster ${cluster} clone \
         ${parent_pool}/${parent_image}@${parent_snap} \
-        ${clone_pool}/${clone_image} \
-        --image-feature layering,exclusive-lock,journaling $@
+        ${clone_pool}/${clone_image} --image-feature "${RBD_IMAGE_FEATURES}" $@
 }
 
 clone_image_and_enable_mirror()

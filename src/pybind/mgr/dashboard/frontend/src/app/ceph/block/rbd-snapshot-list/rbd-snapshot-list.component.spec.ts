@@ -1,9 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
@@ -26,7 +28,8 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
-import { RbdSnapshotFormComponent } from '../rbd-snapshot-form/rbd-snapshot-form.component';
+import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
@@ -45,15 +48,17 @@ describe('RbdSnapshotListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [RbdSnapshotListComponent],
+    declarations: [RbdSnapshotListComponent, RbdTabsComponent],
     imports: [
-      DataTableModule,
-      ComponentsModule,
-      ToastrModule.forRoot(),
       ApiModule,
+      BrowserAnimationsModule,
+      ComponentsModule,
+      DataTableModule,
       HttpClientTestingModule,
+      PipesModule,
       RouterTestingModule,
-      PipesModule
+      TabsModule.forRoot(),
+      ToastrModule.forRoot()
     ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
@@ -110,7 +115,7 @@ describe('RbdSnapshotListComponent', () => {
       };
     });
 
-    it('should call stopLoadingSpinner if the request fails', <any>fakeAsync(() => {
+    it('should call stopLoadingSpinner if the request fails', fakeAsync(() => {
       expect(called).toBe(false);
       component._asyncTask('deleteSnapshot', 'rbd/snap/delete', 'someName');
       tick(500);
@@ -187,7 +192,7 @@ describe('RbdSnapshotListComponent', () => {
       component.rbdName = 'image01';
       spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
         const ref = new BsModalRef();
-        ref.content = new RbdSnapshotFormComponent(
+        ref.content = new RbdSnapshotFormModalComponent(
           null,
           null,
           null,

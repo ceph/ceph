@@ -26,6 +26,7 @@ tasks:
       - Monitor daemon marked osd
       - Behind on trimming
       - Manager daemon
+      - Not found or unloadable
     conf:
       global:
         mon warn on pool no app: false

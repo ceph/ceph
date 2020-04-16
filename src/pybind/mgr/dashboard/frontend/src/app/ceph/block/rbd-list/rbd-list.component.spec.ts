@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { AlertModule } from 'ngx-bootstrap/alert';
@@ -26,6 +27,7 @@ import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from '../rbd-details/rbd-details.component';
 import { RbdSnapshotListComponent } from '../rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdListComponent } from './rbd-list.component';
 import { RbdModel } from './rbd-model';
 
@@ -41,6 +43,7 @@ describe('RbdListComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       SharedModule,
       BsDropdownModule.forRoot(),
       TabsModule.forRoot(),
@@ -55,7 +58,8 @@ describe('RbdListComponent', () => {
       RbdListComponent,
       RbdDetailsComponent,
       RbdSnapshotListComponent,
-      RbdConfigurationListComponent
+      RbdConfigurationListComponent,
+      RbdTabsComponent
     ],
     providers: [TaskListService, i18nProviders]
   });

@@ -1,7 +1,0 @@
-overrides:
-  rgw:
-    frontend: civetweb
-tasks:
-  - sequential:
-    - rgw-final-workload
-    - print: "**** done rgw 4-final-workload"

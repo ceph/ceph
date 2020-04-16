@@ -53,6 +53,15 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 
+using std::cerr;
+using std::cout;
+using std::map;
+using std::ostringstream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
 namespace {
 
 TracepointProvider::Traits osd_tracepoint_traits("libosd_tp.so",
@@ -241,7 +250,7 @@ int main(int argc, const char **argv)
 	try {
 	  decode(e, p);
 	}
-	catch (const buffer::error &e) {
+	catch (const ceph::buffer::error &e) {
 	  derr << "failed to decode LogEntry at offset " << pos << dendl;
 	  forker.exit(1);
 	}

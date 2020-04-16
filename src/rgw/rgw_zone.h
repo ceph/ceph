@@ -268,9 +268,9 @@ struct RGWZonePlacementInfo {
   rgw_pool index_pool;
   rgw_pool data_extra_pool; /* if not set we should use data_pool */
   RGWZoneStorageClasses storage_classes;
-  RGWBucketIndexType index_type;
+  rgw::BucketIndexType index_type;
 
-  RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
+  RGWZonePlacementInfo() : index_type(rgw::BucketIndexType::Normal) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(7, 1, bl);
@@ -301,7 +301,7 @@ struct RGWZonePlacementInfo {
     if (struct_v >= 5) {
       uint32_t it;
       decode(it, bl);
-      index_type = (RGWBucketIndexType)it;
+      index_type = (rgw::BucketIndexType)it;
     }
     string standard_compression_type;
     if (struct_v >= 6) {

@@ -84,13 +84,13 @@ namespace rados {
             return true;
           return false;
         }
-        void dump(Formatter *f) const;
+        void dump(ceph::Formatter *f) const;
 	friend std::ostream& operator<<(std::ostream& out,
 					const locker_id_t& data) {
 	  out << data.locker;
 	  return out;
 	}
-        static void generate_test_instances(list<locker_id_t*>& o);
+        static void generate_test_instances(std::list<locker_id_t*>& o);
       };
       WRITE_CLASS_ENCODER(locker_id_t)
 
@@ -118,9 +118,10 @@ namespace rados {
           decode(description, bl);
           DECODE_FINISH(bl);
         }
-        void dump(Formatter *f) const;
+        void dump(ceph::Formatter *f) const;
 	friend std::ostream& operator<<(std::ostream& out,
 					const locker_info_t& data) {
+	  using ceph::operator <<;
 	  out << "{addr:" << data.addr << ", exp:";
 
 	  const auto& exp = data.expiration;
@@ -132,12 +133,12 @@ namespace rados {
 
 	  return out;
 	}
-        static void generate_test_instances(list<locker_info_t *>& o);
+        static void generate_test_instances(std::list<locker_info_t *>& o);
       };
       WRITE_CLASS_ENCODER_FEATURES(locker_info_t)
 
       struct lock_info_t {
-        map<locker_id_t, locker_info_t> lockers; // map of lockers
+	std::map<locker_id_t, locker_info_t> lockers; // map of lockers
         ClsLockType lock_type;                   // lock type (exclusive / shared)
 	std::string tag;                              // tag: operations on lock can only succeed with this tag
                                                  //      as long as set of non expired lockers
@@ -161,8 +162,8 @@ namespace rados {
           DECODE_FINISH(bl);
         }
         lock_info_t() : lock_type(LOCK_NONE) {}
-        void dump(Formatter *f) const;
-        static void generate_test_instances(list<lock_info_t *>& o);
+        void dump(ceph::Formatter *f) const;
+        static void generate_test_instances(std::list<lock_info_t *>& o);
       };
       WRITE_CLASS_ENCODER_FEATURES(lock_info_t);
     }

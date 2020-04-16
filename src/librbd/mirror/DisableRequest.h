@@ -50,6 +50,9 @@ private:
    * PROMOTE_IMAGE (skip if primary)                              *
    *    |                                                         *
    *    v                                                         *
+   * REFRESH_IMAGE (skip if necessary)                            *
+   *    |                                                         *
+   *    v                                                         *
    * GET_CLIENTS <----------------------------------------\ * * * *
    *    |     | (unregister clients)                      |       *  (on error)
    *    |     |/----------------------------\             |       *
@@ -101,8 +104,15 @@ private:
   void send_promote_image();
   Context *handle_promote_image(int *result);
 
+  void send_refresh_image();
+  Context* handle_refresh_image(int* result);
+
+  void clean_mirror_state();
+
   void send_get_clients();
   Context *handle_get_clients(int *result);
+
+  void remove_mirror_snapshots();
 
   void send_remove_snap(const std::string &client_id,
                         const cls::rbd::SnapshotNamespace &snap_namespace,

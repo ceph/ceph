@@ -24,8 +24,8 @@ class MMDSResolveAck : public SafeMessage {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:
-  map<metareqid_t, bufferlist> commit;
-  vector<metareqid_t> abort;
+  std::map<metareqid_t, ceph::buffer::list> commit;
+  std::vector<metareqid_t> abort;
 
 protected:
   MMDSResolveAck() : SafeMessage{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}

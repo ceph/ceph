@@ -18,6 +18,12 @@
 // rbd feature validation
 #include "librbd/Features.h"
 
+using std::ostream;
+using std::ostringstream;
+
+using ceph::Formatter;
+using ceph::parse_timespan;
+
 namespace {
 class printer : public boost::static_visitor<> {
   ostream& out;
@@ -198,7 +204,7 @@ int Option::parse_value(
   } else if (type == Option::TYPE_SECS) {
     try {
       *out = parse_timespan(val);
-    } catch (const invalid_argument& e) {
+    } catch (const std::invalid_argument& e) {
       *error_message = e.what();
       return -EINVAL;
     }
@@ -1658,7 +1664,7 @@ std::vector<Option> get_global_options() {
     .set_description("nearfull ratio for OSDs to be set during initial creation of cluster"),
 
     Option("mon_osd_initial_require_min_compat_client", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("jewel")
+    .set_default("luminous")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
@@ -2032,17 +2038,17 @@ std::vector<Option> get_global_options() {
     .set_description("file to dump paxos transactions to")
     .add_see_also("mon_debug_dump_transactions"),
 
-    Option("mon_debug_no_require_nautilus", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(false)
-    .add_service("mon")
-    .set_flag(Option::FLAG_CLUSTER_CREATE)
-    .set_description("do not set nautilus feature for new mon clusters"),
-
     Option("mon_debug_no_require_octopus", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .add_service("mon")
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("do not set octopus feature for new mon clusters"),
+
+    Option("mon_debug_no_require_pacific", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .add_service("mon")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
+    .set_description("do not set pacific feature for new mon clusters"),
 
     Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -2606,7 +2612,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jerasure lrc"
-  #ifdef HAVE_BETTER_YASM_ELF64
+  #if defined(HAVE_BETTER_YASM_ELF64) || defined(HAVE_ARMV8_SIMD)
          " isa"
   #endif
         )
@@ -3280,11 +3286,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_class_load_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap")
     .set_description(""),
 
     Option("osd_class_default_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount rgw rgw_gc timeindex user version cas cmpomap")
     .set_description(""),
 
     Option("osd_check_for_log_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4000,8 +4006,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description(""),
+    .set_default(false)
+    .set_description("Enabled buffered IO for bluefs reads.")
+    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold blocks from the compressed SST files itself, they can be read from page cache instead of from the disk.  This option previously was enabled by default, however in some test cases it appears to cause excessive swap utilization by the linux kernel and a large negative performance impact after several hours of run time.  Please exercise caution when enabling."),
 
     Option("bluefs_sync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -4009,6 +4016,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("bitmap")
+    .set_enum_allowed({"bitmap", "stupid", "avl", "hybrid"})
     .set_description(""),
 
     Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4193,7 +4201,7 @@ std::vector<Option> get_global_options() {
     .set_description("Writes smaller than this size will be written to the journal and then asynchronously written to the device.  This can be beneficial when using rotational media where seeks are expensive, and is helpful both with and without solid state journal/wal devices."),
 
     Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(32768)
+    .set_default(65536)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for rotational media")
     .add_see_also("bluestore_prefer_deferred_size"),
@@ -4376,7 +4384,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("bitmap")
-    .set_enum_allowed({"bitmap", "stupid", "avl"})
+    .set_enum_allowed({"bitmap", "stupid", "avl", "hybrid"})
     .set_description("Allocator policy")
     .set_long_description("Allocator to use for bluestore.  Stupid should only be used for testing."),
 
@@ -4629,6 +4637,10 @@ std::vector<Option> get_global_options() {
     Option("bluestore_avl_alloc_bf_free_pct", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(4)
     .set_description(""),
+
+    Option("bluestore_hybrid_alloc_mem_cap", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(64_M)
+    .set_description("Maximum RAM hybrid allocator should use before enabling bitmap supplement"),
 
     Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb_original")
@@ -7748,6 +7760,11 @@ std::vector<Option> get_mds_options() {
     Option("mds_reconnect_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(45)
     .set_description("timeout in seconds to wait for clients to reconnect during MDS reconnect recovery state"),
+
+    Option("mds_deny_all_reconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("flag to deny all client reconnects during failover"),
 
     Option("mds_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)

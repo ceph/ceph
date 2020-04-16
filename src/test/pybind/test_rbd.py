@@ -496,7 +496,7 @@ def test_features_to_string():
     features_string = rbd.features_to_string(features)
     eq(features_string, "layering")
 
-    features = 1024
+    features = 16777216
     assert_raises(InvalidArgument, rbd.features_to_string, features)
 
 @require_new_format()
@@ -587,6 +587,10 @@ class TestImage(object):
 
     def test_image_auto_close(self):
         image = Image(ioctx, image_name)
+
+    def test_use_after_close(self):
+        self.image.close()
+        assert_raises(InvalidArgument, self.image.stat)
 
     def test_write(self):
         data = rand_data(256)
@@ -1372,6 +1376,30 @@ class TestClone(object):
                                self.image.stripe_unit(),
                                self.image.stripe_count())
 
+    def test_stripe_unit_and_count(self):
+        global features
+        global ioctx
+        image_name = get_temp_image_name()
+        RBD().create(ioctx, image_name, IMG_SIZE, IMG_ORDER, old_format=False,
+                     features=int(features), stripe_unit=1048576, stripe_count=8)
+        image = Image(ioctx, image_name)
+        image.create_snap('snap1')
+        image.protect_snap('snap1')
+        clone_name = get_temp_image_name()
+        RBD().clone(ioctx, image_name, 'snap1', ioctx, clone_name)
+        clone = Image(ioctx, clone_name)
+
+        eq(1048576, clone.stripe_unit())
+        eq(8, clone.stripe_count())
+
+        clone.close()
+        RBD().remove(ioctx, clone_name)
+        image.unprotect_snap('snap1')
+        image.remove_snap('snap1')
+        image.close()
+        RBD().remove(ioctx, image_name)
+
+
     def test_unprotected(self):
         self.image.create_snap('snap2')
         global features
@@ -1593,12 +1621,13 @@ class TestClone(object):
         assert_raises(ReadOnlyImage, self.clone.flatten)
         self.clone.remove_snap('snap2')
 
-    def check_flatten_with_order(self, new_order):
+    def check_flatten_with_order(self, new_order, stripe_unit=None,
+                                 stripe_count=None):
         global ioctx
         global features
         clone_name2 = get_temp_image_name()
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         #with Image(ioctx, 'clone2') as clone:
         clone2 = Image(ioctx, clone_name2)
         clone2.flatten()
@@ -1608,7 +1637,7 @@ class TestClone(object):
 
         # flatten after resizing to non-block size
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         with Image(ioctx, clone_name2) as clone:
             clone.resize(IMG_SIZE // 2 - 1)
             clone.flatten()
@@ -1617,7 +1646,7 @@ class TestClone(object):
 
         # flatten after resizing to non-block size
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
-                       features, new_order)
+                       features, new_order, stripe_unit, stripe_count)
         with Image(ioctx, clone_name2) as clone:
             clone.resize(IMG_SIZE // 2 + 1)
             clone.flatten()
@@ -1628,7 +1657,7 @@ class TestClone(object):
         self.check_flatten_with_order(IMG_ORDER)
 
     def test_flatten_smaller_order(self):
-        self.check_flatten_with_order(IMG_ORDER - 2)
+        self.check_flatten_with_order(IMG_ORDER - 2, 1048576, 1)
 
     def test_flatten_larger_order(self):
         self.check_flatten_with_order(IMG_ORDER + 2)
@@ -1855,10 +1884,13 @@ class TestExclusiveLock(object):
                 rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
                 with Image(ioctx2, image_name) as image, \
                      Image(blacklist_ioctx, image_name) as blacklist_image:
+
+                    lock_owners = list(image.lock_get_owners())
+                    eq(0, len(lock_owners))
+
                     blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
                     assert_raises(ReadOnlyImage, image.lock_acquire,
                                   RBD_LOCK_MODE_EXCLUSIVE)
-
                     lock_owners = list(image.lock_get_owners())
                     eq(1, len(lock_owners))
                     eq(RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]['mode'])

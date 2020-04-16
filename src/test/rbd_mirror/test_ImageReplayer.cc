@@ -17,6 +17,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
+#include "test/librbd/test_support.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"
@@ -60,6 +61,7 @@ class TestImageReplayer : public TestFixture {
 public:
   static const cls::rbd::MirrorImageMode MIRROR_IMAGE_MODE =
     T::MIRROR_IMAGE_MODE;
+  static const uint64_t FEATURES = T::FEATURES;
 
   struct C_WatchCtx : public librados::WatchCtx2 {
     TestImageReplayer *test;
@@ -117,9 +119,8 @@ public:
     uint64_t snap_id;
     EXPECT_EQ(0, m_remote_ioctx.selfmanaged_snap_create(&snap_id));
 
-    uint64_t features = librbd::util::get_rbd_default_features(g_ceph_context);
+    uint64_t features = FEATURES;
     if (MIRROR_IMAGE_MODE == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
-      features |= RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_remote_ioctx,
                                                    RBD_MIRROR_MODE_POOL));
       EXPECT_EQ(0, librbd::api::Mirror<>::mode_set(m_local_ioctx,
@@ -569,16 +570,23 @@ public:
 template <typename T>
 int TestImageReplayer<T>::_image_number;
 
-template <cls::rbd::MirrorImageMode _mirror_image_mode>
+template <cls::rbd::MirrorImageMode _mirror_image_mode, uint64_t _features>
 class TestImageReplayerParams {
 public:
   static const cls::rbd::MirrorImageMode MIRROR_IMAGE_MODE = _mirror_image_mode;
+  static const uint64_t FEATURES = _features;
 };
 
 typedef ::testing::Types<TestImageReplayerParams<
-                           cls::rbd::MIRROR_IMAGE_MODE_JOURNAL>,
+                           cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, 125>,
                          TestImageReplayerParams<
-                           cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT>>
+                           cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, 1>,
+                         TestImageReplayerParams<
+                           cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, 5>,
+                         TestImageReplayerParams<
+                           cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, 61>,
+                         TestImageReplayerParams<
+                           cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, 125>>
     TestImageReplayerTypes;
 
 TYPED_TEST_SUITE(TestImageReplayer, TestImageReplayerTypes);
@@ -588,10 +596,8 @@ TYPED_TEST(TestImageReplayer, Bootstrap)
   this->bootstrap();
 }
 
-typedef TestImageReplayer<TestImageReplayerParams<cls::rbd::MIRROR_IMAGE_MODE_JOURNAL>>
-  TestImageReplayerJournal;
-typedef TestImageReplayer<TestImageReplayerParams<cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT>>
-  TestImageReplayerSnapshot;
+typedef TestImageReplayer<TestImageReplayerParams<
+    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, 125>> TestImageReplayerJournal;
 
 TYPED_TEST(TestImageReplayer, BootstrapErrorLocalImageExists)
 {
@@ -1409,6 +1415,10 @@ TYPED_TEST(TestImageReplayer, ImageRename) {
 }
 
 TYPED_TEST(TestImageReplayer, UpdateFeatures) {
+  const uint64_t FEATURES_TO_UPDATE =
+    RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF | RBD_FEATURE_DEEP_FLATTEN;
+  REQUIRE((this->FEATURES & FEATURES_TO_UPDATE) == FEATURES_TO_UPDATE);
+
   librbd::ImageCtx* remote_image_ctx = nullptr;
   this->open_remote_image(&remote_image_ctx);
 

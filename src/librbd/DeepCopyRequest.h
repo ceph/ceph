@@ -24,6 +24,7 @@ namespace deep_copy {
 
 template <typename> class ImageCopyRequest;
 template <typename> class SnapshotCopyRequest;
+struct Handler;
 
 }
 
@@ -39,11 +40,11 @@ public:
                                  const deep_copy::ObjectNumber &object_number,
                                  ContextWQ *work_queue,
                                  SnapSeqs *snap_seqs,
-                                 ProgressContext *prog_ctx,
+                                 deep_copy::Handler *handler,
                                  Context *on_finish) {
     return new DeepCopyRequest(src_image_ctx, dst_image_ctx, src_snap_id_start,
                                src_snap_id_end, dst_snap_id_start, flatten,
-                               object_number, work_queue, snap_seqs, prog_ctx,
+                               object_number, work_queue, snap_seqs, handler,
                                on_finish);
   }
 
@@ -53,7 +54,7 @@ public:
                   librados::snap_t dst_snap_id_start,
                   bool flatten, const deep_copy::ObjectNumber &object_number,
                   ContextWQ *work_queue, SnapSeqs *snap_seqs,
-                  ProgressContext *prog_ctx, Context *on_finish);
+                  deep_copy::Handler *handler, Context *on_finish);
   ~DeepCopyRequest();
 
   void send();
@@ -98,7 +99,7 @@ private:
   deep_copy::ObjectNumber m_object_number;
   ContextWQ *m_work_queue;
   SnapSeqs *m_snap_seqs;
-  ProgressContext *m_prog_ctx;
+  deep_copy::Handler *m_handler;
   Context *m_on_finish;
 
   CephContext *m_cct;

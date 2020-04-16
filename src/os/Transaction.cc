@@ -4,6 +4,16 @@
 #include "os/Transaction.h"
 #include "common/Formatter.h"
 
+using std::list;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
 			      bufferlist *out)
 {

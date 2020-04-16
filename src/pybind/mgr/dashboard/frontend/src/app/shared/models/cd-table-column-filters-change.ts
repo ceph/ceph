@@ -1,4 +1,4 @@
-import { TableColumnProp } from '@swimlane/ngx-datatable/release/types/table-column.type';
+import { TableColumnProp } from '@swimlane/ngx-datatable';
 
 export interface CdTableColumnFiltersChange {
   /**

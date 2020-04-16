@@ -25,6 +25,7 @@ $popover-max-width: 350px;
 @import '~bootstrap/scss/bootstrap';
 @import '~fork-awesome/scss/fork-awesome';
 @import 'app/ceph/dashboard/info-card/info-card-popover.scss';
+@import 'bootstrap-extends';
 
 /* Reset checkbox success color */
 .was-validated .custom-control-input:valid,
@@ -345,6 +346,10 @@ cd-modal {
   .cd-col-form-input {
     @extend .col-lg-8;
   }
+
+  .cd-col-form-offset {
+    @extend .offset-lg-4;
+  }
 }
 
 /* Card */
@@ -490,4 +495,12 @@ bfv-messages {
 .badge-tab {
   color: $color-solid-gray;
   background-color: $color-light-shade-gray;
+}
+
+// angular-tree-component
+tree-root {
+  tree-viewport {
+    // Fix visual bug when tree is empty
+    min-height: 1em;
+  }
 }

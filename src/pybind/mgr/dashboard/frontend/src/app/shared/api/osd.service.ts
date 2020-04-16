@@ -1,11 +1,10 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { map } from 'rxjs/operators';
 
 import * as _ from 'lodash';
-import { DriveGroups } from '../../ceph/cluster/osd/osd-form/drive-groups.interface';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
@@ -64,11 +63,11 @@ export class OsdService {
 
   constructor(private http: HttpClient, private i18n: I18n, private deviceService: DeviceService) {}
 
-  create(driveGroups: DriveGroups) {
+  create(driveGroups: Object[]) {
     const request = {
       method: 'drive_groups',
       data: driveGroups,
-      tracking_id: _.join(_.keys(driveGroups), ', ')
+      tracking_id: _.join(_.map(driveGroups, 'service_id'), ', ')
     };
     return this.http.post(this.path, request, { observe: 'response' });
   }
@@ -138,12 +137,26 @@ export class OsdService {
     return this.http.post(`${this.path}/${id}/destroy`, null);
   }
 
+  delete(id: number, force?: boolean) {
+    const options = force ? { params: new HttpParams().set('force', 'true') } : {};
+    options['observe'] = 'response';
+    return this.http.delete(`${this.path}/${id}`, options);
+  }
+
   safeToDestroy(ids: string) {
     interface SafeToDestroyResponse {
-      'safe-to-destroy': boolean;
+      is_safe_to_destroy: boolean;
       message?: string;
     }
     return this.http.get<SafeToDestroyResponse>(`${this.path}/safe_to_destroy?ids=${ids}`);
+  }
+
+  safeToDelete(ids: string) {
+    interface SafeToDeleteResponse {
+      is_safe_to_delete: boolean;
+      message?: string;
+    }
+    return this.http.get<SafeToDeleteResponse>(`${this.path}/safe_to_delete?svc_ids=${ids}`);
   }
 
   getDevices(osdId: number) {

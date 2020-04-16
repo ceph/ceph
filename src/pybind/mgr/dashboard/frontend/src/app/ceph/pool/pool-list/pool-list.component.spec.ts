@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import * as _ from 'lodash';
@@ -49,6 +50,7 @@ describe('PoolListComponent', () => {
   configureTestBed({
     declarations: [PoolListComponent, PoolDetailsComponent, RbdConfigurationListComponent],
     imports: [
+      BrowserAnimationsModule,
       SharedModule,
       ToastrModule.forRoot(),
       RouterTestingModule,
@@ -72,7 +74,11 @@ describe('PoolListComponent', () => {
   });
 
   it('should have columns that are sortable', () => {
-    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+    expect(
+      component.columns
+        .filter((column) => !(column.prop === undefined))
+        .every((column) => Boolean(column.prop))
+    ).toBeTruthy();
   });
 
   describe('monAllowPoolDelete', () => {
@@ -320,7 +326,14 @@ describe('PoolListComponent', () => {
         stats: {
           bytes_used: { latest: 5, rate: 0, rates: [] },
           max_avail: { latest: 15, rate: 0, rates: [] },
-          rd_bytes: { latest: 6, rate: 4, rates: [[0, 2], [1, 6]] }
+          rd_bytes: {
+            latest: 6,
+            rate: 4,
+            rates: [
+              [0, 2],
+              [1, 6]
+            ]
+          }
         },
         pg_status: { 'active+clean': 8, down: 2 }
       });
@@ -420,7 +433,7 @@ describe('PoolListComponent', () => {
 
   describe('getSelectionTiers', () => {
     const setSelectionTiers = (tiers: number[]) => {
-      component.selection.selected = [{ tiers }];
+      component.expandedRow = { tiers };
       component.getSelectionTiers();
     };
 
@@ -430,31 +443,31 @@ describe('PoolListComponent', () => {
 
     it('should select multiple existing cache tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(getPoolList());
+      expect(component.cacheTiers).toEqual(getPoolList());
     });
 
     it('should select correct existing cache tier', () => {
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
     });
 
     it('should not select cache tier if id is invalid', () => {
       setSelectionTiers([-1]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
 
     it('should not select cache tier if empty', () => {
       setSelectionTiers([]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
 
     it('should be able to selected one pool with multiple tiers, than with a single tier, than with no tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(getPoolList());
+      expect(component.cacheTiers).toEqual(getPoolList());
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
+      expect(component.cacheTiers).toEqual([createPool('a', 0)]);
       setSelectionTiers([]);
-      expect(component.selectionCacheTiers).toEqual([]);
+      expect(component.cacheTiers).toEqual([]);
     });
   });
 

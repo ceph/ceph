@@ -22,9 +22,9 @@
 class MExportDir : public SafeMessage {
 public:
   dirfrag_t dirfrag;
-  bufferlist export_data;
-  vector<dirfrag_t> bounds;
-  bufferlist client_map;
+  ceph::buffer::list export_data;
+  std::vector<dirfrag_t> bounds;
+  ceph::buffer::list client_map;
 
 protected:
   MExportDir() : SafeMessage{MSG_MDS_EXPORTDIR} {}
@@ -36,7 +36,7 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "Ex"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export(" << dirfrag << ")";
   }
 
@@ -52,6 +52,7 @@ public:
     encode(client_map, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(bounds, p);

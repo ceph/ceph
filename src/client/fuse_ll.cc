@@ -941,7 +941,7 @@ static int remount_cb(void *handle)
   // trims all unused dentries in the file system
   char cmd[128+PATH_MAX];
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
-  snprintf(cmd, sizeof(cmd), "mount -i -o remount %s", cfuse->mountpoint);
+  snprintf(cmd, sizeof(cmd), "LIBMOUNT_FSTAB=/dev/null mount -i -o remount %s", cfuse->mountpoint);
   int r = system(cmd);
   if (r != 0 && r != -1) {
     r = WEXITSTATUS(r);

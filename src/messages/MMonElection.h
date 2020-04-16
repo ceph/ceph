@@ -40,18 +40,18 @@ public:
     default: ceph_abort(); return 0;
     }
   }
-  
+
   uuid_d fsid;
   int32_t op;
   epoch_t epoch;
-  bufferlist monmap_bl;
-  set<int32_t> quorum;
+  ceph::buffer::list monmap_bl;
+  std::set<int32_t> quorum;
   uint64_t quorum_features;
   mon_feature_t mon_features;
   ceph_release_t mon_release{ceph_release_t::unknown};
-  bufferlist sharing_bl;
-  map<string,string> metadata;
-  
+  ceph::buffer::list sharing_bl;
+  std::map<std::string,std::string> metadata;
+
   MMonElection() : Message{MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION},
     op(0), epoch(0),
     quorum_features(0),
@@ -71,13 +71,13 @@ public:
 private:
   ~MMonElection() override {}
 
-public:  
+public:
   std::string_view get_type_name() const override { return "election"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "election(" << fsid << " " << get_opname(op)
 	<< " rel " << (int)mon_release << " e" << epoch << ")";
   }
-  
+
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     if (monmap_bl.length() && (features != CEPH_FEATURES_ALL)) {
@@ -102,6 +102,7 @@ public:
     encode(mon_release, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(op, p);

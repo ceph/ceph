@@ -103,8 +103,9 @@ class Scan(object):
             file_json_key = file_
             if file_.endswith('_dmcrypt'):
                 file_json_key = file_.rstrip('_dmcrypt')
-                logger.info(('reading file {}, stripping _dmcrypt',
-                             'suffix').format(file_))
+                logger.info(
+                    'reading file {}, stripping _dmcrypt suffix'.format(file_)
+                )
             if os.path.islink(file_path):
                 if os.path.exists(file_path):
                     osd_metadata[file_json_key] = self.scan_device(file_path)

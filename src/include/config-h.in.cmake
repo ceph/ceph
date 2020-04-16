@@ -238,6 +238,9 @@
 /* yasm can also build the isa-l */
 #cmakedefine HAVE_BETTER_YASM_ELF64
 
+/* Define if isa-l is compiled for arm64 */
+#cmakedefine HAVE_ARMV8_SIMD
+
 /* Define to 1 if strerror_r returns char *. */
 #cmakedefine STRERROR_R_CHAR_P 1
 
@@ -341,5 +344,8 @@
 
 /* Define if RWL is enabled */
 #cmakedefine WITH_RBD_RWL
+
+/* Shared library extension, such as .so, .dll or .dylib */
+#cmakedefine CMAKE_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"
 
 #endif /* CONFIG_H */

@@ -14,7 +14,7 @@ TMPDIR=$(mktemp -d)
 
 function cleanup()
 {
-    dump_all_logs
+    dump_all_logs $FSID
     rm -rf $TMPDIR
 }
 trap cleanup EXIT
@@ -89,7 +89,7 @@ fi
 function expect_false()
 {
         set -x
-        if "$@"; then return 1; else return 0; fi
+        if eval "$@"; then return 1; else return 0; fi
 }
 
 function is_available()
@@ -114,8 +114,9 @@ function is_available()
 
 function dump_log()
 {
-    local name="$1"
-    local num_lines="$2"
+    local fsid="$1"
+    local name="$2"
+    local num_lines="$3"
 
     if [ -z $num_lines ]; then
         num_lines=100
@@ -125,17 +126,32 @@ function dump_log()
     echo 'dump daemon log:' $name
     echo '-------------------------'
 
-    $CEPHADM logs --name $name -- --no-pager -n $num_lines
+    $CEPHADM logs --fsid $fsid --name $name -- --no-pager -n $num_lines
 }
 
 function dump_all_logs()
 {
-    names=$($CEPHADM ls | jq -r '.[].name')
+    local fsid="$1"
+    local names=$($CEPHADM ls | jq -r '.[] | select(.fsid == "'$fsid'").name')
 
     echo 'dumping logs for daemons: ' $names
     for name in $names; do
-        dump_log $name
+        dump_log $fsid $name
     done
+}
+
+function nfs_stop()
+{
+    # stop the running nfs server
+    local units="nfs-server nfs-kernel-server"
+    for unit in $units; do
+        if systemctl status $unit; then
+            $SUDO systemctl stop $unit
+        fi
+    done
+
+    # ensure the NFS port is no longer in use
+    expect_false "$SUDO ss -tlnp '( sport = :nfs )' | grep LISTEN"
 }
 
 ## prepare + check host
@@ -166,6 +182,7 @@ IP=127.0.0.1
 cat <<EOF > $ORIG_CONFIG
 [global]
 	log to file = true
+        osd crush chooseleaf type = 0
 EOF
 $CEPHADM bootstrap \
       --mon-id a \
@@ -175,7 +192,10 @@ $CEPHADM bootstrap \
       --config $ORIG_CONFIG \
       --output-config $CONFIG \
       --output-keyring $KEYRING \
-      --allow-overwrite
+      --output-pub-ssh-key $TMPDIR/ceph.pub \
+      --allow-overwrite \
+      --skip-mon-network \
+      --skip-monitoring-stack
 test -e $CONFIG
 test -e $KEYRING
 rm -f $ORIG_CONFIG
@@ -196,6 +216,11 @@ systemctl | grep system-ceph | grep -q .slice  # naming is escaped and annoying
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       ceph -s | grep $FSID
 
+for t in mon mgr node-exporter prometheus grafana; do
+    $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	     ceph orch apply $t --unmanaged
+done
+
 ## ls
 $CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").fsid' \
     | grep $FSID
@@ -208,15 +233,18 @@ $CEPHADM ls | jq '.[]' | jq 'select(.name == "mon.a").version' | grep -q \\.
 ## deploy
 # add mon.b
 cp $CONFIG $MONCONFIG
-echo "public addr = $IP:3301" >> $MONCONFIG
+echo "public addrv = [v2:$IP:3301,v1:$IP:6790]" >> $MONCONFIG
 $CEPHADM deploy --name mon.b \
       --fsid $FSID \
       --keyring /var/lib/ceph/$FSID/mon.a/keyring \
-      --config $CONFIG
+      --config $MONCONFIG
 for u in ceph-$FSID@mon.b; do
     systemctl is-enabled $u
     systemctl is-active $u
 done
+cond="$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	    ceph mon stat | grep '2 mons'"
+is_available "mon.b" "$cond" 30
 
 # add mgr.y
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
@@ -250,11 +278,38 @@ loop_dev=$($SUDO losetup -f)
 $SUDO vgremove -f $OSD_VG_NAME || true
 $SUDO losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
 $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
+
+# osd boostrap keyring
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+      ceph auth get client.bootstrap-osd > $TMPDIR/keyring.bootstrap.osd
+
+# create lvs first so ceph-volume doesn't overlap with lv creation
 for id in `seq 0 $((--OSD_TO_CREATE))`; do
     $SUDO lvcreate -l $((100/$OSD_TO_CREATE))%VG -n $OSD_LV_NAME.$id $OSD_VG_NAME
-    $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
-            ceph orch osd create \
-                $(hostname):/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
+done
+
+for id in `seq 0 $((--OSD_TO_CREATE))`; do
+    device_name=/dev/$OSD_VG_NAME/$OSD_LV_NAME.$id
+    CEPH_VOLUME="$CEPHADM ceph-volume \
+                       --fsid $FSID \
+                       --config $CONFIG \
+                       --keyring $TMPDIR/keyring.bootstrap.osd --"
+
+    # prepare the osd
+    $CEPH_VOLUME lvm prepare --bluestore --data $device_name --no-systemd
+    $CEPH_VOLUME lvm batch --no-auto $device_name --yes --no-systemd
+
+    # osd id and osd fsid
+    $CEPH_VOLUME lvm list --format json $device_name > $TMPDIR/osd.map
+    osd_id=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_id"? | select(.)')
+    osd_fsid=$($SUDO cat $TMPDIR/osd.map | jq -cr '.. | ."ceph.osd_fsid"? | select(.)')
+
+    # deploy the osd
+    $CEPHADM deploy --name osd.$osd_id \
+          --fsid $FSID \
+          --keyring $TMPDIR/keyring.bootstrap.osd \
+          --config $CONFIG \
+          --osd-fsid $osd_fsid
 done
 
 # add node-exporter
@@ -276,6 +331,25 @@ cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
             --name grafana.a --fsid $FSID --config-json -
 cond="curl --insecure 'https://localhost:3000' | grep -q 'grafana'"
 is_available "grafana" "$cond" 30
+
+# add nfs-ganesha
+nfs_stop
+nfs_rados_pool=$(cat ${CEPHADM_SAMPLES_DIR}/nfs.json | jq -r '.["pool"]')
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+        ceph osd pool create $nfs_rados_pool 64
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+        rados --pool nfs-ganesha --namespace nfs-ns create conf-nfs.a
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	 ceph orch pause
+$CEPHADM deploy --name nfs.a \
+      --fsid $FSID \
+      --keyring $KEYRING \
+      --config $CONFIG \
+      --config-json ${CEPHADM_SAMPLES_DIR}/nfs.json
+cond="$SUDO ss -tlnp '( sport = :nfs )' | grep 'ganesha.nfsd'"
+is_available "nfs" "$cond" 10
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
+	 ceph orch resume
 
 ## run
 # WRITE ME

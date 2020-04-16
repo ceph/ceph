@@ -19,8 +19,10 @@ class ProtocolV2 final : public Protocol {
   ~ProtocolV2() override;
 
  private:
+  bool is_connected() const override;
+
   void start_connect(const entity_addr_t& peer_addr,
-                     const entity_type_t& peer_type) override;
+                     const entity_name_t& peer_name) override;
 
   void start_accept(SocketRef&& socket,
                     const entity_addr_t& peer_addr) override;
@@ -80,6 +82,14 @@ class ProtocolV2 final : public Protocol {
 
   seastar::shared_future<> execution_done = seastar::now();
 
+  template <typename Func>
+  void gated_execute(const char* what, Func&& func) {
+    gated_dispatch(what, [this, &func] {
+      execution_done = seastar::futurize_apply(std::forward<Func>(func));
+      return execution_done.get_future();
+    });
+  }
+
   class Timer {
     double last_dur_ = 0.0;
     const SocketConnection& conn;
@@ -124,9 +134,8 @@ class ProtocolV2 final : public Protocol {
 
  private:
   void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
-  void dispatch_reset();
   void reset_session(bool full);
-  seastar::future<entity_type_t, entity_addr_t> banner_exchange();
+  seastar::future<entity_type_t, entity_addr_t> banner_exchange(bool is_connect);
 
   enum class next_step_t {
     ready,
@@ -152,6 +161,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> _handle_auth_request(bufferlist& auth_payload, bool more);
   seastar::future<> server_auth();
 
+  bool validate_peer_name(const entity_name_t& peer_name) const;
   seastar::future<next_step_t> send_wait();
   seastar::future<next_step_t> reuse_connection(ProtocolV2* existing_proto,
                                                 bool do_reset=false,
@@ -174,7 +184,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> finish_auth();
 
   // ESTABLISHING
-  void execute_establishing();
+  void execute_establishing(SocketConnectionRef existing_conn, bool dispatch_reset);
 
   // ESTABLISHING/REPLACING (server)
   seastar::future<> send_server_ident();
@@ -196,7 +206,7 @@ class ProtocolV2 final : public Protocol {
 
   // READY
   seastar::future<> read_message(utime_t throttle_stamp);
-  void execute_ready();
+  void execute_ready(bool dispatch_connect);
 
   // STANDBY
   void execute_standby();

@@ -2,7 +2,6 @@ import { Component, Input, ViewChild } from '@angular/core';
 
 import { TabsetComponent } from 'ngx-bootstrap/tabs';
 
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 
 @Component({
@@ -15,13 +14,13 @@ export class HostDetailsComponent {
   permissions: Permissions;
 
   @Input()
-  selection: CdTableSelection;
+  selection: any;
 
   @ViewChild(TabsetComponent, { static: false })
   tabsetChild: TabsetComponent;
 
   get selectedHostname(): string {
-    return this.selection.hasSelection ? this.selection.first()['hostname'] : null;
+    return this.selection !== undefined ? this.selection['hostname'] : null;
   }
 
   constructor() {}

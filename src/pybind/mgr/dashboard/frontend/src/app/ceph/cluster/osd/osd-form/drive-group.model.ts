@@ -1,9 +1,10 @@
+import * as _ from 'lodash';
+
 import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { FormatterService } from '../../../../shared/services/formatter.service';
 
 export class DriveGroup {
-  // DriveGroupSpec object.
-  spec = {};
+  spec: Object;
 
   // Map from filter column prop to device selection attribute name
   private deviceSelectionAttrs: {
@@ -16,6 +17,7 @@ export class DriveGroup {
   private formatterService: FormatterService;
 
   constructor() {
+    this.reset();
     this.formatterService = new FormatterService();
     this.deviceSelectionAttrs = {
       'sys_api.vendor': {
@@ -45,7 +47,14 @@ export class DriveGroup {
   }
 
   reset() {
-    this.spec = {};
+    this.spec = {
+      service_type: 'osd',
+      service_id: `dashboard-${_.now()}`
+    };
+  }
+
+  setName(name: string) {
+    this.spec['service_id'] = name;
   }
 
   setHostPattern(pattern: string) {

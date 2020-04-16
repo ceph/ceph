@@ -39,6 +39,13 @@
 
 #include <unistd.h>
 
+using std::ostringstream;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
+
 static bool getentropy_works()
 {
   char buf;
@@ -476,7 +483,7 @@ void CryptoKey::decode(bufferlist::const_iterator& bl)
   bufferptr tmp;
   bl.copy_deep(len, tmp);
   if (_set_secret(type, tmp) < 0)
-    throw buffer::malformed_input("malformed secret");
+    throw ceph::buffer::malformed_input("malformed secret");
 }
 
 int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)

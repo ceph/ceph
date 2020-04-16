@@ -22,6 +22,11 @@
 
 #define dout_subsys ceph_subsys_monc
 
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::string;
+
 int parse_log_client_options(CephContext *cct,
 			     map<string,string> &log_to_monitors,
 			     map<string,string> &log_to_syslog,
@@ -351,7 +356,7 @@ bool LogClient::handle_log_ack(MLogAck *m)
 
   version_t last = m->last;
 
-  deque<LogEntry>::iterator q = log_queue.begin();
+  auto q = log_queue.begin();
   while (q != log_queue.end()) {
     const LogEntry &entry(*q);
     if (entry.seq > last)
@@ -361,4 +366,3 @@ bool LogClient::handle_log_ack(MLogAck *m)
   }
   return true;
 }
-

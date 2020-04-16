@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10.2)
 # remove cmake/modules/FindPython* once 3.12 is required
 
 project(ceph
-  VERSION 15.1.0
+  VERSION 16.0.0
   LANGUAGES CXX C ASM)
 
 foreach(policy
@@ -591,7 +591,6 @@ else()
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
-set(Boost_USE_MULTITHREADED ON)
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
@@ -656,6 +655,9 @@ if(WITH_GRAFANA)
   add_subdirectory(monitoring/grafana/dashboards)
 endif()
 
+CMAKE_DEPENDENT_OPTION(WITH_BOOST_VALGRIND "Boost support for valgrind" OFF
+  "NOT WITH_SYSTEM_BOOST" OFF)
+
 include(CTags)
 option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
 add_tags(ctags
@@ -667,4 +669,4 @@ add_custom_target(tags DEPENDS ctags)
 
 find_package(CppCheck)
 find_package(IWYU)
-set(VERSION 15.1.0)
+set(VERSION 15.2.0)

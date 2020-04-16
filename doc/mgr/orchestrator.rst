@@ -206,18 +206,29 @@ services of a particular type via optional --type parameter
 
 ::
 
-    ceph orch ps
-    ceph orch service ls [--host host] [--svc_type type] [--refresh]
+    ceph orch ls [--service_type type] [--service_name name] [--export] [--format f] [--refresh]
 
 Discover the status of a particular service or daemons::
 
-    ceph orch service ls --svc_type type --svc_id <name> [--refresh]
+    ceph orch ls --service_type type --service_name <name> [--refresh]
+    
+Export the service specs known to the orchestrator as yaml in format
+that is compatible to ``ceph orch apply -i``::
+
+    ceph orch ls --export
 
 
+Daemon Status
+=============
+
+Print a list of all daemons known to the orchestrator::
+
+    ceph orch ps [--hostname host] [--daemon_type type] [--service_name name] [--daemon_id id] [--format f] [--refresh]
+    
 Query the status of a particular service instance (mon, osd, mds, rgw).  For OSDs
 the id is the numeric OSD ID, for MDS services it is the file system name::
 
-    ceph orch daemon status <type> <instance-name> [--refresh]
+    ceph orch ps --daemon_type osd --daemon_id 0
 
 
 .. _orchestrator-cli-cephfs:
@@ -265,6 +276,80 @@ Start/stop/reload::
 
     ceph orch daemon {start,stop,reload} <type> <daemon-id>
     
+.. _orchestrator-cli-service-spec:
+    
+Service Specification
+=====================
+
+As *Service Specification* is a data structure often represented as YAML 
+to specify the deployment of services. For example:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: realm.zone
+    placement: 
+      hosts: 
+        - host1
+        - host2
+        - host3
+    spec: ...
+        
+Where the properties of a service specification are the following:
+
+* ``service_type`` is the type of the service. Needs to be either a Ceph
+   service (``mon``, ``crash``, ``mds``, ``mgr``, ``osd`` or 
+   ``rbd-mirror``), a gateway (``nfs`` or ``rgw``), or part of the
+   monitoring stack (``alertmanager``, ``grafana``, ``node-exporter`` or
+   ``prometheus``).
+* ``service_id`` is the name of the service. Omit the service time
+* ``placement`` is a :ref:`orchestrator-cli-placement-spec`
+* ``spec``: additional specifications for a specific service.
+
+Each service type can have different requirements for the spec.
+
+Service specifications of type ``mon``, ``mgr``, and the monitoring
+types do not require a ``service_id``
+
+A service of type ``nfs`` requires a pool name and contain
+an optional namespace:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement: 
+      hosts: 
+        - host1
+        - host2
+    spec:
+      pool: mypool
+      namespace: mynamespace
+
+Where ``pool`` is a RADOS pool where NFS client recovery data is stored
+and ``namespace`` is a RADOS namespace where NFS client recovery
+data is stored in the pool.
+
+A service of type ``osd`` is in detail described in :ref:`drivegroups`
+
+Many service specifications can then be applied at once using
+``ceph orch apply -i`` by submitting a multi-document YAML file::
+
+    cat <<EOF | ceph orch apply -i -
+    service_type: mon
+    placement:
+      host_pattern: "mon*"
+    ---
+    service_type: mgr
+    placement:
+      host_pattern: "mgr*"
+    ---
+    service_type: osd
+    placement:
+      host_pattern: "osd*"
+    data_devices:
+      all: true
+    EOF
 
 .. _orchestrator-cli-placement-spec:
     
@@ -273,13 +358,113 @@ Placement Specification
 
 In order to allow the orchestrator to deploy a *service*, it needs to
 know how many and where it should deploy *daemons*. The orchestrator 
-defines a placement specification:
+defines a placement specification that can either be passed as a command line argument.
 
-* To deploy three *daemons*, simply specify the count: ``3``
-* To deploy *daemons* on specific hosts, specify the host names: ``host1 host2 host3``
-* To deploy *daemons* on a subset of hosts, also specify the count: ``2 host1 host2 host3``
+Explicit placements
+-------------------
+
+Daemons can be explictly placed on hosts by simply specifying them::
+
+    orch apply prometheus "host1 host2 host3"
+    
+Or in yaml:
+
+.. code-block:: yaml
+  
+    service_type: prometheus
+    placement:
+      hosts: 
+        - host1
+        - host2
+        - host3
+     
+MONs and other services may require some enhanced network specifications::
+
+  orch daemon add mon myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name
+  
+Where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
+and ``=name`` specifies the name of the new monitor.
+
+Placement by labels
+-------------------
+
+Daemons can be explictly placed on hosts that match a specifc label::
+
+    orch apply prometheus label:mylabel
+
+Or in yaml:
+
+.. code-block:: yaml
+
+    service_type: prometheus
+    placement:
+      label: "mylabel"
+
+
+Placement by pattern matching
+-----------------------------
+
+Daemons can be placed on hosts as well::
+
+    orch apply prometheus 'myhost[1-3]'
+
+Or in yaml:
+
+.. code-block:: yaml
+
+    service_type: prometheus
+    placement:
+      host_pattern: "myhost[1-3]"
+
+To place a service on *all* hosts, use ``"*"``::
+
+    orch apply crash '*'
+
+Or in yaml:
+
+.. code-block:: yaml
+
+    service_type: node-exporter
+    placement:
+      host_pattern: "*"
 
     
+Setting a limit
+---------------
+
+By specifying ``count``, only that number of daemons will be created::
+
+    orch apply prometheus 3
+    
+To deploy *daemons* on a subset of hosts, also specify the count::
+
+    orch apply prometheus "2 host1 host2 host3"
+    
+If the count is bigger than the amount of hosts, cephadm still deploys two daemons::
+
+    orch apply prometheus "3 host1 host2"
+
+Or in yaml:
+
+.. code-block:: yaml
+
+    service_type: prometheus
+    placement:
+      count: 3
+      
+Or with hosts:
+
+.. code-block:: yaml
+
+    service_type: prometheus
+    placement:
+      count: 2
+      hosts: 
+        - host1
+        - host2
+        - host3
+
+
 Configuring the Orchestrator CLI
 ================================
 
@@ -317,7 +502,7 @@ This is an overview of the current implementation status of the orchestrators.
  apply mds                           ✔      ✔
  apply mgr                           ⚪      ✔
  apply mon                           ✔      ✔
- apply nfs                           ✔      ⚪
+ apply nfs                           ✔      ✔
  apply osd                           ✔      ✔
  apply rbd-mirror                    ✔      ✔
  apply rgw                           ⚪      ✔
@@ -330,7 +515,7 @@ This is an overview of the current implementation status of the orchestrators.
  device ls                           ✔      ✔
  iscsi add                           ⚪      ⚪
  mds add                             ✔      ✔
- nfs add                             ✔      ⚪
+ nfs add                             ✔      ✔
  ps                                  ⚪      ✔
  rbd-mirror add                      ⚪      ✔
  rgw add                             ✔      ✔

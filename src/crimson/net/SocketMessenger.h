@@ -66,7 +66,7 @@ class SocketMessenger final : public Messenger {
   seastar::future<> start(Dispatcher *dispatcher) override;
 
   ConnectionRef connect(const entity_addr_t& peer_addr,
-                        const entity_type_t& peer_type) override;
+                        const entity_name_t& peer_name) override;
   // can only wait once
   seastar::future<> wait() override {
     assert(seastar::engine().cpu_id() == master_sid);

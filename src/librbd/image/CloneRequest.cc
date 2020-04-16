@@ -281,6 +281,16 @@ void CloneRequest<I>::create_child() {
   }
   m_opts.set(RBD_IMAGE_OPTION_FEATURES, m_features);
 
+  uint64_t stripe_unit = m_parent_image_ctx->stripe_unit;
+  if (m_opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
+    m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+  }
+
+  uint64_t stripe_count = m_parent_image_ctx->stripe_count;
+  if (m_opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
+    m_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+  }
+
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_child>(this);
@@ -424,7 +434,10 @@ template <typename I>
 void CloneRequest<I>::get_mirror_mode() {
   ldout(m_cct, 15) << dendl;
 
-  if (!m_imctx->test_features(RBD_FEATURE_JOURNALING)) {
+  if (!m_non_primary_global_image_id.empty()) {
+    enable_mirror();
+    return;
+  } else if (!m_imctx->test_features(RBD_FEATURE_JOURNALING)) {
     close_child();
     return;
   }
@@ -455,15 +468,12 @@ void CloneRequest<I>::handle_get_mirror_mode(int r) {
                  << dendl;
 
     m_r_saved = r;
-    close_child();
-  } else {
-    if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL ||
-	!m_non_primary_global_image_id.empty()) {
-      enable_mirror();
-    } else {
-      close_child();
-    }
+  } else if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
+    enable_mirror();
+    return;
   }
+
+  close_child();
 }
 
 template <typename I>

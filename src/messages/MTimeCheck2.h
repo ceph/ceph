@@ -30,8 +30,8 @@ public:
   version_t round = 0;
 
   utime_t timestamp;
-  map<int, double> skews;
-  map<int, double> latencies;
+  std::map<int, double> skews;
+  std::map<int, double> latencies;
 
   MTimeCheck2() : Message{MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION} { }
   MTimeCheck2(int op) :
@@ -52,7 +52,7 @@ public:
     }
     return "???";
   }
-  void print(ostream &o) const override {
+  void print(std::ostream &o) const override {
     o << "time_check( " << get_op_name()
       << " e " << epoch << " r " << round;
     if (op == OP_PONG) {
@@ -65,6 +65,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(op, p);
     decode(epoch, p);

@@ -1,4 +1,11 @@
-@import 'styles';
+@import 'defaults.scss';
+
+@mixin row-details-icon {
+  font-family: 'ForkAwesome', sans-serif;
+  font-size: 1rem;
+  color: $gray-900;
+  line-height: 1;
+}
 
 .dataTables_wrapper {
   margin-bottom: 25px;
@@ -13,14 +20,8 @@
 
   .widget-toolbar {
     float: right;
-    // width: auto;
-    // height: 30px;
-    // line-height: 28px;
-    // position: relative;
     border-left: 1px solid $color-table-seperator-border;
-    // cursor: pointer;
     padding: 0 8px;
-    // text-align: center;
 
     .form-check {
       padding-left: 0;
@@ -29,18 +30,18 @@
 
   .dropdown-menu {
     white-space: nowrap;
-    & > li {
-      cursor: pointer;
-      & > label {
+    & li {
+      cursor: default;
+      & label {
         width: 100%;
         margin-bottom: 0;
-        padding-left: 20px;
-        padding-right: 20px;
+        padding-left: 0;
+        padding-right: 0;
         cursor: pointer;
         &:hover {
           background-color: $color-table-dropdown-bg;
         }
-        & > input {
+        & input {
           cursor: pointer;
         }
       }
@@ -232,31 +233,36 @@
         }
         .datatable-body-cell-label {
           display: block;
+          height: 100%;
         }
       }
     }
+    .datatable-row-detail {
+      padding: 20px;
+      border-bottom: 2px solid $color-table-header-border;
+    }
+    .expand-collapse-icon {
+      display: block;
+      height: 100%;
+      text-align: center;
+      &:hover {
+        text-decoration: none;
+      }
+    }
+    .expand-collapse-icon-right:before {
+      @include row-details-icon;
+      content: '\f105';
+    }
+    .expand-collapse-icon-down:before {
+      @include row-details-icon;
+      content: '\f107';
+    }
   }
   .datatable-footer {
-    @extend .p-2;
-
     .selected-count,
     .page-count {
       font-style: italic;
       padding-left: 5px;
-    }
-    .datatable-pager {
-      // .pager
-      ul {
-        @extend .pagination;
-
-        li {
-          @extend .page-item;
-
-          a {
-            @extend .page-link;
-          }
-        }
-      }
     }
   }
 

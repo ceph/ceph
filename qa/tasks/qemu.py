@@ -8,13 +8,12 @@ import os
 import yaml
 import time
 
-from teuthology import misc as teuthology
-from teuthology import contextutil
 from tasks import rbd
-from teuthology.orchestra import run
+from tasks.util.workunit import get_refspec_after_overrides
+from teuthology import contextutil
+from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
-
-from util.workunit import get_refspec_after_overrides
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -285,8 +284,10 @@ def _setup_nfs_mount(remote, client, service_name, mount_dir):
     export = "{dir} *(rw,no_root_squash,no_subtree_check,insecure)".format(
         dir=export_dir
     )
+    log.info("Deleting export from /etc/exports...")
     remote.run(args=[
-        'sudo', 'sed', '-i', '/^\/export\//d', "/etc/exports",
+        'sudo', 'sed', '-i', "\|{export_dir}|d".format(export_dir=export_dir),
+        '/etc/exports'
     ])
     remote.run(args=[
         'echo', export, run.Raw("|"),
@@ -319,13 +320,10 @@ def _teardown_nfs_mount(remote, client, service_name):
     remote.run(args=[
         'sudo', 'umount', export_dir
     ])
-    log.info("Deleting exported directory...")
-    remote.run(args=[
-        'sudo', 'rm', '-r', '/export'
-    ])
     log.info("Deleting export from /etc/exports...")
     remote.run(args=[
-        'sudo', 'sed', '-i', '$ d', '/etc/exports'
+        'sudo', 'sed', '-i', "\|{export_dir}|d".format(export_dir=export_dir),
+        '/etc/exports'
     ])
     log.info("Starting NFS...")
     if remote.os.package_type == "deb":
@@ -457,6 +455,12 @@ def run_qemu(ctx, config):
                         ),
                     ],
                 )
+        log.info("Deleting exported directory...")
+        for client in config.keys():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote.run(args=[
+                'sudo', 'rm', '-r', '/export'
+            ])
 
 
 @contextlib.contextmanager

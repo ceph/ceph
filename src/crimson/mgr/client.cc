@@ -3,6 +3,8 @@
 
 #include "client.h"
 
+#include <seastar/core/sleep.hh>
+
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
@@ -38,9 +40,7 @@ seastar::future<> Client::stop()
 {
   return gate.close().then([this] {
     if (conn) {
-      return conn->close();
-    } else {
-      return seastar::now();
+      conn->mark_down();
     }
   });
 }
@@ -70,7 +70,7 @@ seastar::future<> Client::ms_handle_connect(crimson::net::ConnectionRef c)
   }
 }
 
-seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
+seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c, bool is_replace)
 {
   if (conn == c) {
     report_timer.cancel();
@@ -83,8 +83,7 @@ seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef c)
 seastar::future<> Client::reconnect()
 {
   if (conn) {
-    // crimson::net::Protocol::close() is able to close() in background
-    (void)conn->close();
+    conn->mark_down();
     conn = {};
   }
   if (!mgrmap.get_available()) {

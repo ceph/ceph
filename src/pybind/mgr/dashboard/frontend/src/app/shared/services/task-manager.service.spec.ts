@@ -57,6 +57,7 @@ describe('TaskManagerService', () => {
     expect(taskManagerService.subscriptions.length).toBe(1);
     summaryService.refresh();
     tick();
+    taskManagerService.init(summaryService);
     expect(called).toEqual(true);
     expect(taskManagerService.subscriptions).toEqual([]);
   }));

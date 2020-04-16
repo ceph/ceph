@@ -29,10 +29,10 @@ public:
 
   bool init(const std::string &path);
   
-  void append_output(bufferlist& bl);
+  void append_output(ceph::buffer::list& bl);
 
 protected:
-  virtual void init_connection(bufferlist& bl) {}
+  virtual void init_connection(ceph::buffer::list& bl) {}
   void shutdown();
 
   std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr);
@@ -57,11 +57,11 @@ protected:
   uint64_t data_size;
   uint32_t skipped;
 
-  std::vector<buffer::list> data;
+  std::vector<ceph::buffer::list> data;
 
   ceph::mutex m_lock = ceph::make_mutex("OutputDataSocket::m_lock");
   ceph::condition_variable cond;
-  buffer::list delim;
+  ceph::buffer::list delim;
 };
 
 #endif

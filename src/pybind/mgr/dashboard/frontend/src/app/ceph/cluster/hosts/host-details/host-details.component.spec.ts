@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
@@ -9,7 +10,6 @@ import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../../shared/models/permissions';
 import { SharedModule } from '../../../../shared/shared.module';
 import { CephModule } from '../../../ceph.module';
@@ -22,6 +22,7 @@ describe('HostDetailsComponent', () => {
 
   configureTestBed({
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       TabsModule.forRoot(),
       BsDropdownModule.forRoot(),
@@ -40,7 +41,7 @@ describe('HostDetailsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HostDetailsComponent);
     component = fixture.componentInstance;
-    component.selection = new CdTableSelection();
+    component.selection = undefined;
     component.permissions = new Permissions({
       hosts: ['read'],
       grafana: ['read']
@@ -53,7 +54,7 @@ describe('HostDetailsComponent', () => {
 
   describe('Host details tabset', () => {
     beforeEach(() => {
-      component.selection.selected = [{ hostname: 'localhost' }];
+      component.selection = { hostname: 'localhost' };
       fixture.detectChanges();
     });
 

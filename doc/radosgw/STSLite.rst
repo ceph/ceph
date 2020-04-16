@@ -37,13 +37,15 @@ Parameters:
 An end user needs to attach a policy to allow invocation of GetSessionToken API using its permanent
 credentials and to allow subsequent s3 operations invocation using only the temporary credentials returned
 by GetSessionToken.
-The following is an example of attaching the policy to a user 'TESTER1'::
-
-    s3curl.pl --debug --id admin -- -s -v -X POST "http://localhost:8000/?Action=PutUserPolicy&PolicyName=Policy1&UserName=TESTER1&PolicyDocument=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Deny\",\"Action\":\"s3:*\",\"Resource\":\[\"*\"\],\"Condition\":\{\"BoolIfExists\":\{\"sts:authentication\":\"false\"\}\}\},\{\"Effect\":\"Allow\",\"Action\":\"sts:GetSessionToken\",\"Resource\":\"*\",\"Condition\":\{\"BoolIfExists\":\{\"sts:authentication\":\"false\"\}\}\}\]\}&Version=2010-05-08"
 
 The user attaching the policy needs to have admin caps. For example::
 
     radosgw-admin caps add --uid="TESTER" --caps="user-policy=*"
+
+The following is the policy that needs to be attached to a user 'TESTER1'::
+
+    user_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":\"s3:*\",\"Resource\":[\"*\"],\"Condition\":{\"BoolIfExists\":{\"sts:authentication\":\"false\"}}},{\"Effect\":\"Allow\",\"Action\":\"sts:GetSessionToken\",\"Resource\":\"*\",\"Condition\":{\"BoolIfExists\":{\"sts:authentication\":\"false\"}}}]}"
+
 
 STS Lite Configuration
 ======================

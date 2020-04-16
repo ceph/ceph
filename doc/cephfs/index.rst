@@ -83,6 +83,7 @@ Administration
     MDS Configuration Settings <mds-config-ref>
     Manual: ceph-mds <../../man/8/ceph-mds>
     Export over NFS <nfs>
+    Export over NFS with volume nfs interface <fs-nfs-exports>
     Application best practices <app-best-practices>
     FS volume and subvolumes <fs-volumes>
     CephFS Quotas <quota>
@@ -184,7 +185,7 @@ Developer Guides
 
     Journaler Configuration <journaler>
     Client's Capabilities <capabilities>
-    libcephfs for Java <../../api/libcephfs-java/>
+    Java and Python bindings <api/index>
     Mantle <mantle>
 
 

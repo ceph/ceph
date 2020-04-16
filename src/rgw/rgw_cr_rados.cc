@@ -123,7 +123,7 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletio
 int RGWSimpleRadosReadAttrsCR::send_request()
 {
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(),
-			         svc, nullptr, obj, true, raw_attrs);
+			         svc, objv_tracker, obj, true, raw_attrs);
   async_rados->queue(req);
   return 0;
 }
@@ -132,6 +132,9 @@ int RGWSimpleRadosReadAttrsCR::request_complete()
 {
   if (pattrs) {
     *pattrs = std::move(req->attrs);
+  }
+  if (objv_tracker) {
+    *objv_tracker = req->objv_tracker;
   }
   return req->get_ret_status();
 }
@@ -323,6 +326,44 @@ int RGWRadosGetOmapKeysCR::request_complete()
   return r;
 }
 
+RGWRadosGetOmapValsCR::RGWRadosGetOmapValsCR(rgw::sal::RGWRadosStore *_store,
+                      const rgw_raw_obj& _obj,
+                      const string& _marker,
+                      int _max_entries,
+                      ResultPtr _result)
+  : RGWSimpleCoroutine(_store->ctx()), store(_store), obj(_obj),
+    marker(_marker), max_entries(_max_entries),
+    result(std::move(_result))
+{
+  ceph_assert(result); // must be allocated
+  set_description() << "get omap keys dest=" << obj << " marker=" << marker;
+}
+
+int RGWRadosGetOmapValsCR::send_request() {
+  int r = store->getRados()->get_raw_obj_ref(obj, &result->ref);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
+  set_status() << "send request";
+
+  librados::ObjectReadOperation op;
+  op.omap_get_vals2(marker, max_entries, &result->entries, &result->more, nullptr);
+
+  cn = stack->create_completion_notifier(result);
+  return result->ref.pool.ioctx().aio_operate(result->ref.obj.oid, cn->completion(), &op, NULL);
+}
+
+int RGWRadosGetOmapValsCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
 RGWRadosRemoveOmapKeysCR::RGWRadosRemoveOmapKeysCR(rgw::sal::RGWRadosStore *_store,
                       const rgw_raw_obj& _obj,
                       const set<string>& _keys) : RGWSimpleCoroutine(_store->ctx()),
@@ -358,8 +399,10 @@ int RGWRadosRemoveOmapKeysCR::request_complete()
   return r;
 }
 
-RGWRadosRemoveCR::RGWRadosRemoveCR(rgw::sal::RGWRadosStore *store, const rgw_raw_obj& obj)
-  : RGWSimpleCoroutine(store->ctx()), store(store), obj(obj)
+RGWRadosRemoveCR::RGWRadosRemoveCR(rgw::sal::RGWRadosStore *store, const rgw_raw_obj& obj,
+                                   RGWObjVersionTracker* objv_tracker)
+  : RGWSimpleCoroutine(store->ctx()),
+    store(store), obj(obj), objv_tracker(objv_tracker)
 {
   set_description() << "remove dest=" << obj;
 }
@@ -377,6 +420,9 @@ int RGWRadosRemoveCR::send_request()
   set_status() << "send request";
 
   librados::ObjectWriteOperation op;
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
   op.remove();
 
   cn = stack->create_completion_notifier();

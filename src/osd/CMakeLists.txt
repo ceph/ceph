@@ -59,7 +59,7 @@ endif()
 
 # libcls_* are runtime dependencies
 add_dependencies(osd cls_journal cls_hello cls_lock cls_log cls_numops
-  cls_refcount cls_timeindex cls_user cls_version cls_cas)
+  cls_refcount cls_timeindex cls_user cls_version cls_cas cls_cmpomap)
 if(WITH_CEPHFS)
   add_dependencies(osd cls_cephfs)
 endif()
@@ -67,5 +67,5 @@ if(WITH_RBD)
   add_dependencies(osd cls_rbd)
 endif()
 if(WITH_RADOSGW)
-  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc)
+  add_dependencies(osd cls_otp cls_rgw cls_queue cls_rgw_gc cls_2pc_queue)
 endif()

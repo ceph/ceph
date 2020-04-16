@@ -561,9 +561,8 @@ int main(int argc, char **argv)
     }
   }
   else if (action == "bluefs-bdev-sizes") {
-    BlueFS *fs = open_bluefs(cct.get(), path, devs);
-    fs->dump_block_extents(cout);
-    delete fs;
+    BlueStore bluestore(cct.get(), path);
+    bluestore.dump_bluefs_sizes(cout);
   }
   else if (action == "bluefs-bdev-expand") {
     BlueStore bluestore(cct.get(), path);
@@ -642,7 +641,7 @@ int main(int argc, char **argv)
 	  int left = size;
 	  while (left) {
 	    bufferlist bl;
-	    r = fs->read(h, &h->buf, pos, left, &bl, NULL);
+	    r = fs->read(h, pos, left, &bl, NULL);
 	    if (r <= 0) {
 	      cerr << "read " << dir << "/" << file << " from " << pos
 		   << " failed: " << cpp_strerror(r) << std::endl;

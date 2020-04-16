@@ -73,7 +73,7 @@ class Host(RESTController):
 
     @raise_if_no_orchestrator
     @handle_orchestrator_error('host')
-    @host_task('add', {'hostname': '{hostname}'})
+    @host_task('create', {'hostname': '{hostname}'})
     def create(self, hostname):
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, True)
@@ -81,7 +81,7 @@ class Host(RESTController):
 
     @raise_if_no_orchestrator
     @handle_orchestrator_error('host')
-    @host_task('remove', {'hostname': '{hostname}'})
+    @host_task('delete', {'hostname': '{hostname}'})
     def delete(self, hostname):
         orch_client = OrchClient.instance()
         self._check_orchestrator_host_op(orch_client, hostname, False)

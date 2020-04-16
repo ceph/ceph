@@ -5,7 +5,9 @@ The Ceph dashboard makes use of prometheus, grafana, and related tools
 to store and visualize detailed metrics on cluster utilization and
 performance.  Ceph users have three options:
 
-#. Have cephadm deploy and configure these services.
+#. Have cephadm deploy and configure these services.  This is the default
+   when bootstrapping a new cluster unless the ``--skip-monitoring-stack``
+   option is used.
 #. Deploy and configure these services manually.  This is recommended for users
    with existing prometheus services in their environment (and in cases where
    Ceph is running in Kubernetes with Rook).
@@ -15,7 +17,10 @@ performance.  Ceph users have three options:
 Deploying monitoring with cephadm
 ---------------------------------
 
-To deploy a basic monitoring stack:
+By default, bootstrap will deploy a basic monitoring stack.  If you
+did not do this (by passing ``--skip-monitoring-stack``, or if you
+converted an existing cluster to cephadm management, you can set up
+monitoring by following the steps below.
 
 #. Enable the prometheus module in the ceph-mgr daemon.  This exposes the internal Ceph metrics so that prometheus can scrape them.::
 
@@ -23,7 +28,7 @@ To deploy a basic monitoring stack:
 
 #. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization.::
 
-     ceph orch apply node-exporter all:true
+     ceph orch apply node-exporter '*'
 
 #. Deploy alertmanager::
 
@@ -51,6 +56,18 @@ completed, you should see something like this from ``ceph orch ls``::
   grafana            1/1  0s ago     docker.io/pcuzner/ceph-grafana-el8:latest       f77afcf0bcf6   absent
   node-exporter      2/2  6s ago     docker.io/prom/node-exporter:latest             e5a616e4b9cf  present
   prometheus         1/1  6s ago     docker.io/prom/prometheus:latest                e935122ab143  present
+
+Disabling monitoring
+--------------------
+
+If you have deployed monitoring and would like to remove it, you can do
+so with::
+
+  ceph orch rm grafana
+  ceph orch rm prometheus --force   # this will delete metrics data collected so far
+  ceph orch rm node-exporter
+  ceph orch rm alertmanager
+  ceph mgr module disable prometheus
 
 
 Deploying monitoring manually

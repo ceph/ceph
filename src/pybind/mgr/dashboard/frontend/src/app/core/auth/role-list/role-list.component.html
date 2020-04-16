@@ -5,6 +5,8 @@
           [columns]="columns"
           identifier="name"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (fetchData)="getRoles()"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"
@@ -13,7 +15,7 @@
                     [tableActions]="tableActions">
   </cd-table-actions>
   <cd-role-details cdTableDetail
-                   [selection]="selection"
+                   [selection]="expandedRow"
                    [scopes]="scopes">
   </cd-role-details>
 </cd-table>

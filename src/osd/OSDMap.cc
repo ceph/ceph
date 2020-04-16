@@ -433,11 +433,21 @@ void OSDMap::Incremental::encode_client_old(ceph::buffer::list& bl) const
   encode(new_up_client, bl, 0);
   {
     // legacy is map<int32_t,uint8_t>
-    uint32_t n = new_state.size();
-    encode(n, bl);
+    map<int32_t, uint8_t> os;
     for (auto p : new_state) {
+      // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+      // that an old client could not understand.
+      // skip those!
+      uint8_t s = p.second;
+      if (p.second != 0 && s == 0)
+        continue;
+      os[p.first] = s;
+    }
+    uint32_t n = os.size();
+    encode(n, bl);
+    for (auto p : os) {
       encode(p.first, bl);
-      encode((uint8_t)p.second, bl);
+      encode(p.second, bl);
     }
   }
   encode(new_weight, bl);
@@ -477,11 +487,21 @@ void OSDMap::Incremental::encode_classic(ceph::buffer::list& bl, uint64_t featur
   encode(old_pools, bl);
   encode(new_up_client, bl, features);
   {
-    uint32_t n = new_state.size();
-    encode(n, bl);
+    map<int32_t, uint8_t> os;
     for (auto p : new_state) {
+      // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+      // that an old client could not understand.
+      // skip those!
+      uint8_t s = p.second;
+      if (p.second != 0 && s == 0)
+        continue;
+      os[p.first] = s;
+    }
+    uint32_t n = os.size();
+    encode(n, bl);
+    for (auto p : os) {
       encode(p.first, bl);
-      encode((uint8_t)p.second, bl);
+      encode(p.second, bl);
     }
   }
   encode(new_weight, bl);
@@ -585,11 +605,21 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     if (v >= 5) {
       encode(new_state, bl);
     } else {
-      uint32_t n = new_state.size();
-      encode(n, bl);
+      map<int32_t, uint8_t> os;
       for (auto p : new_state) {
-	encode(p.first, bl);
-	encode((uint8_t)p.second, bl);
+        // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+        // that an old client could not understand.
+        // skip those!
+        uint8_t s = p.second;
+        if (p.second != 0 && s == 0)
+          continue;
+        os[p.first] = s;
+      }
+      uint32_t n = os.size();
+      encode(n, bl);
+      for (auto p : os) {
+        encode(p.first, bl);
+        encode(p.second, bl);
       }
     }
     encode(new_weight, bl);
@@ -975,8 +1005,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_full_ratio", new_full_ratio);
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
-  f->dump_int("new_require_min_compat_client", ceph::to_integer<int>(new_require_min_compat_client));
-  f->dump_int("new_require_osd_release", ceph::to_integer<int>(new_require_osd_release));
+  f->dump_int("new_require_min_compat_client", to_integer<int>(new_require_min_compat_client));
+  f->dump_int("new_require_osd_release", to_integer<int>(new_require_osd_release));
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -3471,11 +3501,11 @@ void OSDMap::dump(Formatter *f) const
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
   f->dump_string("require_min_compat_client",
-		 ceph::to_string(require_min_compat_client));
+		 to_string(require_min_compat_client));
   f->dump_string("min_compat_client",
-		 ceph::to_string(get_min_compat_client()));
+		 to_string(get_min_compat_client()));
   f->dump_string("require_osd_release",
-		 ceph::to_string(require_osd_release));
+		 to_string(require_osd_release));
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {

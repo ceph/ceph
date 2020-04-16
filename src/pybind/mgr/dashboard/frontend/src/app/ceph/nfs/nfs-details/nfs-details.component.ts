@@ -1,10 +1,8 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
 
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 @Component({
   selector: 'cd-nfs-details',
@@ -13,7 +11,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 })
 export class NfsDetailsComponent implements OnChanges {
   @Input()
-  selection: CdTableSelection;
+  selection: any;
 
   selectedItem: any;
   data: any;
@@ -42,8 +40,8 @@ export class NfsDetailsComponent implements OnChanges {
   }
 
   ngOnChanges() {
-    if (this.selection.hasSelection) {
-      this.selectedItem = this.selection.first();
+    if (this.selection) {
+      this.selectedItem = this.selection;
 
       this.clients = this.selectedItem.clients;
 

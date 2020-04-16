@@ -235,7 +235,7 @@ WriteLogOperationSet::WriteLogOperationSet(utime_t dispatched, PerfCounters *per
     dispatch_time(dispatched),
     perfcounter(perfcounter),
     sync_point(sync_point) {
-  on_ops_appending = sync_point->prior_log_entries_persisted->new_sub();
+  on_ops_appending = sync_point->prior_persisted_gather_new_sub();
   on_ops_persist = nullptr;
   extent_ops_persist =
     new C_Gather(m_cct,

@@ -21,7 +21,7 @@ class Actions(Enum):
 
 
 @PM.add_plugin  # pylint: disable=too-many-ancestors
-class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy):
+class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy):  # pylint: disable=too-many-ancestors
     NAME = 'debug'
 
     OPTIONS = [

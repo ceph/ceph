@@ -33,7 +33,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
-import { ErasureCodeProfileFormComponent } from '../erasure-code-profile-form/erasure-code-profile-form.component';
+import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 
@@ -107,7 +107,8 @@ export class PoolFormComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().pool;
     if (
       !this.permission.read ||
-      ((!this.permission.update && this.editing) || (!this.permission.create && !this.editing))
+      (!this.permission.update && this.editing) ||
+      (!this.permission.create && !this.editing)
     ) {
       this.router.navigate(['/404']);
     }
@@ -542,7 +543,7 @@ export class PoolFormComponent implements OnInit {
 
   addErasureCodeProfile() {
     this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
-    this.bsModalService.show(ErasureCodeProfileFormComponent);
+    this.bsModalService.show(ErasureCodeProfileFormModalComponent);
   }
 
   private reloadECPs() {

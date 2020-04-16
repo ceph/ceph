@@ -1,6 +1,7 @@
-import { Component, HostBinding, OnInit } from '@angular/core';
+import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
 
-import { PrometheusService } from '../../../shared/api/prometheus.service';
+import { Subscription } from 'rxjs';
+
 import { Icons } from '../../../shared/enum/icons.enum';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -15,16 +16,13 @@ import { SummaryService } from '../../../shared/services/summary.service';
   templateUrl: './navigation.component.html',
   styleUrls: ['./navigation.component.scss']
 })
-export class NavigationComponent implements OnInit {
+export class NavigationComponent implements OnInit, OnDestroy {
   @HostBinding('class.isPwdDisplayed') isPwdDisplayed = false;
 
   permissions: Permissions;
+  enabledFeature$: FeatureTogglesMap$;
   summaryData: any;
   icons = Icons;
-
-  isAlertmanagerConfigured = false;
-  isPrometheusConfigured = false;
-  enabledFeature$: FeatureTogglesMap$;
 
   isCollapsed = true;
   showMenuSidebar = true;
@@ -33,35 +31,35 @@ export class NavigationComponent implements OnInit {
   simplebar = {
     autoHide: false
   };
+  private subs = new Subscription();
 
   constructor(
     private authStorageService: AuthStorageService,
-    private prometheusService: PrometheusService,
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService
   ) {
     this.permissions = this.authStorageService.getPermissions();
+    this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
-    this.enabledFeature$ = this.featureToggles.get();
-    this.summaryService.subscribe((data: any) => {
-      if (!data) {
-        return;
-      }
-      this.summaryData = data;
-    });
-    if (this.permissions.configOpt.read) {
-      this.prometheusService.ifAlertmanagerConfigured(() => {
-        this.isAlertmanagerConfigured = true;
-      });
-      this.prometheusService.ifPrometheusConfigured(() => {
-        this.isPrometheusConfigured = true;
-      });
-    }
-    this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
-      this.isPwdDisplayed = isDisplayed;
-    });
+    this.subs.add(
+      this.summaryService.subscribe((data: any) => {
+        if (!data) {
+          return;
+        }
+        this.summaryData = data;
+      })
+    );
+    this.subs.add(
+      this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
+        this.isPwdDisplayed = isDisplayed;
+      })
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.subs.unsubscribe();
   }
 
   blockHealthColor() {

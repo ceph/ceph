@@ -121,6 +121,7 @@ set(librbd_internal_srcs
   mirror/snapshot/Utils.cc
   mirror/snapshot/WriteImageStateRequest.cc
   object_map/CreateRequest.cc
+  object_map/DiffRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc
   object_map/RefreshRequest.cc
@@ -192,9 +193,9 @@ target_link_libraries(rbd_internal PRIVATE
   osdc)
 
 if(WITH_RBD_RWL)
-  target_link_libraries(rbd_internal PRIVATE
-    pmem::pmemobj
-    pmem::pmem)
+  target_link_libraries(rbd_internal
+    PUBLIC pmem::pmemobj
+    PRIVATE pmem::pmem)
 endif()
 
 add_library(librbd ${CEPH_SHARED}

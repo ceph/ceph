@@ -26,10 +26,10 @@ namespace ECTransaction {
   struct WritePlan {
     PGTransactionUPtr t;
     bool invalidates_cache = false; // Yes, both are possible
-    map<hobject_t,extent_set> to_read;
-    map<hobject_t,extent_set> will_write; // superset of to_read
+    std::map<hobject_t,extent_set> to_read;
+    std::map<hobject_t,extent_set> will_write; // superset of to_read
 
-    map<hobject_t,ECUtil::HashInfoRef> hash_infos;
+    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
 
   bool requires_overwrite(
@@ -44,7 +44,7 @@ namespace ECTransaction {
     DoutPrefixProvider *dpp) {
     WritePlan plan;
     t->safe_create_traverse(
-      [&](pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
+      [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
 	ECUtil::HashInfoRef hinfo = get_hinfo(i.first);
 	plan.hash_infos[i.first] = hinfo;
 
@@ -184,15 +184,15 @@ namespace ECTransaction {
 
   void generate_transactions(
     WritePlan &plan,
-    ErasureCodeInterfaceRef &ecimpl,
+    ceph::ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
-    const map<hobject_t,extent_map> &partial_extents,
-    vector<pg_log_entry_t> &entries,
-    map<hobject_t,extent_map> *written,
-    map<shard_id_t, ObjectStore::Transaction> *transactions,
-    set<hobject_t> *temp_added,
-    set<hobject_t> *temp_removed,
+    const std::map<hobject_t,extent_map> &partial_extents,
+    std::vector<pg_log_entry_t> &entries,
+    std::map<hobject_t,extent_map> *written,
+    std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+    std::set<hobject_t> *temp_added,
+    std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
     const ceph_release_t require_osd_release = ceph_release_t::unknown);
 };

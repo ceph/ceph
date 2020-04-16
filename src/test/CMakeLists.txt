@@ -22,6 +22,8 @@ add_subdirectory(cls_version)
 add_subdirectory(cls_lua)
 add_subdirectory(cls_rgw_gc)
 add_subdirectory(cls_queue)
+add_subdirectory(cls_2pc_queue)
+add_subdirectory(cls_cmpomap)
 add_subdirectory(common)
 add_subdirectory(compressor)
 add_subdirectory(crush)
@@ -105,11 +107,6 @@ target_link_libraries(test_build_libcommon ceph-common pthread ${CRYPTO_LIBS} ${
 if(WITH_RADOSGW)
   add_executable(test_build_librgw buildtest_skeleton.cc)
   target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
-endif(WITH_RADOSGW)
-
-if(WITH_RADOSGW)
-  add_executable(test_build_librgw_admin_user buildtest_skeleton.cc)
-  target_link_libraries(test_build_librgw_admin_user pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_RADOSGW)
 
 if(WITH_LIBCEPHFS)
@@ -345,18 +342,6 @@ target_link_libraries(test_rgw_ldap
   ${OPENLDAP_LIBRARIES}
   ${UNITTEST_LIBS}
   )
-
-# unittest_librgw_admin_user
-add_executable(ceph_test_librgw_admin_user test_librgw_admin_user.cc)
-target_link_libraries(ceph_test_librgw_admin_user
-  rgw_admin_user
-  cls_otp_client
-  librados
-  ceph-common
-  ${UNITTEST_LIBS}
-  ${EXTRALIBS}
-   )
-
 endif(${WITH_RADOSGW})
 
 # ceph_multi_stress_watch

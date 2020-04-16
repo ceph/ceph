@@ -232,7 +232,8 @@ private:
     ceph::crypto::onwire::rxtx_t &session_stream_handlers,
     std::index_sequence<Is...>)
   {
-    session_stream_handlers.tx->reset_tx_handler({ segments[Is].length()... });
+    session_stream_handlers.tx->reset_tx_handler({ segments[Is].length()...,
+                                                   sizeof(epilogue_secure_block_t) });
   }
 
 public:
@@ -403,14 +404,14 @@ protected:
 
 struct AuthRequestFrame : public ControlFrame<AuthRequestFrame,
                                               uint32_t, // auth method
-                                              vector<uint32_t>, // preferred modes
+                                              std::vector<uint32_t>, // preferred modes
                                               bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REQUEST;
   using ControlFrame::Encode;
   using ControlFrame::Decode;
 
   inline uint32_t &method() { return get_val<0>(); }
-  inline vector<uint32_t> &preferred_modes() { return get_val<1>(); }
+  inline std::vector<uint32_t> &preferred_modes() { return get_val<1>(); }
   inline bufferlist &auth_payload() { return get_val<2>(); }
 
 protected:

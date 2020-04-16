@@ -14,11 +14,13 @@
 #ifndef CEPH_OBJECTSTORE_H
 #define CEPH_OBJECTSTORE_H
 
+#include "include/buffer.h"
 #include "include/common_fwd.h"
 #include "include/Context.h"
-#include "include/buffer.h"
-#include "include/types.h"
+#include "include/interval_set.h"
 #include "include/stringify.h"
+#include "include/types.h"
+
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
@@ -342,7 +344,7 @@ public:
   virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
 			  bool *per_pool_omap) = 0;
 
-  virtual void collect_metadata(std::map<std::string,string> *pm) { }
+  virtual void collect_metadata(std::map<std::string,std::string> *pm) { }
 
   /**
    * write_meta - write a simple configuration key out-of-band
@@ -514,7 +516,7 @@ public:
      uint32_t op_flags = 0) {
      int total = 0;
      for (auto p = m.begin(); p != m.end(); p++) {
-       bufferlist t;
+       ceph::buffer::list t;
        int r = read(c, oid, p.get_start(), p.get_len(), t, op_flags);
        if (r < 0)
          return r;
@@ -553,8 +555,8 @@ public:
   virtual int dump_onode(
     CollectionHandle &c,
     const ghobject_t& oid,
-    const string& section_name,
-    Formatter *f) {
+    const std::string& section_name,
+    ceph::Formatter *f) {
     return -ENOTSUP;
   }
 

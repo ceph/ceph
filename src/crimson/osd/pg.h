@@ -481,7 +481,8 @@ private:
     PeeringCtx &rctx);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(
     Ref<MOSDOp> m,
-    ObjectContextRef obc);
+    ObjectContextRef obc,
+    const OpInfo &op_info);
   seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,
@@ -490,7 +491,9 @@ private:
   seastar::future<ceph::bufferlist> do_pgnls(ceph::bufferlist& indata,
 					     const std::string& nspace,
 					     uint64_t limit);
-  seastar::future<> submit_transaction(ObjectContextRef&& obc,
+  seastar::future<> submit_transaction(const OpInfo& op_info,
+				       const std::vector<OSDOp>& ops,
+				       ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
 				       const osd_op_params_t& oop);
 

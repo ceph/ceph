@@ -238,6 +238,22 @@ BuildRequires:  protobuf-devel
 BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  yaml-cpp-devel
+%if 0%{?fedora}
+BuildRequires:  fmt-devel
+BuildRequires:  libubsan
+BuildRequires:  libasan
+BuildRequires:  libatomic
+%endif
+%if 0%{?rhel} == 7
+BuildRequires:  devtoolset-8-libubsan
+BuildRequires:  devtoolset-8-libasan
+BuildRequires:  devtoolset-8-libatomic
+%endif
+%if 0%{?rhel} >= 8
+BuildRequires:  libubsan
+BuildRequires:  libasan
+BuildRequires:  libatomic
+%endif
 %endif
 #################################################################################
 # distro-conditional dependencies
@@ -515,17 +531,22 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-jwt
 Requires:       python%{python3_pkgversion}-routes
 Requires:       python%{python3_pkgversion}-werkzeug
+%if 0%{?weak_deps}
+Recommends:     python%{python3_pkgversion}-saml
+%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-CherryPy
 Requires:       python%{python3_pkgversion}-PyJWT
 Requires:       python%{python3_pkgversion}-Routes
 Requires:       python%{python3_pkgversion}-Werkzeug
+Recommends:     python%{python3_pkgversion}-python3-saml
 %endif
 %description mgr-dashboard
 ceph-mgr-dashboard is a manager module, providing a web-based application
@@ -930,7 +951,7 @@ Summary:	Ceph distributed file system client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Obsoletes:	libcephfs1
+Obsoletes:	libcephfs1 < %{_epoch_prefix}%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-libcephfs
@@ -1101,14 +1122,12 @@ collecting data from Ceph Manager "prometheus" module and Prometheus
 project "node_exporter" module. The dashboards are designed to be
 integrated with the Ceph Manager Dashboard web UI.
 
-%if 0%{?suse_version}
 %package prometheus-alerts
 Summary:        Prometheus alerts for a Ceph deplyoment
 BuildArch:      noarch
 Group:          System/Monitoring
 %description prometheus-alerts
 This package provides Ceph’s default alerts for Prometheus.
-%endif
 
 #################################################################################
 # common
@@ -1316,11 +1335,12 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
+# prometheus alerts
+install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
+
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
 %py3_compile %{buildroot}%{python3_sitelib}
-# prometheus alerts
-install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml %{buildroot}/etc/prometheus/SUSE/default_rules/ceph_default_alerts.yml
 # hardlink duplicate files under /usr to save space
 %fdupes %{buildroot}%{_prefix}
 %endif
@@ -2121,7 +2141,6 @@ fi
 
 %files -n librgw2
 %{_libdir}/librgw.so.*
-%{_libdir}/librgw_admin_user.so.*
 %if %{with lttng}
 %{_libdir}/librgw_op_tp.so.*
 %{_libdir}/librgw_rados_tp.so.*
@@ -2134,10 +2153,8 @@ fi
 %files -n librgw-devel
 %dir %{_includedir}/rados
 %{_includedir}/rados/librgw.h
-%{_includedir}/rados/librgw_admin_user.h
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
-%{_libdir}/librgw_admin_user.so
 %if %{with lttng}
 %{_libdir}/librgw_op_tp.so
 %{_libdir}/librgw_rados_tp.so
@@ -2320,27 +2337,23 @@ if [ $1 -eq 0 ]; then
     fi
 fi
 exit 0
-
-%endif # with selinux
+%endif
 
 %files grafana-dashboards
 %if 0%{?suse_version}
 %attr(0755,root,root) %dir %{_sysconfdir}/grafana
 %attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards
-%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
-%else
-%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %endif
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %config %{_sysconfdir}/grafana/dashboards/ceph-dashboard/*
 %doc monitoring/grafana/dashboards/README
 %doc monitoring/grafana/README.md
 
-%if 0%{?suse_version}
 %files prometheus-alerts
-%dir /etc/prometheus/SUSE/
-%dir /etc/prometheus/SUSE/default_rules/
-%config /etc/prometheus/SUSE/default_rules/ceph_default_alerts.yml
+%if 0%{?suse_version}
+%attr(0755,root,root) %dir %{_sysconfdir}/prometheus
 %endif
-
+%attr(0755,root,root) %dir %{_sysconfdir}/prometheus/ceph
+%config %{_sysconfdir}/prometheus/ceph/ceph_default_alerts.yml
 
 %changelog

@@ -549,7 +549,7 @@ class Infiniband {
     uint32_t     max_recv_wr;
     uint32_t     q_key;
     bool dead;
-    vector<Chunk*> recv_queue;
+    std::vector<Chunk*> recv_queue;
     ceph::mutex lock = ceph::make_mutex("queue_pair_lock");
   };
 

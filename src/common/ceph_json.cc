@@ -13,11 +13,18 @@
 
 using namespace json_spirit;
 
+using std::ifstream;
+using std::pair;
+using std::ostream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 #define dout_subsys ceph_subsys_rgw
 
-
 static JSONFormattable default_formattable;
-
 
 void encode_json(const char *name, const JSONObj::data_val& v, Formatter *f)
 {
@@ -61,8 +68,7 @@ ostream& operator<<(ostream &out, const JSONObj &obj) {
 
 JSONObj::~JSONObj()
 {
-  multimap<string, JSONObj *>::iterator iter;
-  for (iter = children.begin(); iter != children.end(); ++iter) {
+  for (auto iter = children.begin(); iter != children.end(); ++iter) {
     JSONObj *obj = iter->second;
     delete obj;
   }
@@ -86,11 +92,9 @@ bool JSONObj::get_attr(string name, data_val& attr)
 JSONObjIter JSONObj::find(const string& name)
 {
   JSONObjIter iter;
-  map<string, JSONObj *>::iterator first;
-  map<string, JSONObj *>::iterator last;
-  first = children.find(name);
+  auto first = children.find(name);
   if (first != children.end()) {
-    last = children.upper_bound(name);
+    auto last = children.upper_bound(name);
     iter.set(first, last);
   }
   return iter;
@@ -106,8 +110,7 @@ JSONObjIter JSONObj::find_first()
 JSONObjIter JSONObj::find_first(const string& name)
 {
   JSONObjIter iter;
-  map<string, JSONObj *>::iterator first;
-  first = children.find(name);
+  auto first = children.find(name);
   iter.set(first, children.end());
   return iter;
 }
@@ -457,7 +460,7 @@ void decode_json_obj(bufferlist& val, JSONObj *obj)
   bl.append(s.c_str(), s.size());
   try {
     val.decode_base64(bl);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
    throw JSONDecoder::err("failed to decode base64");
   }
 }
@@ -473,6 +476,47 @@ void decode_json_obj(utime_t& val, JSONObj *obj)
   } else {
     throw JSONDecoder::err("failed to decode utime_t");
   }
+}
+
+void decode_json_obj(ceph::real_time& val, JSONObj *obj)
+{
+  const std::string& s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    using namespace std::chrono;
+    val = real_time{seconds(epoch) + nanoseconds(nsec)};
+  } else {
+    throw JSONDecoder::err("failed to decode real_time");
+  }
+}
+
+void decode_json_obj(ceph::coarse_real_time& val, JSONObj *obj)
+{
+  const std::string& s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    using namespace std::chrono;
+    val = coarse_real_time{seconds(epoch) + nanoseconds(nsec)};
+  } else {
+    throw JSONDecoder::err("failed to decode coarse_real_time");
+  }
+}
+
+void decode_json_obj(ceph_dir_layout& i, JSONObj *obj){
+
+    unsigned tmp;
+    JSONDecoder::decode_json("dir_hash", tmp, obj, true);
+    i.dl_dir_hash = tmp;
+    JSONDecoder::decode_json("unused1", tmp, obj, true);
+    i.dl_unused1 = tmp;
+    JSONDecoder::decode_json("unused2", tmp, obj, true);
+    i.dl_unused2 = tmp;
+    JSONDecoder::decode_json("unused3", tmp, obj, true);
+    i.dl_unused3 = tmp;
 }
 
 void encode_json(const char *name, const string& val, Formatter *f)
@@ -529,6 +573,16 @@ void encode_json(const char *name, long long val, Formatter *f)
 void encode_json(const char *name, const utime_t& val, Formatter *f)
 {
   val.gmtime(f->dump_stream(name));
+}
+
+void encode_json(const char *name, const ceph::real_time& val, Formatter *f)
+{
+  encode_json(name, utime_t{val}, f);
+}
+
+void encode_json(const char *name, const ceph::coarse_real_time& val, Formatter *f)
+{
+  encode_json(name, utime_t{val}, f);
 }
 
 void encode_json(const char *name, const bufferlist& bl, Formatter *f)

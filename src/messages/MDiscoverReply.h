@@ -85,7 +85,7 @@ private:
 
  public:
   __u8 starts_with = 0;
-  bufferlist trace;
+  ceph::buffer::list trace;
 
   enum { DIR, DENTRY, INODE };
 
@@ -145,10 +145,10 @@ protected:
 
 public:
   std::string_view get_type_name() const override { return "discover_reply"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }
-  
+
   // builders
   bool is_empty() const {
     return trace.length() == 0 &&
@@ -159,11 +159,11 @@ public:
 
   //  void set_flag_forward() { flag_forward = true; }
   void set_flag_error_dn(std::string_view dn) { 
-    flag_error_dn = true; 
-    error_dentry = dn; 
+    flag_error_dn = true;
+    error_dentry = dn;
   }
-  void set_flag_error_dir() { 
-    flag_error_dir = true; 
+  void set_flag_error_dir() {
+    flag_error_dir = true;
   }
   void set_dir_auth_hint(int a) {
     dir_auth_hint = a;
@@ -175,6 +175,7 @@ public:
 
   // ...
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(base_ino, p);
     decode(base_dir_frag, p);

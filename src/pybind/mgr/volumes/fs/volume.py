@@ -1,14 +1,13 @@
 import json
 import errno
 import logging
-from threading import Event
 
-import cephfs
+from mgr_util import CephfsClient
 
 from .fs_util import listdir
 
-from .operations.volume import ConnectionPool, open_volume, create_volume, \
-    delete_volume, list_volumes
+from .operations.volume import create_volume, \
+    delete_volume, list_volumes, open_volume
 from .operations.group import open_group, create_group, remove_group
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
@@ -20,11 +19,13 @@ from .purge_queue import ThreadPoolPurgeQueueMixin
 
 log = logging.getLogger(__name__)
 
+
 def octal_str_to_decimal_int(mode):
     try:
         return int(mode, 8)
     except ValueError:
         raise VolumeException(-errno.EINVAL, "Invalid mode '{0}'".format(mode))
+
 
 def name_to_json(names):
     """
@@ -35,13 +36,12 @@ def name_to_json(names):
         namedict.append({'name': names[i].decode('utf-8')})
     return json.dumps(namedict, indent=4, sort_keys=True)
 
-class VolumeClient(object):
+
+class VolumeClient(CephfsClient):
     def __init__(self, mgr):
-        self.mgr = mgr
-        self.stopping = Event()
+        super().__init__(mgr)
         # volume specification
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
-        self.connection_pool = ConnectionPool(self.mgr)
         # TODO: make thread pool size configurable
         self.cloner = Cloner(self, 4)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
@@ -55,10 +55,8 @@ class VolumeClient(object):
             self.cloner.queue_job(fs['mdsmap']['fs_name'])
             self.purge_queue.queue_job(fs['mdsmap']['fs_name'])
 
-    def is_stopping(self):
-        return self.stopping.is_set()
-
     def shutdown(self):
+        # Overrides CephfsClient.shutdown()
         log.info("shutting down")
         # first, note that we're shutting down
         self.stopping.set()
@@ -373,6 +371,18 @@ class VolumeClient(object):
                     with open_subvol(fs_handle, self.volspec, group, clonename,
                                      need_complete=False, expected_types=["clone"]) as subvolume:
                         ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def clone_cancel(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        clonename = kwargs['clone_name']
+        groupname = kwargs['group_name']
+
+        try:
+            self.cloner.cancel_job(volname, (clonename, groupname))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

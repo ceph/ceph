@@ -4,14 +4,13 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { CephServiceService } from '../../../shared/api/ceph-service.service';
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../shared/models/permissions';
-import { CephService } from '../../../shared/models/service.interface';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { CephServiceSpec } from '../../../shared/models/service.interface';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
   selector: 'cd-services',
@@ -30,21 +29,19 @@ export class ServicesComponent implements OnChanges, OnInit {
   permissions: Permissions;
 
   checkingOrchestrator = true;
-  orchestratorExist = false;
+  hasOrchestrator = false;
   docsUrl: string;
 
   columns: Array<CdTableColumn> = [];
-  services: Array<CephService> = [];
+  services: Array<CephServiceSpec> = [];
   isLoadingServices = false;
   selection = new CdTableSelection();
 
   constructor(
     private authStorageService: AuthStorageService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
     private i18n: I18n,
     private orchService: OrchestratorService,
-    private cephServiceService: CephServiceService,
-    private summaryService: SummaryService
+    private cephServiceService: CephServiceService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -58,27 +55,31 @@ export class ServicesComponent implements OnChanges, OnInit {
       },
       {
         name: this.i18n('Container image name'),
-        prop: 'container_image_name',
+        prop: 'status.container_image_name',
         flexGrow: 3
       },
       {
         name: this.i18n('Container image ID'),
-        prop: 'container_image_id',
-        flexGrow: 3
+        prop: 'status.container_image_id',
+        flexGrow: 3,
+        cellTransformation: CellTemplate.truncate,
+        customTemplateConfig: {
+          length: 12
+        }
       },
       {
         name: this.i18n('Running'),
-        prop: 'running',
+        prop: 'status.running',
         flexGrow: 1
       },
       {
         name: this.i18n('Size'),
-        prop: 'size',
+        prop: 'status.size',
         flexGrow: 1
       },
       {
         name: this.i18n('Last Refreshed'),
-        prop: 'last_refresh',
+        prop: 'status.last_refresh',
         flexGrow: 1
       }
     ];
@@ -87,28 +88,13 @@ export class ServicesComponent implements OnChanges, OnInit {
       return !this.hiddenColumns.includes(col.prop);
     });
 
-    // duplicated code with grafana
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
-    });
-
-    this.orchService.status().subscribe((data: { available: boolean }) => {
-      this.orchestratorExist = data.available;
-      this.checkingOrchestrator = false;
+    this.orchService.status().subscribe((status) => {
+      this.hasOrchestrator = status.available;
     });
   }
 
   ngOnChanges() {
-    if (this.orchestratorExist) {
+    if (this.hasOrchestrator) {
       this.services = [];
       this.table.reloadData();
     }
@@ -124,7 +110,7 @@ export class ServicesComponent implements OnChanges, OnInit {
     }
     this.isLoadingServices = true;
     this.cephServiceService.list().subscribe(
-      (services: CephService[]) => {
+      (services: CephServiceSpec[]) => {
         this.services = services;
         this.isLoadingServices = false;
       },

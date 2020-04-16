@@ -33,7 +33,8 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').clear();
     await $('input.form-control.ng-valid').sendKeys(name);
 
-    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
+    // Expand row
+    await this.waitClickableAndClick(this.getExpandCollapseElement(name));
     // Clicks desired config
     await this.waitVisibility(
       $('.table.table-striped.table-bordered'), // Checks for visibility of details tab
@@ -78,7 +79,7 @@ export class ConfigurationPageHelper extends PageHelper {
 
     await this.waitVisibility(this.getFirstTableCellWithText(name));
     // Checks for visibility of config in table
-    await this.getFirstTableCellWithText(name).click();
+    await this.getExpandCollapseElement(name).click();
     // Clicks config
     for (let i = 0, valtuple; (valtuple = values[i]); i++) {
       // iterates through list of values and

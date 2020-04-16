@@ -6,7 +6,7 @@ import time
 
 log = logging.getLogger(__name__)
 
-from args import argify
+from teuthology.task.args import argify
 
 POOLNAME = "POOLNAME"
 ARGS = [

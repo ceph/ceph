@@ -846,7 +846,7 @@ class FailoverSuite : public Dispatcher {
     return seastar::now();
   }
 
-  seastar::future<> ms_handle_reset(ConnectionRef conn) override {
+  seastar::future<> ms_handle_reset(ConnectionRef conn, bool is_replace) override {
     auto result = interceptor.find_result(conn);
     if (result == nullptr) {
       logger().error("Untracked reset connection: {}", *conn);
@@ -932,7 +932,7 @@ class FailoverSuite : public Dispatcher {
     unsigned pending_establish = 0;
     unsigned replaced_conns = 0;
     for (auto& result : interceptor.results) {
-      if (result.conn->is_closed()) {
+      if (result.conn->is_closed_clean()) {
         if (result.state == conn_state_t::replaced) {
           ++replaced_conns;
         }
@@ -1122,7 +1122,8 @@ class FailoverSuite : public Dispatcher {
   seastar::future<> markdown() {
     logger().info("[Test] markdown()");
     ceph_assert(tracked_conn);
-    return tracked_conn->close();
+    tracked_conn->mark_down();
+    return seastar::now();
   }
 
   seastar::future<> wait_blocked() {
@@ -1375,6 +1376,7 @@ class FailoverSuitePeer : public Dispatcher {
   }
 
   seastar::future<> ms_handle_accept(ConnectionRef conn) override {
+    logger().info("[TestPeer] got accept from Test");
     ceph_assert(!tracked_conn ||
                 tracked_conn->is_closed() ||
                 tracked_conn == conn);
@@ -1382,7 +1384,8 @@ class FailoverSuitePeer : public Dispatcher {
     return flush_pending_send();
   }
 
-  seastar::future<> ms_handle_reset(ConnectionRef conn) override {
+  seastar::future<> ms_handle_reset(ConnectionRef conn, bool is_replace) override {
+    logger().info("[TestPeer] got reset from Test");
     ceph_assert(tracked_conn == conn);
     tracked_conn = nullptr;
     return seastar::now();
@@ -1468,7 +1471,8 @@ class FailoverSuitePeer : public Dispatcher {
   seastar::future<> markdown() {
     logger().info("[TestPeer] markdown()");
     ceph_assert(tracked_conn);
-    return tracked_conn->close();
+    tracked_conn->mark_down();
+    return seastar::now();
   }
 
   static seastar::future<std::unique_ptr<FailoverSuitePeer>>

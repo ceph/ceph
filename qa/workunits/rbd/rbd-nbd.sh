@@ -101,7 +101,7 @@ function get_pid()
 unmap_device()
 {
     local unmap_dev=$1
-    local list_dev=$2
+    local list_dev=${2:-$1}
     _sudo rbd-nbd unmap ${unmap_dev}
 
     for s in 0.5 1 2 4 8 16 32; do
@@ -138,7 +138,7 @@ get_pid
 # map test specifying the device
 expect_false _sudo rbd-nbd --device ${DEV} map ${POOL}/${IMAGE}
 dev1=${DEV}
-unmap_device ${DEV} ${DEV}
+unmap_device ${DEV}
 DEV=
 # XXX: race possible when the device is reused by other process
 DEV=`_sudo rbd-nbd --device ${dev1} map ${POOL}/${IMAGE}`
@@ -183,7 +183,7 @@ test -n "${blocks2}"
 test ${blocks2} -eq ${blocks}
 
 # read-only option test
-_sudo rbd-nbd unmap ${DEV}
+unmap_device ${DEV}
 DEV=`_sudo rbd-nbd map --read-only ${POOL}/${IMAGE}`
 PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
     '$2 == pool && $3 == img && $5 == dev {print $1}')
@@ -192,7 +192,7 @@ ps -p ${PID} -o cmd | grep rbd-nbd
 
 _sudo dd if=${DEV} of=/dev/null bs=1M
 expect_false _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
-_sudo rbd-nbd unmap ${DEV}
+unmap_device ${DEV}
 
 # exclusive option test
 DEV=`_sudo rbd-nbd map --exclusive ${POOL}/${IMAGE}`
@@ -201,15 +201,14 @@ get_pid
 _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 expect_false timeout 10 \
 	rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
-_sudo rbd-nbd unmap ${DEV}
+unmap_device ${DEV}
 DEV=
 rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 # unmap by image name test
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
 get_pid
-_sudo rbd-nbd unmap "${IMAGE}"
-rbd-nbd list-mapped | expect_false grep "${DEV} $"
+unmap_device ${IMAGE} ${DEV}
 DEV=
 ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 

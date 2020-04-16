@@ -7,7 +7,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  FormHelper,
+  i18nProviders,
+  IscsiHelper
+} from '../../../../testing/unit-test-helper';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetFormComponent } from './iscsi-target-form.component';
 
@@ -166,7 +172,6 @@ describe('IscsiTargetFormComponent', () => {
     httpTesting.expectOne('ui-api/iscsi/settings').flush(SETTINGS);
     httpTesting.expectOne('ui-api/iscsi/portals').flush(PORTALS);
     httpTesting.expectOne('ui-api/iscsi/version').flush(VERSION);
-    httpTesting.expectOne('api/summary').flush({});
     httpTesting.expectOne('api/block/image').flush(RBD_LIST);
     httpTesting.expectOne('api/iscsi/target').flush(LIST_TARGET);
     httpTesting.verify();
@@ -245,6 +250,13 @@ describe('IscsiTargetFormComponent', () => {
         'backstore:1': {}
       }
     });
+  });
+
+  it('should validate authentication', () => {
+    const control = component.targetForm;
+    const formHelper = new FormHelper(control as CdFormGroup);
+    formHelper.expectValid('auth');
+    validateAuth(formHelper);
   });
 
   describe('should test initiators', () => {
@@ -362,6 +374,13 @@ describe('IscsiTargetFormComponent', () => {
         [{ description: '', enabled: false, name: 'iqn.initiator', selected: true }],
         [{ description: '', enabled: false, name: 'iqn.initiator', selected: false }]
       ]);
+    });
+
+    it('should validate authentication', () => {
+      const control = component.initiators.controls[0];
+      const formHelper = new FormHelper(control as CdFormGroup);
+      formHelper.expectValid(control);
+      validateAuth(formHelper);
     });
   });
 
@@ -508,4 +527,11 @@ describe('IscsiTargetFormComponent', () => {
       });
     });
   });
+
+  function validateAuth(formHelper: FormHelper) {
+    IscsiHelper.validateUser(formHelper, 'auth.user');
+    IscsiHelper.validatePassword(formHelper, 'auth.password');
+    IscsiHelper.validateUser(formHelper, 'auth.mutual_user');
+    IscsiHelper.validatePassword(formHelper, 'auth.mutual_password');
+  }
 });

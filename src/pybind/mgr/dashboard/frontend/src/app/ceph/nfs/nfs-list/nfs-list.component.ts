@@ -6,6 +6,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { NfsService } from '../../../shared/api/nfs.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -28,7 +29,7 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   styleUrls: ['./nfs-list.component.scss'],
   providers: [TaskListService]
 })
-export class NfsListComponent implements OnInit, OnDestroy {
+export class NfsListComponent extends ListWithDetails implements OnInit, OnDestroy {
   @ViewChild('nfsState', { static: false })
   nfsState: TemplateRef<any>;
   @ViewChild('nfsFsal', { static: true })
@@ -67,6 +68,7 @@ export class NfsListComponent implements OnInit, OnDestroy {
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().nfs;
     const getNfsUri = () =>
       this.selection.first() &&

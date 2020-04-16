@@ -88,9 +88,9 @@ const routes: Routes = [
         children: [
           { path: '', component: HostsComponent },
           {
-            path: URLVerbs.ADD,
+            path: URLVerbs.CREATE,
             component: HostFormComponent,
-            data: { breadcrumbs: ActionLabels.ADD }
+            data: { breadcrumbs: ActionLabels.CREATE }
           }
         ]
       },
@@ -259,7 +259,7 @@ const routes: Routes = [
       },
       {
         path: 'nfs',
-        canActivateChild: [ModuleStatusGuardService],
+        canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'nfs-ganesha',

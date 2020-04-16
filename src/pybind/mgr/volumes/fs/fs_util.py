@@ -2,6 +2,8 @@ import os
 import errno
 import logging
 
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+
 import cephfs
 import orchestrator
 
@@ -34,9 +36,9 @@ def remove_filesystem(mgr, fs_name):
     return mgr.mon_command(command)
 
 def create_mds(mgr, fs_name, placement):
-    spec = orchestrator.ServiceSpec(service_type='mds',
+    spec = ServiceSpec(service_type='mds',
                                     service_id=fs_name,
-                                    placement=orchestrator.PlacementSpec.from_string(placement))
+                                    placement=PlacementSpec.from_string(placement))
     try:
         completion = mgr.apply_mds(spec)
         mgr._orchestrator_wait([completion])
@@ -87,7 +89,7 @@ def list_one_entry_at_a_time(fs, dirpath):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
 
-def copy_file(fs, src, dst, mode):
+def copy_file(fs, src, dst, mode, cancel_check=None):
     """
     Copy a regular file from @src to @dst. @dst is overwritten if it exists.
     """
@@ -105,6 +107,8 @@ def copy_file(fs, src, dst, mode):
     IO_SIZE = 8 * 1024 * 1024
     try:
         while True:
+            if cancel_check and cancel_check():
+                raise VolumeException(-errno.EINTR, "copy operation interrupted")
             data = fs.read(src_fd, -1, IO_SIZE)
             if not len(data):
                 break

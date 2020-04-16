@@ -144,7 +144,6 @@ if(HAVE_INTEL)
   endif()
 endif()
 
-
 # require c++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -409,6 +408,7 @@ endif()
 
 if(WIN32)
   list(APPEND ceph_common_deps ws2_32 mswsock)
+  list(APPEND ceph_common_deps dlfcn_win32)
 endif()
 
 if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
@@ -830,6 +830,7 @@ add_custom_target(cephfs_testing DEPENDS
     ceph-fuse
     ceph-dencoder
     cephfs-journal-tool
+    cephfs-meta-injection
     cephfs-data-scan
     cephfs-table-tool)
 

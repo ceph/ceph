@@ -2,10 +2,13 @@
   <tab i18n-heading
        heading="OSDs List">
 
-    <cd-table [data]="osds"
+    <cd-table [autoReload]="false"
+              [data]="osds"
               (fetchData)="getOsdList()"
               [columns]="columns"
               selectionType="multiClick"
+              [hasDetails]="true"
+              (setExpandedRow)="setExpandedRow($event)"
               (updateSelection)="updateSelection($event)"
               [updateSelectionOnRefresh]="'never'">
 
@@ -27,7 +30,7 @@
       </div>
 
       <cd-osd-details cdTableDetail
-                      [selection]="selection">
+                      [selection]="expandedRow">
       </cd-osd-details>
     </cd-table>
 
@@ -55,12 +58,13 @@
 </ng-template>
 
 <ng-template #criticalConfirmationTpl
-             let-safeToDestroyResult="result"
+             let-safeToPerform="safeToPerform"
+             let-message="message"
              let-actionDescription="actionDescription">
-  <div *ngIf="!safeToDestroyResult['is_safe_to_destroy']"
+  <div *ngIf="!safeToPerform"
        class="danger">
     <cd-alert-panel type="warning"
-                    i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to destroy!</cd-alert-panel>
+                    i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to be {{ actionDescription }}! {{ message }}</cd-alert-panel>
   </div>
   <ng-container i18n><strong>OSD {{ getSelectedOsdIds() | join }}</strong> will be
 <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>

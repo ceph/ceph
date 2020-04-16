@@ -333,7 +333,7 @@ def parse_cmdargs(args=None, target=''):
                         help="make less verbose")
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
-                        'xml', 'xml-pretty', 'plain'], dest='output_format')
+                        'xml', 'xml-pretty', 'plain', 'yaml'], dest='output_format')
 
     parser.add_argument('--connect-timeout', dest='cluster_timeout',
                         type=int,
@@ -1279,4 +1279,11 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print('Interrupted')
         retval = errno.EINTR
-    sys.exit(retval)
+
+    if retval:
+        # flush explicitly because we aren't exiting in the usual way
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(retval)
+    else:
+        sys.exit(retval)

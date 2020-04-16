@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
@@ -36,6 +37,7 @@ describe('TableComponent', () => {
   configureTestBed({
     declarations: [TableComponent],
     imports: [
+      BrowserAnimationsModule,
       NgxDatatableModule,
       FormsModule,
       ComponentsModule,
@@ -161,7 +163,10 @@ describe('TableComponent', () => {
 
         // multiple
         expectColumnFiltered(
-          [{ filter: filterOdd, value: 'false' }, { filter: filterIndex, value: '2' }],
+          [
+            { filter: filterOdd, value: 'false' },
+            { filter: filterIndex, value: '2' }
+          ],
           [{ a: 2, b: 20, c: false }]
         );
 
@@ -361,14 +366,23 @@ describe('TableComponent', () => {
     });
 
     it('should search through arrays', () => {
-      component.columns = [{ prop: 'a', name: 'Index' }, { prop: 'b', name: 'ArrayColumn' }];
+      component.columns = [
+        { prop: 'a', name: 'Index' },
+        { prop: 'b', name: 'ArrayColumn' }
+      ];
 
-      component.data = [{ a: 1, b: ['foo', 'bar'] }, { a: 2, b: ['baz', 'bazinga'] }];
+      component.data = [
+        { a: 1, b: ['foo', 'bar'] },
+        { a: 2, b: ['baz', 'bazinga'] }
+      ];
       expectSearch('bar', [{ a: 1, b: ['foo', 'bar'] }]);
       expectSearch('arraycolumn:bar arraycolumn:foo', [{ a: 1, b: ['foo', 'bar'] }]);
       expectSearch('arraycolumn:baz arraycolumn:inga', [{ a: 2, b: ['baz', 'bazinga'] }]);
 
-      component.data = [{ a: 1, b: [1, 2] }, { a: 2, b: [3, 4] }];
+      component.data = [
+        { a: 1, b: [1, 2] },
+        { a: 2, b: [3, 4] }
+      ];
       expectSearch('arraycolumn:1 arraycolumn:2', [{ a: 1, b: [1, 2] }]);
     });
 
@@ -599,6 +613,74 @@ describe('TableComponent', () => {
 
     it('should match against multiple functions and return the corresponding classes', () => {
       expect(component.useCustomClass('https://secure.it')).toBe('btn secure');
+    });
+  });
+
+  describe('test expand and collapse feature', () => {
+    beforeEach(() => {
+      spyOn(component.setExpandedRow, 'emit');
+      component.table = {
+        rowDetail: { collapseAllRows: jest.fn(), toggleExpandRow: jest.fn() }
+      } as any;
+
+      // Setup table
+      component.identifier = 'a';
+      component.data = createFakeData(10);
+
+      // Select item
+      component.expanded = _.clone(component.data[1]);
+    });
+
+    describe('update expanded on refresh', () => {
+      const updateExpendedOnState = (state: 'always' | 'never' | 'onChange') => {
+        component.updateExpandedOnRefresh = state;
+        component.updateExpanded();
+      };
+
+      beforeEach(() => {
+        // Mock change
+        component.data[1].b = 'test';
+      });
+
+      it('refreshes "always"', () => {
+        updateExpendedOnState('always');
+        expect(component.expanded.b).toBe('test');
+        expect(component.setExpandedRow.emit).toHaveBeenCalled();
+      });
+
+      it('refreshes "onChange"', () => {
+        updateExpendedOnState('onChange');
+        expect(component.expanded.b).toBe('test');
+        expect(component.setExpandedRow.emit).toHaveBeenCalled();
+      });
+
+      it('does not refresh "onChange" if data is equal', () => {
+        component.data[1].b = 10; // Reverts change
+        updateExpendedOnState('onChange');
+        expect(component.expanded.b).toBe(10);
+        expect(component.setExpandedRow.emit).not.toHaveBeenCalled();
+      });
+
+      it('"never" refreshes', () => {
+        updateExpendedOnState('never');
+        expect(component.expanded.b).toBe(10);
+        expect(component.setExpandedRow.emit).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should open the table details and close other expanded rows', () => {
+      component.toggleExpandRow(component.expanded, false);
+      expect(component.expanded).toEqual({ a: 1, b: 10, c: true });
+      expect(component.table.rowDetail.collapseAllRows).toHaveBeenCalled();
+      expect(component.setExpandedRow.emit).toHaveBeenCalledWith(component.expanded);
+      expect(component.table.rowDetail.toggleExpandRow).toHaveBeenCalled();
+    });
+
+    it('should close the current table details expansion', () => {
+      component.toggleExpandRow(component.expanded, true);
+      expect(component.expanded).toBeUndefined();
+      expect(component.setExpandedRow.emit).toHaveBeenCalledWith(undefined);
+      expect(component.table.rowDetail.toggleExpandRow).toHaveBeenCalled();
     });
   });
 });

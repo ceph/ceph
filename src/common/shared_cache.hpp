@@ -23,11 +23,9 @@
 #include <memory>
 #endif
 #include "common/ceph_mutex.h"
+#include "common/ceph_context.h"
 #include "common/dout.h"
 #include "include/unordered_map.h"
-
-// re-include our assert to clobber the system one; fix dout:
-#include "include/ceph_assert.h"
 
 template <class K, class V>
 class SharedLRU {
@@ -164,7 +162,7 @@ public:
     VPtr val; // release any ref we have after we drop the lock
     {
       std::lock_guard l{lock};
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
+      auto i = weak_refs.find(key);
       if (i != weak_refs.end()) {
 	val = i->second.first.lock();
       }
@@ -176,7 +174,7 @@ public:
   void clear_range(
     const K& from,
     const K& to) {
-    list<VPtr> vals; // release any refs we have after we drop the lock
+    std::list<VPtr> vals; // release any refs we have after we drop the lock
     {
       std::lock_guard l{lock};
       auto from_iter = weak_refs.lower_bound(from);
@@ -193,7 +191,7 @@ public:
     VPtr val; // release any ref we have after we drop the lock
     {
       std::lock_guard l{lock};
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
+      auto i = weak_refs.find(key);
       if (i != weak_refs.end()) {
 	val = i->second.first.lock();
         weak_refs.erase(i);
@@ -203,7 +201,7 @@ public:
   }
 
   void set_size(size_t new_size) {
-    list<VPtr> to_release;
+    std::list<VPtr> to_release;
     {
       std::lock_guard l{lock};
       max_size = new_size;
@@ -219,7 +217,7 @@ public:
 
   VPtr lower_bound(const K& key) {
     VPtr val;
-    list<VPtr> to_release;
+    std::list<VPtr> to_release;
     {
       std::unique_lock l{lock};
       ++waiting;
@@ -298,7 +296,7 @@ public:
   }
   VPtr lookup_or_create(const K &key) {
     VPtr val;
-    list<VPtr> to_release;
+    std::list<VPtr> to_release;
     {
       std::unique_lock l{lock};
       cond.wait(l, [this, &key, &val] {
@@ -346,9 +344,9 @@ public:
    */
   VPtr add(const K& key, V *value, bool *existed = NULL) {
     VPtr val;
-    list<VPtr> to_release;
+    std::list<VPtr> to_release;
     {
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator actual;
+      typename std::map<K, std::pair<WeakVPtr, V*>, C>::iterator actual;
       std::unique_lock l{lock};
       cond.wait(l, [this, &key, &actual, &val] {
 	  actual = weak_refs.lower_bound(key);

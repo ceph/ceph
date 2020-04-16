@@ -7,6 +7,7 @@ from typing import List, Optional
 from orchestrator import InventoryFilter, DeviceLightLoc, Completion
 from orchestrator import ServiceDescription, DaemonDescription
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
+from orchestrator import HostSpec
 from .. import mgr
 from ..tools import wraps
 
@@ -40,7 +41,6 @@ def wait_api_result(method):
         self.api.orchestrator_wait([completion])
         raise_if_exception(completion)
         return completion.result
-
     return inner
 
 
@@ -51,19 +51,19 @@ class ResourceManager(object):
 
 class HostManger(ResourceManager):
     @wait_api_result
-    def list(self):
+    def list(self) -> List[HostSpec]:
         return self.api.get_hosts()
 
-    def get(self, hostname):
-        hosts = [host for host in self.list() if host.name == hostname]
+    def get(self, hostname: str) -> Optional[HostSpec]:
+        hosts = [host for host in self.list() if host.hostname == hostname]
         return hosts[0] if hosts else None
 
     @wait_api_result
-    def add(self, hostname):
-        return self.api.add_host(hostname)
+    def add(self, hostname: str):
+        return self.api.add_host(HostSpec(hostname))
 
     @wait_api_result
-    def remove(self, hostname):
+    def remove(self, hostname: str):
         return self.api.remove_host(hostname)
 
 
@@ -105,8 +105,16 @@ class ServiceManager(ResourceManager):
 
 class OsdManager(ResourceManager):
     @wait_api_result
-    def create(self, drive_groups):
-        return self.api.create_osds(drive_groups)
+    def create(self, drive_group_specs):
+        return self.api.apply_drivegroups(drive_group_specs)
+
+    @wait_api_result
+    def remove(self, osd_ids):
+        return self.api.remove_osds(osd_ids)
+
+    @wait_api_result
+    def removing_status(self):
+        return self.api.remove_osds_status()
 
 
 class OrchClient(object):

@@ -1055,7 +1055,7 @@ public:
       create_user.display_name = "pubsub";
       create_user.generate_key = false;
       yield call(new RGWUserCreateCR(sync_env->async_rados, sync_env->store, create_user, sync_env->dpp));
-      if (retcode < 0) {
+      if (retcode < 0 && retcode != -ERR_USER_EXIST) {
         ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to create rgw user: ret=" << retcode << dendl;
         return set_cr_error(retcode);
       }

@@ -6,6 +6,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -38,7 +39,7 @@ const BASE_URL = 'pool';
   ],
   styleUrls: ['./pool-list.component.scss']
 })
-export class PoolListComponent implements OnInit {
+export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   @ViewChild('poolUsageTpl', { static: true })
@@ -55,7 +56,7 @@ export class PoolListComponent implements OnInit {
   permissions: Permissions;
   tableActions: CdTableAction[];
   viewCacheStatusList: any[];
-  selectionCacheTiers: any[] = [];
+  cacheTiers: any[] = [];
   monAllowPoolDelete = false;
 
   constructor(
@@ -71,6 +72,7 @@ export class PoolListComponent implements OnInit {
     private configurationService: ConfigurationService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
@@ -214,7 +216,6 @@ export class PoolListComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
-    this.getSelectionTiers();
   }
 
   deletePoolModal() {
@@ -279,10 +280,10 @@ export class PoolListComponent implements OnInit {
   }
 
   getSelectionTiers() {
-    const cacheTierIds = this.selection.hasSingleSelection
-      ? this.selection.first()['tiers'] || []
-      : [];
-    this.selectionCacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
+    if (typeof this.expandedRow !== 'undefined') {
+      const cacheTierIds = this.expandedRow['tiers'];
+      this.cacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
+    }
   }
 
   getDisableDesc(): string | undefined {
@@ -293,5 +294,10 @@ export class PoolListComponent implements OnInit {
     }
 
     return undefined;
+  }
+
+  setExpandedRow(expandedRow: any) {
+    super.setExpandedRow(expandedRow);
+    this.getSelectionTiers();
   }
 }

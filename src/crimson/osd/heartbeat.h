@@ -35,11 +35,8 @@ public:
   seastar::future<> stop();
 
   void add_peer(osd_id_t peer, epoch_t epoch);
-  seastar::future<> update_peers(int whoami);
-  seastar::future<> remove_peer(osd_id_t peer);
-
-  seastar::future<> send_heartbeats();
-  seastar::future<> send_failures();
+  void update_peers(int whoami);
+  void remove_peer(osd_id_t peer);
 
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
@@ -49,7 +46,7 @@ public:
   // Dispatcher methods
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				MessageRef m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn) override;
+  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
 private:
   seastar::future<> handle_osd_ping(crimson::net::Connection* conn,
@@ -65,7 +62,7 @@ private:
   using osds_t = std::vector<osd_id_t>;
   /// remove down OSDs
   /// @return peers not needed in this epoch
-  seastar::future<osds_t> remove_down_peers();
+  osds_t remove_down_peers();
   /// add enough reporters for fast failure detection
   void add_reporter_peers(int whoami);
 
@@ -109,12 +106,14 @@ private:
   };
   using peers_map_t = std::map<osd_id_t, PeerInfo>;
   peers_map_t peers;
-
   // osds which are considered failed
   // osd_id => when was the last time that both front and back pings were acked
   //           use for calculating how long the OSD has been unresponsive
   using failure_queue_t = std::map<osd_id_t, clock::time_point>;
-  failure_queue_t failure_queue;
+  seastar::future<> send_failures(failure_queue_t&& failure_queue);
+  seastar::future<> send_heartbeats();
+  void heartbeat_check();
+
   struct failure_info_t {
     clock::time_point failed_since;
     entity_addrvec_t addrs;

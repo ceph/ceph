@@ -164,6 +164,9 @@ void DetachChildRequest<I>::clone_v2_open_parent() {
   m_parent_image_ctx = I::create("", m_parent_spec.image_id, nullptr,
                                  m_parent_io_ctx, false);
 
+  // ensure non-primary images can be modified
+  m_parent_image_ctx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+
   auto ctx = create_context_callback<
     DetachChildRequest<I>,
     &DetachChildRequest<I>::handle_clone_v2_open_parent>(this);

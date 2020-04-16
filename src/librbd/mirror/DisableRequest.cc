@@ -8,6 +8,7 @@
 #include "cls/journal/cls_journal_client.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
@@ -15,6 +16,7 @@
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/ImageStateUpdateRequest.h"
+#include "librbd/mirror/snapshot/PromoteRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -109,32 +111,6 @@ Context *DisableRequest<I>::handle_image_state_update(int *result) {
     return m_on_finish;
   }
 
-  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    // remove mirroring snapshots
-
-    bool removing_snapshots = false;
-    {
-      std::lock_guard locker{m_lock};
-      std::shared_lock image_locker{m_image_ctx->image_lock};
-
-      for (auto &it : m_image_ctx->snap_info) {
-        auto &snap_info = it.second;
-        auto type = cls::rbd::get_snap_namespace_type(
-          snap_info.snap_namespace);
-        if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
-          send_remove_snap("", snap_info.snap_namespace, snap_info.name);
-          removing_snapshots = true;
-        }
-      }
-    }
-
-    if (!removing_snapshots) {
-      send_remove_mirror_image();
-    }
-
-    return nullptr;
-  }
-
   send_promote_image();
   return nullptr;
 }
@@ -142,21 +118,29 @@ Context *DisableRequest<I>::handle_image_state_update(int *result) {
 template <typename I>
 void DisableRequest<I>::send_promote_image() {
   if (m_is_primary) {
-    send_get_clients();
+    clean_mirror_state();
     return;
   }
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
-  // Not primary -- shouldn't have the journal open
-  ceph_assert(m_image_ctx->journal == nullptr);
+  auto ctx = util::create_context_callback<
+    DisableRequest<I>, &DisableRequest<I>::handle_promote_image>(this);
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    // Not primary -- shouldn't have the journal open
+    ceph_assert(m_image_ctx->journal == nullptr);
 
-  using klass = DisableRequest<I>;
-  Context *ctx = util::create_context_callback<
-    klass, &klass::handle_promote_image>(this);
-  auto req = journal::PromoteRequest<I>::create(m_image_ctx, true, ctx);
-  req->send();
+    auto req = journal::PromoteRequest<I>::create(m_image_ctx, true, ctx);
+    req->send();
+  } else if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    auto req = mirror::snapshot::PromoteRequest<I>::create(
+      m_image_ctx, m_mirror_image.global_image_id, ctx);
+    req->send();
+  } else {
+    lderr(cct) << "unknown image mirror mode: " << m_mirror_image.mode << dendl;
+    ctx->complete(-EOPNOTSUPP);
+  }
 }
 
 template <typename I>
@@ -169,8 +153,50 @@ Context *DisableRequest<I>::handle_promote_image(int *result) {
     return m_on_finish;
   }
 
-  send_get_clients();
+  send_refresh_image();
   return nullptr;
+}
+
+template <typename I>
+void DisableRequest<I>::send_refresh_image() {
+  if (!m_image_ctx->state->is_refresh_required()) {
+    clean_mirror_state();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  auto ctx = util::create_context_callback<
+    DisableRequest<I>,
+    &DisableRequest<I>::handle_refresh_image>(this);
+  m_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+Context *DisableRequest<I>::handle_refresh_image(int* result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to refresh image: " << cpp_strerror(*result) << dendl;
+    return m_on_finish;
+  }
+
+  clean_mirror_state();
+  return nullptr;
+}
+
+template <typename I>
+void DisableRequest<I>::clean_mirror_state() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    remove_mirror_snapshots();
+  } else {
+    send_get_clients();
+  }
 }
 
 template <typename I>
@@ -256,6 +282,33 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
   }
 
   return nullptr;
+}
+
+template <typename I>
+void DisableRequest<I>::remove_mirror_snapshots() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  // remove snapshot-based mirroring snapshots
+  bool removing_snapshots = false;
+  {
+    std::lock_guard locker{m_lock};
+    std::shared_lock image_locker{m_image_ctx->image_lock};
+
+    for (auto &it : m_image_ctx->snap_info) {
+      auto &snap_info = it.second;
+      auto type = cls::rbd::get_snap_namespace_type(
+        snap_info.snap_namespace);
+      if (type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
+        send_remove_snap("", snap_info.snap_namespace, snap_info.name);
+        removing_snapshots = true;
+      }
+    }
+  }
+
+  if (!removing_snapshots) {
+    send_remove_mirror_image();
+  }
 }
 
 template <typename I>

@@ -8,6 +8,13 @@
 namespace cls {
 namespace rbd {
 
+using std::istringstream;
+using std::ostringstream;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 std::ostream& operator<<(std::ostream& os,
                          MirrorPeerDirection mirror_peer_direction) {
   switch (mirror_peer_direction) {

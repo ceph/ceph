@@ -93,6 +93,7 @@ private:
 
 public:
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
     decode(map_epoch, p);
@@ -138,17 +139,17 @@ public:
       // that at runtime we are only adding a bufferptr reference to it.
       static char zeros[16384] = {};
       while (s > sizeof(zeros)) {
-        payload.append(buffer::create_static(sizeof(zeros), zeros));
+        payload.append(ceph::buffer::create_static(sizeof(zeros), zeros));
         s -= sizeof(zeros);
       }
       if (s) {
-        payload.append(buffer::create_static(s, zeros));
+        payload.append(ceph::buffer::create_static(s, zeros));
       }
     }
   }
 
   std::string_view get_type_name() const override { return "osd_ping"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_ping(" << get_op_name(op)
 	<< " e" << map_epoch
 	<< " up_from " << up_from

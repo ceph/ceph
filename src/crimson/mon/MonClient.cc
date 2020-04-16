@@ -79,7 +79,7 @@ public:
                              const std::vector<uint32_t>& allowed_modes);
 
   // v1 and v2
-  seastar::future<> close();
+  void close();
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(entity_type_t peer) const;
   KeyStore& get_keys();
@@ -427,16 +427,14 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
   return 0;
 }
 
-seastar::future<> Connection::close()
+void Connection::close()
 {
   reply.set_value(Ref<MAuthReply>(nullptr));
   reply = {};
   auth_done.set_value(AuthResult::canceled);
   auth_done = {};
   if (conn && !std::exchange(closed, true)) {
-    return conn->close();
-  } else {
-    return seastar::now();
+    conn->mark_down();
   }
 }
 
@@ -543,7 +541,7 @@ Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
   }
 }
 
-seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn)
+seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
   auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
                             [peer_addr = conn->get_peer_addr()](auto& mc) {
@@ -551,13 +549,13 @@ seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn)
                             });
   if (found != pending_conns.end()) {
     logger().warn("pending conn reset by {}", conn->get_peer_addr());
-    return (*found)->close();
+    (*found)->close();
+    return seastar::now();
   } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
     logger().warn("active conn reset {}", conn->get_peer_addr());
     active_con.reset();
     return reopen_session(-1);
   } else {
-    logger().error("unknown reset from {}", conn->get_peer_addr());
     return seastar::now();
   }
 }
@@ -920,9 +918,7 @@ seastar::future<> Client::stop()
   return tick_gate.close().then([this] {
     timer.cancel();
     if (active_con) {
-      return active_con->close();
-    } else {
-      return seastar::now();
+      active_con->close();
     }
   });
 }
@@ -953,9 +949,8 @@ seastar::future<> Client::reopen_session(int rank)
       } else {
         return mc->authenticate_v1(monmap.get_epoch(), entity_name, want_keys)
           .handle_exception([conn](auto ep) {
-            return conn->close().then([ep=std::move(ep)](){
-	      return seastar::make_exception_future<Connection::AuthResult>(ep);
-            });
+            conn->mark_down();
+            return seastar::make_exception_future<Connection::AuthResult>(ep);
           });
       }
     }).then([peer, this](auto result) {
@@ -986,21 +981,13 @@ seastar::future<> Client::reopen_session(int rank)
       ceph_assert(!active_con && !pending_conns.empty());
       active_con = std::move(*found);
       found->reset();
-      auto ret = seastar::do_with(
-	std::move(pending_conns),
-	[](auto &pending_conns) {
-	  return seastar::parallel_for_each(
-	    pending_conns,
-	    [] (auto &conn) {
-	      if (!conn) {
-		return seastar::now();
-	      } else {
-		return conn->close();
-	      }
-	    });
-	});
+      for (auto& conn : pending_conns) {
+        if (conn) {
+          conn->close();
+        }
+      }
       pending_conns.clear();
-      return ret;
+      return seastar::now();
     }).then([]() {
       logger().debug("reopen_session mon connection attempts complete");
     }).handle_exception([](auto ep) {

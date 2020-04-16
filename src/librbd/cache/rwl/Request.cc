@@ -190,11 +190,27 @@ void C_WriteRequest<T>::setup_buffer_resources(
 }
 
 template <typename T>
-void C_WriteRequest<T>::setup_log_operations() {
+void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   {
     std::lock_guard locker(m_lock);
-    // TODO: Add sync point if necessary
     std::shared_ptr<SyncPoint> current_sync_point = rwl.get_current_sync_point();
+    if ((!rwl.get_persist_on_flush() && current_sync_point->log_entry->writes_completed) ||
+        (current_sync_point->log_entry->writes > MAX_WRITES_PER_SYNC_POINT) ||
+        (current_sync_point->log_entry->bytes > MAX_BYTES_PER_SYNC_POINT)) {
+      /* Create new sync point and persist the previous one. This sequenced
+       * write will bear a sync gen number shared with no already completed
+       * writes. A group of sequenced writes may be safely flushed concurrently
+       * if they all arrived before any of them completed. We'll insert one on
+       * an aio_flush() from the application. Here we're inserting one to cap
+       * the number of bytes and writes per sync point. When the application is
+       * not issuing flushes, we insert sync points to record some observed
+       * write concurrency information that enables us to safely issue >1 flush
+       * write (for writes observed here to have been in flight simultaneously)
+       * at a time in persist-on-write mode.
+       */
+      rwl.flush_new_sync_point(nullptr, on_exit);
+      current_sync_point = rwl.get_current_sync_point();
+    }
     uint64_t current_sync_gen = rwl.get_current_sync_gen();
     op_set =
       make_unique<WriteLogOperationSet>(this->m_dispatched_time,
@@ -287,11 +303,12 @@ template <typename T>
 void C_WriteRequest<T>::dispatch()
 {
   CephContext *cct = rwl.get_context();
+  DeferredContexts on_exit;
   utime_t now = ceph_clock_now();
   this->m_dispatched_time = now;
 
   ldout(cct, 15) << "write_req=" << this << " cell=" << this->get_cell() << dendl;
-  setup_log_operations();
+  setup_log_operations(on_exit);
 
   bool append_deferred = false;
   if (!op_set->persist_on_flush &&
@@ -320,6 +337,71 @@ void C_WriteRequest<T>::dispatch()
     this->schedule_append();
   }
 }
+
+template <typename T>
+C_FlushRequest<T>::C_FlushRequest(T &rwl, const utime_t arrived,
+                                  io::Extents &&image_extents,
+                                  bufferlist&& bl, const int fadvise_flags,
+                                  ceph::mutex &lock, PerfCounters *perfcounter,
+                                  Context *user_req)
+  : C_BlockIORequest<T>(rwl, arrived, std::move(image_extents), std::move(bl),
+                        fadvise_flags, user_req),
+    m_lock(lock), m_perfcounter(perfcounter) {
+  ldout(rwl.get_context(), 20) << this << dendl;
+}
+
+template <typename T>
+void C_FlushRequest<T>::finish_req(int r) {
+  ldout(rwl.get_context(), 20) << "flush_req=" << this
+                               << " cell=" << this->get_cell() << dendl;
+  /* Block guard already released */
+  ceph_assert(!this->get_cell());
+
+  /* Completed to caller by here */
+  utime_t now = ceph_clock_now();
+  m_perfcounter->tinc(l_librbd_rwl_aio_flush_latency, now - this->m_arrived_time);
+}
+
+template <typename T>
+bool C_FlushRequest<T>::alloc_resources() {
+  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+                               << "req=[" << *this << "]" << dendl;
+  return rwl.alloc_resources(this);
+}
+
+template <typename T>
+void C_FlushRequest<T>::dispatch() {
+  utime_t now = ceph_clock_now();
+  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+                               << "req=[" << *this << "]" << dendl;
+  ceph_assert(this->m_resources.allocated);
+  this->m_dispatched_time = now;
+
+  op = std::make_shared<SyncPointLogOperation>(m_lock,
+                                               to_append,
+                                               now,
+                                               m_perfcounter,
+                                               rwl.get_context());
+
+  m_perfcounter->inc(l_librbd_rwl_log_ops, 1);
+  rwl.schedule_append(op);
+}
+
+template <typename T>
+void C_FlushRequest<T>::setup_buffer_resources(
+    uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
+    uint64_t &number_lanes, uint64_t &number_log_entries,
+    uint64_t &number_unpublished_reserves) {
+  number_log_entries = 1;
+}
+
+template <typename T>
+std::ostream &operator<<(std::ostream &os,
+                         const C_FlushRequest<T> &req) {
+  os << (C_BlockIORequest<T>&)req
+     << " m_resources.allocated=" << req.m_resources.allocated;
+  return os;
+};
 
 std::ostream &operator<<(std::ostream &os,
                          const BlockGuardReqState &r) {

@@ -4,6 +4,14 @@
 #include "hobject.h"
 #include "common/Formatter.h"
 
+using std::list;
+using std::ostream;
+using std::set;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::Formatter;
+
 static void append_escaped(const string &in, string *out)
 {
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {

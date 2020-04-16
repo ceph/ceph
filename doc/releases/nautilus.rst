@@ -1667,6 +1667,9 @@ Instructions
    and verify that each monitor has both a ``v2:`` and ``v1:`` address
    listed.
 
+   Running nautilus OSDs will not bind to their v2 address automatically.
+   They must be restarted for that to happen.
+
    .. important:: 
       Before this step is run, the following command must already have been run:
 

@@ -19,8 +19,8 @@ int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 	std::cmatch m;
 
 	if (std::regex_match(url, m, expr)) {
-		string host(m[2].first, m[2].second);
-		string port(m[3].first, m[3].second);
+	        std::string host(m[2].first, m[2].second);
+		std::string port(m[3].first, m[3].second);
 		addrinfo hints;
 		// FIPS zeroization audit 20191115: this memset is fine.
 		memset(&hints, 0, sizeof(hints));
@@ -36,4 +36,3 @@ int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 
 	return 1;
 }
-

@@ -2147,22 +2147,14 @@ bool RGWGetObj::prefetch_data()
     return false;
   }
 
-  bool prefetch_first_chunk = true;
   range_str = s->info.env->get("HTTP_RANGE");
-
+  // TODO: add range prefetch
   if (range_str) {
-    int r = parse_range();
-    /* error on parsing the range, stop prefetch and will fail in execute() */
-    if (r < 0) {
-      return false; /* range_parsed==false */
-    }
-    /* range get goes to shadow objects, stop prefetch */
-    if (ofs >= s->cct->_conf->rgw_max_chunk_size) {
-      prefetch_first_chunk = false;
-    }
+    parse_range();
+    return false;
   }
 
-  return get_data && prefetch_first_chunk;
+  return get_data;
 }
 
 void RGWGetObj::pre_exec()
@@ -3286,7 +3278,7 @@ void RGWCreateBucket::execute()
     ldpp_dout(this, 20) << "got creation time: << " << master_info.creation_time << dendl;
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.num_shards;
+    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
     pobjv = &objv;
     obj_lock_enabled = master_info.obj_lock_enabled();
   } else {
@@ -7022,7 +7014,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.num_shards;
+    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
     pobjv = &objv;
   } else {
     pmaster_bucket = nullptr;

@@ -57,8 +57,12 @@ The distinction between *index layout* and *log layout* is important, because in
 
 ### Bucket Sync Status
 
-* Move bucket sync status to a per-bucket object, rather than having separate status per-shard.
-    - Track current log generation and an array of markers for each shard in that generation.
+* Add a per-bucket sync status object that tracks:
+    - full sync progress,
+    - the current generation of incremental sync, and
+    - the set of shards that have completed incremental sync of that generation
+* Existing per-bucket-shard sync status objects continue to track incremental sync.
+    - their object names should include the generation number, except for generation 0
 * For backward compatibility, add special handling when we get ENOENT trying to read this per-bucket sync status:
     - If the remote's oldest log layout has generation=0, read any existing per-shard sync status objects. If any are found, resume incremental sync from there.
     - Otherwise, initialize for full sync.
@@ -66,14 +70,25 @@ The distinction between *index layout* and *log layout* is important, because in
 ### Bucket Sync
 
 * Full sync uses a single bucket-wide listing to fetch all objects.
-* Incremental sync spawns a coroutine for each log shard mentioned in the datalog.
+    - Use a cls_lock to prevent different shards from duplicating this work.
 * When incremental sync gets to the end of a log shard (i.e. listing the log returns truncated=false):
-    - If we've seen a higher generation number in the datalog, flag that shard as 'resharded' in the bucket sync status.
+    - If the remote has a newer log generation, flag that shard as 'resharded' in the bucket sync status.
     - Once all shards in the current generation reach that 'resharded' state, incremental bucket sync can advance to the next generation.
+    - Use cls_version on the bucket sync status object to detect racing writes from other shards.
 
 ### Log Trimming
 
 * Use generation number from sync status to trim the right logs
 * Once all shards of a log generation are trimmed:
     - Remove their rados objects.
+    - Remove the associated incremental sync status objects.
     - Remove the log generation from its bucket instance metadata.
+
+### Admin APIs
+
+* RGWOp_BILog_List response should include the bucket's highest log generation
+    - Allows incremental sync to determine whether truncated=false means that it's caught up, or that it needs to transition to the next generation.
+* RGWOp_BILog_Info response should include the bucket's lowest and highest log generations
+    - Allows bucket sync status initialization to decide whether it needs to scan for existing shard status, and where it should resume incremental sync after full sync completes.
+* RGWOp_BILog_Status response should include per-bucket status information
+    - For log trimming of old generations

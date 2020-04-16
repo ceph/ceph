@@ -3,8 +3,8 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { TreeModule } from 'ng2-tree';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
@@ -30,12 +30,13 @@ import { RbdConfigurationFormComponent } from './rbd-configuration-form/rbd-conf
 import { RbdConfigurationListComponent } from './rbd-configuration-list/rbd-configuration-list.component';
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
-import { RbdImagesComponent } from './rbd-images/rbd-images.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
-import { RbdNamespaceFormComponent } from './rbd-namespace-form/rbd-namespace-form.component';
+import { RbdNamespaceFormModalComponent } from './rbd-namespace-form/rbd-namespace-form-modal.component';
 import { RbdNamespaceListComponent } from './rbd-namespace-list/rbd-namespace-list.component';
-import { RbdSnapshotFormComponent } from './rbd-snapshot-form/rbd-snapshot-form.component';
+import { RbdPerformanceComponent } from './rbd-performance/rbd-performance.component';
+import { RbdSnapshotFormModalComponent } from './rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTabsComponent } from './rbd-tabs/rbd-tabs.component';
 import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdTrashPurgeModalComponent } from './rbd-trash-purge-modal/rbd-trash-purge-modal.component';
@@ -44,8 +45,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
 @NgModule({
   entryComponents: [
     RbdDetailsComponent,
-    RbdNamespaceFormComponent,
-    RbdSnapshotFormComponent,
+    RbdNamespaceFormModalComponent,
+    RbdSnapshotFormModalComponent,
     RbdTrashMoveModalComponent,
     RbdTrashRestoreModalComponent,
     RbdTrashPurgeModalComponent,
@@ -67,8 +68,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     ModalModule.forRoot(),
     SharedModule,
     RouterModule,
-    TreeModule,
-    NgBootstrapFormValidationModule
+    NgBootstrapFormValidationModule,
+    TreeModule.forRoot()
   ],
   declarations: [
     RbdListComponent,
@@ -78,13 +79,12 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     IscsiTargetListComponent,
     RbdDetailsComponent,
     RbdFormComponent,
-    RbdNamespaceFormComponent,
+    RbdNamespaceFormModalComponent,
     RbdNamespaceListComponent,
     RbdSnapshotListComponent,
-    RbdSnapshotFormComponent,
+    RbdSnapshotFormModalComponent,
     RbdTrashListComponent,
     RbdTrashMoveModalComponent,
-    RbdImagesComponent,
     RbdTrashRestoreModalComponent,
     RbdTrashPurgeModalComponent,
     IscsiTargetDetailsComponent,
@@ -93,7 +93,9 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     IscsiTargetIqnSettingsModalComponent,
     IscsiTargetDiscoveryModalComponent,
     RbdConfigurationListComponent,
-    RbdConfigurationFormComponent
+    RbdConfigurationFormComponent,
+    RbdTabsComponent,
+    RbdPerformanceComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
@@ -110,7 +112,22 @@ const routes: Routes = [
     canActivate: [FeatureTogglesGuardService],
     data: { breadcrumbs: 'Images' },
     children: [
-      { path: '', component: RbdImagesComponent },
+      { path: '', component: RbdListComponent },
+      {
+        path: 'namespaces',
+        component: RbdNamespaceListComponent,
+        data: { breadcrumbs: 'Namespaces' }
+      },
+      {
+        path: 'trash',
+        component: RbdTrashListComponent,
+        data: { breadcrumbs: 'Trash' }
+      },
+      {
+        path: 'performance',
+        component: RbdPerformanceComponent,
+        data: { breadcrumbs: 'Overall Performance' }
+      },
       {
         path: URLVerbs.CREATE,
         component: RbdFormComponent,

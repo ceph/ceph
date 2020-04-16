@@ -1,0 +1,83 @@
+<cd-modal [modalRef]="modalRef">
+  <ng-container class="modal-title"
+                i18n>Create Namespace</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="namespaceForm"
+          #formDir="ngForm"
+          [formGroup]="namespaceForm"
+          novalidate>
+      <div class="modal-body">
+
+        <!-- Pool -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="pool"
+                 i18n>Pool</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Pool name..."
+                   id="pool"
+                   name="pool"
+                   formControlName="pool"
+                   *ngIf="!poolPermission.read">
+            <select id="pool"
+                    name="pool"
+                    class="form-control custom-select"
+                    formControlName="pool"
+                    *ngIf="poolPermission.read">
+              <option *ngIf="pools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="pools !== null && pools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No rbd pools available --</option>
+              <option *ngIf="pools !== null && pools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a pool --</option>
+              <option *ngFor="let pool of pools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <span *ngIf="namespaceForm.showError('pool', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="namespace"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Namespace name..."
+                   id="namespace"
+                   name="namespace"
+                   formControlName="namespace"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="namespaceForm.showError('namespace', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="namespaceForm.showError('namespace', formDir, 'namespaceExists')"
+                  i18n>Namespace already exists.</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <cd-submit-button [form]="namespaceForm"
+                          (submitAction)="submit()"
+                          i18n>Create Namespace</cd-submit-button>
+        <cd-back-button [back]="modalRef.hide"
+                        name="Close"
+                        i18n-name>
+        </cd-back-button>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

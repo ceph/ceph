@@ -26,10 +26,7 @@ export abstract class PageHelper {
    * @memberof Helper
    */
   static async checkConsole() {
-    let browserLog = await browser
-      .manage()
-      .logs()
-      .get('browser');
+    let browserLog = await browser.manage().logs().get('browser');
 
     browserLog = browserLog.filter((log) => log.level.value > 900);
 
@@ -48,7 +45,7 @@ export abstract class PageHelper {
   static restrictTo(page: string): Function {
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
       const fn: Function = descriptor.value;
-      descriptor.value = function(...args: any) {
+      descriptor.value = function (...args: any) {
         return browser
           .getCurrentUrl()
           .then((url) =>
@@ -71,9 +68,7 @@ export abstract class PageHelper {
   }
 
   async getTabText(index: number): Promise<string> {
-    return $$('.nav.nav-tabs li')
-      .get(index)
-      .getText();
+    return $$('.nav.nav-tabs li').get(index).getText();
   }
 
   async getTableTotalCount(): Promise<number> {
@@ -102,6 +97,15 @@ export abstract class PageHelper {
 
   getFirstTableCellWithText(content: string): ElementFinder {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
+  }
+
+  getFirstExpandCollapseElement(): ElementFinder {
+    return element.all(by.className('tc_expand-collapse')).first();
+  }
+
+  getExpandCollapseElement(content: string): ElementFinder {
+    const tableRow = element(by.cssContainingText('.datatable-body-row', content));
+    return tableRow.element(by.className('tc_expand-collapse'));
   }
 
   getTableRow(content: string) {
@@ -288,8 +292,8 @@ export abstract class PageHelper {
     return browser.wait(EC.not(EC.textToBePresentInElement(elem, text)), TIMEOUT, message);
   }
 
-  async waitFn(func: Function, message?: string) {
-    return browser.wait(func, TIMEOUT, message);
+  async waitFn(func: Function, message?: string, timeout: number = TIMEOUT) {
+    return browser.wait(func, timeout, message);
   }
 
   getFirstCell(): ElementFinder {
@@ -306,9 +310,7 @@ export abstract class PageHelper {
     await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
 
     // Clicks on table Delete button
-    await $$('.table-actions button.dropdown-toggle')
-      .first()
-      .click(); // open submenu
+    await $$('.table-actions button.dropdown-toggle').first().click(); // open submenu
     await $('li.delete a').click(); // click on "delete" menu item
 
     // Confirms deletion
@@ -327,9 +329,9 @@ export abstract class PageHelper {
    * Uncheck all checked table rows.
    */
   async uncheckAllTableRows() {
-    await $$('.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked').each(
-      (e: ElementFinder) => e.click()
-    );
+    await $$(
+      '.datatable-body-cell-label .datatable-checkbox input[type=checkbox]:checked'
+    ).each((e: ElementFinder) => e.click());
   }
 
   async filterTable(name: string, option: string) {

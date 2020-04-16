@@ -47,8 +47,8 @@ class C_handle_connection_read : public EventCallback {
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
 
-RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband> &ib,
-                                                 shared_ptr<RDMADispatcher>& rdma_dispatcher,
+RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, std::shared_ptr<Infiniband> &ib,
+                                                 std::shared_ptr<RDMADispatcher>& rdma_dispatcher,
                                                  RDMAWorker *w)
   : cct(cct), connected(0), error(0), ib(ib),
     dispatcher(rdma_dispatcher), worker(w),
@@ -58,6 +58,10 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<In
 {
   if (!cct->_conf->ms_async_rdma_cm) {
     qp = ib->create_queue_pair(cct, dispatcher->get_tx_cq(), dispatcher->get_rx_cq(), IBV_QPT_RC, NULL);
+    if (!qp) {
+      lderr(cct) << __func__ << " queue pair create failed" << dendl;
+      return;
+    }
     local_qpn = qp->get_local_qp_number();
     notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
     dispatcher->register_qp(qp, this);
@@ -129,7 +133,7 @@ int RDMAConnectedSocketImpl::activate()
 int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const SocketOptions &opts) {
   ldout(cct, 20) << __func__ << " nonblock:" << opts.nonblock << ", nodelay:"
                  << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << dendl;
-  NetHandler net(cct);
+  ceph::NetHandler net(cct);
 
   // we construct a socket to transport ib sync message
   // but we shouldn't block in tcp connecting
@@ -337,7 +341,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
   return read_size;
 }
 
-ssize_t RDMAConnectedSocketImpl::send(bufferlist &bl, bool more)
+ssize_t RDMAConnectedSocketImpl::send(ceph::buffer::list &bl, bool more)
 {
   if (error) {
     if (!active)
@@ -440,7 +444,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (total_copied == 0)
     return -EAGAIN;
   ceph_assert(total_copied <= pending_bl.length());
-  bufferlist swapped;
+  ceph::buffer::list swapped;
   if (total_copied < pending_bl.length()) {
     worker->perf_logger->inc(l_msgr_rdma_tx_parital_mem);
     pending_bl.splice(total_copied, pending_bl.length() - total_copied, &swapped);
@@ -463,7 +467,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
 int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
 {
   ldout(cct, 20) << __func__ << " QP: " << local_qpn << " " << tx_buffers[0] << dendl;
-  vector<Chunk*>::iterator current_buffer = tx_buffers.begin();
+  auto current_buffer = tx_buffers.begin();
   ibv_sge isge[tx_buffers.size()];
   uint32_t current_sge = 0;
   ibv_send_wr iswr[tx_buffers.size()];

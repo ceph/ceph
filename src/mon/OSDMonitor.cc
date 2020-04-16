@@ -91,6 +91,29 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
+using ceph::ErasureCodePluginRegistry;
+using ceph::ErasureCodeProfile;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
@@ -281,7 +304,7 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
     auto p = caps_info.caps.cbegin();
     try {
       decode(caps_str, p);
-    } catch (const buffer::error &err) {
+    } catch (const ceph::buffer::error &err) {
       derr << "corrupt OSD cap data for " << entity_name << " in auth db"
            << dendl;
       return false;
@@ -378,6 +401,19 @@ epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
   return floor;
 }
 
+void LastEpochClean::dump(Formatter *f) const
+{
+  f->open_array_section("per_pool");
+
+  for (auto& it : report_by_pool) {
+    f->open_object_section("pool");
+    f->dump_unsigned("poolid", it.first);
+    f->dump_unsigned("floor", it.second.floor);
+    f->close_section();
+  }
+
+  f->close_section();
+}
 
 class C_UpdateCreatingPGs : public Context {
 public:
@@ -624,16 +660,19 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
-    if (g_conf().get_val<bool>("mon_debug_no_require_nautilus")) {
-      derr << __func__ << " mon_debug_no_require_octopus and nautilus=true" << dendl;
-      newmap.require_osd_release = ceph_release_t::mimic;
-    } else {
-      derr << __func__ << " mon_debug_no_require_octopus=true" << dendl;
+  if (g_conf().get_val<bool>("mon_debug_no_require_pacific")) {
+    if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
+      derr << __func__ << " mon_debug_no_require_pacific and octopus=true" << dendl;
       newmap.require_osd_release = ceph_release_t::nautilus;
+    } else {
+      derr << __func__ << " mon_debug_no_require_pacific=true" << dendl;
+      newmap.require_osd_release = ceph_release_t::octopus;
     }
   } else {
-    newmap.require_osd_release = ceph_release_t::octopus;
+    newmap.require_osd_release = ceph_release_t::pacific;
+  }
+
+  if (newmap.require_osd_release >= ceph_release_t::octopus) {
     ceph_release_t r = ceph_release_from_name(
       g_conf()->mon_osd_initial_require_min_compat_client);
     if (!r) {
@@ -1345,7 +1384,7 @@ void OSDMonitor::maybe_prime_pg_temp()
       osds.insert(p->first);
     }
   }
-  for (map<int32_t,uint32_t>::iterator p = pending_inc.new_weight.begin();
+  for (auto p = pending_inc.new_weight.begin();
        !all && p != pending_inc.new_weight.end();
        ++p) {
     if (p->second < osdmap.get_weight(p->first)) {
@@ -2019,7 +2058,7 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
     auto p = bl.cbegin();
     decode(m, p);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     if (err)
       *err << "osd." << osd << " metadata is corrupt";
     return -EIO;
@@ -2202,7 +2241,8 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   // also scan osd epochs
   // don't trim past the oldest reported osd epoch
   for (auto& osd_epoch : osd_epochs) {
-    if (osd_epoch.second < floor) {
+    if (osd_epoch.second < floor &&
+        osdmap.is_out(osd_epoch.first)) {
       floor = osd_epoch.second;
     }
   }
@@ -3374,6 +3414,13 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 		      << " because require_osd_release < mimic";
     goto ignore;
   }
+  if (HAVE_FEATURE(m->osd_features, SERVER_PACIFIC) &&
+      osdmap.require_osd_release < ceph_release_t::nautilus) {
+    mon->clog->info() << "disallowing boot of pacific+ OSD "
+		      << m->get_orig_source_inst()
+		      << " because require_osd_release < nautilus";
+    goto ignore;
+  }
 
   // The release check here is required because for OSD_PGLOG_HARDLIMIT,
   // we are reusing a jewel feature bit that was retired in luminous.
@@ -4176,7 +4223,7 @@ bool OSDMonitor::preprocess_get_purged_snaps(MonOpRequestRef op)
       auto &v = r[epoch];
       try {
 	ceph::decode(v, p);
-      } catch (buffer::error& e) {
+      } catch (ceph::buffer::error& e) {
 	derr << __func__ << " unable to parse value for key '" << it->key()
 	     << "': \n";
 	bl.hexdump(*_dout);
@@ -5179,6 +5226,24 @@ void OSDMonitor::dump_info(Formatter *f)
     }
   }
   f->close_section();
+
+  f->open_object_section("osdmap_clean_epochs");
+  f->dump_unsigned("min_last_epoch_clean", get_min_last_epoch_clean());
+
+  f->open_object_section("last_epoch_clean");
+  last_epoch_clean.dump(f);
+  f->close_section();
+
+  f->open_array_section("osd_epochs");
+  for (auto& osd_epoch : osd_epochs) {
+    f->open_object_section("osd");
+    f->dump_unsigned("id", osd_epoch.first);
+    f->dump_unsigned("epoch", osd_epoch.second);
+    f->close_section();
+  }
+  f->close_section(); // osd_epochs
+
+  f->close_section(); // osd_clean_epochs
 
   f->dump_unsigned("osdmap_first_committed", get_first_committed());
   f->dump_unsigned("osdmap_last_committed", get_last_committed());
@@ -7265,7 +7330,7 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
     return -EINVAL;
   }
   check_legacy_ec_plugin(plugin->second, erasure_code_profile);
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  auto& instance = ErasureCodePluginRegistry::instance();
   return instance.factory(plugin->second,
 			  g_conf().get_val<std::string>("erasure_code_dir"),
 			  profile, erasure_code, ss);
@@ -7950,8 +8015,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return r;
     }
     p.size = n;
-    if (n < p.min_size)
-      p.min_size = n;
+    p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
   } else if (var == "min_size") {
     if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
       ss << "pool min size change is disabled; you must unset nosizechange flag for the pool first";
@@ -11013,7 +11077,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!sure) {
       FeatureMap m;
       mon->get_combined_feature_map(&m);
-      uint64_t features = ceph_release_features(ceph::to_integer<int>(vno));
+      uint64_t features = ceph_release_features(to_integer<int>(vno));
       bool first = true;
       bool ok = true;
       for (int type : {
@@ -11203,6 +11267,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_OCTOPUS))
            && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_OCTOPUS feature";
+	err = -EPERM;
+	goto reply;
+      }
+    } else if (rel == ceph_release_t::pacific) {
+      if (!mon->monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_PACIFIC)) {
+	ss << "not all mons are pacific";
+	err = -EPERM;
+	goto reply;
+      }
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_PACIFIC))
+           && !sure) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_PACIFIC feature";
 	err = -EPERM;
 	goto reply;
       }
@@ -11941,7 +12018,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (osdmap.exists(id)) {
       pending_inc.new_primary_affinity[id] = ww;
-      ss << "set osd." << id << " primary-affinity to " << w << " (" << ios::hex << ww << ios::dec << ")";
+      ss << "set osd." << id << " primary-affinity to " << w << " (" << std::ios::hex << ww << std::ios::dec << ")";
       getline(ss, rs);
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                                 get_last_committed() + 1));
