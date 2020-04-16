@@ -253,8 +253,9 @@ def do_summary(ctx):
         lockd[who][1] += 1 if l['up'] else 0
         lockd[who][2] = l['machine_type']
 
+    # sort locks by machine type and count
     locks = sorted([p for p in lockd.items()
-                    ], key=lambda sort: (sort[1][2], sort[1][0]))
+                    ], key=lambda sort: (sort[1][2] or '', sort[1][0]))
     total_count, total_up = 0, 0
     print("TYPE     COUNT  UP  OWNER")
 
@@ -262,7 +263,7 @@ def do_summary(ctx):
             # if machinetype == spectype:
             print("{machinetype:8s} {count:3d}  {up:3d}  {owner}".format(
                 count=count, up=upcount, owner=owner[0],
-                machinetype=machinetype))
+                machinetype=machinetype or '(none)'))
             total_count += count
             total_up += upcount
 
