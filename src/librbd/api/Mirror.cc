@@ -1486,7 +1486,7 @@ int Mirror<I>::peer_site_add(librados::IoCtx& io_ctx, std::string *uuid,
     if (r == -ESTALE) {
       ldout(cct, 5) << "duplicate UUID detected, retrying" << dendl;
     } else if (r < 0) {
-      lderr(cct) << "failed to add mirror peer '" << uuid << "': "
+      lderr(cct) << "failed to add mirror peer '" << site_name << "': "
                  << cpp_strerror(r) << dendl;
       return r;
     }

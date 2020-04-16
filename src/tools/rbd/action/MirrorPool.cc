@@ -1042,7 +1042,10 @@ int execute_peer_add(const po::variables_map &vm,
   std::string uuid;
   r = rbd.mirror_peer_site_add(
     io_ctx, &uuid, mirror_peer_direction, remote_cluster, remote_client_name);
-  if (r < 0) {
+  if (r == -EEXIST) {
+    std::cerr << "rbd: mirror peer already exists" << std::endl;
+    return r;
+  } else if (r < 0) {
     std::cerr << "rbd: error adding mirror peer" << std::endl;
     return r;
   }
