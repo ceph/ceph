@@ -127,18 +127,20 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
     def test_put(self):
         self.set_config_key('config/mgr/mgr/telemetry/contact', '')
         self.set_config_key('config/mgr/mgr/telemetry/description', '')
-        self.set_config_key('config/mgr/mgr/telemetry/enabled', 'True')
         self.set_config_key('config/mgr/mgr/telemetry/interval', '72')
         self.set_config_key('config/mgr/mgr/telemetry/leaderboard', 'False')
         self.set_config_key('config/mgr/mgr/telemetry/organization', '')
         self.set_config_key('config/mgr/mgr/telemetry/proxy', '')
         self.set_config_key('config/mgr/mgr/telemetry/url', '')
+        self.set_config_key('config/mgr/mgr/telemetry/last_opt_revision', '2')
+        self.set_config_key('config/mgr/mgr/telemetry/enabled', 'True')
         self._put(
             '/api/mgr/module/telemetry',
             data={
                 'config': {
                     'contact': 'tux@suse.com',
                     'description': 'test',
+                    'last_opt_revision': 1,
                     'enabled': False,
                     'interval': 4711,
                     'leaderboard': True,
