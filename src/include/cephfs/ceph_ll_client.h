@@ -5,17 +5,14 @@
  *
  * Copyright (C) Jeff Layton <jlayton@redhat.com>
  *
- * Heavily borrowed from David Howells' draft statx patchset.
- *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- *
  */
 
-#ifndef CEPH_CEPH_STATX_H
-#define CEPH_CEPH_STATX_H
+#ifndef CEPH_CEPH_LL_CLIENT_H
+#define CEPH_CEPH_LL_CLIENT_H
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -23,6 +20,8 @@ extern "C" {
 #endif
 
 /*
+ * Heavily borrowed from David Howells' draft statx patchset.
+ *
  * Since the xstat patches are still a work in progress, we borrow its data
  * structures and #defines to implement ceph_getattrx. Once the xstat stuff
  * has been merged we should drop this and switch over to using that instead.

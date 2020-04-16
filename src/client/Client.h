@@ -23,7 +23,7 @@
 #include "common/cmdparse.h"
 #include "common/compiler_extensions.h"
 #include "include/common_fwd.h"
-#include "include/cephfs/ceph_statx.h"
+#include "include/cephfs/ceph_ll_client.h"
 #include "include/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
