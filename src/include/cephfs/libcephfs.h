@@ -74,27 +74,6 @@ struct ceph_file_layout {
 	uint32_t fl_pg_pool;      /* namespace, crush ruleset, rep level */
 } __attribute__ ((packed));
 
-
-typedef struct inodeno_t {
-  uint64_t val;
-} inodeno_t;
-
-typedef struct _snapid_t {
-  uint64_t val;
-} snapid_t;
-
-typedef struct vinodeno_t {
-  inodeno_t ino;
-  snapid_t snapid;
-} vinodeno_t;
-
-typedef struct Fh Fh;
-#else /* _cplusplus */
-
-struct inodeno_t;
-struct vinodeno_t;
-typedef struct vinodeno_t vinodeno;
-
 #endif /* ! __cplusplus */
 
 struct UserPerm;
@@ -1775,7 +1754,6 @@ int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
  * needs, but it should take care to choose a value that allows it to avoid
  * forcible eviction from the cluster in the event of an application bug.
  */
-typedef void (*ceph_deleg_cb_t)(struct Fh *fh, void *priv);
 
 /* Commands for manipulating delegation state */
 #ifndef CEPH_DELEGATION_NONE

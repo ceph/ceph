@@ -117,7 +117,7 @@ public:
       goto fail;
 
     {
-      client_callback_args args = {};
+      ceph_client_callback_args args = {};
       args.handle = this;
       args.umask_cb = umask_cb;
       client->ll_register_callbacks(&args);

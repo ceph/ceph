@@ -10379,7 +10379,7 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
   return statfs(0, stbuf, perms);
 }
 
-void Client::ll_register_callbacks(struct client_callback_args *args)
+void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
 {
   if (!args)
     return;

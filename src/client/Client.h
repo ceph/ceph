@@ -122,29 +122,6 @@ struct CapSnap;
 struct MetaRequest;
 class ceph_lock_state_t;
 
-
-typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
-
-typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
-					 vinodeno_t ino, const char *name,
-					 size_t len);
-typedef int (*client_remount_callback_t)(void *handle);
-
-typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
-typedef mode_t (*client_umask_callback_t)(void *handle);
-
-/* Callback for delegation recalls */
-typedef void (*ceph_deleg_cb_t)(Fh *fh, void *priv);
-
-struct client_callback_args {
-  void *handle;
-  client_ino_callback_t ino_cb;
-  client_dentry_callback_t dentry_cb;
-  client_switch_interrupt_callback_t switch_intr_cb;
-  client_remount_callback_t remount_cb;
-  client_umask_callback_t umask_cb;
-};
-
 // ========================================================
 // client interface
 
@@ -601,7 +578,7 @@ public:
   int ll_osdaddr(int osd, uint32_t *addr);
   int ll_osdaddr(int osd, char* buf, size_t size);
 
-  void ll_register_callbacks(struct client_callback_args *args);
+  void ll_register_callbacks(struct ceph_client_callback_args *args);
   int test_dentry_handling(bool can_invalidate);
 
   const char** get_tracked_conf_keys() const override;

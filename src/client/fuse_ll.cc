@@ -1234,7 +1234,7 @@ int CephFuse::Handle::start()
 #endif
 
 
-  struct client_callback_args args = {
+  struct ceph_client_callback_args args = {
     handle: this,
     ino_cb: client->cct->_conf.get_val<bool>("fuse_use_invalidate_cb") ?
       ino_invalidate_cb : NULL,
