@@ -124,7 +124,7 @@ private:
     auto close_fd = make_scope_guard([fd] { ::close(fd); });
     if (auto bl_delta = appender.bl.length() - bl_offset; bl_delta > 0) {
       ceph::bufferlist dump_bl;
-      appender.bl.copy(bl_offset + space_offset, bl_delta - space_offset, dump_bl);
+      appender.bl.begin(bl_offset + space_offset).copy(bl_delta - space_offset, dump_bl);
       const size_t space_len = space_size();
       dump_bl.append(appender.get_pos() - space_len, space_len);
       dump_bl.write_fd(fd);
