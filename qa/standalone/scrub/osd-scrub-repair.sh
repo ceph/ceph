@@ -494,6 +494,7 @@ function TEST_auto_repair_bluestore_failed() {
     repair $pgid
     sleep 2
 
+    flush_pg_stats
     ceph pg dump pgs
     ceph pg dump pgs | grep -q "^$(pgid).* active+clean " || return 1
     grep scrub_finish $dir/osd.${primary}.log
