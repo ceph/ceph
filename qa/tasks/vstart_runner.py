@@ -150,6 +150,11 @@ else:
     SRC_PREFIX = "./"
 
 
+def rm_nonascii_chars(var):
+    var = var.replace('\xe2\x80\x98', '\'')
+    var = var.replace('\xe2\x80\x99', '\'')
+    return var
+
 class LocalRemoteProcess(object):
     def __init__(self, args, subproc, check_status, stdout, stderr):
         self.args = args
@@ -170,6 +175,7 @@ class LocalRemoteProcess(object):
                 return
 
         out, err = self.subproc.communicate()
+        out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
         self.stdout.write(out)
         self.stderr.write(err)
 
