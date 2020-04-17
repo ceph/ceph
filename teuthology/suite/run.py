@@ -373,24 +373,19 @@ class Run(object):
                 break
             # Break apart the filter parameter (one string) into comma
             # separated components to be used in searches.
+            def matches(f):
+                if f in description:
+                    return True
+                if any(f in path for path in base_frag_paths):
+                    return True
+                return False
             filter_in = self.args.filter_in
             if filter_in:
-                if not any([x in description for x in filter_in]):
-                    for filt_samp in filter_in:
-                        if any(x.find(filt_samp) >= 0 for x in base_frag_paths):
-                            break
-                    else:
-                        continue
+                if not any(matches(f) for f in filter_in):
+                    continue
             filter_out = self.args.filter_out
             if filter_out:
-                if any([x in description for x in filter_out]):
-                    continue
-                is_collected = True
-                for filt_samp in filter_out:
-                    if any(filt_samp in x for x in base_frag_paths):
-                        is_collected = False
-                        break
-                if not is_collected:
+                if any(matches(f) for f in filter_out):
                     continue
 
             raw_yaml = '\n'.join([open(a, 'r').read() for a in fragment_paths])
