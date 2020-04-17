@@ -13462,6 +13462,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if (offset < 0 || length <= 0)
     return -EINVAL;
 
+  if ((uint64_t)(offset+length) > mdsmap->get_max_filesize()) //too large!
+    return -EFBIG;
+
   if (mode & ~(FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE))
     return -EOPNOTSUPP;
 
