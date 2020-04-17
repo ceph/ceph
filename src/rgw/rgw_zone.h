@@ -497,7 +497,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     if (struct_v >= 13) {
       ::decode(oidc_pool, bl);
     } else {
-      oidc_pool = name + ".rgw.oidc";
+      oidc_pool = name + ".rgw.meta:oidc";
     }
     DECODE_FINISH(bl);
   }
