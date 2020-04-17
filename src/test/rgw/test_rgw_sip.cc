@@ -56,56 +56,59 @@ static bool decode_marker(const string& marker, T *t)
   return true;
 }
 
+struct BasicMarker {
+  uint32_t val{0};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(val, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(val, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(BasicMarker)
+
+struct BasicData {
+  string val;
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(val, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(val, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(BasicData)
+
 class BasicProvider : public SIProvider
 {
+  int id;
   uint32_t max_entries;
 
-  static string gen_data(uint32_t val) {
+  string gen_data(uint32_t val) {
     stringstream ss;
-    ss << "basic test data -- " << val;
+    ss << id << ": basic test data -- " << val;
     return ss.str();
   }
 
 public: 
-  BasicProvider(uint32_t _max_entries) : max_entries(_max_entries) {}
-
-  struct Marker {
-    uint32_t val{0};
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(val, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(1, bl);
-      decode(val, bl);
-      DECODE_FINISH(bl);
-    }
-  };
-
-  struct Data {
-    string val;
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(val, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(1, bl);
-      decode(val, bl);
-      DECODE_FINISH(bl);
-    }
-  };
+  BasicProvider(int _id, uint32_t _max_entries) : id(_id), max_entries(_max_entries) {}
 
   SIProvider::Type get_type() const {
     return SIProvider::Type::FULL;
   }
 
   int fetch(std::string marker, int max, fetch_result *result) override {
-    Marker pos;
+    BasicMarker pos;
 
     result->entries.clear();
 
@@ -122,14 +125,14 @@ public:
     for (int i = 0; i < max && val < max_entries; ++i, ++val) {
       SIProvider::info e;
 
-      Data d{gen_data(val)};
+      BasicData d{gen_data(val)};
       d.encode(e.data);
-      e.key = encode_marker(Marker{val});
+      e.key = encode_marker(BasicMarker{val});
 
       result->entries.push_back(std::move(e));
     }
 
-    result->more = (max_entries > 0 && val < max_entries - 1);
+    result->more = (max_entries > 0 && val < max_entries);
     result->done = !result->more; /* simple provider, no intermediate state */
 
     return 0;
@@ -145,8 +148,6 @@ public:
     return -EINVAL;
   }
 };
-WRITE_CLASS_ENCODER(BasicProvider::Marker)
-WRITE_CLASS_ENCODER(BasicProvider::Data)
 
 class LogProvider : public SIProvider
 {
@@ -171,22 +172,6 @@ public:
                                    min_val(_min_val),
                                    max_val(_max_val) {}
 
-  struct Marker {
-    uint32_t val{0};
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(val, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(1, bl);
-      decode(val, bl);
-      DECODE_FINISH(bl);
-    }
-  };
-
   SIProvider::Type get_type() const {
     return SIProvider::Type::INC;
   }
@@ -203,24 +188,8 @@ public:
     done = _done;
   }
 
-  struct Data {
-    string val;
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(val, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(1, bl);
-      decode(val, bl);
-      DECODE_FINISH(bl);
-    }
-  };
-
-
   int fetch(std::string marker, int max, fetch_result *result) override {
-    Marker pos;
+    BasicMarker pos;
 
     result->entries.clear();
 
@@ -244,9 +213,9 @@ public:
     for (int i = 0; i < max && val <= max_val; ++i, ++val) {
       SIProvider::info e;
 
-      Data d{gen_data(val)};
+      BasicData d{gen_data(val)};
       d.encode(e.data);
-      e.key = encode_marker(Marker{val});
+      e.key = encode_marker(BasicMarker{val});
 
       result->entries.push_back(std::move(e));
     }
@@ -266,16 +235,32 @@ public:
     return max_val;
   }
 };
-WRITE_CLASS_ENCODER(LogProvider::Marker)
-WRITE_CLASS_ENCODER(LogProvider::Data)
 
+static bool handle_result(SIProvider::fetch_result& result, string *marker)
+{
+  for (auto& e : result.entries) {
+    if (marker) {
+      *marker = e.key;
+    }
 
+    BasicData d;
+    try {
+      decode(d, e.data);
+    } catch (buffer::error& err) {
+      cerr << "ERROR: failed to decode data" << std::endl;
+      return false;
+    }
+    cout << "entry: " << d.val << std::endl;
+  }
+
+  return true;
+}
 
 TEST(TestRGWSIP, test_basic_provider)
 {
   int max_entries = 25;
 
-  BasicProvider bp(max_entries);
+  BasicProvider bp(0, max_entries);
 
   string marker;
   ASSERT_EQ(0, bp.get_start_marker(&marker));
@@ -290,19 +275,7 @@ TEST(TestRGWSIP, test_basic_provider)
 
     total += result.entries.size();
 
-    for (auto& e : result.entries) {
-      marker = e.key;
-
-      BasicProvider::Data d;
-      try {
-        decode(d, e.data);
-      } catch (buffer::error& err) {
-        cerr << "ERROR: failed to decode data" << std::endl;
-        ASSERT_TRUE(false);
-      }
-      cout << "entry: " << d.val << std::endl;
-    }
-
+    ASSERT_TRUE(handle_result(result, &marker));
     ASSERT_TRUE((total < max_entries) != (result.done));
   } while (total < max_entries);
 
@@ -331,25 +304,93 @@ TEST(TestRGWSIP, test_log_provider)
 
     total += result.entries.size();
 
-    for (auto& e : result.entries) {
-      marker = e.key;
-
-      LogProvider::Data d;
-      try {
-        decode(d, e.data);
-      } catch (buffer::error& err) {
-        cerr << "ERROR: failed to decode data" << std::endl;
-        ASSERT_TRUE(false);
-      }
-      cout << "entry: " << d.val << std::endl;
-    }
-    cout << "result.more=" << result.more << " total=" << total << std::endl;
+    ASSERT_TRUE(handle_result(result, &marker));
     ASSERT_TRUE((total < max_entries) == (result.more));
 
   } while (total < max_entries);
 
   ASSERT_TRUE(total == max_entries);
 }
+
+TEST(TestRGWSIP, test_basic_provider_client)
+{
+  int max_entries = 25;
+
+  auto bp = std::make_shared<BasicProvider>(0, max_entries);
+  auto base = std::static_pointer_cast<SIProvider>(bp);
+
+  SIProviderClient pc(base);
+
+  int total = 0;
+  int chunk_size = 10;
+
+  do {
+    SIProvider::fetch_result result;
+    ASSERT_EQ(0, pc.fetch(chunk_size, &result));
+
+    total += result.entries.size();
+
+    ASSERT_TRUE(handle_result(result, nullptr));
+    ASSERT_TRUE((total < max_entries) != (result.done));
+  } while (total < max_entries);
+
+  ASSERT_TRUE(total == max_entries);
+}
+
+TEST(TestRGWSIP, test_sharded_stage)
+{
+  int num_shards = 20;
+  int shard_entries_limit = 40;
+  int max_entries[num_shards];
+
+  vector<SIProviderClientRef> shards;
+
+  int all_entries = 0;
+
+  for (int i = 0; i < num_shards; ++i) {
+    max_entries[i] = (i * 7) % (shard_entries_limit + 1);
+    cout << "max_entries[" << i << "]=" << max_entries[i] << std::endl;
+    all_entries += max_entries[i];
+
+    auto bp = std::make_shared<BasicProvider>(i, max_entries[i]);
+    auto base = std::static_pointer_cast<SIProvider>(bp);
+    auto pc = std::make_shared<SIProviderClient>(base);
+
+    shards.push_back(pc);
+  }
+
+  SIPShardedStage stage(shards);
+
+  int total[num_shards];
+  int chunk_size = 10;
+
+  memset(total, 0, sizeof(total));
+
+  int total_iter = 0;
+  int all_count = 0;
+
+  while (!stage.is_complete()) {
+    for (int i = 0; i < num_shards; ++i) {
+      if (stage.is_shard_done(i)) {
+        continue;
+      }
+      SIProvider::fetch_result result;
+      ASSERT_EQ(0, stage.fetch(i, chunk_size, &result));
+
+      total[i] += result.entries.size();
+      all_count += result.entries.size();
+
+      ASSERT_TRUE(handle_result(result, nullptr));
+      ASSERT_NE((total[i] < max_entries[i]), result.done);
+    }
+
+    ++total_iter;
+    ASSERT_TRUE(total_iter < (num_shards * shard_entries_limit)); /* avoid infinite loop due to bug */
+  }
+
+  ASSERT_EQ(all_entries, all_count);
+}
+
 
 int main(int argc, char **argv) {
   vector<const char*> args;
