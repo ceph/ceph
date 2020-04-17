@@ -7,19 +7,19 @@ import { Component, Input, OnChanges } from '@angular/core';
 })
 export class UsageBarComponent implements OnChanges {
   @Input()
-  totalBytes: number;
+  total: number;
   @Input()
-  usedBytes: number;
+  used: number;
+  @Input()
+  isBinary = true;
 
   usedPercentage: number;
   freePercentage: number;
-  freeBytes: number;
 
   constructor() {}
 
   ngOnChanges() {
-    this.usedPercentage = Math.round((this.usedBytes / this.totalBytes) * 100);
+    this.usedPercentage = this.total > 0 ? Math.round((this.used / this.total) * 100) : 0;
     this.freePercentage = 100 - this.usedPercentage;
-    this.freeBytes = this.totalBytes - this.usedBytes;
   }
 }
