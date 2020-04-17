@@ -431,6 +431,10 @@ class TestDataScan(CephFSTestCase):
         file_count = 100
         file_names = ["%s" % n for n in range(0, file_count)]
 
+        # Make sure and disable dirfrag auto merging and splitting
+        self.fs.set_ceph_conf('mds', 'mds bal merge size', 0)
+        self.fs.set_ceph_conf('mds', 'mds bal split size', 100 * file_count)
+
         # Create a directory of `file_count` files, each named after its
         # decimal number and containing the string of its decimal number
         self.mount_a.run_python(dedent("""
@@ -485,6 +489,7 @@ class TestDataScan(CephFSTestCase):
         # by checking the omap now has the dentry's key again
         self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
         self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_links"])
         self.assertIn(victim_key, self._dirfrag_keys(frag_obj_id))
 
         # Start the filesystem and check that the dentry we deleted is now once again visible
@@ -504,6 +509,14 @@ class TestDataScan(CephFSTestCase):
         frag_obj_id = "{0:x}.00000000".format(dir_ino)
         keys = self._dirfrag_keys(frag_obj_id)
         self.assertListEqual(sorted(keys), sorted(["%s_head" % f for f in file_names]))
+
+        # run scrub to update and make sure rstat.rbytes info in subdir inode and dirfrag
+        # are matched
+        out_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair", "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        # Remove the whole 'sudbdir' directory
+        self.mount_a.run_shell(["rm", "-rf", "subdir/"])
 
     @for_teuthology
     def test_parallel_execution(self):
