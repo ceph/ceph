@@ -40,7 +40,7 @@ from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
-from .schedule import HostAssignment
+from .schedule import HostAssignment, DRAIN_LABEL
 from .inventory import Inventory, SpecStore, HostCache
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
@@ -1106,6 +1106,16 @@ you may want to run:
         self.inventory.rm_label(host, label)
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
+
+    @trivial_completion
+    def drain_host(self, host):
+        self.inventory.add_label(host, DRAIN_LABEL)
+        self.event.set()
+
+    @trivial_completion
+    def abort_drain_host(self, host):
+        self.inventory.rm_label(host, DRAIN_LABEL)
+        self.event.set()
 
     def update_osdspec_previews(self, search_host: str = ''):
         # Set global 'pending' flag for host

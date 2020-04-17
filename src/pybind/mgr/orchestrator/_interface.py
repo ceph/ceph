@@ -819,6 +819,20 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def drain_host(self, host):
+        # type: (str) -> Completion
+        """
+        Drains a host. something similar to `kubectl drain`
+        """
+        raise NotImplementedError()
+
+    def abort_drain_host(self, host):
+        # type: (str) -> Completion
+        """
+        Replenish the host.
+        """
+        raise NotImplementedError()
+
     def get_inventory(self, host_filter=None, refresh=False):
         # type: (Optional[InventoryFilter], bool) -> Completion
         """

@@ -86,6 +86,24 @@ class HostAssignment(object):
                     f'Cannot place {self.spec.one_line_str()}: No matching '
                     f'hosts for label {self.spec.placement.label}')
 
+    def respect_drain(self, candidates: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
+        num_existing = len(self.get_daemons_func(self.service_name))
+
+        to_be_drained = self._labeled(DRAIN_LABEL)
+        ret = [
+            h for h in candidates if h.hostname not in to_be_drained
+        ]
+
+        if len(ret) < 1 and num_existing >= 1:
+            raise OrchestratorValidationError(
+                f'Cannot drain {to_be_drained}: cannot scale service {self.service_name} to 0')
+
+
+
+        return ret
+
+
+
     def place(self):
         # type: () -> List[HostPlacementSpec]
         """

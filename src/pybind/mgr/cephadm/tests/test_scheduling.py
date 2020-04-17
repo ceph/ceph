@@ -410,7 +410,7 @@ class NodeAssignmentTest(NamedTuple):
         NodeAssignmentTest(
             'mon',
             PlacementSpec(label='foo'),
-            'host1 host2 host3'.split(),
+            'host1,labels=foo host2,labels=foo host3,labels=foo'.split(),
             [],
             ['host1', 'host2', 'host3']
         ),
@@ -422,8 +422,21 @@ class NodeAssignmentTest(NamedTuple):
             [],
             ['monhost1', 'monhost2']
         ),
+        # drain
+        NodeAssignmentTest(
+            'mon',
+            PlacementSpec(count=1, host_pattern='*'),
+            'host1,labels=_drain host2 host3'.split(),
+            [
+                DaemonDescription('mon', 'a', 'host1'),
+                DaemonDescription('mon', 'b', 'host2'),
+                DaemonDescription('mon', 'c', 'host3'),
+            ],
+            ['host2', 'host3']
+        ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
+    host_specs = [host_from_str(h) for h in hosts]
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
         get_hosts_func=lambda label=None, as_hostspec=False: hosts,
@@ -494,7 +507,7 @@ class NodeAssignmentTest2(NamedTuple):
         NodeAssignmentTest2(
             'mon',
             PlacementSpec(count=1, label='foo'),
-            'host1 host2 host3'.split(),
+            'host1,labels=foo host2,labels=foo host3,labels=foo'.split(),
             [],
             1,
             ['host1', 'host2', 'host3']
@@ -502,9 +515,10 @@ class NodeAssignmentTest2(NamedTuple):
     ])
 def test_node_assignment2(service_type, placement, hosts,
                           daemons, expected_len, in_set):
+    host_specs = [host_from_str(h) for h in hosts]
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
-        get_hosts_func=lambda label=None, as_hostspec=False: hosts,
+        get_hosts_func=lambda _: hosts,
         get_daemons_func=lambda _: daemons).place()
     assert len(hosts) == expected_len
     for h in [h.hostname for h in hosts]:
@@ -533,6 +547,7 @@ def test_node_assignment2(service_type, placement, hosts,
     ])
 def test_node_assignment3(service_type, placement, hosts,
                           daemons, expected_len, must_have):
+    host_specs = [host_from_str(h) for h in hosts]
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
         get_hosts_func=lambda label=None, as_hostspec=False: hosts,
@@ -591,6 +606,7 @@ class NodeAssignmentTestBadSpec(NamedTuple):
         ),
     ])
 def test_bad_specs(service_type, placement, hosts, daemons, expected):
+    host_specs = [host_from_str(h) for h in hosts]
     with pytest.raises(OrchestratorValidationError) as e:
         hosts = HostAssignment(
             spec=ServiceSpec(service_type, placement=placement),

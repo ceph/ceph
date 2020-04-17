@@ -254,6 +254,26 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_write_command(
+        'orch host drain',
+        'name=hostname,type=CephString',
+        'Drains a host')
+    def _host_drain(self, hostname):
+        completion = self.drain_host(hostname)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch host abort-drain',
+        'name=hostname,type=CephString',
+        'Replenish a host')
+    def _host_abort_drain(self, hostname):
+        completion = self.abort_drain_host(hostname)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_read_command(
         'orch device ls',
         "name=hostname,type=CephString,n=N,req=false "
