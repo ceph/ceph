@@ -51,7 +51,7 @@
 <ng-template #poolUsageTpl
              let-row="row">
   <cd-usage-bar *ngIf="row.stats?.max_avail?.latest"
-                [totalBytes]="row.stats.bytes_used.latest + row.stats.max_avail.latest"
-                [usedBytes]="row.stats.bytes_used.latest">
+                [total]="row.stats.bytes_used.latest + row.stats.max_avail.latest"
+                [used]="row.stats.bytes_used.latest">
   </cd-usage-bar>
 </ng-template>
