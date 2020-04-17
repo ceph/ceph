@@ -89,8 +89,7 @@ if(HAVE_LIBAIO)
 endif(HAVE_LIBAIO)
 
 if(WITH_FUSE)
-  target_include_directories(os SYSTEM PRIVATE ${FUSE_INCLUDE_DIRS})
-  target_link_libraries(os ${FUSE_LIBRARIES})
+  target_link_libraries(os FUSE::FUSE)
 endif()
 
 if(HAVE_LIBZFS)
