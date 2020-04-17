@@ -6,8 +6,13 @@
 # - FUSE_LIBRARIES : FUSE library
 # - FUSE_VERSION : the version of the FUSE library found
 
-set(fuse_names fuse)
-set(fuse_suffixes fuse)
+if(PACKAGE_FIND_VERSION AND PACKAGE_FIND_VERSION VERSION_LESS "3.0")
+  set(fuse_names fuse)
+  set(fuse_suffixes fuse)
+else()
+  set(fuse_names fuse3 fuse)
+  set(fuse_suffixes fuse3 fuse)
+endif()
 
 if(APPLE)
   list(APPEND fuse_names libosxfuse.dylib)
