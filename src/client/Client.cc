@@ -270,6 +270,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     async_dentry_invalidator(m->cct),
     interrupt_finisher(m->cct),
     remount_finisher(m->cct),
+    async_ino_releasor(m->cct),
     objecter_finisher(m->cct),
     m_command_hook(this),
     fscid(0)
@@ -596,6 +597,12 @@ void Client::shutdown()
     ldout(cct, 10) << "shutdown stopping remount finisher" << dendl;
     remount_finisher.wait_for_empty();
     remount_finisher.stop();
+  }
+
+  if (ino_release_cb) {
+    ldout(cct, 10) << "shutdown stopping inode release finisher" << dendl;
+    async_ino_releasor.wait_for_empty();
+    async_ino_releasor.stop();
   }
 
   objectcacher->stop();  // outside of client_lock! this does a join.
@@ -4257,6 +4264,39 @@ void Client::_trim_negative_child_dentries(InodeRef& in)
   }
 }
 
+class C_Client_CacheRelease : public Context  {
+private:
+  Client *client;
+  vinodeno_t ino;
+public:
+  C_Client_CacheRelease(Client *c, Inode *in) :
+    client(c) {
+    if (client->use_faked_inos())
+      ino = vinodeno_t(in->faked_ino, CEPH_NOSNAP);
+    else
+      ino = in->vino();
+  }
+  void finish(int r) override {
+    ceph_assert(ceph_mutex_is_not_locked_by_me(client->client_lock));
+    client->_async_inode_release(ino);
+  }
+};
+
+void Client::_async_inode_release(vinodeno_t ino)
+{
+  if (unmounting)
+    return;
+  ldout(cct, 10) << __func__ << " " << ino << dendl;
+  ino_release_cb(callback_handle, ino);
+}
+
+void Client::_schedule_ino_release_callback(Inode *in) {
+
+  if (ino_release_cb)
+    // we queue the invalidate, which calls the callback and decrements the ref
+    async_ino_releasor.queue(new C_Client_CacheRelease(this, in));
+}
+
 void Client::trim_caps(MetaSession *s, uint64_t max)
 {
   mds_rank_t mds = s->mds_num;
@@ -4311,6 +4351,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
       if (all && in->ino != MDS_INO_ROOT) {
         ldout(cct, 20) << __func__ << " counting as trimmed: " << *in << dendl;
 	trimmed++;
+	_schedule_ino_release_callback(in.get());
       }
     }
   }
@@ -10406,6 +10447,10 @@ void Client::ll_register_callbacks(struct ceph_client_callback_args *args)
   if (args->remount_cb) {
     remount_cb = args->remount_cb;
     remount_finisher.start();
+  }
+  if (args->ino_release_cb) {
+    ino_release_cb = args->ino_release_cb;
+    async_ino_releasor.start();
   }
   if (args->umask_cb)
     umask_cb = args->umask_cb;

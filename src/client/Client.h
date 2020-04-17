@@ -233,6 +233,7 @@ public:
   friend class C_Client_Remount;
   friend class C_Client_RequestInterrupt;
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
+  friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
 
@@ -672,6 +673,10 @@ public:
   void _invalidate_inode_cache(Inode *in);
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
   void _async_invalidate(vinodeno_t ino, int64_t off, int64_t len);
+
+  void _schedule_ino_release_callback(Inode *in);
+  void _async_inode_release(vinodeno_t ino);
+
   bool _release(Inode *in);
 
   /**
@@ -1182,6 +1187,7 @@ private:
   client_ino_callback_t ino_invalidate_cb = nullptr;
   client_dentry_callback_t dentry_invalidate_cb = nullptr;
   client_umask_callback_t umask_cb = nullptr;
+  client_ino_release_t ino_release_cb = nullptr;
   void *callback_handle = nullptr;
   bool can_invalidate_dentries = false;
 
@@ -1189,6 +1195,7 @@ private:
   Finisher async_dentry_invalidator;
   Finisher interrupt_finisher;
   Finisher remount_finisher;
+  Finisher async_ino_releasor;
   Finisher objecter_finisher;
 
   Context *tick_event = nullptr;
