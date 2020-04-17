@@ -203,6 +203,10 @@ int radosgw_Main(int argc, const char **argv)
   }
 
   int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
+  // Prevent global_init() from dropping permissions until frontends can bind
+  // privileged ports
+  flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
+
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 flags, "rgw_data");
@@ -221,9 +225,6 @@ int radosgw_Main(int argc, const char **argv)
     string& f = *iter;
 
     if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
-      // If civetweb or beast is configured as a frontend, prevent global_init() from
-      // dropping permissions by setting the appropriate flag.
-      flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;
       if (f.find("port") != string::npos) {
         // check for the most common ws problems
         if ((f.find("port=") == string::npos) ||
