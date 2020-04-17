@@ -119,6 +119,9 @@ typedef void (*client_switch_interrupt_callback_t)(void *handle, void *data);
 /* fetch umask of actor */
 typedef mode_t (*client_umask_callback_t)(void *handle);
 
+/* request that application release Inode references */
+typedef void (*client_ino_release_t)(void *handle, vinodeno_t ino);
+
 /*
  * The handle is an opaque value that gets passed to some callbacks. Any fields
  * set to NULL will be left alone. There is no way to unregister callbacks.
@@ -130,6 +133,7 @@ struct ceph_client_callback_args {
   client_switch_interrupt_callback_t switch_intr_cb;
   client_remount_callback_t remount_cb;
   client_umask_callback_t umask_cb;
+  client_ino_release_t ino_release_cb;
 };
 
 #ifdef __cplusplus
