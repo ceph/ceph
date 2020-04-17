@@ -523,6 +523,8 @@ class RGWSpec(ServiceSpec):
                  rgw_zone=None,  # type: Optional[str]
                  subcluster=None,  # type: Optional[str]
                  rgw_frontend_port=None,  # type: Optional[int]
+                 rgw_frontend_ssl_certificate=None,  # type Optional[List[str]]
+                 rgw_frontend_ssl_key=None,  # type: Optional[List[str]]
                  unmanaged=False,  # type: bool
                  ssl=False,   # type: bool
                  ):
@@ -546,6 +548,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_zone = rgw_zone
         self.subcluster = subcluster
         self.rgw_frontend_port = rgw_frontend_port
+        self.rgw_frontend_ssl_certificate = rgw_frontend_ssl_certificate
+        self.rgw_frontend_ssl_key = rgw_frontend_ssl_key
         self.ssl = ssl
 
     def get_port(self):
@@ -555,6 +559,16 @@ class RGWSpec(ServiceSpec):
             return 443
         else:
             return 80
+
+    def rgw_frontends_config_value(self):
+        ports = []
+        if self.ssl:
+            ports.append(f"ssl_port={self.get_port()}")
+            ports.append(f"ssl_certificate=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.crt")
+            ports.append(f"ssl_key=config://rgw/cert/{self.rgw_realm}/{self.rgw_zone}.key")
+        else:
+            ports.append(f"port={self.get_port()}")
+        return f'beast {" ".join(ports)}'
 
 
 class IscsiServiceSpec(ServiceSpec):
