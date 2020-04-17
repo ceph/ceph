@@ -174,7 +174,6 @@ private:
   };
 
   struct C_ReplayCommitted;
-  struct C_TrackedOp;
   struct RemoteJournalerListener;
   struct RemoteReplayHandler;
   struct LocalJournalListener;
