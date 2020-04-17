@@ -2798,7 +2798,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        return "Scheduled %s update..." % spec.service_type
+        return "Scheduled %s update..." % spec.service_name()
 
     @trivial_completion
     def apply(self, specs: List[ServiceSpec]):
