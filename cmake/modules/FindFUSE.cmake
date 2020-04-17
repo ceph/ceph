@@ -26,3 +26,14 @@ find_package_handle_standard_args(FUSE DEFAULT_MSG
 
 mark_as_advanced(
   FUSE_INCLUDE_DIRS FUSE_LIBRARIES)
+
+if(FUSE_FOUND)
+  if(NOT TARGET FUSE::FUSE)
+    add_library(FUSE::FUSE UNKNOWN IMPORTED)
+    set_target_properties(FUSE::FUSE PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${FUSE_INCLUDE_DIRS}"
+      IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+      IMPORTED_LOCATION "${FUSE_LIBRARIES}"
+      VERSION "${FUSE_VERSION}")
+  endif()
+endif()

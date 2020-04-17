@@ -50,7 +50,7 @@ add_executable(ceph-objectstore-tool
   RadosDump.cc)
 target_link_libraries(ceph-objectstore-tool osd os global Boost::program_options ${CMAKE_DL_LIBS})
 if(WITH_FUSE)
-  target_link_libraries(ceph-objectstore-tool ${FUSE_LIBRARIES})
+  target_link_libraries(ceph-objectstore-tool FUSE::FUSE)
 endif(WITH_FUSE)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
