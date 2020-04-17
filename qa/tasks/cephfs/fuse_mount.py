@@ -244,6 +244,9 @@ class FuseMount(CephFSMount):
         return self.client_remote.run(args=["ls", "-d", self.mountpoint], check_status=False, cwd=self.test_dir, timeout=(15*60)).exitstatus == 0
 
     def umount(self):
+        if not self.is_mounted():
+            return
+
         try:
             log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
             self.client_remote.run(
