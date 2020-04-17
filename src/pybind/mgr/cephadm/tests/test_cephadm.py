@@ -360,28 +360,6 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == set()
 
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_mds(self, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_mds(ServiceSpec('mds', 'name', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed mds.name.* on host 'test'")
-
-            assert_rm_daemon(cephadm_module, 'mds.name', 'test')
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_rgw(self, cephadm_module):
-
-        with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_rgw(RGWSpec(rgw_realm='realm', rgw_zone='zone', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed rgw.realm.zone.* on host 'test'")
-
-            assert_rm_daemon(cephadm_module, 'rgw.realm.zone', 'test')
-
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_rgw_update(self, cephadm_module):
         with self._with_host(cephadm_module, 'host1'):
@@ -418,15 +396,29 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
 
+    @pytest.mark.parametrize(
+        "spec, meth",
+        [
+            (ServiceSpec('crash'), CephadmOrchestrator.add_crash),
+            (ServiceSpec('prometheus'), CephadmOrchestrator.add_prometheus),
+            (ServiceSpec('grafana'), CephadmOrchestrator.add_grafana),
+            (ServiceSpec('node-exporter'), CephadmOrchestrator.add_node_exporter),
+            (ServiceSpec('alertmanager'), CephadmOrchestrator.add_alertmanager),
+            (ServiceSpec('rbd-mirror'), CephadmOrchestrator.add_rbd_mirror),
+            (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.add_mds),
+            (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.add_rgw),
+        ]
+    )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_rbd_mirror(self, cephadm_module):
+    def test_daemon_add(self, spec: ServiceSpec, meth, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_rbd_mirror(ServiceSpec('rbd-mirror', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed rbd-mirror.* on host 'test'")
+            spec.placement = PlacementSpec(hosts=['test'], count=1)
 
-            assert_rm_daemon(cephadm_module, 'rbd-mirror.test', 'test')
+            c = meth(cephadm_module, spec)
+            [out] = wait(cephadm_module, c)
+            match_glob(out, f"Deployed {spec.service_name()}.* on host 'test'")
+
+            assert_rm_daemon(cephadm_module, spec.service_name(), 'test')
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
@@ -460,50 +452,6 @@ class TestCephadm(object):
             # this is in contrast to the other services, which don't create this service
             # automatically.
             assert_rm_service(cephadm_module, 'iscsi.name')
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_prometheus(self, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(hosts=['test'], count=1)
-
-            c = cephadm_module.add_prometheus(ServiceSpec('prometheus', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed prometheus.* on host 'test'")
-
-            assert_rm_daemon(cephadm_module, 'prometheus.test', 'test')
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_node_exporter(self, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(hosts=['test'], count=1)
-
-            c = cephadm_module.add_node_exporter(ServiceSpec('node-exporter', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed node-exporter.* on host 'test'")
-
-            assert_rm_daemon(cephadm_module, 'node-exporter.test', 'test')
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_grafana(self, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(hosts=['test'], count=1)
-
-            c = cephadm_module.add_grafana(ServiceSpec('grafana', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed grafana.* on host 'test'")
-
-            assert_rm_daemon(cephadm_module, 'grafana.test', 'test')
-
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_alertmanager(self, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            ps = PlacementSpec(hosts=['test'], count=1)
-
-            c = cephadm_module.add_alertmanager(ServiceSpec('alertmanager', placement=ps))
-            [out] = wait(cephadm_module, c)
-            match_glob(out, "Deployed alertmanager.* on host 'test'")
-
-            assert_rm_daemon(cephadm_module, 'alertmanager.test', 'test')
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_blink_device_light(self, cephadm_module):
