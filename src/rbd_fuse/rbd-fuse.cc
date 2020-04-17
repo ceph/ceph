@@ -505,7 +505,7 @@ rbdfs_init(struct fuse_conn_info *conn)
 	ret = rados_ioctx_create(cluster, pool_name, &ioctx);
 	if (ret < 0)
 		exit(91);
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8) && FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
 	conn->want |= FUSE_CAP_BIG_WRITES;
 #endif
 	rados_ioctx_set_namespace(ioctx, nspace_name);
