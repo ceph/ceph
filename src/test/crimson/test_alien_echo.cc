@@ -12,6 +12,8 @@
 #include <seastar/core/alien.hh>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/future-util.hh>
+#include <seastar/core/internal/pollable_fd.hh>
+#include <seastar/core/posix.hh>
 #include <seastar/core/reactor.hh>
 
 
@@ -93,17 +95,19 @@ struct Client {
 } // namespace seastar_pingpong
 
 class SeastarContext {
-  seastar::file_desc begin_fd;
-  seastar::readable_eventfd on_end;
+  int begin_fd;
+  seastar::file_desc on_end;
 
 public:
   SeastarContext()
-    : begin_fd{seastar::file_desc::eventfd(0, 0)}
+    : begin_fd{eventfd(0, 0)},
+      on_end{seastar::file_desc::eventfd(0, 0)}
   {}
 
   template<class Func>
   std::thread with_seastar(Func&& func) {
-    return std::thread{[this, func = std::forward<Func>(func)] {
+    return std::thread{[this, on_end = on_end.get(),
+	                func = std::forward<Func>(func)] {
         // alien: are you ready?
         wait_for_seastar();
         // alien: could you help me apply(func)?
@@ -111,7 +115,7 @@ public:
         // alien: i've sent my request. have you replied it?
         // wait_for_seastar();
         // alien: you are free to go!
-        on_end.write_side().signal(1);
+        ::eventfd_write(on_end, 1);
       }};
   }
 
@@ -119,9 +123,16 @@ public:
     app.run(argc, argv, [this] {
       return seastar::now().then([this] {
         return set_seastar_ready();
-      }).then([this] {
+      }).then([on_end = std::move(on_end)] () mutable {
         // seastar: let me know once i am free to leave.
-        return on_end.wait().then([](size_t){});
+        return seastar::do_with(seastar::pollable_fd(std::move(on_end)), [] 
+			        (seastar::pollable_fd& on_end_fds) {
+          return on_end_fds.readable().then([&on_end_fds] {
+            eventfd_t result = 0;
+            on_end_fds.get_file_desc().read(&result, sizeof(result));
+            return seastar::make_ready_future<>();
+          });
+        });
       }).handle_exception([](auto ep) {
         std::cerr << "Error: " << ep << std::endl;
       }).finally([] {
@@ -132,14 +143,14 @@ public:
 
   seastar::future<> set_seastar_ready() {
     // seastar: i am ready to serve!
-    ::eventfd_write(begin_fd.get(), 1);
+    ::eventfd_write(begin_fd, 1);
     return seastar::now();
   }
 
 private:
   void wait_for_seastar() {
     eventfd_t result = 0;
-    if (int r = ::eventfd_read(begin_fd.get(), &result); r < 0) {
+    if (int r = ::eventfd_read(begin_fd, &result); r < 0) {
       std::cerr << "unable to eventfd_read():" << errno << std::endl;
     }
   }
