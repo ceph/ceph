@@ -87,7 +87,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(destroy, void());
   MOCK_METHOD2(start, void(Context *, bool));
   MOCK_METHOD2(stop, void(Context *, bool));
-  MOCK_METHOD0(restart, void());
+  MOCK_METHOD1(restart, void(Context*));
   MOCK_METHOD0(flush, void());
   MOCK_METHOD2(print_status, void(Formatter *, stringstream *));
   MOCK_METHOD2(add_peer, void(const std::string &, librados::IoCtx &));
@@ -192,7 +192,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
-  EXPECT_CALL(mock_image_replayer, start(nullptr, false));
+  EXPECT_CALL(mock_image_replayer, start(_, false))
+    .WillOnce(CompleteContext(0));
   expect_work_queue(mock_threads);
 
   instance_replayer.acquire_image(&mock_instance_watcher, global_image_id,
@@ -261,7 +262,8 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
-  EXPECT_CALL(mock_image_replayer, start(nullptr, false));
+  EXPECT_CALL(mock_image_replayer, start(_, false))
+    .WillOnce(CompleteContext(0));
   expect_work_queue(mock_threads);
 
   instance_replayer.acquire_image(&mock_instance_watcher, global_image_id,
@@ -332,7 +334,8 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
-  EXPECT_CALL(mock_image_replayer, start(nullptr, false));
+  EXPECT_CALL(mock_image_replayer, start(_, false))
+    .WillOnce(CompleteContext(0));
   expect_work_queue(mock_threads);
 
   C_SaferCond on_acquire1;
@@ -342,7 +345,8 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
 
   // Re-acquire
   EXPECT_CALL(mock_image_replayer, set_finished(false));
-  EXPECT_CALL(mock_image_replayer, restart());
+  EXPECT_CALL(mock_image_replayer, restart(_))
+    .WillOnce(CompleteContext(0));
   expect_work_queue(mock_threads);
 
   C_SaferCond on_acquire2;

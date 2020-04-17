@@ -168,7 +168,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
     // detect if the image has been deleted while the leader was offline
     auto& image_replayer = it->second;
     image_replayer->set_finished(false);
-    image_replayer->restart();
+    image_replayer->restart(new C_TrackedOp(m_async_op_tracker, nullptr));
   }
 
   m_threads->work_queue->queue(on_finish, 0);
@@ -217,7 +217,7 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
     // it will eventually detect that the peer image is missing and
     // determine if a delete propagation is required.
     auto image_replayer = it->second;
-    image_replayer->restart();
+    image_replayer->restart(new C_TrackedOp(m_async_op_tracker, nullptr));
   }
   m_threads->work_queue->queue(on_finish, 0);
 }
@@ -249,10 +249,15 @@ void InstanceReplayer<I>::start()
 
   m_manual_stop = false;
 
+  auto cct = static_cast<CephContext *>(m_local_rados->cct());
+  auto gather_ctx = new C_Gather(
+    cct, new C_TrackedOp(m_async_op_tracker, nullptr));
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
-    image_replayer->start(nullptr, true);
+    image_replayer->start(gather_ctx->new_sub(), true);
   }
+
+  gather_ctx->activate();
 }
 
 template <typename I>
@@ -260,14 +265,21 @@ void InstanceReplayer<I>::stop()
 {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  auto cct = static_cast<CephContext *>(m_local_rados->cct());
+  auto gather_ctx = new C_Gather(
+    cct, new C_TrackedOp(m_async_op_tracker, nullptr));
+  {
+    Mutex::Locker locker(m_lock);
 
-  m_manual_stop = true;
+    m_manual_stop = true;
 
-  for (auto &kv : m_image_replayers) {
-    auto &image_replayer = kv.second;
-    image_replayer->stop(nullptr, true);
+    for (auto &kv : m_image_replayers) {
+      auto &image_replayer = kv.second;
+      image_replayer->stop(gather_ctx->new_sub(), true);
+    }
   }
+
+  gather_ctx->activate();
 }
 
 template <typename I>
@@ -281,7 +293,7 @@ void InstanceReplayer<I>::restart()
 
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
-    image_replayer->restart();
+    image_replayer->restart(new C_TrackedOp(m_async_op_tracker, nullptr));
   }
 }
 
@@ -323,7 +335,7 @@ void InstanceReplayer<I>::start_image_replayer(
   }
 
   dout(10) << "global_image_id=" << global_image_id << dendl;
-  image_replayer->start(nullptr, false);
+  image_replayer->start(new C_TrackedOp(m_async_op_tracker, nullptr), false);
 }
 
 template <typename I>
