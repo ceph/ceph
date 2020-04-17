@@ -36,8 +36,8 @@
 
     <ng-template #osdUsageTpl
                  let-row="row">
-      <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
-                    [usedBytes]="row.stats.stat_bytes_used">
+      <cd-usage-bar [total]="row.stats.stat_bytes"
+                    [used]="row.stats.stat_bytes_used">
       </cd-usage-bar>
     </ng-template>
   </tab>
@@ -68,27 +68,6 @@
                     i18n>The {selection.hasSingleSelection, select, true {OSD is} false {OSDs are}} not safe to be
       {{ actionDescription }}! {{ message }}</cd-alert-panel>
   </div>
-  <ng-container i18n><strong>OSD {{ osdIds | join }}</strong> will be
+  <ng-container i18n><strong>OSD {{ getSelectedOsdIds() | join }}</strong> will be
   <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
-</ng-template>
-
-<ng-template #deleteOsdExtraTpl
-             let-form="form">
-  <ng-container [formGroup]="form">
-    <ng-container formGroupName="child">
-      <div class="form-group">
-        <div class="custom-control custom-checkbox">
-          <input type="checkbox"
-                 class="custom-control-input"
-                 name="preserve"
-                 id="preserve"
-                 formControlName="preserve"
-                 autofocus>
-          <label class="custom-control-label"
-                 for="preserve"
-                 i18n>Preserve OSD ID(s) for replacement.</label>
-        </div>
-      </div>
-    </ng-container>
-  </ng-container>
 </ng-template>
