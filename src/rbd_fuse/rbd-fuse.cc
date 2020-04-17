@@ -587,7 +587,7 @@ rbdfs_rename(const char *path, const char *destname)
 }
 
 int
-rbdfs_utime(const char *path, struct utimbuf *utime)
+rbdfs_utimens(const char *path, const struct timespec tv[2])
 {
 	// called on create; not relevant
 	return 0;
@@ -735,7 +735,9 @@ const static struct fuse_operations rbdfs_oper = {
   chmod:      0,
   chown:      0,
   truncate:   rbdfs_truncate,
-  utime:      rbdfs_utime,
+#if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
+  utime:      0,
+#endif
   open:	      rbdfs_open,
   read:	      rbdfs_read,
   write:      rbdfs_write,
@@ -755,6 +757,10 @@ const static struct fuse_operations rbdfs_oper = {
   destroy:    rbdfs_destroy,
   access:     0,
   create:     rbdfs_create,
+  ftruncate:  0,
+  fgetattr:   0,
+  lock:       0,
+  utimens:    rbdfs_utimens,
   /* skip unimplemented */
 };
 
