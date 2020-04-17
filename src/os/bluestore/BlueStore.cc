@@ -11060,6 +11060,7 @@ int BlueStore::_upgrade_super()
     ceph_assert(ondisk_format > 0);
     ceph_assert(ondisk_format < latest_ondisk_format);
 
+    KeyValueDB::Transaction t = db->get_transaction();
     if (ondisk_format == 1) {
       // changes:
       // - super: added ondisk_format
@@ -11067,7 +11068,6 @@ int BlueStore::_upgrade_super()
       // - super: added min_compat_ondisk_format
       // - super: added min_alloc_size
       // - super: removed min_min_alloc_size
-      KeyValueDB::Transaction t = db->get_transaction();
       {
 	bufferlist bl;
 	db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
@@ -11084,9 +11084,6 @@ int BlueStore::_upgrade_super()
 	t->rmkey(PREFIX_SUPER, "min_min_alloc_size");
       }
       ondisk_format = 2;
-      _prepare_ondisk_format_super(t);
-      int r = db->submit_transaction_sync(t);
-      ceph_assert(r == 0);
     }
     if (ondisk_format == 2) {
       // changes:
@@ -11096,19 +11093,18 @@ int BlueStore::_upgrade_super()
       // - super: added per_pool_omap key, which indicates that *all* objects
       //   are using the new prefix and key format
       ondisk_format = 3;
-      KeyValueDB::Transaction t = db->get_transaction();
-      _prepare_ondisk_format_super(t);
-      int r = db->submit_transaction_sync(t);
-      ceph_assert(r == 0);
     }
     if (ondisk_format == 3) {
       // changes:
       // - FreelistManager keeps meta within bdev label
       int r = _write_out_fm_meta(0);
       ceph_assert(r == 0);
-
       ondisk_format = 4;
     }
+    // This to be the last operation
+    _prepare_ondisk_format_super(t);
+    int r = db->submit_transaction_sync(t);
+    ceph_assert(r == 0);
   }
   // done
   dout(1) << __func__ << " done" << dendl;
