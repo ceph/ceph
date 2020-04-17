@@ -4,30 +4,44 @@
 # - FUSE_FOUND : was FUSE found?
 # - FUSE_INCLUDE_DIRS : FUSE include directory
 # - FUSE_LIBRARIES : FUSE library
-
-find_path(
-    FUSE_INCLUDE_DIRS
-    NAMES fuse_common.h fuse_lowlevel.h fuse.h
-    PATHS /usr/local/include/osxfuse /usr/local/include
-    PATH_SUFFIXES fuse)
+# - FUSE_VERSION : the version of the FUSE library found
 
 set(fuse_names fuse)
+set(fuse_suffixes fuse)
+
 if(APPLE)
   list(APPEND fuse_names libosxfuse.dylib)
+  list(APPEND fuse_suffixes osxfuse)
 endif()
+
+find_path(
+  FUSE_INCLUDE_DIR
+  NAMES fuse_common.h fuse_lowlevel.h fuse.h
+  PATH_SUFFIXES ${fuse_suffixes})
 
 find_library(FUSE_LIBRARIES
   NAMES ${fuse_names}
   PATHS /usr/local/lib64 /usr/local/lib)
 
+foreach(ver "MAJOR" "MINOR")
+  file(STRINGS "${FUSE_INCLUDE_DIR}/fuse_common.h" fuse_ver_${ver}_line
+    REGEX "^#define[\t ]+FUSE_${ver}_VERSION[\t ]+[0-9]+$")
+  string(REGEX REPLACE ".*#define[\t ]+FUSE_${ver}_VERSION[\t ]+([0-9]+)$"
+    "\\1" FUSE_VERSION_${ver} "${fuse_ver_${ver}_line}")
+endforeach()
+set(FUSE_VERSION
+  "${FUSE_VERSION_MAJOR}.${FUSE_VERSION_MINOR}")
+
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(FUSE DEFAULT_MSG
-  FUSE_INCLUDE_DIRS FUSE_LIBRARIES)
+find_package_handle_standard_args(FUSE
+  REQUIRED_VARS FUSE_LIBRARIES FUSE_INCLUDE_DIR
+  VERSION_VAR FUSE_VERSION)
 
 mark_as_advanced(
-  FUSE_INCLUDE_DIRS FUSE_LIBRARIES)
+  FUSE_INCLUDE_DIR)
 
 if(FUSE_FOUND)
+  set(FUSE_INCLUDE_DIRS ${FUSE_INCLUDE_DIR})
   if(NOT TARGET FUSE::FUSE)
     add_library(FUSE::FUSE UNKNOWN IMPORTED)
     set_target_properties(FUSE::FUSE PROPERTIES
