@@ -390,26 +390,6 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
-        json.dumps([
-            dict(
-                name='rgw.myrgw.foobar',
-                style='cephadm',
-                fsid='fsid',
-                container_id='container_id',
-                version='version',
-                state='running',
-            )
-        ])
-    ))
-    def test_remove_service(self, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            c = cephadm_module.list_daemons(refresh=True)
-            wait(cephadm_module, c)
-            c = cephadm_module.remove_service('rgw.myrgw')
-            out = wait(cephadm_module, c)
-            assert out == ["Removed service rgw.myrgw"]
-
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_rbd_mirror(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
