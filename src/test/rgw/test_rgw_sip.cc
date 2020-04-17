@@ -337,31 +337,55 @@ TEST(TestRGWSIP, test_basic_provider_client)
   ASSERT_TRUE(total == max_entries);
 }
 
-TEST(TestRGWSIP, test_sharded_stage)
-{
-  int num_shards = 20;
-  int shard_entries_limit = 40;
-  int max_entries[num_shards];
-
+struct stage_info {
+  int num_shards;
+  int first_shard_size;
+  int shard_entries_limit;
+  vector<int> max_entries;
+  int all_entries{0};
   vector<SIProviderClientRef> shards;
 
-  int all_entries = 0;
+  stage_info() {}
+  stage_info(int _num_shards,
+             int _start,
+             int _limit,
+             std::function<std::shared_ptr<SIProvider>(int, int)> alloc) : num_shards(_num_shards),
+                                                                           first_shard_size(_start),
+                                                                           shard_entries_limit(_limit) {
+    max_entries.resize(num_shards);
 
-  for (int i = 0; i < num_shards; ++i) {
-    max_entries[i] = (i * 7) % (shard_entries_limit + 1);
-    cout << "max_entries[" << i << "]=" << max_entries[i] << std::endl;
-    all_entries += max_entries[i];
-
-    auto bp = std::make_shared<BasicProvider>(i, max_entries[i]);
-    auto base = std::static_pointer_cast<SIProvider>(bp);
-    auto pc = std::make_shared<SIProviderClient>(base);
-
-    shards.push_back(pc);
+    init(alloc);
   }
 
-  SIPShardedStage stage(shards);
+  void init(std::function<std::shared_ptr<SIProvider>(int, int)> alloc) {
+    all_entries = 0;
 
-  int total[num_shards];
+    for (int i = 0; i < num_shards; ++i) {
+      int max = first_shard_size + (i * 7) % (shard_entries_limit + 1);
+      all_entries += max;
+      max_entries[i] = max;
+      cout << "max_entries[" << i << "]=" << max_entries[i] << std::endl;
+  
+      auto base = alloc(i, max_entries[i]);
+      auto pc = std::make_shared<SIProviderClient>(base);
+
+      shards.push_back(pc);
+    }
+  }
+};
+
+TEST(TestRGWSIP, test_sharded_stage)
+{
+  stage_info si(20, 20, 40, [](int id, int max_entries){ 
+    auto bp = std::make_shared<BasicProvider>(id, max_entries);
+    return std::static_pointer_cast<SIProvider>(bp);
+  });
+
+  auto stage = make_shared<SIPShardedStage>(si.shards);
+
+  ASSERT_EQ(0, stage->init_markers(true));
+
+  int total[si.num_shards];
   int chunk_size = 10;
 
   memset(total, 0, sizeof(total));
@@ -369,26 +393,102 @@ TEST(TestRGWSIP, test_sharded_stage)
   int total_iter = 0;
   int all_count = 0;
 
-  while (!stage.is_complete()) {
-    for (int i = 0; i < num_shards; ++i) {
-      if (stage.is_shard_done(i)) {
+  while (!stage->is_complete()) {
+    for (int i = 0; i < stage->num_shards(); ++i) {
+      if (stage->is_shard_done(i)) {
         continue;
       }
       SIProvider::fetch_result result;
-      ASSERT_EQ(0, stage.fetch(i, chunk_size, &result));
+      ASSERT_EQ(0, stage->fetch(i, chunk_size, &result));
 
       total[i] += result.entries.size();
       all_count += result.entries.size();
 
       ASSERT_TRUE(handle_result(result, nullptr));
-      ASSERT_NE((total[i] < max_entries[i]), result.done);
+      ASSERT_NE((total[i] < si.max_entries[i]), result.done);
     }
 
     ++total_iter;
-    ASSERT_TRUE(total_iter < (num_shards * shard_entries_limit)); /* avoid infinite loop due to bug */
+    ASSERT_TRUE(total_iter < (si.num_shards * si.shard_entries_limit)); /* avoid infinite loop due to bug */
   }
 
-  ASSERT_EQ(all_entries, all_count);
+  ASSERT_EQ(si.all_entries, all_count);
+}
+
+TEST(TestRGWSIP, test_multistage)
+{
+  vector<SIPShardedStageRef> stages;
+
+  stage_info sis[2];
+
+  sis[0] = stage_info(1, 35, 40, [](int id, int max_entries){ 
+    auto bp = std::make_shared<BasicProvider>(id, max_entries);
+    return std::static_pointer_cast<SIProvider>(bp);
+  });
+
+  auto stage1 = make_shared<SIPShardedStage>(sis[0].shards);
+
+  sis[1] = stage_info(10, 5, 20, [](int id, int max_entries){ 
+    auto bp = std::make_shared<LogProvider>(id, 0, max_entries);
+
+    /* simulate half read log */
+    bp->trim(max_entries + 1);
+    bp->add_entries(max_entries);
+    return std::static_pointer_cast<SIProvider>(bp);
+  });
+
+  auto stage2 = make_shared<SIPShardedStage>(sis[1].shards);
+
+  stages.push_back(stage1);
+  stages.push_back(stage2);
+
+  SIPMultiStageClient client(stages);
+
+  ASSERT_EQ(0, client.init_markers());
+
+  for (int stage_num = 0; stage_num < 2; ++stage_num) {
+    auto stage = client.cur_stage_ref();
+    auto& si = sis[stage_num];
+
+    int total[si.num_shards];
+    int chunk_size = 10;
+
+    memset(total, 0, sizeof(total));
+
+    int total_iter = 0;
+    int all_count = 0;
+
+    int fetched_now;
+
+    do {
+
+      fetched_now = 0;
+      
+      for (int i = 0; i < client.num_shards(); ++i) {
+
+        if (stage->is_shard_done(i)) {
+          continue;
+        }
+        SIProvider::fetch_result result;
+        ASSERT_EQ(0, stage->fetch(i, chunk_size, &result));
+
+        fetched_now = result.entries.size();
+
+        total[i] += fetched_now;
+        all_count += fetched_now;
+
+        ASSERT_TRUE(handle_result(result, nullptr));
+        ASSERT_NE((total[i] < si.max_entries[i]), !result.more);
+      }
+
+      ++total_iter;
+      ASSERT_TRUE(total_iter < (si.num_shards * si.shard_entries_limit)); /* avoid infinite loop due to bug */
+    } while (fetched_now > 0);
+
+    client.promote_stage(nullptr);
+
+    ASSERT_EQ(si.all_entries, all_count);
+  }
 }
 
 
