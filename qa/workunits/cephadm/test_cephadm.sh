@@ -366,8 +366,8 @@ $CEPHADM unit --fsid $FSID --name mon.a -- is-enabled
 ## shell
 $CEPHADM shell --fsid $FSID -- true
 $CEPHADM shell --fsid $FSID -- test -d /var/log/ceph
-expect_false $CEPHADM --timeout 1 shell --fsid $FSID -- sleep 10
-$CEPHADM --timeout 10 shell --fsid $FSID -- sleep 1
+expect_false $CEPHADM --timeout 10 shell --fsid $FSID -- sleep 60
+$CEPHADM --timeout 60 shell --fsid $FSID -- sleep 10
 
 ## enter
 expect_false $CEPHADM enter
@@ -377,8 +377,8 @@ $CEPHADM enter --fsid $FSID --name mon.a -- pidof ceph-mon
 expect_false $CEPHADM enter --fsid $FSID --name mgr.x -- pidof ceph-mon
 $CEPHADM enter --fsid $FSID --name mgr.x -- pidof ceph-mgr
 # this triggers a bug in older versions of podman, including 18.04's 1.6.2
-#expect_false $CEPHADM --timeout 1 enter --fsid $FSID --name mon.a -- sleep 10
-$CEPHADM --timeout 10 enter --fsid $FSID --name mon.a -- sleep 1
+#expect_false $CEPHADM --timeout 5 enter --fsid $FSID --name mon.a -- sleep 30
+$CEPHADM --timeout 60 enter --fsid $FSID --name mon.a -- sleep 10
 
 ## ceph-volume
 $CEPHADM ceph-volume --fsid $FSID -- inventory --format=json \
