@@ -1119,7 +1119,6 @@ int CephFuse::Handle::init(int argc, const char *argv[])
   if (fuse_max_write > 0) {
     char strsplice[65];
     newargv[newargc++] = "-o";
-    newargv[newargc++] = strsplice;
     sprintf(strsplice, "max_write=%zu", (size_t)fuse_max_write);
     newargv[newargc++] = strsplice;
   }
