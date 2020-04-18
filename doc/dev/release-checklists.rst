@@ -104,3 +104,4 @@ First stable release
 ====================
 
 - [ ] src/ceph_release: change type `stable`
+- [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
