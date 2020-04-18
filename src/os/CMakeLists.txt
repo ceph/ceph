@@ -134,27 +134,11 @@ if(WITH_EVENTTRACE)
 endif()
 
 if(WITH_LIBURING)
-  include(ExternalProject)
-  if("${CMAKE_GENERATOR}" MATCHES "Make")
-    set(make_cmd "$(MAKE)")
+  if(WITH_SYSTEM_LIBURING)
+    find_package(uring REQUIRED)
   else()
-    set(make_cmd "make")
+    include(Builduring)
+    build_uring()
   endif()
-  ExternalProject_Add(liburing_ext
-    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
-    GIT_REPOSITORY http://git.kernel.dk/liburing
-    GIT_TAG "4e360f71131918c36774f51688e5c65dea8d43f2"
-    SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure
-    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} ${make_cmd} -C src -s
-    BUILD_IN_SOURCE 1
-    INSTALL_COMMAND "")
-  unset(make_cmd)
-  add_library(liburing STATIC IMPORTED GLOBAL)
-  add_dependencies(liburing liburing_ext)
-  set_target_properties(liburing PROPERTIES
-    IMPORTED_LINK_INTERFACE_LANGUAGES "C"
-    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/liburing/src/liburing.a")
-  target_link_libraries(os liburing)
-  target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/liburing/src/include")
-endif(WITH_LIBURING)
+  target_link_libraries(os uring::uring)
+endif()
