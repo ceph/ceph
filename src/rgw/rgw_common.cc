@@ -1263,11 +1263,22 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 int verify_bucket_owner_or_policy(struct req_state* const s,
 				  const uint64_t op)
 {
+  auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket));
+  if (usr_policy_res == Effect::Deny) {
+    return -EACCES;
+  }
+
   auto e = eval_or_pass(s->iam_policy,
 			s->env, *s->auth.identity,
 			op, ARN(s->bucket));
+  if (e == Effect::Deny) {
+    return -EACCES;
+  }
+
   if (e == Effect::Allow ||
+      usr_policy_res == Effect::Allow ||
       (e == Effect::Pass &&
+       usr_policy_res == Effect::Pass &&
        s->auth.identity->is_owner_of(s->bucket_owner.get_id()))) {
     return 0;
   } else {
