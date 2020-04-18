@@ -575,7 +575,16 @@ void OSDService::agent_entry()
     int agent_flush_quota = max;
     if (!flush_mode_high_count)
       agent_flush_quota = cct->_conf->osd_agent_max_low_ops - agent_ops;
-    if (agent_flush_quota <= 0 || top.empty() || !agent_active) {
+    /**
+     * osd_agent_flush_quota should be less than osd_agent_max_low_ops, otherwise will block agent_entry
+     * osd_agent_max_low_ops and osd_agent_max_ops are used for controlling the speed of flushing, if we set
+     * osd_agent_max_low_ops to 2, there will be 2 objects in flushing at most time. Now there will be at
+     * least `osd_agent_max_low_ops - osd_agent_flush_quota` objects in flushing, adding `osd_agent_flush_quta/2`
+     * then is the mean number. Anyway, after setting osd_agent_flush_quota to a non-zero number, you can set
+     * osd_agent_max_low_ops - osd_agent_fush_quota to the value of osd_agent_max_low_ops when osd_agent_flush_quota
+     * is zero. Same to osd_agent_max_ops.
+     */
+    if (agent_flush_quota <= cct->_conf->osd_agent_flush_quota || top.empty() || !agent_active) {
       agent_cond.wait(agent_locker);
       continue;
     }
@@ -585,6 +594,7 @@ void OSDService::agent_entry()
       agent_valid_iterator = true;
     }
     PGRef pg = *agent_queue_pos;
+    agent_queue_pos++;
     dout(10) << "high_count " << flush_mode_high_count
 	     << " agent_ops " << agent_ops
 	     << " flush_quota " << agent_flush_quota << dendl;

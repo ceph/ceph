@@ -2434,6 +2434,10 @@ std::vector<Option> get_global_options() {
     .set_default(2)
     .set_description("maximum concurrent low-priority tiering operations for tiering agent"),
 
+    Option("osd_agent_flush_quota", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("osd_agent_flush_quota should be less than osd_agent_max_low_ops, otherwise will block agent_entry"),
+
     Option("osd_agent_min_evict_effort", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.1)
     .set_min_max(0.0, .99)

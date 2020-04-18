@@ -527,6 +527,7 @@ OPTION(osd_recovery_retry_interval, OPT_DOUBLE)
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT)
 OPTION(osd_agent_max_low_ops, OPT_INT)
+OPTION(osd_agent_flush_quota, OPT_INT)
 OPTION(osd_agent_min_evict_effort, OPT_FLOAT)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT)
 OPTION(osd_agent_delay_time, OPT_FLOAT)
