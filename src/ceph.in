@@ -679,6 +679,9 @@ def complete(sigdict, args, target):
     match_count = 0
     comps = []
     for cmdtag, cmd in sigdict.items():
+        flags = cmd.get('flags', 0)
+        if flags & (Flag.OBSOLETE | Flag.HIDDEN):
+            continue
         sig = cmd['sig']
         j = 0
         # iterate over all arguments, except last one
