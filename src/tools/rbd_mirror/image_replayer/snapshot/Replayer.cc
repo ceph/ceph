@@ -88,22 +88,6 @@ struct Replayer<I>::C_UpdateWatchCtx : public librbd::UpdateWatchCtx {
 };
 
 template <typename I>
-struct Replayer<I>::C_TrackedOp : public Context {
-  Replayer *replayer;
-  Context* ctx;
-
-  C_TrackedOp(Replayer* replayer, Context* ctx)
-    : replayer(replayer), ctx(ctx) {
-    replayer->m_in_flight_op_tracker.start_op();
-  }
-
-  void finish(int r) override {
-    ctx->complete(r);
-    replayer->m_in_flight_op_tracker.finish_op();
-  }
-};
-
-template <typename I>
 struct Replayer<I>::DeepCopyHandler : public librbd::deep_copy::Handler {
   Replayer *replayer;
 
@@ -1101,7 +1085,8 @@ void Replayer<I>::update_non_primary_snapshot(bool complete) {
     &op, m_local_snap_id_end, m_local_mirror_snap_ns.complete,
     m_local_mirror_snap_ns.last_copied_object_number);
 
-  auto ctx = new C_TrackedOp(this, new LambdaContext([this, complete](int r) {
+  auto ctx = new C_TrackedOp(
+    m_in_flight_op_tracker, new LambdaContext([this, complete](int r) {
       handle_update_non_primary_snapshot(complete, r);
     }));
   auto aio_comp = create_rados_callback(ctx);
@@ -1419,7 +1404,7 @@ void Replayer<I>::notify_status_updated() {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   dout(10) << dendl;
-  auto ctx = new C_TrackedOp(this, new LambdaContext(
+  auto ctx = new C_TrackedOp(m_in_flight_op_tracker, new LambdaContext(
     [this](int) {
       m_replayer_listener->handle_notification();
     }));

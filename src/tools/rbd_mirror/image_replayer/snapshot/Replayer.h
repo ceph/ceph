@@ -189,7 +189,6 @@ private:
   };
 
   struct C_UpdateWatchCtx;
-  struct C_TrackedOp;
   struct DeepCopyHandler;
 
   Threads<ImageCtxT>* m_threads;
