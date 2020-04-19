@@ -81,7 +81,7 @@ class HostAssignment(object):
             unknown_hosts = explicit_hostnames.difference(set(self.get_hosts_func()))
             if unknown_hosts:
                 raise OrchestratorValidationError(
-                    f'Cannot place {self.spec.one_line_str()} on {unknown_hosts}: Unknown hosts')
+                    f'Cannot place {self.spec.one_line_str()} on {", ".join(sorted(unknown_hosts))}: Unknown hosts')
 
         if self.spec.placement.host_pattern:
             pattern_hostnames = self.spec.placement.filter_matching_hosts(self.get_hosts_func)

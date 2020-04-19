@@ -7,6 +7,180 @@ from cephadm.module import HostAssignment
 from orchestrator import DaemonDescription, OrchestratorValidationError
 
 
+def wrapper(func):
+    # some odd thingy to revert the order or arguments
+    def inner(*args):
+        def inner2(expected):
+            func(expected, *args)
+        return inner2
+    return inner
+
+
+@wrapper
+def none(expected):
+    assert expected == []
+
+
+@wrapper
+def one_of(expected, *hosts):
+    if not isinstance(expected, list):
+        assert False, str(expected)
+    assert len(expected) == 1, f'one_of failed len({expected}) != 1'
+    assert expected[0] in hosts
+
+
+@wrapper
+def two_of(expected, *hosts):
+    if not isinstance(expected, list):
+        assert False, str(expected)
+    assert len(expected) == 2, f'one_of failed len({expected}) != 2'
+    matches = 0
+    for h in hosts:
+        matches += int(h in expected)
+    if matches != 2:
+        assert False, f'two of {hosts} not in {expected}'
+
+
+@wrapper
+def exactly(expected, *hosts):
+    assert expected == list(hosts)
+
+
+@wrapper
+def error(expected, kind, match):
+    assert isinstance(expected, kind), (str(expected), match)
+    assert str(expected) == match, (str(expected), match)
+
+
+@wrapper
+def _or(expected, *inners):
+    def catch(inner):
+        try:
+            inner(expected)
+        except AssertionError as e:
+            return e
+    result = [catch(i) for i in inners]
+    if None not in result:
+        assert False, f"_or failed: {expected}"
+
+
+def _always_true(_): pass
+
+
+def k(s):
+    return [e for e in s.split(' ') if e]
+
+
+def get_result(key, results):
+    def match(one):
+        for o, k in zip(one, key):
+            if o != k and o != '*':
+                return False
+        return True
+    return [v for k, v in results
+     if match(k)][0]
+
+
+# * first match from the top wins
+# * where N=None, e=[], *=any
+#
+#       + list of known hosts available for scheduling
+#       |   + hosts used for explict placement
+#       |   |   + count
+#       |   |   |
+test_explicit_scheduler_results = [
+    (k("*   *   0"), error(ServiceSpecValidationError, 'num/count must be > 1')),
+    (k("e   N   *"), none()),  # bug: should be exception
+    (k("e   e   *"), none()),
+    (k("e   1   *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1: Unknown hosts")),
+    (k("e   12  *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1, 2: Unknown hosts")),
+    (k("e   123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1, 2, 3: Unknown hosts")),
+    (k("1   N   *"), exactly('1')),  # bug: should be exception (empty placement should be invalid)
+    (k("1   e   *"), exactly('1')),  # bug: should be exception (empty placement should be invalid)
+    (k("1   1   2"), exactly('1', '1')),  # bug: should be exactly('1')
+    (k("1   1   3"), exactly('1', '1')),  # bug: should be exactly('1')
+    (k("1   1   *"), one_of('1')),
+    (k("1   12  *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2: Unknown hosts")),
+    (k("1   123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2, 3: Unknown hosts")),
+    (k("12  N   2"), exactly('1', '2')),  # bug: should be exception (empty placement should be invalid)
+    (k("12  N   3"), exactly('1', '2')),  # bug: should be exception (empty placement should be invalid)
+    (k("12  N   *"), one_of('1', '2')),  # bug: should be exception (empty placement should be invalid)
+    (k("12  e   2"), exactly('1', '2')),  # bug: should be exception
+    (k("12  e   3"), exactly('1', '2')),  # bug: should be exception
+    (k("12  e   *"), one_of('1', '2')),  # bug: should be exception
+    (k("12  1   2"), _or(exactly('1', '1'), exactly('1', '2'))),   # bug: should be exactly('1')
+    (k("12  1   3"), exactly('1', '1', '2')),   # bug: should be exactly('1')
+    (k("12  1   *"), exactly('1')),
+    (k("12  12  1"), one_of('1', '2')),
+    (k("12  12  3"), _or(exactly('1', '2', '2'), exactly('1', '1', '2'))), # bug: one_of('1', '2')
+    (k("12  12  *"), exactly('1', '2')),
+    (k("12  123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 3: Unknown hosts")),
+    (k("123 N   2"), two_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
+    (k("123 N   3"), exactly('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
+    (k("123 N   *"), one_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
+    (k("123 e   2"), two_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
+    (k("123 e   3"), exactly('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
+    (k("123 e   *"), one_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
+    (k("123 e   2"), _or(exactly('1', '3'), exactly('1', '2'), exactly('1', '1'))), # bug. should be exactly('1')
+    (k("123 1   2"), _always_true), # bug. should be exactly('1')
+    (k("123 1   3"), _always_true), # bug. should be exactly('1')
+    (k("123 1   *"), exactly('1')),
+    (k("123 12  1"), one_of('1', '2')),
+    (k("123 12  3"), _always_true),  # bug: should be exactly('1', '2')
+    (k("123 12  *"), exactly('1', '2')),
+    (k("123 123 1"), one_of('1', '2', '3')),
+    (k("123 123 2"), two_of('1', '2', '3')),
+    (k("123 123 *"), exactly('1', '2', '3')),
+]
+
+@pytest.mark.parametrize("count",
+    [
+        None,
+        0,
+        1,
+        2,
+        3,
+    ])
+@pytest.mark.parametrize("explicit_key, explicit",
+    [
+        ('N', None),
+        ('e', []),
+        ('1', ['1']),
+        ('12', ['1', '2']),
+        ('123', ['1', '2', '3']),
+    ])
+@pytest.mark.parametrize("host_key, hosts",
+    [
+        ('e', []),
+        ('1', ['1']),
+        ('12', ['1', '2']),
+        ('123', ['1', '2', '3']),
+    ])
+def test_scheduler(host_key, hosts,
+                   explicit_key, explicit,
+                   count):
+    count_key = 'N' if count is None else str(count)
+    key = k(f'{host_key} {explicit_key} {count_key}')
+    try:
+        assert_res = get_result(key, test_explicit_scheduler_results)
+    except IndexError:
+        assert False, f'`(k("{host_key} {explicit_key} {count_key}"), ...),` not found'
+
+    for _ in range(10):  # scheduler has a random component
+        try:
+            host_res = HostAssignment(
+                spec=ServiceSpec('mon', placement=PlacementSpec(
+                    hosts=explicit,
+                    count=count,
+                )),
+                get_hosts_func=lambda _: hosts,
+                get_daemons_func=lambda _: []).place()
+
+            assert_res(sorted([h.hostname for h in host_res]))
+        except Exception as e:
+            assert_res(e)
+
+
 class NodeAssignmentTest(NamedTuple):
     service_type: str
     placement: PlacementSpec
@@ -271,7 +445,7 @@ class NodeAssignmentTestBadSpec(NamedTuple):
             PlacementSpec(hosts=['unknownhost']),
             ['knownhost'],
             [],
-            "Cannot place <ServiceSpec for service_name=mon> on {'unknownhost'}: Unknown hosts"
+            "Cannot place <ServiceSpec for service_name=mon> on unknownhost: Unknown hosts"
         ),
         # unknown host pattern
         NodeAssignmentTestBadSpec(
