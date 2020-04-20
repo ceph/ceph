@@ -13,6 +13,7 @@ Content Index
    downburst_vms.rst
    INSTALL.rst
    LAB_SETUP.rst
+   commands/list.rst
    ChangeLog.rst
 
 Indices and tables
