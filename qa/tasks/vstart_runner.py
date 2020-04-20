@@ -31,6 +31,7 @@ Alternative usage:
 """
 
 from io import BytesIO
+from io import StringIO
 from collections import defaultdict
 import getpass
 import signal
@@ -159,8 +160,14 @@ class LocalRemoteProcess(object):
                 return
 
         out, err = self.subproc.communicate()
-        self.stdout.write(out)
-        self.stderr.write(err)
+        if isinstance(self.stdout, StringIO):
+            self.stdout.write(out.decode(errors='ignore'))
+        else:
+            self.stdout.write(out)
+        if isinstance(self.stderr, StringIO):
+            self.stderr.write(err.decode(errors='ignore'))
+        else:
+            self.stderr.write(err)
 
         self.exitstatus = self.returncode = self.subproc.returncode
 
@@ -284,12 +291,12 @@ class LocalRemote(object):
                                        env=env)
 
         if stdin:
-            if not isinstance(stdin, six.string_types):
+            if not isinstance(stdin, str):
                 raise RuntimeError("Can't handle non-string stdins on a vstart cluster")
 
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
             # as long as the input buffer is "small"
-            subproc.stdin.write(stdin)
+            subproc.stdin.write(stdin.encode())
 
         proc = LocalRemoteProcess(
             args, subproc, check_status,
@@ -918,7 +925,8 @@ def exec_test():
 
     # Tolerate no MDSs or clients running at start
     ps_txt = six.ensure_str(remote.run(
-        args=["ps", "-u"+str(os.getuid())]
+        args=["ps", "-u"+str(os.getuid())],
+        stdout=StringIO()
     ).stdout.getvalue().strip())
     lines = ps_txt.split("\n")[1:]
     for line in lines:
@@ -978,7 +986,7 @@ def exec_test():
                                  "mds", "allow",
                                  "mon", "allow r"])
 
-            open("./keyring", "a").write(p.stdout.getvalue())
+            open("./keyring", "ab").write(p.stdout.getvalue())
 
         mount = LocalFuseMount(ctx, test_dir, client_id)
         mounts.append(mount)
