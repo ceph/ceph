@@ -14,6 +14,7 @@
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
+#include "librbd/image/Types.h"
 #include "librbd/mirror/EnableRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -285,8 +286,9 @@ void CloneRequest<I>::create_child() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_child>(this);
 
-  CreateRequest<I> *req = CreateRequest<I>::create(
-    m_config, m_ioctx, m_name, m_id, m_size, m_opts, true,
+  auto req = CreateRequest<I>::create(
+    m_config, m_ioctx, m_name, m_id, m_size, m_opts,
+    image::CREATE_FLAG_SKIP_MIRROR_ENABLE,
     cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, m_non_primary_global_image_id,
     m_primary_mirror_uuid, m_op_work_queue, ctx);
   req->send();
