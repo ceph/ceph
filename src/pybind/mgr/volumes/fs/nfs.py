@@ -2,6 +2,8 @@ import json
 import errno
 import logging
 
+from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
+
 import cephfs
 import orchestrator
 from .fs_util import create_pool
@@ -337,6 +339,27 @@ class NFSCluster:
                     "write configuration into rados object %s/%s/nfs-conf\n",
                     self.pool_name, self.pool_ns)
 
+    def check_cluster_exists(self):
+        try:
+            completion = self.mgr.describe_service(service_type='nfs')
+            self.mgr._orchestrator_wait([completion])
+            orchestrator.raise_if_exception(completion)
+            return self.cluster_id in [cluster.spec.service_id for cluster in completion.result]
+        except Exception as e:
+            log.exception(str(e))
+            return True
+
+    def _call_orch_apply_nfs(self, size):
+        spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
+                              pool=self.pool_name, namespace=self.pool_ns,
+                              placement=PlacementSpec.from_string(str(size)))
+        try:
+            completion = self.mgr.apply_nfs(spec)
+            self.mgr._orchestrator_wait([completion])
+            orchestrator.raise_if_exception(completion)
+        except Exception as e:
+            log.exception("Failed to create NFS daemons:{}".format(e))
+
     def create_nfs_cluster(self, export_type, size):
         if export_type != 'cephfs':
             return -errno.EINVAL,"", f"Invalid export type: {export_type}"
@@ -357,8 +380,11 @@ class NFSCluster:
                 return r, out, err
 
         self.create_empty_rados_obj()
-        #TODO Check if cluster exists
-        #TODO Call Orchestrator to deploy cluster
+
+        if self.check_cluster_exists():
+            log.info(f"{self.cluster_id} cluster already exists")
+        else:
+            self._call_orch_apply_nfs(size)
 
         return 0, "", "NFS Cluster Created Successfully"
 
