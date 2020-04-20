@@ -101,6 +101,43 @@ Example::
     node2   /dev/vdc  hdd   8192M  228094  False  LVM detected, Insufficient space (<5GB) on vgs, locked
 
 
+
+
+Erase Devices (Zap Devices)
+---------------------------
+
+Erase (zap) a device so it can be re-used.
+
+::
+
+     orch device zap
+
+Example command::
+
+     ceph orch device zap my_hostname my_path true
+
+Parameters::
+
+    hostname: (string)
+
+    path: (string)
+
+    force: CephBool
+
+Ceph Module::
+
+    mgr
+
+Required Permissions::
+
+    rw
+
+Command Flags::
+
+    mgr
+
+
+
 Create OSDs
 -----------
 
