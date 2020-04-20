@@ -378,7 +378,7 @@ class CephFSVolumeClient(object):
                 if vol_meta['auths'][auth_id] == want_auth:
                     continue
 
-                readonly = access_level == 'r'
+                readonly = True if access_level == 'r' else False
                 self._authorize_volume(volume_path, auth_id, readonly)
 
             # Recovered from partial auth updates for the auth ID's access
