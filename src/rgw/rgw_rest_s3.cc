@@ -1859,11 +1859,15 @@ int RGWPutObj_ObjStore_S3::get_params()
   if (append) {
     string pos_str = s->info.args.get("position");
     string err;
-    position = (uint64_t)strict_strtoll(pos_str.c_str(), 10, &err);
+    long long pos_tmp = strict_strtoll(pos_str.c_str(), 10, &err);
     if (!err.empty()) {
       ldpp_dout(s, 10) << "bad position: " << pos_str << ": " << err << dendl;
       return -EINVAL;
+    } else if (pos_tmp < 0) {
+      ldpp_dout(s, 10) << "bad position: " << pos_str << ": " << "position shouldn't be negative" << dendl;
+      return -EINVAL;
     }
+    position = uint64_t(pos_tmp);
   }
   
   return RGWPutObj_ObjStore::get_params();
