@@ -476,8 +476,7 @@ void CloneRequest<I>::enable_mirror() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_enable_mirror>(this);
   auto req = mirror::EnableRequest<I>::create(
-    m_imctx->md_ctx, m_id, m_mirror_image_mode, m_non_primary_global_image_id,
-    m_imctx->op_work_queue, ctx);
+    m_imctx, m_mirror_image_mode, m_non_primary_global_image_id, ctx);
   req->send();
 }
 

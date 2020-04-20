@@ -420,8 +420,8 @@ void EnableFeaturesRequest<I>::send_enable_mirror_image() {
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_enable_mirror_image>(this);
 
-  mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
-    &image_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, ctx);
+  auto req = mirror::EnableRequest<I>::create(
+    &image_ctx, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", ctx);
   req->send();
 }
 
