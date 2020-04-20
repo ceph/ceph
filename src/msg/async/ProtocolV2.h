@@ -70,7 +70,7 @@ private:
 
   entity_name_t peer_name;
   State state;
-  uint64_t peer_required_features;
+  uint64_t peer_supported_features;  // CEPH_MSGR2_FEATURE_*
 
   uint64_t client_cookie;
   uint64_t server_cookie;
