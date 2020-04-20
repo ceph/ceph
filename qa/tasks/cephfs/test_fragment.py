@@ -3,6 +3,8 @@
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra import run
 
+import os
+import time
 import logging
 log = logging.getLogger(__name__)
 
@@ -227,3 +229,88 @@ class TestFragmentation(CephFSTestCase):
             if o.startswith("{0:x}.".format(dir_inode_no)):
                 frag_objs.append(o)
         self.assertListEqual(frag_objs, [])
+
+    def test_split_straydir(self):
+        """
+        That stray dir is split when it becomes too large.
+        """
+        def _count_fragmented():
+            mdsdir_cache = self.fs.read_cache("~mdsdir", 1)
+            num = 0
+            for ino in mdsdir_cache:
+                if ino["ino"] == 0x100:
+                    continue
+                if len(ino["dirfrags"]) > 1:
+                    log.info("straydir 0x{:X} is fragmented".format(ino["ino"]))
+                    num += 1;
+            return num
+
+        split_size = 50
+        merge_size = 5
+        split_bits = 1
+
+        self._configure(
+            mds_bal_split_size=split_size,
+            mds_bal_merge_size=merge_size,
+            mds_bal_split_bits=split_bits,
+            mds_bal_fragment_size_max=(split_size * 100)
+        )
+
+        # manually split/merge
+        self.assertEqual(_count_fragmented(), 0)
+        self.fs.mds_asok(["dirfrag", "split", "~mdsdir/stray8", "0/0", "1"])
+        self.fs.mds_asok(["dirfrag", "split", "~mdsdir/stray9", "0/0", "1"])
+        self.wait_until_true(
+            lambda: _count_fragmented() == 2,
+            timeout=30
+        )
+
+        time.sleep(30)
+
+        self.fs.mds_asok(["dirfrag", "merge", "~mdsdir/stray8", "0/0"])
+        self.wait_until_true(
+            lambda: _count_fragmented() == 1,
+            timeout=30
+        )
+
+        time.sleep(30)
+
+        # auto merge
+
+        # merging stray dirs is driven by MDCache::advance_stray()
+        # advance stray dir 10 times
+        for _ in range(10):
+            self.fs.mds_asok(['flush', 'journal'])
+
+        self.wait_until_true(
+            lambda: _count_fragmented() == 0,
+            timeout=30
+        )
+
+        # auto split
+
+        # there are 10 stray dirs. advance stray dir 20 times
+        self.mount_a.create_n_files("testdir1/file", split_size * 20)
+        self.mount_a.run_shell(["mkdir", "testdir2"])
+        testdir1_path = os.path.join(self.mount_a.mountpoint, "testdir1")
+        for i in self.mount_a.ls(testdir1_path):
+            self.mount_a.run_shell(["ln", "testdir1/{0}".format(i), "testdir2/"])
+
+        self.mount_a.umount_wait()
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+
+        # flush journal and restart mds. after restart, testdir2 is not in mds' cache
+        self.fs.mds_asok(['flush', 'journal'])
+        self.mds_cluster.mds_fail_restart()
+        self.fs.wait_for_daemons()
+        # splitting stray dirs is driven by MDCache::advance_stray()
+        # advance stray dir after unlink 'split_size' files.
+        self.fs.mds_asok(['config', 'set', 'mds_log_events_per_segment', str(split_size)])
+
+        self.assertEqual(_count_fragmented(), 0)
+        self.mount_a.run_shell(["rm", "-rf", "testdir1"])
+        self.wait_until_true(
+            lambda: _count_fragmented() > 0,
+            timeout=30
+        )
