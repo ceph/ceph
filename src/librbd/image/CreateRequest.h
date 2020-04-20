@@ -123,7 +123,6 @@ private:
 
   CephContext *m_cct;
   int m_r_saved = 0;  // used to return actual error after cleanup
-  bool m_force_non_primary;
   file_layout_t m_layout;
   std::string m_id_obj, m_header_obj, m_objmap_name;
 
