@@ -133,7 +133,10 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
   m_id_obj = util::id_obj_name(m_image_name);
   m_header_obj = util::header_name(m_image_id);
   m_objmap_name = ObjectMap<>::object_map_name(m_image_id, CEPH_NOSNAP);
-  m_force_non_primary = !non_primary_global_image_id.empty();
+  if (!non_primary_global_image_id.empty() &&
+      (m_create_flags & CREATE_FLAG_MIRROR_ENABLE_MASK) == 0) {
+    m_create_flags |= CREATE_FLAG_FORCE_MIRROR_ENABLE;
+  }
 
   if (image_options.get(RBD_IMAGE_OPTION_FEATURES, &m_features) != 0) {
     m_features = librbd::rbd_features_from_string(
@@ -603,7 +606,7 @@ void CreateRequest<I>::journal_create() {
   // only link to remote primary mirror uuid if in journal-based
   // mirroring mode
   bool use_primary_mirror_uuid = (
-    m_force_non_primary &&
+    !m_non_primary_global_image_id.empty() &&
     m_mirror_image_mode == cls::rbd::MIRROR_IMAGE_MODE_JOURNAL);
 
   librbd::journal::TagData tag_data;
@@ -635,9 +638,11 @@ void CreateRequest<I>::handle_journal_create(int r) {
 
 template<typename I>
 void CreateRequest<I>::mirror_image_enable() {
-  if (((m_mirror_mode != cls::rbd::MIRROR_MODE_POOL) && !m_force_non_primary) ||
-      ((m_create_flags & CREATE_FLAG_MIRROR_ENABLE_MASK) ==
-          CREATE_FLAG_SKIP_MIRROR_ENABLE)) {
+  auto mirror_enable_flag = (m_create_flags & CREATE_FLAG_MIRROR_ENABLE_MASK);
+
+  if ((m_mirror_mode != cls::rbd::MIRROR_MODE_POOL &&
+       mirror_enable_flag != CREATE_FLAG_FORCE_MIRROR_ENABLE) ||
+      (mirror_enable_flag == CREATE_FLAG_SKIP_MIRROR_ENABLE)) {
     complete(0);
     return;
   }

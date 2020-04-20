@@ -160,7 +160,8 @@ void EnableRequest<I>::open_image() {
 
   auto ctx = create_context_callback<
     EnableRequest<I>, &EnableRequest<I>::handle_open_image>(this);
-  m_image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
+  m_image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT |
+                           OPEN_FLAG_IGNORE_MIGRATING, ctx);
 }
 
 template <typename I>

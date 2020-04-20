@@ -311,6 +311,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     {RBD_IMAGE_OPTION_DATA_POOL, STR},
     {RBD_IMAGE_OPTION_FLATTEN, UINT64},
     {RBD_IMAGE_OPTION_CLONE_FORMAT, UINT64},
+    {RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -341,6 +342,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return "flatten";
     case RBD_IMAGE_OPTION_CLONE_FORMAT:
       return "clone_format";
+    case RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE:
+      return "mirror_image_mode";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -689,15 +692,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       api::Config<>::apply_pool_overrides(io_ctx, &config);
 
       uint32_t create_flags = 0U;
+      uint64_t mirror_image_mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
       if (skip_mirror_enable) {
         create_flags = image::CREATE_FLAG_SKIP_MIRROR_ENABLE;
+      } else if (opts.get(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+                          &mirror_image_mode) == 0) {
+        create_flags = image::CREATE_FLAG_FORCE_MIRROR_ENABLE;
       }
 
       C_SaferCond cond;
       image::CreateRequest<> *req = image::CreateRequest<>::create(
         config, io_ctx, image_name, id, size, opts, create_flags,
-        cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, non_primary_global_image_id,
-        primary_mirror_uuid, op_work_queue, &cond);
+        static_cast<cls::rbd::MirrorImageMode>(mirror_image_mode),
+        non_primary_global_image_id, primary_mirror_uuid, op_work_queue, &cond);
       req->send();
 
       r = cond.wait();
