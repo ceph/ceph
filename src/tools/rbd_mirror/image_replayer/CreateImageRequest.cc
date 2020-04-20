@@ -89,7 +89,7 @@ void CreateImageRequest<I>::create_image() {
 
   auto req = librbd::image::CreateRequest<I>::create(
     config, m_local_io_ctx, m_local_image_name, m_local_image_id,
-    m_remote_image_ctx->size, image_options, false, m_mirror_image_mode,
+    m_remote_image_ctx->size, image_options, 0U, m_mirror_image_mode,
     m_global_image_id, m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue,
     ctx);
   req->send();

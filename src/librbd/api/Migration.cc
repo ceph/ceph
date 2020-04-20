@@ -29,6 +29,7 @@
 #include "librbd/image/DetachParentRequest.h"
 #include "librbd/image/ListWatchersRequest.h"
 #include "librbd/image/RemoveRequest.h"
+#include "librbd/image/Types.h"
 #include "librbd/internal.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/mirror/DisableRequest.h"
@@ -1232,7 +1233,7 @@ int Migration<I>::create_dst_image() {
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
       config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
-      m_image_options, true /* skip_mirror_enable */,
+      m_image_options, image::CREATE_FLAG_SKIP_MIRROR_ENABLE,
       cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
     req->send();
   } else {

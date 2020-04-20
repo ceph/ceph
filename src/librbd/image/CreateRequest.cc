@@ -12,6 +12,7 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/image/Types.h"
 #include "librbd/image/ValidatePoolRequest.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/RemoveRequest.h"
@@ -114,13 +115,13 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
                                 const std::string &image_name,
                                 const std::string &image_id, uint64_t size,
                                 const ImageOptions &image_options,
-                                bool skip_mirror_enable,
+                                uint32_t create_flags,
                                 cls::rbd::MirrorImageMode mirror_image_mode,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_config(config), m_image_name(image_name), m_image_id(image_id),
-    m_size(size), m_skip_mirror_enable(skip_mirror_enable),
+    m_size(size), m_create_flags(create_flags),
     m_mirror_image_mode(mirror_image_mode),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
@@ -635,7 +636,8 @@ void CreateRequest<I>::handle_journal_create(int r) {
 template<typename I>
 void CreateRequest<I>::mirror_image_enable() {
   if (((m_mirror_mode != cls::rbd::MIRROR_MODE_POOL) && !m_force_non_primary) ||
-      m_skip_mirror_enable) {
+      ((m_create_flags & CREATE_FLAG_MIRROR_ENABLE_MASK) ==
+          CREATE_FLAG_SKIP_MIRROR_ENABLE)) {
     complete(0);
     return;
   }

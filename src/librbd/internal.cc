@@ -40,6 +40,7 @@
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/GetMetadataRequest.h"
+#include "librbd/image/Types.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -687,9 +688,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       ConfigProxy config{cct->_conf};
       api::Config<>::apply_pool_overrides(io_ctx, &config);
 
+      uint32_t create_flags = 0U;
+      if (skip_mirror_enable) {
+        create_flags = image::CREATE_FLAG_SKIP_MIRROR_ENABLE;
+      }
+
       C_SaferCond cond;
       image::CreateRequest<> *req = image::CreateRequest<>::create(
-        config, io_ctx, image_name, id, size, opts, skip_mirror_enable,
+        config, io_ctx, image_name, id, size, opts, create_flags,
         cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, non_primary_global_image_id,
         primary_mirror_uuid, op_work_queue, &cond);
       req->send();
