@@ -29,20 +29,19 @@ If you are new to teuthology and simply want to run existing tests, check out
 
 Provided Utilities
 ==================
-* ``teuthology`` - Run individual jobs
-* ``teuthology-coverage`` - Analyze code coverage via lcov
-* ``teuthology-kill`` - Kill running jobs or entire runs
-* ``teuthology-lock`` - Lock, unlock, and update status of machines
-* ``teuthology-ls`` - List job results by examining an archive directory
-* ``teuthology-openstack`` - Use OpenStack backend (wrapper around ``teuthology-suite``)
-* ``teuthology-nuke`` - Attempt to return a machine to a pristine state
-* ``teuthology-queue`` - List, or delete, jobs in the queue
-* ``teuthology-report`` - Submit test results to a web service (we use `paddles <https://github.com/ceph/paddles/>`__)
-* ``teuthology-results`` - Examing a finished run and email results
-* ``teuthology-schedule`` - Schedule a single job
-* ``teuthology-suite`` - Schedule a full run based on a suite (see `suites` in `ceph-qa-suite <https://github.com/ceph/ceph-qa-suite>`__)
-* ``teuthology-updatekeys`` - Update SSH host keys for a machine
-* ``teuthology-worker`` - Worker daemon to monitor the queue and execute jobs
+* :ref:`teuthology` - Run individual jobs
+* :ref:`teuthology-kill` - Kill running jobs or entire runs
+* :ref:`teuthology-lock` - Lock, unlock, and update status of machines
+* :ref:`teuthology-ls` - List job results by examining an archive directory
+* :ref:`teuthology-openstack` - Use OpenStack backend (wrapper around ``teuthology-suite``)
+* :ref:`teuthology-nuke` - Attempt to return a machine to a pristine state
+* :ref:`teuthology-queue` - List, or delete, jobs in the queue
+* :ref:`teuthology-report` - Submit test results to a web service (we use `paddles <https://github.com/ceph/paddles/>`__)
+* :ref:`teuthology-results` - Examing a finished run and email results
+* :ref:`teuthology-schedule` - Schedule a single job
+* :ref:`teuthology-suite` - Schedule a full run based on a suite (see `suites` in `ceph-qa-suite <https://github.com/ceph/ceph-qa-suite>`__)
+* :ref:`teuthology-updatekeys` - Update SSH host keys for a machine
+* :ref:`teuthology-worker` - Worker daemon to monitor the queue and execute jobs
 
 For a description of the distinct services that utilities interact with see
 :ref:`components`.
