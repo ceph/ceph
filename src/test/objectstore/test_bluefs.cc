@@ -82,6 +82,7 @@ TEST(BlueFS, mkfs_mount) {
 TEST(BlueFS, mkfs_mount_duplicate_gift) {
   uint64_t size = 1048576 * 128;
   TempBdev bdev{ size };
+  bluefs_extent_t dup_ext;
   {
     BlueFS fs(g_ceph_context);
     ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
@@ -98,6 +99,9 @@ TEST(BlueFS, mkfs_mount_duplicate_gift) {
       h->append("bar", 3);
       h->append("baz", 3);
       fs.fsync(h);
+      ceph_assert(h->file->fnode.extents.size() > 0);
+      dup_ext = h->file->fnode.extents[0];
+      ceph_assert(dup_ext.bdev == BlueFS::BDEV_DB);
       fs.close_writer(h);
     }
 
@@ -109,7 +113,10 @@ TEST(BlueFS, mkfs_mount_duplicate_gift) {
     ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
     ASSERT_EQ(0, fs.mount());
     // free allocation presumably allocated for file1 
-    fs.debug_inject_duplicate_gift(BlueFS::BDEV_DB, 5 * 1048576, 1048576);
+    std::cout << "duplicate extent: " << std::hex
+      << dup_ext.offset << "~" << dup_ext.length
+      << std::dec << std::endl;
+    fs.debug_inject_duplicate_gift(BlueFS::BDEV_DB, dup_ext.offset, dup_ext.length);
     {
       // overwrite file1 with file2 
       BlueFS::FileWriter *h;
