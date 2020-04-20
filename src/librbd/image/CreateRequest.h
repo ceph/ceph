@@ -29,13 +29,13 @@ public:
                                const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
-                               bool skip_mirror_enable,
+                               uint32_t create_flags,
                                cls::rbd::MirrorImageMode mirror_image_mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
                                ContextWQ *op_work_queue, Context *on_finish) {
     return new CreateRequest(config, ioctx, image_name, image_id, size,
-                             image_options, skip_mirror_enable,
+                             image_options, create_flags,
                              mirror_image_mode, non_primary_global_image_id,
                              primary_mirror_uuid, op_work_queue, on_finish);
   }
@@ -91,7 +91,7 @@ private:
                 const std::string &image_name,
                 const std::string &image_id, uint64_t size,
                 const ImageOptions &image_options,
-                bool skip_mirror_enable,
+                uint32_t create_flags,
                 cls::rbd::MirrorImageMode mirror_image_mode,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
@@ -112,7 +112,7 @@ private:
   std::string m_journal_pool;
   std::string m_data_pool;
   int64_t m_data_pool_id = -1;
-  bool m_skip_mirror_enable;
+  uint32_t m_create_flags;
   cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
