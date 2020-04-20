@@ -82,7 +82,7 @@ def get_result(key, results):
 
 
 # * first match from the top wins
-# * where N=None, e=[], *=any
+# * where e=[], *=any
 #
 #       + list of known hosts available for scheduling
 #       |   + hosts used for explict placement
@@ -90,43 +90,20 @@ def get_result(key, results):
 #       |   |   |
 test_explicit_scheduler_results = [
     (k("*   *   0"), error(ServiceSpecValidationError, 'num/count must be > 1')),
-    (k("e   N   *"), none()),  # bug: should be exception
-    (k("e   e   *"), none()),
+    (k("*   e   N"), error(OrchestratorValidationError, 'placement spec is empty: no hosts, no label, no pattern, no count')),
+    (k("*   e   *"), none),
     (k("e   1   *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1: Unknown hosts")),
     (k("e   12  *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1, 2: Unknown hosts")),
     (k("e   123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1, 2, 3: Unknown hosts")),
-    (k("1   N   *"), exactly('1')),  # bug: should be exception (empty placement should be invalid)
-    (k("1   e   *"), exactly('1')),  # bug: should be exception (empty placement should be invalid)
-    (k("1   1   2"), exactly('1', '1')),  # bug: should be exactly('1')
-    (k("1   1   3"), exactly('1', '1')),  # bug: should be exactly('1')
-    (k("1   1   *"), one_of('1')),
+    (k("1   1   *"), exactly('1')),
     (k("1   12  *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2: Unknown hosts")),
     (k("1   123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2, 3: Unknown hosts")),
-    (k("12  N   2"), exactly('1', '2')),  # bug: should be exception (empty placement should be invalid)
-    (k("12  N   3"), exactly('1', '2')),  # bug: should be exception (empty placement should be invalid)
-    (k("12  N   *"), one_of('1', '2')),  # bug: should be exception (empty placement should be invalid)
-    (k("12  e   2"), exactly('1', '2')),  # bug: should be exception
-    (k("12  e   3"), exactly('1', '2')),  # bug: should be exception
-    (k("12  e   *"), one_of('1', '2')),  # bug: should be exception
-    (k("12  1   2"), _or(exactly('1', '1'), exactly('1', '2'))),   # bug: should be exactly('1')
-    (k("12  1   3"), exactly('1', '1', '2')),   # bug: should be exactly('1')
     (k("12  1   *"), exactly('1')),
     (k("12  12  1"), one_of('1', '2')),
-    (k("12  12  3"), _or(exactly('1', '2', '2'), exactly('1', '1', '2'))), # bug: one_of('1', '2')
     (k("12  12  *"), exactly('1', '2')),
     (k("12  123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 3: Unknown hosts")),
-    (k("123 N   2"), two_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
-    (k("123 N   3"), exactly('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
-    (k("123 N   *"), one_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
-    (k("123 e   2"), two_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
-    (k("123 e   3"), exactly('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
-    (k("123 e   *"), one_of('1', '2', '3')),  # bug: should be exception (empty placement should be invalid)
-    (k("123 e   2"), _or(exactly('1', '3'), exactly('1', '2'), exactly('1', '1'))), # bug. should be exactly('1')
-    (k("123 1   2"), _always_true), # bug. should be exactly('1')
-    (k("123 1   3"), _always_true), # bug. should be exactly('1')
     (k("123 1   *"), exactly('1')),
     (k("123 12  1"), one_of('1', '2')),
-    (k("123 12  3"), _always_true),  # bug: should be exactly('1', '2')
     (k("123 12  *"), exactly('1', '2')),
     (k("123 123 1"), one_of('1', '2', '3')),
     (k("123 123 2"), two_of('1', '2', '3')),
@@ -143,7 +120,6 @@ test_explicit_scheduler_results = [
     ])
 @pytest.mark.parametrize("explicit_key, explicit",
     [
-        ('N', None),
         ('e', []),
         ('1', ['1']),
         ('12', ['1', '2']),
@@ -227,7 +203,7 @@ class NodeAssignmentTest(NamedTuple):
                 DaemonDescription('mon', 'a', 'host1'),
                 DaemonDescription('mon', 'b', 'host2'),
             ],
-            ['host1', 'host2', 'host3']
+            ['host3']
         ),
         # count 1 + partial host list
         NodeAssignmentTest(
@@ -248,7 +224,7 @@ class NodeAssignmentTest(NamedTuple):
             [
                 DaemonDescription('mon', 'a', 'host1'),
             ],
-            ['host1', 'host3']
+            ['host3']
         ),
         # count + partial host list + existing (deterministic)
         NodeAssignmentTest(
@@ -258,7 +234,7 @@ class NodeAssignmentTest(NamedTuple):
             [
                 DaemonDescription('mon', 'a', 'host1'),
             ],
-            ['host1', 'host2']
+            ['host1']
         ),
         # count + partial host list + existing (deterministic)
         NodeAssignmentTest(
@@ -268,7 +244,7 @@ class NodeAssignmentTest(NamedTuple):
             [
                 DaemonDescription('mon', 'a', 'host2'),
             ],
-            ['host1', 'host2']
+            ['host1']
         ),
         # label only
         NodeAssignmentTest(
@@ -305,16 +281,6 @@ class NodeAssignmentTest2(NamedTuple):
 
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,in_set",
     [
-        # empty
-        NodeAssignmentTest2(
-            'mon',
-            PlacementSpec(),
-            'host1 host2 host3'.split(),
-            [],
-            1,
-            ['host1', 'host2', 'host3'],
-        ),
-
         # just count
         NodeAssignmentTest2(
             'mon',
@@ -361,7 +327,7 @@ class NodeAssignmentTest2(NamedTuple):
             PlacementSpec(count=2, hosts=['host3']),
             'host1 host2 host3'.split(),
             [],
-            2,
+            1,
             ['host1', 'host2', 'host3']
         ),
         # label + count
@@ -392,7 +358,7 @@ def test_node_assignment2(service_type, placement, hosts,
             PlacementSpec(count=3, hosts='host3'.split()),
             'host1 host2 host3'.split(),
             [],
-            3,
+            1,
             ['host3']
         ),
         # count + partial host list
@@ -401,7 +367,7 @@ def test_node_assignment2(service_type, placement, hosts,
             PlacementSpec(count=2, hosts=['host3']),
             'host1 host2 host3'.split(),
             [],
-            2,
+            1,
             ['host3']
         ),
     ])
