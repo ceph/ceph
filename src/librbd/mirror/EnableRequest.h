@@ -53,7 +53,13 @@ private:
    * GET_TAG_OWNER  * * * * * * * *
    *    |                         *
    *    v (skip if not needed)    *
+   * OPEN_IMAGE                   *
+   *    |                         *
+   *    v (skip if not needed)    *
    * CREATE_PRIMARY_SNAPSHOT  * * *
+   *    |                         *
+   *    v (skip of not opened)    *
+   * CLOSE_IMAGE                  *
    *    |                         *
    *    v (skip if not needed)    *
    * ENABLE_NON_PRIMARY_FEATURE   *
@@ -84,6 +90,9 @@ private:
   bufferlist m_out_bl;
   cls::rbd::MirrorImage m_mirror_image;
 
+  int m_ret_val = 0;
+  bool m_close_image = false;
+
   bool m_is_primary = false;
   uint64_t m_snap_id = CEPH_NOSNAP;
 
@@ -93,8 +102,14 @@ private:
   void get_tag_owner();
   void handle_get_tag_owner(int r);
 
+  void open_image();
+  void handle_open_image(int r);
+
   void create_primary_snapshot();
   void handle_create_primary_snapshot(int r);
+
+  void close_image();
+  void handle_close_image(int r);
 
   void enable_non_primary_feature();
   void handle_enable_non_primary_feature(int r);
