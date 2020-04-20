@@ -41,7 +41,7 @@ setup_teuthology() {
     TEMP_DIR=`mktemp -d`
     cd $TEMP_DIR
 
-    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
+    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} venv
     source venv/bin/activate
     pip install 'setuptools >= 12'
     pip install git+https://github.com/ceph/teuthology#egg=teuthology[test]
