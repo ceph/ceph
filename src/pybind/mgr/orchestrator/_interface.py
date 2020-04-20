@@ -1277,7 +1277,7 @@ class DaemonDescription(object):
                  osdspec_affinity=None,
                  last_deployed=None):
         # Host is at the same granularity as InventoryHost
-        self.hostname = hostname
+        self.hostname: str = hostname
 
         # Not everyone runs in containers, but enough people do to
         # justify having the container_id (runtime id) and container_image
