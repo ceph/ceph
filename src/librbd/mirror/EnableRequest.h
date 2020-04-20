@@ -24,9 +24,11 @@ class EnableRequest {
 public:
   static EnableRequest *create(ImageCtxT *image_ctx,
                                cls::rbd::MirrorImageMode mode,
+                               const std::string &non_primary_global_image_id,
                                Context *on_finish) {
     return new EnableRequest(image_ctx->md_ctx, image_ctx->id, image_ctx, mode,
-                             "", image_ctx->op_work_queue, on_finish);
+                             non_primary_global_image_id,
+                             image_ctx->op_work_queue, on_finish);
   }
   static EnableRequest *create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
