@@ -81,7 +81,7 @@ if(connection->interceptor) { \
 ProtocolV2::ProtocolV2(AsyncConnection *connection)
     : Protocol(2, connection),
       state(NONE),
-      peer_required_features(0),
+      peer_supported_features(0),
       client_cookie(0),
       server_cookie(0),
       global_seq(0),
@@ -930,13 +930,10 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(rx_buffer_t &&buffer, int r) {
     return nullptr;
   }
 
-  this->peer_required_features = peer_required_features;
-  if (this->peer_required_features == 0) {
+  this->peer_supported_features = peer_supported_features;
+  if (peer_required_features == 0) {
     this->connection_features = msgr2_required;
   }
-
-  // at this point we can change how the client protocol behaves based on
-  // this->peer_required_features
 
   if (state == BANNER_CONNECTING) {
     state = HELLO_CONNECTING;
