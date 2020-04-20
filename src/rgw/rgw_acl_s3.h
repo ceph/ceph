@@ -89,8 +89,12 @@ public:
 
   virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const string& canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    int ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
-    owner = _owner;
+    if (_owner.get_id() == rgw_user("anonymous")) {
+      owner = bucket_owner;
+    } else {
+      owner = _owner;
+    }
+    int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
     return ret;
   }
   int create_from_headers(RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner);
