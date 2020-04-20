@@ -30,7 +30,6 @@ If you are new to teuthology and simply want to run existing tests, check out
 Provided Utilities
 ==================
 * :ref:`teuthology` - Run individual jobs
-* ``teuthology-coverage`` - Analyze code coverage via lcov
 * :ref:`teuthology-kill` - Kill running jobs or entire runs
 * :ref:`teuthology-lock` - Lock, unlock, and update status of machines
 * :ref:`teuthology-ls` - List job results by examining an archive directory
