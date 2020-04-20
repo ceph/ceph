@@ -437,6 +437,27 @@ def task(ctx, config):
     assert out['swift_keys'][0]['user'] == subuser1
     assert out['swift_keys'][0]['secret_key'] == swift_secret1
 
+    # TESTCASE 'add-s3-key','key','create','s3 key','succeeds'
+    (err, out) = rgwadmin(ctx, client, [
+        'subuser', 'modify', '--subuser', subuser1,
+        '--access-key', access_key2, '--secret', secret_key2,
+        '--key-type', 's3',
+    ], check_status=True)
+
+    # TESTCASE 'info-s3-key','user','info','after key addition','returns all keys'
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1], check_status=True)
+    assert len(out['keys']) == 2
+    assert out['keys'][0]['user'] == subuser1 or out['keys'][1]['user'] == subuser1
+    assert out['keys'][0]['access_key'] == access_key2 or out['keys'][1]['access_key'] == access_key2
+    assert out['keys'][0]['secret_key'] == secret_key2 or out['keys'][1]['secret_key'] == secret_key2
+
+    # TESTCASE 'info-s3-key-by-access-key','user','info','after key addition','returns all keys'
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--access-key', access_key2], check_status=True)
+    assert len(out['keys']) == 2
+    assert out['keys'][0]['user'] == subuser1 or out['keys'][1]['user'] == subuser1
+    assert out['keys'][0]['access_key'] == access_key2 or out['keys'][1]['access_key'] == access_key2
+    assert out['keys'][0]['secret_key'] == secret_key2 or out['keys'][1]['secret_key'] == secret_key2
+
     # TESTCASE 'add-swift-subuser','key','create','swift sub-user key','succeeds'
     (err, out) = rgwadmin(ctx, client, [
             'subuser', 'create', '--subuser', subuser2,
@@ -457,10 +478,38 @@ def task(ctx, config):
             ], check_status=True)
     assert len(out['swift_keys']) == 1
 
+    # TESTCASE 'rm-s3-key','key','rm','subuser','succeeds, one key is removed'
+    (err, out) = rgwadmin(ctx, client, [
+            'key', 'rm', '--subuser', subuser1,
+            '--key-type', 's3', '--access-key', access_key2
+            ], check_status=True)
+    assert len(out['keys']) == 1
+    assert not out['keys'][0]['user'] == subuser1
+    assert not out['keys'][0]['access_key'] == access_key2
+    assert not out['keys'][0]['secret_key'] == secret_key2
+
     # TESTCASE 'rm-subuser','subuser','rm','subuser','success, subuser is removed'
     (err, out) = rgwadmin(ctx, client, [
             'subuser', 'rm', '--subuser', subuser1,
             ], check_status=True)
+    assert len(out['subusers']) == 1
+
+    # TESTCASE 'add-s3-subuser','subuser','create','s3 sub-user auto gen key','succeeds'
+    (err, out) = rgwadmin(ctx, client, [
+            'subuser', 'create', '--subuser', subuser1,
+            '--key-type', 's3',
+            ], check_status=True)
+    
+    # TESTCASE 'info-s3-subuser','user','info','after user creation','returns all sub-users/keys'
+    (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1], check_status=True)
+    assert len(out['keys']) == 2
+    assert len(out['subusers']) == 2
+
+    # TESTCASE 'rm-s3-subuser','subuser','rm'
+    (err, out) = rgwadmin(ctx, client, [
+            'subuser', 'rm', '--subuser', subuser1,
+            ], check_status=True)
+    assert len(out['keys']) == 1
     assert len(out['subusers']) == 1
 
     # TESTCASE 'rm-subuser-with-keys','subuser','rm','subuser','succeeds, second subser and key is removed'
