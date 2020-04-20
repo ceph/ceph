@@ -160,6 +160,7 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
 bool cls_has_chunk(cls_method_context_t hctx, std::string fp_oid);
 
 extern uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx);
+extern uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx);
 
 #endif
 
