@@ -106,7 +106,7 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
 template <typename I>
 void EnableRequest<I>::get_tag_owner() {
   if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    create_primary_snapshot();
+    open_image();
     return;
   } else if (!m_non_primary_global_image_id.empty()) {
     image_state_update();
@@ -143,13 +143,43 @@ void EnableRequest<I>::handle_get_tag_owner(int r) {
 }
 
 template <typename I>
-void EnableRequest<I>::create_primary_snapshot() {
+void EnableRequest<I>::open_image() {
   if (!m_non_primary_global_image_id.empty()) {
     // special case for rbd-mirror creating a non-primary image
     enable_non_primary_feature();
     return;
+  } else if (m_image_ctx != nullptr) {
+    create_primary_snapshot();
+    return;
   }
 
+  ldout(m_cct, 10) << dendl;
+
+  m_close_image = true;
+  m_image_ctx = I::create("", m_image_id, CEPH_NOSNAP, m_io_ctx, false);
+
+  auto ctx = create_context_callback<
+    EnableRequest<I>, &EnableRequest<I>::handle_open_image>(this);
+  m_image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
+}
+
+template <typename I>
+void EnableRequest<I>::handle_open_image(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to open image: " << cpp_strerror(r) << dendl;
+    m_image_ctx->destroy();
+    m_image_ctx = nullptr;
+    finish(r);
+    return;
+  }
+
+  create_primary_snapshot();
+}
+
+template <typename I>
+void EnableRequest<I>::create_primary_snapshot() {
   ldout(m_cct, 10) << dendl;
 
   ceph_assert(m_image_ctx != nullptr);
@@ -169,12 +199,52 @@ void EnableRequest<I>::handle_create_primary_snapshot(int r) {
   if (r < 0) {
     lderr(m_cct) << "failed to create initial primary snapshot: "
                  << cpp_strerror(r) << dendl;
-    finish(r);
+    m_ret_val = r;
+  }
+
+  close_image();
+}
+
+template <typename I>
+void EnableRequest<I>::close_image() {
+  if (!m_close_image) {
+    if (m_ret_val < 0) {
+      finish(m_ret_val);
+    } else {
+      image_state_update();
+    }
+    return;
+  }
+
+  ldout(m_cct, 10) << dendl;
+
+  auto ctx = create_context_callback<
+    EnableRequest<I>, &EnableRequest<I>::handle_close_image>(this);
+  m_image_ctx->state->close(ctx);
+}
+
+template <typename I>
+void EnableRequest<I>::handle_close_image(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  m_image_ctx->destroy();
+  m_image_ctx = nullptr;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to close image: " << cpp_strerror(r) << dendl;
+    if (m_ret_val == 0) {
+      m_ret_val = r;
+    }
+  }
+
+  if (m_ret_val < 0) {
+    finish(m_ret_val);
     return;
   }
 
   image_state_update();
 }
+
 
 template <typename I>
 void EnableRequest<I>::enable_non_primary_feature() {
