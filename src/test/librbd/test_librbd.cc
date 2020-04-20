@@ -6606,17 +6606,31 @@ TEST_F(TestLibRBD, CreateWithMirrorEnabled) {
                  RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
                  static_cast<uint64_t>(RBD_MIRROR_IMAGE_MODE_SNAPSHOT)));
 
-  std::string image_name = get_temp_image_name();
-  ASSERT_EQ(0, rbd.create4(ioctx, image_name.c_str(), 2<<20, image_options));
+  std::string parent_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.create4(ioctx, parent_name.c_str(), 2<<20, image_options));
 
-  librbd::Image image;
-  ASSERT_EQ(0, rbd.open(ioctx, image, image_name.c_str(), NULL));
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
 
   librbd::mirror_image_mode_t mirror_image_mode;
-  ASSERT_EQ(0, image.mirror_image_get_mode(&mirror_image_mode));
+  ASSERT_EQ(0, parent_image.mirror_image_get_mode(&mirror_image_mode));
   ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mirror_image_mode);
 
-  ASSERT_EQ(0, image.mirror_image_disable(true));
+  ASSERT_EQ(0, parent_image.snap_create("parent_snap"));
+  ASSERT_EQ(0, parent_image.snap_protect("parent_snap"));
+
+  std::string child_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone3(ioctx, parent_name.c_str(), "parent_snap", ioctx,
+            child_name.c_str(), image_options));
+
+  librbd::Image child_image;
+  ASSERT_EQ(0, rbd.open(ioctx, child_image, child_name.c_str(), NULL));
+
+  ASSERT_EQ(0, child_image.mirror_image_get_mode(&mirror_image_mode));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mirror_image_mode);
+
+  ASSERT_EQ(0, child_image.mirror_image_disable(true));
+  ASSERT_EQ(0, parent_image.mirror_image_disable(true));
   ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_DISABLED));
 }
 
