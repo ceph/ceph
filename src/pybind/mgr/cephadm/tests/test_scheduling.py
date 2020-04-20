@@ -4,7 +4,7 @@ import pytest
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
 
 from cephadm.module import HostAssignment
-from orchestrator import DaemonDescription, OrchestratorValidationError
+from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError
 
 
 def wrapper(func):
@@ -81,6 +81,37 @@ def get_result(key, results):
      if match(k)][0]
 
 
+def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_elems):
+    key = ' '.join('N' if e is None else str(e) for e in key_elems)
+    try:
+        assert_res = get_result(k(key), results)
+    except IndexError:
+        try:
+            spec = mk_spec()
+            host_res = HostAssignment(
+                spec=spec,
+                get_hosts_func=get_hosts_func,
+                get_daemons_func=get_daemons_func).place()
+            if isinstance(host_res, list):
+                e = ', '.join(repr(h.hostname) for h in host_res)
+                assert False, f'`(k("{key}"), exactly({e})),` not found'
+            assert False, f'`(k("{key}"), ...),` not found'
+        except OrchestratorError as e:
+            assert False, f'`(k("{key}"), error({type(e).__name__}, {repr(str(e))})),` not found'
+
+    for _ in range(10):  # scheduler has a random component
+        try:
+            spec = mk_spec()
+            host_res = HostAssignment(
+                spec=spec,
+                get_hosts_func=get_hosts_func,
+                get_daemons_func=get_daemons_func).place()
+
+            assert_res(sorted([h.hostname for h in host_res]))
+        except Exception as e:
+            assert_res(e)
+
+
 # * first match from the top wins
 # * where e=[], *=any
 #
@@ -127,34 +158,92 @@ test_explicit_scheduler_results = [
     ])
 @pytest.mark.parametrize("host_key, hosts",
     [
-        ('e', []),
         ('1', ['1']),
         ('12', ['1', '2']),
         ('123', ['1', '2', '3']),
     ])
-def test_scheduler(host_key, hosts,
-                   explicit_key, explicit,
-                   count):
-    count_key = 'N' if count is None else str(count)
-    key = k(f'{host_key} {explicit_key} {count_key}')
-    try:
-        assert_res = get_result(key, test_explicit_scheduler_results)
-    except IndexError:
-        assert False, f'`(k("{host_key} {explicit_key} {count_key}"), ...),` not found'
-
-    for _ in range(10):  # scheduler has a random component
-        try:
-            host_res = HostAssignment(
-                spec=ServiceSpec('mon', placement=PlacementSpec(
+def test_explicit_scheduler(host_key, hosts,
+                            explicit_key, explicit,
+                            count):
+    run_scheduler_test(
+        results=test_explicit_scheduler_results,
+        mk_spec=lambda: ServiceSpec('mon', placement=PlacementSpec(
                     hosts=explicit,
                     count=count,
                 )),
-                get_hosts_func=lambda _: hosts,
-                get_daemons_func=lambda _: []).place()
+        get_hosts_func=lambda _: hosts,
+        get_daemons_func=lambda _: [],
+        key_elems=(host_key, explicit_key, count)
+    )
 
-            assert_res(sorted([h.hostname for h in host_res]))
-        except Exception as e:
-            assert_res(e)
+test_scheduler_daemons_results = [
+    (k("*   1   * *  "), exactly('1')),
+    (k("1   123 * *  "), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon> on 2, 3: Unknown hosts')),
+    (k("12  123 * *  "), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon> on 3: Unknown hosts')),
+    (k("123 123 N *  "), exactly('1', '2', '3')),
+    (k("123 123 1 e  "), one_of('1', '2', '3')),
+    (k("123 123 1 1  "), exactly('1')),
+    (k("123 123 1 3  "), exactly('3')),
+    (k("123 123 1 12 "), one_of('1', '2')),
+    (k("123 123 1 23 "), one_of('2', '3')),
+    (k("123 123 1 123"), one_of('1', '2', '3')),
+    (k("123 123 2 e  "), two_of('1', '2', '3')),
+    (k("123 123 2 1  "), _or(exactly('1', '2'), exactly('1', '3'))),
+    (k("123 123 2 3  "), _or(exactly('1', '3'), exactly('2', '3'))),
+    (k("123 123 2 12 "), exactly('1', '2')),
+    (k("123 123 2 23 "), exactly('2', '3')),
+    (k("123 123 2 123"), two_of('1', '2', '3')),
+    (k("123 123 3 *  "), exactly('1', '2', '3')),
+]
+
+@pytest.mark.parametrize("daemons_key, daemons",
+    [
+        ('e', []),
+        ('1', ['1']),
+        ('3', ['3']),
+        ('12', ['1', '2']),
+        ('23', ['2', '3']),
+        ('123', ['1', '2', '3']),
+    ])
+@pytest.mark.parametrize("count",
+    [
+        None,
+        1,
+        2,
+        3,
+    ])
+@pytest.mark.parametrize("explicit_key, explicit",
+    [
+        ('1', ['1']),
+        ('123', ['1', '2', '3']),
+    ])
+@pytest.mark.parametrize("host_key, hosts",
+    [
+        ('1', ['1']),
+        ('12', ['1', '2']),
+        ('123', ['1', '2', '3']),
+    ])
+def test_scheduler_daemons(host_key, hosts,
+                           explicit_key, explicit,
+                           count,
+                           daemons_key, daemons):
+    dds = [
+        DaemonDescription('mon', d, d)
+        for d in daemons
+    ]
+    run_scheduler_test(
+        results=test_scheduler_daemons_results,
+        mk_spec=lambda: ServiceSpec('mon', placement=PlacementSpec(
+                    hosts=explicit,
+                    count=count,
+                )),
+        get_hosts_func=lambda _: hosts,
+        get_daemons_func=lambda _: dds,
+        key_elems=(host_key, explicit_key, count, daemons_key)
+    )
+
+
+## =========================
 
 
 class NodeAssignmentTest(NamedTuple):
