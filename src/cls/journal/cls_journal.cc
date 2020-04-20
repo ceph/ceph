@@ -1183,6 +1183,11 @@ int journal_object_append(cls_method_context_t hctx, bufferlist *in,
     min_alloc_size = 8;
   }
 
+  auto stripe_width = cls_get_pool_stripe_width(hctx);
+  if (stripe_width > 0) {
+    min_alloc_size = round_up_to(min_alloc_size, stripe_width);
+  }
+
   CLS_LOG(20, "pad to %" PRIu64, min_alloc_size);
 
   auto end = offset + data.length();
