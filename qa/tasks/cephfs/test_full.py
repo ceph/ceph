@@ -125,16 +125,21 @@ class FullnessTestCase(CephFSTestCase):
 
         # Fill up the cluster.  This dd may or may not fail, as it depends on
         # how soon the cluster recognises its own fullness
-        self.mount_a.write_n_mb("large_file_a", self.fill_mb // 2)
         try:
-            self.mount_a.write_n_mb("large_file_b", self.fill_mb // 2)
+            self.mount_a.write_n_mb("large_file_a", self.fill_mb // 2)
         except CommandFailedError:
-            log.info("Writing file B failed (full status happened already)")
+            log.info("Writing file A failed (full status happened already)")
             assert self.is_full()
         else:
-            log.info("Writing file B succeeded (full status will happen soon)")
-            self.wait_until_true(lambda: self.is_full(),
-                                 timeout=osd_mon_report_interval * 5)
+            try:
+                self.mount_a.write_n_mb("large_file_b", self.fill_mb // 2)
+            except CommandFailedError:
+                log.info("Writing file B failed (full status happened already)")
+                assert self.is_full()
+            else:
+                log.info("Writing file B succeeded (full status will happen soon)")
+                self.wait_until_true(lambda: self.is_full(),
+                                     timeout=osd_mon_report_interval * 5)
 
         # Attempting to write more data should give me ENOSPC
         with self.assertRaises(CommandFailedError) as ar:
