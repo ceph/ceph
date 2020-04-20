@@ -1227,6 +1227,15 @@ int Migration<I>::create_dst_image() {
   ConfigProxy config{m_cct->_conf};
   api::Config<I>::apply_pool_overrides(m_dst_io_ctx, &config);
 
+  uint64_t mirror_image_mode;
+  if (m_image_options.get(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+                          &mirror_image_mode) == 0) {
+    m_mirroring = true;
+    m_mirror_image_mode = static_cast<cls::rbd::MirrorImageMode>(
+      mirror_image_mode);
+    m_image_options.unset(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE);
+  }
+
   int r;
   C_SaferCond on_create;
   librados::IoCtx parent_io_ctx;
