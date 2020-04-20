@@ -1,4 +1,5 @@
 from io import BytesIO
+from io import StringIO
 import json
 import time
 import logging
@@ -101,6 +102,7 @@ class FuseMount(CephFSMount):
             )
             try:
                 ls_str = self.client_remote.sh("ls /sys/fs/fuse/connections",
+                                               stdout=StringIO(),
                                                timeout=(15*60)).strip()
             except CommandFailedError:
                 return []
@@ -447,14 +449,16 @@ print(find_socket("{client_name}"))
             client_name="client.{0}".format(self.client_id))
 
         # Find the admin socket
-        asok_path = self.client_remote.sh([
-            'sudo', 'python3', '-c', pyscript
-        ], timeout=(15*60)).strip()
+        asok_path = self.client_remote.sh(
+            ['sudo', 'python3', '-c', pyscript],
+            stdout=StringIO(),
+            timeout=(15*60)).strip()
         log.info("Found client admin socket at {0}".format(asok_path))
 
         # Query client ID from admin socket
         json_data = self.client_remote.sh(
             ['sudo', self._prefix + 'ceph', '--admin-daemon', asok_path] + args,
+            stdout=StringIO(),
             timeout=(15*60))
         return json.loads(json_data)
 
