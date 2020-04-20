@@ -1534,3 +1534,7 @@ int cls_cxx_map_read_header(cls_method_handle_t, bufferlist *) {
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
   return 0;
 }
+
+uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx) {
+  return 0;
+}

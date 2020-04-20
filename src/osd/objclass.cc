@@ -703,3 +703,10 @@ uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
 
   return ctx->pg->get_min_alloc_size();
 }
+
+uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+
+  return ctx->pg->get_pool().stripe_width;
+}
