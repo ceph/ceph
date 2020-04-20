@@ -973,8 +973,10 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   log_file = _get_file(1);
 
   // sanity check
-  for (auto& a : block_unused_too_granular) {
-    ceph_assert(a.empty());
+  if (!noop) {
+    for (auto& a : block_unused_too_granular) {
+      ceph_assert(a.empty());
+    }
   }
 
   if (!noop) {
