@@ -256,6 +256,21 @@ static bool handle_result(SIProvider::fetch_result& result, string *marker)
   return true;
 }
 
+class TestProviderClient : public SIProviderClient
+{
+public:
+  TestProviderClient(SIProviderRef& provider) : SIProviderClient(provider) {}
+
+  int load_state() override {
+    return 0;
+  }
+
+  int save_state() override {
+    return 0;
+  }
+
+};
+
 TEST(TestRGWSIP, test_basic_provider)
 {
   int max_entries = 25;
@@ -319,7 +334,7 @@ TEST(TestRGWSIP, test_basic_provider_client)
   auto bp = std::make_shared<BasicProvider>(0, max_entries);
   auto base = std::static_pointer_cast<SIProvider>(bp);
 
-  SIProviderClient pc(base);
+  TestProviderClient pc(base);
 
   int total = 0;
   int chunk_size = 10;
@@ -343,7 +358,7 @@ struct stage_info {
   int shard_entries_limit;
   vector<int> max_entries;
   int all_entries{0};
-  vector<SIProviderClientRef> shards;
+  vector<SIClientRef> shards;
 
   stage_info() {}
   stage_info(int _num_shards,
@@ -367,9 +382,9 @@ struct stage_info {
       cout << "max_entries[" << i << "]=" << max_entries[i] << std::endl;
   
       auto base = alloc(i, max_entries[i]);
-      auto pc = std::make_shared<SIProviderClient>(base);
+      auto pc = std::make_shared<TestProviderClient>(base);
 
-      shards.push_back(pc);
+      shards.push_back(std::static_pointer_cast<SIClient>(pc));
     }
   }
 };

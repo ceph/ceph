@@ -7,6 +7,9 @@
 
 #include "include/buffer.h"
 
+/*
+ * non-stateful entity that is responsible for providing data
+ */
 class SIProvider
 {
 public:
@@ -37,17 +40,30 @@ public:
 
 using SIProviderRef = std::shared_ptr<SIProvider>;
 
-class SIPClient
+/*
+ * stateful entity that is responsible for fetching data
+ */
+class SIClient
 {
 public:
-  virtual ~SIPClient() {}
+  virtual ~SIClient() {}
 
+  virtual int init_marker(bool all_history) = 0;
   virtual int fetch(int max, SIProvider::fetch_result *result) = 0;
+
+  virtual int load_state() = 0;
+  virtual int save_state() = 0;
+
+  virtual SIProvider::Type get_provider_type() const = 0;
 };
 
-using SIPClientRef = std::shared_ptr<SIPClient>;
+using SIClientRef = std::shared_ptr<SIClient>;
 
-class SIProviderClient : public SIPClient
+
+/*
+ * provider client: a client that connects directly to a provider
+ */
+class SIProviderClient : public SIClient
 {
   SIProviderRef provider;
   std::string marker;
@@ -57,21 +73,42 @@ class SIProviderClient : public SIPClient
 public:
   SIProviderClient(SIProviderRef& _provider) : provider(_provider) {}
 
-  int init_marker(bool all_history);
+  int init_marker(bool all_history) override;
 
   int fetch(int max, SIProvider::fetch_result *result) override;
 
-  SIProvider::Type get_provider_type() const {
+  SIProvider::Type get_provider_type() const override {
     return provider->get_type();
   }
 };
 
-using SIProviderClientRef = std::shared_ptr<SIProviderClient>;
+/*
+ * chained client: a client that connects to another client
+ */
+class SIChainedClient : public SIClient
+{
+  SIClientRef client;
+  std::string marker;
+
+public:
+  SIChainedClient(SIClientRef& _client) : client(_client) {}
+
+  int init_marker(bool all_history) override;
+
+  int fetch(int max, SIProvider::fetch_result *result) override;
+
+  SIProvider::Type get_provider_type() const override {
+    return client->get_provider_type();
+  }
+};
 
 
+/*
+ * sharded stage: a collection of clients (each represents a shard) that form a single sync stage
+ */
 class SIPShardedStage
 {
-  std::vector<SIProviderClientRef> shards;
+  std::vector<SIClientRef> shards;
 
   std::vector<bool> done_vec;
 
@@ -79,8 +116,8 @@ class SIPShardedStage
   bool complete{false};
 
 public:
-  SIPShardedStage(std::vector<SIProviderClientRef>& _shards) : shards(_shards),
-                                                               done_vec(_shards.size()) {}
+  SIPShardedStage(std::vector<SIClientRef>& _shards) : shards(_shards),
+                                                       done_vec(_shards.size()) {}
 
   int init_markers(bool all_history);
   int fetch(int shard_id, int max, SIProvider::fetch_result *result);
@@ -110,6 +147,9 @@ public:
 using SIPShardedStageRef = std::shared_ptr<SIPShardedStage>;
 
 
+/*
+ * multi stage: a collection of sync stages
+ */
 class SIPMultiStageClient
 {
   std::vector<SIPShardedStageRef> stages;
