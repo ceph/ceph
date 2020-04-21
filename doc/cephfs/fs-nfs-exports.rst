@@ -17,18 +17,15 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <type=cephfs> [--size=1] <clusterid>
+    $ ceph nfs cluster create <type=cephfs> <clusterid> [<placement>]
 
 This creates a common recovery pool for all Ganesha daemons, new user based on
 cluster_id and common ganesha config rados object.
 
-Here size denotes the number of ganesha daemons within a cluster and type is
-export type. Currently only CephFS is supported.
-
-.. note:: This does not setup ganesha recovery database and start the daemons.
-          It needs to be done manually if not using vstart for creating
-          clusters. Please refer `ganesha-rados-grace doc
-          <https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/doc/man/ganesha-rados-grace.rst>`_
+Here type is export type and placement specifies the size of cluster and hosts.
+For more details on placement specification refer the `orchestrator doc
+<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_.
+Currently only CephFS export type is supported.
 
 Create CephFS Export
 ====================
