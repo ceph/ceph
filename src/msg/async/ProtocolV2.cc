@@ -24,6 +24,8 @@ std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
 		<< " :" << connection->port
                 << " s=" << get_state_name(state) << " pgs=" << peer_global_seq
                 << " cs=" << connect_seq << " l=" << connection->policy.lossy
+                << " rev1=" << HAVE_MSGR2_FEATURE(peer_supported_features,
+                                                  REVISION_1)
                 << " rx=" << session_stream_handlers.rx.get()
                 << " tx=" << session_stream_handlers.tx.get()
                 << ").";
@@ -935,6 +937,11 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(rx_buffer_t &&buffer, int r) {
     this->connection_features = msgr2_required;
   }
 
+  // if the peer supports msgr2.1, switch to it
+  bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
+  tx_frame_asm.set_is_rev1(is_rev1);
+  rx_frame_asm.set_is_rev1(is_rev1);
+
   if (state == BANNER_CONNECTING) {
     state = HELLO_CONNECTING;
   }
@@ -1806,8 +1813,9 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
     return _fault();
   }
   auth_meta->con_mode = auth_done.con_mode();
+  bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
   session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
-      cct, *auth_meta, /*new_nonce_format=*/false, /*crossed=*/false);
+      cct, *auth_meta, /*new_nonce_format=*/is_rev1, /*crossed=*/false);
 
   state = AUTH_CONNECTING_SIGN;
 
@@ -2186,8 +2194,9 @@ CtPtr ProtocolV2::finish_auth()
   ceph_assert(auth_meta);
   // TODO: having a possibility to check whether we're server or client could
   // allow reusing finish_auth().
+  bool is_rev1 = HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1);
   session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
-      cct, *auth_meta, /*new_nonce_format=*/false, /*crossed=*/true);
+      cct, *auth_meta, /*new_nonce_format=*/is_rev1, /*crossed=*/true);
 
   const auto sig = auth_meta->session_key.empty() ? sha256_digest_t() :
     auth_meta->session_key.hmac_sha256(cct, pre_auth.rxbuf);
