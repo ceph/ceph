@@ -2863,9 +2863,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': utils.name_to_config_section('iscsi') + '.' + igw_id,
-            'caps': ['mon', 'allow rw',
+            'caps': ['mon', 'profile rbd, '
+                            'allow command "osd blacklist", '
+                            'allow command "config-key get" with "key" prefix "iscsi/"',
                      'osd', f'allow rwx pool={spec.pool}'],
         })
+
+        if spec.ssl_cert:
+            if isinstance(spec.ssl_cert, list):
+                cert_data = '\n'.join(spec.ssl_cert)
+            else:
+                cert_data = spec.ssl_cert
+            ret, out, err = self.mon_command({
+                'prefix': 'config-key set',
+                'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.crt',
+                'val': cert_data,
+            })
+
+        if spec.ssl_key:
+            if isinstance(spec.ssl_key, list):
+                key_data = '\n'.join(spec.ssl_key)
+            else:
+                key_data = spec.ssl_key
+            ret, out, err = self.mon_command({
+                'prefix': 'config-key set',
+                'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.key',
+                'val': key_data,
+            })
 
         api_secure = 'false' if spec.api_secure is None else spec.api_secure
         igw_conf = f"""
