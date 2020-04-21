@@ -2700,7 +2700,7 @@ public:
 class TierFlushOp : public TestOp {
 public:
   librados::AioCompletion *completion;
-  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation op;
   string oid;
   std::shared_ptr<int> in_use;
 
@@ -2728,8 +2728,9 @@ public:
     context->state_lock.unlock();
 
     op.tier_flush();
+    unsigned flags = librados::OPERATION_IGNORE_CACHE;
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
-					&op);
+					&op, flags, NULL);
     ceph_assert(!r);
   }
 
