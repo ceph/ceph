@@ -4,7 +4,7 @@ import pytest
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
 
 from cephadm.module import HostAssignment
-from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError
+from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError, HostSpec
 
 
 def wrapper(func):
@@ -80,6 +80,43 @@ def get_result(key, results):
     return [v for k, v in results
      if match(k)][0]
 
+def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
+
+
+    if spec_section == 'hosts':
+        mk_spec = lambda: ServiceSpec('mon', placement=PlacementSpec(
+                    hosts=explicit,
+                    count=count,
+                ))
+        mk_hosts = lambda _: hosts
+    elif spec_section == 'label':
+        mk_spec = lambda: ServiceSpec('mon', placement=PlacementSpec(
+            label='mylabel',
+            count=count,
+        ))
+        mk_hosts = lambda l: [e for e in explicit if e in hosts] if l == 'mylabel' else hosts
+    elif spec_section == 'host_pattern':
+        pattern = {
+            'e': 'notfound',
+            '1': '1',
+            '12': '[1-2]',
+            '123': '*',
+        }[explicit_key]
+        mk_spec = lambda: ServiceSpec('mon', placement=PlacementSpec(
+                    host_pattern=pattern,
+                    count=count,
+                ))
+        mk_hosts = lambda _: hosts
+    else:
+        assert False
+    def _get_hosts_wrapper(label=None, as_hostspec=False):
+        hosts = mk_hosts(label)
+        if as_hostspec:
+            return list(map(HostSpec, hosts))
+        return hosts
+
+    return mk_spec, _get_hosts_wrapper
+
 
 def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_elems):
     key = ' '.join('N' if e is None else str(e) for e in key_elems)
@@ -115,32 +152,41 @@ def run_scheduler_test(results, mk_spec, get_hosts_func, get_daemons_func, key_e
 # * first match from the top wins
 # * where e=[], *=any
 #
-#       + list of known hosts available for scheduling
-#       |   + hosts used for explict placement
+#       + list of known hosts available for scheduling (host_key)
+#       |   + hosts used for explict placement (explicit_key)
 #       |   |   + count
-#       |   |   |
+#       |   |   | + section (host, label, pattern)
+#       |   |   | |     + expected result
+#       |   |   | |     |
 test_explicit_scheduler_results = [
-    (k("*   *   0"), error(ServiceSpecValidationError, 'num/count must be > 1')),
-    (k("*   e   N"), error(OrchestratorValidationError, 'placement spec is empty: no hosts, no label, no pattern, no count')),
-    (k("*   e   *"), none),
-    (k("e   1   *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1: Unknown hosts")),
-    (k("e   12  *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1, 2: Unknown hosts")),
-    (k("e   123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 1, 2, 3: Unknown hosts")),
-    (k("1   1   *"), exactly('1')),
-    (k("1   12  *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2: Unknown hosts")),
-    (k("1   123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2, 3: Unknown hosts")),
-    (k("12  1   *"), exactly('1')),
-    (k("12  12  1"), one_of('1', '2')),
-    (k("12  12  *"), exactly('1', '2')),
-    (k("12  123 *"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 3: Unknown hosts")),
-    (k("123 1   *"), exactly('1')),
-    (k("123 12  1"), one_of('1', '2')),
-    (k("123 12  *"), exactly('1', '2')),
-    (k("123 123 1"), one_of('1', '2', '3')),
-    (k("123 123 2"), two_of('1', '2', '3')),
-    (k("123 123 *"), exactly('1', '2', '3')),
+    (k("*   *   0 *"), error(ServiceSpecValidationError, 'num/count must be > 1')),
+    (k("*   e   N l"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon>: No matching hosts for label mylabel')),
+    (k("*   e   N p"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon>: No matching hosts')),
+    (k("*   e   N h"), error(OrchestratorValidationError, 'placement spec is empty: no hosts, no label, no pattern, no count')),
+    (k("*   e   * *"), none),
+    (k("1   12  * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2: Unknown hosts")),
+    (k("1   123 * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 2, 3: Unknown hosts")),
+    (k("1   *   * *"), exactly('1')),
+    (k("12  1   * *"), exactly('1')),
+    (k("12  12  1 *"), one_of('1', '2')),
+    (k("12  12  * *"), exactly('1', '2')),
+    (k("12  123 * h"), error(OrchestratorValidationError, "Cannot place <ServiceSpec for service_name=mon> on 3: Unknown hosts")),
+    (k("12  123 1 *"), one_of('1', '2', '3')),
+    (k("12  123 * *"), two_of('1', '2', '3')),
+    (k("123 1   * *"), exactly('1')),
+    (k("123 12  1 *"), one_of('1', '2')),
+    (k("123 12  * *"), exactly('1', '2')),
+    (k("123 123 1 *"), one_of('1', '2', '3')),
+    (k("123 123 2 *"), two_of('1', '2', '3')),
+    (k("123 123 * *"), exactly('1', '2', '3')),
 ]
 
+@pytest.mark.parametrize("spec_section_key,spec_section",
+    [
+        ('h', 'hosts'),
+        ('l', 'label'),
+        ('p', 'host_pattern'),
+    ])
 @pytest.mark.parametrize("count",
     [
         None,
@@ -164,38 +210,61 @@ test_explicit_scheduler_results = [
     ])
 def test_explicit_scheduler(host_key, hosts,
                             explicit_key, explicit,
-                            count):
+                            count,
+                            spec_section_key, spec_section):
+
+    mk_spec, mk_hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
     run_scheduler_test(
         results=test_explicit_scheduler_results,
-        mk_spec=lambda: ServiceSpec('mon', placement=PlacementSpec(
-                    hosts=explicit,
-                    count=count,
-                )),
-        get_hosts_func=lambda _: hosts,
+        mk_spec=mk_spec,
+        get_hosts_func=mk_hosts,
         get_daemons_func=lambda _: [],
-        key_elems=(host_key, explicit_key, count)
+        key_elems=(host_key, explicit_key, count, spec_section_key)
     )
 
+
+# * first match from the top wins
+# * where e=[], *=any
+#
+#       + list of known hosts available for scheduling (host_key)
+#       |   + hosts used for explict placement (explicit_key)
+#       |   |   + count
+#       |   |   | + existing daemons
+#       |   |   | |     + section (host, label, pattern)
+#       |   |   | |     |   + expected result
+#       |   |   | |     |   |
 test_scheduler_daemons_results = [
-    (k("*   1   * *  "), exactly('1')),
-    (k("1   123 * *  "), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon> on 2, 3: Unknown hosts')),
-    (k("12  123 * *  "), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon> on 3: Unknown hosts')),
-    (k("123 123 N *  "), exactly('1', '2', '3')),
-    (k("123 123 1 e  "), one_of('1', '2', '3')),
-    (k("123 123 1 1  "), exactly('1')),
-    (k("123 123 1 3  "), exactly('3')),
-    (k("123 123 1 12 "), one_of('1', '2')),
-    (k("123 123 1 23 "), one_of('2', '3')),
-    (k("123 123 1 123"), one_of('1', '2', '3')),
-    (k("123 123 2 e  "), two_of('1', '2', '3')),
-    (k("123 123 2 1  "), _or(exactly('1', '2'), exactly('1', '3'))),
-    (k("123 123 2 3  "), _or(exactly('1', '3'), exactly('2', '3'))),
-    (k("123 123 2 12 "), exactly('1', '2')),
-    (k("123 123 2 23 "), exactly('2', '3')),
-    (k("123 123 2 123"), two_of('1', '2', '3')),
-    (k("123 123 3 *  "), exactly('1', '2', '3')),
+    (k("*   1   * *   *"), exactly('1')),
+    (k("1   123 * *   h"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon> on 2, 3: Unknown hosts')),
+    (k("1   123 * *   *"), exactly('1')),
+    (k("12  123 * *   h"), error(OrchestratorValidationError, 'Cannot place <ServiceSpec for service_name=mon> on 3: Unknown hosts')),
+    (k("12  123 N *   *"), exactly('1', '2')),
+    (k("12  123 1 *   *"), one_of('1', '2')),
+    (k("12  123 2 *   *"), exactly('1', '2')),
+    (k("12  123 3 *   *"), exactly('1', '2')),
+    (k("123 123 N *   *"), exactly('1', '2', '3')),
+    (k("123 123 1 e   *"), one_of('1', '2', '3')),
+    (k("123 123 1 1   *"), exactly('1')),
+    (k("123 123 1 3   *"), exactly('3')),
+    (k("123 123 1 12  *"), one_of('1', '2')),
+    (k("123 123 1 23  *"), one_of('2', '3')),
+    (k("123 123 1 123 *"), one_of('1', '2', '3')),
+    (k("123 123 2 e   *"), two_of('1', '2', '3')),
+    (k("123 123 2 1   *"), _or(exactly('1', '2'), exactly('1', '3'))),
+    (k("123 123 2 3   *"), _or(exactly('1', '3'), exactly('2', '3'))),
+    (k("123 123 2 12  *"), exactly('1', '2')),
+    (k("123 123 2 23  *"), exactly('2', '3')),
+    (k("123 123 2 123 *"), two_of('1', '2', '3')),
+    (k("123 123 3 *   *"), exactly('1', '2', '3')),
 ]
 
+
+@pytest.mark.parametrize("spec_section_key,spec_section",
+    [
+        ('h', 'hosts'),
+        ('l', 'label'),
+        ('p', 'host_pattern'),
+    ])
 @pytest.mark.parametrize("daemons_key, daemons",
     [
         ('e', []),
@@ -226,20 +295,19 @@ test_scheduler_daemons_results = [
 def test_scheduler_daemons(host_key, hosts,
                            explicit_key, explicit,
                            count,
-                           daemons_key, daemons):
+                           daemons_key, daemons,
+                           spec_section_key, spec_section):
+    mk_spec, mk_hosts = mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count)
     dds = [
         DaemonDescription('mon', d, d)
         for d in daemons
     ]
     run_scheduler_test(
         results=test_scheduler_daemons_results,
-        mk_spec=lambda: ServiceSpec('mon', placement=PlacementSpec(
-                    hosts=explicit,
-                    count=count,
-                )),
-        get_hosts_func=lambda _: hosts,
+        mk_spec=mk_spec,
+        get_hosts_func=mk_hosts,
         get_daemons_func=lambda _: dds,
-        key_elems=(host_key, explicit_key, count, daemons_key)
+        key_elems=(host_key, explicit_key, count, daemons_key, spec_section_key)
     )
 
 
