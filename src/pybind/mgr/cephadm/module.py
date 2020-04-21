@@ -2114,7 +2114,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         try:
             tree = json.loads(out)
         except json.decoder.JSONDecodeError:
-            self.log.error(f"Could not decode json -> {out}")
+            self.log.exception(f"Could not decode json -> {out}")
             return osd_host_map
 
         nodes = tree.get('nodes', {})
@@ -2528,7 +2528,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     daemon_type, daemon_id, host))
                 if daemon_type == 'mon':
                     create_func(daemon_id, host, network)  # type: ignore
-                elif daemon_type == 'nfs':
+                elif daemon_type in ['nfs', 'iscsi']:
                     create_func(daemon_id, host, spec)  # type: ignore
                 else:
                     create_func(daemon_id, host)           # type: ignore
@@ -2563,7 +2563,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if self._apply_service(spec):
                     r = True
             except Exception as e:
-                self.log.warning('Failed to apply %s spec %s: %s' % (
+                self.log.exception('Failed to apply %s spec %s: %s' % (
                     spec.service_name(), spec, e))
         return r
 
