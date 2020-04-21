@@ -178,7 +178,7 @@ class TestMkdir(TestCephFSShell):
         self.negtest_cephfs_shell_cmd(cmd="mkdir -m -0755 d3")
         try:
             self.mount_a.stat('d3')
-        except:
+        except CommandFailedError:
             pass
 
     def test_mkdir_with_non_octal_mode(self):
@@ -199,7 +199,7 @@ class TestMkdir(TestCephFSShell):
         self.negtest_cephfs_shell_cmd(cmd="mkdir -m ugx=0755 d5")
         try:
             self.mount_a.stat('d5')
-        except:
+        except CommandFailedError:
             pass
 
     def test_mkdir_path_without_path_option(self):
@@ -209,7 +209,7 @@ class TestMkdir(TestCephFSShell):
         self.negtest_cephfs_shell_cmd(cmd="mkdir d5/d6/d7")
         try:
             self.mount_a.stat('d5/d6/d7')
-        except:
+        except CommandFailedError:
             pass
 
     def test_mkdir_path_with_path_option(self):
@@ -456,7 +456,7 @@ class TestSnapshots(TestCephFSShell):
         self.assertEqual("", o)
         try:
             o = self.mount_a.stat(sdn)
-        except:
+        except CommandFailedError:
             # snap dir should not exist anymore
             pass
         log.info("mount_a output:\n{}".format(o))
@@ -467,7 +467,7 @@ class TestSnapshots(TestCephFSShell):
                                       errmsg="'snap1': no such snapshot")
         try:
             o = self.mount_a.stat(sdn)
-        except:
+        except CommandFailedError:
             pass
         log.info("mount_a output:\n{}".format(o))
         self.assertNotIn('st_mode', o)
