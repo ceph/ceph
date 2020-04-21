@@ -80,7 +80,9 @@ seastar::future<> PGAdvanceMap::start()
 	    logger().info("PGAdvanceMap::start new pg {}", *pg);
 	  }
 	  return seastar::when_all_succeed(
-	    pg->get_need_up_thru() ? osd._send_alive() : seastar::now(),
+	    pg->get_need_up_thru() \
+              ? osd.shard_services.send_alive(pg->get_same_interval_since())
+              : seastar::now(),
 	    osd.shard_services.dispatch_context(
 	      pg->get_collection_ref(),
 	      std::move(rctx)));
