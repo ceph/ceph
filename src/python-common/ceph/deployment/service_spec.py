@@ -599,6 +599,9 @@ class IscsiServiceSpec(ServiceSpec):
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
 
+        if not self.api_secure and self.ssl_cert and self.ssl_key:
+            self.api_secure = True
+
     def validate_add(self):
         servicespec_validate_add(self)
 
