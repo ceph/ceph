@@ -16,7 +16,6 @@
 #include "include/util.h"
 
 #include "messages/MCommand.h"
-#include "messages/MOSDAlive.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
@@ -83,7 +82,7 @@ OSD::OSD(int id, uint32_t nonce,
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"),
       local_conf().get_config_values())},
-    shard_services{*this, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
+    shard_services{*this, whoami, *cluster_msgr, *public_msgr, *monc, *mgrc, *store},
     heartbeat{new Heartbeat{whoami, shard_services, *monc, hb_front_msgr, hb_back_msgr}},
     // do this in background
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
@@ -404,27 +403,6 @@ seastar::future<> OSD::_add_me_to_crush()
     }
     return seastar::now();
   });
-}
-
-seastar::future<> OSD::_send_alive()
-{
-  auto want = osdmap->get_epoch();
-  logger().info(
-    "{} want {} up_thru_wanted {}",
-    __func__,
-    want,
-    up_thru_wanted);
-  if (!osdmap->exists(whoami)) {
-    logger().warn("{} DNE", __func__);
-    return seastar::now();
-  } else if (want <= up_thru_wanted) {
-    logger().debug("{} {} <= {}", __func__, want, up_thru_wanted);
-    return seastar::now();
-  } else {
-    up_thru_wanted = want;
-    auto m = make_message<MOSDAlive>(osdmap->get_epoch(), want);
-    return monc->send_message(std::move(m));
-  }
 }
 
 seastar::future<> OSD::handle_command(crimson::net::Connection* conn,

@@ -80,6 +80,9 @@ seastar::future<> PeeringEvent::start()
 	pg->do_peering_event(evt, ctx);
 	handle.exit();
 	return complete_rctx(pg);
+      }).then([this, pg] {
+	return pg->get_need_up_thru() ? shard_services.send_alive(pg->get_same_interval_since())
+                               : seastar::now();
       });
     }
   }).then([this, ref=std::move(ref)] {

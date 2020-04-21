@@ -449,6 +449,9 @@ public:
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
   }
+  epoch_t get_same_interval_since() const {
+    return get_info().history.same_interval_since;
+  }
 
   const auto& get_pool() const {
     return peering_state.get_pool();
