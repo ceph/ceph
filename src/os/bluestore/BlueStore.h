@@ -2281,6 +2281,8 @@ private:
   */
   int _open_db_and_around(bool read_only);
   void _close_db_and_around(bool read_only);
+  int _prepare_db_environment(bool create, bool read_only,
+			      std::string* kv_dir, std::string* kv_backend);
 
   // updates legacy bluefs related recs in DB to a state valid for
   // downgrades from nautilus.
