@@ -5613,18 +5613,15 @@ void BlueStore::_sync_bluefs_and_fm()
   }
 }
 
-int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
+int BlueStore::_prepare_db_environment(bool create, bool read_only,
+				       std::string* _fn, std::string* _kv_backend)
 {
   int r;
   ceph_assert(!db);
-  ceph_assert(!(create && read_only));
-  string fn = path + "/db";
-  string options;
-  stringstream err;
+  std::string& fn=*_fn;
+  std::string& kv_backend=*_kv_backend;
+  fn = path + "/db";
   std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
-
-  string kv_backend;
-  std::string sharding_def;
 
   if (create) {
     kv_backend = cct->_conf->bluestore_kvbackend;
@@ -5765,7 +5762,23 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   FreelistManager::setup_merge_operators(db);
   db->set_merge_operator(PREFIX_STAT, merge_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
+  return 0;
+}
 
+int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
+{
+  int r;
+  ceph_assert(!(create && read_only));
+  string options;
+  stringstream err;
+  string kv_dir_fn;
+  string kv_backend;
+  std::string sharding_def;
+  r = _prepare_db_environment(create, read_only, &kv_dir_fn, &kv_backend);
+  if (r < 0) {
+    derr << __func__ << " failed to prepare db environment: " << err.str() << dendl;
+    return -EIO;
+  }
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
     if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
@@ -5791,7 +5804,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     return -EIO;
   }
   dout(1) << __func__ << " opened " << kv_backend
-	  << " path " << fn << " options " << options << dendl;
+	  << " path " << kv_dir_fn << " options " << options << dendl;
   return 0;
 }
 
