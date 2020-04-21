@@ -116,7 +116,7 @@ class RgwBucketTest(RgwTestCase):
 
     _mfa_token_serial = '1'
     _mfa_token_seed = '23456723'
-    _mfa_token_time_step = 3
+    _mfa_token_time_step = 2
 
     AUTH_ROLES = ['rgw-manager']
 
@@ -152,7 +152,7 @@ class RgwBucketTest(RgwTestCase):
         totp_key = base64.b32decode(self._mfa_token_seed)
         totp = TOTP(totp_key, 6, SHA1(), self._mfa_token_time_step, backend=default_backend(),
                     enforce_key_length=False)
-        time_value = time.time()
+        time_value = int(time.time())
         return totp.generate(time_value)
 
     def test_all(self):
@@ -241,7 +241,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(data['mfa_delete'], 'Enabled')
 
         # Update bucket: disable versioning & MFA Delete.
-        time.sleep(self._mfa_token_time_step + 2)  # Required to get new TOTP pin.
+        time.sleep(self._mfa_token_time_step * 3)  # Required to get new TOTP pin.
         self._put(
             '/api/rgw/bucket/teuth-test-bucket',
             params={
