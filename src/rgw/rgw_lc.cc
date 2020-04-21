@@ -493,15 +493,16 @@ public:
     ++obj_iter;
   }
 
-  bool next_has_same_name()
-  {
-    if ((obj_iter + 1) == objs.end()) {
+  boost::optional<std::string> next_key_name() {
+    if (obj_iter == objs.end() ||
+	(obj_iter + 1) == objs.end()) {
       /* this should have been called after get_obj() was called, so this should
        * only happen if is_truncated is false */
-      return false;
+      return boost::none;
     }
-    return (obj_iter->key.name.compare((obj_iter + 1)->key.name) == 0);
+    return ((obj_iter + 1)->key.name);
   }
+
 }; /* LCObjsLister */
 
 struct op_env {
@@ -581,8 +582,15 @@ static int remove_expired_obj(lc_op_ctx& oc, bool remove_indeed)
 } /* remove_expired_obj */
 
 class LCOpAction {
+protected:
+  boost::optional<std::string> next_key_name;
 public:
   virtual ~LCOpAction() {}
+
+  bool next_has_same_name(const std::string& key_name) {
+    return (next_key_name && key_name.compare(
+	      boost::get<std::string>(next_key_name)) == 0);
+  }
 
   virtual bool check(lc_op_ctx& oc, ceph::real_time *exp_time) {
     return false;
@@ -985,6 +993,10 @@ public:
 
 class LCOpAction_CurrentExpiration : public LCOpAction {
 public:
+  LCOpAction_CurrentExpiration(op_env& env) {
+    next_key_name = env.ol.next_key_name();
+  }
+
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
     auto& o = oc.o;
     if (!o.is_current()) {
@@ -994,8 +1006,8 @@ public:
       return false;
     }
     if (o.is_delete_marker()) {
-      if (oc.ol.next_has_same_name()) {
-        return false;
+      if (next_has_same_name(o.key.name)) {
+	return false;
       } else {
         *exp_time = real_clock::now();
         return true;
@@ -1047,7 +1059,13 @@ public:
 };
 
 class LCOpAction_NonCurrentExpiration : public LCOpAction {
+protected:
+  ceph::real_time mtime;
 public:
+  LCOpAction_NonCurrentExpiration(op_env& env)
+    : mtime(env.ol.get_prev_obj().meta.mtime)
+    {}
+
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
     auto& o = oc.o;
     if (o.is_current()) {
@@ -1057,7 +1075,6 @@ public:
       return false;
     }
 
-    auto mtime = oc.ol.get_prev_obj().meta.mtime;
     int expiration = oc.op.noncur_expiration;
     bool is_expired = obj_has_expired(oc.cct, mtime, expiration, exp_time);
 
@@ -1088,6 +1105,10 @@ public:
 
 class LCOpAction_DMExpiration : public LCOpAction {
 public:
+  LCOpAction_DMExpiration(op_env& env) {
+    next_key_name = env.ol.next_key_name();
+  }
+
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
     auto& o = oc.o;
     if (!o.is_delete_marker()) {
@@ -1096,8 +1117,7 @@ public:
 			<< oc.wq->thr_name() << dendl;
       return false;
     }
-
-    if (oc.ol.next_has_same_name()) {
+    if (next_has_same_name(o.key.name)) {
       ldout(oc.cct, 20) << __func__ << "(): key=" << o.key
 			<< ": next is same object, skipping "
 			<< oc.wq->thr_name() << dendl;
@@ -1232,16 +1252,21 @@ public:
 
 class LCOpAction_NonCurrentTransition : public LCOpAction_Transition {
 protected:
+  ceph::real_time effective_mtime;
+
   bool check_current_state(bool is_current) override {
     return !is_current;
   }
 
   ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
-    return oc.ol.get_prev_obj().meta.mtime;
+    return effective_mtime;
   }
 public:
-  LCOpAction_NonCurrentTransition(const transition_action& _transition)
-    : LCOpAction_Transition(_transition) {}
+  LCOpAction_NonCurrentTransition(op_env& env,
+				  const transition_action& _transition)
+    : LCOpAction_Transition(_transition),
+      effective_mtime(env.ol.get_prev_obj().meta.mtime)
+    {}
 };
 
 void LCOpRule::build()
@@ -1252,15 +1277,15 @@ void LCOpRule::build()
 
   if (op.expiration > 0 ||
       op.expiration_date != boost::none) {
-    actions.emplace_back(new LCOpAction_CurrentExpiration);
+    actions.emplace_back(new LCOpAction_CurrentExpiration(env));
   }
 
   if (op.dm_expiration) {
-    actions.emplace_back(new LCOpAction_DMExpiration);
+    actions.emplace_back(new LCOpAction_DMExpiration(env));
   }
 
   if (op.noncur_expiration > 0) {
-    actions.emplace_back(new LCOpAction_NonCurrentExpiration);
+    actions.emplace_back(new LCOpAction_NonCurrentExpiration(env));
   }
 
   for (auto& iter : op.transitions) {
@@ -1268,7 +1293,7 @@ void LCOpRule::build()
   }
 
   for (auto& iter : op.noncur_transitions) {
-    actions.emplace_back(new LCOpAction_NonCurrentTransition(iter.second));
+    actions.emplace_back(new LCOpAction_NonCurrentTransition(env, iter.second));
   }
 }
 
