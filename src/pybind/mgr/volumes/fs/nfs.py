@@ -349,10 +349,10 @@ class NFSCluster:
             log.exception(str(e))
             return True
 
-    def _call_orch_apply_nfs(self, size):
+    def _call_orch_apply_nfs(self, placement):
         spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
                               pool=self.pool_name, namespace=self.pool_ns,
-                              placement=PlacementSpec.from_string(str(size)))
+                              placement=PlacementSpec.from_string(placement))
         try:
             completion = self.mgr.apply_nfs(spec)
             self.mgr._orchestrator_wait([completion])
@@ -360,7 +360,7 @@ class NFSCluster:
         except Exception as e:
             log.exception("Failed to create NFS daemons:{}".format(e))
 
-    def create_nfs_cluster(self, export_type, size):
+    def create_nfs_cluster(self, export_type, placement):
         if export_type != 'cephfs':
             return -errno.EINVAL,"", f"Invalid export type: {export_type}"
 
@@ -384,7 +384,7 @@ class NFSCluster:
         if self.check_cluster_exists():
             log.info(f"{self.cluster_id} cluster already exists")
         else:
-            self._call_orch_apply_nfs(size)
+            self._call_orch_apply_nfs(placement)
 
         return 0, "", "NFS Cluster Created Successfully"
 
