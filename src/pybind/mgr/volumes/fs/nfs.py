@@ -256,8 +256,8 @@ class FSExport(object):
                     "write configuration into rados object %s/%s/%s:\n%s",
                     self.rados_pool, self.rados_namespace, obj, raw_config)
 
-    def _update_common_conf(self, ex_id):
-        common_conf = 'conf-nfs'
+    def _update_common_conf(self, cluster_id, ex_id):
+        common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
         conf_blocks = {
                 'block_name': '%url',
                 'value': self.make_rados_url(
@@ -269,7 +269,7 @@ class FSExport(object):
         self.exports[self.rados_namespace].append(export)
         conf_block = export.to_export_block()
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
-        self._update_common_conf(export.export_id)
+        self._update_common_conf(export.cluster_id, export.export_id)
 
     def create_export(self, export_type, fs_name, pseudo_path, read_only, path, cluster_id):
         if export_type != 'cephfs':
@@ -329,15 +329,15 @@ class NFSCluster:
         self.mgr = mgr
 
     def create_empty_rados_obj(self):
-        common_conf = 'conf-nfs'
+        common_conf = 'conf-nfs.{}'.format(self.cluster_id)
         result = ''
         with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
             if self.pool_ns:
                 ioctx.set_namespace(self.pool_ns)
             ioctx.write_full(common_conf, result.encode('utf-8'))
             log.debug(
-                    "write configuration into rados object %s/%s/nfs-conf\n",
-                    self.pool_name, self.pool_ns)
+                    "write configuration into rados object %s/%s/%s\n",
+                    self.pool_name, self.pool_ns, common_conf)
 
     def check_cluster_exists(self):
         try:
