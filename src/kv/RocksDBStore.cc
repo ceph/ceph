@@ -92,9 +92,6 @@ public:
     for (auto& p : store.merge_ops) {
       names[p.first] = p.second->name();
     }
-    for (auto& p : store.cf_handles) {
-      names.erase(p.first);
-    }
     for (auto& p : names) {
       store.assoc_name += '.';
       store.assoc_name += p.first;
