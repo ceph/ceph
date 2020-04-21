@@ -572,7 +572,7 @@ class RGWSpec(ServiceSpec):
 
 
 class IscsiServiceSpec(ServiceSpec):
-    def __init__(self, service_id, pool=None,
+    def __init__(self, pool=None,
                  placement=None,
                  trusted_ip_list=None,
                  fqdn_enabled=None,
@@ -585,7 +585,7 @@ class IscsiServiceSpec(ServiceSpec):
                  service_type='iscsi',
                  unmanaged=False):
         assert service_type == 'iscsi'
-        super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
+        super(IscsiServiceSpec, self).__init__('iscsi', service_id='iscsi',
                                                placement=placement, unmanaged=unmanaged)
 
         #: RADOS pool where ceph-iscsi config data is stored.

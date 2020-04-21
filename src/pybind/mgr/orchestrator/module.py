@@ -841,7 +841,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply',
-        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus|iscsi,req=false '
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the size or placement for a service or apply a large yaml spec')
@@ -859,7 +859,7 @@ Usage:
             placement = PlacementSpec.from_string(placement)
             placement.validate()
 
-            specs = [ServiceSpec(service_type, placement=placement, unmanaged=unmanaged)]
+            specs = [ServiceSpec(service_type=service_type, placement=placement, unmanaged=unmanaged)]
 
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
