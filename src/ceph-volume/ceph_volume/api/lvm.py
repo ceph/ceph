@@ -563,6 +563,8 @@ class VolumeGroup(object):
         for k, v in kw.items():
             setattr(self, k, v)
         self.name = kw['vg_name']
+        if not self.name:
+            raise ValueError('VolumeGroup must have a non-empty name')
         self.tags = parse_tags(kw.get('vg_tags', ''))
 
     def __str__(self):
@@ -866,7 +868,7 @@ def get_device_vgs(device, name_prefix=''):
         verbose_on_failure=False
     )
     vgs = _output_parser(stdout, VG_FIELDS)
-    return [VolumeGroup(**vg) for vg in vgs]
+    return [VolumeGroup(**vg) for vg in vgs if vg['vg_name'] and vg['vg_name'].startswith(name_prefix)]
 
 
 #################################
@@ -908,6 +910,8 @@ class Volume(object):
             setattr(self, k, v)
         self.lv_api = kw
         self.name = kw['lv_name']
+        if not self.name:
+            raise ValueError('Volume must have a non-empty name')
         self.tags = parse_tags(kw['lv_tags'])
         self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
         self.used_by_ceph = 'ceph.osd_id' in self.tags
@@ -1356,7 +1360,8 @@ def get_device_lvs(device, name_prefix=''):
         verbose_on_failure=False
     )
     lvs = _output_parser(stdout, LV_FIELDS)
-    return [Volume(**lv) for lv in lvs]
+    return [Volume(**lv) for lv in lvs if lv['lv_name'] and
+            lv['lv_name'].startswith(name_prefix)]
 
 
 #############################################################
