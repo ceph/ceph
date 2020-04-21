@@ -7,7 +7,7 @@
 #include <mutex>
 
 #include "bluefs_types.h"
-#include "BlockDevice.h"
+#include "blk/BlockDevice.h"
 
 #include "common/RefCountedObj.h"
 #include "common/ceph_context.h"

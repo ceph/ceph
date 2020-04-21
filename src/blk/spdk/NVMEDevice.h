@@ -14,8 +14,8 @@
  *
  */
 
-#ifndef CEPH_OS_BLUESTORE_NVMEDEVICE
-#define CEPH_OS_BLUESTORE_NVMEDEVICE
+#ifndef CEPH_BLK_NVMEDEVICE
+#define CEPH_BLK_NVMEDEVICE
 
 #include <queue>
 #include <map>

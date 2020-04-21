@@ -6,7 +6,7 @@
 #include "acconfig.h"
 
 #include "include/types.h"
-#include "ceph_aio.h"
+#include "aio/aio.h"
 
 struct ioring_data;
 

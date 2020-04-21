@@ -12,7 +12,7 @@
 #include "include/stringify.h"
 #include "common/errno.h"
 
-#include "os/bluestore/BlockDevice.h"
+#include "blk/BlockDevice.h"
 
 class TempBdev {
 public:

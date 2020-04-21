@@ -217,8 +217,7 @@ target_link_libraries(rbd_internal PRIVATE
 
 if(WITH_RBD_RWL)
   target_link_libraries(rbd_internal
-    PUBLIC pmem::pmemobj
-    PRIVATE pmem::pmem)
+    PUBLIC blk)
 endif()
 
 add_library(librbd ${CEPH_SHARED}
