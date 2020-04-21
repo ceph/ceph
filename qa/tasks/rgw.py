@@ -103,9 +103,10 @@ def start_rgw(ctx, config, clients):
                                                 kport=keystone_port),
                 ])
 
-        if client_config.get('dns-name'):
+
+        if client_config.get('dns-name') is not None:
             rgw_cmd.extend(['--rgw-dns-name', endpoint.dns_name])
-        if client_config.get('dns-s3website-name'):
+        if client_config.get('dns-s3website-name') is not None:
             rgw_cmd.extend(['--rgw-dns-s3website-name', endpoint.website_dns_name])
 
         rgw_cmd.extend([
@@ -188,9 +189,8 @@ def assign_endpoints(ctx, config, default_cert):
             dns_name += remote.hostname
 
         website_dns_name = client_config.get('dns-s3website-name')
-        if website_dns_name:
-            if len(website_dns_name) == 0 or website_dns_name.endswith('.'):
-                website_dns_name += remote.hostname
+        if website_dns_name is not None and (len(website_dns_name) == 0 or website_dns_name.endswith('.')):
+            website_dns_name += remote.hostname
 
         role_endpoints[role] = RGWEndpoint(remote.hostname, port, ssl_certificate, dns_name, website_dns_name)
 
