@@ -37,6 +37,12 @@ class Inventory(object):
         else:
             self.format_report(Devices())
 
+    def get_report(self):
+        if self.args.path:
+            return Device(self.args.path).json_report()
+        else:
+            return Devices().json_report()
+
     def format_report(self, inventory):
         if self.args.format == 'json':
             print(json.dumps(inventory.json_report()))

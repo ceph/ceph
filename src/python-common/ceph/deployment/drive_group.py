@@ -191,7 +191,7 @@ class DriveGroupSpec(ServiceSpec):
         #: Set (or override) the "bluestore_block_db_size" value, in bytes
         self.block_db_size = block_db_size
 
-        #: set journal_size is bytes
+        #: set journal_size in bytes
         self.journal_size = journal_size
 
         #: Number of osd daemons per "DATA" device.

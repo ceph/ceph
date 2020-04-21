@@ -65,6 +65,7 @@ and ``ceph-disk`` is fully disabled. Encryption is fully supported.
    intro
    systemd
    inventory
+   drive-group
    lvm/index
    lvm/activate
    lvm/batch
