@@ -10407,7 +10407,8 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
     remount_cb = args->remount_cb;
     remount_finisher.start();
   }
-  umask_cb = args->umask_cb;
+  if (args->umask_cb)
+    umask_cb = args->umask_cb;
 }
 
 int Client::test_dentry_handling(bool can_invalidate)
