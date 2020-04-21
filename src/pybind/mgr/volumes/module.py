@@ -255,7 +255,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'nfs cluster create '
                    'name=type,type=CephString '
                    'name=clusterid,type=CephString '
-                   'name=size,type=CephInt,req=false ',
+                   'name=placement,type=CephString,req=false ',
             'desc': "Create an NFS Cluster",
             'perm': 'rw'
         },
@@ -446,6 +446,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.fs_export.delete_export(cmd['export_id'])
 
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
-        #TODO add placement option
         nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
-        return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'], size=cmd.get('size', 1))
+        return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'],
+                                                  placement=cmd.get('placement', None))
