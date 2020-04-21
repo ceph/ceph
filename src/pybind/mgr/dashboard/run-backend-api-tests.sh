@@ -98,7 +98,7 @@ setup_coverage() {
     source coverage-venv/bin/activate
     cd $CURR_DIR
     pip install coverage==4.5.2
-    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['platlib'])")
     deactivate
 }
 
