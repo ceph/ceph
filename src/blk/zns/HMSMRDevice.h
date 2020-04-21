@@ -16,8 +16,8 @@
 // Copied from KernelDevice with HM-SMR specific functionality added.  Will be
 // further specialized for HM-SMR.
 
-#ifndef CEPH_OS_BLUESTORE_HMSMRDEVICE_H
-#define CEPH_OS_BLUESTORE_HMSMRDEVICE_H
+#ifndef CEPH_BLK_HMSMRDEVICE_H
+#define CEPH_BLK_HMSMRDEVICE_H
 
 #include <atomic>
 
@@ -26,7 +26,7 @@
 #include "common/Thread.h"
 #include "include/utime.h"
 
-#include "ceph_aio.h"
+#include "aio/aio.h"
 #include "BlockDevice.h"
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
@@ -159,4 +159,4 @@ public:
   void close() final;
 };
 
-#endif
+#endif //CEPH_BLK_HMSMRDEVICE_H

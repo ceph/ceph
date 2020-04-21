@@ -35,7 +35,7 @@
 #include "common/numa.h"
 
 #include "global/global_context.h"
-#include "ceph_io_uring.h"
+#include "kernel/io_uring.h"
 
 extern "C" {
 #include <libzbc/zbc.h>

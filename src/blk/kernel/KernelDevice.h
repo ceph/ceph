@@ -12,8 +12,8 @@
  *
  */
 
-#ifndef CEPH_OS_BLUESTORE_KERNELDEVICE_H
-#define CEPH_OS_BLUESTORE_KERNELDEVICE_H
+#ifndef CEPH_BLK_KERNELDEVICE_H
+#define CEPH_BLK_KERNELDEVICE_H
 
 #include <atomic>
 
@@ -22,7 +22,7 @@
 #include "common/Thread.h"
 #include "include/utime.h"
 
-#include "ceph_aio.h"
+#include "aio/aio.h"
 #include "BlockDevice.h"
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)

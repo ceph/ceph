@@ -49,7 +49,6 @@
 #include "os/ObjectStore.h"
 
 #include "bluestore_types.h"
-#include "BlockDevice.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 
