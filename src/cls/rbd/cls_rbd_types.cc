@@ -767,10 +767,14 @@ void MirrorSnapshotNamespace::dump(Formatter *f) const {
     f->dump_string("mirror_peer_uuid", peer);
   }
   f->close_section();
-  f->dump_string("primary_mirror_uuid", primary_mirror_uuid);
-  f->dump_unsigned("primary_snap_id", primary_snap_id);
-  f->dump_unsigned("last_copied_object_number", last_copied_object_number);
-  f->dump_stream("snap_seqs") << snap_seqs;
+  if (is_primary()) {
+    f->dump_unsigned("clean_since_snap_id", clean_since_snap_id);
+  } else {
+    f->dump_string("primary_mirror_uuid", primary_mirror_uuid);
+    f->dump_unsigned("primary_snap_id", primary_snap_id);
+    f->dump_unsigned("last_copied_object_number", last_copied_object_number);
+    f->dump_stream("snap_seqs") << snap_seqs;
+  }
 }
 
 class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
