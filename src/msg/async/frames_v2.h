@@ -179,6 +179,11 @@ public:
   FrameAssembler(const ceph::crypto::onwire::rxtx_t* crypto, bool is_rev1)
       : m_crypto(crypto), m_is_rev1(is_rev1) {}
 
+  void set_is_rev1(bool is_rev1) {
+    m_descs.clear();
+    m_is_rev1 = is_rev1;
+  }
+
   size_t get_num_segments() const {
     ceph_assert(!m_descs.empty());
     return m_descs.size();
