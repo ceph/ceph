@@ -14,8 +14,8 @@
  *
  */
 
-#ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE_H
-#define CEPH_OS_BLUESTORE_BLOCKDEVICE_H
+#ifndef CEPH_BLK_BLOCKDEVICE_H
+#define CEPH_BLK_BLOCKDEVICE_H
 
 #include <atomic>
 #include <condition_variable>
@@ -31,7 +31,7 @@
 #include "include/common_fwd.h"
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
-#include "ceph_aio.h"
+#include "aio/aio.h"
 #endif
 #include "include/ceph_assert.h"
 #include "include/buffer.h"
@@ -261,4 +261,4 @@ protected:
   }
 };
 
-#endif //CEPH_OS_BLUESTORE_BLOCKDEVICE_H
+#endif //CEPH_BLK_BLOCKDEVICE_H
