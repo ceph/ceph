@@ -84,8 +84,8 @@ class Handle {
   Handle(boost::intrusive_ptr<Cache> cache,
          boost::intrusive_ptr<Entry> entry) noexcept
     : cache(std::move(cache)), entry(std::move(entry)) {}
-  Handle(Handle&&) noexcept = default;
-  Handle(const Handle&) noexcept = default;
+  Handle(Handle&&) = default;
+  Handle(const Handle&) = default;
   Handle& operator=(Handle&& o) noexcept {
     // move the entry first so that its cache stays referenced over destruction
     entry = std::move(o.entry);
