@@ -86,7 +86,9 @@ seastar::future<> PGAdvanceMap::start()
 	    osd.shard_services.dispatch_context(
 	      pg->get_collection_ref(),
 	      std::move(rctx)));
-	});
+	}).then([this] {
+          return osd.shard_services.send_pg_temp();
+        });
     }).then([this, ref=std::move(ref)] {
       logger().debug("{}: complete", *this);
     });
