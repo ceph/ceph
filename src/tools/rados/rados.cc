@@ -3789,9 +3789,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     string oid(nargs[1]);
 
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.tier_flush();
-    ret = io_ctx.operate(oid, &op);
+    librados::AioCompletion *completion =
+      librados::Rados::aio_create_completion();
+    io_ctx.aio_operate(oid.c_str(), completion, &op,
+		       librados::OPERATION_IGNORE_CACHE |
+		       librados::OPERATION_IGNORE_OVERLAY,
+		       NULL);
+    completion->wait_for_complete();
+    ret = completion->get_return_value();
+    completion->release();
     if (ret < 0) {
       cerr << "error tier-flush " << pool_name << "/" << oid << " : " 
 	   << cpp_strerror(ret) << std::endl;
