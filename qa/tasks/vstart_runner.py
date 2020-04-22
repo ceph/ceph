@@ -204,8 +204,14 @@ class LocalRemoteProcess(object):
 
         if self.subproc.poll() is not None:
             out, err = self.subproc.communicate()
-            self.stdout.write(out)
-            self.stderr.write(err)
+            if isinstance(self.stdout, StringIO):
+                self.stdout.write(out.decode(errors='ignore'))
+            else:
+                self.stdout.write(out)
+            if isinstance(self.stderr, StringIO):
+                self.stderr.write(err.decode(errors='ignore'))
+            else:
+                self.stderr.write(err)
             self.exitstatus = self.returncode = self.subproc.returncode
             return True
         else:
