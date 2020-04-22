@@ -59,6 +59,8 @@ protected:
   CephContext *cct;
 
 public:
+  using KeyInfo = RGWSI_MetaBackend::KeyInfo;
+
   RGWMetadataHandler() {}
   virtual ~RGWMetadataHandler() {}
   virtual std::string get_type() = 0;
@@ -88,7 +90,8 @@ public:
 		     std::function<int()> f) = 0;
 
   virtual int list_keys_init(const DoutPrefixProvider *dpp, const std::string& marker, void **phandle) = 0;
-  virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated) = 0;
+  virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated);
+  virtual int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<KeyInfo>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
   virtual std::string get_marker(void *handle) = 0;
@@ -184,6 +187,7 @@ public:
 
   int list_keys_init(const DoutPrefixProvider *dpp, const std::string& marker, void **phandle) override;
   int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated) override;
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<KeyInfo>& keys, bool *truncated) override;
   void list_keys_complete(void *handle) override;
 
   std::string get_marker(void *handle) override;
@@ -257,6 +261,7 @@ public:
   int list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, void **phandle);
   int list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void **phandle);
   int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<std::string>& keys, bool *truncated);
+  int list_keys_next(const DoutPrefixProvider *dpp, void *handle, int max, std::list<RGWMetadataHandler::KeyInfo>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 
   std::string get_marker(void *handle);

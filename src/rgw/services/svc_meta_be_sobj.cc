@@ -249,6 +249,54 @@ int RGWSI_MetaBackend_SObj::list_next(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int RGWSI_MetaBackend_SObj::list_next(const DoutPrefixProvider *dpp,
+                                      RGWSI_MetaBackend::Context *_ctx,
+                                      int max, list<KeyInfo> *keys,
+                                      bool *ptruncated)
+{
+  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
+
+
+  keys->clear();
+
+  bool truncated = true;
+  auto module = ctx->module;
+
+  for (int i = 0; truncated && i < max; ++i) {
+    vector<string> oids;
+    int ret = ctx->list.op->get_next(1, &oids, &truncated);
+    if (ret < 0 && ret != -ENOENT)
+      return ret;
+    if (ret == -ENOENT) {
+      if (ptruncated)
+        *ptruncated = false;
+      return 0;
+    }
+
+    for (auto& o : oids) {
+      if (!module->is_valid_oid(o)) {
+        continue;
+      }
+      KeyInfo ki;
+      ret = list_get_marker(_ctx, &ki.marker);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: possible bug: " << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): list_get_marker() failed: ret=" << ret << dendl;
+        return ret;
+      }
+
+      ki.key = module->oid_to_key(o);
+
+      keys->emplace_back(std::move(ki));
+    }
+  }
+  if (ptruncated) {
+    *ptruncated = truncated;
+  }
+
+  return 0;
+}
+
+
 int RGWSI_MetaBackend_SObj::list_get_marker(RGWSI_MetaBackend::Context *_ctx,
                                             string *marker)
 {
