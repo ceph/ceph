@@ -293,7 +293,7 @@ int RocksDBStore::ParseOptionsFromStringStatic(
         return -EINVAL;
       }
     }
-    lgeneric_dout(cct, 0) << " set rocksdb option " << it->first
+    lgeneric_dout(cct, 1) << " set rocksdb option " << it->first
       << " = " << it->second << dendl;
   }
   return 0;
@@ -411,6 +411,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   if (priv) {
     dout(10) << __func__ << " using custom Env " << priv << dendl;
     opt.env = static_cast<rocksdb::Env*>(priv);
+  } else {
+    env = opt.env;
   }
 
   opt.env->SetAllowNonOwnerAccess(false);
