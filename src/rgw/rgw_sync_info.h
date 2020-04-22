@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <map>
 
 #include "include/buffer.h"
 
@@ -181,5 +182,35 @@ public:
   }
 
   bool promote_stage(int *new_num_shards);
+};
+
+
+class RGWSIPManager
+{
+  std::map<std::string, SIProviderRef> providers;
+
+public:
+  RGWSIPManager() {}
+
+  void register_sip(const std::string& id, SIProviderRef provider) {
+    providers[id] = provider;
+  }
+
+  SIProviderRef find_sip(const std::string& id) {
+    auto iter = providers.find(id);
+    if (iter == providers.end()) {
+      return nullptr;
+    }
+    return iter->second;
+  }
+
+  std::vector<std::string> list_sip() const {
+    std::vector<std::string> result;
+    result.reserve(providers.size());
+    for (auto& entry : providers) {
+      result.push_back(entry.first);
+    }
+    return result;
+  }
 };
 

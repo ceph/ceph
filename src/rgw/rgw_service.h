@@ -167,6 +167,8 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWOTPCtl;
 
+class RGWSIPManager;
+
 struct RGWCtlDef {
   struct _meta {
     std::unique_ptr<RGWMetadataManager> mgr;
@@ -182,6 +184,10 @@ struct RGWCtlDef {
   std::unique_ptr<RGWUserCtl> user;
   std::unique_ptr<RGWBucketCtl> bucket;
   std::unique_ptr<RGWOTPCtl> otp;
+
+  struct _si {
+    std::unique_ptr<RGWSIPManager> mgr;
+  } si;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -207,6 +213,10 @@ struct RGWCtl {
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
+
+  struct _si {
+    RGWSIPManager *mgr{nullptr};
+  } si;
 
   int init(RGWServices *_svc, const DoutPrefixProvider *dpp);
 };
