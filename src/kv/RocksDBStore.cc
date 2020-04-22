@@ -2940,6 +2940,7 @@ int RocksDBStore::reshard(const std::string& new_sharding)
 	ceph_assert(it);
 	it->Seek(raw_key_str);
 	ceph_assert(it->Valid());
+	raw_key = it->key();
       }
       rocksdb::Slice value = it->value();
       std::string prefix, key;
