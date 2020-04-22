@@ -188,7 +188,7 @@ void EnableRequest<I>::create_primary_snapshot() {
     EnableRequest<I>,
     &EnableRequest<I>::handle_create_primary_snapshot>(this);
   auto req = snapshot::CreatePrimaryRequest<I>::create(
-    m_image_ctx, m_mirror_image.global_image_id,
+    m_image_ctx, m_mirror_image.global_image_id, CEPH_NOSNAP,
     snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS, &m_snap_id, ctx);
   req->send();
 }
