@@ -2638,6 +2638,7 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
 				      std::vector<std::string>& to_process_columns,
 				      std::vector<rocksdb::ColumnFamilyHandle*>& to_process_handles)
 {
+  //0. lock db from opening
   //1. list existing columns
   //2. apply merge operator to (main + columns) opts
   //3. prepare std::vector<rocksdb::ColumnFamilyDescriptor> existing_cfs
@@ -2657,6 +2658,25 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
     dout(1) << __func__ << new_sharding << dendl;
     dout(1) << __func__ << std::string(error_position - &new_sharding[0], ' ') << "^" << error_msg << dendl;
     return -EINVAL;
+  }
+
+  //0. lock db from opening
+  std::string stored_sharding_text;
+  rocksdb::ReadFileToString(env,
+			    sharding_def_file,
+			    &stored_sharding_text);
+  if (stored_sharding_text.find("reshardingXcommencingXlocked") == string::npos) {
+    rocksdb::Status status;
+    if (stored_sharding_text.size() != 0)
+      stored_sharding_text += " ";
+    stored_sharding_text += "reshardingXcommencingXlocked";
+    env->CreateDir(sharding_def_dir);
+    status = rocksdb::WriteStringToFile(env, stored_sharding_text,
+					sharding_def_file, true);
+    if (!status.ok()) {
+      derr << __func__ << " cannot write to " << sharding_def_file << dendl;
+      return -EIO;
+    }
   }
 
   //1. list existing columns
