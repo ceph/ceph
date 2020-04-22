@@ -133,6 +133,7 @@
       "datasource": "$datasource",
       "decimals": 0,
       "description": "Average CPU busy across all hosts (OSD, RGW, MON etc) within the cluster",
+      "decimals": 2,
       "format": "percentunit",
       "gauge": {
         "maxValue": 100,
@@ -216,6 +217,7 @@
       "datasource": "$datasource",
       "decimals": 0,
       "description": "Average Memory Usage across all hosts in the cluster (excludes buffer/cache usage)",
+      "decimals": 2,
       "format": "percentunit",
       "gauge": {
         "maxValue": 100,
