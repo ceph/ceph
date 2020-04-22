@@ -1577,7 +1577,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if not image:
                 daemon_type = entity.split('.', 1)[0] # type: ignore
                 if daemon_type in CEPH_TYPES or \
-                        daemon_type == 'nfs':
+                        daemon_type == 'nfs' or \
+                        daemon_type == 'iscsi':
                     # get container image
                     ret, image, err = self.mon_command({
                         'prefix': 'config get',
