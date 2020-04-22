@@ -92,8 +92,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.wait_for_daemons()
 
         # List files
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # First ls -R to populate MDCache, such that hardlinks will
         # resolve properly (recover_dentries does not create backtraces,
@@ -102,8 +101,7 @@ class TestJournalRepair(CephFSTestCase):
         # FIXME: hook in forward scrub here to regenerate backtraces
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.mount_a.umount_wait()  # remount to clear client cache before our second ls
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.assertEqual(proc.stdout.getvalue().strip(),
@@ -278,7 +276,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_fail_restart(active_mds_names[0])
         self.wait_until_equal(lambda: self.fs.get_active_names(), [active_mds_names[0]], 30,
                               reject_fn=lambda v: len(v) > 1)
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-R"], wait=True)
 
     def test_table_tool(self):
@@ -434,7 +432,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # trivial sync moutn a
         workunit(self.ctx, {

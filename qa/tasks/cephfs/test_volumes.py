@@ -1388,7 +1388,7 @@ class TestVolumes(CephFSTestCase):
         for subvolume in subvolumes:
             self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # verify trash dir is clean
         self._wait_for_trash_empty(timeout=300)

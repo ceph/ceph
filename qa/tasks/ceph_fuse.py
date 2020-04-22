@@ -42,12 +42,16 @@ def task(ctx, config):
     this operation on. This lets you e.g. set up one client with
     ``ceph-fuse`` and another with ``kclient``.
 
+    ``brxnet`` should be a Private IPv4 Address range, default range is
+    [192.168.0.0/16]
+
     Example that mounts all clients::
 
         tasks:
         - ceph:
         - ceph-fuse:
         - interactive:
+        - brxnet: [192.168.0.0/16]
 
     Example that uses both ``kclient` and ``ceph-fuse``::
 
@@ -106,6 +110,8 @@ def task(ctx, config):
     mounted_by_me = {}
     skipped = {}
 
+    brxnet = config.get("brxnet", None)
+
     # Construct any new FuseMount instances
     for id_, remote in clients:
         client_config = config.get("client.%s" % id_)
@@ -120,7 +126,7 @@ def task(ctx, config):
             continue
 
         if id_ not in all_mounts:
-            fuse_mount = FuseMount(ctx, client_config, testdir, auth_id, remote)
+            fuse_mount = FuseMount(ctx, client_config, testdir, auth_id, remote, brxnet)
             all_mounts[id_] = fuse_mount
         else:
             # Catch bad configs where someone has e.g. tried to use ceph-fuse and kcephfs for the same client

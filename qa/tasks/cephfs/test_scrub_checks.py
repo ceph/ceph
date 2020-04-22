@@ -298,8 +298,7 @@ class TestScrubChecks(CephFSTestCase):
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # fragstat indicates the directory is not empty, rmdir should fail
         with self.assertRaises(CommandFailedError) as ar:

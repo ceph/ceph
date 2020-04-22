@@ -414,8 +414,7 @@ class TestFailover(CephFSTestCase):
         self.mounts[0].umount_wait()
 
         # Control: that we can mount and unmount usually, while the cluster is healthy
-        self.mounts[0].mount()
-        self.mounts[0].wait_until_mounted()
+        self.mounts[0].mount_wait()
         self.mounts[0].umount_wait()
 
         # Stop the daemon processes
@@ -432,7 +431,7 @@ class TestFailover(CephFSTestCase):
 
         self.wait_until_true(laggy, grace * 2)
         with self.assertRaises(CommandFailedError):
-            self.mounts[0].mount()
+            self.mounts[0].mount_wait()
 
     def test_standby_count_wanted(self):
         """

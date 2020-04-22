@@ -17,19 +17,14 @@ UMOUNT_TIMEOUT = 300
 
 
 class KernelMount(CephFSMount):
-    def __init__(self, ctx, test_dir, client_id, client_remote,
-                 ipmi_user, ipmi_password, ipmi_domain):
-        super(KernelMount, self).__init__(ctx, test_dir, client_id, client_remote)
-
-        self.mounted = False
-        self.ipmi_user = ipmi_user
-        self.ipmi_password = ipmi_password
-        self.ipmi_domain = ipmi_domain
+    def __init__(self, ctx, test_dir, client_id, client_remote, brxnet):
+        super(KernelMount, self).__init__(ctx, test_dir, client_id, client_remote, brxnet)
 
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         if mountpoint is not None:
             self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
+        self.setup_netns()
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
@@ -55,6 +50,8 @@ class KernelMount(CephFSMount):
                 'adjust-ulimits',
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=self.test_dir),
+                'nsenter',
+                '--net=/var/run/netns/{0}'.format(self.netns_name),
                 '/bin/mount',
                 '-t',
                 'ceph',
@@ -94,19 +91,9 @@ class KernelMount(CephFSMount):
             ], timeout=(15*60))
             raise e
 
-        rproc = self.client_remote.run(
-            args=[
-                'rmdir',
-                '--',
-                self.mountpoint,
-            ],
-            wait=False
-        )
-        run.wait([rproc], UMOUNT_TIMEOUT)
         self.mounted = False
-
-    def cleanup(self):
-        pass
+        self.cleanup_netns()
+        self.cleanup()
 
     def umount_wait(self, force=False, require_clean=False, timeout=900):
         """
@@ -121,13 +108,20 @@ class KernelMount(CephFSMount):
             if not force:
                 raise
 
-            self.kill()
-            self.kill_cleanup()
+            # force delete the netns and umount
+            self.cleanup_netns()
+            self.client_remote.run(
+                args=['sudo',
+                      'umount',
+                      '-f',
+                      '-l',
+                      self.mountpoint
+                ],
+                timeout=(15*60))
 
-        self.mounted = False
-
-    def is_mounted(self):
-        return self.mounted
+            self.mounted = False
+            self.cleanup_netns()
+            self.cleanup()
 
     def wait_until_mounted(self):
         """
@@ -140,57 +134,6 @@ class KernelMount(CephFSMount):
         super(KernelMount, self).teardown()
         if self.mounted:
             self.umount()
-
-    def kill(self):
-        """
-        The Ceph kernel client doesn't have a mechanism to kill itself (doing
-        that in side the kernel would be weird anyway), so we reboot the whole node
-        to get the same effect.
-
-        We use IPMI to reboot, because we don't want the client to send any
-        releases of capabilities.
-        """
-
-        con = orchestra_remote.getRemoteConsole(self.client_remote.hostname,
-                                                self.ipmi_user,
-                                                self.ipmi_password,
-                                                self.ipmi_domain)
-        con.hard_reset(wait_for_login=False)
-
-        self.mounted = False
-
-    def kill_cleanup(self):
-        assert not self.mounted
-
-        # We need to do a sleep here because we don't know how long it will
-        # take for a hard_reset to be effected.
-        time.sleep(30)
-
-        try:
-            # Wait for node to come back up after reboot
-            misc.reconnect(None, 300, [self.client_remote])
-        except:
-            # attempt to get some useful debug output:
-            con = orchestra_remote.getRemoteConsole(self.client_remote.hostname,
-                                                    self.ipmi_user,
-                                                    self.ipmi_password,
-                                                    self.ipmi_domain)
-            con.check_status(timeout=60)
-            raise
-
-        # Remove mount directory
-        self.client_remote.run(args=['uptime'], timeout=10)
-
-        # Remove mount directory
-        self.client_remote.run(
-            args=[
-                'rmdir',
-                '--',
-                self.mountpoint,
-            ],
-            timeout=(5*60),
-            check_status=False,
-        )
 
     def _find_debug_dir(self):
         """
