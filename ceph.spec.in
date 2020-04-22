@@ -1454,6 +1454,7 @@ exit 0
 
 %files -n cephadm
 %{_sbindir}/cephadm
+%{_mandir}/man8/cephadm.8*
 %{_sysconfdir}/sudoers.d/cephadm
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm
 %attr(0700,cephadm,cephadm) %dir %{_sharedstatedir}/cephadm/.ssh
