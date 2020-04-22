@@ -27,12 +27,7 @@ export class ImagesPageHelper extends PageHelper {
   }
 
   editImage(name: string, pool: string, newName: string, newSize: string) {
-    const base_url = '#/block/rbd/edit/';
-    const editURL = base_url
-      .concat(encodeURIComponent(pool))
-      .concat('%2F')
-      .concat(encodeURIComponent(name));
-    cy.visit(editURL);
+    this.navigateEdit(name);
 
     // Wait until data is loaded
     cy.get('#pool').should('contain.value', pool);

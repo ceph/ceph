@@ -8,6 +8,8 @@ export class RoleMgmtPageHelper extends PageHelper {
 
   create(name: string, description: string) {
     this.navigateTo('create');
+    // Waits for data to load
+    cy.contains('grafana');
 
     // fill in fields
     cy.get('#name').type(name);
@@ -15,19 +17,22 @@ export class RoleMgmtPageHelper extends PageHelper {
 
     // Click the create button and wait for role to be made
     cy.contains('button', 'Create Role').click();
+    cy.get('.breadcrumb-item.active').should('not.have.text', name);
 
     this.getFirstTableCell(name).should('exist');
   }
 
   edit(name: string, description: string) {
-    this.getFirstTableCell(name).click(); // select role from table
-    cy.contains('button', 'Edit').click(); // click button to move to edit page
+    this.navigateEdit(name);
+    // Waits for data to load
+    cy.contains('grafana');
 
     // fill in fields with new values
     cy.get('#description').clear().type(description);
 
     // Click the edit button and check new values are present in table
     cy.contains('button', 'Edit Role').click();
+    cy.get('.breadcrumb-item.active').should('not.have.text', name);
 
     this.getFirstTableCell(name).should('exist');
     this.getFirstTableCell(description).should('exist');

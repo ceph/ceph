@@ -50,6 +50,18 @@ export abstract class PageHelper {
   }
 
   /**
+   * Navigates to the edit page
+   */
+  navigateEdit(name: string, select = true) {
+    if (select) {
+      this.navigateTo();
+      this.getFirstTableCell(name).click();
+    }
+    cy.contains('button', 'Edit').click();
+    this.expectBreadcrumbText('Edit');
+  }
+
+  /**
    * Checks the active breadcrumb value.
    */
   expectBreadcrumbText(text: string) {

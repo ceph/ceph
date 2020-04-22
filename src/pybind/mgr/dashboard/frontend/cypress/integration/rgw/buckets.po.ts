@@ -40,9 +40,8 @@ export class BucketsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(name: string, new_owner: string) {
-    this.getFirstTableCell(name).click(); // wait for table to load and click
-    cy.contains('button', 'Edit').click(); // click button to move to edit page
-    this.expectBreadcrumbText('Edit');
+    this.navigateEdit(name);
+
     cy.get('input[name=placement-target]').should('have.value', 'default-placement');
     this.selectOwner(new_owner);
 
@@ -69,8 +68,8 @@ export class BucketsPageHelper extends PageHelper {
     cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
 
     // Disable versioning:
-    cy.contains('button', 'Edit').click(); // click button to move to edit page
-    this.expectBreadcrumbText('Edit');
+    this.navigateEdit(name, false);
+
     cy.get('label[for=versioning]').click();
     cy.get('input[id=versioning]').should('not.be.checked');
     cy.contains('button', 'Edit Bucket').click();
@@ -134,12 +133,7 @@ export class BucketsPageHelper extends PageHelper {
   }
 
   testInvalidEdit(name: string) {
-    this.navigateTo();
-
-    this.getFirstTableCell(name).click(); // wait for table to load and click
-    cy.contains('button', 'Edit').click(); // click button to move to edit page
-
-    this.expectBreadcrumbText('Edit');
+    this.navigateEdit(name);
 
     cy.get('input[id=versioning]').should('exist').and('not.be.checked');
 
