@@ -33,11 +33,16 @@ export class RgwBucketFormComponent implements OnInit {
   resource: string;
   zonegroup: string;
   placementTargets: object[] = [];
-  isVersioningEnabled = false;
   isVersioningAlreadyEnabled = false;
-  isMfaDeleteEnabled = false;
   isMfaDeleteAlreadyEnabled = false;
   icons = Icons;
+
+  get isVersioningEnabled(): boolean {
+    return this.bucketForm.getValue('versioning');
+  }
+  get isMfaDeleteEnabled(): boolean {
+    return this.bucketForm.getValue('mfa-delete');
+  }
 
   constructor(
     private route: ActivatedRoute,
@@ -117,22 +122,26 @@ export class RgwBucketFormComponent implements OnInit {
 
       this.rgwBucketService.get(bid).subscribe((resp: object) => {
         this.loading = false;
+
         // Get the default values (incl. the values from disabled fields).
         const defaults = _.clone(this.bucketForm.getRawValue());
+
         // Get the values displayed in the form. We need to do that to
         // extract those key/value pairs from the response data, otherwise
         // the Angular react framework will throw an error if there is no
         // field for a given key.
         let value: object = _.pick(resp, _.keys(defaults));
         value['placement-target'] = resp['placement_rule'];
+        value['versioning'] = resp['versioning'] === RgwBucketVersioning.ENABLED;
+        value['mfa-delete'] = resp['mfa_delete'] === RgwBucketMfaDelete.ENABLED;
+
         // Append default values.
         value = _.merge(defaults, value);
+
         // Update the form.
         this.bucketForm.setValue(value);
         if (this.editing) {
-          this.setVersioningStatus(resp['versioning']);
           this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
-          this.setMfaDeleteStatus(resp['mfa_delete']);
           this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
           this.setMfaDeleteValidators();
         }
@@ -308,25 +317,7 @@ export class RgwBucketFormComponent implements OnInit {
     return this.isVersioningEnabled ? RgwBucketVersioning.ENABLED : RgwBucketVersioning.SUSPENDED;
   }
 
-  setVersioningStatus(status: RgwBucketVersioning) {
-    this.isVersioningEnabled = status === RgwBucketVersioning.ENABLED;
-  }
-
-  updateVersioning() {
-    this.isVersioningEnabled = !this.isVersioningEnabled;
-    this.setMfaDeleteValidators();
-  }
-
   getMfaDeleteStatus() {
     return this.isMfaDeleteEnabled ? RgwBucketMfaDelete.ENABLED : RgwBucketMfaDelete.DISABLED;
-  }
-
-  setMfaDeleteStatus(status: RgwBucketMfaDelete) {
-    this.isMfaDeleteEnabled = status === RgwBucketMfaDelete.ENABLED;
-  }
-
-  updateMfaDelete() {
-    this.isMfaDeleteEnabled = !this.isMfaDeleteEnabled;
-    this.setMfaDeleteValidators();
   }
 }
