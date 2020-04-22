@@ -9,10 +9,9 @@ import logging
 import time
 import yaml
 
-from salt_manager import SaltManager
-from scripts import Scripts
-from teuthology import misc
-from util import (
+from tasks.salt_manager import SaltManager
+from tasks.scripts import Scripts
+from tasks.util import (
     copy_directory_recursively,
     enumerate_osds,
     get_remote_for_role,
@@ -24,6 +23,7 @@ from util import (
     sudo_append_to_file,
     )
 
+from teuthology import misc
 from teuthology.exceptions import (
     CommandFailedError,
     ConfigError,

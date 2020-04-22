@@ -6,8 +6,8 @@ Linter:
 """
 import logging
 
-from salt_manager import SaltManager
-from scripts import Scripts
+from tasks.salt_manager import SaltManager
+from tasks.scripts import Scripts
 
 from teuthology.exceptions import (
     ConfigError,
