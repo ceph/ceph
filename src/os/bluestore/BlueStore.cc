@@ -6840,6 +6840,24 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
+int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
+{
+  bluestore_bdev_label_t label;
+  int r = _read_bdev_label(cct, path, &label);
+  if (r < 0) {
+    derr << "unable to read label for " << path << ": "
+          << cpp_strerror(r) << dendl;
+  } else {
+    label.size = size;
+    r = _write_bdev_label(cct, path, label);
+    if (r < 0) {
+      derr << "unable to write label for " << path << ": "
+            << cpp_strerror(r) << dendl;
+    }
+  }
+  return r;
+}
+
 int BlueStore::expand_devices(ostream& out)
 {
   int r = cold_open();
@@ -6872,23 +6890,13 @@ int BlueStore::expand_devices(ostream& out)
 	      <<": can't find device path " << dendl;
 	continue;
       }
-      bluestore_bdev_label_t label;
-      int r = _read_bdev_label(cct, path, &label);
-      if (r < 0) {
-	derr << "unable to read label for " << path << ": "
-	      << cpp_strerror(r) << dendl;
-	continue;
+      if (bluefs->bdev_support_label(devid)) {
+        if (_set_bdev_label_size(p, size) >= 0) {
+          out << devid
+            << " : size label updated to " << size
+            << std::endl;
+        }
       }
-      label.size = size;
-      r = _write_bdev_label(cct, path, label);
-      if (r < 0) {
-	derr << "unable to write label for " << path << ": "
-	      << cpp_strerror(r) << dendl;
-	continue;
-      }
-      out << devid
-	   <<" : size label updated to " << size
-	   << std::endl;
     }
   }
   uint64_t size0 = fm->get_size();
@@ -6898,6 +6906,13 @@ int BlueStore::expand_devices(ostream& out)
       << " : expanding " << " from 0x" << std::hex
       << size0 << " to 0x" << size << std::dec << std::endl;
     _write_out_fm_meta(size);
+    if (bdev->supported_bdev_label()) {
+      if (_set_bdev_label_size(path, size) >= 0) {
+        out << bluefs_layout.shared_bdev
+          << " : size label updated to " << size
+          << std::endl;
+      }
+    }
     cold_close();
 
     // mount in read/write to sync expansion changes
