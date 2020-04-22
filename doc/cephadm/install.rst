@@ -167,6 +167,8 @@ To add each new host to the cluster, perform two steps:
      # ceph orch host add host3
 
 
+.. _deploy_additional_monitors:
+
 Deploy additional monitors (optional)
 =====================================
 
