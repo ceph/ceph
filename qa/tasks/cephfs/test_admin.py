@@ -7,6 +7,7 @@ from tasks.cephfs.fuse_mount import FuseMount
 
 from tasks.cephfs.filesystem import FileLayout
 
+
 class TestAdminCommands(CephFSTestCase):
     """
     Tests for administration command.
@@ -22,6 +23,12 @@ class TestAdminCommands(CephFSTestCase):
 
         s = self.fs.mon_manager.raw_cluster_cmd("fs", "status")
         self.assertTrue("active" in s)
+
+        mdsmap = json.loads(self.fs.mon_manager.raw_cluster_cmd("fs", "status", "--format=json-pretty"))["mdsmap"]
+        self.assertEqual(mdsmap[0]["state"], "active")
+
+        mdsmap = json.loads(self.fs.mon_manager.raw_cluster_cmd("fs", "status", "--format=json"))["mdsmap"]
+        self.assertEqual(mdsmap[0]["state"], "active")
 
     def _setup_ec_pools(self, n, metadata=True, overwrites=True):
         if metadata:
