@@ -64,6 +64,7 @@ shell = None    # holds instance of class CephFSShell
 #
 #######################################################################
 
+
 def poutput(s, end='\n'):
     shell.poutput(s, end=end)
 
@@ -111,12 +112,13 @@ def to_bytes(param):
     elif isinstance(param, str):
         return bytes(param, encoding='utf-8')
     elif isinstance(param, list):
-        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for \
+        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for
                 i in param]
     elif isinstance(param, int) or isinstance(param, float):
         return str(param).encode('utf-8')
     elif param is None:
         return None
+
 
 def ls(path, opts=''):
     # opts tries to be like /bin/ls opts
@@ -133,6 +135,7 @@ def ls(path, opts=''):
     except libcephfs.ObjectNotFound as e:
         perror(e)
         shell.exit_code = e.get_error_code()
+
 
 def glob(path, pattern):
     paths = []
@@ -1132,12 +1135,12 @@ class CephFSShell(Cmd):
             try:
                 statfs = cephfs.statfs(file)
                 stat = cephfs.stat(file)
-                block_size = statfs['f_blocks']*statfs['f_bsize'] // 1024
+                block_size = (statfs['f_blocks'] * statfs['f_bsize']) // 1024
                 available = block_size - stat.st_size
                 use = 0
 
                 if block_size > 0:
-                    use = (stat.st_size*100 // block_size)
+                    use = (stat.st_size * 100) // block_size
 
                 if header:
                     header = False
@@ -1220,7 +1223,7 @@ class CephFSShell(Cmd):
                     if f[0] is ord('/'):
                         f = b'.' + f
                     poutput('{:10s} {}'.format(humansize(dusage),
-                        f.decode('utf-8')))
+                            f.decode('utf-8')))
                 except libcephfs.Error as e:
                     perror(e)
                     self.exit_code = e.get_error_code()
@@ -1354,7 +1357,7 @@ class CephFSShell(Cmd):
         else:
             self.perror("snapshot can only be created or deleted; check - "
                         "help snap")
-            self.exit_code = e.get_error_code()
+            self.exit_code = 1
 
     def do_help(self, line):
         """
@@ -1399,12 +1402,15 @@ class CephFSShell(Cmd):
 
                 poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n"
                         "Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: "
-                        "{:o}/{}\tUid: {:d}\tGid: {:d}\n\Access: {}\nModify: "
+                        "{:o}/{}\tUid: {:d}\tGid: {:d}\nAccess: {}\nModify: "
                         "{}\nChange: {}".format(path.decode('utf-8'),
-                        stat.st_size, stat.st_blocks, stat.st_blksize,
-                        stat.st_dev, stat.st_ino, stat.st_nlink, stat.st_mode,
-                        mode_notation(stat.st_mode), stat.st_uid, stat.st_gid,
-                        atime, mtime, ctime))
+                                                stat.st_size, stat.st_blocks,
+                                                stat.st_blksize, stat.st_dev,
+                                                stat.st_ino, stat.st_nlink,
+                                                stat.st_mode,
+                                                mode_notation(stat.st_mode),
+                                                stat.st_uid, stat.st_gid, atime,
+                                                mtime, ctime))
             except libcephfs.Error as e:
                 perror(e)
                 self.exit_code = e.get_error_code()
