@@ -1,5 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
+import { Observable, of as observableOf } from 'rxjs';
+import { catchError, mapTo } from 'rxjs/operators';
 
 import { UserFormModel } from '../../core/auth/user-form/user-form.model';
 import { ApiModule } from './api.module';
@@ -38,6 +40,16 @@ export class UserService {
       old_password: oldPassword,
       new_password: newPassword
     });
+  }
+
+  validateUserName(user_name: string): Observable<boolean> {
+    return this.get(user_name).pipe(
+      mapTo(true),
+      catchError((error) => {
+        error.preventDefault();
+        return observableOf(false);
+      })
+    );
   }
 
   validatePassword(password: string, username: string = null, oldPassword: string = null) {

@@ -29,6 +29,9 @@
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('username', formDir, 'required')"
                   i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('username', formDir, 'notUnique')"
+                  i18n>The username already exists.</span>
           </div>
         </div>
 
