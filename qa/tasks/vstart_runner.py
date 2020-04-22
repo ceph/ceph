@@ -1190,7 +1190,6 @@ class InteractiveFailureResult(unittest.TextTestResult):
 def enumerate_methods(s):
     log.info("e: {0}".format(s))
     for t in s._tests:
-	print("t {0}, s._tests {1}".format(t, s._tests))
         if isinstance(t, suite.BaseTestSuite):
             for sub in enumerate_methods(t):
                 yield sub
@@ -1222,10 +1221,7 @@ def scan_tests(modules):
     max_required_mgr = 0
     require_memstore = False
 
-    print("module = {}".format(overall_suite))
     for suite_, case in enumerate_methods(overall_suite):
-	print("suite {0}".format(suite_))
-	print("case {0}".format(case))
         max_required_mds = max(max_required_mds,
                                getattr(case, "MDSS_REQUIRED", 0))
         max_required_clients = max(max_required_clients,
