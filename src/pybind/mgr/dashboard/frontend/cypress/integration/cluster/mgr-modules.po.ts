@@ -9,8 +9,7 @@ export class ManagerModulesPageHelper extends PageHelper {
    * DOES NOT WORK FOR ALL MGR MODULES, for example, Device health
    */
   editMgrModule(name: string, tuple: string[][]) {
-    this.getFirstTableCell(name).click();
-    cy.contains('button', 'Edit').click();
+    this.navigateEdit(name);
 
     for (const entry of tuple) {
       // Clears fields and adds edits
@@ -25,8 +24,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     }
 
     // Clear mgr module of all edits made to it
-    this.getFirstTableCell(name).click();
-    cy.contains('button', 'Edit').click();
+    this.navigateEdit(name);
 
     // Clears the editable fields
     for (const entry of tuple) {
@@ -64,8 +62,7 @@ export class ManagerModulesPageHelper extends PageHelper {
       [warn, 'warn_threshold']
     ];
 
-    this.getFirstTableCell('devicehealth').click();
-    cy.contains('button', 'Edit').click();
+    this.navigateEdit('devicehealth');
     for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
         // Clears and inputs edits
@@ -89,8 +86,8 @@ export class ManagerModulesPageHelper extends PageHelper {
     // to be made when the values are cleared. Therefore, I restored them to their original values
     // (on my local run of ceph-dev, this is subject to change i would assume).
     // I'd imagine there is a better way of doing this.
-    this.getFirstTableCell('devicehealth').click();
-    cy.contains('button', 'Edit').click();
+    this.navigateEdit('devicehealth');
+
     cy.get('#mark_out_threshold').clear().type('2419200');
 
     cy.get('#pool_name').clear().type('device_health_metrics');

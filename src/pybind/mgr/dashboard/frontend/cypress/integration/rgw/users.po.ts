@@ -30,10 +30,7 @@ export class UsersPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(name: string, new_fullname: string, new_email: string, new_maxbuckets: string) {
-    this.getFirstTableCell(name).click(); // wait for table to load and click
-    cy.contains('button', 'Edit').click(); // click button to move to edit page
-
-    this.expectBreadcrumbText('Edit');
+    this.navigateEdit(name);
 
     // Change the full name field
     cy.get('#display_name').click().clear().type(new_fullname);
@@ -107,13 +104,7 @@ export class UsersPageHelper extends PageHelper {
     this.navigateTo('create');
     this.create(uname, 'xxx', 'xxx@xxx', '1');
 
-    this.navigateTo();
-
-    // wait for table to load and click on the bucket you want to edit in the table
-    this.getFirstTableCell(uname).click();
-    cy.contains('button', 'Edit').click(); // click button to move to edit page
-
-    this.expectBreadcrumbText('Edit');
+    this.navigateEdit(name);
 
     // put invalid email to make field invalid
     cy.get('#email')

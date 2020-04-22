@@ -10,17 +10,10 @@ export class ConfigurationPageHelper extends PageHelper {
    * Does not work for configs with checkbox only, possible future PR
    */
   configClear(name: string) {
-    this.navigateTo();
     const valList = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']; // Editable values
 
-    // Enter config setting name into filter box
-    this.seachTable(name);
-
-    // Selects config that we want to clear
-    this.getFirstTableCell(name).click(); // waits for config to be clickable and click
-    cy.contains('button', 'Edit').click(); // clicks button to edit
-
-    // Wait for the data to load
+    this.navigateEdit(name);
+    // Waits for the data to load
     cy.contains('.card-header', `Edit ${name}`);
 
     for (const i of valList) {
@@ -52,14 +45,9 @@ export class ConfigurationPageHelper extends PageHelper {
    * Ex: [global, '2'] is the global value with an input of 2
    */
   edit(name: string, ...values: [string, string][]) {
+    this.navigateEdit(name);
 
-    // Enter config setting name into filter box
-    this.seachTable(name);
-
-    // Selects config that we want to edit
-    this.getFirstTableCell(name).click(); // waits for config to be clickable and click
-    cy.contains('button', 'Edit').click(); // clicks button to edit
-
+    // Waits for data to load
     cy.contains('.card-header', `Edit ${name}`);
 
     values.forEach((valtuple) => {
