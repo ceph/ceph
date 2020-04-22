@@ -20,13 +20,13 @@ public:
     INC = 1,
   };
 
-  struct info {
+  struct Entry {
     std::string key;
     bufferlist data;
   };
 
   struct fetch_result {
-    std::vector<info> entries;
+    std::vector<Entry> entries;
     bool more{false}; /* more available now */
     bool done{false}; /* completely done */
   };
