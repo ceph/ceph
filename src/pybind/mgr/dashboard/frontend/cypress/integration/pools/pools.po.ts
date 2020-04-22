@@ -36,9 +36,8 @@ export class PoolPageHelper extends PageHelper {
 
   edit_pool_pg(name: string, new_pg: number, wait = true) {
     this.isPowerOf2(new_pg);
-    this.getFirstTableCell(name).click(); // select pool from the table
-    cy.contains('button', 'Edit').click(); // click edit button
-    this.expectBreadcrumbText('Edit'); // verify we are now on edit page
+    this.navigateEdit(name);
+
     cy.get('input[name=pgNum]').clear().type(`${new_pg}`);
     cy.get('cd-submit-button').click();
     const str = `${new_pg} active+clean`;

@@ -22,8 +22,7 @@ export class UserMgmtPageHelper extends PageHelper {
   }
 
   edit(username: string, password: string, name: string, email: string) {
-    this.getFirstTableCell(username).click(); // select user from table
-    cy.contains('button', 'Edit').click(); // click button to move to edit page
+    this.navigateEdit(username);
 
     // fill in fields with new values
     cy.get('#password').clear().type(password);
