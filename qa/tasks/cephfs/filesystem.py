@@ -11,7 +11,7 @@ import random
 import traceback
 
 from io import BytesIO
-from six import StringIO
+from io import StringIO
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -1094,7 +1094,7 @@ class Filesystem(MDSCluster):
             os.path.join(self._prefix, "rados"), "-p", pool, "getxattr", obj_name, xattr_name
         ]
         try:
-            proc = remote.run(args=args, stdout=BytesIO())
+            proc = remote.run(args=args, stdout=StringIO())
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(obj_name)
@@ -1105,7 +1105,8 @@ class Filesystem(MDSCluster):
                                             "type", type,
                                             "import", "-",
                                             "decode", "dump_json"],
-            stdin=data
+            stdin=data,
+            stdout=StringIO()
         )
 
         return json.loads(dump.strip())
