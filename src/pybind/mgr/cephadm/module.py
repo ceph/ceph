@@ -34,7 +34,7 @@ from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.service_spec import \
     HostPlacementSpec, NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
 
-from mgr_module import MgrModule, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult, MonCommandFailed
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta
@@ -743,11 +743,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _check_safe_to_destroy_mon(self, mon_id):
         # type: (str) -> None
-        ret, out, err = self.mon_command({
+        ret, out, err = self.check_mon_command({
             'prefix': 'quorum_status',
         })
-        if ret:
-            raise OrchestratorError('failed to check mon quorum status')
         try:
             j = json.loads(out)
         except Exception as e:
@@ -1577,7 +1575,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if daemon_type in CEPH_TYPES or \
                         daemon_type == 'nfs':
                     # get container image
-                    ret, image, err = self.mon_command({
+                    ret, image, err = self.check_mon_command({
                         'prefix': 'config get',
                         'who': utils.name_to_config_section(entity),
                         'key': 'container_image',
@@ -2104,13 +2102,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def find_destroyed_osds(self) -> Dict[str, List[str]]:
         osd_host_map: Dict[str, List[str]] = dict()
-        ret, out, err = self.mon_command({
-            'prefix': 'osd tree',
-            'states': ['destroyed'],
-            'format': 'json'
-        })
-        if ret != 0:
-            raise OrchestratorError(f"Caught error on calling 'osd tree destroyed' -> {err}")
+        try:
+            ret, out, err = self.check_mon_command({
+                'prefix': 'osd tree',
+                'states': ['destroyed'],
+                'format': 'json'
+            })
+        except MonCommandFailed as e:
+            logger.exception('osd tree failed')
+            raise OrchestratorError(str(e))
         try:
             tree = json.loads(out)
         except json.decoder.JSONDecodeError:
@@ -2208,13 +2208,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self._require_hosts(host)
 
         # get bootstrap key
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get',
             'entity': 'client.bootstrap-osd',
         })
 
         # generate config
-        ret, config, err = self.mon_command({
+        ret, config, err = self.check_mon_command({
             "prefix": "config generate-minimal-conf",
         })
 
@@ -2311,13 +2311,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 ename = 'mon.'
             else:
                 ename = utils.name_to_config_section(daemon_type + '.' + daemon_id)
-            ret, keyring, err = self.mon_command({
+            ret, keyring, err = self.check_mon_command({
                 'prefix': 'auth get',
                 'entity': ename,
             })
 
         # generate config
-        ret, config, err = self.mon_command({
+        ret, config, err = self.check_mon_command({
             "prefix": "config generate-minimal-conf",
         })
         if extra_ceph_config:
@@ -2419,13 +2419,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
             # remove mon from quorum before we destroy the daemon
             self.log.info('Removing monitor %s from monmap...' % name)
-            ret, out, err = self.mon_command({
+            ret, out, err = self.check_mon_command({
                 'prefix': 'mon rm',
                 'name': daemon_id,
             })
-            if ret:
-                raise OrchestratorError('failed to remove mon %s from monmap' % (
-                    name))
 
         args = ['--name', name, '--force']
         self.log.info('Removing daemon %s from %s' % (name, host))
@@ -2479,7 +2476,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         public_network = None
         if daemon_type == 'mon':
-            ret, out, err = self.mon_command({
+            ret, out, err = self.check_mon_command({
                 'prefix': 'config get',
                 'who': 'mon',
                 'key': 'public_network',
@@ -2699,7 +2696,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Create a new monitor on the given host.
         """
         # get mon. key
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get',
             'entity': 'mon.',
         })
@@ -2717,14 +2714,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 raise OrchestratorError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
         else:
             # try to get the public_network from the config
-            ret, network, err = self.mon_command({
+            ret, network, err = self.check_mon_command({
                 'prefix': 'config get',
                 'who': 'mon',
                 'key': 'public_network',
             })
             network = network.strip() # type: ignore
-            if ret:
-                raise RuntimeError('Unable to fetch cluster_network config option')
             if not network:
                 raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
             if '/' not in network:
@@ -2744,7 +2739,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Create a new manager instance on a host.
         """
         # get mgr. key
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'mgr.%s' % mgr_id,
             'caps': ['mon', 'profile mgr',
@@ -2812,7 +2807,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def _config_mds(self, spec):
         # ensure mds_join_fs is set for these daemons
         assert spec.service_id
-        ret, out, err = self.mon_command({
+        ret, out, err = self.check_mon_command({
             'prefix': 'config set',
             'who': 'mds.' + spec.service_id,
             'name': 'mds_join_fs',
@@ -2821,7 +2816,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _create_mds(self, mds_id, host):
         # get mgr. key
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'mds.' + mds_id,
             'caps': ['mon', 'profile mds',
@@ -2835,19 +2830,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _config_rgw(self, spec):
         # ensure rgw_realm and rgw_zone is set for these daemons
-        ret, out, err = self.mon_command({
+        ret, out, err = self.check_mon_command({
             'prefix': 'config set',
             'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
             'name': 'rgw_zone',
             'value': spec.rgw_zone,
         })
-        ret, out, err = self.mon_command({
+        ret, out, err = self.check_mon_command({
             'prefix': 'config set',
             'who': f"{utils.name_to_config_section('rgw')}.{spec.rgw_realm}",
             'name': 'rgw_realm',
             'value': spec.rgw_realm,
         })
-        ret, out, err = self.mon_command({
+        ret, out, err = self.check_mon_command({
             'prefix': 'config set',
             'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
             'name': 'rgw_frontends',
@@ -2859,7 +2854,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
             else:
                 cert_data = spec.rgw_frontend_ssl_certificate
-            ret, out, err = self.mon_command({
+            ret, out, err = self.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
                 'val': cert_data,
@@ -2870,7 +2865,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 key_data = '\n'.join(spec.rgw_frontend_ssl_key)
             else:
                 key_data = spec.rgw_frontend_ssl_key
-            ret, out, err = self.mon_command({
+            ret, out, err = self.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
                 'val': key_data,
@@ -2881,7 +2876,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.spec_store.save(spec)
 
     def _create_rgw(self, rgw_id, host):
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
             'caps': ['mon', 'allow *',
@@ -2904,7 +2899,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.spec_store.save(spec)
 
     def _create_iscsi(self, igw_id, host, spec):
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': utils.name_to_config_section('iscsi') + '.' + igw_id,
             'caps': ['mon', 'allow rw',
@@ -2937,7 +2932,7 @@ api_secure = {api_secure}
         return self._add_daemon('rbd-mirror', spec, self._create_rbd_mirror)
 
     def _create_rbd_mirror(self, daemon_id, host):
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.rbd-mirror.' + daemon_id,
             'caps': ['mon', 'profile rbd-mirror',
@@ -3156,7 +3151,7 @@ datasources:
             cert, pkey = create_self_signed_cert('Ceph', 'cephadm')
             self.set_store('grafana_crt', cert)
             self.set_store('grafana_key', pkey)
-            self.mon_command({
+            self.check_mon_command({
                 'prefix': 'dashboard set-grafana-api-ssl-verify',
                 'value': 'false',
             })
@@ -3290,7 +3285,7 @@ receivers:
         return self._apply(spec)
 
     def _create_crash(self, daemon_id, host):
-        ret, keyring, err = self.mon_command({
+        ret, keyring, err = self.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.crash.' + host,
             'caps': ['mon', 'profile crash',
