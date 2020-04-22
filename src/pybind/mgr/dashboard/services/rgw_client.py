@@ -310,7 +310,8 @@ class RgwClient(RestClient):
         # If user ID is not set, then try to get it via the RGW Admin Ops API.
         self.userid = userid if userid else self._get_user_id(self.admin_path)
 
-        logger.info("Created new connection for user: %s", self.userid)
+        logger.info("Created new connection: user=%s, host=%s, port=%s, ssl=%d, sslverify=%d",
+                    self.userid, host, port, ssl, ssl_verify)
 
     @RestClient.api_get('/', resp_structure='[0] > (ID & DisplayName)')
     def is_service_online(self, request=None):
