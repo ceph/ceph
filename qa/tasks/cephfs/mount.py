@@ -50,8 +50,8 @@ class CephFSMount(object):
         # and there is no workaround, will continue to use the 'brctl'
         args = ["bash", "-c",
                 "cat /etc/os-release"]
-        p = self.client_remote.run(args=args, stderr=BytesIO(),
-                                   stdout=BytesIO(), timeout=(5*60))
+        p = self.client_remote.run(args=args, stderr=StringIO(),
+                                   stdout=StringIO(), timeout=(5*60))
         distro = re.findall(r'NAME="Ubuntu"', p.stdout.getvalue())
         version = re.findall(r'VERSION_ID="18.04"', p.stdout.getvalue())
         self.use_brctl = len(distro) is not 0 and len(version) is not 0
@@ -109,8 +109,8 @@ class CephFSMount(object):
         mask = self.ceph_brx_net.split('/')[1]
         brd = IP(self.ceph_brx_net).broadcast()
 
-        brx = self.client_remote.run(args=['ip', 'addr'], stderr=BytesIO(),
-                                     stdout=BytesIO(), timeout=(5*60))
+        brx = self.client_remote.run(args=['ip', 'addr'], stderr=StringIO(),
+                                     stdout=StringIO(), timeout=(5*60))
         brx = re.findall(r'inet .* ceph-brx', brx.stdout.getvalue())
         if brx:
             # If the 'ceph-brx' already exists, then check whether
@@ -146,7 +146,7 @@ class CephFSMount(object):
         self.client_remote.run(args=['touch', '/tmp/python-ceph-brx'],
                                timeout=(5*60))
         p = self.client_remote.run(args=['cat', '/proc/sys/net/ipv4/ip_forward'],
-                                   stderr=BytesIO(), stdout=BytesIO(),
+                                   stderr=StringIO(), stdout=StringIO(),
                                    timeout=(5*60))
         val = p.stdout.getvalue().strip()
         args = ["sudo", "bash", "-c",
@@ -157,8 +157,8 @@ class CephFSMount(object):
         self.client_remote.run(args=args, timeout=(5*60))
         
         # Setup the NAT
-        p = self.client_remote.run(args=['route'], stderr=BytesIO(),
-                                   stdout=BytesIO(), timeout=(5*60))
+        p = self.client_remote.run(args=['route'], stderr=StringIO(),
+                                   stdout=StringIO(), timeout=(5*60))
         p = re.findall(r'default .*', p.stdout.getvalue())
         if p == False:
             raise RuntimeError("No default gw found")
@@ -175,7 +175,7 @@ class CephFSMount(object):
 
     def _setup_netns(self):
         p = self.client_remote.run(args=['ip', 'netns', 'list'],
-                                   stderr=BytesIO(), stdout=BytesIO(),
+                                   stderr=StringIO(), stdout=StringIO(),
                                    timeout=(5*60))
         p = p.stdout.getvalue().strip()
         if re.match(self.netns_name, p) is not None:
@@ -188,7 +188,7 @@ class CephFSMount(object):
         nsid = 0
         while True:
             p = self.client_remote.run(args=['ip', 'netns', 'list-id'],
-                                       stderr=BytesIO(), stdout=BytesIO(),
+                                       stderr=StringIO(), stdout=StringIO(),
                                        timeout=(5*60))
             p = re.search(r"nsid {} ".format(nsid), p.stdout.getvalue())
             if p is None:
@@ -219,8 +219,8 @@ class CephFSMount(object):
                 ns_name = ns.split()[0]
                 args = ["sudo", "bash", "-c",
                         "ip netns exec {0} ip addr".format(ns_name)]
-                p = self.client_remote.run(args=args, stderr=BytesIO(),
-                                           stdout=BytesIO(), timeout=(5*60))
+                p = self.client_remote.run(args=args, stderr=StringIO(),
+                                           stdout=StringIO(), timeout=(5*60))
                 q = re.search("{0}".format(ip), p.stdout.getvalue())
                 if q is not None:
                     found = True
@@ -302,8 +302,8 @@ class CephFSMount(object):
         self.nsid = -1
 
     def _cleanup_brx_and_nat(self):
-        brx = self.client_remote.run(args=['ip', 'addr'], stderr=BytesIO(),
-                                     stdout=BytesIO(), timeout=(5*60))
+        brx = self.client_remote.run(args=['ip', 'addr'], stderr=StringIO(),
+                                     stdout=StringIO(), timeout=(5*60))
         brx = re.findall(r'inet .* ceph-brx', brx.stdout.getvalue())
         if not brx:
             return
@@ -311,12 +311,12 @@ class CephFSMount(object):
         # If we are the last netns, will delete the ceph-brx
         if self.use_brctl == True:
             p = self.client_remote.run(args=['brctl', 'show', 'ceph-brx'],
-                                       stderr=BytesIO(), stdout=BytesIO(),
+                                       stderr=StringIO(), stdout=StringIO(),
                                        timeout=(5*60))
         else:
             self._bringup_network_manager_service()
             p = self.client_remote.run(args=['nmcli', 'connection', 'show'],
-                                       stderr=BytesIO(), stdout=BytesIO(),
+                                       stderr=StringIO(), stdout=StringIO(),
                                        timeout=(5*60))
         _list = re.findall(r'brx\.', p.stdout.getvalue().strip())
         if len(_list) != 0:
@@ -343,8 +343,8 @@ class CephFSMount(object):
         ip = IP(self.ceph_brx_net)[-2]
         mask = self.ceph_brx_net.split('/')[1]
 
-        p = self.client_remote.run(args=['route'], stderr=BytesIO(),
-                                   stdout=BytesIO(), timeout=(5*60))
+        p = self.client_remote.run(args=['route'], stderr=StringIO(),
+                                   stdout=StringIO(), timeout=(5*60))
         p = re.findall(r'default .*', p.stdout.getvalue())
         if p == False:
             raise RuntimeError("No default gw found")
@@ -361,7 +361,7 @@ class CephFSMount(object):
 
         # Restore the ip_forward
         p = self.client_remote.run(args=['cat', '/tmp/python-ceph-brx'],
-                                   stderr=BytesIO(), stdout=BytesIO(),
+                                   stderr=StringIO(), stdout=StringIO(),
                                    timeout=(5*60))
         val = p.stdout.getvalue().strip()
         args = ["sudo", "bash", "-c",
@@ -457,7 +457,7 @@ class CephFSMount(object):
 
         Prerequisite: the client is not mounted.
         """
-        stderr = BytesIO()
+        stderr = StringIO()
         try:
             self.client_remote.run(
                 args=[
