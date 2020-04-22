@@ -46,7 +46,7 @@ class BitmapFreelistManager : public FreelistManager {
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn);
 
-  int _init_from_external_cfg(
+  int _read_cfg(
     std::function<int(const std::string&, std::string*)> cfg_reader);
 
   int _expand(uint64_t new_size, KeyValueDB* db);

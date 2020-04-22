@@ -82,7 +82,7 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
     // set past-eof blocks as allocated
     _xor(size, blocks * bytes_per_block - size, txn);
   }
-  dout(0) << __func__
+  dout(1) << __func__
 	   << " size 0x" << std::hex << size
 	   << " bytes_per_block 0x" << bytes_per_block
 	   << " blocks 0x" << blocks
@@ -220,7 +220,7 @@ int BitmapFreelistManager::init(KeyValueDB *kvdb, bool db_in_read_only,
   std::function<int(const std::string&, std::string*)> cfg_reader)
 {
   dout(1) << __func__ << dendl;
-  int r = _init_from_external_cfg(cfg_reader);
+  int r = _read_cfg(cfg_reader);
   if (r != 0) {
     dout(1) << __func__ << " fall back to legacy meta repo" << dendl;
     _load_from_db(kvdb);
@@ -237,7 +237,7 @@ int BitmapFreelistManager::init(KeyValueDB *kvdb, bool db_in_read_only,
   return 0;
 }
 
-int BitmapFreelistManager::_init_from_external_cfg(
+int BitmapFreelistManager::_read_cfg(
   std::function<int(const std::string&, std::string*)> cfg_reader)
 {
   dout(1) << __func__ << dendl;
@@ -265,7 +265,7 @@ int BitmapFreelistManager::_init_from_external_cfg(
         derr << __func__ << " Failed to parse - "
           << keys[i] << ":" << val
           << ", error: " << err << dendl;
-        return r;
+        return -EINVAL;
       }
     } else {
       // this is expected for legacy deployed OSDs

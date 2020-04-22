@@ -2317,6 +2317,7 @@ public:
 private:
   int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
 			       bool create);
+  int _set_bdev_label_size(const string& path, uint64_t size);
 
   int _open_super_meta();
 
