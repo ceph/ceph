@@ -510,7 +510,7 @@ class DeepSea(Task):
         If the role type is absent, returns the empty string.
         """
         role_dict = self.role_lookup_table.get(role_type, {})
-        host = role_dict[role_dict.keys()[0]] if role_dict else ''
+        host = role_dict[next(iter(role_dict.keys()))] if role_dict else ''
         return host
 
     # Teuthology iterates through the tasks stanza twice: once to "execute"
@@ -1393,7 +1393,7 @@ class Policy(DeepSea):
             for k, v in self.munge_policy.items():
                 if k in ['node_add', 'node_rm']:
                     try:
-                        teuthology_role, deepsea_role = v.items()[0]
+                        teuthology_role, deepsea_role = list(v.items())[0]
                     except AttributeError:
                         raise ConfigError(
                             self.err_prefix + "wrong configuration for {}".format(k)
@@ -1467,7 +1467,7 @@ class Reboot(DeepSea):
                 "config dictionary may contain only one key. "
                 "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
                 )
-        role_spec, paramdict = self.config.items()[0]
+        role_spec, paramdict = list(self.config.items())[0]
         if not isinstance(paramdict, dict):
             paramdict = {'tries': reboot_tries}
         paramdict_keys = len(paramdict)
@@ -1479,7 +1479,7 @@ class Reboot(DeepSea):
                 )
         elif paramdict_keys == 1:
             self.log.info("Considering parameter dict {}".format(paramdict))
-            tries, tries_num = paramdict.items()[0]
+            tries, tries_num = list(paramdict.items())[0]
             if tries == 'tries':
                 tries_num = int(tries_num)
             else:
@@ -1612,7 +1612,7 @@ class Repository(DeepSea):
                 "config dictionary may contain only one key. "
                 "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
                 )
-        role_spec, repositories = self.config.items()[0]
+        role_spec, repositories = list(self.config.items())[0]
         self.log.info("Current role is {} and repositories are {}".format(role_spec, repositories))
         if role_spec == "patch":
             self.log.info("Maintenance Update scenario starting...")
@@ -1684,7 +1684,7 @@ class Script(DeepSea):
                 "config dictionary may contain only one key. "
                 "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
                 )
-        role_spec, role_dict = self.config.items()[0]
+        role_spec, role_dict = list(self.config.items())[0]
         role_keys = len(role_dict)
         if role_keys > 1:
             raise ConfigError(
@@ -1696,16 +1696,16 @@ class Script(DeepSea):
             remote = self.ctx.cluster
         else:
             remote = get_remote_for_role(self.ctx, role_spec)
-        script_spec, script_dict = role_dict.items()[0]
+        script_spec, script_dict = list(role_dict.items())[0]
         if script_dict is None:
             args = []
         if isinstance(script_dict, dict):
-            if len(script_dict) > 1 or script_dict.keys()[0] != 'args':
+            if len(script_dict) > 1 or list(script_dict.keys())[0] != 'args':
                 raise ConfigError(
                     self.err_prefix +
                     'script dicts may only contain one key (args)'
                     )
-            args = script_dict.values()[0] or []
+            args = list(script_dict.values())[0] or []
             if not isinstance(args, list):
                 raise ConfigError(self.err_prefix + 'script args must be a list')
         self.scripts.run(
@@ -1768,7 +1768,7 @@ class Toolbox(DeepSea):
         Then runs 'rebuild.nodes' on the node, can be used for filestore to bluestore
         migration if you run it after you change the drive_groups.yml file.
         """
-        role = kwargs.keys()[0]
+        role = list(kwargs.keys())[0]
         remote = get_remote_for_role(self.ctx, role)
         osds_before_rebuild = len(enumerate_osds(remote, self.log))
         self.log.info("Disengaging safety to prepare for rebuild")
@@ -1799,7 +1799,7 @@ class Toolbox(DeepSea):
         Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
         Enumerates the OSDs on this node and does 'add-noout' on each of them.
         """
-        role = kwargs.keys()[0]
+        role = list(kwargs.keys())[0]
         self._noout("add", role)
 
     def assert_bluestore(self, **kwargs):
@@ -1807,7 +1807,7 @@ class Toolbox(DeepSea):
         Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
         Enumerates the OSDs on this node and asserts that each one is a bluestore OSD.
         """
-        role = kwargs.keys()[0]
+        role = list(kwargs.keys())[0]
         self._assert_store("bluestore", role)
 
     def assert_filestore(self, **kwargs):
@@ -1815,7 +1815,7 @@ class Toolbox(DeepSea):
         Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
         Enumerates the OSDs on this node and asserts that each one is a filestore OSD.
         """
-        role = kwargs.keys()[0]
+        role = list(kwargs.keys())[0]
         self._assert_store("filestore", role)
 
     def rm_noout(self, **kwargs):
@@ -1823,7 +1823,7 @@ class Toolbox(DeepSea):
         Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
         Enumerates the OSDs on this node and does 'rm-noout' on each of them.
         """
-        role = kwargs.keys()[0]
+        role = list(kwargs.keys())[0]
         self._noout("rm", role)
 
     def wait_for_health_ok(self, **kwargs):
@@ -1846,7 +1846,7 @@ class Toolbox(DeepSea):
                     "wait_for_health_ok config dictionary may contain only one key. "
                     "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
                     )
-            timeout_spec, timeout_minutes = kwargs.items()[0]
+            timeout_spec, timeout_minutes = list(kwargs.items())[0]
         else:
             timeout_minutes = 120
         self.log.info("Waiting up to ->{}<- minutes for HEALTH_OK".format(timeout_minutes))
@@ -1885,7 +1885,7 @@ class Toolbox(DeepSea):
                 "config dictionary may contain only one key. "
                 "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
                 )
-        tool_spec, kwargs = self.config.items()[0]
+        tool_spec, kwargs = next(iter(self.config.items()))
         kwargs = {} if not kwargs else kwargs
         method = getattr(self, tool_spec, None)
         if method:
@@ -2014,7 +2014,7 @@ class Validation(DeepSea):
                     "nodes_in_cluster config dictionary may contain only one key. "
                     "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
                     )
-            deepsea_role, expected_count = kwargs.items()[0]
+            deepsea_role, expected_count = next(iter(kwargs.items()))
             # TODO: extend with other roles
             if deepsea_role == 'storage':
                 self.master_remote.sh('sudo ceph osd tree')
