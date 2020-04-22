@@ -12,8 +12,9 @@ CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1=r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT=None # in seconds
 DEFAULT_RETRY=10
-SHELL_DEFAULT_CONF='/etc/ceph/ceph.conf'
-SHELL_DEFAULT_KEYRING='/etc/ceph/ceph.client.admin.keyring'
+ETC_CEPH_DIR="/etc/ceph"
+SHELL_DEFAULT_CONF=ETC_CEPH_DIR + '/ceph.conf'
+SHELL_DEFAULT_KEYRING=ETC_CEPH_DIR + '/ceph.client.admin.keyring'
 
 """
 You can invoke cephadm in two ways:
@@ -213,8 +214,8 @@ class NFSGanesha(object):
     def get_container_mounts(data_dir):
         # type: (str) -> Dict[str, str]
         mounts = dict()
-        mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
-        mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
+        mounts[os.path.join(data_dir, 'config')] = ETC_CEPH_DIR + '/ceph.conf:z'
+        mounts[os.path.join(data_dir, 'keyring')] = ETC_CEPH_DIR + '/keyring:z'
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
         return mounts
 
@@ -222,7 +223,7 @@ class NFSGanesha(object):
     def get_container_envs():
         # type: () -> List[str]
         envs = [
-            'CEPH_CONF=%s' % ('/etc/ceph/ceph.conf')
+            'CEPH_CONF=%s' % (SHELL_DEFAULT_CONF)
         ]
         return envs
 
@@ -365,9 +366,9 @@ class CephIscsi(object):
     def get_container_mounts(data_dir, log_dir):
         # type: (str, str) -> Dict[str, str]
         mounts = dict()
-        mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
-        mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
-        mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
+        mounts[os.path.join(data_dir, 'config')] = ETC_CEPH_DIR + '/ceph.conf:z'
+        mounts[os.path.join(data_dir, 'keyring')] = ETC_CEPH_DIR + '/keyring:z'
+        mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = ETC_CEPH_DIR + '/iscsi-gateway.cfg:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config:z'
         mounts[log_dir] = '/var/log/rbd-target-api:z'
         mounts['/dev/log'] = '/dev/log:z'
@@ -1351,7 +1352,7 @@ def check_units(units, enabler=None):
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
     # type: (str, str) -> Optional[str]
-    config_file = '/etc/ceph/%s.conf' % cluster
+    config_file = ETC_CEPH_DIR + '/%s.conf' % cluster
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)
 
@@ -1558,10 +1559,10 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         if daemon_type != 'crash':
             mounts[data_dir] = cdata_dir + ':z'
         if not no_config:
-            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
+            mounts[data_dir + '/config'] = ETC_CEPH_DIR + '/ceph.conf:z'
         if daemon_type == 'rbd-mirror' or daemon_type == 'crash':
             # these do not search for their keyrings in a data directory
-            mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
+            mounts[data_dir + '/keyring'] = ETC_CEPH_DIR + '/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
 
     if daemon_type in ['mon', 'osd']:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
@@ -2184,7 +2185,7 @@ def command_bootstrap():
                               '--allow-overwrite to overwrite' % f)
         dirname = os.path.dirname(f)
         if dirname and not os.path.exists(dirname):
-            if dirname == "/etc/ceph":
+            if dirname == ETC_CEPH_DIR:
                 os.mkdir(dirname)
             else:
                 raise Error('%s directory %s does not exist' % (f, dirname))
@@ -2380,8 +2381,8 @@ def command_bootstrap():
         # type: (List[str], Dict[str, str], Optional[int]) -> str
         mounts = {
             log_dir: '/var/log/ceph:z',
-            tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-            tmp_config.name: '/etc/ceph/ceph.conf:z',
+            tmp_admin_keyring.name: ETC_CEPH_DIR + '/ceph.client.admin.keyring:z',
+            tmp_config.name: ETC_CEPH_DIR + '/ceph.conf:z',
         }
         for k, v in extra_mounts.items():
             mounts[k] = v
@@ -2401,8 +2402,8 @@ def command_bootstrap():
             'status'],
         volume_mounts={
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-            tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-            tmp_config.name: '/etc/ceph/ceph.conf:z',
+            tmp_admin_keyring.name: ETC_CEPH_DIR + '/ceph.client.admin.keyring:z',
+            tmp_config.name: ETC_CEPH_DIR + '/ceph.conf:z',
         },
     )
 
@@ -2725,9 +2726,9 @@ def command_shell():
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
                                   no_config=True if args.config else False)
     if args.config:
-        mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
+        mounts[pathify(args.config)] = ETC_CEPH_DIR + '/ceph.conf:z'
     if args.keyring:
-        mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
+        mounts[pathify(args.keyring)] = ETC_CEPH_DIR + '/ceph.keyring:z'
     if args.command:
         command = args.command
     else:
@@ -2807,7 +2808,7 @@ def command_ceph_volume():
     if config:
         # tmp config file
         tmp_config = write_tmp(config, uid, gid)
-        mounts[tmp_config.name] = '/etc/ceph/ceph.conf:z'
+        mounts[tmp_config.name] = ETC_CEPH_DIR + '/ceph.conf:z'
 
     if keyring:
         # tmp keyring file
@@ -3166,7 +3167,7 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
                 logger.info('Chowning %s...' % p)
                 os.chown(p, uid, gid)
         # disable the ceph-volume 'simple' mode files on the host
-        simple_fn = os.path.join('/etc/ceph/osd',
+        simple_fn = os.path.join(ETC_CEPH_DIR + '/osd',
                                  '%s-%s.json' % (daemon_id, osd_fsid))
         if os.path.exists(simple_fn):
             new_fn = simple_fn + '.adopted-by-cephadm'
@@ -3184,7 +3185,7 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
                   'ceph-volume@lvm-%s-%s.service' % (daemon_id, osd_fsid)])
 
     # config
-    config_src = '/etc/ceph/%s.conf' % (args.cluster)
+    config_src = ETC_CEPH_DIR + '/%s.conf' % (args.cluster)
     config_src = os.path.abspath(args.legacy_dir + config_src)
     config_dst = os.path.join(data_dir_dst, 'config')
     copy_files([config_src], config_dst, uid=uid, gid=gid)
@@ -3447,7 +3448,7 @@ def command_rm_cluster():
     call_throws(['rm', '-f', args.logrotate_dir + '/ceph-%s' % args.fsid])
 
     # clean up config, keyring, and pub key files
-    files = ['/etc/ceph/ceph.conf', '/etc/ceph/ceph.pub', '/etc/ceph/ceph.client.admin.keyring']
+    files = [SHELL_DEFAULT_CONF, ETC_CEPH_DIR + '/ceph.pub', ETC_CEPH_DIR + '/ceph.client.admin.keyring']
 
     if os.path.exists(files[0]):
         valid_fsid = False
@@ -4257,7 +4258,7 @@ def _get_parser():
         help='cluster FSID')
     parser_bootstrap.add_argument(
         '--output-dir',
-        default='/etc/ceph',
+        default=ETC_CEPH_DIR,
         help='directory to write config, keyring, and pub key files')
     parser_bootstrap.add_argument(
         '--output-keyring',
