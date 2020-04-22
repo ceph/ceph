@@ -27,10 +27,12 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 CreatePrimaryRequest<I>::CreatePrimaryRequest(
-    I *image_ctx, const std::string& global_image_id, uint32_t flags,
-    uint64_t *snap_id, Context *on_finish)
+    I *image_ctx, const std::string& global_image_id,
+    uint64_t clean_since_snap_id, uint32_t flags, uint64_t *snap_id,
+    Context *on_finish)
   : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
-    m_flags(flags), m_snap_id(snap_id), m_on_finish(on_finish) {
+    m_clean_since_snap_id(clean_since_snap_id), m_flags(flags),
+    m_snap_id(snap_id), m_on_finish(on_finish) {
   m_default_ns_ctx.dup(m_image_ctx->md_ctx);
   m_default_ns_ctx.set_namespace("");
 }
@@ -111,7 +113,7 @@ void CreatePrimaryRequest<I>::create_snapshot() {
     ((m_flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0 ?
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
-    m_mirror_peer_uuids, "", CEPH_NOSNAP};
+    m_mirror_peer_uuids, "", m_clean_since_snap_id};
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << "name=" << m_snap_name << ", "
