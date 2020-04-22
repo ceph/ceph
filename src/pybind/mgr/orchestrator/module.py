@@ -1,24 +1,18 @@
 import datetime
 import errno
 import json
+from typing import List, Set, Optional, Iterator
+import re
+
 import yaml
-
 import six
-
-from ceph.deployment.inventory import Device
 from prettytable import PrettyTable
 
-from mgr_util import format_bytes, to_pretty_timedelta
-
-try:
-    from typing import List, Set, Optional, Dict, Iterator
-except ImportError:
-    pass  # just for type checking.
-
-
+from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+
+from mgr_util import format_bytes, to_pretty_timedelta
 from mgr_module import MgrModule, HandleCommandResult
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
@@ -1048,12 +1042,28 @@ Usage:
         c = TrivialReadCompletion(result=True)
         assert c.has_result
 
+    @staticmethod
+    def _upgrade_check_image_name(image, ceph_version):
+        """
+        >>> OrchestratorCli._upgrade_check_image_name('v15.2.0', None)
+        Traceback (most recent call last):
+        orchestrator._interface.OrchestratorValidationError: Error: unable to pull image name `v15.2.0`.
+          Maybe you meant `--ceph-version 15.2.0`?
+
+        """
+        if image and re.match(r'^v?\d+\.\d+\.\d+$', image) and ceph_version is None:
+            ver = image[1:] if image.startswith('v') else image
+            s =  f"Error: unable to pull image name `{image}`.\n" \
+                 f"  Maybe you meant `--ceph-version {ver}`?"
+            raise OrchestratorValidationError(s)
+
     @_cli_write_command(
         'orch upgrade check',
         'name=image,type=CephString,req=false '
         'name=ceph_version,type=CephString,req=false',
         desc='Check service versions vs available and target containers')
     def _upgrade_check(self, image=None, ceph_version=None):
+        self._upgrade_check_image_name(image, ceph_version)
         completion = self.upgrade_check(image=image, version=ceph_version)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -1081,6 +1091,7 @@ Usage:
         'name=ceph_version,type=CephString,req=false',
         desc='Initiate upgrade')
     def _upgrade_start(self, image=None, ceph_version=None):
+        self._upgrade_check_image_name(image, ceph_version)
         completion = self.upgrade_start(image, ceph_version)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
