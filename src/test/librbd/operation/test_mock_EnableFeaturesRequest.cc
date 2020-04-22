@@ -97,7 +97,7 @@ public:
   static EnableRequest *create(MockOperationImageCtx *image_ctx,
                                cls::rbd::MirrorImageMode mirror_image_mode,
                                const std::string& non_primary_global_image_id,
-                               Context *on_finish) {
+                               bool image_clean, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
