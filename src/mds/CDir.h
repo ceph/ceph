@@ -392,11 +392,13 @@ public:
   void merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool replay);
 
   bool should_split() const {
-    return (int)get_frag_size() > g_conf()->mds_bal_split_size;
+    return g_conf()->mds_bal_split_size > 0 &&
+           (int)get_frag_size() > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
   bool should_merge() const {
-    return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
+    return get_frag() != frag_t() &&
+	   (int)get_frag_size() < g_conf()->mds_bal_merge_size;
   }
 
   mds_authority_t authority() const override;
