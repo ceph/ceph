@@ -189,8 +189,9 @@ struct EnableRequest<MockTestImageCtx> {
   static EnableRequest* create(MockTestImageCtx* image_ctx,
                                cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
-                               Context *on_finish) {
+                               bool image_clean, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
+    EXPECT_TRUE(image_clean);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

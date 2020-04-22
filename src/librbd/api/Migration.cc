@@ -1505,7 +1505,7 @@ int Migration<I>::enable_mirroring(
 
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<I>::create(
-    image_ctx, mirror_image_mode, "", &ctx);
+    image_ctx, mirror_image_mode, "", false, &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {

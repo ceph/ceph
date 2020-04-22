@@ -28,10 +28,12 @@ EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
                                 I* image_ctx,
                                 cls::rbd::MirrorImageMode mode,
                                 const std::string &non_primary_global_image_id,
-                                ContextWQ *op_work_queue, Context *on_finish)
+                                bool image_clean, ContextWQ *op_work_queue,
+                                Context *on_finish)
   : m_io_ctx(io_ctx), m_image_id(image_id), m_image_ctx(image_ctx),
     m_mode(mode), m_non_primary_global_image_id(non_primary_global_image_id),
-    m_op_work_queue(op_work_queue), m_on_finish(on_finish),
+    m_image_clean(image_clean), m_op_work_queue(op_work_queue),
+    m_on_finish(on_finish),
     m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())) {
 }
 
@@ -188,7 +190,8 @@ void EnableRequest<I>::create_primary_snapshot() {
     EnableRequest<I>,
     &EnableRequest<I>::handle_create_primary_snapshot>(this);
   auto req = snapshot::CreatePrimaryRequest<I>::create(
-    m_image_ctx, m_mirror_image.global_image_id, CEPH_NOSNAP,
+    m_image_ctx, m_mirror_image.global_image_id,
+    (m_image_clean ? 0 : CEPH_NOSNAP),
     snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS, &m_snap_id, ctx);
   req->send();
 }

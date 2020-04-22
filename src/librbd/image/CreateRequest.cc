@@ -653,7 +653,7 @@ void CreateRequest<I>::mirror_image_enable() {
 
   auto req = mirror::EnableRequest<I>::create(
     m_io_ctx, m_image_id, m_mirror_image_mode,
-    m_non_primary_global_image_id, m_op_work_queue, ctx);
+    m_non_primary_global_image_id, true, m_op_work_queue, ctx);
   req->send();
 }
 
