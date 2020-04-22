@@ -928,8 +928,15 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
 
 template <typename I>
 void Replayer<I>::request_sync() {
-  dout(10) << dendl;
+  if (m_remote_mirror_snap_ns.clean_since_snap_id == m_remote_snap_id_start) {
+    dout(10) << "skipping unnecessary image copy: "
+             << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
+             << "remote_mirror_snap_ns=" << m_remote_mirror_snap_ns << dendl;
+    apply_image_state();
+    return;
+  }
 
+  dout(10) << dendl;
   std::unique_lock locker{m_lock};
   if (is_replay_interrupted(&locker)) {
     return;
