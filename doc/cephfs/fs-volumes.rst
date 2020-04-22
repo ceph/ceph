@@ -193,6 +193,18 @@ List snapshots of a subvolume using::
 
     $ ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
+Fetch the metadata of a snapshot using::
+
+    $ ceph fs subvolume snapshot info <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+The output format is json and contains fields as follows.
+
+* created_at: time of creation of snapshot in the format "YYYY-MM-DD HH:MM:SS:ffffff"
+* data_pool: data pool the snapshot belongs to
+* has_pending_clones: "yes" if snapshot clone is in progress otherwise "no"
+* protected: "yes" if snapshot is protected otherwise "no"
+* size: snapshot size in bytes
+
 Cloning Snapshots
 -----------------
 
