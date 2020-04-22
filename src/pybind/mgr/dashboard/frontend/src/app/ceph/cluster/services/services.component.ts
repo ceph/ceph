@@ -4,6 +4,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { CephServiceService } from '../../../shared/api/ceph-service.service';
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -60,7 +61,11 @@ export class ServicesComponent implements OnChanges, OnInit {
       {
         name: this.i18n('Container image ID'),
         prop: 'status.container_image_id',
-        flexGrow: 3
+        flexGrow: 3,
+        cellTransformation: CellTemplate.truncate,
+        customTemplateConfig: {
+          length: 12
+        }
       },
       {
         name: this.i18n('Running'),

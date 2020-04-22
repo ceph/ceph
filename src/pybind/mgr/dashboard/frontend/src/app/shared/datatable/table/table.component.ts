@@ -61,6 +61,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   badgeTpl: TemplateRef<any>;
   @ViewChild('mapTpl', { static: true })
   mapTpl: TemplateRef<any>;
+  @ViewChild('truncateTpl', { static: true })
+  truncateTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -513,6 +515,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.classAdding = this.classAddingTpl;
     this.cellTemplates.badge = this.badgeTpl;
     this.cellTemplates.map = this.mapTpl;
+    this.cellTemplates.truncate = this.truncateTpl;
   }
 
   useCustomClass(value: any): string {
