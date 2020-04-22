@@ -3082,5 +3082,6 @@ int RocksDBStore::reshard(const std::string& new_sharding)
     }
   }
   cf_handles.clear();
+  close();
   return r;
 }
