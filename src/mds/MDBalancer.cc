@@ -1154,7 +1154,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
       !dir->inode->is_stray()) { // not straydir
 
     // split
-    if (g_conf()->mds_bal_split_size > 0 && (dir->should_split() || hot)) {
+    if (dir->should_split() || hot) {
       if (split_pending.count(dir->dirfrag()) == 0) {
         queue_split(dir, false);
       } else {
@@ -1177,6 +1177,8 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 
 void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
 {
+  if (dir->inode->is_stray())
+    return;
   // hit me
   double v = dir->pop_me.get(type).hit(amount);
 

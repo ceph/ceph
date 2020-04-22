@@ -691,6 +691,51 @@ void MDCache::open_root()
   populate_mydir();
 }
 
+void MDCache::advance_stray() {
+  // check whether the directory has been fragmented
+  if (stray_fragmenting_index >= 0) {
+    auto&& dfs = strays[stray_fragmenting_index]->get_dirfrags();
+    bool any_fragmenting = false;
+    for (const auto& dir : dfs) {
+      if (dir->state_test(CDir::STATE_FRAGMENTING) ||
+	  mds->balancer->is_fragment_pending(dir->dirfrag())) {
+	any_fragmenting = true;
+	break;
+      }
+    }
+    if (!any_fragmenting)
+      stray_fragmenting_index = -1;
+  }
+
+  for (int i = 1; i < NUM_STRAY; i++){
+    stray_index = (stray_index + i) % NUM_STRAY;
+    if (stray_index != stray_fragmenting_index)
+      break;
+  }
+
+  if (stray_fragmenting_index == -1 && is_open()) {
+    // Fragment later stray dir in advance. We don't choose past
+    // stray dir because in-flight requests may still use it.
+    stray_fragmenting_index = (stray_index + 3) % NUM_STRAY;
+    auto&& dfs = strays[stray_fragmenting_index]->get_dirfrags();
+    bool any_fragmenting = false;
+    for (const auto& dir : dfs) {
+      if (dir->should_split()) {
+	mds->balancer->queue_split(dir, true);
+	any_fragmenting = true;
+      } else if (dir->should_merge()) {
+	mds->balancer->queue_merge(dir);
+	any_fragmenting = true;
+      }
+    }
+    if (!any_fragmenting)
+      stray_fragmenting_index = -1;
+  }
+
+  dout(10) << "advance_stray to index " << stray_index
+	   << " fragmenting index " << stray_fragmenting_index << dendl;
+}
+
 void MDCache::populate_mydir()
 {
   ceph_assert(myin);
@@ -793,25 +838,6 @@ CDir *MDCache::get_stray_dir(CInode *in)
   ceph_assert(straydir);
   return straydir;
 }
-
-CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
-{
-  CDir *straydir = get_stray_dir(in);
-  string straydname;
-  in->name_stray_dentry(straydname);
-  CDentry *straydn = straydir->lookup(straydname);
-  if (!straydn) {
-    straydn = straydir->add_null_dentry(straydname);
-    straydn->mark_new();
-  } else {
-    ceph_assert(straydn->get_projected_linkage()->is_null());
-  }
-
-  straydn->state_set(CDentry::STATE_STRAY);
-  return straydn;
-}
-
-
 
 MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 {
@@ -8551,17 +8577,23 @@ CInode *MDCache::cache_traverse(const filepath& fp)
   dout(10) << "cache_traverse " << fp << dendl;
 
   CInode *in;
-  if (fp.get_ino())
+  unsigned depth = 0;
+
+  if (fp.get_ino()) {
     in = get_inode(fp.get_ino());
-  else
+  } else if (fp.depth() > 0 && fp[0] == "~mdsdir") {
+    in = myin;
+    depth = 1;
+  } else {
     in = root;
+  }
   if (!in)
     return NULL;
 
-  for (unsigned i = 0; i < fp.depth(); i++) {
-    std::string_view dname = fp[i];
+  for (; depth < fp.depth(); depth++) {
+    std::string_view dname = fp[depth];
     frag_t fg = in->pick_dirfrag(dname);
-    dout(20) << " " << i << " " << dname << " frag " << fg << " from " << *in << dendl;
+    dout(20) << " " << depth << " " << dname << " frag " << fg << " from " << *in << dendl;
     CDir *curdir = in->get_dirfrag(fg);
     if (!curdir)
       return NULL;
@@ -9955,29 +9987,40 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
-  std::vector<CDir*> ls;
+  if (next.ino)
+    next.frag = strays[MDS_INO_STRAY_INDEX(next.ino)]->dirfragtree[next.frag.value()];
+
   for (int i = 0; i < NUM_STRAY; ++i) {
     if (strays[i]->ino() < next.ino)
       continue;
-    strays[i]->get_dirfrags(ls);
-  }
 
-  for (const auto& dir : ls) {
-    if (dir->dirfrag() < next)
-      continue;
-    if (!dir->is_complete()) {
-      dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
-      return;
-    }
-    for (auto &p : dir->items) {
-      CDentry *dn = p.second;
-      dn->state_set(CDentry::STATE_STRAY);
-      CDentry::linkage_t *dnl = dn->get_projected_linkage();
-      if (dnl->is_primary()) {
-	CInode *in = dnl->get_inode();
-	if (in->inode.nlink == 0)
-	  in->state_set(CInode::STATE_ORPHAN);
-	maybe_eval_stray(in);
+    std::vector<CDir*> ls;
+    strays[i]->get_dirfrags(ls);
+
+    for (const auto& dir : ls) {
+      if (dir->get_frag() < next.frag)
+	continue;
+
+      if (!dir->can_auth_pin()) {
+	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	return;
+      }
+
+      if (!dir->is_complete()) {
+	dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
+	return;
+      }
+
+      for (auto &p : dir->items) {
+	CDentry *dn = p.second;
+	dn->state_set(CDentry::STATE_STRAY);
+	CDentry::linkage_t *dnl = dn->get_projected_linkage();
+	if (dnl->is_primary()) {
+	  CInode *in = dnl->get_inode();
+	  if (in->inode.nlink == 0)
+	    in->state_set(CInode::STATE_ORPHAN);
+	  maybe_eval_stray(in);
+	}
       }
     }
   }
@@ -10807,6 +10850,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
  
 void MDCache::encode_replica_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
 {
+  ceph_assert(straydn->get_num_auth_pins());
   ENCODE_START(1, 1, bl);
   uint64_t features = mds->mdsmap->get_up_features();
   encode_replica_inode(get_myin(), who, bl, features);
@@ -11361,8 +11405,8 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     dout(7) << "can_fragment: i won't merge|split anything in stray" << dendl;
     return false;
   }
-  if (diri->is_mdsdir() || diri->is_stray() || diri->ino() == MDS_INO_CEPH) {
-    dout(7) << "can_fragment: i won't fragment the mdsdir or straydir or .ceph" << dendl;
+  if (diri->is_mdsdir() || diri->ino() == MDS_INO_CEPH) {
+    dout(7) << "can_fragment: i won't fragment mdsdir or .ceph" << dendl;
     return false;
   }
 
