@@ -263,6 +263,8 @@ io::Extent whole_volume_extent();
 
 BlockExtent block_extent(const io::Extent& image_extent);
 
+Context * override_ctx(int r, Context *ctx);
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
