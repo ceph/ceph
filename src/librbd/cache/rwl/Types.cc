@@ -111,6 +111,18 @@ BlockExtent block_extent(const io::Extent& image_extent) {
   return convert_to_block_extent(image_extent.first, image_extent.second);
 }
 
+Context * override_ctx(int r, Context *ctx) {
+  if (r < 0) {
+    /* Override next_ctx status with this error */
+    return new LambdaContext(
+      [r, ctx](int _r) {
+        ctx->complete(r);
+      });
+  } else {
+    return ctx;
+  }
+}
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd

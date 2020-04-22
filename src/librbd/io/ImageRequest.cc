@@ -717,7 +717,11 @@ void ImageFlushRequest<I>::send_request() {
     });
 
   // ensure all in-flight IOs are settled if non-user flush request
-  aio_comp->async_op.flush(ctx);
+  if (m_flush_source == FLUSH_SOURCE_WRITEBACK) {
+    ctx->complete(0);
+  } else {
+    aio_comp->async_op.flush(ctx);
+  }
 
   // might be flushing during image shutdown
   if (image_ctx.perfcounter != nullptr) {
@@ -733,7 +737,7 @@ void ImageFlushRequest<I>::send_image_cache_request() {
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
   C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-  image_ctx.image_cache->aio_flush(req_comp);
+  image_ctx.image_cache->aio_flush(librbd::io::FLUSH_SOURCE_USER, req_comp);
 }
 
 template <typename I>
