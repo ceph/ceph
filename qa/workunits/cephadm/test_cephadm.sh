@@ -10,6 +10,7 @@ FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
 IMAGE_MASTER=${IMAGE_MASTER:-'docker.io/ceph/daemon-base:latest-master-devel'}
+IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'docker.io/ceph/daemon-base:latest-octopus'}
 IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
 
@@ -172,6 +173,9 @@ function nfs_stop()
 $SUDO $CEPHADM check-host
 
 ## version + --image
+$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
+$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
+    | grep 'ceph version 15'
 $SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version
 $SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version \
     | grep 'ceph version 14'
