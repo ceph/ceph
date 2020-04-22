@@ -3106,6 +3106,84 @@ def command_adopt():
         raise Error('daemon type %s not recognized' % daemon_type)
 
 
+class AdoptOsd(object):
+    def __init__(self, osd_data_dir, osd_id):
+        # type: (str, str) -> None
+        self.osd_data_dir = osd_data_dir
+        self.osd_id = osd_id
+
+    def check_online_osd(self):
+        # type: () -> Tuple[Optional[str], Optional[str]]
+
+        osd_fsid, osd_type = None, None
+
+        path = os.path.join(self.osd_data_dir, 'fsid')
+        try:
+            with open(path, 'r') as f:
+                osd_fsid = f.read().strip()
+            logger.info("Found online OSD at %s" % path)
+            if os.path.exists(os.path.join(self.osd_data_dir, 'type')):
+                with open(os.path.join(self.osd_data_dir, 'type')) as f:
+                    osd_type = f.read().strip()
+            else:
+                logger.info('"type" file missing for OSD data dir')
+        except IOError:
+            logger.info('Unable to read OSD fsid from %s' % path)
+
+        return osd_fsid, osd_type
+
+    def check_offline_lvm_osd(self):
+        # type: () -> Tuple[Optional[str], Optional[str]]
+
+        osd_fsid, osd_type = None, None
+
+        c = CephContainer(
+            image=args.image,
+            entrypoint='/usr/sbin/ceph-volume',
+            args=['lvm', 'list', '--format=json'],
+            privileged=True
+        )
+        out, err, code = call_throws(c.run_cmd(), verbose=False)
+        if not code:
+            try:
+                js = json.loads(out)
+                if self.osd_id in js:
+                    logger.info("Found offline LVM OSD {}".format(self.osd_id))
+                    osd_fsid = js[self.osd_id][0]['tags']['ceph.osd_fsid']
+                    for device in js[self.osd_id]:
+                        if device['tags']['ceph.type'] == 'block':
+                            osd_type = 'bluestore'
+                            break
+                        if device['tags']['ceph.type'] == 'data':
+                            osd_type = 'filestore'
+                            break
+            except ValueError as e:
+                logger.info("Invalid JSON in ceph-volume lvm list: {}".format(e))
+
+        return osd_fsid, osd_type
+
+    def check_offline_simple_osd(self):
+        # type: () -> Tuple[Optional[str], Optional[str]]
+
+        osd_fsid, osd_type = None, None
+
+        osd_file = glob("/etc/ceph/osd/{}-[a-f0-9-]*.json".format(self.osd_id))
+        if len(osd_file) == 1:
+            with open(osd_file[0], 'r') as f:
+                try:
+                    js = json.loads(f.read())
+                    logger.info("Found offline simple OSD {}".format(self.osd_id))
+                    osd_fsid = js["fsid"]
+                    osd_type = js["type"]
+                    if osd_type != "filestore":
+                        # need this to be mounted for the adopt to work, as it
+                        # needs to move files from this directory
+                        call_throws(['mount', js["data"]["path"], self.osd_data_dir])
+                except ValueError as e:
+                    logger.info("Invalid JSON in {}: {}".format(osd_file, e))
+
+        return osd_fsid, osd_type
+
 
 def command_adopt_ceph(daemon_type, daemon_id, fsid):
     # type: (str, str, str) -> None
@@ -3116,22 +3194,23 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
                     (daemon_type, args.cluster, daemon_id))
     data_dir_src = os.path.abspath(args.legacy_dir + data_dir_src)
 
+    if not os.path.exists(data_dir_src):
+        raise Error("{}.{} data directory '{}' does not exist.  "
+                    "Incorrect ID specified, or daemon alrady adopted?".format(
+                    daemon_type, daemon_id, data_dir_src))
+
     osd_fsid = None
     if daemon_type == 'osd':
-        path = os.path.join(data_dir_src, 'fsid')
-        try:
-            with open(path, 'r') as f:
-                osd_fsid = f.read().strip()
-        except IOError:
-            raise Error('unable to read OSD fsid from %s' % path)
-        os_type = None
-        if os.path.exists(os.path.join(data_dir_src, 'type')):
-            with open(os.path.join(data_dir_src, 'type')) as f:
-                os_type = f.read().strip()
-        else:
-            raise Error('"type" file missing for OSD data dir')
-        logger.info('objectstore_type is %s' % os_type)
-        if os_type == 'filestore':
+        adopt_osd = AdoptOsd(data_dir_src, daemon_id)
+        osd_fsid, osd_type = adopt_osd.check_online_osd()
+        if not osd_fsid:
+            osd_fsid, osd_type = adopt_osd.check_offline_lvm_osd()
+        if not osd_fsid:
+            osd_fsid, osd_type = adopt_osd.check_offline_simple_osd()
+        if not osd_fsid:
+            raise Error('Unable to find OSD {}'.format(daemon_id))
+        logger.info('objectstore_type is %s' % osd_type)
+        if osd_type == 'filestore':
             raise Error('FileStore is not supported by cephadm')
 
     # NOTE: implicit assumption here that the units correspond to the
@@ -3190,9 +3269,8 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
             logger.info('Renaming %s -> %s', simple_fn, new_fn)
             os.rename(simple_fn, new_fn)
             logger.info('Disabling host unit ceph-volume@ simple unit...')
-            call_throws(['systemctl', 'disable',
-                         'ceph-volume@simple-%s-%s.service' % (
-                             daemon_id, osd_fsid)])
+            call(['systemctl', 'disable',
+                  'ceph-volume@simple-%s-%s.service' % (daemon_id, osd_fsid)])
         else:
             # assume this is an 'lvm' c-v for now, but don't error
             # out if it's not.
@@ -3221,7 +3299,7 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
     c = get_container(fsid, daemon_type, daemon_id)
     deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                         enable=True,  # unconditionally enable the new unit
-                        start=(state == 'running'),
+                        start=(state == 'running' or args.force_start),
                         osd_fsid=osd_fsid)
     update_firewalld(daemon_type)
 
@@ -4120,6 +4198,10 @@ def _get_parser():
         '--skip-pull',
         action='store_true',
         help='do not pull the latest image before adopting')
+    parser_adopt.add_argument(
+        '--force-start',
+        action='store_true',
+        help="start newly adoped daemon, even if it wasn't running previously")
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
