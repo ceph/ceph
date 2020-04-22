@@ -27,9 +27,8 @@ public:
   virtual int create(uint64_t size, uint64_t granularity,
 		     KeyValueDB::Transaction txn) = 0;
 
-  virtual int init(const bluestore_bdev_label_t& l,
-    KeyValueDB *kvdb,
-    bool db_in_read_only) = 0;
+  virtual int init(KeyValueDB *kvdb, bool db_in_read_only,
+    std::function<int(const std::string&, std::string*)> cfg_reader) = 0;
   virtual void sync(KeyValueDB* kvdb) = 0;
   virtual void shutdown() = 0;
 
