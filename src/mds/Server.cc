@@ -5705,8 +5705,20 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur)) {
       return;
     }
+
+    // Convert file count into directory fragment split bits
+    uint8_t bits = 0;
+    if (files > 0) {
+      auto fragments = files / g_conf().get_val<int64_t>("mds_bal_split_size") + 1;
+      while (fragments > 0 && bits < UINT8_MAX) {
+        bits++;
+        fragments >>= 1;
+      }
+    }
+
     auto &pi = cur->project_inode();
-    cur->set_expected_files(files);
+    dout(10) << " setting expected files to " << files << ", bits to " << +bits << dendl;
+    cur->set_expected_file_bits(bits);
     pip = &pi.inode;
   } else {
     dout(10) << " unknown vxattr " << name << dendl;

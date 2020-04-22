@@ -963,9 +963,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     maybe_ephemeral_dist();
     maybe_ephemeral_rand();
   }
-  void set_expected_files(uint64_t files);
-  uint64_t get_expected_files() const;
-  uint32_t get_expected_file_bits() const;
+  void set_expected_file_bits(uint8_t bits);
+  uint8_t get_expected_file_bits() const;
 
   void print(std::ostream& out) override;
   void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;

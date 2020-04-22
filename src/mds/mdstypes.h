@@ -595,8 +595,7 @@ struct inode_t {
   quota_info_t quota;
 
   mds_rank_t export_pin = MDS_RANK_NONE;
-  uint64_t expected_files = 0;
-  uint32_t expected_file_bits = 0;
+  uint8_t expected_file_bits = 0;
 
   double export_ephemeral_random_pin = 0;
   bool export_ephemeral_distributed_pin = false;
@@ -678,7 +677,6 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_ephemeral_random_pin, bl);
   encode(export_ephemeral_distributed_pin, bl);
 
-  encode(expected_files, bl);
   encode(expected_file_bits, bl);
   ENCODE_FINISH(bl);
 }
@@ -785,10 +783,8 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
   }
 
   if (struct_v >= 17) {
-    decode(expected_files, p);
     decode(expected_file_bits, p);
   } else {
-    expected_files = 0;
     expected_file_bits = 0;
   }
   DECODE_FINISH(p);
