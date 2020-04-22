@@ -302,7 +302,9 @@ see :ref:`fs-volumes-and-subvolumes`.
 
 To deploy metadata servers::
 
-  # ceph orch apply mds *<fs-name>* *<num-daemons>* [*<host1>* ...]
+  # ceph orch apply mds *<fs-name>* --placement="*<num-daemons>* [*<host1>* ...]"
+
+See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
 Deploy RGWs
 ===========
@@ -332,7 +334,7 @@ Next create a zone::
 
 To deploy a set of radosgw daemons for a particular realm and zone::
 
-  # ceph orch apply rgw *<realm-name>* *<zone-name>* *<num-daemons>* [*<host1>* ...]
+  # ceph orch apply rgw *<realm-name>* *<zone-name>* --placement="*<num-daemons>* [*<host1>* ...]"
 
 For example, to deploy 2 rgw daemons serving the *myorg* realm and the *us-east-1*
 zone on *myhost1* and *myhost2*::
@@ -340,7 +342,9 @@ zone on *myhost1* and *myhost2*::
   # radosgw-admin realm create --rgw-realm=myorg --default
   # radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
   # radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=us-east-1 --master --default
-  # ceph orch apply rgw myorg us-east-1 2 myhost1 myhost2
+  # ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
+
+See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
 Deploying NFS ganesha
 =====================
@@ -350,9 +354,12 @@ and optional *namespace*
 
 To deploy a NFS Ganesha gateway,::
 
-  # ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* *<num-daemons>* [*<host1>* ...]
+  # ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* --placement="*<num-daemons>* [*<host1>* ...]"
 
 For example, to deploy NFS with a service id of *foo*, that will use the
 RADOS pool *nfs-ganesha* and namespace *nfs-ns*,::
 
   # ceph orch apply nfs foo nfs-ganesha nfs-ns
+
+See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
+
