@@ -60,6 +60,7 @@ extern "C" {
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_checkpoint.h"
 #include "rgw_lua.h"
+#include "rgw_sync_info.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -811,6 +812,8 @@ enum class OPT {
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
   SCRIPT_PACKAGE_LIST
+  SI_PROVIDER_LIST,
+  SI_PROVIDER_FETCH,
 };
 
 }
@@ -1040,6 +1043,8 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
+  { "si provider list", OPT::SI_PROVIDER_LIST },
+  { "si provider fetch", OPT::SI_PROVIDER_FETCH },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3595,6 +3600,8 @@ int main(int argc, const char **argv)
   ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
+  std::optional<string> opt_provider;
+
   SimpleCmd cmd(all_cmds, cmd_aliases);
   bool raw_storage_op = false;
 
@@ -4229,7 +4236,9 @@ int main(int argc, const char **argv)
 			 OPT::PUBSUB_SUB_GET,
 			 OPT::PUBSUB_SUB_PULL,
 			 OPT::SCRIPT_GET,
-    };
+			 OPT::SI_PROVIDER_LIST,
+			 OPT::SI_PROVIDER_FETCH,
+  };
 
     std::set<OPT> gc_ops_list = {
 			 OPT::GC_LIST,
@@ -10089,6 +10098,48 @@ next:
     return EPERM;
 #endif
   }
+
+ if (opt_cmd == OPT::SI_PROVIDER_LIST) {
+   auto providers = store->ctl()->si.mgr->list_sip();
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("providers", providers, formatter.get());
+   }
+   formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_FETCH) {
+   if (!opt_provider) {
+     cerr << "ERROR: --provider not specified" << std::endl;
+     return EINVAL;
+   }
+   auto provider = store->ctl()->si.mgr->find_sip(*opt_provider);
+   if (!provider) {
+     cerr << "ERROR: sync info provider not found" << std::endl;
+     return ENOENT;
+   }
+
+   SIProvider::fetch_result result;
+   int r = provider->fetch(marker, max_entries, &result);
+   if (r < 0) {
+     cerr << "ERROR: failed to fetch entries: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
+
+   {
+     Formatter::ObjectSection top_section(*formatter, "result");
+     encode_json("more", result.more, formatter.get());
+     encode_json("done", result.done, formatter.get());
+
+     Formatter::ArraySection as(*formatter, "entries");
+
+     for (auto& e : result.entries) {
+       Formatter::ObjectSection hs(*formatter, "handler");
+       encode_json("key", e.key, formatter.get());
+     }
+   }
+   formatter->flush(cout);
+ }
 
   return 0;
 }
