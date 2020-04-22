@@ -305,8 +305,7 @@ class TestDamage(CephFSTestCase):
                 log.info("Daemons came up after mutation '{0}', proceeding to ls".format(mutation.desc))
 
             # MDS is up, should go damaged on ls or client mount
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+            self.mount_a.mount_wait()
             if mutation.ls_path == ".":
                 proc = self.mount_a.run_shell(["ls", "-R", mutation.ls_path], wait=False)
             else:
@@ -401,8 +400,7 @@ class TestDamage(CephFSTestCase):
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         dentries = self.mount_a.ls("subdir/")
 
         # The damaged guy should have disappeared
@@ -461,8 +459,7 @@ class TestDamage(CephFSTestCase):
         self.assertEqual(scrub_json["raw_stats"]["passed"], False)
 
         # Check that the file count is now correct
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         nfiles = self.mount_a.getfattr("./subdir", "ceph.dir.files")
         self.assertEqual(nfiles, "1")
 
@@ -505,7 +502,7 @@ class TestDamage(CephFSTestCase):
         self.mds_cluster.mds_fail_restart()
         self.fs.wait_for_daemons()
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # Case 1: un-decodeable backtrace
 

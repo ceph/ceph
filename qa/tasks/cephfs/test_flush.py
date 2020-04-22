@@ -88,8 +88,7 @@ class TestFlush(CephFSTestCase):
         initial_purges = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_enqueued']
 
         # Use a client to delete a file
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["rm", "-rf", "mydir"])
 
         # Flush the journal so that the directory inode can be purged

@@ -44,8 +44,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.fs.rados(["rmxattr", dir_objname, "parent"])
 
         # readdir (fetch dirfrag) should fix testdir1's backtrace
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "testdir1"])
 
         # flush journal entries to dirfrag objects

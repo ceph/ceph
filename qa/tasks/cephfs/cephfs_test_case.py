@@ -142,8 +142,7 @@ class CephFSTestCase(CephTestCase):
 
             # Mount the requested number of clients
             for i in range(0, self.CLIENTS_REQUIRED):
-                self.mounts[i].mount()
-                self.mounts[i].wait_until_mounted()
+                self.mounts[i].mount_wait()
 
         if self.REQUIRE_RECOVERY_FILESYSTEM:
             if not self.REQUIRE_FILESYSTEM:

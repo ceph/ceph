@@ -390,13 +390,13 @@ vc.disconnect()
             m.umount_wait()
 
         # Create a dir on mount A
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["mkdir", "parent1"])
         self.mount_a.run_shell(["mkdir", "parent2"])
         self.mount_a.run_shell(["mkdir", "parent1/mydir"])
 
         # Put some files in it from mount B
-        self.mount_b.mount()
+        self.mount_b.mount_wait()
         self.mount_b.run_shell(["touch", "parent1/mydir/afile"])
         self.mount_b.umount_wait()
 
