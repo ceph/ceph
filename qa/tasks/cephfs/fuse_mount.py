@@ -1,4 +1,3 @@
-from io import BytesIO
 from io import StringIO
 import json
 import time
@@ -187,15 +186,15 @@ class FuseMount(CephFSMount):
                 '--',
                 self.mountpoint,
             ],
-            stdout=BytesIO(),
-            stderr=BytesIO(),
+            stdout=StringIO(),
+            stderr=StringIO(),
             wait=False,
             timeout=(15*60)
         )
         try:
             proc.wait()
         except CommandFailedError:
-            error = six.ensure_str(proc.stderr.getvalue())
+            error = proc.stderr.getvalue()
             if ("endpoint is not connected" in error
             or "Software caused connection abort" in error):
                 # This happens is fuse is killed without unmount
@@ -231,11 +230,11 @@ class FuseMount(CephFSMount):
         # Now that we're mounted, set permissions so that the rest of the test will have
         # unrestricted access to the filesystem mount.
         try:
-            stderr = BytesIO()
+            stderr = StringIO()
             self.client_remote.run(args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(15*60), stderr=stderr)
         except run.CommandFailedError:
             stderr = stderr.getvalue()
-            if b"Read-only file system".lower() in stderr.lower():
+            if "Read-only file system".lower() in stderr.lower():
                 pass
             else:
                 raise
@@ -277,7 +276,7 @@ class FuseMount(CephFSMount):
                 """).format(self._fuse_conn))
                 self._fuse_conn = None
 
-            stderr = BytesIO()
+            stderr = StringIO()
             try:
                 # make sure its unmounted
                 self.client_remote.run(
@@ -339,7 +338,7 @@ class FuseMount(CephFSMount):
 
         Prerequisite: the client is not mounted.
         """
-        stderr = BytesIO()
+        stderr = StringIO()
         try:
             self.client_remote.run(
                 args=[
@@ -351,7 +350,7 @@ class FuseMount(CephFSMount):
                 timeout=(60*5)
             )
         except CommandFailedError:
-            if b"No such file or directory" in stderr.getvalue():
+            if "No such file or directory" in stderr.getvalue():
                 pass
             else:
                 raise
