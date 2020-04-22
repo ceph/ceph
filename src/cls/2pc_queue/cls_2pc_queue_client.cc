@@ -19,7 +19,7 @@ void cls_2pc_queue_init(ObjectWriteOperation& op, const std::string& queue_name,
 
 int cls_2pc_queue_get_capacity(IoCtx& io_ctx, const string& queue_name, uint64_t& size) {
   bufferlist in, out;
-  const auto r = io_ctx.exec(queue_name, QUEUE_CLASS, QUEUE_GET_CAPACITY, in, out);
+  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_CAPACITY, in, out);
   if (r < 0 ) {
     return r;
   }
@@ -91,7 +91,7 @@ int cls_2pc_queue_list_entries(IoCtx& io_ctx, const string& queue_name, const st
   op.max = max;
   encode(op, in);
 
-  const auto r = io_ctx.exec(queue_name, QUEUE_CLASS, QUEUE_LIST_ENTRIES, in, out);
+  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_LIST_ENTRIES, in, out);
   if (r < 0) {
     return r;
   }
@@ -138,6 +138,6 @@ void cls_2pc_queue_remove_entries(ObjectWriteOperation& op, const std::string& e
   cls_queue_remove_op rem_op;
   rem_op.end_marker = end_marker;
   encode(rem_op, in);
-  op.exec(QUEUE_CLASS, QUEUE_REMOVE_ENTRIES, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in);
 }
 
