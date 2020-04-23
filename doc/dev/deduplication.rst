@@ -89,9 +89,8 @@ scheme between replication and erasure coding depending on
 its usage and each pool can be placed in a different storage
 location depending on the required performance.
 
-Regarding how to use, please see :doc:`doc/dev/osd_internals/manifest.rst`
+Regarding how to use, please see osd_internals/manifest.rst
 
-=============
 Usage Patterns
 ==============
 
