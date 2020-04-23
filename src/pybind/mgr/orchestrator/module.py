@@ -491,7 +491,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         usage = """
 Usage:
   ceph orch apply osd -i <json_file/yaml_file>
-  ceph orch apply osd --use-all-devices
+  ceph orch apply osd --all-available-devices
   ceph orch apply osd --service-name <service_name> --preview
   ceph orch apply osd --service-name <service_name> --unmanaged=True|False
 """
