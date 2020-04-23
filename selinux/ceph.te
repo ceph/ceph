@@ -13,11 +13,12 @@ require {
 	type urandom_device_t;
 	type setfiles_t;
 	type nvme_device_t;
+	type targetd_etc_rw_t;
 	class sock_file unlink;
 	class tcp_socket name_connect_t;
 	class lnk_file { create getattr read unlink };
 	class dir { add_name create getattr open read remove_name rmdir search write };
-	class file { create getattr open read rename unlink write };
+	class file { create getattr open read rename unlink write ioctl };
 	class blk_file { getattr ioctl open read write };
 	class capability2 block_suspend;
 	class process2 { nnp_transition nosuid_transition };
@@ -137,7 +138,7 @@ allow ceph_t sysfs_t:file { read getattr open };
 allow ceph_t sysfs_t:lnk_file { read getattr };
 
 allow ceph_t configfs_t:dir { add_name create getattr open read remove_name rmdir search write };
-allow ceph_t configfs_t:file { getattr open read write };
+allow ceph_t configfs_t:file { getattr open read write ioctl };
 allow ceph_t configfs_t:lnk_file { create getattr read unlink };
 
 
@@ -149,6 +150,8 @@ allow ceph_t var_run_t:dir { write create add_name };
 allow ceph_t var_run_t:file { read write create open getattr };
 allow ceph_t init_var_run_t:file getattr;
 allow init_t ceph_t:process2 { nnp_transition nosuid_transition };
+
+allow ceph_t targetd_etc_rw_t:dir { getattr search };
 
 fsadm_manage_pid(ceph_t)
 
