@@ -188,12 +188,8 @@ public:
     return AESGCM_TAG_LEN;
   }
   void reset_rx_handler() override;
-  ceph::bufferlist authenticated_decrypt_update(
-    ceph::bufferlist&& ciphertext,
-    std::uint32_t alignment) override;
-  ceph::bufferlist authenticated_decrypt_update_final(
-    ceph::bufferlist&& ciphertext,
-    std::uint32_t alignment) override;
+  void authenticated_decrypt_update(ceph::bufferlist& bl) override;
+  void authenticated_decrypt_update_final(ceph::bufferlist& bl) override;
 };
 
 void AES128GCM_OnWireRxHandler::reset_rx_handler()
@@ -205,65 +201,36 @@ void AES128GCM_OnWireRxHandler::reset_rx_handler()
   nonce.random_seq = nonce.random_seq + 1;
 }
 
-ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update(
-  ceph::bufferlist&& ciphertext,
-  std::uint32_t alignment)
+void AES128GCM_OnWireRxHandler::authenticated_decrypt_update(
+  ceph::bufferlist& bl)
 {
-  ceph_assert(ciphertext.length() > 0);
-  //ceph_assert(ciphertext.length() % AESGCM_BLOCK_LEN == 0);
-
-  // NOTE: we might consider in-place transformations in the future. AFAIK
-  // OpenSSL's might sustain that but lack of clear confirmation postpones.
-  auto plainnode = ceph::buffer::ptr_node::create(buffer::create_aligned(
-    ciphertext.length(), alignment));
-  auto* plainbuf = reinterpret_cast<unsigned char*>(plainnode->c_str());
-
-  for (const auto& cipherbuf : ciphertext.buffers()) {
-    // XXX: Why int?
+  // discard cached crcs as we will be writing through c_str()
+  bl.invalidate_crc();
+  for (auto& buf : bl.buffers()) {
+    auto p = reinterpret_cast<unsigned char*>(const_cast<char*>(buf.c_str()));
     int update_len = 0;
 
-    if (1 != EVP_DecryptUpdate(ectx.get(),
-	plainbuf,
-	&update_len,
-	reinterpret_cast<const unsigned char*>(cipherbuf.c_str()),
-	cipherbuf.length())) {
+    if (1 != EVP_DecryptUpdate(ectx.get(), p, &update_len, p, buf.length())) {
       throw std::runtime_error("EVP_DecryptUpdate failed");
     }
     ceph_assert_always(update_len >= 0);
-    ceph_assert(cipherbuf.length() == static_cast<unsigned>(update_len));
-
-    plainbuf += update_len;
+    ceph_assert(static_cast<unsigned>(update_len) == buf.length());
   }
-
-  ceph::bufferlist outbl;
-  outbl.push_back(std::move(plainnode));
-  return outbl;
 }
 
-
-ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
-  ceph::bufferlist&& ciphertext_and_tag,
-  std::uint32_t alignment)
+void AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
+  ceph::bufferlist& bl)
 {
-  const auto cnt_len = ciphertext_and_tag.length();
-  ceph_assert(cnt_len >= AESGCM_TAG_LEN);
+  unsigned orig_len = bl.length();
+  ceph_assert(orig_len >= AESGCM_TAG_LEN);
 
   // decrypt optional data. Caller is obliged to provide only signature but it
   // may supply ciphertext as well. Combining the update + final is reflected
   // combined together.
-  ceph::bufferlist plainbl;
   ceph::bufferlist auth_tag;
-  {
-    const auto tag_off = cnt_len - AESGCM_TAG_LEN;
-    ceph::bufferlist ciphertext;
-    ciphertext_and_tag.splice(0, tag_off, &ciphertext);
-
-    // the rest is the signature (a.k.a auth tag)
-    auth_tag = std::move(ciphertext_and_tag);
-
-    if (ciphertext.length()) {
-      plainbl = authenticated_decrypt_update(std::move(ciphertext), alignment);
-    }
+  bl.splice(orig_len - AESGCM_TAG_LEN, AESGCM_TAG_LEN, &auth_tag);
+  if (bl.length() > 0) {
+    authenticated_decrypt_update(bl);
   }
 
   // we need to ensure the tag is stored in continuous memory.
@@ -277,18 +244,11 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
   {
     int final_len = 0;
     if (0 >= EVP_DecryptFinal_ex(ectx.get(), nullptr, &final_len)) {
-      ldout(cct, 15) << __func__
-		     << " plainbl.length()=" << plainbl.length()
-		     << " final_len=" << final_len
-		     << dendl;
       throw MsgAuthError();
-    } else {
-      ceph_assert_always(final_len == 0);
-      ceph_assert_always(plainbl.length() + final_len + AESGCM_TAG_LEN == cnt_len);
     }
+    ceph_assert_always(final_len == 0);
+    ceph_assert(bl.length() + AESGCM_TAG_LEN == orig_len);
   }
-
-  return plainbl;
 }
 
 ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
