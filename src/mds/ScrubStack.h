@@ -105,6 +105,10 @@ public:
    */
   std::string_view scrub_summary();
 
+  static bool is_idle(std::string_view state_str) {
+    return state_str == "idle";
+  }
+
   bool is_scrubbing() const { return !inode_stack.empty(); }
 
   MDCache *mdcache;
