@@ -388,8 +388,12 @@ class NFSCluster:
 
         return 0, "", "NFS Cluster Created Successfully"
 
-    def update_nfs_cluster(self, size):
-        raise NotImplementedError()
+    def update_nfs_cluster(self, placement):
+        if not self.check_cluster_exists():
+            return -errno.EINVAL, "", "Cluster does not exist"
+
+        self._call_orch_apply_nfs(placement)
+        return 0, "", "NFS Cluster Updated Successfully"
 
     def delete_nfs_cluster(self):
         raise NotImplementedError()
