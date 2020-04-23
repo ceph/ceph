@@ -36,6 +36,15 @@ Update NFS Ganesha Cluster
 
 This updates the deployed cluster according to the placement value.
 
+Delete NFS Ganesha Cluster
+==========================
+
+.. code:: bash
+
+    $ ceph nfs cluster delete <clusterid>
+
+This deletes the deployed cluster.
+
 Create CephFS Export
 ====================
 

@@ -396,4 +396,15 @@ class NFSCluster:
         return 0, "", "NFS Cluster Updated Successfully"
 
     def delete_nfs_cluster(self):
-        raise NotImplementedError()
+        if self.check_cluster_exists():
+            try:
+                completion = self.mgr.remove_service('nfs.' + self.cluster_id)
+                self.mgr._orchestrator_wait([completion])
+                orchestrator.raise_if_exception(completion)
+            except Exception as e:
+                log.exception("Failed to delete NFS Cluster")
+                return -errno.EINVAL, "", str(e)
+        else:
+            log.warn("Cluster does not exist")
+
+        return 0, "", "NFS Cluster Deleted Successfully"
