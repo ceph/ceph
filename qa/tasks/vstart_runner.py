@@ -318,7 +318,7 @@ class LocalRemote(object):
             remote_date = remote.sh('date')
         """
         if 'stdout' not in kwargs:
-            kwargs['stdout'] = BytesIO()
+            kwargs['stdout'] = StringIO()
         if 'args' not in kwargs:
             kwargs['args'] = script
         proc = self.run(**kwargs)
