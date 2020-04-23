@@ -100,8 +100,12 @@ std::string SIProvider_MetaFull::to_marker(const std::string& section, const std
   return section + "/" + k;
 }
 
-int SIProvider_MetaFull::fetch(std::string marker, int max, fetch_result *result)
+int SIProvider_MetaFull::fetch(int shard_id, std::string marker, int max, fetch_result *result)
 {
+  if (shard_id > 0) {
+    return -ERANGE;
+  }
+
   string section;
   string m;
 

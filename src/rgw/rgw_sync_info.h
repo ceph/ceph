@@ -20,6 +20,11 @@ public:
     INC = 1,
   };
 
+  struct Info {
+    Type type{UNKNOWN};
+    int num_shards{0};
+  };
+
   struct Entry {
     std::string key;
     bufferlist data;
@@ -33,8 +38,8 @@ public:
 
   virtual ~SIProvider() {}
 
-  virtual Type get_type() const = 0;
-  virtual int fetch(std::string marker, int max, fetch_result *result) = 0;
+  virtual Info get_info() const = 0;
+  virtual int fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int get_start_marker(std::string *marker) const = 0;
   virtual int get_cur_state(std::string *marker) const = 0;
 };
@@ -50,12 +55,12 @@ public:
   virtual ~SIClient() {}
 
   virtual int init_marker(bool all_history) = 0;
-  virtual int fetch(int max, SIProvider::fetch_result *result) = 0;
+  virtual int fetch(int shard_id, int max, SIProvider::fetch_result *result) = 0;
 
   virtual int load_state() = 0;
   virtual int save_state() = 0;
 
-  virtual SIProvider::Type get_provider_type() const = 0;
+  virtual SIProvider::Info get_provider_info() const = 0;
 };
 
 using SIClientRef = std::shared_ptr<SIClient>;
@@ -76,10 +81,10 @@ public:
 
   int init_marker(bool all_history) override;
 
-  int fetch(int max, SIProvider::fetch_result *result) override;
+  int fetch(int shard_id, int max, SIProvider::fetch_result *result) override;
 
-  SIProvider::Type get_provider_type() const override {
-    return provider->get_type();
+  SIProvider::Info get_provider_info() const override {
+    return provider->get_info();
   }
 };
 
@@ -96,10 +101,10 @@ public:
 
   int init_marker(bool all_history) override;
 
-  int fetch(int max, SIProvider::fetch_result *result) override;
+  int fetch(int shard_id, int max, SIProvider::fetch_result *result) override;
 
-  SIProvider::Type get_provider_type() const override {
-    return client->get_provider_type();
+  SIProvider::Info get_provider_info() const override {
+    return client->get_provider_info();
   }
 };
 
@@ -123,12 +128,12 @@ public:
   int init_markers(bool all_history);
   int fetch(int shard_id, int max, SIProvider::fetch_result *result);
 
-  SIProvider::Type get_provider_type() const {
+  SIProvider::Info get_provider_info() const {
     if (num_shards() == 0) {
-      return SIProvider::Type::UNKNOWN;
+      return { SIProvider::Type::UNKNOWN, 0 };
     }
 
-    return shards[0]->get_provider_type();
+    return shards[0]->get_provider_info();
   }
 
   int num_shards() const {

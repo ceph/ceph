@@ -7,8 +7,8 @@ int SIProviderClient::init_marker(bool all_history) {
   return provider->get_start_marker(&marker);
 }
 
-int SIProviderClient::fetch(int max, SIProvider::fetch_result *result) {
-  int r = provider->fetch(marker, max, result);
+int SIProviderClient::fetch(int shard_id, int max, SIProvider::fetch_result *result) {
+  int r = provider->fetch(shard_id, marker, max, result);
   if (r < 0) {
     return r;
   }
@@ -43,7 +43,7 @@ int SIPShardedStage::fetch(int shard_id, int max, SIProvider::fetch_result *resu
     return  0;
   }
 
-  int r = shards[shard_id]->fetch(max, result);
+  int r = shards[shard_id]->fetch(shard_id, max, result);
   if (r < 0) {
     return r;
   }
@@ -106,7 +106,7 @@ int SIPMultiStageClient::init_markers()
 
     stage->init_markers(full_history); 
 
-    prev_type = stage->get_provider_type();
+    prev_type = stage->get_provider_info().type;
   }
 
   return 0;

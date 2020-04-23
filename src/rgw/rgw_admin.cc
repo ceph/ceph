@@ -10120,7 +10120,7 @@ next:
    }
 
    SIProvider::fetch_result result;
-   int r = provider->fetch(marker, max_entries, &result);
+   int r = provider->fetch(shard_id, marker, max_entries, &result);
    if (r < 0) {
      cerr << "ERROR: failed to fetch entries: " << cpp_strerror(-r) << std::endl;
      return -r;

@@ -51,11 +51,11 @@ public:
 
   int init();
 
-  Type get_type() const override {
-    return Type::FULL;
+  Info get_info() const override {
+    return { Type::FULL, 1 };
   }
 
-  int fetch(std::string marker, int max, fetch_result *result) override;
+  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
   int get_start_marker(std::string *marker) const override {
     marker->clear();

@@ -103,11 +103,11 @@ class BasicProvider : public SIProvider
 public: 
   BasicProvider(int _id, uint32_t _max_entries) : id(_id), max_entries(_max_entries) {}
 
-  SIProvider::Type get_type() const {
-    return SIProvider::Type::FULL;
+  SIProvider::Info get_info() const {
+    return { SIProvider::Type::FULL, 1 };
   }
 
-  int fetch(std::string marker, int max, fetch_result *result) override {
+  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override {
     BasicMarker pos;
 
     result->entries.clear();
@@ -123,7 +123,7 @@ public:
     }
 
     for (int i = 0; i < max && val < max_entries; ++i, ++val) {
-      SIProvider::info e;
+      SIProvider::Entry e;
 
       BasicData d{gen_data(val)};
       d.encode(e.data);
@@ -172,8 +172,8 @@ public:
                                    min_val(_min_val),
                                    max_val(_max_val) {}
 
-  SIProvider::Type get_type() const {
-    return SIProvider::Type::INC;
+  SIProvider::Info get_info() const {
+    return { SIProvider::Type::INC, 1 };
   }
 
   void add_entries(int count) {
@@ -188,7 +188,7 @@ public:
     done = _done;
   }
 
-  int fetch(std::string marker, int max, fetch_result *result) override {
+  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override {
     BasicMarker pos;
 
     result->entries.clear();
@@ -211,7 +211,7 @@ public:
     }
 
     for (int i = 0; i < max && val <= max_val; ++i, ++val) {
-      SIProvider::info e;
+      SIProvider::Entry e;
 
       BasicData d{gen_data(val)};
       d.encode(e.data);
@@ -286,7 +286,7 @@ TEST(TestRGWSIP, test_basic_provider)
 
   do {
     SIProvider::fetch_result result;
-    ASSERT_EQ(0, bp.fetch(marker, chunk_size, &result));
+    ASSERT_EQ(0, bp.fetch(0, marker, chunk_size, &result));
 
     total += result.entries.size();
 
@@ -315,7 +315,7 @@ TEST(TestRGWSIP, test_log_provider)
 
   do {
     SIProvider::fetch_result result;
-    ASSERT_EQ(0, lp.fetch(marker, chunk_size, &result));
+    ASSERT_EQ(0, lp.fetch(0, marker, chunk_size, &result));
 
     total += result.entries.size();
 
@@ -341,7 +341,7 @@ TEST(TestRGWSIP, test_basic_provider_client)
 
   do {
     SIProvider::fetch_result result;
-    ASSERT_EQ(0, pc.fetch(chunk_size, &result));
+    ASSERT_EQ(0, pc.fetch(0, chunk_size, &result));
 
     total += result.entries.size();
 
