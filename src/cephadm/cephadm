@@ -1786,6 +1786,11 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
         if daemon_type == 'osd':
             # osds have a pre-start step
             assert osd_fsid
+            f.write('# Simple OSDs need chown on startup:\n')
+            for n in ['block', 'block.db', 'block.wal']:
+                p = os.path.join(data_dir, n)
+                f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
+            f.write('# LVM OSDs use ceph-volume lvm activate:\n')
             prestart = CephContainer(
                 image=args.image,
                 entrypoint='/usr/sbin/ceph-volume',
