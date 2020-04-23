@@ -419,8 +419,8 @@ class CephFSMount(object):
 
         return self.run_shell(["dd", "if=/dev/urandom", "of={0}".format(filename),
                                "bs=1M", "conv=fdatasync",
-                               "count={0}".format(n_mb),
-                               "seek={0}".format(seek)
+                               "count={0}".format(int(n_mb)),
+                               "seek={0}".format(int(seek))
                                ], wait=wait)
 
     def write_test_pattern(self, filename, size):
