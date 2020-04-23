@@ -4604,6 +4604,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable health indication on lack of per-pool statfs reporting from bluestore"),
 
+    Option("bluestore_warn_on_spurious_read_errors", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Enable health indication when spurious read errors are observed by OSD"),
+
     Option("bluestore_fsck_error_on_no_per_pool_omap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Make fsck error (instead of warn) when objects without per-pool omap are found"),

@@ -9924,6 +9924,9 @@ int BlueStore::_do_read(
     logger->inc(l_bluestore_reads_with_retries);
     dout(5) << __func__ << " read at 0x" << std::hex << offset << "~" << length
             << " failed " << std::dec << retry_count << " times before succeeding" << dendl;
+    stringstream s;
+    s << " reads with retries: " << logger->get(l_bluestore_reads_with_retries);
+    _set_spurious_read_errors_alert(s.str());
   }
   return r;
 }
@@ -15726,6 +15729,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
 
+  if (!spurious_read_errors_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_SPURIOUS_READ_ERRORS",
+      spurious_read_errors_alert);
+  }
   if (!disk_size_mismatch_alert.empty()) {
     alerts.emplace(
       "BLUESTORE_DISK_SIZE_MISMATCH",
