@@ -337,7 +337,7 @@ constexpr unsigned long long operator"" _hr (unsigned long long hr) {
   return hr * 60 * 60;
 }
 constexpr unsigned long long operator"" _day (unsigned long long day) {
-  return day * 60 * 60 * 24;
+  return day * 24 * 60 * 60;
 }
 constexpr unsigned long long operator"" _K (unsigned long long n) {
   return n << 10;
