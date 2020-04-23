@@ -103,17 +103,12 @@ public:
   virtual void reset_rx_handler() = 0;
 
   // Perform decryption ciphertext must be ALWAYS aligned to 16 bytes.
-  // TODO: switch to always_aligned_t
-  virtual ceph::bufferlist authenticated_decrypt_update(
-    ceph::bufferlist&& ciphertext,
-    std::uint32_t alignment) = 0;
+  virtual void authenticated_decrypt_update(ceph::bufferlist& bl) = 0;
 
   // Perform decryption of last cipertext's portion and verify signature
   // for overall decryption sequence.
   // Throws on integrity/authenticity checks
-  virtual ceph::bufferlist authenticated_decrypt_update_final(
-    ceph::bufferlist&& ciphertext,
-    std::uint32_t alignment) = 0;
+  virtual void authenticated_decrypt_update_final(ceph::bufferlist& bl) = 0;
 };
 
 struct rxtx_t {

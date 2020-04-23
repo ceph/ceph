@@ -1087,8 +1087,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
     ceph_assert(session_stream_handlers.rx);
 
     session_stream_handlers.rx->reset_rx_handler();
-    preamble = session_stream_handlers.rx->authenticated_decrypt_update(
-      std::move(preamble), segment_t::DEFAULT_ALIGNMENT);
+    session_stream_handlers.rx->authenticated_decrypt_update(preamble);
 
     ldout(cct, 10) << __func__ << " got encrypted preamble."
                    << " after decrypt premable.length()=" << preamble.length()
@@ -1236,11 +1235,12 @@ CtPtr ProtocolV2::handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r) {
 
     auto& new_seg = rx_segments_data.back();
     if (new_seg.length()) {
-      auto padded = session_stream_handlers.rx->authenticated_decrypt_update(
-          std::move(new_seg), segment_t::DEFAULT_ALIGNMENT);
+      session_stream_handlers.rx->authenticated_decrypt_update(new_seg);
       const auto idx = rx_segments_data.size() - 1;
-      new_seg.clear();
-      padded.splice(0, rx_segments_desc[idx].length, &new_seg);
+      if (new_seg.length() > rx_segments_desc[idx].length) {
+        new_seg.splice(rx_segments_desc[idx].length,
+                       new_seg.length() - rx_segments_desc[idx].length);
+      }
 
       ldout(cct, 20) << __func__
                      << " unpadded new_seg.length()=" << new_seg.length()
@@ -1365,9 +1365,8 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r)
     {
       epilogue_bl.push_back(std::move(buffer));
       try {
-        epilogue_bl =
-            session_stream_handlers.rx->authenticated_decrypt_update_final(
-	        std::move(epilogue_bl), segment_t::DEFAULT_ALIGNMENT);
+        session_stream_handlers.rx->authenticated_decrypt_update_final(
+            epilogue_bl);
       } catch (ceph::crypto::onwire::MsgAuthError &e) {
         ldout(cct, 5) << __func__ << " message authentication failed: "
                       << e.what() << dendl;
