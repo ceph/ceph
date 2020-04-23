@@ -259,6 +259,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Create an NFS Cluster",
             'perm': 'rw'
         },
+        {
+            'cmd': 'nfs cluster update '
+                   'name=clusterid,type=CephString '
+                   'name=placement,type=CephString ',
+            'desc': "Updates an NFS Cluster",
+            'perm': 'rw'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -449,3 +456,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
         return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'],
                                                   placement=cmd.get('placement', None))
+    def _cmd_nfs_cluster_update(self, inbuf, cmd):
+        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
+        return nfs_cluster_obj.update_nfs_cluster(placement=cmd['placement'])
