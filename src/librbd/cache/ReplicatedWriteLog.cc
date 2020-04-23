@@ -820,6 +820,36 @@ template <typename I>
 void ReplicatedWriteLog<I>::aio_writesame(uint64_t offset, uint64_t length,
                                           bufferlist&& bl, int fadvise_flags,
                                           Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << "aio_writesame" << dendl;
+
+  utime_t now = ceph_clock_now();
+  Extents ws_extents = {{offset, length}};
+  m_perfcounter->inc(l_librbd_rwl_ws, 1);
+  ceph_assert(m_initialized);
+
+  /* A write same request is also a write request. The key difference is the
+   * write same data buffer is shorter than the extent of the request. The full
+   * extent will be used in the block guard, and appear in
+   * m_blocks_to_log_entries_map. The data buffer allocated for the WS is only
+   * as long as the length of the bl here, which is the pattern that's repeated
+   * in the image for the entire length of this WS. Read hits and flushing of
+   * write sames are different than normal writes. */
+  auto *ws_req =
+    new C_WriteSameRequestT(*this, now, std::move(ws_extents), std::move(bl),
+                            fadvise_flags, m_lock, m_perfcounter, on_finish);
+  m_perfcounter->inc(l_librbd_rwl_ws_bytes, ws_req->image_extents_summary.total_bytes);
+
+  /* The lambda below will be called when the block guard for all
+   * blocks affected by this write is obtained */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, ws_req](GuardedRequestFunctionContext &guard_ctx) {
+      ws_req->blockguard_acquired(guard_ctx);
+      alloc_and_dispatch_io_req(ws_req);
+    });
+
+  detain_guarded_request(ws_req, guarded_ctx, false);
 }
 
 template <typename I>
