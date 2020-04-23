@@ -82,7 +82,8 @@
             <select class="form-control custom-select"
                     formControlName="max_buckets_mode"
                     name="max_buckets_mode"
-                    id="max_buckets_mode">
+                    id="max_buckets_mode"
+                    (change)="onMaxBucketsModeChange($event.target.value)">
               <option i18n
                       value="-1">Disabled</option>
               <option i18n
