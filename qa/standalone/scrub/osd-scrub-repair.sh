@@ -496,7 +496,7 @@ function TEST_auto_repair_bluestore_failed() {
 
     flush_pg_stats
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^${pgid}.* active+clean " || return 1
+    ceph pg dump pgs | grep -q -e "^${pgid}.* active+clean " -e "^${pgid}.* active+clean+wait " || return 1
     grep scrub_finish $dir/osd.${primary}.log
 
     # Tear down
