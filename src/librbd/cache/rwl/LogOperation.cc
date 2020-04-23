@@ -211,7 +211,7 @@ void WriteLogOperation::complete(int result) {
   utime_t buf_lat = buf_persist_comp_time - buf_persist_time;
   m_perfcounter->tinc(l_librbd_rwl_log_op_buf_to_bufc_t, buf_lat);
   m_perfcounter->hinc(l_librbd_rwl_log_op_buf_to_bufc_t_hist, buf_lat.to_nsec(),
-                    log_entry->ram_entry.write_bytes);
+                      log_entry->ram_entry.write_bytes);
   m_perfcounter->tinc(l_librbd_rwl_log_op_buf_to_app_t, log_append_time - buf_persist_time);
 }
 
@@ -306,6 +306,30 @@ std::ostream &DiscardLogOperation::format(std::ostream &os) const {
 
 std::ostream &operator<<(std::ostream &os,
                          const DiscardLogOperation &op) {
+  return op.format(os);
+}
+
+WriteSameLogOperation::WriteSameLogOperation(WriteLogOperationSet &set,
+                                             uint64_t image_offset_bytes,
+                                             uint64_t write_bytes,
+                                             uint32_t data_len,
+                                             CephContext *cct)
+  : WriteLogOperation(set, image_offset_bytes, write_bytes, cct) {
+  log_entry =
+    std::make_shared<WriteSameLogEntry>(set.sync_point->log_entry, image_offset_bytes, write_bytes, data_len);
+  ldout(m_cct, 20) << __func__ << " " << this << dendl;
+}
+
+WriteSameLogOperation::~WriteSameLogOperation() { }
+
+std::ostream &WriteSameLogOperation::format(std::ostream &os) const {
+  os << "(Write Same) ";
+  WriteLogOperation::format(os);
+  return os;
+};
+
+std::ostream &operator<<(std::ostream &os,
+                         const WriteSameLogOperation &op) {
   return op.format(os);
 }
 
