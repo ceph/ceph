@@ -201,7 +201,7 @@ vc.disconnect()
         # the volume.
         self._configure_guest_auth(self.mount_b, self.mounts[2], guest_entity,
                                    mount_path, namespace_prefix)
-        self.mounts[2].mount(mount_path=mount_path)
+        self.mounts[2].mount_wait(mount_path=mount_path)
 
         # The kernel client doesn't have the quota-based df behaviour,
         # or quotas at all, so only exercise the client behaviour when
@@ -450,7 +450,7 @@ vc.disconnect()
             # Mount the volume.
             guest_mounts[i].mountpoint_dir_name = 'mnt.{id}.{suffix}'.format(
                 id=guest_entity, suffix=str(i))
-            guest_mounts[i].mount(mount_path=mount_paths[i])
+            guest_mounts[i].mount_wait(mount_path=mount_paths[i])
             guest_mounts[i].write_n_mb("data.bin", 1)
 
 
@@ -582,7 +582,7 @@ vc.disconnect()
                                    mount_path, readonly=False)
 
         # Mount the volume, and write to it.
-        guest_mount.mount(mount_path=mount_path)
+        guest_mount.mount_wait(mount_path=mount_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # Change the guest auth ID's authorization to read-only mount access.
@@ -601,7 +601,7 @@ vc.disconnect()
         # immediate. The guest sees the change only after a remount of
         # the volume.
         guest_mount.umount_wait()
-        guest_mount.mount(mount_path=mount_path)
+        guest_mount.mount_wait(mount_path=mount_path)
 
         # Read existing content of the volume.
         self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
@@ -1062,7 +1062,7 @@ vc.disconnect()
 
         # Mount the volume in the guest using the auth ID to assert that the
         # auth caps are valid
-        guest_mount.mount(mount_path=mount_path)
+        guest_mount.mount_wait(mount_path=mount_path)
 
     def test_volume_without_namespace_isolation(self):
         """
