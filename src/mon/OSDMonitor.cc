@@ -405,10 +405,10 @@ void LastEpochClean::dump(Formatter *f) const
 {
   f->open_array_section("per_pool");
 
-  for (auto& it : report_by_pool) {
+  for (auto& [pool, lec] : report_by_pool) {
     f->open_object_section("pool");
-    f->dump_unsigned("poolid", it.first);
-    f->dump_unsigned("floor", it.second.floor);
+    f->dump_unsigned("poolid", pool);
+    f->dump_unsigned("floor", lec.floor);
     f->close_section();
   }
 
@@ -2240,10 +2240,10 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   auto floor = last_epoch_clean.get_lower_bound(osdmap);
   // also scan osd epochs
   // don't trim past the oldest reported osd epoch
-  for (auto& osd_epoch : osd_epochs) {
-    if (osd_epoch.second < floor &&
-        osdmap.is_out(osd_epoch.first)) {
-      floor = osd_epoch.second;
+  for (auto [osd, epoch] : osd_epochs) {
+    if (epoch < floor &&
+        osdmap.is_out(osd)) {
+      floor = epoch;
     }
   }
   return floor;
