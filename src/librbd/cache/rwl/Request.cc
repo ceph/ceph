@@ -113,7 +113,7 @@ C_WriteRequest<T>::C_WriteRequest(T &rwl, const utime_t arrived, io::Extents &&i
                                   bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,
                                   PerfCounters *perfcounter, Context *user_req)
   : C_BlockIORequest<T>(rwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, user_req),
-    m_lock(lock), m_perfcounter(perfcounter) {
+    m_perfcounter(perfcounter), m_lock(lock) {
   ldout(rwl.get_context(), 99) << this << dendl;
 }
 
@@ -188,6 +188,11 @@ void C_WriteRequest<T>::setup_buffer_resources(
 }
 
 template <typename T>
+std::shared_ptr<WriteLogOperation> C_WriteRequest<T>::create_operation(uint64_t offset, uint64_t len) {
+  return std::make_shared<WriteLogOperation>(*op_set, offset, len, rwl.get_context());
+}
+
+template <typename T>
 void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   GenericWriteLogEntries log_entries;
   {
@@ -224,9 +229,8 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
     uint64_t buffer_offset = 0;
     for (auto &extent : this->image_extents) {
       /* operation->on_write_persist connected to m_prior_log_entries_persisted Gather */
-      auto operation =
-        std::make_shared<WriteLogOperation>(*op_set, extent.first, extent.second, rwl.get_context());
-      op_set->operations.emplace_back(operation);
+      auto operation = this->create_operation(extent.first, extent.second);
+      this->op_set->operations.emplace_back(operation);
 
       /* A WS is also a write */
       ldout(rwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get()
@@ -311,7 +315,7 @@ void C_WriteRequest<T>::dispatch()
   this->m_dispatched_time = now;
 
   ldout(cct, 15) << "write_req=" << this << " cell=" << this->get_cell() << dendl;
-  setup_log_operations(on_exit);
+  this->setup_log_operations(on_exit);
 
   bool append_deferred = false;
   if (!op_set->persist_on_flush &&
@@ -558,6 +562,63 @@ std::ostream &operator<<(std::ostream &os,
   } else {
     os << " op=nullptr";
   }
+  return os;
+};
+
+template <typename T>
+C_WriteSameRequest<T>::C_WriteSameRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+                                          bufferlist&& bl, const int fadvise_flags, ceph::mutex &lock,
+                                          PerfCounters *perfcounter, Context *user_req)
+  : C_WriteRequest<T>(rwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, lock, perfcounter, user_req) {
+  ldout(rwl.get_context(), 20) << this << dendl;
+}
+
+template <typename T>
+C_WriteSameRequest<T>::~C_WriteSameRequest() {
+   ldout(rwl.get_context(), 20) << this << dendl;
+}
+
+template <typename T>
+void C_WriteSameRequest<T>::update_req_stats(utime_t &now) {
+  /* Write same stats excluded from most write stats
+   * because the read phase will make them look like slow writes in
+   * those histograms. */
+  ldout(rwl.get_context(), 20) << this << dendl;
+  utime_t comp_latency = now - this->m_arrived_time;
+  this->m_perfcounter->tinc(l_librbd_rwl_ws_latency, comp_latency);
+}
+
+/* Write sames will allocate one buffer, the size of the repeating pattern */
+template <typename T>
+void C_WriteSameRequest<T>::setup_buffer_resources(
+    uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
+    uint64_t &number_lanes, uint64_t &number_log_entries,
+    uint64_t &number_unpublished_reserves) {
+  ldout(rwl.get_context(), 20) << this << dendl;
+  ceph_assert(this->image_extents.size() == 1);
+  bytes_dirtied += this->image_extents[0].second;
+  auto pattern_length = this->bl.length();
+  this->m_resources.buffers.emplace_back();
+  struct WriteBufferAllocation &buffer = this->m_resources.buffers.back();
+  buffer.allocation_size = MIN_WRITE_ALLOC_SIZE;
+  buffer.allocated = false;
+  bytes_cached += pattern_length;
+  if (pattern_length > buffer.allocation_size) {
+    buffer.allocation_size = pattern_length;
+  }
+}
+
+template <typename T>
+std::shared_ptr<WriteLogOperation> C_WriteSameRequest<T>::create_operation(uint64_t offset, uint64_t len) {
+  ceph_assert(this->image_extents.size() == 1);
+  return std::make_shared<WriteSameLogOperation>(*this->op_set.get(), offset, len,
+                                                 this->bl.length(), rwl.get_context());
+}
+
+template <typename T>
+std::ostream &operator<<(std::ostream &os,
+                         const C_WriteSameRequest<T> &req) {
+  os << (C_WriteRequest<T>&)req;
   return os;
 };
 
