@@ -83,6 +83,8 @@ protected:
     m_trace.event("start");
   }
 
+  uint64_t get_total_length() const;
+
   virtual bool finish_request_early() {
     return false;
   }
@@ -106,6 +108,7 @@ public:
 
 protected:
   int clip_request() override;
+  bool finish_request_early() override;
 
   void send_request() override;
   void send_image_cache_request() override;
