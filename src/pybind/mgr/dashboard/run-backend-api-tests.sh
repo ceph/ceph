@@ -158,5 +158,5 @@ if [ "$sourced" -eq 1 ] ; then
     return
 fi
 
-run_teuthology_tests "$@"
+run_teuthology_tests tasks.mgr.dashboard.test_rbd.RbdTest
 cleanup_teuthology
