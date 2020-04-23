@@ -21,6 +21,7 @@ export class UsersPageHelper extends PageHelper {
 
     // Enter max buckets
     this.selectOption('max_buckets_mode', 'Custom');
+    cy.get('#max_buckets').should('exist').should('have.value', '1000');
     cy.get('#max_buckets').click().clear().type(maxbuckets);
 
     // Click the create button and wait for user to be made
@@ -102,7 +103,7 @@ export class UsersPageHelper extends PageHelper {
     const uname = '000invalid_edit_user';
     // creating this user to edit for the test
     this.navigateTo('create');
-    this.create(uname, 'xxx', 'xxx@xxx', '1');
+    this.create(uname, 'xxx', 'xxx@xxx', '50');
 
     this.navigateEdit(name);
 
@@ -120,7 +121,10 @@ export class UsersPageHelper extends PageHelper {
     cy.contains('#display_name + .invalid-feedback', 'This field is required.');
 
     // put negative max buckets to make field invalid
-    this.expectSelectOption('max_buckets_mode', 'Custom');
+    this.selectOption('max_buckets_mode', 'Disabled');
+    cy.get('#max_buckets').should('not.exist');
+    this.selectOption('max_buckets_mode', 'Custom');
+    cy.get('#max_buckets').should('exist').should('have.value', '50');
     cy.get('#max_buckets').clear().type('-5').blur().should('have.class', 'ng-invalid');
     cy.contains('#max_buckets + .invalid-feedback', 'The entered value must be >= 1.');
 
