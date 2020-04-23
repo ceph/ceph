@@ -1424,7 +1424,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             tmp_dir = TemporaryDirectory()
             path = tmp_dir.name + '/key'
             try:
-                subprocess.call([
+                subprocess.check_call([
                     '/usr/bin/ssh-keygen',
                     '-C', 'ceph-%s' % self._cluster_fsid,
                     '-N', '',
