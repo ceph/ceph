@@ -367,7 +367,7 @@ class RbdTrash(RESTController):
     @DeletePermission
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
-        now = "{}Z".format(datetime.now().isoformat())
+        now = "{}Z".format(datetime.utcnow().isoformat())
         pools = self._trash_list(pool_name)
         logger.info('now: %s', now)
         logger.info('pools: %s', pools)
