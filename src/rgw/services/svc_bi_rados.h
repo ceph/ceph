@@ -52,7 +52,7 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                                int shard_id,
                                string *bucket_obj);
   int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
-                              uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type,
+                              uint32_t num_shards, rgw::BucketHashType hash_type,
                               string *bucket_obj, int *shard_id);
 
   int cls_bucket_head(const RGWBucketInfo& bucket_info,

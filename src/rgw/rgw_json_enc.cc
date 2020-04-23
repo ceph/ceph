@@ -818,7 +818,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_shards", layout.current_index.layout.normal.num_shards, obj);
   uint32_t hash_type;
   JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
-  layout.current_index.layout.normal.num_shards = (uint8_t)hash_type;
+  layout.current_index.layout.normal.hash_type = static_cast<rgw::BucketHashType>(hash_type);
   JSONDecoder::decode_json("requester_pays", requester_pays, obj);
   JSONDecoder::decode_json("has_website", has_website, obj);
   if (has_website) {

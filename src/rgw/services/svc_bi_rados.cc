@@ -200,12 +200,12 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_b
 }
 
 int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
-                                                     uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type,
+                                                     uint32_t num_shards, rgw::BucketHashType hash_type,
                                                      string *bucket_obj, int *shard_id)
 {
   int r = 0;
   switch (hash_type) {
-    case RGWBucketInfo::MOD:
+    case rgw::BucketHashType::Mod:
       if (!num_shards) {
         // By default with no sharding, we use the bucket oid as itself
         (*bucket_obj) = bucket_oid_base;
@@ -247,7 +247,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   string oid;
 
   ret = get_bucket_index_object(bucket_oid_base, obj_key, bucket_info.layout.current_index.layout.normal.num_shards,
-        (RGWBucketInfo::BIShardsHashType)bucket_info.layout.current_index.layout.normal.hash_type, &oid, shard_id);
+        bucket_info.layout.current_index.layout.normal.hash_type, &oid, shard_id);
   if (ret < 0) {
     ldout(cct, 10) << "get_bucket_index_object() returned ret=" << ret << dendl;
     return ret;
