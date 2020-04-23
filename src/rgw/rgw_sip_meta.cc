@@ -3,6 +3,10 @@
 
 #include "rgw_sip_meta.h"
 #include "rgw_metadata.h"
+#include "rgw_mdlog.h"
+#include "rgw_b64.h"
+
+#include "services/svc_mdlog.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -181,3 +185,69 @@ int SIProvider_MetaFull::fetch(int shard_id, std::string marker, int max, fetch_
   return 0;
 }
 
+int SIProvider_MetaInc::init()
+{
+  meta_log = mdlog->get_log(period_id);
+  num_shards = cct->_conf->rgw_md_log_max_shards;
+
+  return 0;
+}
+
+SIProvider::Info SIProvider_MetaInc::get_info() const
+{
+  return { SIProvider::Type::INC, num_shards };
+}
+
+int SIProvider_MetaInc::fetch(int shard_id, std::string marker, int max, fetch_result *result)
+{
+  if (shard_id >= stage_info.num_shards) {
+    return -ERANGE;
+  }
+
+  utime_t start_time;
+  utime_t end_time;
+
+  void *handle;
+
+  meta_log->init_list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(), marker, &handle);
+  bool truncated;
+  do {
+    list<cls_log_entry> entries;
+    int ret = meta_log->list_entries(handle, max, entries, NULL, &truncated);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: meta_log->list_entries() failed: ret=" << ret << dendl;
+      return -ret;
+    }
+
+    max -= entries.size();
+
+    for (auto& entry : entries) {
+      siprovider_meta_info meta_info = { entry.section, entry.name };
+
+      SIProvider::Entry e;
+      e.key = entry.id;
+      meta_info.encode(e.data);
+      result->entries.push_back(e);
+    }
+  } while (truncated && max > 0);
+
+  result->done = false; /* FIXME */
+  result->more = truncated;
+
+  meta_log->complete_list_entries(handle);
+
+  return 0;
+}
+
+
+int SIProvider_MetaInc::get_start_marker(int shard_id, std::string *marker) const
+{
+  marker->clear();
+  return 0;
+}
+
+int SIProvider_MetaInc::get_cur_state(int shard_id, std::string *marker) const
+{
+#warning FIXME
+  return 0;
+}

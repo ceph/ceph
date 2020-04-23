@@ -57,12 +57,12 @@ public:
 
   int fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int get_start_marker(std::string *marker) const override {
+  int get_start_marker(int shard_id, std::string *marker) const override {
     marker->clear();
     return 0;
   }
 
-  int get_cur_state(std::string *marker) const {
+  int get_cur_state(int shard_id, std::string *marker) const {
     marker->clear(); /* full data, no current incremental state */
     return 0;
   }
@@ -79,5 +79,31 @@ public:
     meta_info.encode(e.data);
     return e;
   }
+};
+
+class RGWSI_MDLog;
+class RGWMetadataLog;
+
+class SIProvider_MetaInc : public SIProvider {
+  RGWSI_MDLog *mdlog;
+  string period_id;
+
+  RGWMetadataLog *meta_log{nullptr};
+
+public:
+  SIProvider_MetaInc(CephContext *_cct,
+                     RGWSI_MDLog *_mdlog,
+                     const string& _period_id) : cct(_cct),
+                                                 mdlog(_mdlog),
+                                                 period_id(_period_id) {}
+
+  int init();
+
+  Info get_info() const override;
+
+  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
+
+  int get_start_marker(int shard_id, std::string *marker) const override;
+  int get_cur_state(int shard_id, std::string *marker) const;
 };
 

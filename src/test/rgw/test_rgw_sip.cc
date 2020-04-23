@@ -138,12 +138,12 @@ public:
     return 0;
   }
 
-  int get_start_marker(std::string *marker) const override {
+  int get_start_marker(int shard_id, std::string *marker) const override {
     marker->clear();
     return 0;
   }
 
-  int get_cur_state(std::string *marker) const override {
+  int get_cur_state(int shard_id, std::string *marker) const override {
     /* non incremental, no cur state */
     return -EINVAL;
   }
@@ -226,12 +226,12 @@ public:
     return 0;
   }
 
-  int get_start_marker(std::string *marker) const override {
+  int get_start_marker(int shard_id, std::string *marker) const override {
     marker->clear();
     return 0;
   }
 
-  int get_cur_state(std::string *marker) const override {
+  int get_cur_state(int shard_id, std::string *marker) const override {
     return max_val;
   }
 };
@@ -278,7 +278,7 @@ TEST(TestRGWSIP, test_basic_provider)
   BasicProvider bp(0, max_entries);
 
   string marker;
-  ASSERT_EQ(0, bp.get_start_marker(&marker));
+  ASSERT_EQ(0, bp.get_start_marker(0, &marker));
 
   int total = 0;
 
@@ -307,7 +307,7 @@ TEST(TestRGWSIP, test_log_provider)
   LogProvider lp(0, min_val, max_val);
 
   string marker;
-  ASSERT_EQ(0, lp.get_start_marker(&marker));
+  ASSERT_EQ(0, lp.get_start_marker(0, &marker));
 
   int total = 0;
 

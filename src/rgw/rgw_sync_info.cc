@@ -1,10 +1,10 @@
 #include "rgw_sync_info.h"
 
-int SIProviderClient::init_marker(bool all_history) {
+int SIProviderClient::init_marker(int shard_id, bool all_history) {
   if (!all_history) {
-    return provider->get_cur_state(&marker);
+    return provider->get_cur_state(shard_id, &marker);
   }
-  return provider->get_start_marker(&marker);
+  return provider->get_start_marker(shard_id, &marker);
 }
 
 int SIProviderClient::fetch(int shard_id, int max, SIProvider::fetch_result *result) {
@@ -23,8 +23,9 @@ int SIProviderClient::fetch(int shard_id, int max, SIProvider::fetch_result *res
 }
 
 int SIPShardedStage::init_markers(bool all_history) {
+  int shard_id = 0;
   for (auto iter : shards) {
-    int r = iter->init_marker(all_history);
+    int r = iter->init_marker(shard_id++, all_history);
     if (r < 0) {
       return r;
     }

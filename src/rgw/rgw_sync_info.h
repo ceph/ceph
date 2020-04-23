@@ -40,8 +40,8 @@ public:
 
   virtual Info get_info() const = 0;
   virtual int fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
-  virtual int get_start_marker(std::string *marker) const = 0;
-  virtual int get_cur_state(std::string *marker) const = 0;
+  virtual int get_start_marker(int shard_id, std::string *marker) const = 0;
+  virtual int get_cur_state(int shard_id, std::string *marker) const = 0;
 };
 
 using SIProviderRef = std::shared_ptr<SIProvider>;
@@ -54,7 +54,7 @@ class SIClient
 public:
   virtual ~SIClient() {}
 
-  virtual int init_marker(bool all_history) = 0;
+  virtual int init_marker(int shard_id, bool all_history) = 0;
   virtual int fetch(int shard_id, int max, SIProvider::fetch_result *result) = 0;
 
   virtual int load_state() = 0;
@@ -79,7 +79,7 @@ class SIProviderClient : public SIClient
 public:
   SIProviderClient(SIProviderRef& _provider) : provider(_provider) {}
 
-  int init_marker(bool all_history) override;
+  int init_marker(int shard_id, bool all_history) override;
 
   int fetch(int shard_id, int max, SIProvider::fetch_result *result) override;
 
@@ -99,7 +99,7 @@ class SIChainedClient : public SIClient
 public:
   SIChainedClient(SIClientRef& _client) : client(_client) {}
 
-  int init_marker(bool all_history) override;
+  int init_marker(int shard_id, bool all_history) override;
 
   int fetch(int shard_id, int max, SIProvider::fetch_result *result) override;
 
