@@ -27,6 +27,15 @@ For more details on placement specification refer the `orchestrator doc
 <https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_.
 Currently only CephFS export type is supported.
 
+Update NFS Ganesha Cluster
+==========================
+
+.. code:: bash
+
+    $ ceph nfs cluster update <clusterid> <placement>
+
+This updates the deployed cluster according to the placement value.
+
 Create CephFS Export
 ====================
 
