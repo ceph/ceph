@@ -1094,7 +1094,7 @@ class Filesystem(MDSCluster):
             os.path.join(self._prefix, "rados"), "-p", pool, "getxattr", obj_name, xattr_name
         ]
         try:
-            proc = remote.run(args=args, stdout=StringIO())
+            proc = remote.run(args=args, stdout=BytesIO())
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(obj_name)
