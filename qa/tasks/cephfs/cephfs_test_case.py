@@ -162,7 +162,7 @@ class CephFSTestCase(CephTestCase):
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:
             setattr(self, setting, float(self.fs.mds_asok(
-                ['config', 'get', setting], self.mds_cluster.mds_ids[0]
+                ['config', 'get', setting], list(self.mds_cluster.mds_ids)[0]
             )[setting]))
 
         self.configs_set = set()
