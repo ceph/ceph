@@ -30,6 +30,8 @@ Status and Future Work
 At the moment, initial versions of a manifest data structure along
 with IO path support and rados control operations exist.  This section
 is meant to outline next steps.
+Future work will be proceeded as cleanups -> snapshot -> cache/tiering -> rbd support
+in order.
 
 Cleanups
 --------
@@ -46,24 +48,63 @@ There are some rough edges we may want to improve:
     do_osd_ops.  This probably isn't desirable, see Snapshots section
     below for some options on how generally to mix these operations
     with snapshots.
+    TODO: Modify SET_CHUNK to set user_modify = false not to trigger a new clone.
   * Appears to assume that the corresponding section of the object
     does not exist (sets FLAG_MISSING) but does not check whether the
     corresponding extent exists already in the object.
+    TODO: Set FLAG_DIRTY if the corresponding section of the object exists.
+
   * Appears to clear the manifest unconditionally if not chunked,
     that's probably wrong.  We should return an error if it's a
     REDIRECT.
+    TODO: add the following lines ::
+
+	case CEPH_OSD_OP_SET_CHUNK:
+	  if (oi.manifest.is_redirect()) {
+	    result = -EINVAL;
+	    goto fail;
+	  }
+
 
 * TIER_PROMOTE:
 
   * Document control flow in this file.  The CHUNKED case is
     particularly unintuitive and could use some explanation.
+    - Control flow
+    Based on the chunk_map in a head object (each chunk's state can be 
+    dirty or missing), chunked objects for the head object 
+    can be retrieved when tier_promote is invoked.
+    After promotion is completed, all chunks in the object should be clean state.
+
+    One thing to note is snapshotted manifest object.
+    Suppose that there are 10(9), 5(4). If we want to read clone id 4,
+    need to read chunks according to the chunk_map for clone id 4.
+    But, because the base tier keeps object_info_t in the case of manifest object,
+    the read with snapshot can work.
+    If clone id 4 is dirty or clean, the chunks will be read directly from the base tier.
+    If clone id 4 is missing, the chunks will be copied from the lower tier 
+
   * SET_REDIRECT clears the contents of the object.  PROMOTE appears
     to copy them back in, but does not unset the redirect or clear the
     reference. Does this not violate the invariant?  In particular, as
     long as the redirect is set, it appears that all operations
     will be proxied even after the promote defeating the purpose.
+    TODO: To prevent it, clear redirect as part of promote.
+
   * For a chunked manifest, we appear to flush prior to promoting,
     it that actually desirable?
+    TODO: The initial thought behind of this is that we don't know fingerprint 
+    oid before flushing the chunk. So, before promoting the chunk, 
+    we need to figure out the fingerprint oid.
+    But, to avoid unnecessary dedup work if the user specifically ask for 
+    the data to be resident in the base pool, TIER_DO_NOT_DEDUP_PIN can be used.
+
+Plans
+  1. https://github.com/ceph/ceph/pull/29283 
+  (This PR adds basic snapshotted manifest object by using per clone's chunk_info_t)
+  2. Modify SET_CHUNK not to trigger a clone
+  3. Cleanups regarding existing manifest object as discussed here
+   
 
 Cache/Tiering
 -------------
@@ -89,6 +130,41 @@ to be wired up to provide feature parity:
   would need to be modified to instead flush and evict using
   manifests.
 
+Plans
+ 
+* Rework the tiering agent for manifest objects
+  - flush method (passive vs active)
+
+    Current flush operation for manifest objects uses a active flush model like
+    read the cotent - generating fingerprint - write and set.
+    But, exising tiering method uses copy-get and copy-from to flush the object.
+    I think the active flush model has two advantages compared to the existing method.
+    First, it can reduce the number of operations for a communication. Such as
+    Active: read -> generating fingerprint -> write and set
+    Passive: request copy_from -> copy_get -> read -> getnerating fingerprint -> write and set
+    Second, By managing I/O related to flush on the base tier, 
+    we can control overall I/Os on the cluster appropriately.
+
+  - tier agent
+
+    Because the active flush model is used, the tier agent does more jobs than before
+    (read - generating fingerprint - write and set vs sending copy_from). 
+    So, my concern is a parallism and performance.
+    since a single agent thread is probably hard to achieve high throughput.
+    To this end, the idea is to use N threads working on N pgs.
+    Existing agent threads (agent_work) can manages the list of dirty objects (pgbackend->list_partial)
+    , and flush the dirty objects in parallel. 
+
+* Use exiting existing features regarding the cache flush policy such as histset, age, ratio
+  - hitset
+  - age, ratio, bytes
+
+* Add tiering-mode to manifest-tiering
+  - Writeback
+  - Read-only
+
+
+
 Snapshots
 ---------
 
@@ -109,6 +185,96 @@ clones byte ranges which are identical.  It's used during recovery and
 cache/tiering promotion to ensure that the ObjectStore ends up with
 the right byte range sharing via clone.  We probably want to ensure
 that adjacent clones agree on chunk mappings for shared regions.
+
+* Implementation
+
+  My thought is that set_chunk and set_reredirect shouldn't set
+  user_modify to indicate not to trigger a new clone (probably also need a flag like cache_evict).
+  Also, to use manifest with snapshot, set_chunk should be set when the manifest object is created.
+  As a result, the overall procedure is:
+
+    1. Write the object A
+    2. SET_CHUNK (offset: 0 ~ 4)
+    3. SET_CHUNK (offset: 8 ~ 12)
+    4. SET_CHUNK (offset: 16 ~ 20)
+    5. Create a snapshot 
+    6. Write the object A
+    7. Create a snapshot
+
+  When a snapshot is created between 5 and 6, clones prior to head are dirty
+  if the head object is dirty (and the flush should start from old clones).
+  Also, there are two use cases.
+
+    Use case 1
+
+      1. Create object A
+      2. Write Full
+      3. SET_CHUNK
+      4. SET_CHUNK
+      5. Write the object A
+      6. Create a snapshot
+      7. Write the object A
+      8. Create a snapshot
+
+    Use case 2
+
+      1. Create object A
+      2. Write Full
+      3. SET_CHUNK
+      4. SET_CHUNK
+      5. Write the object A
+      6. Create a snapshot ABC
+      7. Write the object A
+      8. SET_CHUNK to the snapshot ABC
+
+  The state of the chunk_map in clone should be MISSING after eviction is done.
+  If we want to read clones, we have to look at the chunk_info_t according to given snap_id 
+  to find out which chunk is needed.
+  Therefore, clone needs to be mutable. To do that, we probably need a new op type.
+  If snap read occurs, the chunks can be read from snapshots without doing a rollback.
+  Such reads must return the contents of the object at the time the snapshot was taken.
+
+  - Clone_overlap
+
+  clone_overlap is an optimization that ensures that recovery preserves the underlying 
+  ObjectStore level byte range sharing inherent in clone.
+  Therefore, to support snapshot with manifest object, we should ensure interaction 
+  between clone_overlap and manifest object. To do so, here is the basic example describing how 
+  it works.
+  HEAD: [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
+  clone 10(9, 7): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
+  clone 6(6, 5): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
+  clone 4(2, 1): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
+  clone_overlap: {10: [1 ~ 10, 20 ~ 10], 6: [10 ~ 10], 4: [1 ~ 10, 10 ~ 20]}
+
+  At this point, if we SET_CHUNK clone 6 20 ~ 10 aaa, the object will become as below.
+
+  HEAD: [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
+  clone 10(9, 7): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
+  clone 6(6, 5): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 aaa]
+  clone 4(2, 1): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 aaa]
+  clone_overlap: {10: [1 ~ 10, 20 ~ 10], 6: [10 ~ 10], 4:[1 ~ 10]}
+  
+
+  - Leak management
+
+  Fixing a reference leak by dedup-tool also need to be reconsidered because
+  dedup-tool finds out the leaks by using the head object. If the head object 
+  has snapshots, it should search chunk_info_t in clones as well.
+  
+
+* Plans
+
+  1. separate evict from flush (manifest tier uses flush+evict)
+  2. promote, flush and evict clones for snapshotted manifest object (with a new op)
+  3. scrub test for manifest object and dedup tool
+
+
+Interaction between RBD
+-----------------------
+
+ToDo
+
 
 Data Structures
 ===============
@@ -153,7 +319,6 @@ The type enum reflects three possible states an object can be in:
           hobject_t oid;
           cflag_t flags;   // FLAG_*
 
-TODO: apparently we specify the offset twice, with different widths
 
 Request Handling
 ================
@@ -222,7 +387,12 @@ Operations:
 
   At the top of do_osd_ops, does not set user_modify.
 
-  TODO: No user_modify means does not this trigger a new clone?
+  This operation is not a user mutation and does not trigger a clone to be created.
+
+  The purpose of set_redirect is two.
+
+  1. Redirect all operation to the target object (like proxy)
+  2. Cache when tier_promote is called (rediect will be cleared at this time).
 
 * set-chunk 
 
@@ -246,20 +416,14 @@ Operations:
 
   Truncates object, clears omap, and clears xattrs as a side effect.
 
-  TODO: Because do_osd_ops does not list SET_CHUNK in the non-user_modify list,xi
-  it would appear that make_writeable will trigger a new clone.
-
-  TODO: Because user_modify apparently gets set, it'll also trigger a watch.
-
-  TODO: Does not appear to clear corresponding portion of object.  Should it?
+  This operation is not a user mutation and does not trigger a clone to be created.
 
   TODO: SET_CHUNK appears to clear the manifest unconditionally if it's not chunked.
   That seems wrong. ::
-	  
-	if (!oi.manifest.is_chunked()) {
-	  oi.manifest.clear();
-	}
 
+       if (!oi.manifest.is_chunked()) {
+         oi.manifest.clear();
+       }
 
 * tier-promote 
 
@@ -276,20 +440,48 @@ Operations:
 
   For a redirect manifest, copies data to head.
 
-  TODO: For a redirect manifest, I don't see where it unsets the redirect.
-        Is it supposed to?
+  TODO: To atomically replace a redirect or dedup'd chunk with a local copy atomically,
+  redirect will be clear after the promote.
 
   Does not clear the manifest.
 
   Note: For a chunked manifest, calls start_copy on itself and uses the
   existing read proxy machinery to proxy the reads.
 
-  TODO: maybe_handle_manifest_detail appears to flush the data prior to
-        promoting it, seems unnecessary?
+  TODO: Use TIER_DO_NOT_DEDUP_PIN to avoid unnecessary dedup work.
+  - Two use cases.
+
+    Case a: 
+
+      1. Create Object A and B
+      2. Setchunk A to B
+      3. Write A
+      4. TIER_DO_NOT_DEDUP_PIN
+      5. Flush does not occur
+
+    Case b:
+
+      1. Create Object A and B
+      2. Setchunk A to B
+      3. TIER_DO_NOT_DEDUP_PIN
+      4. Promote A
+      5. Write A
+      6. Flush does not occur
+
+  TODO: Free old fingerprint oid earlier.
+  There is a HEAD: [1-10 manifest: aaa, clean, size is 20]
+  Then, we write the region of 5 ~ 15.
+  HEAD:[size is 20] (1-10 is not in the manifest)
+  Then, we write the region of 6 ~ 15.
+  HEAD:[size is 20] (1-10 is not in the manifest)
+  Then, we write the region of 7 ~ 15.
+  If the tiering agent wants to dedup 1-10 because it is now cold, it can use a read and set-chunk to:
+  Read 1-10 and computation
+  HEAD:[1-10 manifest:ddd, clean, size is 20]
+  This way, we shorten the lifetime of the aaa dedup target object freeing space earlier.
 
   At the top of do_osd_ops, does not set user_modify.
 
-  TODO: No user_modify means does not this trigger a new clone unlike SET_CHUNK.
 
 * unset-manifest
 
