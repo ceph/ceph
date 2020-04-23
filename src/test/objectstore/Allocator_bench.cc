@@ -326,6 +326,38 @@ TEST_P(AllocTest, test_alloc_bench_10_300)
   doOverwriteTest(capacity, prefill, overwrite);
 }
 
+TEST_P(AllocTest, mempoolAccounting)
+{
+  uint64_t bytes = mempool::bluestore_alloc::allocated_bytes();
+  uint64_t items = mempool::bluestore_alloc::allocated_items();
+
+  uint64_t alloc_size = 4 * 1024;
+  uint64_t capacity = 512ll * 1024 * 1024 * 1024;
+  Allocator* alloc = Allocator::create(g_ceph_context, string(GetParam()),
+				       capacity, alloc_size);
+  ASSERT_NE(alloc, nullptr);
+  alloc->init_add_free(0, capacity);
+
+  std::map<uint32_t, PExtentVector> all_allocs;
+  for (size_t i = 0; i < 10000; i++) {
+    PExtentVector tmp;
+    alloc->allocate(alloc_size, alloc_size, 0, 0, &tmp);
+    all_allocs[rand()] = tmp;
+    alloc->allocate(alloc_size, alloc_size, 0, 0, &tmp);
+    all_allocs[rand()] = tmp;
+
+    auto it = all_allocs.upper_bound(rand());
+    if (it != all_allocs.end()) {
+      alloc->release(it->second);
+      all_allocs.erase(it);
+    }
+  }
+
+  delete(alloc);
+  ASSERT_EQ(mempool::bluestore_alloc::allocated_bytes(), bytes);
+  ASSERT_EQ(mempool::bluestore_alloc::allocated_items(), items);
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
