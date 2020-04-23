@@ -2219,7 +2219,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     } else {
       info.layout.current_index.layout.normal.num_shards = bucket_index_max_shards;
     }
-    info.layout.current_index.layout.normal.num_shards = RGWBucketInfo::MOD;
+    info.layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time)) {
       info.creation_time = ceph::real_clock::now();
