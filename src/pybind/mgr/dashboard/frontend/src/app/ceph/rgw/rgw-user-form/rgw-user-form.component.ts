@@ -705,4 +705,17 @@ export class RgwUserFormComponent implements OnInit {
     result = _.uniq(result);
     return result;
   }
+
+  onMaxBucketsModeChange(mode: string) {
+    if (mode === '1') {
+      // If 'Custom' mode is selected, then ensure that the form field
+      // 'Max. buckets' contains a valid value. Set it to default if
+      // necessary.
+      if (!this.userForm.get('max_buckets').valid) {
+        this.userForm.patchValue({
+          max_buckets: 1000
+        });
+      }
+    }
+  }
 }
