@@ -641,7 +641,13 @@ static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino,
 }
 
 #ifdef FUSE_IOCTL_COMPAT
-static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, struct fuse_file_info *fi,
+static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 5)
+                          unsigned int cmd,
+#else
+                          int cmd,
+#endif
+                          void *arg, struct fuse_file_info *fi,
 			  unsigned flags, const void *in_buf, size_t in_bufsz, size_t out_bufsz)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
