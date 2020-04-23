@@ -395,6 +395,50 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
     assert len(out['subusers']) == 1
 
+    # TESTCASE 'add-s3-key-subuser','key','create','s3 key','succeeds'
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['subuser', 'create'],
+            {'subuser' : subuser1,
+             'access-key' : access_key2,
+             'secret-key' : secret_key2,
+             'key-type' : 's3'
+            })
+    
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    assert ret == 200
+    assert len(out['keys']) == 2
+    assert out['keys'][0]['user'] == subuser1 or out['keys'][1]['user'] == subuser1
+    assert out['keys'][0]['access-key'] == access_key2 or out['keys'][1]['access-key'] == access_key2
+    assert out['keys'][0]['secret-key'] == secret_key2 or out['keys'][1]['secret-key'] == secret_key2
+
+    # TESTCASE 'rm-s3-key','key','rm','newly added key','succeeds, key is removed'
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['key', 'rm'],
+            {'uid' : user1,
+             'access-key' : access_key2
+            })
+
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+
+    assert len(out['keys']) == 1
+    assert out['keys'][0]['access_key'] == access_key
+    assert out['keys'][0]['secret_key'] == secret_key
+
+    # TESTCASE 'rm-subuser','subuser','rm','subuser','success, subuser is removed'
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['subuser', 'rm'],
+            {'subuser' : subuser1
+            })
+
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' :  user1})
+    assert len(out['subusers']) == 1
+
     # TESTCASE 'rm-subuser-with-keys','subuser','rm','subuser','succeeds, second subser and key is removed'
     (ret, out) = rgwadmin_rest(admin_conn,
             ['subuser', 'rm'],
