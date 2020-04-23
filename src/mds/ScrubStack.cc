@@ -393,17 +393,11 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
 
     if (r == ENOENT) {
       // Nothing left to scrub, are we done?
-      auto&& scrubbing = dir->scrub_dentries_scrubbing();
-      if (scrubbing.empty()) {
-        dout(20) << __func__ << " dirfrag done: " << *dir << dendl;
-        // FIXME: greg: What's the diff meant to be between done and terminal
-	dir->scrub_finished();
-        *done = true;
-        *is_terminal = true;
-      } else {
-        dout(20) << __func__ << " " << scrubbing.size() << " dentries still "
-                   "scrubbing in " << *dir << dendl;
-      }
+      dout(20) << __func__ << " dirfrag done: " << *dir << dendl;
+      // FIXME: greg: What's the diff meant to be between done and terminal
+      dir->scrub_finished();
+      *done = true;
+      *is_terminal = true;
       return;
     }
 
@@ -411,7 +405,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
     // never get random IO errors here.
     ceph_assert(r == 0);
 
-    _enqueue_inode(dn->get_projected_inode(), dn, header, NULL, true);
+    _enqueue_inode(dn->get_projected_inode(), dn, header, NULL, false);
 
     *added_children = true;
   }

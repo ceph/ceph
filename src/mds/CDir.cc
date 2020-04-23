@@ -3329,11 +3329,7 @@ void CDir::scrub_initialize()
   scrub_infop->recursive_start.time = ceph_clock_now();
 
   scrub_infop->directories_to_scrub.clear();
-  scrub_infop->directories_scrubbing.clear();
-  scrub_infop->directories_scrubbed.clear();
   scrub_infop->others_to_scrub.clear();
-  scrub_infop->others_scrubbing.clear();
-  scrub_infop->others_scrubbed.clear();
 
   for (auto i = items.begin();
       i != items.end();
@@ -3375,11 +3371,7 @@ void CDir::scrub_finished()
   ceph_assert(scrub_infop && scrub_infop->directory_scrubbing);
 
   ceph_assert(scrub_infop->directories_to_scrub.empty());
-  ceph_assert(scrub_infop->directories_scrubbing.empty());
-  scrub_infop->directories_scrubbed.clear();
   ceph_assert(scrub_infop->others_to_scrub.empty());
-  ceph_assert(scrub_infop->others_scrubbing.empty());
-  scrub_infop->others_scrubbed.clear();
   scrub_infop->directory_scrubbing = false;
 
   scrub_infop->last_recursive = scrub_infop->recursive_start;
@@ -3449,7 +3441,6 @@ int CDir::scrub_dentry_next(MDSContext *cb, CDentry **dnout)
   if (rval == 0) {
     dout(20) << __func__ << " inserted to directories scrubbing: "
       << *dnout << dendl;
-    scrub_infop->directories_scrubbing.insert((*dnout)->key());
   } else if (rval == EAGAIN) {
     // we don't need to do anything else
   } else { // we emptied out the directory scrub set
@@ -3461,44 +3452,10 @@ int CDir::scrub_dentry_next(MDSContext *cb, CDentry **dnout)
     if (rval == 0) {
       dout(20) << __func__ << " inserted to others scrubbing: "
         << *dnout << dendl;
-      scrub_infop->others_scrubbing.insert((*dnout)->key());
     }
   }
   dout(20) << " returning " << rval << " with dn=" << *dnout << dendl;
   return rval;
-}
-
-std::vector<CDentry*> CDir::scrub_dentries_scrubbing()
-{
-  dout(20) << __func__ << dendl;
-  ceph_assert(scrub_infop && scrub_infop->directory_scrubbing);
-
-  std::vector<CDentry*> result;
-  for (auto& scrub_info : scrub_infop->directories_scrubbing) {
-    CDentry *d = lookup(scrub_info.name, scrub_info.snapid);
-    ceph_assert(d);
-    result.push_back(d);
-  }
-  for (auto& scrub_info : scrub_infop->others_scrubbing) {
-    CDentry *d = lookup(scrub_info.name, scrub_info.snapid);
-    ceph_assert(d);
-    result.push_back(d);
-  }
-  return result;
-}
-
-void CDir::scrub_dentry_finished(CDentry *dn)
-{
-  dout(20) << __func__ << " on dn " << *dn << dendl;
-  ceph_assert(scrub_infop && scrub_infop->directory_scrubbing);
-  dentry_key_t dn_key = dn->key();
-  if (scrub_infop->directories_scrubbing.erase(dn_key)) {
-    scrub_infop->directories_scrubbed.insert(dn_key);
-  } else {
-    ceph_assert(scrub_infop->others_scrubbing.count(dn_key));
-    scrub_infop->others_scrubbing.erase(dn_key);
-    scrub_infop->others_scrubbed.insert(dn_key);
-  }
 }
 
 void CDir::scrub_maybe_delete_info()

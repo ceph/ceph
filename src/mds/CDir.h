@@ -92,11 +92,7 @@ public:
 
     /// these are lists of children in each stage of scrubbing
     dentry_key_set directories_to_scrub;
-    dentry_key_set directories_scrubbing;
-    dentry_key_set directories_scrubbed;
     dentry_key_set others_to_scrub;
-    dentry_key_set others_scrubbing;
-    dentry_key_set others_scrubbed;
 
     ScrubHeaderRef header;
   };
@@ -305,18 +301,6 @@ public:
    * @returns a value as described above
    */
   int scrub_dentry_next(MDSContext *cb, CDentry **dnout);
-  /**
-   * Get the currently scrubbing dentries. When returned, the passed-in
-   * list will be filled with all CDentry * which have been returned
-   * from scrub_dentry_next() but not sent back via scrub_dentry_finished().
-   */
-  std::vector<CDentry*> scrub_dentries_scrubbing();
-  /**
-   * Report to the CDir that a CDentry has been scrubbed. Call this
-   * for every CDentry returned from scrub_dentry_next().
-   * @param dn The CDentry which has been scrubbed.
-   */
-  void scrub_dentry_finished(CDentry *dn);
   /**
    * Call this once all CDentries have been scrubbed, according to
    * scrub_dentry_next's listing. It finalizes the scrub statistics.

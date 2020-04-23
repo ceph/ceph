@@ -4972,12 +4972,9 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
 	     << dendl;
     ceph_assert(scrub_infop->scrub_parent);
     CDentry *dn = scrub_infop->scrub_parent;
-    CDir *dir = dn->dir;
     dn->put(CDentry::PIN_SCRUBPARENT);
-    ceph_assert(dir->scrub_infop && dir->scrub_infop->directory_scrubbing);
-    dir->scrub_infop->directories_scrubbing.erase(dn->key());
-    dir->scrub_infop->others_scrubbing.erase(dn->key());
   }
+
   scrub_info();
   if (!scrub_infop)
     scrub_infop = new scrub_info_t();
@@ -5079,7 +5076,6 @@ void CInode::scrub_aborted(MDSContext **c) {
   if (scrub_infop->scrub_parent) {
     CDentry *dn = scrub_infop->scrub_parent;
     scrub_infop->scrub_parent = NULL;
-    dn->dir->scrub_dentry_finished(dn);
     dn->put(CDentry::PIN_SCRUBPARENT);
   }
 
@@ -5109,7 +5105,6 @@ void CInode::scrub_finished(MDSContext **c) {
   if (scrub_infop->scrub_parent) {
     CDentry *dn = scrub_infop->scrub_parent;
     scrub_infop->scrub_parent = NULL;
-    dn->dir->scrub_dentry_finished(dn);
     dn->put(CDentry::PIN_SCRUBPARENT);
   }
 
