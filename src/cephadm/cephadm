@@ -3166,13 +3166,13 @@ class AdoptOsd(object):
             with open(path, 'r') as f:
                 osd_fsid = f.read().strip()
             logger.info("Found online OSD at %s" % path)
-            if os.path.exists(os.path.join(self.osd_data_dir, 'type')):
-                with open(os.path.join(self.osd_data_dir, 'type')) as f:
-                    osd_type = f.read().strip()
-            else:
-                logger.info('"type" file missing for OSD data dir')
         except IOError:
             logger.info('Unable to read OSD fsid from %s' % path)
+        if os.path.exists(os.path.join(self.osd_data_dir, 'type')):
+            with open(os.path.join(self.osd_data_dir, 'type')) as f:
+                osd_type = f.read().strip()
+        else:
+            logger.info('"type" file missing for OSD data dir')
 
         return osd_fsid, osd_type
 
@@ -3254,6 +3254,7 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
         if not osd_fsid:
             raise Error('Unable to find OSD {}'.format(daemon_id))
         logger.info('objectstore_type is %s' % osd_type)
+        assert osd_type
         if osd_type == 'filestore':
             raise Error('FileStore is not supported by cephadm')
 
