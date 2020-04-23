@@ -198,6 +198,41 @@ private:
   uint32_t m_discard_granularity_bytes;
 };
 
+class WriteSameLogEntry : public WriteLogEntry {
+protected:
+  void init_bl(buffer::ptr &bp, buffer::list &bl) override;
+
+public:
+  WriteSameLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
+                    const uint64_t image_offset_bytes, const uint64_t write_bytes,
+                    const uint32_t data_length)
+    : WriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes) {
+    ram_entry.writesame = 1;
+    ram_entry.ws_datalen = data_length;
+  };
+  WriteSameLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes,
+                    const uint32_t data_length)
+    : WriteLogEntry(nullptr, image_offset_bytes, write_bytes) {
+    ram_entry.writesame = 1;
+    ram_entry.ws_datalen = data_length;
+  };
+  WriteSameLogEntry(const WriteSameLogEntry&) = delete;
+  WriteSameLogEntry &operator=(const WriteSameLogEntry&) = delete;
+  unsigned int write_bytes() const override {
+    /* The valid bytes in this ops data buffer. */
+    return ram_entry.ws_datalen;
+  };
+  unsigned int bytes_dirty() const override {
+    /* The bytes in the image this op makes dirty. */
+    return ram_entry.write_bytes;
+  };
+  void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
+                 Context *ctx) override;
+  std::ostream &format(std::ostream &os) const;
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const WriteSameLogEntry &entry);
+};
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
