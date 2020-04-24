@@ -98,6 +98,8 @@ Request parameters:
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
 
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP "routing key"
+
 - Kafka endpoint 
 
  - URI: ``kafka://[<user>:<password>@]<fqdn>[:<port]``

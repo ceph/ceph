@@ -137,6 +137,8 @@ PubSub REST API
 Topics
 ~~~~~~
  
+.. _radosgw-create-a-topic:
+
 Create a Topic
 ``````````````
 
@@ -177,6 +179,8 @@ The endpoint URI may include parameters depending with the type of endpoint:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
+
+.. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP "routing key"
 
 - Kafka endpoint 
 
