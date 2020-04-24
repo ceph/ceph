@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { HostService } from '../../../../shared/api/host.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
+import { CdForm } from '../../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../../shared/models/finished-task';
@@ -14,11 +15,10 @@ import { TaskWrapperService } from '../../../../shared/services/task-wrapper.ser
   templateUrl: './host-form.component.html',
   styleUrls: ['./host-form.component.scss']
 })
-export class HostFormComponent implements OnInit {
+export class HostFormComponent extends CdForm implements OnInit {
   hostForm: CdFormGroup;
   action: string;
   resource: string;
-  loading = true;
   hostnames: string[];
 
   constructor(
@@ -28,6 +28,7 @@ export class HostFormComponent implements OnInit {
     private hostService: HostService,
     private taskWrapper: TaskWrapperService
   ) {
+    super();
     this.resource = this.i18n('host');
     this.action = this.actionLabels.CREATE;
     this.createForm();
@@ -38,7 +39,7 @@ export class HostFormComponent implements OnInit {
       this.hostnames = resp.map((host) => {
         return host['hostname'];
       });
-      this.loading = false;
+      this.loadingReady();
     });
   }
 

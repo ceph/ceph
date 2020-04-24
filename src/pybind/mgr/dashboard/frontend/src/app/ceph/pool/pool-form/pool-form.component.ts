@@ -16,6 +16,7 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import {
@@ -51,7 +52,7 @@ interface FormFieldDescription {
   templateUrl: './pool-form.component.html',
   styleUrls: ['./pool-form.component.scss']
 })
-export class PoolFormComponent implements OnInit {
+export class PoolFormComponent extends CdForm implements OnInit {
   @ViewChild('crushInfoTabs', { static: false }) crushInfoTabs: TabsetComponent;
   @ViewChild('crushDeletionBtn', { static: false }) crushDeletionBtn: TooltipDirective;
   @ViewChild('ecpInfoTabs', { static: false }) ecpInfoTabs: TabsetComponent;
@@ -99,6 +100,7 @@ export class PoolFormComponent implements OnInit {
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = this.i18n('pool');
@@ -190,6 +192,7 @@ export class PoolFormComponent implements OnInit {
         this.initEditMode();
       } else {
         this.setAvailableApps();
+        this.loadingReady();
       }
       this.listenToChanges();
       this.setComplexValidators();
@@ -240,6 +243,7 @@ export class PoolFormComponent implements OnInit {
       this.poolService.get(param.name).subscribe((pool: Pool) => {
         this.data.pool = pool;
         this.initEditFormData(pool);
+        this.loadingReady();
       })
     );
   }

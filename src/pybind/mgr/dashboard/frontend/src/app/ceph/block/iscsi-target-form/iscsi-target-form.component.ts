@@ -13,6 +13,7 @@ import { SelectMessages } from '../../../shared/components/select/select-message
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -25,7 +26,7 @@ import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settin
   templateUrl: './iscsi-target-form.component.html',
   styleUrls: ['./iscsi-target-form.component.scss']
 })
-export class IscsiTargetFormComponent implements OnInit {
+export class IscsiTargetFormComponent extends CdForm implements OnInit {
   cephIscsiConfigVersion: number;
   targetForm: CdFormGroup;
   modalRef: BsModalRef;
@@ -97,6 +98,7 @@ export class IscsiTargetFormComponent implements OnInit {
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.resource = this.i18n('target');
   }
 
@@ -182,6 +184,8 @@ export class IscsiTargetFormComponent implements OnInit {
       if (data[5]) {
         this.resolveModel(data[5]);
       }
+
+      this.loadingReady();
     });
   }
 

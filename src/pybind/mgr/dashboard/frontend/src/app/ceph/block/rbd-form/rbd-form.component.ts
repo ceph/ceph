@@ -12,6 +12,7 @@ import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
@@ -38,7 +39,7 @@ import { RbdFormResponseModel } from './rbd-form-response.model';
   templateUrl: './rbd-form.component.html',
   styleUrls: ['./rbd-form.component.scss']
 })
-export class RbdFormComponent implements OnInit {
+export class RbdFormComponent extends CdForm implements OnInit {
   poolPermission: Permission;
   rbdForm: CdFormGroup;
   getDirtyConfigurationValues: (
@@ -105,6 +106,7 @@ export class RbdFormComponent implements OnInit {
     public actionLabels: ActionLabelsI18n,
     public router: Router
   ) {
+    super();
     this.poolPermission = this.authStorageService.getPermissions().pool;
     this.resource = this.i18n('RBD');
     this.features = {
@@ -293,6 +295,8 @@ export class RbdFormComponent implements OnInit {
         this.setResponse(resp, this.snapName);
         this.rbdImage.next(resp);
       }
+
+      this.loadingReady();
     });
 
     _.each(this.features, (feature) => {

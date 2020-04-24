@@ -1,12 +1,5 @@
-<cd-loading-panel *ngIf="editing && loading && !error"
-                  i18n>Loading user data...</cd-loading-panel>
-<cd-alert-panel type="error"
-                *ngIf="editing && error"
-                (backAction)="goToListView()"
-                i18n>The user data could not be loaded.</cd-alert-panel>
-
 <div class="cd-col-form"
-     *ngIf="!loading && !error">
+     *cdFormLoading="loading">
   <form #frm="ngForm"
         [formGroup]="userForm"
         novalidate>
