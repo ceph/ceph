@@ -602,44 +602,20 @@ def cluster(ctx, config):
 
     devs_to_clean = {}
     remote_to_roles_to_devs = {}
-    remote_to_roles_to_journals = {}
     osds = ctx.cluster.only(teuthology.is_type('osd', cluster_name))
     for remote, roles_for_host in osds.remotes.iteritems():
         devs = teuthology.get_scratch_devices(remote)
-        roles_to_devs = {}
-        roles_to_journals = {}
-        if config.get('fs'):
-            log.info('fs option selected, checking for scratch devs')
-            log.info('found devs: %s' % (str(devs),))
-            devs_id_map = teuthology.get_wwn_id_map(remote, devs)
-            iddevs = devs_id_map.values()
-            roles_to_devs = assign_devs(
-                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), iddevs
-            )
-            if len(roles_to_devs) < len(iddevs):
-                iddevs = iddevs[len(roles_to_devs):]
-            devs_to_clean[remote] = []
-
-        if config.get('block_journal'):
-            log.info('block journal enabled')
-            roles_to_journals = assign_devs(
-                teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), iddevs
-            )
-            log.info('journal map: %s', roles_to_journals)
-
-        if config.get('tmpfs_journal'):
-            log.info('tmpfs journal enabled')
-            roles_to_journals = {}
-            remote.run(args=['sudo', 'mount', '-t', 'tmpfs', 'tmpfs', '/mnt'])
-            for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
-                tmpfs = '/mnt/' + role
-                roles_to_journals[role] = tmpfs
-                remote.run(args=['truncate', '-s', '1500M', tmpfs])
-            log.info('journal map: %s', roles_to_journals)
-
-        log.info('dev map: %s' % (str(roles_to_devs),))
+        roles_to_devs = assign_devs(
+            teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name), devs
+        )
+        devs_to_clean[remote] = []
+        log.info('osd dev map: {}'.format(roles_to_devs))
+        assert roles_to_devs, \
+            "remote {} has osd roles, but no osd devices were specified!".format(remote.hostname)
         remote_to_roles_to_devs[remote] = roles_to_devs
-        remote_to_roles_to_journals[remote] = roles_to_journals
+    log.info("remote_to_roles_to_devs: {}".format(remote_to_roles_to_devs))
+    for osd_role, dev_name in remote_to_roles_to_devs.items():
+        assert dev_name, "{} has no associated device!".format(osd_role)
 
     log.info('Generating config...')
     remotes_and_roles = ctx.cluster.remotes.items()
@@ -654,21 +630,12 @@ def cluster(ctx, config):
     conf = skeleton_config(
         ctx, roles=roles, ips=ips, mons=mons, cluster=cluster_name,
     )
-    for remote, roles_to_journals in remote_to_roles_to_journals.iteritems():
-        for role, journal in roles_to_journals.iteritems():
-            name = teuthology.ceph_role(role)
-            if name not in conf:
-                conf[name] = {}
-            conf[name]['osd journal'] = journal
     for section, keys in config['conf'].iteritems():
         for key, value in keys.iteritems():
             log.info("[%s] %s = %s" % (section, key, value))
             if section not in conf:
                 conf[section] = {}
             conf[section][key] = value
-
-    if config.get('tmpfs_journal'):
-        conf['journal dio'] = False
 
     if not hasattr(ctx, 'ceph'):
         ctx.ceph = {}
@@ -846,20 +813,16 @@ def cluster(ctx, config):
         ctx.disk_config = argparse.Namespace()
     if not hasattr(ctx.disk_config, 'remote_to_roles_to_dev'):
         ctx.disk_config.remote_to_roles_to_dev = {}
-    if not hasattr(ctx.disk_config, 'remote_to_roles_to_journals'):
-        ctx.disk_config.remote_to_roles_to_journals = {}
     if not hasattr(ctx.disk_config, 'remote_to_roles_to_dev_mount_options'):
         ctx.disk_config.remote_to_roles_to_dev_mount_options = {}
     if not hasattr(ctx.disk_config, 'remote_to_roles_to_dev_fstype'):
         ctx.disk_config.remote_to_roles_to_dev_fstype = {}
 
     teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_dev, remote_to_roles_to_devs)
-    teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_journals, remote_to_roles_to_journals)
 
     log.info("ctx.disk_config.remote_to_roles_to_dev: {r}".format(r=str(ctx.disk_config.remote_to_roles_to_dev)))
     for remote, roles_for_host in osds.remotes.iteritems():
         roles_to_devs = remote_to_roles_to_devs[remote]
-        roles_to_journals = remote_to_roles_to_journals[remote]
 
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
@@ -872,9 +835,8 @@ def cluster(ctx, config):
                     '-p',
                     mnt_point,
                 ])
-            log.info(str(roles_to_devs))
-            log.info(str(roles_to_journals))
-            log.info(role)
+            log.info('roles_to_devs: {}'.format(roles_to_devs))
+            log.info('role: {}'.format(role))
             if roles_to_devs.get(role):
                 dev = roles_to_devs[role]
                 fs = config.get('fs')
@@ -1186,14 +1148,6 @@ def cluster(ctx, config):
                         'ps', 'auxf',
                     ])
                     raise e
-
-        if config.get('tmpfs_journal'):
-            log.info('tmpfs journal enabled - unmounting tmpfs at /mnt')
-            for remote, roles_for_host in osds.remotes.iteritems():
-                remote.run(
-                    args=['sudo', 'umount', '-f', '/mnt'],
-                    check_status=False,
-                )
 
         if ctx.archive is not None and \
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
@@ -1887,8 +1841,6 @@ def task(ctx, config):
             fs=config.get('fs', 'xfs'),
             mkfs_options=config.get('mkfs_options', None),
             mount_options=config.get('mount_options', None),
-            block_journal=config.get('block_journal', None),
-            tmpfs_journal=config.get('tmpfs_journal', None),
             skip_mgr_daemons=config.get('skip_mgr_daemons', False),
             log_whitelist=config.get('log-whitelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
