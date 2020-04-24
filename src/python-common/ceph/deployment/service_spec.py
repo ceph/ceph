@@ -18,6 +18,9 @@ class ServiceSpecValidationError(Exception):
 
 
 def assert_valid_host(name):
+    if not name:
+        raise ServiceSpecValidationError("Empty hostname provided.")
+
     p = re.compile('^[a-zA-Z0-9-]+$')
     try:
         assert len(name) <= 250, 'name is too long (max 250 chars)'

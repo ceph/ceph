@@ -60,7 +60,8 @@ def cephadm_module():
             mock.patch("cephadm.module.HostCache.rm_host"), \
             mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
             mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command), \
-            mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix", get_store_prefix):
+            mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix", get_store_prefix), \
+            mock.patch("cephadm.module.CephadmOrchestrator.list_servers", lambda _: []):
 
         CephadmOrchestrator._register_commands('')
         CephadmOrchestrator._register_options('')

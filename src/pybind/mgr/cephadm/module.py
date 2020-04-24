@@ -1630,15 +1630,49 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: (Optional[str]) -> List[str]
         return list(self.inventory.filter_by_label(label))
 
+    def _verify_add_host(self, hostname: str):
+        """
+        Make sure, we have sane hostname:
+
+        * Either allowing all hosts as FQDN or as short hostnames.
+        * try to keep in sync with mgr.list_servers()
+        """
+        message = """
+  You may add `--force` to ignore this. Be aware that this might
+  cause CEPHADM_STRAY_HOST HEALTH warnings."""
+        existing_ceph: Set[str] = {s['hostname'] for s in self.list_servers() if
+                                   'hostname' in s}
+
+        for other in existing_ceph:
+            if hostname.startswith(other + '.') or other.startswith(hostname + '.'):
+                # TODO: under some artificial circumstances, this makes it impossible to
+                # add hosts, e.g. add_host('myhost') && add_host('myhost.with-a-dot-in-it')
+                raise OrchestratorValidationError(
+                    f"Failed to add {hostname}: There is already a similar hostname: {other}" + message)
+
+        if self.inventory.keys():
+            fqdns = [i.count('.') > 0 for i in self.inventory.keys()]
+            if hostname.count('.') > 0 and not any(fqdns):
+                raise OrchestratorValidationError(
+                    f"Failed to add {hostname}: Host looks like an FQDN" + message)
+
+            if hostname.count('.') == 0 and all(fqdns):
+                raise OrchestratorValidationError(
+                    f"Failed to add {hostname}: Host does not look like an FQDN" + message)
+
     @async_completion
-    def add_host(self, spec):
-        # type: (HostSpec) -> str
+    def add_host(self, spec, force=False):
+        # type: (HostSpec, bool) -> str
         """
         Add a host to be managed by the orchestrator.
 
         :param host: host name
         """
         assert_valid_host(spec.hostname)
+
+        if not force:
+            self._verify_add_host(spec.hostname)
+
         out, err, code = self._run_cephadm(spec.hostname, 'client', 'check-host',
                                            ['--expect-hostname', spec.hostname],
                                            addr=spec.addr,

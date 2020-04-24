@@ -87,6 +87,32 @@ class TestCephadm(object):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+    def test_host_fqdn(self, cephadm_module):
+        with self._with_host(cephadm_module, 'first.fqdn'):
+            with pytest.raises(OrchestratorError):
+                with self._with_host(cephadm_module, 'second'):
+                    assert False
+
+        with self._with_host(cephadm_module, 'first'):
+            with pytest.raises(OrchestratorError):
+                with self._with_host(cephadm_module, 'second.fqdn'):
+                    assert False
+
+        with self._with_host(cephadm_module, 'first.fqdn'):
+            with self._with_host(cephadm_module, 'second.fqdn'):
+                pass
+
+        with mock.patch("cephadm.module.CephadmOrchestrator.list_servers", lambda _: [{'hostname': 'host.fqdn'}]):
+            with pytest.raises(OrchestratorError):
+                with self._with_host(cephadm_module, 'host'):
+                    pass
+
+        with mock.patch("cephadm.module.CephadmOrchestrator.list_servers", lambda _: [{'hostname': 'host'}]):
+            with pytest.raises(OrchestratorError):
+                with self._with_host(cephadm_module, 'host.fqdn'):
+                    pass
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)

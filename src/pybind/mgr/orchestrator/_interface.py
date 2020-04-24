@@ -770,8 +770,8 @@ class Orchestrator(object):
         # type: () -> None
         raise NotImplementedError()
 
-    def add_host(self, host_spec):
-        # type: (HostSpec) -> Completion
+    def add_host(self, host_spec, force=False):
+        # type: (HostSpec, bool) -> Completion
         """
         Add a host to the orchestrator inventory.
 
