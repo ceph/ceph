@@ -13,6 +13,7 @@ ValidationError = namedtuple("ValidationError", ["exception", "backtrace"])
 
 class Workload(CephFSTestCase):
     def __init__(self, filesystem, mount):
+        super().__init__()
         self._mount = mount
         self._filesystem = filesystem
         self._initial_state = None
@@ -108,6 +109,9 @@ class DupInodeWorkload(Workload):
 
 class TestScrub(CephFSTestCase):
     MDSS_REQUIRED = 1
+
+    def setUp(self):
+        super().setUp()
 
     def _scrub(self, workload, workers=1):
         """
