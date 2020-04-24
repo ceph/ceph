@@ -138,11 +138,13 @@ class SpecStore():
         )
 
     def rm(self, service_name):
-        # type: (str) -> None
-        if service_name in self.specs:
+        # type: (str) -> bool
+        found = service_name in self.specs
+        if found:
             del self.specs[service_name]
             del self.spec_created[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
+        return found
 
     def find(self, service_name: Optional[str] = None) -> List[ServiceSpec]:
         specs = []
@@ -2016,9 +2018,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     @trivial_completion
     def remove_service(self, service_name):
         self.log.info('Remove service %s' % service_name)
-        self.spec_store.rm(service_name)
-        self._kick_serve_loop()
-        return ['Removed service %s' % service_name]
+        found = self.spec_store.rm(service_name)
+        if found:
+            self._kick_serve_loop()
+            return ['Removed service %s' % service_name]
+        else:
+            # must be idempotent: still a success.
+            return [f'Failed to remove service. <{service_name}> was not found.']
 
     @trivial_completion
     def get_inventory(self, host_filter=None, refresh=False):
@@ -2792,7 +2798,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        return "Scheduled %s update..." % spec.service_type
+        return "Scheduled %s update..." % spec.service_name()
 
     @trivial_completion
     def apply(self, specs: List[ServiceSpec]):
@@ -3682,4 +3688,3 @@ class HostAssignment(object):
         logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
             existing, chosen))
         return existing + chosen
-
