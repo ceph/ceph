@@ -16,6 +16,8 @@ from execnet.gateway_bootstrap import HostNotFound
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
     NFSServiceSpec, IscsiServiceSpec
+from ceph.deployment.drive_selection.selector import DriveSelection
+from ceph.deployment.inventory import Devices, Device
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
@@ -157,7 +159,6 @@ class TestCephadm(object):
                 c = cephadm_module.daemon_action(what, 'rgw', 'myrgw.foobar')
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
 
-
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_mon_add(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
@@ -176,6 +177,57 @@ class TestCephadm(object):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
             r = cephadm_module._apply_service(ServiceSpec('mgr', placement=ps))
             assert r
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    def test_find_destroyed_osds(self, _mon_cmd, cephadm_module):
+        dict_out = {
+            "nodes": [
+                {
+                    "id": -1,
+                    "name": "default",
+                    "type": "root",
+                    "type_id": 11,
+                    "children": [
+                        -3
+                    ]
+                },
+                {
+                    "id": -3,
+                    "name": "host1",
+                    "type": "host",
+                    "type_id": 1,
+                    "pool_weights": {},
+                    "children": [
+                        0
+                    ]
+                },
+                {
+                    "id": 0,
+                    "device_class": "hdd",
+                    "name": "osd.0",
+                    "type": "osd",
+                    "type_id": 0,
+                    "crush_weight": 0.0243988037109375,
+                    "depth": 2,
+                    "pool_weights": {},
+                    "exists": 1,
+                    "status": "destroyed",
+                    "reweight": 1,
+                    "primary_affinity": 1
+                }
+            ],
+            "stray": []
+        }
+        json_out = json.dumps(dict_out)
+        _mon_cmd.return_value = (0, json_out, '')
+        out = cephadm_module.find_destroyed_osds()
+        assert out == {'host1': ['0']}
+
+    @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
+    def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
+        _mon_cmd.return_value = (1, "", "fail_msg")
+        with pytest.raises(OrchestratorError):
+            out = cephadm_module.find_destroyed_osds()
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -206,6 +258,54 @@ class TestCephadm(object):
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
             assert out == "Created no osd(s) on host test; already created?"
+
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_prepare_drivegroup(self, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=['']))
+            out = cephadm_module.prepare_drivegroup(dg)
+            assert len(out) == 1
+            f1 = out[0]
+            assert f1[0] == 'test'
+            assert isinstance(f1[1], DriveSelection)
+
+    @pytest.mark.parametrize(
+        "devices, preview, exp_command",
+        [
+            # no preview and only one disk, prepare is used due the hack that is in place.
+            (['/dev/sda'], False, "lvm prepare --bluestore --data /dev/sda --no-systemd"),
+            # no preview and multiple disks, uses batch
+            (['/dev/sda', '/dev/sdb'], False, "lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
+            # preview and only one disk needs to use batch again to generate the preview
+            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --report --format json"),
+            # preview and multiple disks work the same
+            (['/dev/sda', '/dev/sdb'], True, "lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
+        ]
+    )
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_command):
+        with self._with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
+            ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
+            preview = preview
+            out = cephadm_module.driveselection_to_ceph_volume(dg, ds, [], preview)
+            assert out in exp_command
+
+    @mock.patch("cephadm.module.SpecStore.find")
+    @mock.patch("cephadm.module.CephadmOrchestrator.prepare_drivegroup")
+    @mock.patch("cephadm.module.CephadmOrchestrator.driveselection_to_ceph_volume")
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_ceph_volume_command")
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    def test_preview_drivegroups_str(self, _run_c_v_command, _ds_to_cv, _prepare_dg, _find_store, cephadm_module):
+        with self._with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=['']))
+            _find_store.return_value = [dg]
+            _prepare_dg.return_value = [('host1', 'ds_dummy')]
+            _run_c_v_command.return_value = ("{}", '', 0)
+            cephadm_module.preview_drivegroups(drive_group_name='foo')
+            _find_store.assert_called_once_with(service_name='foo')
+            _prepare_dg.assert_called_once_with(dg)
+            _run_c_v_command.assert_called_once()
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([

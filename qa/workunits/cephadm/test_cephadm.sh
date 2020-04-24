@@ -3,21 +3,15 @@
 SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# cleanup during exit
+[ -z "$CLEANUP" ] && CLEANUP=true
+
 FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
 IMAGE_MASTER=${IMAGE_MASTER:-'docker.io/ceph/daemon-base:latest-octopus'}
 IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
 IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
-
-TMPDIR=$(mktemp -d)
-
-function cleanup()
-{
-    dump_all_logs $FSID
-    rm -rf $TMPDIR
-}
-trap cleanup EXIT
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -85,6 +79,26 @@ loopdev=$($SUDO losetup -a | grep $(basename $OSD_IMAGE_NAME) | awk -F : '{print
 if ! [ "$loopdev" = "" ]; then
     $SUDO losetup -d $loopdev
 fi
+
+# TMPDIR for test data
+[ -d "$TMPDIR" ] || TMPDIR=$(mktemp -d tmp.$SCRIPT_NAME.XXXXXX)
+
+function cleanup()
+{
+    if [ $CLEANUP = false ]; then
+        # preserve the TMPDIR state
+        echo "========================"
+        echo "!!! CLEANUP=$CLEANUP !!!"
+        echo
+        echo "TMPDIR=$TMPDIR"
+        echo "========================"
+        return
+    fi
+
+    dump_all_logs $FSID
+    rm -rf $TMPDIR
+}
+trap cleanup EXIT
 
 function expect_false()
 {
@@ -384,6 +398,9 @@ $CEPHADM --timeout 10 enter --fsid $FSID --name mon.a -- sleep 1
 $CEPHADM ceph-volume --fsid $FSID -- inventory --format=json \
       | jq '.[]'
 
+## preserve test state
+[ $CLEANUP = false ] && exit 0
+
 ## rm-daemon
 # mon and osd require --force
 expect_false $CEPHADM rm-daemon --fsid $FSID --name mon.a
@@ -394,5 +411,4 @@ $CEPHADM rm-daemon --fsid $FSID --name mgr.x
 expect_false $CEPHADM rm-cluster --fsid $FSID
 $CEPHADM rm-cluster --fsid $FSID --force
 
-rm -rf $TMPDIR
 echo PASS

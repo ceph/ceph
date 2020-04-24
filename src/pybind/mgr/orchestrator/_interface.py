@@ -437,7 +437,8 @@ class Completion(_Promise):
     call one completion from another completion. I.e. making them re-usable
     using Promises E.g.::
 
-        >>> return Orchestrator().get_hosts().then(self._create_osd)
+        >>> #doctest: +SKIP
+        ... return Orchestrator().get_hosts().then(self._create_osd)
 
     where ``get_hosts`` returns a Completion of list of hosts and
     ``_create_osd`` takes a list of hosts.
@@ -445,7 +446,8 @@ class Completion(_Promise):
     The concept behind this is to store the computation steps
     explicit and then explicitly evaluate the chain:
 
-        >>> p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
+        >>> #doctest: +SKIP
+        ... p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
         ... p.finalize(2)
         ... assert p.result = "4"
 
@@ -695,7 +697,8 @@ class Orchestrator(object):
             is actually available in the orchestrator. I.e. this
             won't work as expected::
 
-                >>> if OrchestratorClientMixin().available()[0]:  # wrong.
+                >>> #doctest: +SKIP
+                ... if OrchestratorClientMixin().available()[0]:  # wrong.
                 ...     OrchestratorClientMixin().get_hosts()
 
         :return: two-tuple of boolean, string
@@ -727,13 +730,15 @@ class Orchestrator(object):
             is actually possible in the orchestrator. I.e. this
             won't work as expected::
 
-                >>> api = OrchestratorClientMixin()
+                >>> #doctest: +SKIP
+                ... api = OrchestratorClientMixin()
                 ... if api.get_feature_set()['get_hosts']['available']:  # wrong.
                 ...     api.get_hosts()
 
             It's better to ask for forgiveness instead::
 
-                >>> try:
+                >>> #doctest: +SKIP
+                ... try:
                 ...     OrchestratorClientMixin().get_hosts()
                 ... except (OrchestratorError, NotImplementedError):
                 ...     ...
@@ -939,6 +944,14 @@ class Orchestrator(object):
 
     def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> Completion:
         """ Update OSD cluster """
+        raise NotImplementedError()
+
+    def set_unmanaged_flag(self, service_name: str, unmanaged_flag: bool) -> HandleCommandResult:
+        raise NotImplementedError()
+
+    def preview_drivegroups(self, drive_group_name: Optional[str] = 'osd',
+                            dg_specs: Optional[List[DriveGroupSpec]] = None) -> List[Dict[str, Dict[Any, Any]]]:
+        """ Get a preview for OSD deployments """
         raise NotImplementedError()
 
     def remove_osds(self, osd_ids: List[str],
@@ -1280,8 +1293,16 @@ class DaemonDescription(object):
 
     def service_id(self):
         if self.daemon_type == 'rgw':
-            v = self.daemon_id.split('.')
-            return '.'.join(v[0:2])
+            if self.hostname and self.hostname in self.daemon_id:
+                pre, post_ = self.daemon_id.split(self.hostname)
+                return pre[:-1]
+            else:
+                # daemon_id == "realm.zone.host.random"
+                v = self.daemon_id.split('.')
+                if len(v) == 4:
+                    return '.'.join(v[0:2])
+                # subcluster or fqdn? undecidable.
+                raise OrchestratorError(f"DaemonDescription: Cannot calculate service_id: {v}")
         if self.daemon_type in ['mds', 'nfs', 'iscsi']:
             return self.daemon_id.split('.')[0]
         return self.daemon_type
@@ -1410,7 +1431,7 @@ class ServiceDescription(object):
 
         c_status = status.copy()
         for k in ['last_refresh', 'created']:
-            if k in c:
+            if k in c_status:
                 c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
         return cls(spec=spec, **c_status)
 
@@ -1471,10 +1492,10 @@ class InventoryHost(object):
             name = _data.pop('name')
             addr = _data.pop('addr', None) or name
             devices = inventory.Devices.from_json(_data.pop('devices'))
+            labels = _data.pop('labels', list())
             if _data:
                 error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
                 raise OrchestratorValidationError(error_msg)
-            labels = _data.get('labels', list())
             return cls(name, devices, labels, addr)
         except KeyError as e:
             error_msg = '{} is required for {}'.format(e, cls.__name__)
@@ -1549,7 +1570,8 @@ class OrchestratorClientMixin(Orchestrator):
 
 
     >>> import mgr_module
-    >>> class MyImplentation(mgr_module.MgrModule, Orchestrator):
+    >>> #doctest: +SKIP
+    ... class MyImplentation(mgr_module.MgrModule, Orchestrator):
     ...     def __init__(self, ...):
     ...         self.orch_client = OrchestratorClientMixin()
     ...         self.orch_client.set_mgr(self.mgr))

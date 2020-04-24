@@ -30,7 +30,7 @@ import uuid
 
 from ceph.deployment import inventory, translate
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.drive_selection import selector
+from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.service_spec import \
     HostPlacementSpec, NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
 
@@ -144,8 +144,7 @@ class SpecStore():
             del self.spec_created[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
 
-    def find(self, service_name=None):
-        # type: (Optional[str]) -> List[ServiceSpec]
+    def find(self, service_name: Optional[str] = None) -> List[ServiceSpec]:
         specs = []
         for sn, spec in self.specs.items():
             if not service_name or \
@@ -1069,7 +1068,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     host_detail.append(
                         'stray host %s has %d stray daemons: %s' % (
                             host, len(missing_names), missing_names))
-            if host_detail:
+            if self.warn_on_stray_hosts and host_detail:
                 self.health_checks['CEPHADM_STRAY_HOST'] = {
                     'severity': 'warning',
                     'summary': '%d stray host(s) with %s daemon(s) '
@@ -1078,7 +1077,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     'count': len(host_detail),
                     'detail': host_detail,
                 }
-            if daemon_detail:
+            if self.warn_on_stray_daemons and daemon_detail:
                 self.health_checks['CEPHADM_STRAY_DAEMON'] = {
                     'severity': 'warning',
                     'summary': '%d stray daemons(s) not managed by cephadm' % (
@@ -2085,27 +2084,72 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return blink(locs)
 
     def get_osd_uuid_map(self, only_up=False):
-        # type: (bool) -> Dict[str,str]
+        # type: (bool) -> Dict[str, str]
         osd_map = self.get('osd_map')
         r = {}
         for o in osd_map['osds']:
             # only include OSDs that have ever started in this map.  this way
             # an interrupted osd create can be repeated and succeed the second
             # time around.
-            if not only_up or o['up_from'] > 0:
-                r[str(o['osd'])] = o['uuid']
+            osd_id = o.get('osd')
+            if osd_id is None:
+                raise OrchestratorError("Could not retrieve osd_id from osd_map")
+            if not only_up or (o['up_from'] > 0):
+                r[str(osd_id)] = o.get('uuid', '')
         return r
 
     @trivial_completion
     def apply_drivegroups(self, specs: List[DriveGroupSpec]):
         return [self._apply(spec) for spec in specs]
 
+    def find_destroyed_osds(self) -> Dict[str, List[str]]:
+        osd_host_map: Dict[str, List[str]] = dict()
+        ret, out, err = self.mon_command({
+            'prefix': 'osd tree',
+            'states': ['destroyed'],
+            'format': 'json'
+        })
+        if ret != 0:
+            raise OrchestratorError(f"Caught error on calling 'osd tree destroyed' -> {err}")
+        try:
+            tree = json.loads(out)
+        except json.decoder.JSONDecodeError:
+            self.log.error(f"Could not decode json -> {out}")
+            return osd_host_map
+
+        nodes = tree.get('nodes', {})
+        for node in nodes:
+            if node.get('type') == 'host':
+                osd_host_map.update(
+                    {node.get('name'): [str(_id) for _id in node.get('children', list())]}
+                )
+        return osd_host_map
+
     @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
-        self.log.debug("Processing DriveGroup {}".format(drive_group))
+        self.log.debug(f"Processing DriveGroup {drive_group}")
+        ret = []
+        drive_group.osd_id_claims = self.find_destroyed_osds()
+        self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
+        for host, drive_selection in self.prepare_drivegroup(drive_group):
+            self.log.info('Applying %s on host %s...' % (drive_group.service_id, host))
+            cmd = self.driveselection_to_ceph_volume(drive_group, drive_selection,
+                                                     drive_group.osd_id_claims.get(host, []))
+            if not cmd:
+                self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
+                continue
+            ret_msg = self._create_osd(host, cmd,
+                                       replace_osd_ids=drive_group.osd_id_claims.get(host, []))
+            ret.append(ret_msg)
+        return ", ".join(ret)
+
+    def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
         # 1) use fn_filter to determine matching_hosts
         matching_hosts = drive_group.placement.pattern_matches_hosts([x for x in self.cache.get_hosts()])
         # 2) Map the inventory to the InventoryHost object
+        host_ds_map = []
+
+        # set osd_id_claims
 
         def _find_inv_for_host(hostname: str, inventory_dict: dict):
             # This is stupid and needs to be loaded with the host
@@ -2114,27 +2158,53 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     return _inventory
             raise OrchestratorError("No inventory found for host: {}".format(hostname))
 
-        ret = []
-        # 3) iterate over matching_host and call DriveSelection and to_ceph_volume
+        # 3) iterate over matching_host and call DriveSelection
         self.log.debug(f"Checking matching hosts -> {matching_hosts}")
         for host in matching_hosts:
             inventory_for_host = _find_inv_for_host(host, self.cache.devices)
             self.log.debug(f"Found inventory for host {inventory_for_host}")
-            drive_selection = selector.DriveSelection(drive_group, inventory_for_host)
+            drive_selection = DriveSelection(drive_group, inventory_for_host)
             self.log.debug(f"Found drive selection {drive_selection}")
-            cmd = translate.to_ceph_volume(drive_group, drive_selection).run()
-            self.log.debug(f"translated to cmd {cmd}")
-            if not cmd:
-                self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
-                continue
-            self.log.info('Applying %s on host %s...' % (
-                drive_group.service_name(), host))
-            ret_msg = self._create_osd(host, cmd)
-            ret.append(ret_msg)
-        return ", ".join(ret)
+            host_ds_map.append((host, drive_selection))
+        return host_ds_map
 
-    def _create_osd(self, host, cmd):
+    def driveselection_to_ceph_volume(self, drive_group: DriveGroupSpec,
+                                      drive_selection: DriveSelection,
+                                      osd_id_claims: Optional[List[str]] = None,
+                                      preview: bool = False) -> Optional[str]:
+        self.log.debug(f"Translating DriveGroup <{drive_group}> to ceph-volume command")
+        cmd: Optional[str] = translate.to_ceph_volume(drive_group, drive_selection, osd_id_claims, preview=preview).run()
+        self.log.debug(f"Resulting ceph-volume cmd: {cmd}")
+        return cmd
 
+    def preview_drivegroups(self, drive_group_name: Optional[str] = None,
+                            dg_specs: Optional[List[DriveGroupSpec]] = None) -> List[Dict[str, Dict[Any, Any]]]:
+        # find drivegroups
+        if drive_group_name:
+            drive_groups = cast(List[DriveGroupSpec],
+                                self.spec_store.find(service_name=drive_group_name))
+        elif dg_specs:
+            drive_groups = dg_specs
+        else:
+            drive_groups = []
+        ret_all = []
+        for drive_group in drive_groups:
+            drive_group.osd_id_claims = self.find_destroyed_osds()
+            self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
+            # prepare driveselection
+            for host, ds in self.prepare_drivegroup(drive_group):
+                cmd = self.driveselection_to_ceph_volume(drive_group, ds,
+                                                         drive_group.osd_id_claims.get(host, []), preview=True)
+                if not cmd:
+                    self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
+                    continue
+                out, err, code = self._run_ceph_volume_command(host, cmd)
+                if out:
+                    concat_out = json.loads(" ".join(out))
+                    ret_all.append({'data': concat_out, 'drivegroup': drive_group.service_id, 'host': host})
+        return ret_all
+
+    def _run_ceph_volume_command(self, host: str, cmd: str) -> Tuple[List[str], List[str], int]:
         self._require_hosts(host)
 
         # get bootstrap key
@@ -2153,8 +2223,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'keyring': keyring,
         })
 
-        before_osd_uuid_map = self.get_osd_uuid_map(only_up=True)
-
         split_cmd = cmd.split(' ')
         _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
@@ -2163,6 +2231,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             _cmd,
             stdin=j,
             error_ok=True)
+        return out, err, code
+
+    def _create_osd(self, host, cmd, replace_osd_ids=None):
+        out, err, code = self._run_ceph_volume_command(host, cmd)
+
         if code == 1 and ', it is already prepared' in '\n'.join(err):
             # HACK: when we create against an existing LV, ceph-volume
             # returns an error and the above message.  To make this
@@ -2182,6 +2255,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 'lvm', 'list',
                 '--format', 'json',
             ])
+        before_osd_uuid_map = self.get_osd_uuid_map(only_up=True)
         osds_elems = json.loads('\n'.join(out))
         fsid = self._cluster_fsid
         osd_uuid_map = self.get_osd_uuid_map()
@@ -2191,16 +2265,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if osd['tags']['ceph.cluster_fsid'] != fsid:
                     self.log.debug('mismatched fsid, skipping %s' % osd)
                     continue
-                if osd_id in before_osd_uuid_map:
-                    # this osd existed before we ran prepare
+                if osd_id in before_osd_uuid_map and osd_id not in replace_osd_ids:
+                    # if it exists but is part of the replacement operation, don't skip
                     continue
                 if osd_id not in osd_uuid_map:
-                    self.log.debug('osd id %d does not exist in cluster' % osd_id)
+                    self.log.debug('osd id {} does not exist in cluster'.format(osd_id))
                     continue
-                if osd_uuid_map[osd_id] != osd['tags']['ceph.osd_fsid']:
+                if osd_uuid_map.get(osd_id) != osd['tags']['ceph.osd_fsid']:
                     self.log.debug('mismatched osd uuid (cluster has %s, osd '
                                    'has %s)' % (
-                                       osd_uuid_map[osd_id],
+                                       osd_uuid_map.get(osd_id),
                                        osd['tags']['ceph.osd_fsid']))
                     continue
 
@@ -2295,7 +2369,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             if daemon_type == 'osd':
                 if not osd_uuid_map:
                     osd_uuid_map = self.get_osd_uuid_map()
-                osd_uuid = osd_uuid_map.get(daemon_id, None)
+                osd_uuid = osd_uuid_map.get(daemon_id)
                 if not osd_uuid:
                     raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
                 extra_args.extend(['--osd-fsid', osd_uuid])
@@ -2763,32 +2837,54 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mon_command({
             'prefix': 'config set',
-            'who': 'client.rgw.' + spec.service_id,
+            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
             'name': 'rgw_zone',
             'value': spec.rgw_zone,
         })
         ret, out, err = self.mon_command({
             'prefix': 'config set',
-            'who': 'client.rgw.' + spec.rgw_realm,
+            'who': f"{utils.name_to_config_section('rgw')}.{spec.rgw_realm}",
             'name': 'rgw_realm',
             'value': spec.rgw_realm,
         })
-        if spec.ssl:
-            v = 'beast ssl_port=%d' % spec.get_port()
-        else:
-            v = 'beast port=%d' % spec.get_port()
         ret, out, err = self.mon_command({
             'prefix': 'config set',
-            'who': 'client.rgw.' + spec.service_id,
+            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
             'name': 'rgw_frontends',
-            'value': v,
+            'value': spec.rgw_frontends_config_value(),
         })
+
+        if spec.rgw_frontend_ssl_certificate:
+            if isinstance(spec.rgw_frontend_ssl_certificate, list):
+                cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
+            else:
+                cert_data = spec.rgw_frontend_ssl_certificate
+            ret, out, err = self.mon_command({
+                'prefix': 'config-key set',
+                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
+                'val': cert_data,
+            })
+
+        if spec.rgw_frontend_ssl_key:
+            if isinstance(spec.rgw_frontend_ssl_key, list):
+                key_data = '\n'.join(spec.rgw_frontend_ssl_key)
+            else:
+                key_data = spec.rgw_frontend_ssl_key
+            ret, out, err = self.mon_command({
+                'prefix': 'config-key set',
+                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
+                'val': key_data,
+            })
+
+        logger.info('Saving service %s spec with placement %s' % (
+            spec.service_name(), spec.placement.pretty_str()))
+        self.spec_store.save(spec)
 
     def _create_rgw(self, rgw_id, host):
         ret, keyring, err = self.mon_command({
             'prefix': 'auth get-or-create',
-            'entity': 'client.rgw.' + rgw_id,
-            'caps': ['mon', 'allow rw',
+            'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
+            'caps': ['mon', 'allow *',
                      'mgr', 'allow rw',
                      'osd', 'allow rwx'],
         })
