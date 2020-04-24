@@ -1047,7 +1047,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_latest_counter(svc_type, svc_name, path)
 
-    def list_servers(self):
+    def list_servers(self) -> List[dict]:
         """
         Like ``get_server``, but gives information about all servers (i.e. all
         unique hostnames that have been mentioned in daemon metadata)

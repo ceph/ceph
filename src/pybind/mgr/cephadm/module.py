@@ -1046,8 +1046,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             host_num_daemons = 0
             daemon_detail = []  # type: List[str]
             for item in ls:
-                host = item.get('hostname')
-                daemons = item.get('services')  # misnomer!
+                host = item.get('hostname', '')
+                daemons = item.get('services', [])  # misnomer!
                 missing_names = []
                 for s in daemons:
                     name = '%s.%s' % (s.get('type'), s.get('id'))
