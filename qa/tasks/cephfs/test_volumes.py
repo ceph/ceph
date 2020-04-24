@@ -364,7 +364,7 @@ class TestVolumes(CephFSTestCase):
         self.assertNotEqual(subvolpath, None)
 
         # shrink the subvolume
-        nsize = osize/2
+        nsize = osize // 2
         self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
 
         # verify the quota
@@ -456,7 +456,7 @@ class TestVolumes(CephFSTestCase):
         self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
-        nsize = usedsize/2
+        nsize = usedsize // 2
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
         except CommandFailedError:
@@ -496,7 +496,7 @@ class TestVolumes(CephFSTestCase):
         self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
-        nsize = usedsize/2
+        nsize = usedsize // 2
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize), "--no_shrink")
         except CommandFailedError as ce:
@@ -531,7 +531,7 @@ class TestVolumes(CephFSTestCase):
         self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
 
         # create a file of size 5MB and try write more
-        file_size=file_size/2
+        file_size=file_size // 2
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
                                                                              number_of_files,
@@ -2156,7 +2156,7 @@ class TestVolumes(CephFSTestCase):
         self.fs.add_data_pool(new_pool)
 
         self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", new_pool,
-                                            "max_bytes", "{0}".format(pool_capacity / 4))
+                                            "max_bytes", "{0}".format(pool_capacity // 4))
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1, "--pool_layout", new_pool)
