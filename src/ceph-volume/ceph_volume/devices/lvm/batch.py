@@ -1,5 +1,6 @@
 import argparse
 import logging
+import json
 from textwrap import dedent
 from ceph_volume import terminal, decorators
 from ceph_volume.util import disk, prompt_bool
@@ -376,6 +377,11 @@ class Batch(object):
                 # filtered
                 if self.args.yes and dev_list and self.usable and devs != usable:
                     err = '{} devices were filtered in non-interactive mode, bailing out'
+                    if self.args.format == "json" and self.args.report:
+                        # if a json report is requested, report unchanged so idempotency checks
+                        # in ceph-ansible will work
+                        print(json.dumps({"changed": False, "osds": [], "vgs": []}))
+                        raise SystemExit(0)
                     raise RuntimeError(err.format(len(devs) - len(usable)))
 
 
