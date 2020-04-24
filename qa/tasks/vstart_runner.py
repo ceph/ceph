@@ -51,6 +51,7 @@ import platform
 from teuthology import misc
 from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
+from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
 import six
 import logging
@@ -239,6 +240,9 @@ class LocalRemote(object):
     Run this inside your src/ dir!
     """
 
+    os = Remote.os
+    arch = Remote.arch
+
     def __init__(self):
         self.name = "local"
         self.hostname = "localhost"
@@ -413,7 +417,7 @@ class LocalRemote(object):
             remote_date = remote.sh('date')
         """
         if 'stdout' not in kwargs:
-            kwargs['stdout'] = BytesIO()
+            kwargs['stdout'] = StringIO()
         if 'args' not in kwargs:
             kwargs['args'] = script
         proc = self.run(**kwargs)
