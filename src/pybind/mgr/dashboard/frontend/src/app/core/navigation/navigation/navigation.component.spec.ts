@@ -12,6 +12,7 @@ import {
   FeatureTogglesMap,
   FeatureTogglesService
 } from '../../../shared/services/feature-toggles.service';
+import { PrometheusAlertService } from '../../../shared/services/prometheus-alert.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { NavigationModule } from '../navigation.module';
 import { NavigationComponent } from './navigation.component';
@@ -61,7 +62,8 @@ describe('NavigationComponent', () => {
           }
         },
         { provide: SummaryService, useValue: { subscribe: jest.fn() } },
-        { provide: FeatureTogglesService, useValue: { get: jest.fn() } }
+        { provide: FeatureTogglesService, useValue: { get: jest.fn() } },
+        { provide: PrometheusAlertService, useValue: { alerts: [] } }
       ]
     });
   });
