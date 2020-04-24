@@ -70,6 +70,8 @@ Synopsis
 |                           [--skip-pull] [--skip-firewalld] [--allow-overwrite]
 |                           [--allow-fqdn-hostname] [--skip-prepare-host]
 |                           [--orphan-initial-daemons] [--skip-monitoring-stack]
+|                           [--apply-spec APPLY_SPEC]
+
 
 
 | **cephadm** **deploy** [-h] --name NAME --fsid FSID [--config CONFIG]
@@ -216,7 +218,7 @@ Arguments:
 * [--skip-prepare-host]           Do not prepare host
 * [--orphan-initial-daemons]      Do not create initial mon, mgr, and crash service specs
 * [--skip-monitoring-stack]       Do not automatically provision monitoring stack] (prometheus, grafana, alertmanager, node-exporter)
-
+* [--apply-spec APPLY_SPEC]       Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)
 
 ceph-volume
 -----------

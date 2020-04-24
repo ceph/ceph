@@ -27,6 +27,7 @@ from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta
+from orchestrator._interface import GenericSpec
 
 from . import remotes
 from . import utils
@@ -1067,8 +1068,7 @@ you may want to run:
         # type: (Optional[str]) -> List[str]
         return list(self.inventory.filter_by_label(label))
 
-    @trivial_completion
-    def add_host(self, spec):
+    def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
         Add a host to be managed by the orchestrator.
@@ -1090,6 +1090,10 @@ you may want to run:
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
+
+    @trivial_completion
+    def add_host(self, spec: HostSpec) -> str:
+        return self._add_host(spec)
 
     @trivial_completion
     def remove_host(self, host):
@@ -2004,7 +2008,13 @@ you may want to run:
         # type: (ServiceSpec) -> List[str]
         return self._add_daemon('mgr', spec, self.mgr_service.create)
 
-    def _apply(self, spec: ServiceSpec) -> str:
+    def _apply(self, spec: GenericSpec) -> str:
+        if spec.service_type == 'host':
+            return self._add_host(cast(HostSpec, spec))
+
+        return self._apply_service_spec(cast(ServiceSpec, spec))
+
+    def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
@@ -2041,8 +2051,11 @@ you may want to run:
         return "Scheduled %s update..." % spec.service_name()
 
     @trivial_completion
-    def apply(self, specs: List[ServiceSpec]):
-        return [self._apply(spec) for spec in specs]
+    def apply(self, specs: List[GenericSpec]):
+        results = []
+        for spec in specs:
+            results.append(self._apply(spec))
+        return results
 
     @trivial_completion
     def apply_mgr(self, spec):
