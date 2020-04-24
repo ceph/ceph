@@ -505,8 +505,8 @@ public:
   bool if_already_run_today(time_t start_date);
   bool expired_session(time_t started);
   time_t thread_stop_at();
-  int list_lc_progress(const string& marker, uint32_t max_entries,
-		       vector<cls_rgw_lc_entry>&);
+  int list_lc_progress(string& marker, uint32_t max_entries,
+		       vector<cls_rgw_lc_entry>&, int& index);
   int bucket_lc_prepare(int index, LCWorker* worker);
   int bucket_lc_process(string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
