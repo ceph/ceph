@@ -1,4 +1,4 @@
-import { Component, ViewChild } from '@angular/core';
+import { Component, NgZone, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalService } from 'ngx-bootstrap/modal';
@@ -30,12 +30,13 @@ const BASE_URL = 'rgw/user';
 export class RgwUserListComponent extends ListWithDetails {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-
   permission: Permission;
   tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
   users: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
+  isStale = false;
+  staleTimeout: number;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -43,7 +44,8 @@ export class RgwUserListComponent extends ListWithDetails {
     private bsModalService: BsModalService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private ngZone: NgZone
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rgw;
@@ -105,9 +107,23 @@ export class RgwUserListComponent extends ListWithDetails {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.tableActions = [addAction, editAction, deleteAction];
+    this.timeConditionReached();
+  }
+
+  timeConditionReached() {
+    clearTimeout(this.staleTimeout);
+    this.ngZone.runOutsideAngular(() => {
+      this.staleTimeout = window.setTimeout(() => {
+        this.ngZone.run(() => {
+          this.isStale = true;
+        });
+      }, 10000);
+    });
   }
 
   getUserList(context: CdTableFetchDataContext) {
+    this.isStale = false;
+    this.timeConditionReached();
     this.rgwUserService.list().subscribe(
       (resp: object[]) => {
         this.users = resp;
