@@ -2,6 +2,7 @@ import unittest
 import time
 import logging
 
+from six import ensure_str
 from teuthology.orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ class CephTestCase(unittest.TestCase):
 
         class ContextManager(object):
             def match(self):
-                found = expected_pattern in self.watcher_process.stdout.getvalue()
+                found = expected_pattern in ensure_str(self.watcher_process.stdout.getvalue())
                 if invert_match:
                     return not found
 
