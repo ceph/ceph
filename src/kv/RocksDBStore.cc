@@ -2968,7 +2968,7 @@ int RocksDBStore::reshard(const std::string& new_sharding)
       } else {
 	new_raw_key = key;
       }
-      bat->SingleDelete(handle, raw_key);
+      bat->Delete(handle, raw_key);
       bat->Put(new_handle, new_raw_key, value);
       dout(25) << "moving " << (void*)handle << "/" << pretty_binary_string(raw_key.ToString()) <<
 	" to " << (void*)new_handle << "/" << pretty_binary_string(new_raw_key) <<
