@@ -14,11 +14,15 @@
 releases:
   octopus:
     releases:
+      - version: 15.2.1
+        released: 2020-04-09
       - version: 15.2.0
         released: 2020-03-23
     target_eol: 2022-06-01
   nautilus:
     releases:
+      - version: 14.2.9
+        released: 2020-04-15
       - version: 14.2.8
         released: 2020-03-03
       - version: 14.2.7
@@ -41,6 +45,10 @@ releases:
 
   mimic:
     releases:
+      - version: 13.2.10
+        released: 2020-04-23
+      - version: 13.2.9
+        released: 2020-04-16
       - version: 13.2.8
         released: 2019-12-13
       - version: 13.2.7
