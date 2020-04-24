@@ -92,6 +92,7 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       replacing(false),
       can_write(false),
       bannerExchangeCallback(nullptr),
+      tx_frame_asm(&session_stream_handlers),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
 }
@@ -573,11 +574,14 @@ template <class F>
 bool ProtocolV2::append_frame(F& frame) {
   ceph::bufferlist bl;
   try {
-    bl = frame.get_buffer(session_stream_handlers);
+    bl = frame.get_buffer(tx_frame_asm);
   } catch (ceph::crypto::onwire::TxHandlerError &e) {
     ldout(cct, 1) << __func__ << " " << e.what() << dendl;
     return false;
   }
+
+  ldout(cct, 25) << __func__ << " assembled frame " << bl.length()
+                 << " bytes " << tx_frame_asm << dendl;
   connection->outgoing_bl.append(bl);
   return true;
 }
@@ -787,11 +791,14 @@ CtPtr ProtocolV2::write(const std::string &desc,
                         F &frame) {
   ceph::bufferlist bl;
   try {
-    bl = frame.get_buffer(session_stream_handlers);
+    bl = frame.get_buffer(tx_frame_asm);
   } catch (ceph::crypto::onwire::TxHandlerError &e) {
     ldout(cct, 1) << __func__ << " " << e.what() << dendl;
     return _fault();
   }
+
+  ldout(cct, 25) << __func__ << " assembled frame " << bl.length()
+                 << " bytes " << tx_frame_asm << dendl;
   return write(desc, next, bl);
 }
 

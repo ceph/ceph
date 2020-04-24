@@ -5,6 +5,7 @@
 #include "common/Clock.h"
 #include "crypto_onwire.h"
 #include <array>
+#include <iosfwd>
 #include <utility>
 
 #include <boost/container/static_vector.hpp>
@@ -157,14 +158,85 @@ static uint32_t segment_onwire_size(const uint32_t logical_size)
   return p2roundup<uint32_t>(logical_size, CRYPTO_BLOCK_SIZE);
 }
 
-static inline ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
-{
-  const auto padding_size = segment_onwire_size(bl.length()) - bl.length();
-  if (padding_size) {
-    bl.append_zero(padding_size);
+struct FrameError : std::runtime_error {
+  using runtime_error::runtime_error;
+};
+
+class FrameAssembler {
+public:
+  // crypto must be non-null
+  FrameAssembler(const ceph::crypto::onwire::rxtx_t* crypto)
+      : m_crypto(crypto) {}
+
+  size_t get_num_segments() const {
+    ceph_assert(!m_descs.empty());
+    return m_descs.size();
   }
-  return std::move(bl);
-}
+
+  uint32_t get_segment_logical_len(size_t seg_idx) const {
+    ceph_assert(seg_idx < m_descs.size());
+    return m_descs[seg_idx].logical_len;
+  }
+
+  uint16_t get_segment_align(size_t seg_idx) const {
+    ceph_assert(seg_idx < m_descs.size());
+    return m_descs[seg_idx].align;
+  }
+
+  uint32_t get_preamble_onwire_len() const {
+    return sizeof(preamble_block_t);
+  }
+
+  uint32_t get_segment_onwire_len(size_t seg_idx) const {
+    ceph_assert(seg_idx < m_descs.size());
+    if (m_crypto->rx) {
+      return get_segment_padded_len(seg_idx);
+    }
+    return m_descs[seg_idx].logical_len;
+  }
+
+  uint32_t get_epilogue_onwire_len() const {
+    ceph_assert(!m_descs.empty());
+    if (m_crypto->rx) {
+      return sizeof(epilogue_secure_block_t) + get_auth_tag_len();
+    }
+    return sizeof(epilogue_plain_block_t);
+  }
+
+  uint64_t get_frame_logical_len() const;
+  uint64_t get_frame_onwire_len() const;
+
+  bufferlist assemble_frame(Tag tag, bufferlist segment_bls[],
+                            const uint16_t segment_aligns[],
+                            size_t segment_count);
+
+private:
+  struct segment_desc_t {
+    uint32_t logical_len;
+    uint16_t align;
+  };
+
+  uint32_t get_segment_padded_len(size_t seg_idx) const {
+    return p2roundup<uint32_t>(m_descs[seg_idx].logical_len,
+                               CRYPTO_BLOCK_SIZE);
+  }
+
+  uint32_t get_auth_tag_len() const {
+    return m_crypto->rx->get_extra_size_at_final();
+  }
+
+  bufferlist asm_crc_rev0(const preamble_block_t& preamble,
+                          bufferlist segment_bls[]) const;
+  bufferlist asm_secure_rev0(const preamble_block_t& preamble,
+                             bufferlist segment_bls[]) const;
+
+  void fill_preamble(Tag tag, preamble_block_t& preamble) const;
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const FrameAssembler& frame_asm);
+
+  boost::container::static_vector<segment_desc_t, MAX_NUM_SEGMENTS> m_descs;
+  const ceph::crypto::onwire::rxtx_t* m_crypto;
+};
 
 template <class T, uint16_t... SegmentAlignmentVs>
 struct Frame {
@@ -177,136 +249,15 @@ private:
   static constexpr std::array<uint16_t, SegmentsNumV> alignments {
     SegmentAlignmentVs...
   };
-  ceph::bufferlist::contiguous_filler preamble_filler;
-
-  __u8 calc_num_segments(const segment_t segments[])
-  {
-    for (__u8 num = SegmentsNumV; num > 0; num--) {
-      if (segments[num-1].length) {
-        return num;
-      }
-    }
-    // frame always has at least one segment.
-    return 1;
-  }
-
-  // craft the main preamble. It's always present regardless of the number
-  // of segments message is composed from.
-  void fill_preamble() {
-    ceph_assert(std::size(segments) <= MAX_NUM_SEGMENTS);
-
-    preamble_block_t main_preamble;
-    // FIPS zeroization audit 20191115: this memset is not security related.
-    ::memset(&main_preamble, 0, sizeof(main_preamble));
-
-    main_preamble.tag = static_cast<__u8>(T::tag);
-    ceph_assert(main_preamble.tag != 0);
-
-    // implementation detail: the first bufferlist of Frame::segments carries
-    // space for preamble. This glueing isn't a part of the onwire format but
-    // just our private detail.
-    main_preamble.segments[0].length =
-        segments[0].length() - FRAME_PREAMBLE_SIZE;
-    main_preamble.segments[0].alignment = alignments[0];
-
-    // there is no business in issuing frame without at least one segment
-    // filled.
-    if constexpr(SegmentsNumV > 1) {
-      for (__u8 idx = 1; idx < SegmentsNumV; idx++) {
-        main_preamble.segments[idx].length = segments[idx].length();
-        main_preamble.segments[idx].alignment = alignments[idx];
-      }
-    }
-    // calculate the number of non-empty segments.
-    // TODO: reorder segments to get DATA first
-    main_preamble.num_segments = calc_num_segments(main_preamble.segments);
-
-    main_preamble.crc =
-        ceph_crc32c(0, reinterpret_cast<unsigned char *>(&main_preamble),
-                    sizeof(main_preamble) - sizeof(main_preamble.crc));
-
-    preamble_filler.copy_in(sizeof(main_preamble),
-                            reinterpret_cast<const char *>(&main_preamble));
-  }
-
-  template <size_t... Is>
-  void reset_tx_handler(
-    ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-    std::index_sequence<Is...>)
-  {
-    session_stream_handlers.tx->reset_tx_handler({ segments[Is].length()...,
-                                                   sizeof(epilogue_secure_block_t) });
-  }
 
 public:
-  ceph::bufferlist get_buffer(
-    ceph::crypto::onwire::rxtx_t &session_stream_handlers)
-  {
-    fill_preamble();
-    if (session_stream_handlers.tx) {
-      // we're padding segments to biggest cipher's block size. Although
-      // AES-GCM can live without that as it's a stream cipher, we don't
-      // to be fixed to stream ciphers only.
-      for (auto& segment : segments) {
-        segment = segment_onwire_bufferlist(std::move(segment));
-      }
-
-      // let's cipher allocate one huge buffer for entire ciphertext.
-      reset_tx_handler(
-          session_stream_handlers, std::make_index_sequence<SegmentsNumV>());
-
-      for (auto& segment : segments) {
-        if (segment.length()) {
-          session_stream_handlers.tx->authenticated_encrypt_update(
-            std::move(segment));
-        }
-      }
-
-      // in secure mode we craft only the late_flags. Signature (for AES-GCM
-      // called auth tag) will be added by the cipher.
-      {
-        epilogue_secure_block_t epilogue;
-        // FIPS zeroization audit 20191115: this memset is not security
-        // related.
-        ::memset(&epilogue, 0, sizeof(epilogue));
-        ceph::bufferlist epilogue_bl;
-        epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
-                           sizeof(epilogue));
-        session_stream_handlers.tx->authenticated_encrypt_update(epilogue_bl);
-      }
-      return session_stream_handlers.tx->authenticated_encrypt_final();
-    } else {
-      // plain mode
-      epilogue_plain_block_t epilogue;
-      // FIPS zeroization audit 20191115: this memset is not security related.
-      ::memset(&epilogue, 0, sizeof(epilogue));
-
-      ceph::bufferlist::const_iterator hdriter(&segments.front(),
-                                               FRAME_PREAMBLE_SIZE);
-      epilogue.crc_values[SegmentIndex::Control::PAYLOAD] =
-          hdriter.crc32c(hdriter.get_remaining(), -1);
-      if constexpr(SegmentsNumV > 1) {
-        for (__u8 idx = 1; idx < SegmentsNumV; idx++) {
-          epilogue.crc_values[idx] = segments[idx].crc32c(-1);
-        }
-      }
-
-      ceph::bufferlist ret;
-      for (auto& segment : segments) {
-        ret.claim_append(segment);
-      }
-      ret.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-      return ret;
-    }
+  ceph::bufferlist get_buffer(FrameAssembler& tx_frame_asm) {
+    auto bl = tx_frame_asm.assemble_frame(T::tag, segments.data(),
+                                          alignments.data(), SegmentsNumV);
+    ceph_assert(bl.length() == tx_frame_asm.get_frame_onwire_len());
+    return bl;
   }
-
-  Frame()
-    : preamble_filler(segments.front().append_hole(FRAME_PREAMBLE_SIZE)) {
-  }
-
-public:
 };
-
 
 // ControlFrames are used to manage transceiver state (like connections) and
 // orchestrate transfers of MessageFrames. They use only single segment with

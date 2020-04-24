@@ -148,7 +148,8 @@ ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
                        SocketMessenger& messenger)
   : Protocol(proto_t::v2, dispatcher, conn),
     messenger{messenger},
-    protocol_timer{conn}
+    protocol_timer{conn},
+    tx_frame_asm(&session_stream_handlers)
 {}
 
 ProtocolV2::~ProtocolV2() {}
@@ -386,7 +387,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
 template <class F>
 seastar::future<> ProtocolV2::write_frame(F &frame, bool flush)
 {
-  auto bl = frame.get_buffer(session_stream_handlers);
+  auto bl = frame.get_buffer(tx_frame_asm);
   const auto main_preamble = reinterpret_cast<const preamble_block_t*>(bl.front().c_str());
   logger().trace("{} SEND({}) frame: tag={}, num_segments={}, crc={}",
                  conn, bl.length(), (int)main_preamble->tag,
@@ -1850,19 +1851,19 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
 
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
-    bl.append(keepalive_frame.get_buffer(session_stream_handlers));
+    bl.append(keepalive_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2, bp_type_t::WRITE);
   }
 
   if (unlikely(_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
-    bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
+    bl.append(keepalive_ack_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, bp_type_t::WRITE);
   }
 
   if (require_ack && !num_msgs) {
     auto ack_frame = AckFrame::Encode(conn.in_seq);
-    bl.append(ack_frame.get_buffer(session_stream_handlers));
+    bl.append(ack_frame.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
   }
 
@@ -1891,7 +1892,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
         msg->get_payload(), msg->get_middle(), msg->get_data());
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
-    bl.append(message.get_buffer(session_stream_handlers));
+    bl.append(message.get_buffer(tx_frame_asm));
     INTERCEPT_FRAME(ceph::msgr::v2::Tag::MESSAGE, bp_type_t::WRITE);
   });
 
