@@ -516,7 +516,6 @@ This is an overview of the current implementation status of the orchestrators.
  iscsi add                           ⚪      ⚪
  mds add                             ✔      ✔
  nfs add                             ✔      ✔
- ps                                  ⚪      ✔
  rbd-mirror add                      ⚪      ✔
  rgw add                             ✔      ✔
  ps                                  ✔      ✔
