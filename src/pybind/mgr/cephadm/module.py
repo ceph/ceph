@@ -2919,7 +2919,6 @@ cluster_client_name = {utils.name_to_config_section('iscsi')}.{igw_id}
 pool = {spec.pool}
 trusted_ip_list = {spec.trusted_ip_list or ''}
 minimum_gateways = 1
-fqdn_enabled = {spec.fqdn_enabled or ''}
 api_port = {spec.api_port or ''}
 api_user = {spec.api_user or ''}
 api_password = {spec.api_password or ''}
