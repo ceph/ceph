@@ -1,3 +1,46 @@
+v15.2.1 Octopus
+===============
+
+This is the first bugfix release of Ceph Octopus, we recommend all Octopus users
+upgrade. This release fixes an upgrade issue and also has 2 security fixes
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* issue#44759: Fixed luminous->nautilus->octopus upgrade asserts
+* CVE-2020-1759: Fixed nonce reuse in msgr V2 secure mode
+* CVE-2020-1760: Fixed XSS due to RGW GetObject header-splitting
+
+Changelog
+~~~~~~~~~
+
+* build/ops: fix ceph_release type to 'stable' (`pr#34194 <https://github.com/ceph/ceph/pull/34194>`_, Sage Weil)
+* build/ops: vstart_runner.py: fix OSError when checking if non-existent path is mounted (`pr#34132 <https://github.com/ceph/ceph/pull/34132>`_, Alfonso Martínez)
+* cephadm: Add alertmanager adopt (`pr#34157 <https://github.com/ceph/ceph/pull/34157>`_, Eric Jackson)
+* cephadm: Add alertmanager sample (`pr#34158 <https://github.com/ceph/ceph/pull/34158>`_, Eric Jackson)
+* cephadm: Fix truncated output of "ceph mgr dump" (`pr#34258 <https://github.com/ceph/ceph/pull/34258>`_, Sebastian Wagner)
+* mgr/cephadm: Add example to run when debugging ssh failures (`pr#34153 <https://github.com/ceph/ceph/pull/34153>`_, Sebastian Wagner)
+* mgr/cephadm: DriveGroupSpec needs to support/ignore _unmanaged_ (`pr#34185 <https://github.com/ceph/ceph/pull/34185>`_, Joshua Schmid)
+* mgr/cephadm: bind grafana to all interfaces (`pr#34191 <https://github.com/ceph/ceph/pull/34191>`_, Sage Weil)
+* mgr/cephadm: fix 'orch ps --refresh' (`pr#34190 <https://github.com/ceph/ceph/pull/34190>`_, Sage Weil)
+* mgr/cephadm: fix 'upgrade start' message when specifying a version (`pr#34186 <https://github.com/ceph/ceph/pull/34186>`_, Sage Weil)
+* mgr/cephadm: include alerts in prometheus deployment (`pr#34155 <https://github.com/ceph/ceph/pull/34155>`_, Sage Weil)
+* mgr/cephadm: point alertmanager at all mgr/dashboard URLs (`pr#34154 <https://github.com/ceph/ceph/pull/34154>`_, Sage Weil)
+* mgr/cephadm: provision nfs-ganesha via orchestrator (`pr#34192 <https://github.com/ceph/ceph/pull/34192>`_, Michael Fritch)
+* mgr/dashboard: Check for missing npm resolutions (`pr#34202 <https://github.com/ceph/ceph/pull/34202>`_, Tiago Melo)
+* mgr/dashboard: NoRebalance flag is added to the Dashboard (`pr#33939 <https://github.com/ceph/ceph/pull/33939>`_, Nizamudeen)
+* mgr/dashboard: correct Orchestrator documentation link (`pr#34212 <https://github.com/ceph/ceph/pull/34212>`_, Tatjana Dehler)
+* mgr/dashboard: do not fail on user creation (CLI) (`pr#34280 <https://github.com/ceph/ceph/pull/34280>`_, Tatjana Dehler)
+* mgr/orch: allow list daemons by service_name (`pr#34160 <https://github.com/ceph/ceph/pull/34160>`_, Kiefer Chang)
+* mgr/prometheus: ceph_pg\_\* metrics contains last value instead of sum across all reported states (`pr#34163 <https://github.com/ceph/ceph/pull/34163>`_, Jacek Suchenia)
+* mgr/rook: Blinking lights (`pr#34199 <https://github.com/ceph/ceph/pull/34199>`_, Juan Miguel Olmo Martínez)
+* osd/PeeringState: drop mimic assert (`pr#34204 <https://github.com/ceph/ceph/pull/34204>`_, Sage Weil)
+* osd/PeeringState: fix pending want_acting vs osd offline race (`pr#34123 <https://github.com/ceph/ceph/pull/34123>`_, xie xingguo)
+* pybind/mgr: fix config_notify handling of default values (`pr#34178 <https://github.com/ceph/ceph/pull/34178>`_, Nathan Cutler)
+* rbd: librbd: fix client backwards compatibility issues (`issue#39450 <http://tracker.ceph.com/issues/39450>`_, `issue#38834 <http://tracker.ceph.com/issues/38834>`_, `pr#34323 <https://github.com/ceph/ceph/pull/34323>`_, Jason Dillaman)
+* tools: ceph-backport.sh: add deprecation warning (`pr#34125 <https://github.com/ceph/ceph/pull/34125>`_, Nathan Cutler)
+
+
 v15.2.0 Octopus
 ===============
 
