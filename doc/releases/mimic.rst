@@ -1,3 +1,15 @@
+v13.2.10 Mimic
+=============
+
+This is the tenth bugfix release of Ceph Mimic, this release fixes a RGW
+vulnerability affecting mimic, and we recommend that all mimic users upgrade.
+
+Notable Changes
+---------------
+* CVE 2020 12059: Fix an issue with Post Object Requests with Tagging
+  (`issue#44967 <http://tracker.ceph.com/issues/44967>`_, Lei Cao, Abhishek
+  Lekshmanan)
+
 v13.2.9 Mimic
 =============
 
