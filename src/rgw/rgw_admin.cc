@@ -7226,13 +7226,14 @@ next:
     formatter->open_array_section("lifecycle_list");
     vector<cls_rgw_lc_entry> bucket_lc_map;
     string marker;
+    int index{0};
 #define MAX_LC_LIST_ENTRIES 100
     if (max_entries < 0) {
       max_entries = MAX_LC_LIST_ENTRIES;
     }
     do {
       int ret = store->getRados()->list_lc_progress(marker, max_entries,
-						    bucket_lc_map);
+						    bucket_lc_map, index);
       if (ret < 0) {
         cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret)
 	     << std::endl;
@@ -7252,7 +7253,6 @@ next:
         formatter->dump_string("status", lc_status);
         formatter->close_section(); // objs
         formatter->flush(cout);
-        marker = entry.bucket;
       }
     } while (!bucket_lc_map.empty());
 

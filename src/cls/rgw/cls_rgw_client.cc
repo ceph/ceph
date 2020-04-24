@@ -939,7 +939,7 @@ int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
 	    [](const cls_rgw_lc_entry& a, const cls_rgw_lc_entry& b)
 	      { return a.bucket < b.bucket; });
   entries = std::move(ret.entries);
- return r;
+  return r;
 }
 
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
