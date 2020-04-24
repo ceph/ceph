@@ -17,6 +17,7 @@ list(APPEND msg_srcs
   async/PosixStack.cc
   async/Stack.cc
   async/crypto_onwire.cc
+  async/frames_v2.cc
   async/net_handler.cc)
 
 if(LINUX)
