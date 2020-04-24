@@ -45,4 +45,9 @@ def create_parser(prog, description):
         dest='block_wal',
         help='Path to bluestore block.wal block device'
     )
+    parser.add_argument(
+        '--dmcrypt',
+        action='store_true',
+        help='Enable device encryption via dm-crypt',
+    )
     return parser

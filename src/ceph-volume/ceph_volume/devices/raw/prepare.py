@@ -1,8 +1,11 @@
 from __future__ import print_function
 import json
 import logging
+import os
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
+from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util import disk
 from ceph_volume.util import system
 from ceph_volume import conf, decorators, terminal
 from ceph_volume.devices.lvm.common import rollback_osd
@@ -10,6 +13,27 @@ from .common import create_parser
 
 logger = logging.getLogger(__name__)
 
+def prepare_dmcrypt(key, device, device_type, fsid):
+    """
+    Helper for devices that are encrypted. The operations needed for
+    block, db, wal, or data/journal devices are all the same
+    """
+    if not device:
+        return ''
+    kname = disk.lsblk(device)['KNAME']
+    mapping = 'ceph-{}-{}-{}-dmcrypt'.format(fsid, kname, device_type)
+    # format data device
+    encryption_utils.luks_format(
+        key,
+        device
+    )
+    encryption_utils.luks_open(
+        key,
+        device,
+        mapping
+    )
+
+    return '/dev/mapper/{}'.format(mapping)
 
 def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
     """
@@ -21,6 +45,12 @@ def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
     :param fsid: The OSD fsid, also known as the OSD UUID
     """
     cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
+
+    if secrets.get('dmcrypt_key'):
+        key = secrets['dmcrypt_key']
+        block = prepare_dmcrypt(key, block, 'block', fsid)
+        wal = prepare_dmcrypt(key, wal, 'wal', fsid)
+        db = prepare_dmcrypt(key, db, 'db', fsid)
 
     # create the directory
     prepare_utils.create_osd_path(osd_id, tmpfs=tmpfs)
@@ -64,7 +94,8 @@ class Prepare(object):
             logger.info('will rollback OSD ID creation')
             rollback_osd(self.args, self.osd_id)
             raise
-        terminal.success("ceph-volume raw prepare successful for: %s" % self.args.data)
+        dmcrypt_log = 'dmcrypt' if args.dmcrypt else 'clear'
+        terminal.success("ceph-volume raw {} prepare successful for: {}".format(dmcrypt_log, self.args.data))
 
     def get_cluster_fsid(self):
         """
@@ -79,6 +110,13 @@ class Prepare(object):
     @decorators.needs_root
     def prepare(self):
         secrets = {'cephx_secret': prepare_utils.create_key()}
+        encrypted = 1 if self.args.dmcrypt else 0
+        cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
+
+        if encrypted:
+            secrets['dmcrypt_key'] = os.getenv('CEPH_VOLUME_DMCRYPT_SECRET')
+            secrets['cephx_lockbox_secret'] = cephx_lockbox_secret # dummy value to make `ceph osd new` not complaining
+
         osd_fsid = system.generate_uuid()
         crush_device_class = self.args.crush_device_class
         if crush_device_class:
@@ -94,6 +132,7 @@ class Prepare(object):
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
             osd_fsid, json.dumps(secrets))
+
         prepare_bluestore(
             self.args.data,
             wal,
@@ -112,8 +151,6 @@ class Prepare(object):
         Once the OSD is ready, an ad-hoc systemd unit will be enabled so that
         it can later get activated and the OSD daemon can get started.
 
-        Encryption is not supported.
-
             ceph-volume raw prepare --bluestore --data {device}
 
         DB and WAL devices are supported.
@@ -131,6 +168,11 @@ class Prepare(object):
         self.args = parser.parse_args(self.argv)
         if not self.args.bluestore:
             terminal.error('must specify --bluestore (currently the only supported backend)')
+            raise SystemExit(1)
+        if self.args.dmcrypt and not os.getenv('CEPH_VOLUME_DMCRYPT_SECRET'):
+            terminal.error('encryption was requested (--dmcrypt) but environment variable ' \
+                           'CEPH_VOLUME_DMCRYPT_SECRET is not set, you must set ' \
+                           'this variable to provide a dmcrypt secret.')
             raise SystemExit(1)
 
         self.safe_prepare(self.args)
