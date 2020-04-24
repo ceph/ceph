@@ -2666,6 +2666,28 @@ def command_bootstrap():
                         get_fqdn(), port,
                         args.initial_dashboard_user,
                         password))
+    
+    if args.apply_spec:
+        logger.info('Applying %s to cluster' % args.apply_spec)
+
+        with open(args.apply_spec) as f:
+            for line in f:
+                if 'hostname:' in line:
+                    line = line.replace('\n', '')
+                    split = line.split(': ')
+                    if split[1] != host:
+                        logger.info('Adding ssh key to %s' % split[1])
+
+                        ssh_key = '/etc/ceph/ceph.pub'
+                        if args.ssh_public_key:
+                            ssh_key = args.ssh_public_key.name
+                        out, err, code = call_throws(['ssh-copy-id', '-f', '-i', ssh_key, 'root@%s' % split[1]])
+
+        mounts = {}
+        mounts[pathify(args.apply_spec)] = '/tmp/spec.yml:z'
+
+        out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
+        logger.info(out)
 
     logger.info('You can access the Ceph CLI with:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
@@ -4552,6 +4574,10 @@ def _get_parser():
         '--skip-monitoring-stack',
         action='store_true',
         help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)')
+    parser_bootstrap.add_argument(
+        '--apply-spec',
+        help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
+
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

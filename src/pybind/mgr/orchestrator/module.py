@@ -1,7 +1,7 @@
 import datetime
 import errno
 import json
-from typing import List, Set, Optional, Iterator
+from typing import List, Set, Optional, Iterator, cast
 import re
 import ast
 
@@ -20,7 +20,7 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec
+    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec
 
 
 def nice_delta(now, t, suffix=''):
@@ -468,7 +468,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             spec = service.spec
             spec.unmanaged = unmanaged_flag
             specs.append(spec)
-        completion = self.apply(specs)
+        completion = self.apply(cast(List[GenericSpec], specs))
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         if specs:
@@ -996,12 +996,13 @@ Usage:
             if service_type or placement or unmanaged:
                 raise OrchestratorValidationError(usage)
             content: Iterator = yaml.load_all(inbuf)
-            specs = [ServiceSpec.from_json(s) for s in content]
-        else:
-            spec = PlacementSpec.from_string(placement)
-            assert service_type
-            specs = [ServiceSpec(service_type, placement=spec, unmanaged=unmanaged)]
+            specs: List[GenericSpec] = [json_to_generic_spec(s) for s in content]
 
+        else:
+            placmentspec = PlacementSpec.from_string(placement)
+            assert service_type
+            specs = [ServiceSpec(service_type, placement=placmentspec, unmanaged=unmanaged)]
+ 
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
