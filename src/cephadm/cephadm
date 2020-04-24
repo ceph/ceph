@@ -892,6 +892,8 @@ def is_available(what, func):
     num = 1
     while True:
         if func():
+            logger.info('%s is available'
+                    % (what))
             break
         elif num > retry:
             raise Error('%s not available after %s tries'
@@ -2484,9 +2486,13 @@ def command_bootstrap():
     def is_mgr_available():
         # type: () -> bool
         timeout=args.timeout if args.timeout else 30 # seconds
-        out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
-        j = json.loads(out)
-        return j.get('mgrmap', {}).get('available', False)
+        try:
+            out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
+            j = json.loads(out)
+            return j.get('mgrmap', {}).get('available', False)
+        except Exception as e:
+            logger.debug('status failed: %s' % e)
+            return False
     is_available('mgr', is_mgr_available)
 
     # wait for mgr to restart (after enabling a module)
