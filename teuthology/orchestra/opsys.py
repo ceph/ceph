@@ -2,6 +2,7 @@ import re
 
 DISTRO_CODENAME_MAP = {
     "ubuntu": {
+        "20.04": "focal",
         "18.04": "bionic",
         "17.10": "artful",
         "17.04": "zesty",
