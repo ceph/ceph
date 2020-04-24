@@ -40,6 +40,8 @@ def cmd_to_sig(cmd):
 def list_mgr_module(m_name):
     sys.modules['rbd'] = mock.Mock()
     sys.modules['cephfs'] = mock.Mock()
+    sys.modules['dateutil'] = mock.Mock()
+    sys.modules['dateutil.parser'] = mock.Mock()
 
     # make dashboard happy
     sys.modules['OpenSSL'] = mock.Mock()
@@ -50,6 +52,8 @@ def list_mgr_module(m_name):
     sys.modules['jsonpatch'] = mock.Mock()
     sys.modules['rook.rook_client'] = mock.Mock()
     sys.modules['rook.rook_client.ceph'] = mock.Mock()
+
+    sys.modules['cherrypy'] = mock.Mock(__version__="3.2.3")
 
     # make restful happy:
     sys.modules['pecan'] = mock.Mock()
