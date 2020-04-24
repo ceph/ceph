@@ -13,6 +13,7 @@ import { SelectMessages } from '../../../shared/components/select/select-message
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -29,7 +30,7 @@ import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.compo
   templateUrl: './nfs-form.component.html',
   styleUrls: ['./nfs-form.component.scss']
 })
-export class NfsFormComponent implements OnInit {
+export class NfsFormComponent extends CdForm implements OnInit {
   @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
@@ -92,6 +93,7 @@ export class NfsFormComponent implements OnInit {
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().pool;
     this.resource = this.i18n('NFS export');
     this.createForm();
@@ -137,6 +139,8 @@ export class NfsFormComponent implements OnInit {
       if (data[4]) {
         this.resolveModel(data[4]);
       }
+
+      this.loadingReady();
     });
   }
 

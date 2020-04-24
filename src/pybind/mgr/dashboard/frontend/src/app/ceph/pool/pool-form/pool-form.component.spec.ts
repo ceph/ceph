@@ -201,6 +201,8 @@ describe('PoolFormComponent', () => {
     navigationSpy = spyOn(router, 'navigate').and.stub();
 
     setUpPoolComponent();
+
+    component.loadingReady();
   });
 
   it('should create', () => {

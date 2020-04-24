@@ -11,6 +11,7 @@ import { of as observableOf } from 'rxjs';
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
+import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -24,6 +25,7 @@ describe('RgwBucketFormComponent', () => {
   let rgwBucketService: RgwBucketService;
   let getPlacementTargetsSpy: jasmine.Spy;
   let rgwBucketServiceGetSpy: jasmine.Spy;
+  let enumerateSpy: jasmine.Spy;
   let formHelper: FormHelper;
 
   configureTestBed({
@@ -44,6 +46,7 @@ describe('RgwBucketFormComponent', () => {
     rgwBucketService = TestBed.get(RgwBucketService);
     rgwBucketServiceGetSpy = spyOn(rgwBucketService, 'get');
     getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'getPlacementTargets');
+    enumerateSpy = spyOn(TestBed.get(RgwUserService), 'enumerate');
     formHelper = new FormHelper(component.bucketForm);
   });
 
@@ -156,6 +159,7 @@ describe('RgwBucketFormComponent', () => {
         ]
       };
       getPlacementTargetsSpy.and.returnValue(observableOf(payload));
+      enumerateSpy.and.returnValue(observableOf([]));
       fixture.detectChanges();
 
       expect(component.zonegroup).toBe(payload.zonegroup);
@@ -226,6 +230,7 @@ describe('RgwBucketFormComponent', () => {
       component['route'].params = observableOf({ bid: 'bid' });
       component.editing = true;
       rgwBucketServiceGetSpy.and.returnValue(observableOf(fakeResponse));
+      enumerateSpy.and.returnValue(observableOf([]));
       component.ngOnInit();
       component.bucketForm.patchValue({
         versioning: versioningChecked,

@@ -8,6 +8,8 @@ import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
 import { configureTestBed, modalServiceShow } from '../../../../testing/unit-test-helper';
 import { DirectivesModule } from '../../directives/directives.module';
+import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
+import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
 
 @NgModule({
@@ -94,7 +96,12 @@ describe('CriticalConfirmationModalComponent', () => {
   let fixture: ComponentFixture<CriticalConfirmationModalComponent>;
 
   configureTestBed({
-    declarations: [MockComponent, CriticalConfirmationModalComponent],
+    declarations: [
+      MockComponent,
+      CriticalConfirmationModalComponent,
+      LoadingPanelComponent,
+      AlertPanelComponent
+    ],
     schemas: [NO_ERRORS_SCHEMA],
     imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule, DirectivesModule],
     providers: [BsModalRef]

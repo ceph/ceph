@@ -53,6 +53,8 @@ describe('RbdFormComponent', () => {
     fixture = TestBed.createComponent(RbdFormComponent);
     component = fixture.componentInstance;
     activatedRoute = TestBed.get(ActivatedRoute);
+
+    component.loadingReady();
   });
 
   it('should create', () => {

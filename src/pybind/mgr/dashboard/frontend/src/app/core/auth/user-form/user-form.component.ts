@@ -16,6 +16,7 @@ import { SelectMessages } from '../../../shared/components/select/select-message
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -32,7 +33,7 @@ import { UserFormModel } from './user-form.model';
   templateUrl: './user-form.component.html',
   styleUrls: ['./user-form.component.scss']
 })
-export class UserFormComponent implements OnInit {
+export class UserFormComponent extends CdForm implements OnInit {
   @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })
   removeSelfUserReadUpdatePermissionTpl: TemplateRef<any>;
 
@@ -73,6 +74,7 @@ export class UserFormComponent implements OnInit {
     private formBuilder: CdFormBuilder,
     private settingsService: SettingsService
   ) {
+    super();
     this.resource = this.i18n('user');
     this.createForm();
     this.messages = new SelectMessages({ empty: this.i18n('There are no roles.') }, this.i18n);
@@ -149,6 +151,8 @@ export class UserFormComponent implements OnInit {
             pwdExpirationDateField.setValue(expirationDate);
             pwdExpirationDateField.setValidators([Validators.required]);
           }
+
+          this.loadingReady();
         }
       }
     );
@@ -161,6 +165,8 @@ export class UserFormComponent implements OnInit {
       this.userService.get(username).subscribe((userFormModel: UserFormModel) => {
         this.response = _.cloneDeep(userFormModel);
         this.setResponse(userFormModel);
+
+        this.loadingReady();
       });
     });
   }
