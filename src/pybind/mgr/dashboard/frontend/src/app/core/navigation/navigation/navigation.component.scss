@@ -190,6 +190,10 @@ $sidebar-width: 200px;
           background: $color-primary;
         }
 
+        & > .badge {
+          margin-left: 5px;
+        }
+
         text-decoration: none;
       }
 
