@@ -1,3 +1,7 @@
+<cd-alert-panel *ngIf="isStale"
+                type="warning"
+                size="slim"
+                i18n>The bucket list data might be stale. If needed, you can manually reload it.</cd-alert-panel>
 <cd-table #table
           [autoReload]="false"
           [data]="buckets"
