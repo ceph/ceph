@@ -2898,6 +2898,8 @@ int RocksDBStore::reshard(const std::string& new_sharding)
   size_t keys_in_batch = 0;
   size_t bytes_per_iterator = 0;
   size_t keys_per_iterator = 0;
+  size_t keys_processed = 0;
+  size_t keys_moved = 0;
 
   rocksdb::WriteBatch* bat = nullptr;
 
@@ -2906,12 +2908,12 @@ int RocksDBStore::reshard(const std::string& new_sharding)
   size_t unittest_command = unittest_str ? atoi(unittest_str) : 0;
 
   auto flush_batch = [&]() {
-    dout(10) << "flushing batch" << dendl;
+    dout(10) << "flushing batch, " << keys_in_batch << " keys, for "
+             << bytes_in_batch << " bytes" << dendl;
     rocksdb::WriteOptions woptions;
     woptions.sync = true;
     rocksdb::Status s = db->Write(woptions, bat);
     ceph_assert(s.ok());
-    dout(25) << "processed " << keys_in_batch << " keys, for " << bytes_in_batch << " bytes" << dendl;
     bytes_in_batch = 0;
     keys_in_batch = 0;
     delete bat;
@@ -2923,7 +2925,7 @@ int RocksDBStore::reshard(const std::string& new_sharding)
 			    const std::string& fixed_prefix)
   {
     int r = 0;
-    dout(10) << " column=" << (void*)handle << " prefix=" << fixed_prefix << dendl;
+    dout(5) << " column=" << (void*)handle << " prefix=" << fixed_prefix << dendl;
     rocksdb::Iterator* it;
     it = db->NewIterator(rocksdb::ReadOptions(), handle);
     ceph_assert(it);
@@ -2936,7 +2938,7 @@ int RocksDBStore::reshard(const std::string& new_sharding)
       //check if need to refresh iterator
       if (bytes_per_iterator >= 10000000 ||
 	  keys_per_iterator >= 10000) {
-	dout(10) << "refreshing iterator" << dendl;
+	dout(8) << "refreshing iterator" << dendl;
 	bytes_per_iterator = 0;
 	keys_per_iterator = 0;
 	std::string raw_key_str = raw_key.ToString();
@@ -2954,6 +2956,10 @@ int RocksDBStore::reshard(const std::string& new_sharding)
       } else {
 	prefix = fixed_prefix;
 	key = raw_key.ToString();
+      }
+      keys_processed++;
+      if ((keys_processed % 10000) == 0) {
+	dout(10) << "processed " << keys_processed << " keys, moved " << keys_moved << dendl;
       }
       std::string new_raw_key;
       rocksdb::ColumnFamilyHandle* new_handle = get_cf_handle(prefix, key);
@@ -2973,11 +2979,11 @@ int RocksDBStore::reshard(const std::string& new_sharding)
       dout(25) << "moving " << (void*)handle << "/" << pretty_binary_string(raw_key.ToString()) <<
 	" to " << (void*)new_handle << "/" << pretty_binary_string(new_raw_key) <<
 	" size " << value.size() << dendl;
-
+      keys_moved++;
       bytes_in_batch += new_raw_key.size() * 2 + value.size();
-      keys_in_batch ++;
+      keys_in_batch++;
       bytes_per_iterator += new_raw_key.size() * 2 + value.size();
-      keys_per_iterator ++;
+      keys_per_iterator++;
 
       //check if need to write batch
       if (bytes_in_batch >= 1000000 ||
