@@ -1320,7 +1320,6 @@ CtPtr ProtocolV2::handle_message() {
 #endif
   recv_stamp = ceph_clock_now();
 
-  // we need to get the size before std::moving segments data
   const size_t cur_msg_size = get_current_msg_size();
   auto msg_frame = MessageFrame::Decode(rx_segments_data);
 
@@ -1444,9 +1443,8 @@ CtPtr ProtocolV2::handle_message() {
   }
 
   connection->logger->inc(l_msgr_recv_messages);
-  connection->logger->inc(
-      l_msgr_recv_bytes,
-      cur_msg_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
+  connection->logger->inc(l_msgr_recv_bytes,
+                          rx_frame_asm.get_frame_onwire_len());
 
   messenger->ms_fast_preprocess(message);
   fast_dispatch_time = ceph::mono_clock::now();
