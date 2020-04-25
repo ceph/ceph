@@ -4,8 +4,6 @@
 #ifndef _MSG_ASYNC_PROTOCOL_V2_
 #define _MSG_ASYNC_PROTOCOL_V2_
 
-#include <boost/container/static_vector.hpp>
-
 #include "Protocol.h"
 #include "crypto_onwire.h"
 #include "frames_v2.h"
@@ -96,9 +94,11 @@ private:
   using ProtFuncPtr = void (ProtocolV2::*)();
   Ct<ProtocolV2> *bannerExchangeCallback;
 
-  boost::container::static_vector<ceph::msgr::v2::segment_t,
-				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
   ceph::msgr::v2::FrameAssembler tx_frame_asm;
+  ceph::msgr::v2::FrameAssembler rx_frame_asm;
+
+  ceph::bufferlist rx_preamble;
+  ceph::bufferlist rx_epilogue;
   ceph::msgr::v2::segment_bls_t rx_segments_data;
   ceph::msgr::v2::Tag next_tag;
   utime_t backoff;  // backoff time
@@ -251,8 +251,6 @@ private:
   Ct<ProtocolV2> *send_reconnect_ok();
   Ct<ProtocolV2> *server_ready();
 
-  uint32_t get_onwire_size(uint32_t logical_size) const;
-  uint32_t get_epilogue_size() const;
   size_t get_current_msg_size() const;
 };
 
