@@ -5,14 +5,14 @@ This is the first bugfix release of Ceph Octopus, we recommend all Octopus users
 upgrade. This release fixes an upgrade issue and also has 2 security fixes
 
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * issue#44759: Fixed luminous->nautilus->octopus upgrade asserts
 * CVE-2020-1759: Fixed nonce reuse in msgr V2 secure mode
 * CVE-2020-1760: Fixed XSS due to RGW GetObject header-splitting
 
 Changelog
-~~~~~~~~~
+---------
 
 * build/ops: fix ceph_release type to 'stable' (`pr#34194 <https://github.com/ceph/ceph/pull/34194>`_, Sage Weil)
 * build/ops: vstart_runner.py: fix OSError when checking if non-existent path is mounted (`pr#34132 <https://github.com/ceph/ceph/pull/34132>`_, Alfonso Martínez)
