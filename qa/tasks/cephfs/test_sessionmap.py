@@ -186,7 +186,7 @@ class TestSessionMap(CephFSTestCase):
         # Try to mount the client, see that it fails
         with self.assert_cluster_log("client session with non-allowable root '/baz' denied"):
             with self.assertRaises(CommandFailedError):
-                self.mount_b.mount(mount_path="/foo/bar")
+                self.mount_b.mount_wait(mount_path="/foo/bar")
 
     def test_session_evict_blacklisted(self):
         """
