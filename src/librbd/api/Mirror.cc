@@ -415,7 +415,7 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
 
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<ImageCtx>::create(
-    ictx, static_cast<cls::rbd::MirrorImageMode>(mode), &ctx);
+    ictx, static_cast<cls::rbd::MirrorImageMode>(mode), "", false, &ctx);
   req->send();
 
   r = ctx.wait();
@@ -1997,7 +1997,7 @@ int Mirror<I>::image_snapshot_create(I *ictx, uint64_t *snap_id) {
 
   C_SaferCond on_finish;
   auto req = mirror::snapshot::CreatePrimaryRequest<I>::create(
-    ictx, mirror_image.global_image_id, 0U, snap_id, &on_finish);
+    ictx, mirror_image.global_image_id, CEPH_NOSNAP, 0U, snap_id, &on_finish);
   req->send();
   return on_finish.wait();
 }

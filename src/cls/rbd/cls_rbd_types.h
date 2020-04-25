@@ -545,7 +545,10 @@ struct MirrorSnapshotNamespace {
   std::set<std::string> mirror_peer_uuids;
 
   std::string primary_mirror_uuid;
-  snapid_t primary_snap_id = CEPH_NOSNAP;
+  union {
+    snapid_t primary_snap_id = CEPH_NOSNAP;
+    snapid_t clean_since_snap_id;
+  };
   uint64_t last_copied_object_number = 0;
   SnapSeqs snap_seqs;
 
