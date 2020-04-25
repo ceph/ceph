@@ -20,6 +20,14 @@
 
 namespace ceph::msgr::v2 {
 
+// Unpads bufferlist to unpadded_len.
+static void unpad_zero(bufferlist& bl, uint32_t unpadded_len) {
+  ceph_assert(bl.length() >= unpadded_len);
+  if (bl.length() > unpadded_len) {
+    bl.splice(unpadded_len, bl.length() - unpadded_len);
+  }
+}
+
 // Discards trailing empty segments, unless there is just one segment.
 // A frame always has at least one (possibly empty) segment.
 static size_t calc_num_segments(const bufferlist segment_bls[],
@@ -31,6 +39,15 @@ static size_t calc_num_segments(const bufferlist segment_bls[],
     }
   }
   return 1;
+}
+
+static void check_segment_crc(const bufferlist& segment_bl,
+                              uint32_t expected_crc) {
+  uint32_t crc = segment_bl.crc32c(-1);
+  if (crc != expected_crc) {
+    throw FrameError(fmt::format(
+        "bad segment crc calculated={} expected={}", crc, expected_crc));
+  }
 }
 
 void FrameAssembler::fill_preamble(Tag tag,
@@ -147,6 +164,85 @@ bufferlist FrameAssembler::assemble_frame(Tag tag, bufferlist segment_bls[],
     return asm_secure_rev0(preamble, segment_bls);
   }
   return asm_crc_rev0(preamble, segment_bls);
+}
+
+Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
+  ceph_assert(preamble_bl.length() == sizeof(preamble_block_t));
+  if (m_crypto->rx) {
+    m_crypto->rx->reset_rx_handler();
+    m_crypto->rx->authenticated_decrypt_update(preamble_bl);
+  }
+
+  // I expect ceph_le32 will make the endian conversion for me. Passing
+  // everything through ::Decode is unnecessary.
+  auto preamble = reinterpret_cast<const preamble_block_t*>(
+      preamble_bl.c_str());
+  // check preamble crc before any further processing
+  uint32_t crc = ceph_crc32c(
+      0, reinterpret_cast<const unsigned char*>(preamble),
+      sizeof(*preamble) - sizeof(preamble->crc));
+  if (crc != preamble->crc) {
+    throw FrameError(fmt::format(
+        "bad preamble crc calculated={} expected={}", crc, preamble->crc));
+  }
+
+  // see calc_num_segments()
+  if (preamble->num_segments < 1 ||
+      preamble->num_segments > MAX_NUM_SEGMENTS) {
+    throw FrameError(fmt::format(
+        "bad number of segments num_segments={}", preamble->num_segments));
+  }
+  if (preamble->num_segments > 1 &&
+      preamble->segments[preamble->num_segments - 1].length == 0) {
+    throw FrameError("last segment empty");
+  }
+
+  m_descs.resize(preamble->num_segments);
+  for (size_t i = 0; i < m_descs.size(); i++) {
+    m_descs[i].logical_len = preamble->segments[i].length;
+    m_descs[i].align = preamble->segments[i].alignment;
+  }
+  return static_cast<Tag>(preamble->tag);
+}
+
+bool FrameAssembler::disasm_all_crc_rev0(bufferlist segment_bls[],
+                                         bufferlist& epilogue_bl) const {
+  ceph_assert(epilogue_bl.length() == sizeof(epilogue_plain_block_t));
+  auto epilogue = reinterpret_cast<const epilogue_plain_block_t*>(
+      epilogue_bl.c_str());
+
+  for (size_t i = 0; i < m_descs.size(); i++) {
+    ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
+    check_segment_crc(segment_bls[i], epilogue->crc_values[i]);
+  }
+  return !(epilogue->late_flags & FRAME_FLAGS_LATEABRT);
+}
+
+bool FrameAssembler::disasm_all_secure_rev0(bufferlist segment_bls[],
+                                            bufferlist& epilogue_bl) const {
+  for (size_t i = 0; i < m_descs.size(); i++) {
+    ceph_assert(segment_bls[i].length() == get_segment_padded_len(i));
+    if (segment_bls[i].length() > 0) {
+      m_crypto->rx->authenticated_decrypt_update(segment_bls[i]);
+      unpad_zero(segment_bls[i], m_descs[i].logical_len);
+    }
+  }
+
+  ceph_assert(epilogue_bl.length() == sizeof(epilogue_secure_block_t) +
+                                      get_auth_tag_len());
+  m_crypto->rx->authenticated_decrypt_update_final(epilogue_bl);
+  auto epilogue = reinterpret_cast<const epilogue_secure_block_t*>(
+      epilogue_bl.c_str());
+  return !(epilogue->late_flags & FRAME_FLAGS_LATEABRT);
+}
+
+bool FrameAssembler::disassemble_segments(bufferlist segment_bls[],
+                                          bufferlist& epilogue_bl) const {
+  ceph_assert(!m_descs.empty());
+  if (m_crypto->rx) {
+    return disasm_all_secure_rev0(segment_bls, epilogue_bl);
+  }
+  return disasm_all_crc_rev0(segment_bls, epilogue_bl);
 }
 
 std::ostream& operator<<(std::ostream& os, const FrameAssembler& frame_asm) {
