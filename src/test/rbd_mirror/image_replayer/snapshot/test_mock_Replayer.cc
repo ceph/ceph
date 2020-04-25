@@ -708,17 +708,17 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}},
     {2U, librbd::SnapInfo{"snap2", cls::rbd::UserSnapshotNamespace{},
      0, {}, 0, 0, {}}},
     {3U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {""},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}},
     {4U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   MockThreads mock_threads(m_threads);
@@ -826,11 +826,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
        0, {}, 0, 0, {}}},
       {3U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
          cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {""},
-         "", 0U, true, 0, {}},
+         "", CEPH_NOSNAP, true, 0, {}},
        0, {}, 0, 0, {}}},
       {4U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
          cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-         "", 0U, true, 0, {}},
+         "", CEPH_NOSNAP, true, 0, {}},
        0, {}, 0, 0, {}}}
     }, 0);
   expect_prune_non_primary_snapshot(mock_local_image_ctx, 11, 0);
@@ -897,7 +897,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSync) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
   mock_local_image_ctx.snap_info = {
     {11U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
@@ -982,7 +982,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteImageDemoted) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-       {"remote mirror peer uuid"}, "", 0U, true, 0, {}},
+       {"remote mirror peer uuid"}, "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1069,7 +1069,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, LocalImagePromoted) {
   mock_local_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
-       {"remote mirror peer uuid"}, "", 0U, true, 0, {}},
+       {"remote mirror peer uuid"}, "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // idle
@@ -1475,7 +1475,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopySnapshotsError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U, true, 0, {}},
+       CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1535,7 +1535,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, GetImageStateError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U, true, 0, {}},
+       CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1597,7 +1597,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CreateNonPrimarySnapshotError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U, true, 0, {}},
+       CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1663,7 +1663,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RequestSyncError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U, true, 0, {}},
+       CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1732,7 +1732,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, CopyImageError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U, true, 0, {}},
+       CEPH_NOSNAP,true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1803,7 +1803,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UpdateNonPrimarySnapshotError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U, true, 0, {}},
+       CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // sync snap1
@@ -1878,11 +1878,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"}, "",
-       0U, true, 0, {}},
+       CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}},
     {2U, librbd::SnapInfo{"snap2", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
   mock_local_image_ctx.snap_info = {
     {11U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
@@ -1966,12 +1966,12 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SplitBrain) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
   mock_local_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
-       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {}, "", 0U, true, 0,
-       {}},
+       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {}, "", CEPH_NOSNAP,
+       true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // detect split-brain
@@ -2035,7 +2035,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteFailover) {
      0, {}, 0, 0, {}}},
     {3U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
   mock_local_image_ctx.snap_ids = {
     {{cls::rbd::UserSnapshotNamespace{}, "snap1"}, 11},
@@ -2044,8 +2044,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteFailover) {
     {11U, librbd::SnapInfo{"snap1", cls::rbd::UserSnapshotNamespace{},
      0, {}, 0, 0, {}}},
     {12U, librbd::SnapInfo{"snap2", cls::rbd::MirrorSnapshotNamespace{
-       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {}, "", 0U, true, 0,
-       {}},
+       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {}, "", CEPH_NOSNAP,
+       true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   // attach to promoted remote image
@@ -2083,8 +2083,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteFailover) {
       {11U, librbd::SnapInfo{"snap1", cls::rbd::UserSnapshotNamespace{},
          0, {}, 0, 0, {}}},
       {12U, librbd::SnapInfo{"snap2", cls::rbd::MirrorSnapshotNamespace{
-         cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {}, "", 0U, true, 0,
-         {}},
+         cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED, {}, "", CEPH_NOSNAP,
+         true, 0, {}},
        0, {}, 0, 0, {}}},
       {13U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
          cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
@@ -2102,7 +2102,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteFailover) {
          {"remote mirror peer uuid"}, "local mirror uuid", 12U, true, 0, {}},
        0, {}, 0, 0, {}}},
       {3U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
-         cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {}, "", 0U, true, 0, {}},
+         cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {}, "", CEPH_NOSNAP, true, 0,
+         {}},
        0, {}, 0, 0, {}}}
     }, 0);
 
@@ -2130,11 +2131,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkRemoteSnapshot) {
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}},
     {4U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
        cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-       "", 0U, true, 0, {}},
+       "", CEPH_NOSNAP, true, 0, {}},
      0, {}, 0, 0, {}}}};
 
   MockThreads mock_threads(m_threads);
@@ -2183,11 +2184,11 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkRemoteSnapshot) {
        0, {}, 0, 0, {}}},
       {3U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
          cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {""},
-         "", 0U, true, 0, {}},
+         "", CEPH_NOSNAP, true, 0, {}},
        0, {}, 0, 0, {}}},
       {4U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
          cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
-         "", 0U, true, 0, {}},
+         "", CEPH_NOSNAP, true, 0, {}},
        0, {}, 0, 0, {}}}
     }, 0);
 
@@ -2198,6 +2199,89 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkRemoteSnapshot) {
 
   // wait for sync to complete
   ASSERT_EQ(0, wait_for_notification(2));
+
+  // shut down
+  ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
+                                        mock_local_image_ctx,
+                                        mock_remote_image_ctx));
+}
+
+TEST_F(TestMockImageReplayerSnapshotReplayer, SkipImageSync) {
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx};
+  librbd::MockTestImageCtx mock_remote_image_ctx{*m_remote_image_ctx};
+
+  mock_remote_image_ctx.snap_info = {
+    {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
+       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
+       "", 0U, true, 0, {}},
+     0, {}, 0, 0, {}}}};
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+
+  MockReplayerListener mock_replayer_listener;
+  expect_notification(mock_threads, mock_replayer_listener);
+
+  InSequence seq;
+
+  MockInstanceWatcher mock_instance_watcher;
+  MockImageMeta mock_image_meta;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_image_ctx,
+                                      mock_image_meta);
+  MockReplayer mock_replayer{&mock_threads, &mock_instance_watcher,
+                             "local mirror uuid", &m_pool_meta_cache,
+                             &mock_state_builder, &mock_replayer_listener};
+  m_pool_meta_cache.set_remote_pool_meta(
+    m_remote_io_ctx.get_id(),
+    {"remote mirror uuid", "remote mirror peer uuid"});
+
+  librbd::UpdateWatchCtx* update_watch_ctx = nullptr;
+
+  // init
+  expect_register_update_watcher(mock_local_image_ctx, &update_watch_ctx, 123,
+                                 0);
+  expect_register_update_watcher(mock_remote_image_ctx, &update_watch_ctx, 234,
+                                 0);
+
+  // sync snap1
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_local_image_ctx, false);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+  MockSnapshotCopyRequest mock_snapshot_copy_request;
+  expect_snapshot_copy(mock_snapshot_copy_request, 0, 1, 0, {{1, CEPH_NOSNAP}},
+                       0);
+  MockGetImageStateRequest mock_get_image_state_request;
+  expect_get_image_state(mock_get_image_state_request, 1, 0);
+  MockCreateNonPrimaryRequest mock_create_non_primary_request;
+  expect_create_non_primary_request(mock_create_non_primary_request,
+                                    false, "remote mirror uuid", 1,
+                                    {{1, CEPH_NOSNAP}}, 11, 0);
+  MockApplyImageStateRequest mock_apply_state_request;
+  expect_apply_image_state(mock_apply_state_request, 0);
+  expect_mirror_image_snapshot_set_copy_progress(
+    mock_local_image_ctx, 11, true, 0, 0);
+  expect_notify_update(mock_local_image_ctx);
+
+  // idle
+  expect_load_image_meta(mock_image_meta, false, 0);
+  expect_is_refresh_required(mock_local_image_ctx, true);
+  expect_refresh(
+    mock_local_image_ctx, {
+      {11U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
+         cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, "remote mirror uuid",
+         1, true, 0, {{1, CEPH_NOSNAP}}},
+       0, {}, 0, 0, {}}},
+    }, 0);
+  expect_is_refresh_required(mock_remote_image_ctx, false);
+
+  // fire init
+  C_SaferCond init_ctx;
+  mock_replayer.init(&init_ctx);
+  ASSERT_EQ(0, init_ctx.wait());
+
+  // wait for sync to complete
+  ASSERT_EQ(0, wait_for_notification(3));
 
   // shut down
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,

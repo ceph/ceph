@@ -69,6 +69,7 @@ static const std::string IMAGE_DATA_POOL("data-pool");
 static const std::string IMAGE_SPARSE_SIZE("sparse-size");
 static const std::string IMAGE_THICK_PROVISION("thick-provision");
 static const std::string IMAGE_FLATTEN("flatten");
+static const std::string IMAGE_MIRROR_IMAGE_MODE("mirror-image-mode");
 
 static const std::string JOURNAL_OBJECT_SIZE("journal-object-size");
 static const std::string JOURNAL_SPLAY_WIDTH("journal-splay-width");
@@ -96,6 +97,8 @@ struct ImageFeatures {
 
   uint64_t features;
 };
+
+struct MirrorImageMode {};
 
 template <typename T>
 struct TypedValue {

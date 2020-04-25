@@ -26,15 +26,18 @@ class CreatePrimaryRequest {
 public:
   static CreatePrimaryRequest *create(ImageCtxT *image_ctx,
                                       const std::string& global_image_id,
+                                      uint64_t clean_since_snap_id,
                                       uint32_t flags, uint64_t *snap_id,
                                       Context *on_finish) {
-    return new CreatePrimaryRequest(image_ctx, global_image_id, flags, snap_id,
+    return new CreatePrimaryRequest(image_ctx, global_image_id,
+                                    clean_since_snap_id, flags, snap_id,
                                     on_finish);
   }
 
   CreatePrimaryRequest(ImageCtxT *image_ctx,
                        const std::string& global_image_id,
-                       uint32_t flags, uint64_t *snap_id, Context *on_finish);
+                       uint64_t clean_since_snap_id, uint32_t flags,
+                       uint64_t *snap_id, Context *on_finish);
 
   void send();
 
@@ -64,6 +67,7 @@ private:
 
   ImageCtxT *m_image_ctx;
   std::string m_global_image_id;
+  uint64_t m_clean_since_snap_id;
   const uint32_t m_flags;
   uint64_t *m_snap_id;
   Context *m_on_finish;
