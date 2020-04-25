@@ -153,11 +153,6 @@ static constexpr uint32_t FRAME_SECURE_EPILOGUE_SIZE =
 
 #define FRAME_FLAGS_LATEABRT      (1<<0)   /* frame was aborted after txing data */
 
-static uint32_t segment_onwire_size(const uint32_t logical_size)
-{
-  return p2roundup<uint32_t>(logical_size, CRYPTO_BLOCK_SIZE);
-}
-
 struct FrameError : std::runtime_error {
   using runtime_error::runtime_error;
 };
@@ -210,6 +205,11 @@ public:
                             const uint16_t segment_aligns[],
                             size_t segment_count);
 
+  Tag disassemble_preamble(bufferlist& preamble_bl);
+
+  bool disassemble_segments(bufferlist segment_bls[],
+                            bufferlist& epilogue_bl) const;
+
 private:
   struct segment_desc_t {
     uint32_t logical_len;
@@ -229,6 +229,11 @@ private:
                           bufferlist segment_bls[]) const;
   bufferlist asm_secure_rev0(const preamble_block_t& preamble,
                              bufferlist segment_bls[]) const;
+
+  bool disasm_all_crc_rev0(bufferlist segment_bls[],
+                           bufferlist& epilogue_bl) const;
+  bool disasm_all_secure_rev0(bufferlist segment_bls[],
+                              bufferlist& epilogue_bl) const;
 
   void fill_preamble(Tag tag, preamble_block_t& preamble) const;
   friend std::ostream& operator<<(std::ostream& os,
