@@ -677,11 +677,125 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             return r
 
 
-class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
+class API:
+    def DecoratorFactory(attr: str, default: Any):
+        class DecoratorClass:
+            _ATTR_TOKEN = f'__ATTR_{attr.upper()}__'
+
+            def __init__(self, value=default):
+                self.value = value
+
+            def __call__(self, func):
+                setattr(func, self._ATTR_TOKEN, self.value)
+                return func
+
+            @classmethod
+            def get(cls, func):
+                return getattr(func, cls._ATTR_TOKEN, default)
+
+        return DecoratorClass
+
+    hook = DecoratorFactory('hook', default=False)(True)
+    perm = DecoratorFactory('perm', default='r')
+    internal = DecoratorFactory('internal', default=False)(True)
+
+
+class MgrModuleHooks:
     COMMANDS = []  # type: List[Any]
     MODULE_OPTIONS = []  # type: List[dict]
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
+    @API.hook
+    def notify(self, notify_type, notify_id):
+        """
+        Called by the ceph-mgr service to notify the Python plugin
+        that new state is available.
+
+        :param notify_type: string indicating what kind of notification,
+                            such as osd_map, mon_map, fs_map, mon_status,
+                            health, pg_summary, command, service_map
+        :param notify_id:  string (may be empty) that optionally specifies
+                            which entity is being notified about.  With
+                            "command" notifications this is set to the tag
+                            ``from send_command``.
+        """
+        pass
+
+    @API.hook
+    def config_notify(self):
+        """
+        Called by the ceph-mgr service to notify the Python plugin
+        that the configuration may have changed.  Modules will want to
+        refresh any configuration values stored in config variables.
+        """
+        pass
+
+    @API.hook
+    def handle_command(self, inbuf, cmd):
+        """
+        Called by ceph-mgr to request the plugin to handle one
+        of the commands that it declared in self.COMMANDS
+
+        Return a status code, an output buffer, and an
+        output string.  The output buffer is for data results,
+        the output string is for informative text.
+
+        :param inbuf: content of any "-i <file>" supplied to ceph cli
+        :type inbuf: str
+        :param cmd: from Ceph's cmdmap_t
+        :type cmd: dict
+
+        :return: HandleCommandResult or a 3-tuple of (int, str, str)
+        """
+
+        # Should never get called if they didn't declare
+        # any ``COMMANDS``
+        raise NotImplementedError()
+
+    @API.hook
+    def serve(self):
+        """
+        Called by the ceph-mgr service to start any server that
+        is provided by this Python plugin.  The implementation
+        of this function should block until ``shutdown`` is called.
+
+        You *must* implement ``shutdown`` if you implement ``serve``
+        """
+        pass
+
+    @staticmethod
+    @API.hook
+    def can_run():
+        """
+        Implement this function to report whether the module's dependencies
+        are met.  For example, if the module needs to import a particular
+        dependency to work, then use a try/except around the import at
+        file scope, and then report here if the import failed.
+
+        This will be called in a blocking way from the C++ code, so do not
+        do any I/O that could block in this function.
+
+        :return a 2-tuple consisting of a boolean and explanatory string
+        """
+
+        return True, ""
+
+    @API.hook
+    def shutdown(self):
+        """
+        Called by the ceph-mgr service to request that this
+        module drop out of its serve() function.  You do not
+        need to implement this if you do not implement serve()
+
+        :return: None
+        """
+        if self._rados:
+            addrs = self._rados.get_addrs()
+            self._rados.shutdown()
+            self._ceph_unregister_client(addrs)
+
+
+class MgrModule(ceph_module.BaseMgrModule, MgrModuleHooks, MgrModuleLoggingMixin):
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
     PRIO_INTERESTING = 8
@@ -744,7 +858,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # Keep a librados instance for those that need it.
         self._rados = None
 
-
     def __del__(self):
         self._unconfigure_logging()
 
@@ -774,8 +887,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def log(self):
         return self._logger
 
-    def cluster_log(self, channel, priority, message):
+    @API.perm('w')
+    def cluster_log(self, channel: str, priority: int, message: str):
         """
+        Send message to the cluster log.
+
         :param channel: The log channel. This can be 'cluster', 'audit', ...
         :type channel: str
         :param priority: The log message priority. This can be
@@ -801,26 +917,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_release_name()
 
+    @API.internal
     def get_context(self):
         """
         :return: a Python capsule containing a C++ CephContext pointer
         """
         return self._ceph_get_context()
-
-    def notify(self, notify_type, notify_id):
-        """
-        Called by the ceph-mgr service to notify the Python plugin
-        that new state is available.
-
-        :param notify_type: string indicating what kind of notification,
-                            such as osd_map, mon_map, fs_map, mon_status,
-                            health, pg_summary, command, service_map
-        :param notify_id:  string (may be empty) that optionally specifies
-                            which entity is being notified about.  With
-                            "command" notifications this is set to the tag
-                            ``from send_command``.
-        """
-        pass
 
     def _config_notify(self):
         # check logging options for changes
@@ -846,38 +948,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # call module subclass implementations
         self.config_notify()
 
-    def config_notify(self):
-        """
-        Called by the ceph-mgr service to notify the Python plugin
-        that the configuration may have changed.  Modules will want to
-        refresh any configuration values stored in config variables.
-        """
-        pass
-
-    def serve(self):
-        """
-        Called by the ceph-mgr service to start any server that
-        is provided by this Python plugin.  The implementation
-        of this function should block until ``shutdown`` is called.
-
-        You *must* implement ``shutdown`` if you implement ``serve``
-        """
-        pass
-
-    def shutdown(self):
-        """
-        Called by the ceph-mgr service to request that this
-        module drop out of its serve() function.  You do not
-        need to implement this if you do not implement serve()
-
-        :return: None
-        """
-        if self._rados:
-            addrs = self._rados.get_addrs()
-            self._rados.shutdown()
-            self._ceph_unregister_client(addrs)
-
-    def get(self, data_name):
+    def get(self, data_name: str):
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
@@ -941,6 +1012,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         elif unit == self.BYTES:
             return "B/s"
 
+    @API.internal
     @staticmethod
     def to_pretty_iec(n):
         for bits, suffix in [(60, 'Ei'), (50, 'Pi'), (40, 'Ti'), (30, 'Gi'),
@@ -949,6 +1021,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 return str(n >> bits) + ' ' + suffix
         return str(n) + ' '
 
+    @API.internal
     @staticmethod
     def get_pretty_row(elems, width):
         """
@@ -967,7 +1040,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return ret
 
-    def get_pretty_header(self, elems, width):
+    @classmethod
+    def get_pretty_header(cls, elems, width):
         """
         Like ``get_pretty_row`` but adds dashes, to be used as a table title.
 
@@ -984,7 +1058,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         ret += '\n'
 
         # title
-        ret += self.get_pretty_row(elems, width)
+        ret += cls.get_pretty_row(elems, width)
         ret += '\n'
 
         # dash line
@@ -995,7 +1069,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return ret
 
-    def get_server(self, hostname):
+    def get_server(self, hostname: str):
         """
         Called by the plugin to fetch metadata about a particular hostname from
         ceph-mgr.
@@ -1007,7 +1081,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_server(hostname)
 
-    def get_perf_schema(self, svc_type, svc_name):
+    def get_perf_schema(self, svc_type: str, svc_name: str):
         """
         Called by the plugin to fetch perf counter schema info.
         svc_name can be nullptr, as can svc_type, in which case
@@ -1019,7 +1093,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_perf_schema(svc_type, svc_name)
 
-    def get_counter(self, svc_type, svc_name, path):
+    def get_counter(self, svc_type: str, svc_name: str, path: str):
         """
         Called by the plugin to fetch the latest performance counter data for a
         particular counter on a particular service.
@@ -1033,7 +1107,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_counter(svc_type, svc_name, path)
 
-    def get_latest_counter(self, svc_type, svc_name, path):
+    def get_latest_counter(self, svc_type: str, svc_name: str, path: str):
         """
         Called by the plugin to fetch only the newest performance counter data
         pointfor a particular counter on a particular service.
@@ -1057,7 +1131,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_server(None)
 
-    def get_metadata(self, svc_type, svc_id):
+    def get_metadata(self, svc_type: str, svc_id: str):
         """
         Fetch the daemon metadata for a particular service.
 
@@ -1072,15 +1146,16 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_metadata(svc_type, svc_id)
 
-    def get_daemon_status(self, svc_type, svc_id):
+    def get_daemon_status(self, svc_type: str, svc_id: str):
         """
         Fetch the latest status for a particular service daemon.
 
         This method may return ``None`` if no status information is
         available, for example because the daemon hasn't fully started yet.
 
-        :param svc_type: string (e.g., 'rgw')
-        :param svc_id: string
+        :param str svc_type: string (e.g., 'rgw')
+        :param str svc_id: string
+
         :return: dict, or None if the service is not found
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
@@ -1096,6 +1171,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr} retval: {r.retval}')
         return r
 
+    @API.internal
     def mon_command(self, cmd_dict):
         """
         Helper for modules that do simple, synchronous mon command
@@ -1118,6 +1194,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return r
 
+    @API.internal
     def send_command(self, *args, **kwargs):
         """
         Called by the plugin to send a command to the mon
@@ -1141,6 +1218,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         self._ceph_send_command(*args, **kwargs)
 
+    @API.internal
     def set_health_checks(self, checks):
         """
         Set the module's current map of health checks.  Argument is a
@@ -1172,27 +1250,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
 
-    def handle_command(self, inbuf, cmd):
-        """
-        Called by ceph-mgr to request the plugin to handle one
-        of the commands that it declared in self.COMMANDS
-
-        Return a status code, an output buffer, and an
-        output string.  The output buffer is for data results,
-        the output string is for informative text.
-
-        :param inbuf: content of any "-i <file>" supplied to ceph cli
-        :type inbuf: str
-        :param cmd: from Ceph's cmdmap_t
-        :type cmd: dict
-
-        :return: HandleCommandResult or a 3-tuple of (int, str, str)
-        """
-
-        # Should never get called if they didn't declare
-        # any ``COMMANDS``
-        raise NotImplementedError()
-
     def get_mgr_id(self):
         """
         Retrieve the name of the manager daemon where this plugin
@@ -1202,7 +1259,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_mgr_id()
 
-    def get_ceph_option(self, key):
+    def get_ceph_option(self, key: str):
         return self._ceph_get_option(key)
 
     def _validate_module_option(self, key):
@@ -1223,7 +1280,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
-    def get_module_option(self, key, default=None):
+    def get_module_option(self, key: str, default=None):
         """
         Retrieve the value of a persistent configuration setting
 
@@ -1234,7 +1291,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._validate_module_option(key)
         return self._get_module_option(key, default)
 
-    def get_module_option_ex(self, module, key, default=None):
+    def get_module_option_ex(self, module: str, key: str, default=None):
         """
         Retrieve the value of a persistent configuration setting
         for the specified module.
@@ -1251,7 +1308,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         r = self._ceph_get_module_option(module, key)
         return default if r is None else r
 
-    def get_store_prefix(self, key_prefix):
+    def get_store_prefix(self, key_prefix: str):
         """
         Retrieve a dict of KV store keys to values, where the keys
         have the given prefix
@@ -1264,7 +1321,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def _set_localized(self, key, val, setter):
         return setter(_get_localized_key(self.get_mgr_id(), key), val)
 
-    def get_localized_module_option(self, key, default=None):
+    def get_localized_module_option(self, key: str, default=None):
         """
         Retrieve localized configuration for this ceph-mgr instance
         :param str key:
@@ -1278,7 +1335,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_set_module_option(self.module_name, key,
                                             None if val is None else str(val))
 
-    def set_module_option(self, key, val):
+    def set_module_option(self, key: str, val):
         """
         Set the value of a persistent configuration setting
 
@@ -1288,7 +1345,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._validate_module_option(key)
         return self._set_module_option(key, val)
 
-    def set_module_option_ex(self, module, key, val):
+    def set_module_option_ex(self, module: str, key: str, val):
         """
         Set the value of a persistent configuration setting
         for the specified module.
@@ -1301,7 +1358,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self._validate_module_option(key)
         return self._ceph_set_module_option(module, key, str(val))
 
-    def set_localized_module_option(self, key, val):
+    def set_localized_module_option(self, key: str, val):
         """
         Set localized configuration for this ceph-mgr instance
         :param str key:
@@ -1311,7 +1368,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._validate_module_option(key)
         return self._set_localized(key, val, self._set_module_option)
 
-    def set_store(self, key, val):
+    def set_store(self, key: str, val: str):
         """
         Set a value in this module's persistent key value store.
         If val is None, remove key from store
@@ -1321,7 +1378,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         self._ceph_set_store(key, val)
 
-    def get_store(self, key, default=None):
+    def get_store(self, key: str, default=None):
         """
         Get a value from this module's persistent key value store
         """
@@ -1331,7 +1388,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
-    def get_localized_store(self, key, default=None):
+    def get_localized_store(self, key: str, default=None):
         r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
         if r is None:
             r = self._ceph_get_store(key)
@@ -1339,7 +1396,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 r = default
         return r
 
-    def set_localized_store(self, key, val):
+    def set_localized_store(self, key: str, val):
         return self._set_localized(key, val, self.set_store)
 
     def self_test(self):
@@ -1364,7 +1421,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_osdmap()
 
-    def get_latest(self, daemon_type, daemon_name, counter):
+    def get_latest(self, daemon_type: str, daemon_name: str, counter: str):
         data = self.get_latest_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
@@ -1372,7 +1429,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0
 
-    def get_latest_avg(self, daemon_type, daemon_name, counter):
+    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str):
         data = self.get_latest_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
@@ -1380,7 +1437,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0, 0
 
-    def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
+    def get_all_perf_counters(self, prio_limit: int=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
                                         "rbd-mirror", "rgw", "tcmu-runner")):
         """
@@ -1447,7 +1504,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return result
 
-    def set_uri(self, uri):
+    @API.perm('rw')
+    def set_uri(self, uri: str):
         """
         If the module exposes a service, then call this to publish the
         address once it is available.
@@ -1466,14 +1524,17 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
+    @API.perm('rw')
     def update_progress_event(self, evid, desc, progress):
         return self._ceph_update_progress_event(str(evid),
                                                 str(desc),
                                                 float(progress))
 
+    @API.perm('rw')
     def complete_progress_event(self, evid):
         return self._ceph_complete_progress_event(str(evid))
 
+    @API.perm('rw')
     def clear_all_progress_events(self):
         return self._ceph_clear_all_progress_events()
 
@@ -1492,23 +1553,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._ceph_register_client(self._rados.get_addrs())
         return self._rados
 
-    @staticmethod
-    def can_run():
-        """
-        Implement this function to report whether the module's dependencies
-        are met.  For example, if the module needs to import a particular
-        dependency to work, then use a try/except around the import at
-        file scope, and then report here if the import failed.
 
-        This will be called in a blocking way from the C++ code, so do not
-        do any I/O that could block in this function.
-
-        :return a 2-tuple consisting of a boolean and explanatory string
-        """
-
-        return True, ""
-
-    def remote(self, module_name, method_name, *args, **kwargs):
+    def remote(self, module_name: str, method_name: str, *args, **kwargs):
         """
         Invoke a method on another module.  All arguments, and the return
         value from the other module must be serializable.
@@ -1532,6 +1578,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_dispatch_remote(module_name, method_name,
                                           args, kwargs)
 
+    @API.internal
     def add_osd_perf_query(self, query):
         """
         Register an OSD perf query.  Argument is a
@@ -1562,6 +1609,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_add_osd_perf_query(query)
 
+    @API.internal
     def remove_osd_perf_query(self, query_id):
         """
         Unregister an OSD perf query.
@@ -1570,6 +1618,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_remove_osd_perf_query(query_id)
 
+    @API.internal
     def get_osd_perf_counters(self, query_id):
         """
         Get stats collected for an OSD perf query.
@@ -1578,6 +1627,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_osd_perf_counters(query_id)
 
+    @API.internal
     def is_authorized(self, arguments):
         """
         Verifies that the current session caps permit executing the py service
