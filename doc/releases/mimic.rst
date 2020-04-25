@@ -1,5 +1,5 @@
 v13.2.10 Mimic
-=============
+==============
 
 This is the tenth bugfix release of Ceph Mimic, this release fixes a RGW
 vulnerability affecting mimic, and we recommend that all mimic users upgrade.
