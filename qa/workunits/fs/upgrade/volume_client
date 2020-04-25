@@ -2,7 +2,7 @@
 
 set -ex
 
-PYTHON="python2"
+PYTHON="python3"
 
 function run_payload {
     local payload="$1"
