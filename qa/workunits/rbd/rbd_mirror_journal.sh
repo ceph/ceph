@@ -349,8 +349,8 @@ for cluster in ${CLUSTER1} ${CLUSTER2}; do
     CEPH_ARGS='' rbd --cluster ${cluster} pool init ${pool}
     rbd --cluster ${cluster} mirror pool enable ${pool} pool
 done
-rbd --cluster ${CLUSTER1} mirror pool peer add ${pool} ${CLUSTER2}
-rbd --cluster ${CLUSTER2} mirror pool peer add ${pool} ${CLUSTER1}
+peer_add ${CLUSTER1} ${pool} ${CLUSTER2}
+peer_add ${CLUSTER2} ${pool} ${CLUSTER1}
 rdp_image=test_remove_data_pool
 create_image ${CLUSTER2} ${pool} ${image} 128
 create_image ${CLUSTER2} ${POOL} ${rdp_image} 128 --data-pool ${pool}
