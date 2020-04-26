@@ -77,31 +77,12 @@ build_dashboard_frontend() {
   $TEMP_DIR/bin/nodeenv -p --node=12.16.2
   cd src/pybind/mgr/dashboard/frontend
 
-  DEFAULT_LANG=`jq -r .config.locale package.json`
-  if [ -z "$DASHBOARD_FRONTEND_LANGS" ]; then
-    BUILD_TARGET=":${DEFAULT_LANG}"
-  else
-    if [ "$DASHBOARD_FRONTEND_LANGS" == "ALL" ]; then
-      BUILD_TARGET=":*"
-    else
-      DASHBOARD_FRONTEND_LANGS_LIST=`echo "$DASHBOARD_FRONTEND_LANGS" | sed 's/ /,/g'`
-      if [[ $DASHBOARD_FRONTEND_LANGS_LIST != *"${DEFAULT_LANG}"* ]]; then
-        # default language must be always built
-        DASHBOARD_FRONTEND_LANGS_LIST="${DASHBOARD_FRONTEND_LANGS},${DEFAULT_LANG}"
-      fi
-      BUILD_TARGET=":{${DASHBOARD_FRONTEND_LANGS_LIST}}"
-    fi
-  fi
-  # number of frontend languages to build in parallel - default to 1 to work
-  # around https://tracker.ceph.com/issues/43152
-  [ -z "$MAX_DASHBOARD_PARALLEL_BUILDS" ] && MAX_DASHBOARD_PARALLEL_BUILDS=1
-
   . $TEMP_DIR/bin/activate
   timeout 1h npm ci
-  echo "Building ceph-dashboard frontend with build${BUILD_TARGET} script";
-  # we need to use "-- --" because so that "--prod" survives accross all
+  echo "Building ceph-dashboard frontend with build:localize script";
+  # we need to use "--" because so that "--prod" survives accross all
   # scripts redirections inside package.json
-  npx npm-run-all --print-label --parallel --max-parallel $MAX_DASHBOARD_PARALLEL_BUILDS "build${BUILD_TARGET} -- -- --prod"
+  npm run build:localize -- --prod
   deactivate
   cd $CURR_DIR
   rm -rf $TEMP_DIR
