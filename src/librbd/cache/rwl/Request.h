@@ -256,6 +256,50 @@ private:
   PerfCounters *m_perfcounter;
 };
 
+/**
+ * This is the custodian of the BlockGuard cell for this discard. As in the
+ * case of write, the block guard is not released until the discard persists
+ * everywhere.
+ */
+template <typename T>
+class C_DiscardRequest : public C_BlockIORequest<T> {
+public:
+  using C_BlockIORequest<T>::rwl;
+  std::shared_ptr<DiscardLogOperation> op;
+
+  C_DiscardRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+                   uint32_t discard_granularity_bytes, ceph::mutex &lock,
+                   PerfCounters *perfcounter, Context *user_req);
+
+  ~C_DiscardRequest() override;
+  void finish_req(int r) override {}
+
+  bool alloc_resources() override;
+
+  void deferred_handler() override { }
+
+  void setup_log_operations();
+
+  void dispatch() override;
+
+  void blockguard_acquired(GuardedRequestFunctionContext &guard_ctx);
+
+  const char *get_name() const override {
+    return "C_DiscardRequest";
+  }
+  void setup_buffer_resources(
+      uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
+      uint64_t &number_lanes, uint64_t &number_log_entries,
+      uint64_t &number_unpublished_reserves) override;
+private:
+  uint32_t m_discard_granularity_bytes;
+  ceph::mutex &m_lock;
+  PerfCounters *m_perfcounter = nullptr;
+  template <typename U>
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const C_DiscardRequest<U> &req);
+};
+
 struct BlockGuardReqState {
   bool barrier = false; /* This is a barrier request */
   bool current_barrier = false; /* This is the currently active barrier */

@@ -232,7 +232,9 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
       ldout(rwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get()
                                    << " operation=" << operation << dendl;
       log_entries.emplace_back(operation->log_entry);
-      rwl.inc_last_op_sequence_num();
+      if (!op_set->persist_on_flush) {
+        rwl.inc_last_op_sequence_num();
+      }
       operation->init(true, allocation, current_sync_gen,
                       rwl.get_last_op_sequence_num(), this->bl, buffer_offset, op_set->persist_on_flush);
       buffer_offset += operation->log_entry->write_bytes();
@@ -454,6 +456,110 @@ void C_ReadRequest::finish(int r) {
     }
   }
 }
+
+template <typename T>
+C_DiscardRequest<T>::C_DiscardRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+                                      uint32_t discard_granularity_bytes, ceph::mutex &lock,
+                                      PerfCounters *perfcounter, Context *user_req)
+  : C_BlockIORequest<T>(rwl, arrived, std::move(image_extents), bufferlist(), 0, user_req),
+  m_discard_granularity_bytes(discard_granularity_bytes),
+  m_lock(lock),
+  m_perfcounter(perfcounter) {
+  ldout(rwl.get_context(), 20) << this << dendl;
+}
+
+template <typename T>
+C_DiscardRequest<T>::~C_DiscardRequest() {
+  ldout(rwl.get_context(), 20) << this << dendl;
+}
+
+template <typename T>
+bool C_DiscardRequest<T>::alloc_resources() {
+  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+                               << "req=[" << *this << "]" << dendl;
+  return rwl.alloc_resources(this);
+}
+
+template <typename T>
+void C_DiscardRequest<T>::setup_log_operations() {
+  std::lock_guard locker(m_lock);
+  GenericWriteLogEntries log_entries;
+  for (auto &extent : this->image_extents) {
+    op = std::make_shared<DiscardLogOperation>(rwl.get_current_sync_point(),
+                                               extent.first,
+                                               extent.second,
+                                               m_discard_granularity_bytes,
+                                               this->m_dispatched_time,
+                                               m_perfcounter,
+                                               rwl.get_context());
+    log_entries.emplace_back(op->log_entry);
+    break;
+  }
+  uint64_t current_sync_gen = rwl.get_current_sync_gen();
+  bool persist_on_flush = rwl.get_persist_on_flush();
+  if (!persist_on_flush) {
+    rwl.inc_last_op_sequence_num();
+  }
+  auto discard_req = this;
+  Context *on_write_persist = new LambdaContext(
+    [this, discard_req](int r) {
+      ldout(rwl.get_context(), 20) << "discard_req=" << discard_req
+                                   << " cell=" << discard_req->get_cell() << dendl;
+      ceph_assert(discard_req->get_cell());
+      discard_req->complete_user_request(r);
+      discard_req->release_cell();
+    });
+  op->init(current_sync_gen, persist_on_flush, rwl.get_last_op_sequence_num(), on_write_persist);
+  rwl.add_into_log_map(log_entries);
+}
+
+template <typename T>
+void C_DiscardRequest<T>::dispatch() {
+  utime_t now = ceph_clock_now();
+  ldout(rwl.get_context(), 20) << "req type=" << get_name() << " "
+                               << "req=[" << *this << "]" << dendl;
+  ceph_assert(this->m_resources.allocated);
+  this->m_dispatched_time = now;
+  setup_log_operations();
+  m_perfcounter->inc(l_librbd_rwl_log_ops, 1);
+  rwl.schedule_append(op);
+}
+
+template <typename T>
+void C_DiscardRequest<T>::setup_buffer_resources(
+    uint64_t &bytes_cached, uint64_t &bytes_dirtied, uint64_t &bytes_allocated,
+    uint64_t &number_lanes, uint64_t &number_log_entries,
+    uint64_t &number_unpublished_reserves) {
+  number_log_entries = 1;
+  /* No bytes are allocated for a discard, but we count the discarded bytes
+   * as dirty.  This means it's possible to have more bytes dirty than
+   * there are bytes cached or allocated. */
+  for (auto &extent : this->image_extents) {
+    bytes_dirtied = extent.second;
+    break;
+  }
+}
+
+template <typename T>
+void C_DiscardRequest<T>::blockguard_acquired(GuardedRequestFunctionContext &guard_ctx) {
+  ldout(rwl.get_context(), 20) << " cell=" << guard_ctx.cell << dendl;
+
+  ceph_assert(guard_ctx.cell);
+  this->detained = guard_ctx.state.detained; /* overlapped */
+  this->set_cell(guard_ctx.cell);
+}
+
+template <typename T>
+std::ostream &operator<<(std::ostream &os,
+                         const C_DiscardRequest<T> &req) {
+  os << (C_BlockIORequest<T>&)req;
+  if (req.op) {
+    os << " op=[" << *req.op << "]";
+  } else {
+    os << " op=nullptr";
+  }
+  return os;
+};
 
 std::ostream &operator<<(std::ostream &os,
                          const BlockGuardReqState &r) {
