@@ -180,26 +180,20 @@ public:
   }
 
   template <typename T>
-  void start_peering_event_operation(T &&evt) {
+  void start_peering_event_operation(T &&evt, float delay = 0) {
     shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
       pg_whoami,
       pgid,
+      delay,
       std::forward<T>(evt));
   }
 
   void schedule_event_after(
     PGPeeringEventRef event,
     float delay) final {
-    // TODO: this is kind of a hack -- once the start_operation call
-    // happens, the operation will be registered, but during the delay
-    // it's just a dangling future.  It would be nice for the
-    // operation machinery to have something to take care of this.
-    (void)seastar::sleep(std::chrono::milliseconds(std::lround(delay*1000))).then(
-      [this, event=std::move(event)]() {
-	start_peering_event_operation(std::move(*event));
-      });
+    start_peering_event_operation(std::move(*event), delay);
   }
   std::vector<pg_shard_t> get_replica_recovery_order() const final {
     return peering_state.get_replica_recovery_order();
