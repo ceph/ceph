@@ -58,7 +58,7 @@ void frag_info_t::dump(Formatter *f) const
 void frag_info_t::decode_json(JSONObj *obj){
 
   JSONDecoder::decode_json("version", version, obj, true);
-  //JSONDecoder::decode_json("mtime", mtime, obj, true);   // remove now
+  JSONDecoder::decode_json("mtime", mtime, obj, true);
   JSONDecoder::decode_json("num_files", nfiles, obj, true);
   JSONDecoder::decode_json("num_subdirs", nsubdirs, obj, true);
   JSONDecoder::decode_json("change_attr", change_attr, obj, true);
@@ -142,7 +142,7 @@ void nest_info_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("rfiles", rfiles, obj, true);
   JSONDecoder::decode_json("rsubdirs", rsubdirs, obj, true);
   JSONDecoder::decode_json("rsnaps", rsnaps, obj, true);
-  //JSONDecoder::decode_json("rctime", rctime, obj, true);   // remove now
+  JSONDecoder::decode_json("rctime", rctime, obj, true);
 }
 
 void nest_info_t::generate_test_instances(std::list<nest_info_t*>& ls)
@@ -344,7 +344,16 @@ void fnode_t::dump(Formatter *f) const
   accounted_rstat.dump(f);
   f->close_section();
 }
-
+void fnode_t::decode_json(JSONObj *obj){
+  JSONDecoder::decode_json("version", version, obj, true);
+  uint64_t tmp;
+  JSONDecoder::decode_json("snap_purged_thru", tmp, obj, true);
+  snap_purged_thru.val = tmp;
+  JSONDecoder::decode_json("fragstat", fragstat, obj, true);
+  JSONDecoder::decode_json("accounted_fragstat", accounted_fragstat, obj, true);
+  JSONDecoder::decode_json("rstat", rstat, obj, true);
+  JSONDecoder::decode_json("accounted_rstat", accounted_rstat, obj, true);
+}
 void fnode_t::generate_test_instances(std::list<fnode_t*>& ls)
 {
   ls.push_back(new fnode_t);

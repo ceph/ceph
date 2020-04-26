@@ -56,6 +56,8 @@ class MetaTool : public MDSUtility
             OP_LTRACE,
             OP_SHOW,
             OP_AMEND,
+            OP_SHOW_FN,
+            OP_AMEND_FN,
              OP_NO
         }op_type;
         typedef enum{
@@ -76,6 +78,12 @@ class MetaTool : public MDSUtility
                 break;
             case OP_AMEND:
                 name = "amend info";
+                break;
+            case OP_SHOW_FN:
+                name = "show fnode";
+                break;
+            case OP_AMEND_FN:
+                name = "amend fnode";
                 break;
             case OP_NO:
                 name = "noop";
@@ -228,16 +236,21 @@ class MetaTool : public MDSUtility
     int show_meta_info(string& ino, string& out);
     int list_meta_info(string& ino, string& out);
     int amend_meta_info(string& ino, string& in, bool confirm);
+    int show_fnode(string& ino, string& out);
+    int amend_fnode(string& in, bool confirm);
     int op_process(meta_op &op);
     int list_meta(meta_op &op);
     int file_meta(meta_op &op);
     int show_meta(meta_op &op);
     int amend_meta(meta_op &op);
-
+    int show_fn(meta_op &op);
+    int amend_fn(meta_op &op);
  public:
     int _file_meta(meta_op &op, librados::IoCtx& io);
     int _show_meta(inode_meta_t& i, const string& fn);
     int _amend_meta(string &k, inode_meta_t& i, const string& fn, meta_op& op);
+    int _show_fn(inode_meta_t& i, const string& fn);
+    int _amend_fn(const string& fn, bool confirm);
     static unsigned long long conv2hexino(const char* ino);
     void usage();
  MetaTool(bool debug=false):
