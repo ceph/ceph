@@ -43,7 +43,9 @@ int main(int argc, const char **argv){
          "\tconv : convert decimal ino to hex\n"  \
          "\tlistc : list all obj of dir\n" \
          "\tshowm : show the info of ino\n" \
-         "\tamend : amend part of the meta data\n"
+         "\tshowfn : show the fnode of dir\n" \
+         "\tamend : amend part of the meta data\n" \
+         "\tamendfn : amend fnode from file\n"
          );
 
     po::positional_options_description p;
@@ -67,7 +69,7 @@ int main(int argc, const char **argv){
     if (vm.count("help")){
         std::cout << version << std::endl;
         std::cout << "usage : \n"
-                  << "  cephfs-meta-injection <conv|listc|showm|amend> -r <fsname:rank> -i <ino>"
+                  << "  cephfs-meta-injection <conv|listc|showm|showfn|amend|amendfn> -r <fsname:rank> -i <ino>"
                   << std::endl;
         std::cout << "example : \n"
                   << "  amend info of inode(1099531628828)\n"
