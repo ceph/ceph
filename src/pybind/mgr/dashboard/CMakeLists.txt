@@ -84,31 +84,15 @@ execute_process(
     OUTPUT_VARIABLE default_lang
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-if(DASHBOARD_FRONTEND_LANGS)
-  string(STRIP "${DASHBOARD_FRONTEND_LANGS}" DASHBOARD_FRONTEND_LANGS)
-  if(DASHBOARD_FRONTEND_LANGS STREQUAL "ALL")
-    set(build_target ":*")
-  else()
-    string(FIND "${DASHBOARD_FRONTEND_LANGS}" "${default_lang}" default_idx)
-    if (default_idx EQUAL -1)
-      # default language must be always built
-      string(CONCAT DASHBOARD_FRONTEND_LANGS "${DASHBOARD_FRONTEND_LANGS}" ",${default_lang}")
-    endif()
-    set(build_target ":\{${DASHBOARD_FRONTEND_LANGS}\}")
-  endif()
-else(DASHBOARD_FRONTEND_LANGS)
-  set(build_target ":${default_lang}")
-endif(DASHBOARD_FRONTEND_LANGS)
-
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(npm_args "-- --prod --progress=false")
+  set(npm_args "--prod --progress=false")
 else()
-  set(npm_args "-- --progress=false")
+  set(npm_args "--progress=false")
 endif()
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/dist"
-  COMMAND npx npm-run-all --print-label --parallel --max-parallel 2 "\"build${build_target} -- ${npm_args}\""
+  COMMAND npm run build:localize -- ${npm_args}
   DEPENDS ${frontend_src} frontend/node_modules
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend is being created"

@@ -35,7 +35,6 @@
             "main": "src/main.ts",
             "tsConfig": "src/tsconfig.app.json",
             "polyfills": "src/polyfills.ts",
-            "deleteOutputPath": false,
             "assets": [
               "src/assets",
               "src/favicon.ico",
@@ -92,40 +91,40 @@
             "cs": {
               "localize": ["cs"]
             },
-            "de-DE": {
+            "de": {
               "localize": ["de"]
             },
-            "en-US": {
+            "en": {
               "localize": ["en"]
             },
-            "es-ES": {
+            "es": {
               "localize": ["es"]
             },
-            "fr-FR": {
+            "fr": {
               "localize": ["fr"]
             },
-            "id-ID": {
+            "id": {
               "localize": ["id"]
             },
-            "it-IT": {
+            "it": {
               "localize": ["it"]
             },
-            "ja-JP": {
+            "ja": {
               "localize": ["ja"]
             },
-            "ko-KR": {
+            "ko": {
               "localize": ["ko"]
             },
-            "pl-PL": {
+            "pl": {
               "localize": ["pl"]
             },
-            "pt-BR": {
+            "pt": {
               "localize": ["pt"]
             },
-            "zh-CN": {
+            "zh-Hans": {
               "localize": ["zh-Hans"]
             },
-            "zh-TW": {
+            "zh-Hant": {
               "localize": ["zh-Hant"]
             }
           }
