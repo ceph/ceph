@@ -96,6 +96,8 @@ public:
   using C_WriteRequestT = rwl::C_WriteRequest<This>;
   using C_BlockIORequestT = rwl::C_BlockIORequest<This>;
   using C_FlushRequestT = rwl::C_FlushRequest<This>;
+  using C_DiscardRequestT = rwl::C_DiscardRequest<This>;
+
   CephContext * get_context();
   void release_guarded_request(BlockGuardCell *cell);
   void release_write_lanes(C_BlockIORequestT *req);

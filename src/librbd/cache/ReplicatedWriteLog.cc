@@ -625,27 +625,38 @@ void ReplicatedWriteLog<I>::aio_read(Extents&& image_extents,
       uint64_t entry_hit_length = min(entry_image_extent.second - entry_offset,
                                       extent.second - extent_offset);
       Extent hit_extent(entry_image_extent.first, entry_hit_length);
+      if (0 == map_entry.log_entry->write_bytes() && 0 < map_entry.log_entry->bytes_dirty()) {
+        /* discard log entry */
+        auto discard_entry = map_entry.log_entry;
+        ldout(cct, 20) << "read hit on discard entry: log_entry=" << *discard_entry << dendl;
+        /* Discards read as zero, so we'll construct a bufferlist of zeros */
+        bufferlist zero_bl;
+        zero_bl.append_zero(entry_hit_length);
+        /* Add hit extent to read extents */
+        ImageExtentBuf hit_extent_buf(hit_extent, zero_bl);
+        read_ctx->read_extents.push_back(hit_extent_buf);
+      } else {
+        /* write and writesame log entry */
+        /* Offset of the map entry into the log entry's buffer */
+        uint64_t map_entry_buffer_offset = entry_image_extent.first - map_entry.log_entry->ram_entry.image_offset_bytes;
+        /* Offset into the log entry buffer of this read hit */
+        uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
+        /* Create buffer object referring to pmem pool for this read hit */
+        auto write_entry = map_entry.log_entry;
 
-      /* Offset of the map entry into the log entry's buffer */
-      uint64_t map_entry_buffer_offset = entry_image_extent.first - map_entry.log_entry->ram_entry.image_offset_bytes;
-      /* Offset into the log entry buffer of this read hit */
-      uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
-      /* Create buffer object referring to pmem pool for this read hit */
-      auto write_entry = map_entry.log_entry;
+        /* Make a bl for this hit extent. This will add references to the write_entry->pmem_bp */
+        buffer::list hit_bl;
 
-      /* Make a bl for this hit extent. This will add references to the write_entry->pmem_bp */
-      buffer::list hit_bl;
+        buffer::list entry_bl_copy;
+        write_entry->copy_pmem_bl(&entry_bl_copy);
+        entry_bl_copy.begin(read_buffer_offset).copy(entry_hit_length, hit_bl);
 
-      buffer::list entry_bl_copy;
-      write_entry->copy_pmem_bl(&entry_bl_copy);
-      entry_bl_copy.begin(read_buffer_offset).copy(entry_hit_length, hit_bl);
+        ceph_assert(hit_bl.length() == entry_hit_length);
 
-      ceph_assert(hit_bl.length() == entry_hit_length);
-
-      /* Add hit extent to read extents */
-      ImageExtentBuf hit_extent_buf(hit_extent, hit_bl);
-      read_ctx->read_extents.push_back(hit_extent_buf);
-
+        /* Add hit extent to read extents */
+        ImageExtentBuf hit_extent_buf(hit_extent, hit_bl);
+        read_ctx->read_extents.push_back(hit_extent_buf);
+      }
       /* Exclude RWL hit range from buffer and extent */
       extent_offset += entry_hit_length;
       ldout(cct, 20) << map_entry << dendl;
@@ -710,6 +721,29 @@ template <typename I>
 void ReplicatedWriteLog<I>::aio_discard(uint64_t offset, uint64_t length,
                                         uint32_t discard_granularity_bytes,
                                         Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << dendl;
+
+  utime_t now = ceph_clock_now();
+  m_perfcounter->inc(l_librbd_rwl_discard, 1);
+  Extents discard_extents = {{offset, length}};
+
+  ceph_assert(m_initialized);
+
+  auto *discard_req =
+    new C_DiscardRequestT(*this, now, std::move(discard_extents), discard_granularity_bytes,
+                          m_lock, m_perfcounter, on_finish);
+
+  /* The lambda below will be called when the block guard for all
+   * blocks affected by this write is obtained */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, discard_req](GuardedRequestFunctionContext &guard_ctx) {
+      discard_req->blockguard_acquired(guard_ctx);
+      alloc_and_dispatch_io_req(discard_req);
+    });
+
+  detain_guarded_request(discard_req, guarded_ctx, false);
 }
 
 /**
@@ -1319,9 +1353,11 @@ void ReplicatedWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
     utime_t now = ceph_clock_now();
     auto log_entry = op->get_log_entry();
     log_entry->completed = true;
-    if (op->reserved_allocated()) {
+    if (op->is_writing_op()) {
       op->mark_log_entry_completed();
       dirty_entries.push_back(log_entry);
+    }
+    if (op->reserved_allocated()) {
       published_reserves++;
     }
     op->complete(result);
@@ -1713,7 +1749,7 @@ bool ReplicatedWriteLog<I>::can_flush_entry(std::shared_ptr<GenericLogEntry> log
 
 template <typename I>
 Context* ReplicatedWriteLog<I>::construct_flush_entry_ctx(std::shared_ptr<GenericLogEntry> log_entry) {
-  //TODO handle writesame, invalidate and discard in later PRs
+  //TODO handle invalidate in later PRs
   CephContext *cct = m_image_ctx.cct;
 
   ldout(cct, 20) << "" << dendl;
