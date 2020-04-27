@@ -115,15 +115,16 @@ FS Subvolumes
 
 Create a subvolume using::
 
-    $ ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes> --group_name <subvol_group_name> --pool_layout <data_pool_name> --uid <uid> --gid <gid> --mode <octal_mode>]
+    $ ceph fs subvolume create <vol_name> <subvol_name> [--size <size_in_bytes> --group_name <subvol_group_name> --pool_layout <data_pool_name> --uid <uid> --gid <gid> --mode <octal_mode> --namespace-isolated]
 
 
 The command succeeds even if the subvolume already exists.
 
 When creating a subvolume you can specify its subvolume group, data pool layout,
 uid, gid, file mode in octal numerals, and size in bytes. The size of the subvolume is
-specified by setting a quota on it (see :doc:`/cephfs/quota`). By default a
-subvolume is created within the default subvolume group, and with an octal file
+specified by setting a quota on it (see :doc:`/cephfs/quota`). The subvolume can be
+created in a separate RADOS namespace by specifying --namespace-isolated option. By
+default a subvolume is created within the default subvolume group, and with an octal file
 mode '755', uid of its subvolume group, gid of its subvolume group, data pool layout of
 its parent directory and no size limit.
 
@@ -172,6 +173,7 @@ The output format is json and contains fields as follows.
 * data_pool: data pool the subvolume belongs to
 * path: absolute path of a subvolume
 * type: subvolume type indicating whether it's clone or subvolume
+* pool_namespace: RADOS namespace of the subvolume
 
 List subvolumes using::
 
