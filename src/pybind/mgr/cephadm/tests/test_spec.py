@@ -282,6 +282,21 @@ def test_spec_octopus():
         ),
         False
     ),
+    (
+        # zone contains hostname
+        # https://tracker.ceph.com/issues/45294
+        RGWSpec(
+            rgw_realm="default.rgw.realm",
+            rgw_zone="ceph.001",
+            subcluster='1',
+        ),
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id="default.rgw.realm.ceph.001.1.ceph.001.ytywjo",
+            hostname="ceph.001",
+        ),
+        True
+    ),
 
     # https://tracker.ceph.com/issues/45293
     (
