@@ -130,12 +130,20 @@ int execute_map(const po::variables_map &vm,
   }
   args.push_back(img);
 
+  if (vm["quiesce"].as<bool>()) {
+    std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
+  }
+
   if (vm["read-only"].as<bool>()) {
     args.push_back("--read-only");
   }
 
   if (vm["exclusive"].as<bool>()) {
     args.push_back("--exclusive");
+  }
+
+  if (vm.count("quiesce-hook")) {
+    std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
   }
 
   if (vm.count("options")) {

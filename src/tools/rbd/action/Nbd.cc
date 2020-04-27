@@ -134,12 +134,21 @@ int execute_map(const po::variables_map &vm,
   }
   args.push_back(img);
 
+  if (vm["quiesce"].as<bool>()) {
+    args.push_back("--quiesce");
+  }
+
   if (vm["read-only"].as<bool>()) {
     args.push_back("--read-only");
   }
 
   if (vm["exclusive"].as<bool>()) {
     args.push_back("--exclusive");
+  }
+
+  if (vm.count("quiesce-hook")) {
+    args.push_back("--quiesce-hook");
+    args.push_back(vm["quiesce-hook"].as<std::string>());
   }
 
   if (vm.count("options")) {
