@@ -1,4 +1,4 @@
-from ceph_volume.util import arg_validators
+from ceph_volume.util import arg_validators, disk
 from ceph_volume import process, conf
 from ceph_volume import terminal
 import argparse
@@ -44,7 +44,8 @@ common_args = {
     },
     '--data-size': {
         'help': 'Size of data LV in case a device was passed in --data',
-        'default': 0,
+        'default': '0',
+        'type': disk.Size.parse
     },
     '--data-slots': {
         'help': ('Intended number of slots on data device. The new OSD gets one'
@@ -92,7 +93,8 @@ bluestore_args = {
     '--block.db-size': {
         'dest': 'block_db_size',
         'help': 'Size of block.db LV in case device was passed in --block.db',
-        'default': 0,
+        'default': '0',
+        'type': disk.Size.parse
     },
     '--block.db-slots': {
         'dest': 'block_db_slots',
@@ -108,7 +110,8 @@ bluestore_args = {
     '--block.wal-size': {
         'dest': 'block_wal_size',
         'help': 'Size of block.wal LV in case device was passed in --block.wal',
-        'default': 0,
+        'default': '0',
+        'type': disk.Size.parse
     },
     '--block.wal-slots': {
         'dest': 'block_wal_slots',
@@ -129,7 +132,8 @@ filestore_args = {
     },
     '--journal-size': {
         'help': 'Size of journal LV in case a raw block device was passed in --journal',
-        'default': 0,
+        'default': '0',
+        'type': disk.Size.parse
     },
 }
 
