@@ -16,6 +16,7 @@
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
+#include "rocksdb/db.h"
 #include "kv/rocksdb_cache/BinnedLRUCache.h"
 #include <errno.h>
 #include "common/errno.h"
@@ -77,22 +78,79 @@ class RocksDBStore : public KeyValueDB {
   void *priv;
   rocksdb::DB *db;
   rocksdb::Env *env;
+  const rocksdb::Comparator* comparator;
   std::shared_ptr<rocksdb::Statistics> dbstats;
   rocksdb::BlockBasedTableOptions bbt_opts;
   std::string options_str;
 
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
+  friend class ShardMergeIteratorImpl;
+  friend class WholeMergeIteratorImpl;
+  /*
+   *  See RocksDB's definition of a column family(CF) and how to use it.
+   *  The interfaces of KeyValueDB is extended, when a column family is created.
+   *  Prefix will be the name of column family to use.
+   */
+public:
+  struct ColumnFamily {
+    string name;      //< name of this individual column family
+    size_t shard_cnt; //< count of shards
+    string options;   //< configure option string for this CF
+    uint32_t hash_l;  //< first character to take for hash calc.
+    uint32_t hash_h;  //< last character to take for hash calc.
+    ColumnFamily(const string &name, size_t shard_cnt, const string &options,
+		 uint32_t hash_l, uint32_t hash_h)
+      : name(name), shard_cnt(shard_cnt), options(options), hash_l(hash_l), hash_h(hash_h) {}
+  };
+private:
+  friend std::ostream& operator<<(std::ostream& out, const ColumnFamily& cf);
 
   bool must_close_default_cf = false;
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
+
+  /// column families in use, name->handles
+  struct prefix_shards {
+    uint32_t hash_l;  //< first character to take for hash calc.
+    uint32_t hash_h;  //< last character to take for hash calc.
+    std::vector<rocksdb::ColumnFamilyHandle *> handles;
+  };
+  std::unordered_map<std::string, prefix_shards> cf_handles;
+
+  void add_column_family(const std::string& cf_name, uint32_t hash_l, uint32_t hash_h,
+			 size_t shard_idx, rocksdb::ColumnFamilyHandle *handle);
+  bool is_column_family(const std::string& prefix);
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const std::string& key);
+  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const char* key, size_t keylen);
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const std::string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
   int create_db_dir();
   int do_open(std::ostream &out, bool create_if_missing, bool open_readonly,
-	      const std::vector<ColumnFamily>* cfs = nullptr);
+	      const std::string& cfs="");
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
+public:
+  static bool parse_sharding_def(const std::string_view text_def,
+				std::vector<ColumnFamily>& sharding_def,
+				char const* *error_position = nullptr,
+				std::string *error_msg = nullptr);
+  const rocksdb::Comparator* get_comparator() const {
+    return comparator;
+  }
+
+private:
+  static void sharding_def_to_columns(const std::vector<ColumnFamily>& sharding_def,
+				      std::vector<std::string>& columns);
+  int create_shards(const rocksdb::Options& opt,
+		    const vector<ColumnFamily>& sharding_def);
+  int apply_sharding(const rocksdb::Options& opt,
+		     const std::string& sharding_text);
+  int verify_sharding(const rocksdb::Options& opt,
+		      const std::string& sharding_text,
+		      std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
+		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
+		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
+		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
 
   // manage async compactions
   ceph::mutex compact_queue_lock =
@@ -162,6 +220,7 @@ public:
     priv(p),
     db(NULL),
     env(static_cast<rocksdb::Env*>(p)),
+    comparator(nullptr),
     dbstats(NULL),
     compact_queue_stop(false),
     compact_thread(this),
@@ -174,26 +233,19 @@ public:
 
   static bool check_omap_dir(std::string &omap_dir);
   /// Opens underlying db
-  int open(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) override {
-    return do_open(out, false, false, &cfs);
+  int open(std::ostream &out, const std::string& cfs="") override {
+    return do_open(out, false, false, cfs);
   }
   /// Creates underlying db if missing and opens it
   int create_and_open(std::ostream &out,
-		      const std::vector<ColumnFamily>& cfs = {}) override;
+		      const std::string& cfs="") override;
 
-  int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) override {
-    return do_open(out, false, true, &cfs);
+  int open_read_only(std::ostream &out, const std::string& cfs="") override {
+    return do_open(out, false, true, cfs);
   }
 
   void close() override;
 
-  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& cf_name) {
-    auto iter = cf_handles.find(cf_name);
-    if (iter == cf_handles.end())
-      return nullptr;
-    else
-      return static_cast<rocksdb::ColumnFamilyHandle*>(iter->second);
-  }
   int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(ceph::Formatter *f) override;
@@ -399,7 +451,10 @@ public:
   };
 
   Iterator get_iterator(const std::string& prefix) override;
-
+private:
+  /// this iterator spans single cf
+  rocksdb::Iterator* new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
+public:
   /// Utility
   static std::string combine_strings(const std::string &prefix, const std::string &value) {
     std::string out = prefix;
@@ -511,8 +566,8 @@ err:
   }
 
   WholeSpaceIterator get_wholespace_iterator() override;
+private:
+  WholeSpaceIterator get_default_cf_iterator();
 };
-
-
 
 #endif
