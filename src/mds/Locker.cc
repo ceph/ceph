@@ -1651,7 +1651,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
   if (lock->get_parent()->is_auth()) {
     // auth
     while (1) {
-      if (lock->can_xlock(client) &&
+      if (mut->locking && // started xlock (not preempt other request)
+	  lock->can_xlock(client) &&
 	  !(lock->get_state() == LOCK_LOCK_XLOCK &&	// client is not xlocker or
 	    in && in->issued_caps_need_gather(lock))) { // xlocker does not hold shared cap
 	lock->set_state(LOCK_XLOCK);
