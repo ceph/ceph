@@ -740,7 +740,8 @@ def get_device_vgs(device, name_prefix=''):
 ###############################
 
 LV_FIELDS = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
-LV_CMD_OPTIONS =  ['--noheadings', '--readonly', '--separator=";"', '-a']
+LV_CMD_OPTIONS =  ['--noheadings', '--readonly', '--separator=";"', '-a',
+                   '--units=b', '--nosuffix']
 
 
 class Volume(object):
