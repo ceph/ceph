@@ -9,11 +9,6 @@ install(TARGETS ceph_erasure_code_benchmark
 add_executable(ceph_erasure_code_non_regression ceph_erasure_code_non_regression.cc)
 target_link_libraries(ceph_erasure_code_non_regression ceph-common Boost::program_options global ${CMAKE_DL_LIBS})
 
-add_executable(ceph_erasure_code ceph_erasure_code.cc)
-target_link_libraries(ceph_erasure_code ceph-common Boost::program_options global ${CMAKE_DL_LIBS})
-install(TARGETS ceph_erasure_code
-  DESTINATION bin)
-
 add_library(ec_example SHARED 
   ErasureCodePluginExample.cc
   $<TARGET_OBJECTS:erasure_code_objs>)

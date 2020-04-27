@@ -415,7 +415,6 @@ ceph_test() {
 		ceph_bench_log \
 		ceph_kvstorebench \
 		ceph_multi_stress_watch \
-		ceph_erasure_code \
 		ceph_erasure_code_benchmark \
 		ceph_omapbench \
 		ceph_objectstore_bench \
