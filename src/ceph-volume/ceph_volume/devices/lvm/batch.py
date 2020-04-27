@@ -218,6 +218,15 @@ class Batch(object):
         #         if slot_value < len(self.args.devices):
         #             raise ValueError('{} is smaller then osds_per_device')
 
+    def _sort_rotational_disks(self):
+        for d in self.args.devices:
+            if d.rotational:
+                self.args.devices.remove(d)
+                if self.args.filestore:
+                    self.args.journal_devices.append(d)
+                else:
+                    self.args.db_devices.append(d)
+
     @decorators.needs_root
     def main(self):
         if not self.args.devices:
@@ -228,8 +237,8 @@ class Batch(object):
         if not self.args.bluestore and not self.args.filestore:
             self.args.bluestore = True
 
-        # TODO add device sorter for when the user wants legacy auto_detect
-        # behaviour
+        if not self.args.no_auto:
+            self._sort_rotational_disks()
 
         self._check_slot_args()
 
