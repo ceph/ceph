@@ -519,6 +519,13 @@ class VolumeGroup(object):
         return int(self.vg_extent_size) * int(self.vg_free_count)
 
     @property
+    def free_percent(self):
+        """
+        Return free space in VG in bytes
+        """
+        return int(self.vg_free_count) / int(self.vg_extent_count)
+
+    @property
     def size(self):
         """
         Returns VG size in bytes
