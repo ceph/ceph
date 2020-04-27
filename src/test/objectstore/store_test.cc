@@ -1318,6 +1318,8 @@ TEST_P(StoreTest, SimpleObjectTest) {
 TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
   if(string(GetParam()) != "bluestore")
     return;
+      
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
   g_conf().apply_changes(nullptr);
   StartDeferred(65536);
@@ -3768,6 +3770,7 @@ public:
   unsigned in_flight;
   map<ghobject_t, Object> contents;
   set<ghobject_t> available_objects;
+  set<ghobject_t>::iterator next_available_object;
   set<ghobject_t> in_flight_objects;
   ObjectGenerator *object_gen;
   gen_type *rng;
@@ -3892,8 +3895,9 @@ public:
 			 unsigned max_write,
 			 unsigned alignment)
     : cid(cid), write_alignment(alignment), max_object_len(max_size),
-      max_write_len(max_write), in_flight(0), object_gen(gen),
-      rng(rng), store(store) {}
+      max_write_len(max_write), in_flight(0),
+      next_available_object(available_objects.end()),
+      object_gen(gen), rng(rng), store(store) {}
 
   int init() {
     ObjectStore::Transaction t;
@@ -3902,17 +3906,19 @@ public:
     return queue_transaction(store, ch, std::move(t));
   }
   void shutdown() {
+    ghobject_t next;
     while (1) {
       vector<ghobject_t> objects;
-      int r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-				     10, &objects, 0);
+      int r = store->collection_list(ch, next, ghobject_t::get_max(),
+                                     10, &objects, &next);
       ceph_assert(r >= 0);
-      if (objects.empty())
-	break;
+      if (objects.size() == 0)
+        break;
       ObjectStore::Transaction t;
+      std::map<std::string, ceph::buffer::list> attrset;
       for (vector<ghobject_t>::iterator p = objects.begin();
-	   p != objects.end(); ++p) {
-	t.remove(cid, *p);
+           p != objects.end(); ++p) {
+        t.remove(cid, *p);
       }
       queue_transaction(store, ch, std::move(t));
     }
@@ -3933,6 +3939,20 @@ public:
     set<ghobject_t>::iterator i = available_objects.begin();
     for ( ; index > 0; --index, ++i) ;
     ghobject_t ret = *i;
+    return ret;
+  }
+
+  ghobject_t get_next_object(std::unique_lock<ceph::mutex>& locker) {
+    cond.wait(locker, [this] {
+      return in_flight < max_in_flight && !available_objects.empty();
+      });
+
+    if (next_available_object == available_objects.end()) {
+      next_available_object = available_objects.begin();
+    }
+
+    ghobject_t ret = *next_available_object;
+    ++next_available_object;
     return ret;
   }
 
@@ -4383,6 +4403,35 @@ public:
         attrs[name.c_str()] = value;
         contents[obj].attrs[name.c_str()] = value;
       }
+    }
+    t.setattrs(cid, obj, attrs);
+    ++in_flight;
+    in_flight_objects.insert(obj);
+    t.register_on_applied(new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(ch, std::move(t));
+    return status;
+  }
+
+  int set_fixed_attrs(size_t entries, size_t key_size, size_t val_size) {
+    std::unique_lock locker{ lock };
+    EnterExit ee("setattrs");
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready(locker);
+
+    ghobject_t obj = get_next_object(locker);
+    available_objects.erase(obj);
+    ObjectStore::Transaction t;
+
+    map<string, bufferlist> attrs;
+    set<string> keys;
+
+    while (entries--) {
+      bufferlist name, value;
+      filled_byte_array(value, val_size);
+      filled_byte_array(name, key_size);
+      attrs[name.c_str()] = value;
+      contents[obj].attrs[name.c_str()] = value;
     }
     t.setattrs(cid, obj, attrs);
     ++in_flight;
@@ -6680,8 +6729,6 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     return;
 
   size_t block_size = 4096;
-  // this will enable continuous allocations
-  SetVal(g_conf(), "bluestore_allocator", "avl");
   StartDeferred(block_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
   SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
@@ -7117,8 +7164,6 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 
   size_t alloc_size = 4096;
   size_t large_object_size = 1 * 1024 * 1024;
-  // this will enable continuous allocations
-  SetVal(g_conf(), "bluestore_allocator", "avl");
   StartDeferred(alloc_size);
   SetVal(g_conf(), "bluestore_max_blob_size", "131072");
   SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
@@ -8709,22 +8754,23 @@ void doManySetAttr(ObjectStore* store,
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0, 447), shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store, &gen, &rng, cid, 40 * 1024, 4 * 1024, 0);
+  SyntheticWorkloadState test_obj(store, &gen, &rng, cid, 0, 0, 0);
   test_obj.init();
-  for (int i = 0; i < 1500; ++i) {
+  size_t object_count = 256;
+  for (size_t i = 0; i < object_count; ++i) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 10000; ++i) {
+  for (size_t i = 0; i < object_count; ++i) {
     if (!(i % 100)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
     }
-    boost::uniform_int<> true_false(0, 99);
-    test_obj.setattrs();
+    test_obj.set_fixed_attrs(1024, 64, 4096); // 1024 attributes, 64 bytes name and 4K value
   }
   test_obj.wait_for_done();
 
+  std::cout << "done" << std::endl;
   AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
   ceph_assert(admin_socket);
 
@@ -8761,7 +8807,9 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       //experimentally it was discovered that this case results in 400+MB spillover
       //using lower 300MB threshold just to be safe enough
-      ASSERT_GE(logger->get(l_bluefs_slow_used_bytes), 300 * 1024 * 1024);
+      std::cout << "db_used:" << logger->get(l_bluefs_db_used_bytes) << std::endl;
+      std::cout << "slow_used:" << logger->get(l_bluefs_slow_used_bytes) << std::endl;
+      ASSERT_GE(logger->get(l_bluefs_slow_used_bytes), 16 * 1024 * 1024);
 
     }
   );
