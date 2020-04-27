@@ -23,7 +23,6 @@ import os
 import random
 import tempfile
 import multiprocessing.pool
-import re
 import shutil
 import subprocess
 import uuid
@@ -1241,15 +1240,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self.log.debug('name %s exists, trying again', name)
                 continue
             return name
-
-    def get_service_name(self, daemon_type, daemon_id, host):
-        # type: (str, str, str) -> (str)
-        """
-        Returns the generic service name
-        """
-        p = re.compile(r'(.*)\.%s.*' % (host))
-        return '%s.%s' % (daemon_type, p.sub(r'\1', daemon_id))
-
 
     def _save_upgrade_state(self):
         self.set_store('upgrade_state', json.dumps(self.upgrade_state))
@@ -2917,8 +2907,14 @@ api_secure = {api_secure}
 
         # find the matching NFSServiceSpec
         # TODO: find the spec and pass via _create_daemon instead ??
-        service_name = self.get_service_name(daemon_type, daemon_id, host)
+        dd = orchestrator.DaemonDescription()
+        dd.daemon_type = daemon_type
+        dd.daemon_id = daemon_id
+        dd.hostname = host
+
+        service_name = dd.service_name()
         specs = self.spec_store.find(service_name)
+
         if not specs:
             raise OrchestratorError('Cannot find service spec %s' % (service_name))
         elif len(specs) > 1:
