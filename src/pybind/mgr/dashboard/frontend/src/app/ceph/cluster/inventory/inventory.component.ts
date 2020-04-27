@@ -16,8 +16,6 @@ export class InventoryComponent implements OnChanges, OnInit {
   icons = Icons;
 
   hasOrchestrator = false;
-  docsUrl: string;
-
   devices: Array<InventoryDevice> = [];
 
   constructor(private orchService: OrchestratorService) {}
@@ -25,9 +23,6 @@ export class InventoryComponent implements OnChanges, OnInit {
   ngOnInit() {
     this.orchService.status().subscribe((status) => {
       this.hasOrchestrator = status.available;
-      if (status.available) {
-        this.getInventory();
-      }
     });
   }
 
@@ -42,7 +37,7 @@ export class InventoryComponent implements OnChanges, OnInit {
     if (this.hostname === '') {
       return;
     }
-    this.orchService.inventoryDeviceList(this.hostname).subscribe(
+    this.orchService.inventoryDeviceList(this.hostname, true).subscribe(
       (devices: InventoryDevice[]) => {
         this.devices = devices;
       },

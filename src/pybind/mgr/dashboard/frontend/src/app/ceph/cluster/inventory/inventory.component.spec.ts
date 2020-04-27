@@ -46,13 +46,13 @@ describe('InventoryComponent', () => {
   describe('after ngOnInit', () => {
     it('should load devices', () => {
       fixture.detectChanges();
-      expect(orchService.inventoryDeviceList).toHaveBeenCalledWith(undefined);
+      expect(orchService.inventoryDeviceList).toHaveBeenCalledWith(undefined, true);
     });
 
     it('should load devices for a host', () => {
       component.hostname = 'host0';
       fixture.detectChanges();
-      expect(orchService.inventoryDeviceList).toHaveBeenCalledWith('host0');
+      expect(orchService.inventoryDeviceList).toHaveBeenCalledWith('host0', true);
     });
   });
 });

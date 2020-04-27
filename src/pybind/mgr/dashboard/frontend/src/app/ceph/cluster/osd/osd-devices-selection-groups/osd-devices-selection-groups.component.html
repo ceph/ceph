@@ -22,6 +22,8 @@
               [disabled]="availDevices.length === 0 || !canSelect">
         <i [ngClass]="[icons.add]"></i>
         <ng-container i18n>Add</ng-container>
+        <i *ngIf="loading"
+           [ngClass]="[icons.spinner, icons.spin]"></i>
       </button>
     </ng-container>
     <ng-template #blockClearDevices>

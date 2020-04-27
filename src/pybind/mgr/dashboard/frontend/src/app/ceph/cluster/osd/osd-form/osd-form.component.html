@@ -1,6 +1,6 @@
 <cd-orchestrator-doc-panel *ngIf="!hasOrchestrator"></cd-orchestrator-doc-panel>
 <div class="cd-col-form"
-     *ngIf="!loading && hasOrchestrator">
+     *ngIf="hasOrchestrator">
   <form name="form"
         #formDir="ngForm"
         [formGroup]="form"
@@ -15,6 +15,7 @@
                                            type="data"
                                            [availDevices]="availDevices"
                                            [canSelect]="availDevices.length !== 0"
+                                           [loading]="loading"
                                            (selected)="onDevicesSelected($event)"
                                            (cleared)="onDevicesCleared($event)">
           </cd-osd-devices-selection-groups>

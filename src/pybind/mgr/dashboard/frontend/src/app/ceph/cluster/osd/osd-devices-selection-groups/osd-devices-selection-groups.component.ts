@@ -29,6 +29,8 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
 
   @Input() canSelect: boolean;
 
+  @Input() loading = false;
+
   @Output()
   selected = new EventEmitter<DevicesSelectionChangeEvent>();
 
