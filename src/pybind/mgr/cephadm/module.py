@@ -2467,7 +2467,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     config_func(spec)
                     did_config = True
                 daemon_id = self.get_unique_name(daemon_type, host, daemons,
-                                                 spec.service_id, name)
+                                                 prefix=spec.service_id,
+                                                 forcename=name)
                 self.log.debug('Placing %s.%s on host %s' % (
                     daemon_type, daemon_id, host))
                 if daemon_type == 'mon':
@@ -2613,7 +2614,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         args = []  # type: List[tuple]
         for host, network, name in hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
-                                             spec.service_id, name)
+                                             prefix=spec.service_id,
+                                             forcename=name)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
             if daemon_type == 'mon':
