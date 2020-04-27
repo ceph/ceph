@@ -20,8 +20,8 @@ static constexpr const std::size_t AESGCM_TAG_LEN{16};
 static constexpr const std::size_t AESGCM_BLOCK_LEN{16};
 
 struct nonce_t {
-  ceph_le32 random_seq;
-  ceph_le64 random_rest;
+  ceph_le32 fixed;
+  ceph_le64 counter;
 
   bool operator==(const nonce_t& rhs) const {
     return !memcmp(this, &rhs, sizeof(*this));
@@ -41,15 +41,18 @@ class AES128GCM_OnWireTxHandler : public ceph::crypto::onwire::TxHandler {
   ceph::bufferlist buffer;
   nonce_t nonce, initial_nonce;
   bool used_initial_nonce;
+  bool new_nonce_format;  // 64-bit counter?
   static_assert(sizeof(nonce) == AESGCM_IV_LEN);
 
 public:
   AES128GCM_OnWireTxHandler(CephContext* const cct,
 			    const key_t& key,
-			    const nonce_t& nonce)
+			    const nonce_t& nonce,
+			    bool new_nonce_format)
     : cct(cct),
       ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
-      nonce(nonce), initial_nonce(nonce), used_initial_nonce(false) {
+      nonce(nonce), initial_nonce(nonce), used_initial_nonce(false),
+      new_nonce_format(new_nonce_format) {
     ceph_assert_always(ectx);
     ceph_assert_always(key.size() * CHAR_BIT == 128);
 
@@ -93,7 +96,13 @@ void AES128GCM_OnWireTxHandler::reset_tx_handler(const uint32_t* first,
   ceph_assert(buffer.get_append_buffer_unused_tail_length() == 0);
   buffer.reserve(std::accumulate(first, last, AESGCM_TAG_LEN));
 
-  nonce.random_seq = nonce.random_seq + 1;
+  if (!new_nonce_format) {
+    // msgr2.0: 32-bit counter followed by 64-bit fixed field,
+    // susceptible to overflow!
+    nonce.fixed = nonce.fixed + 1;
+  } else {
+    nonce.counter = nonce.counter + 1;
+  }
 }
 
 void AES128GCM_OnWireTxHandler::authenticated_encrypt_update(
@@ -156,16 +165,17 @@ class AES128GCM_OnWireRxHandler : public ceph::crypto::onwire::RxHandler {
   CephContext* const cct;
   std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)> ectx;
   nonce_t nonce;
+  bool new_nonce_format;  // 64-bit counter?
   static_assert(sizeof(nonce) == AESGCM_IV_LEN);
 
 public:
   AES128GCM_OnWireRxHandler(CephContext* const cct,
 			    const key_t& key,
-			    const nonce_t& nonce)
+			    const nonce_t& nonce,
+			    bool new_nonce_format)
     : cct(cct),
       ectx(EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free),
-      nonce(nonce)
-  {
+      nonce(nonce), new_nonce_format(new_nonce_format) {
     ceph_assert_always(ectx);
     ceph_assert_always(key.size() * CHAR_BIT == 128);
 
@@ -198,7 +208,14 @@ void AES128GCM_OnWireRxHandler::reset_rx_handler()
 	reinterpret_cast<const unsigned char*>(&nonce))) {
     throw std::runtime_error("EVP_DecryptInit_ex failed");
   }
-  nonce.random_seq = nonce.random_seq + 1;
+
+  if (!new_nonce_format) {
+    // msgr2.0: 32-bit counter followed by 64-bit fixed field,
+    // susceptible to overflow!
+    nonce.fixed = nonce.fixed + 1;
+  } else {
+    nonce.counter = nonce.counter + 1;
+  }
 }
 
 void AES128GCM_OnWireRxHandler::authenticated_decrypt_update(
@@ -254,6 +271,7 @@ void AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
 ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
   CephContext* cct,
   const AuthConnectionMeta& auth_meta,
+  bool new_nonce_format,
   bool crossed)
 {
   if (auth_meta.is_mode_secure()) {
@@ -281,9 +299,9 @@ ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
 
     return {
       std::make_unique<AES128GCM_OnWireRxHandler>(
-	cct, key, crossed ? tx_nonce : rx_nonce),
+	cct, key, crossed ? tx_nonce : rx_nonce, new_nonce_format),
       std::make_unique<AES128GCM_OnWireTxHandler>(
-	cct, key, crossed ? rx_nonce : tx_nonce)
+	cct, key, crossed ? rx_nonce : tx_nonce, new_nonce_format)
     };
   } else {
     return { nullptr, nullptr };
