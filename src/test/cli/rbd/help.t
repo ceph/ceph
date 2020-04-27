@@ -582,8 +582,8 @@
   rbd help device map
   usage: rbd device map [--device-type <device-type>] [--pool <pool>] 
                         [--namespace <namespace>] [--image <image>] 
-                        [--snap <snap>] [--read-only] [--exclusive] 
-                        [--options <options>] 
+                        [--snap <snap>] [--read-only] [--exclusive] [--quiesce] 
+                        [--quiesce-hook <quiesce-hook>] [--options <options>] 
                         <image-or-snap-spec> 
   
   Map an image to a block device.
@@ -602,6 +602,8 @@
     --snap arg               snapshot name
     --read-only              map read-only
     --exclusive              disable automatic exclusive lock transitions
+    --quiesce                use quiesce callbacks
+    --quiesce-hook arg       quiesce hook path
     -o [ --options ] arg     device specific options
   
   rbd help device unmap
