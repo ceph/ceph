@@ -171,6 +171,8 @@ class Prepare(object):
                 'device': device_name,
                 'tags': tags,
             }
+            #TODO use get_block_db_size and co here to get configured size in
+            #conf file
             if size != 0:
                 kwargs['size'] = size
             lv = api.create_lv(
