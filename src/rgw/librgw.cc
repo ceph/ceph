@@ -508,11 +508,27 @@ namespace rgw {
     rgw::curl::setup_curl(boost::none);
     rgw_http_client_init(g_ceph_context);
 
+    auto run_gc =
+      g_conf()->rgw_enable_gc_threads &&
+      g_conf()->rgw_nfs_run_gc_threads;
+
+    auto run_lc =
+      g_conf()->rgw_enable_lc_threads &&
+      g_conf()->rgw_nfs_run_lc_threads;
+
+    auto run_quota =
+      g_conf()->rgw_enable_quota_threads &&
+      g_conf()->rgw_nfs_run_quota_threads;
+
+    auto run_sync =
+      g_conf()->rgw_run_sync_thread &&
+      g_conf()->rgw_nfs_run_sync_thread;
+
     store = RGWStoreManager::get_storage(g_ceph_context,
-					 g_conf()->rgw_enable_gc_threads,
-					 g_conf()->rgw_enable_lc_threads,
-					 g_conf()->rgw_enable_quota_threads,
-					 g_conf()->rgw_run_sync_thread,
+					 run_gc,
+					 run_lc,
+					 run_quota,
+					 run_sync,
 					 g_conf().get_val<bool>("rgw_dynamic_resharding"));
 
     if (!store) {

@@ -1276,6 +1276,11 @@ OPTION(rgw_enable_quota_threads, OPT_BOOL)
 OPTION(rgw_enable_gc_threads, OPT_BOOL)
 OPTION(rgw_enable_lc_threads, OPT_BOOL)
 
+/* overrides for librgw/nfs */
+OPTION(rgw_nfs_run_gc_threads, OPT_BOOL)
+OPTION(rgw_nfs_run_lc_threads, OPT_BOOL)
+OPTION(rgw_nfs_run_quota_threads, OPT_BOOL)
+OPTION(rgw_nfs_run_sync_thread, OPT_BOOL)
 
 OPTION(rgw_data, OPT_STR)
 OPTION(rgw_enable_apis, OPT_STR)
