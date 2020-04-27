@@ -41,13 +41,9 @@ void PyModuleRegistry::init()
   std::lock_guard locker(lock);
 
   // Set up global python interpreter
-#if PY_MAJOR_VERSION >= 3
 #define WCHAR(s) L ## #s
   Py_SetProgramName(const_cast<wchar_t*>(WCHAR(MGR_PYTHON_EXECUTABLE)));
 #undef WCHAR
-#else
-  Py_SetProgramName(const_cast<char*>(MGR_PYTHON_EXECUTABLE));
-#endif
   // Add more modules
   if (g_conf().get_val<bool>("daemonize")) {
     PyImport_AppendInittab("ceph_logger", PyModule::init_ceph_logger);
