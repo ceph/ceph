@@ -11,7 +11,7 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient
-from ..tools import TaskManager, wraps
+from ..tools import TaskManager, str_to_bool, wraps
 
 
 def get_device_osd_map():
@@ -102,10 +102,13 @@ class Orchestrator(RESTController):
 class OrchestratorInventory(RESTController):
 
     @raise_if_no_orchestrator
-    def list(self, hostname=None):
+    def list(self, hostname=None, refresh=None):
         orch = OrchClient.instance()
         hosts = [hostname] if hostname else None
-        inventory_hosts = [host.to_json() for host in orch.inventory.list(hosts)]
+        do_refresh = False
+        if refresh is not None:
+            do_refresh = str_to_bool(refresh)
+        inventory_hosts = [host.to_json() for host in orch.inventory.list(hosts, do_refresh)]
         device_osd_map = get_device_osd_map()
         for inventory_host in inventory_hosts:
             host_osds = device_osd_map.get(inventory_host['name'])

@@ -1,4 +1,6 @@
-import { Component, Input, OnChanges, OnInit } from '@angular/core';
+import { Component, Input, NgZone, OnChanges, OnDestroy, OnInit } from '@angular/core';
+
+import { Subscription, timer as observableTimer } from 'rxjs';
 
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -9,9 +11,13 @@ import { InventoryDevice } from './inventory-devices/inventory-device.model';
   templateUrl: './inventory.component.html',
   styleUrls: ['./inventory.component.scss']
 })
-export class InventoryComponent implements OnChanges, OnInit {
+export class InventoryComponent implements OnChanges, OnInit, OnDestroy {
   // Display inventory page only for this hostname, ignore to display all.
   @Input() hostname?: string;
+
+  private reloadSubscriber: Subscription;
+  private reloadInterval = 5000;
+  private firstRefresh = true;
 
   icons = Icons;
 
@@ -20,30 +26,48 @@ export class InventoryComponent implements OnChanges, OnInit {
 
   devices: Array<InventoryDevice> = [];
 
-  constructor(private orchService: OrchestratorService) {}
+  constructor(private orchService: OrchestratorService, private ngZone: NgZone) {}
 
   ngOnInit() {
     this.orchService.status().subscribe((status) => {
       this.hasOrchestrator = status.available;
       this.showDocPanel = !status.available;
       if (status.available) {
-        this.getInventory();
+        // Create a timer to get cached inventory from the orchestrator.
+        // Do not ask the orchestrator frequently to refresh its cache data because it's expensive.
+        this.ngZone.runOutsideAngular(() => {
+          // start after first pass because the embedded table calls refresh at init.
+          this.reloadSubscriber = observableTimer(
+            this.reloadInterval,
+            this.reloadInterval
+          ).subscribe(() => {
+            this.ngZone.run(() => {
+              this.getInventory(false);
+            });
+          });
+        });
       }
     });
+  }
+
+  ngOnDestroy() {
+    if (this.reloadSubscriber) {
+      this.reloadSubscriber.unsubscribe();
+    }
   }
 
   ngOnChanges() {
     if (this.hasOrchestrator) {
       this.devices = [];
-      this.getInventory();
+      this.getInventory(false);
     }
   }
 
-  getInventory() {
+  getInventory(refresh: boolean) {
     if (this.hostname === '') {
       return;
     }
-    this.orchService.inventoryDeviceList(this.hostname).subscribe(
+    this.orchService.inventoryDeviceList(this.hostname, refresh).subscribe(
       (devices: InventoryDevice[]) => {
         this.devices = devices;
       },
@@ -54,6 +78,9 @@ export class InventoryComponent implements OnChanges, OnInit {
   }
 
   refresh() {
-    this.getInventory();
+    // Make the first reload (triggered by table) use cached data, and
+    // the remaining reloads (triggered by users) ask orchestrator to refresh inventory.
+    this.getInventory(!this.firstRefresh);
+    this.firstRefresh = false;
   }
 }

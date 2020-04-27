@@ -29,13 +29,19 @@ export class OrchestratorService {
     });
   }
 
-  inventoryList(hostname?: string): Observable<InventoryHost[]> {
-    const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get<InventoryHost[]>(`${this.url}/inventory`, options);
+  inventoryList(hostname?: string, refresh?: boolean): Observable<InventoryHost[]> {
+    let params = new HttpParams();
+    if (hostname) {
+      params = params.append('hostname', hostname);
+    }
+    if (refresh) {
+      params = params.append('refresh', _.toString(refresh));
+    }
+    return this.http.get<InventoryHost[]>(`${this.url}/inventory`, { params: params });
   }
 
-  inventoryDeviceList(hostname?: string): Observable<InventoryDevice[]> {
-    return this.inventoryList(hostname).pipe(
+  inventoryDeviceList(hostname?: string, refresh?: boolean): Observable<InventoryDevice[]> {
+    return this.inventoryList(hostname, refresh).pipe(
       mergeMap((hosts: InventoryHost[]) => {
         const devices = _.flatMap(hosts, (host) => {
           return host.devices.map((device) => {
