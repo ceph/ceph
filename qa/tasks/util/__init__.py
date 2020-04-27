@@ -7,7 +7,7 @@ from teuthology.exceptions import (
     ConfigError,
     ConnectionLostError,
     )
-
+from paramiko.ssh_exception import NoValidConnectionsError
 
 def enumerate_osds(remote, logger):
     """
@@ -236,7 +236,7 @@ def remote_exec(remote, cmd_str, logger, log_spec, quiet=True, rerun=False, trie
                               "output of \"journalctl --all\"!").format(log_spec))
                 remote.sh("sudo su -c 'journalctl --all > /var/log/journalctl.log'")
                 raise
-            except ConnectionLostError:
+            except (ConnectionLostError, NoValidConnectionsError):
                 already_rebooted_at_least_once = True
                 if tries < 1:
                     raise
