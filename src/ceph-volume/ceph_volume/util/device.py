@@ -418,6 +418,12 @@ class Device(object):
                    if lv.tags.get("ceph.type") in ["data", "block"]]
         return any(osd_ids)
 
+    @property
+    def vg_free_percent(self):
+        if self.vgs:
+            return [vg.vg_free_count / vg.vg_extent_count for vg in self.vgs]
+        else:
+            return [1]
 
     def _check_generic_reject_reasons(self):
         reasons = [
