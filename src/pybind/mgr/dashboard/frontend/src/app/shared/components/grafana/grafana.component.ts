@@ -164,7 +164,8 @@ export class GrafanaComponent implements OnInit, OnChanges {
     this.styles = {
       one: 'grafana_one',
       two: 'grafana_two',
-      three: 'grafana_three'
+      three: 'grafana_three',
+      four: 'grafana_four'
     };
 
     this.settingsService.ifSettingConfigured('api/grafana/url', (url) => {
