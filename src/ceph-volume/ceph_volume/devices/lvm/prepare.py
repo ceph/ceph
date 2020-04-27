@@ -174,6 +174,8 @@ class Prepare(object):
                                  'block_{}_slots'.format(device_type),
                                  1),
             }
+            #TODO use get_block_db_size and co here to get configured size in
+            #conf file
             if size != 0:
                 kwargs['size'] = size
             lv = api.create_lv(
