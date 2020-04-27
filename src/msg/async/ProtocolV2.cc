@@ -1797,8 +1797,8 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
     return _fault();
   }
   auth_meta->con_mode = auth_done.con_mode();
-  session_stream_handlers = \
-    ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, false);
+  session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
+      cct, *auth_meta, /*new_nonce_format=*/false, /*crossed=*/false);
 
   state = AUTH_CONNECTING_SIGN;
 
@@ -2177,8 +2177,8 @@ CtPtr ProtocolV2::finish_auth()
   ceph_assert(auth_meta);
   // TODO: having a possibility to check whether we're server or client could
   // allow reusing finish_auth().
-  session_stream_handlers = \
-    ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, true);
+  session_stream_handlers = ceph::crypto::onwire::rxtx_t::create_handler_pair(
+      cct, *auth_meta, /*new_nonce_format=*/false, /*crossed=*/true);
 
   const auto sig = auth_meta->session_key.empty() ? sha256_digest_t() :
     auth_meta->session_key.hmac_sha256(cct, pre_auth.rxbuf);
