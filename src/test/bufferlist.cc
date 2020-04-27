@@ -2540,8 +2540,9 @@ TEST(BufferList, crc32c_append_perf) {
 TEST(BufferList, compare) {
   bufferlist a;
   a.append("A");
-  bufferlist ab;
-  ab.append("AB");
+  bufferlist ab; // AB in segments
+  ab.append(bufferptr("A", 1));
+  ab.append(bufferptr("B", 1));
   bufferlist ac;
   ac.append("AC");
   //
