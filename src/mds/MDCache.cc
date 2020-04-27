@@ -3315,6 +3315,10 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
   maybe_resolve_finish();
 }
 
+void MDCache::handle_scrub(const cref_t<MMDSScrub> &m)
+{
+  enqueue_scrub(m->get_ino(), "", m->scrub_dir(), m->get_frag(), m->is_force(), m->is_recursive(), m->is_repair(), NULL, NULL);
+}
 void MDCache::process_delayed_resolve()
 {
   dout(10) << "process_delayed_resolve" << dendl;
@@ -8123,6 +8127,9 @@ void MDCache::dispatch(const cref_t<Message> &m)
   case MSG_MDS_SNAPUPDATE:
     handle_snap_update(ref_cast<MMDSSnapUpdate>(m));
     break;
+  case MSG_MDS_SCRUB:
+    handle_scrub(ref_cast<MMDSScrub>(m));
+    break;
     
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
@@ -9603,6 +9610,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
       break;
     case CEPH_MDS_OP_UPGRADE_SNAPREALM:
       upgrade_inode_snaprealm_work(mdr);
+      break;
+    case CEPH_MDS_OP_RDLOCK_FRAGSSTATS:
+      rdlock_frags_stats_work(mdr);
       break;
     default:
       ceph_abort();
@@ -12698,20 +12708,16 @@ public:
 };
 
 void MDCache::enqueue_scrub(
-    std::string_view path,
+    filepath fp,
     std::string_view tag,
+    bool scrub_frag,
+    frag_t frag,
     bool force, bool recursive, bool repair,
     Formatter *f, Context *fin)
 {
-  dout(10) << __func__ << " " << path << dendl;
+  dout(10) << __func__ << " " << fp << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
-  if (path == "~mdsdir") {
-    filepath fp(MDS_INO_MDSDIR(mds->get_nodeid()));
-    mdr->set_filepath(fp);
-  } else {
-    filepath fp(path);
-    mdr->set_filepath(path);
-  }
+  mdr->set_filepath(fp);
 
   bool is_internal = false;
   std::string tag_str(tag);
@@ -12727,7 +12733,8 @@ void MDCache::enqueue_scrub(
     tag_str, is_internal, force, recursive, repair, f);
 
   mdr->internal_op_finish = cs;
-  mdr->more()->frag = frag_t();
+  mdr->more()->scrub_frag = scrub_frag;
+  mdr->more()->frag = frag;
   enqueue_scrub_work(mdr);
 }
 
@@ -13058,7 +13065,27 @@ do_rdlocks:
 
   mds->server->respond_to_request(mdr, 0);
 }
-
+void MDCache::rdlock_frags_stats_work(MDRequestRef& mdr)
+{
+  CInode *diri = static_cast<CInode*>(mdr->internal_op_private);
+  dout(10) << __func__ << " " << *diri << dendl;
+  if (!diri->is_auth()) {
+    mds->server->respond_to_request(mdr, -ESTALE);
+    return;
+  }
+  if (!diri->is_dir()) {
+    mds->server->respond_to_request(mdr, -ENOTDIR);
+    return;
+  }
+  
+  MutationImpl::LockOpVec lov;
+  lov.add_rdlock(&diri->dirfragtreelock);
+  lov.add_rdlock(&diri->nestlock);
+  lov.add_rdlock(&diri->filelock);
+  if (!mds->locker->acquire_locks(mdr, lov))
+    return;
+  mds->server->respond_to_request(mdr, 0);
+}
 void MDCache::upgrade_inode_snaprealm(CInode *in)
 {
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_UPGRADE_SNAPREALM);

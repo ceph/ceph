@@ -4609,6 +4609,12 @@ next:
       MDSGatherBuilder gather(g_ceph_context);
       frag_vec_t leaves;
       in->dirfragtree.get_leaves(leaves);
+      // the frag may not be mine
+      MDRequestRef mdr = in->mdcache->request_start_internal(CEPH_MDS_OP_RDLOCK_FRAGSSTATS);
+      mdr->pin(in);
+      mdr->internal_op_private = in;
+      mdr->internal_op_finish = gather.new_sub();
+      
       for (const auto& leaf : leaves) {
         CDir *dir = in->get_or_open_dirfrag(in->mdcache, leaf);
 	dir->scrub_info();
@@ -4621,6 +4627,9 @@ next:
 	  dir->fetch(gather.new_sub(), false);
 	}
       }
+      // get rdlock
+      in->mdcache->dispatch_request(mdr);
+
       if (gather.has_subs()) {
         gather.set_finisher(get_internal_callback(DIRFRAGS));
         gather.activate();

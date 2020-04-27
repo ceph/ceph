@@ -144,6 +144,7 @@
 #include "messages/MMDSOpenIno.h"
 #include "messages/MMDSOpenInoReply.h"
 #include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSScrub.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"

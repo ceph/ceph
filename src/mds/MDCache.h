@@ -48,6 +48,7 @@
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSSlaveRequest.h"
 #include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSScrub.h"
 
 #include "osdc/Filer.h"
 #include "CInode.h"
@@ -919,7 +920,8 @@ class MDCache {
   /**
    * Create and start an OP_ENQUEUE_SCRUB
    */
-  void enqueue_scrub(std::string_view path, std::string_view tag,
+  void enqueue_scrub(filepath fp, std::string_view tag,
+		     bool scrub_frag, frag_t frag,
                      bool force, bool recursive, bool repair,
 		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
@@ -1026,6 +1028,7 @@ class MDCache {
 
   void handle_resolve(const cref_t<MMDSResolve> &m);
   void handle_resolve_ack(const cref_t<MMDSResolveAck> &m);
+  void handle_scrub(const cref_t<MMDSScrub> &m);
   void process_delayed_resolve();
   void discard_delayed_resolve(mds_rank_t who);
   void maybe_resolve_finish();
@@ -1104,7 +1107,8 @@ class MDCache {
   void repair_inode_stats_work(MDRequestRef& mdr);
   void repair_dirfrag_stats_work(MDRequestRef& mdr);
   void upgrade_inode_snaprealm_work(MDRequestRef& mdr);
-
+  void rdlock_frags_stats_work(MDRequestRef& mdr);
+  
   ceph::unordered_map<inodeno_t,CInode*> inode_map;  // map of head inodes by ino
   map<vinodeno_t, CInode*> snap_inode_map;  // map of snap inodes by ino
   CInode *root = nullptr; // root inode

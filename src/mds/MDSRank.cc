@@ -2526,13 +2526,6 @@ void MDSRankDispatcher::handle_asok_command(
     cmd_getval(cmdmap, "path", path);
     cmd_getval(cmdmap, "tag", tag);
 
-    /* Multiple MDS scrub is not currently supported. See also: https://tracker.ceph.com/issues/12274 */
-    if (mdsmap->get_max_mds() > 1) {
-      ss << "Scrub is not currently supported for multiple active MDS. Please reduce max_mds to 1 and then scrub.";
-      r = -EINVAL;
-      goto out;
-    }
-
     finisher->queue(
       new LambdaContext(
 	[this, on_finish, f, path, tag, scrubop_vec](int r) {
@@ -2770,7 +2763,14 @@ void MDSRank::command_scrub_start(Formatter *f,
   }
 
   std::lock_guard l(mds_lock);
-  mdcache->enqueue_scrub(path, tag, force, recursive, repair, f, on_finish);
+  if (path == "~mdsdir") {
+    filepath fp(MDS_INO_MDSDIR(get_nodeid()));
+    mdcache->enqueue_scrub(fp, tag, force, recursive, repair, false, frag_t(), f, on_finish);
+  } else {
+    filepath fp(path);
+    mdcache->enqueue_scrub(fp, tag, force, recursive, repair, false, frag_t(), f, on_finish);
+  }
+  
   // scrub_dentry() finishers will dump the data for us; we're done!
 }
 
@@ -2780,7 +2780,7 @@ void MDSRank::command_tag_path(Formatter *f,
   C_SaferCond scond;
   {
     std::lock_guard l(mds_lock);
-    mdcache->enqueue_scrub(path, tag, true, true, false, f, &scond);
+    mdcache->enqueue_scrub(path, tag, true, true, false, false, frag_t(), f, &scond);
   }
   scond.wait();
 }

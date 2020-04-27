@@ -254,6 +254,9 @@ void ScrubStack::scrub_dir_inode(CInode *in,
        }else{
 	 dout(20) << __func__ << "should send it to auth mds" << dendl;
          // send msg to auth mds
+	 // The edge cdir must be in memory
+	 auto req = make_message<MMDSScrub>(in->inode.ino, true, *i, true, true, true);
+	 mdcache->mds->send_message_mds(req, dir->authority().first);
        }
        // insert list
        in->scrub_dirfrag(*i);
