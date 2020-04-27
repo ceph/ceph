@@ -421,9 +421,38 @@ class Device(object):
     @property
     def vg_free_percent(self):
         if self.vgs:
-            return [vg.vg_free_count / vg.vg_extent_count for vg in self.vgs]
+            return [vg.free_percent for vg in self.vgs]
         else:
             return [1]
+
+    @property
+    def vg_size(self):
+        if self.vgs:
+            return [vg.size for vg in self.vgs]
+        else:
+            # TODO fix this...we can probably get rid of vg_free
+            return self.vg_free
+
+    @property
+    def vg_free(self):
+        '''
+        Returns the free space in all VGs on this device. If no VGs are
+        present, returns the disk size.
+        '''
+        if self.vgs:
+            return [vg.free for vg in self.vgs]
+        else:
+            # We could also query 'lvmconfig
+            # --typeconfig full' and use allocations -> physical_extent_size
+            # value to project the space for a vg
+            # assuming 4M extents here
+            extent_size = 4194304
+            vg_free = int(self.size / extent_size) * extent_size
+            if self.size % 4194304 == 0:
+                # If the extent size divides size exactly, deduct on extent for
+                # LVM metadata
+                vg_free -= extent_size
+            return [vg_free]
 
     def _check_generic_reject_reasons(self):
         reasons = [
