@@ -18,7 +18,7 @@ tasks:
         - influxdb python module not found
         - \(MGR_ZABBIX_
         - foo bar
-        - evicting unresponsive client
+        - Failed to open Telegraf
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_module_selftest
