@@ -60,7 +60,7 @@ def _config_user(testswift_conf, account, user, suffix):
     testswift_conf['func_test'].setdefault('username{s}'.format(s=suffix), user)
     testswift_conf['func_test'].setdefault('email{s}'.format(s=suffix), '{account}+test@test.test'.format(account=account))
     testswift_conf['func_test'].setdefault('display_name{s}'.format(s=suffix), 'Mr. {account} {user}'.format(account=account, user=user))
-    testswift_conf['func_test'].setdefault('password{s}'.format(s=suffix), base64.b64encode(os.urandom(40)))
+    testswift_conf['func_test'].setdefault('password{s}'.format(s=suffix), base64.b64encode(os.urandom(40)).decode('ascii'))
 
 @contextlib.contextmanager
 def create_users(ctx, config):
