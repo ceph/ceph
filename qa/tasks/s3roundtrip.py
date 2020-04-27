@@ -122,7 +122,7 @@ def create_users(ctx, config):
         yield
     finally:
         for client in config['clients']:
-            for user in users.itervalues():
+            for user in users.values():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 ctx.cluster.only(client).run(
                     args=[

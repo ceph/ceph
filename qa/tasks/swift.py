@@ -96,7 +96,7 @@ def create_users(ctx, config):
         yield
     finally:
         for client in config.keys():
-            for user in users.itervalues():
+            for user in users.values():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
                 ctx.cluster.only(client).run(
