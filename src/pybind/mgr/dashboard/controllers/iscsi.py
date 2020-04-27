@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 from copy import deepcopy
+import re
 import json
 import cherrypy
 
@@ -197,6 +198,13 @@ class Iscsi(BaseController):
     @Endpoint('PUT', 'discoveryauth')
     @UpdatePermission
     def set_discoveryauth(self, user, password, mutual_user, mutual_password):
+        validate_auth({
+            'user': user,
+            'password': password,
+            'mutual_user': mutual_user,
+            'mutual_password': mutual_password
+        })
+
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
         gateway_names = list(config['gateways'].keys())
@@ -275,6 +283,10 @@ class IscsiTarget(RESTController):
         clients = clients or []
         groups = groups or []
 
+        validate_auth(auth)
+        for client in clients:
+            validate_auth(client['auth'])
+
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
         if target_iqn in config['targets']:
@@ -295,6 +307,10 @@ class IscsiTarget(RESTController):
         disks = IscsiTarget._sorted_disks(disks)
         clients = IscsiTarget._sorted_clients(clients)
         groups = IscsiTarget._sorted_groups(groups)
+
+        validate_auth(auth)
+        for client in clients:
+            validate_auth(client['auth'])
 
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
@@ -949,3 +965,22 @@ def validate_rest_api(gateways):
                                          '{}'.format(gateway),
                                      code='ceph_iscsi_rest_api_not_available_for_gateway',
                                      component='iscsi')
+
+
+def validate_auth(auth):
+    username_regex = re.compile(r'^[\w\.:@_-]{8,64}$')
+    password_regex = re.compile(r'^[\w@\-_\/]{12,16}$')
+    result = True
+
+    if auth['user'] or auth['password']:
+        result = bool(username_regex.match(auth['user'])) and \
+            bool(password_regex.match(auth['password']))
+
+    if auth['mutual_user'] or auth['mutual_password']:
+        result = result and bool(username_regex.match(auth['mutual_user'])) and \
+            bool(password_regex.match(auth['mutual_password'])) and auth['user']
+
+    if not result:
+        raise DashboardException(msg='Bad authentication',
+                                 code='target_bad_auth',
+                                 component='iscsi')
