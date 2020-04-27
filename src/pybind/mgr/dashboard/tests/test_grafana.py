@@ -10,32 +10,30 @@ from . import ControllerTestCase, KVStoreMockMixin
 from ..controllers.grafana import Grafana
 from ..grafana import GrafanaRestClient
 from ..settings import Settings
-from .. import mgr
 
 
-class GrafanaTest(ControllerTestCase):
+class GrafanaTest(ControllerTestCase, KVStoreMockMixin):
     @classmethod
     def setup_server(cls):
-        cls.server_settings()
         # pylint: disable=protected-access
         Grafana._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([Grafana])
 
-    @classmethod
+    def setUp(self):
+        self.mock_kv_store()
+
+    @staticmethod
     def server_settings(
-            cls,
             url='http://localhost:3000',
             user='admin',
             password='admin',
     ):
-        settings = dict()
         if url is not None:
-            settings['GRAFANA_API_URL'] = url
+            Settings.GRAFANA_API_URL = url
         if user is not None:
-            settings['GRAFANA_API_USERNAME'] = user
+            Settings.GRAFANA_API_USERNAME = user
         if password is not None:
-            settings['GRAFANA_API_PASSWORD'] = password
-        mgr.get_module_option.side_effect = settings.get
+            Settings.GRAFANA_API_PASSWORD = password
 
     def test_url(self):
         self.server_settings()
@@ -48,13 +46,17 @@ class GrafanaTest(ControllerTestCase):
         self._get('/api/grafana/validation/foo')
         self.assertStatus(500)
 
-    def test_dashboards(self):
+    def test_dashboards_unavailable_no_url(self):
         self.server_settings(url=None)
         self._post('/api/grafana/dashboards')
         self.assertStatus(500)
+
+    def test_dashboards_unavailable_no_user(self):
         self.server_settings(user=None)
         self._post('/api/grafana/dashboards')
         self.assertStatus(500)
+
+    def test_dashboards_unavailable_no_password(self):
         self.server_settings(password=None)
         self._post('/api/grafana/dashboards')
         self.assertStatus(500)

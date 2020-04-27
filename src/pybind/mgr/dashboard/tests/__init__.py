@@ -4,11 +4,13 @@ from __future__ import absolute_import
 
 import json
 import threading
+import sys
 import time
 
 import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
+from pyfakefs import fake_filesystem
 
 from mgr_module import CLICommand, MgrModule
 
@@ -82,6 +84,17 @@ class CLICommandTestMixin(KVStoreMockMixin):
     @classmethod
     def exec_cmd(cls, cmd, **kwargs):
         return exec_dashboard_cmd(None, cmd, **kwargs)
+
+
+class FakeFsMixin(object):
+    fs = fake_filesystem.FakeFilesystem()
+    f_open = fake_filesystem.FakeFileOpen(fs)
+    f_os = fake_filesystem.FakeOsModule(fs)
+
+    if sys.version_info > (3, 0):
+        builtins_open = 'builtins.open'
+    else:
+        builtins_open = '__builtin__.open'
 
 
 class ControllerTestCase(helper.CPWebCase):

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import unittest
 
-from .. import mgr
 from ..services.rgw_client import RgwClient
+from ..settings import Settings
 from . import KVStoreMockMixin
 
 
@@ -18,11 +18,11 @@ class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
         })
 
     def test_ssl_verify(self):
-        mgr.set_module_option('RGW_API_SSL_VERIFY', True)
+        Settings.RGW_API_SSL_VERIFY = True
         instance = RgwClient.admin_instance()
         self.assertTrue(instance.session.verify)
 
     def test_no_ssl_verify(self):
-        mgr.set_module_option('RGW_API_SSL_VERIFY', False)
+        Settings.RGW_API_SSL_VERIFY = False
         instance = RgwClient.admin_instance()
         self.assertFalse(instance.session.verify)
