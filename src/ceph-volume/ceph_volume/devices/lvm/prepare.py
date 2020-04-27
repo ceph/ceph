@@ -172,7 +172,7 @@ class Prepare(object):
                 'tags': tags,
             }
             if size != 0:
-                kwargs['size'] = disk.Size.parse(size)
+                kwargs['size'] = size
             lv = api.create_lv(
                 lv_type,
                 uuid,
@@ -208,7 +208,7 @@ class Prepare(object):
                      }
             logger.debug('data device size: {}'.format(self.args.data_size))
             if self.args.data_size != 0:
-                kwargs['size'] = disk.Size.parse(self.args.data_size)
+                kwargs['size'] = self.args.data_size
             return api.create_lv(
                 lv_name_prefix,
                 osd_uuid,
