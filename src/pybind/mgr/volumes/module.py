@@ -293,6 +293,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
         self.fs_export = FSExport(self)
+        self.nfs = NFSCluster(self)
 
     def __del__(self):
         self.vc.shutdown()
@@ -459,14 +460,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.fs_export.delete_export(cmd['export_id'])
 
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
-        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
-        return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'],
-                                                  placement=cmd.get('placement', None))
+        return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'], export_type=cmd['type'],
+                                           placement=cmd.get('placement', None))
 
     def _cmd_nfs_cluster_update(self, inbuf, cmd):
-        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
-        return nfs_cluster_obj.update_nfs_cluster(placement=cmd['placement'])
+        return self.nfs.update_nfs_cluster(cluster_id=cmd['clusterid'], placement=cmd['placement'])
 
     def _cmd_nfs_cluster_delete(self, inbuf, cmd):
-        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
-        return nfs_cluster_obj.delete_nfs_cluster()
+        return self.nfs.delete_nfs_cluster(cluster_id=cmd['clusterid'])

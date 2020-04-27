@@ -322,10 +322,9 @@ class FSExport(object):
         return "rados://{}/{}".format(self.rados_pool, obj)
 
 class NFSCluster:
-    def __init__(self, mgr, cluster_id):
-        self.cluster_id = "ganesha-%s" % cluster_id
+    def __init__(self, mgr):
         self.pool_name = 'nfs-ganesha'
-        self.pool_ns = cluster_id
+        self.pool_ns = ''
         self.mgr = mgr
 
     def create_empty_rados_obj(self):
@@ -349,6 +348,12 @@ class NFSCluster:
             log.exception(str(e))
             return True
 
+    def _set_cluster_id(self, cluster_id):
+        self.cluster_id = "ganesha-%s" % cluster_id
+
+    def _set_pool_namespace(self, cluster_id):
+        self.pool_ns = cluster_id
+
     def _call_orch_apply_nfs(self, placement):
         spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
                               pool=self.pool_name, namespace=self.pool_ns,
@@ -360,12 +365,11 @@ class NFSCluster:
         except Exception as e:
             log.exception("Failed to create NFS daemons:{}".format(e))
 
-    def create_nfs_cluster(self, export_type, placement):
+    def create_nfs_cluster(self, export_type, cluster_id, placement):
         if export_type != 'cephfs':
             return -errno.EINVAL,"", f"Invalid export type: {export_type}"
 
         pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
-        client = 'client.%s' % self.cluster_id
 
         if self.pool_name not in pool_list:
             r, out, err = create_pool(self.mgr, self.pool_name)
@@ -379,6 +383,8 @@ class NFSCluster:
             if r != 0:
                 return r, out, err
 
+        self._set_pool_namespace(cluster_id)
+        self._set_cluster_id(cluster_id)
         self.create_empty_rados_obj()
 
         if self.check_cluster_exists():
@@ -388,14 +394,18 @@ class NFSCluster:
 
         return 0, "", "NFS Cluster Created Successfully"
 
-    def update_nfs_cluster(self, placement):
+    def update_nfs_cluster(self, cluster_id, placement):
+        self._set_pool_namespace(cluster_id)
+        self._set_cluster_id(cluster_id)
+
         if not self.check_cluster_exists():
             return -errno.EINVAL, "", "Cluster does not exist"
 
         self._call_orch_apply_nfs(placement)
         return 0, "", "NFS Cluster Updated Successfully"
 
-    def delete_nfs_cluster(self):
+    def delete_nfs_cluster(self, cluster_id):
+        self._set_cluster_id(cluster_id)
         if self.check_cluster_exists():
             try:
                 completion = self.mgr.remove_service('nfs.' + self.cluster_id)
