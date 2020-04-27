@@ -4019,7 +4019,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("bitmap")
+    .set_default("hybrid")
     .set_enum_allowed({"bitmap", "stupid", "avl", "hybrid"})
     .set_description(""),
 
@@ -4183,7 +4183,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("A smaller allocation size generally means less data is read and then rewritten when a copy-on-write operation is triggered (e.g., when writing to something that was recently snapshotted).  Similarly, less data is journaled before performing an overwrite (writes smaller than min_alloc_size must first pass through the BlueStore journal).  Larger values of min_alloc_size reduce the amount of metadata required to describe the on-disk layout and reduce overall fragmentation."),
 
     Option("bluestore_min_alloc_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(64_K)
+    .set_default(4_K)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for rotational media")
     .add_see_also("bluestore_min_alloc_size"),
@@ -4205,7 +4205,7 @@ std::vector<Option> get_global_options() {
     .set_description("Writes smaller than this size will be written to the journal and then asynchronously written to the device.  This can be beneficial when using rotational media where seeks are expensive, and is helpful both with and without solid state journal/wal devices."),
 
     Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(65536)
+    .set_default(64_K)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for rotational media")
     .add_see_also("bluestore_prefer_deferred_size"),
@@ -4237,7 +4237,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("Chunks larger than this are broken into smaller chunks before being compressed"),
 
     Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(128_K)
+    .set_default(8_K)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_min_blob_size for rotational media")
     .add_see_also("bluestore_compression_min_blob_size"),
@@ -4255,7 +4255,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("Chunks larger than this are broken into smaller chunks before being compressed"),
 
     Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(512_K)
+    .set_default(64_K)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_max_blob_size for rotational media")
     .add_see_also("bluestore_compression_max_blob_size"),
@@ -4283,7 +4283,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("Bluestore blobs are collections of extents (ie on-disk data) originating from one or more objects.  Blobs can be compressed, typically have checksum data, may be overwritten, may be shared (with an extent ref map), or split.  This setting controls the maximum size a blob is allowed to be."),
 
     Option("bluestore_max_blob_size_hdd", Option::TYPE_SIZE, Option::LEVEL_DEV)
-    .set_default(512_K)
+    .set_default(64_K)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("")
     .add_see_also("bluestore_max_blob_size"),
@@ -4387,7 +4387,7 @@ std::vector<Option> get_global_options() {
     .set_description("Key value database to use for bluestore"),
 
     Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("bitmap")
+    .set_default("hybrid")
     .set_enum_allowed({"bitmap", "stupid", "avl", "hybrid"})
     .set_description("Allocator policy")
     .set_long_description("Allocator to use for bluestore.  Stupid should only be used for testing."),
