@@ -14,8 +14,6 @@ namespace librbd {
 namespace cache {
 namespace rwl {
 
-typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
-
 template <typename T>
 C_BlockIORequest<T>::C_BlockIORequest(T &rwl, const utime_t arrived, io::Extents &&extents,
                                       bufferlist&& bl, const int fadvise_flags, Context *user_req)
@@ -191,6 +189,7 @@ void C_WriteRequest<T>::setup_buffer_resources(
 
 template <typename T>
 void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
+  GenericWriteLogEntries log_entries;
   {
     std::lock_guard locker(m_lock);
     std::shared_ptr<SyncPoint> current_sync_point = rwl.get_current_sync_point();
@@ -232,6 +231,7 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
       /* A WS is also a write */
       ldout(rwl.get_context(), 20) << "write_req=" << *this << " op_set=" << op_set.get()
                                    << " operation=" << operation << dendl;
+      log_entries.emplace_back(operation->log_entry);
       rwl.inc_last_op_sequence_num();
       operation->init(true, allocation, current_sync_gen,
                       rwl.get_last_op_sequence_num(), this->bl, buffer_offset, op_set->persist_on_flush);
@@ -248,6 +248,7 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   for (auto &operation : op_set->operations) {
     operation->copy_bl_to_pmem_buffer();
   }
+  rwl.add_into_log_map(log_entries);
 }
 
 template <typename T>
@@ -402,6 +403,57 @@ std::ostream &operator<<(std::ostream &os,
      << " m_resources.allocated=" << req.m_resources.allocated;
   return os;
 };
+
+void C_ReadRequest::finish(int r) {
+  ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
+  int hits = 0;
+  int misses = 0;
+  int hit_bytes = 0;
+  int miss_bytes = 0;
+  if (r >= 0) {
+    /*
+     * At this point the miss read has completed. We'll iterate through
+     * read_extents and produce *m_out_bl by assembling pieces of miss_bl
+     * and the individual hit extent bufs in the read extents that represent
+     * hits.
+     */
+    uint64_t miss_bl_offset = 0;
+    for (auto &extent : read_extents) {
+      if (extent.m_bl.length()) {
+        /* This was a hit */
+        ceph_assert(extent.second == extent.m_bl.length());
+        ++hits;
+        hit_bytes += extent.second;
+        m_out_bl->claim_append(extent.m_bl);
+      } else {
+        /* This was a miss. */
+        ++misses;
+        miss_bytes += extent.second;
+        bufferlist miss_extent_bl;
+        miss_extent_bl.substr_of(miss_bl, miss_bl_offset, extent.second);
+        /* Add this read miss bufferlist to the output bufferlist */
+        m_out_bl->claim_append(miss_extent_bl);
+        /* Consume these bytes in the read miss bufferlist */
+        miss_bl_offset += extent.second;
+      }
+    }
+  }
+  ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << " bl=" << *m_out_bl << dendl;
+  utime_t now = ceph_clock_now();
+  ceph_assert((int)m_out_bl->length() == hit_bytes + miss_bytes);
+  m_on_finish->complete(r);
+  m_perfcounter->inc(l_librbd_rwl_rd_bytes, hit_bytes + miss_bytes);
+  m_perfcounter->inc(l_librbd_rwl_rd_hit_bytes, hit_bytes);
+  m_perfcounter->tinc(l_librbd_rwl_rd_latency, now - m_arrived_time);
+  if (!misses) {
+    m_perfcounter->inc(l_librbd_rwl_rd_hit_req, 1);
+    m_perfcounter->tinc(l_librbd_rwl_rd_hit_latency, now - m_arrived_time);
+  } else {
+    if (hits) {
+      m_perfcounter->inc(l_librbd_rwl_rd_part_hit_req, 1);
+    }
+  }
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const BlockGuardReqState &r) {

@@ -52,6 +52,7 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(I &image_ctx, librbd::cache::rwl::Imag
       "librbd::cache::ReplicatedWriteLog::m_lock", this))),
     m_blockguard_lock(ceph::make_mutex(util::unique_lock_name(
       "librbd::cache::ReplicatedWriteLog::m_blockguard_lock", this))),
+    m_blocks_to_log_entries(image_ctx.cct),
     m_thread_pool(image_ctx.cct, "librbd::cache::ReplicatedWriteLog::thread_pool", "tp_rwl",
                   4,
                   ""),
@@ -565,6 +566,114 @@ template <typename I>
 void ReplicatedWriteLog<I>::aio_read(Extents&& image_extents,
                                      ceph::bufferlist* bl,
                                      int fadvise_flags, Context *on_finish) {
+  // TODO: handle writesame and discard case in later PRs
+  CephContext *cct = m_image_ctx.cct;
+  utime_t now = ceph_clock_now();
+  C_ReadRequest *read_ctx = new C_ReadRequest(cct, now, m_perfcounter, bl, on_finish);
+  ldout(cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
+                 << "image_extents=" << image_extents << ", "
+                 << "bl=" << bl << ", "
+                 << "on_finish=" << on_finish << dendl;
+
+  ceph_assert(m_initialized);
+  bl->clear();
+  m_perfcounter->inc(l_librbd_rwl_rd_req, 1);
+
+  /*
+   * The strategy here is to look up all the WriteLogMapEntries that overlap
+   * this read, and iterate through those to separate this read into hits and
+   * misses. A new Extents object is produced here with Extents for each miss
+   * region. The miss Extents is then passed on to the read cache below RWL. We
+   * also produce an ImageExtentBufs for all the extents (hit or miss) in this
+   * read. When the read from the lower cache layer completes, we iterate
+   * through the ImageExtentBufs and insert buffers for each cache hit at the
+   * appropriate spot in the bufferlist returned from below for the miss
+   * read. The buffers we insert here refer directly to regions of various
+   * write log entry data buffers.
+   *
+   * Locking: These buffer objects hold a reference on the write log entries
+   * they refer to. Log entries can't be retired until there are no references.
+   * The GenericWriteLogEntry references are released by the buffer destructor.
+   */
+  for (auto &extent : image_extents) {
+    uint64_t extent_offset = 0;
+    RWLock::RLocker entry_reader_locker(m_entry_reader_lock);
+    WriteLogMapEntries map_entries = m_blocks_to_log_entries.find_map_entries(block_extent(extent));
+    for (auto &map_entry : map_entries) {
+      Extent entry_image_extent(rwl::image_extent(map_entry.block_extent));
+      /* If this map entry starts after the current image extent offset ... */
+      if (entry_image_extent.first > extent.first + extent_offset) {
+        /* ... add range before map_entry to miss extents */
+        uint64_t miss_extent_start = extent.first + extent_offset;
+        uint64_t miss_extent_length = entry_image_extent.first - miss_extent_start;
+        Extent miss_extent(miss_extent_start, miss_extent_length);
+        read_ctx->miss_extents.push_back(miss_extent);
+        /* Add miss range to read extents */
+        ImageExtentBuf miss_extent_buf(miss_extent);
+        read_ctx->read_extents.push_back(miss_extent_buf);
+        extent_offset += miss_extent_length;
+      }
+      ceph_assert(entry_image_extent.first <= extent.first + extent_offset);
+      uint64_t entry_offset = 0;
+      /* If this map entry starts before the current image extent offset ... */
+      if (entry_image_extent.first < extent.first + extent_offset) {
+        /* ... compute offset into log entry for this read extent */
+        entry_offset = (extent.first + extent_offset) - entry_image_extent.first;
+      }
+      /* This read hit ends at the end of the extent or the end of the log
+         entry, whichever is less. */
+      uint64_t entry_hit_length = min(entry_image_extent.second - entry_offset,
+                                      extent.second - extent_offset);
+      Extent hit_extent(entry_image_extent.first, entry_hit_length);
+
+      /* Offset of the map entry into the log entry's buffer */
+      uint64_t map_entry_buffer_offset = entry_image_extent.first - map_entry.log_entry->ram_entry.image_offset_bytes;
+      /* Offset into the log entry buffer of this read hit */
+      uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
+      /* Create buffer object referring to pmem pool for this read hit */
+      auto write_entry = map_entry.log_entry;
+
+      /* Make a bl for this hit extent. This will add references to the write_entry->pmem_bp */
+      buffer::list hit_bl;
+
+      buffer::list entry_bl_copy;
+      write_entry->copy_pmem_bl(&entry_bl_copy);
+      entry_bl_copy.begin(read_buffer_offset).copy(entry_hit_length, hit_bl);
+
+      ceph_assert(hit_bl.length() == entry_hit_length);
+
+      /* Add hit extent to read extents */
+      ImageExtentBuf hit_extent_buf(hit_extent, hit_bl);
+      read_ctx->read_extents.push_back(hit_extent_buf);
+
+      /* Exclude RWL hit range from buffer and extent */
+      extent_offset += entry_hit_length;
+      ldout(cct, 20) << map_entry << dendl;
+    }
+    /* If the last map entry didn't consume the entire image extent ... */
+    if (extent.second > extent_offset) {
+      /* ... add the rest of this extent to miss extents */
+      uint64_t miss_extent_start = extent.first + extent_offset;
+      uint64_t miss_extent_length = extent.second - extent_offset;
+      Extent miss_extent(miss_extent_start, miss_extent_length);
+      read_ctx->miss_extents.push_back(miss_extent);
+      /* Add miss range to read extents */
+      ImageExtentBuf miss_extent_buf(miss_extent);
+      read_ctx->read_extents.push_back(miss_extent_buf);
+      extent_offset += miss_extent_length;
+    }
+  }
+
+  ldout(cct, 20) << "miss_extents=" << read_ctx->miss_extents << ", "
+                 << "miss_bl=" << read_ctx->miss_bl << dendl;
+
+  if (read_ctx->miss_extents.empty()) {
+    /* All of this read comes from RWL */
+    read_ctx->complete(0);
+  } else {
+    /* Pass the read misses on to the layer below RWL */
+    m_image_writeback.aio_read(std::move(read_ctx->miss_extents), &read_ctx->miss_bl, fadvise_flags, read_ctx);
+  }
 }
 
 template <typename I>
@@ -2039,6 +2148,11 @@ void ReplicatedWriteLog<I>::internal_flush(Context *on_finish) {
         flush_new_sync_point_if_needed(flush_req, on_exit);
       });
   detain_guarded_request(nullptr, guarded_ctx, true);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::add_into_log_map(GenericWriteLogEntries &log_entries) {
+  m_blocks_to_log_entries.add_log_entries(log_entries);
 }
 
 } // namespace cache
