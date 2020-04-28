@@ -141,6 +141,9 @@ namespace librbd {
 namespace cache {
 namespace rwl {
 
+class ImageExtentBuf;
+typedef std::vector<ImageExtentBuf> ImageExtentBufs;
+
 const int IN_FLIGHT_FLUSH_WRITE_LIMIT = 64;
 const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
 
@@ -264,6 +267,15 @@ io::Extent whole_volume_extent();
 BlockExtent block_extent(const io::Extent& image_extent);
 
 Context * override_ctx(int r, Context *ctx);
+
+class ImageExtentBuf : public io::Extent {
+public:
+  bufferlist m_bl;
+  ImageExtentBuf(io::Extent extent)
+    : io::Extent(extent) { }
+  ImageExtentBuf(io::Extent extent, bufferlist bl)
+    : io::Extent(extent), m_bl(bl) { }
+};
 
 } // namespace rwl
 } // namespace cache
