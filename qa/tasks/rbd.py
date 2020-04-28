@@ -413,9 +413,10 @@ def run_xfstests_one_client(ctx, role, properties):
         log.info('         randomize: {randomize}'.format(randomize=randomize))
 
         if exclude_list:
-            with tempfile.NamedTemporaryFile(bufsize=0, prefix='exclude') as exclude_file:
+            with tempfile.NamedTemporaryFile(mode='w', prefix='exclude') as exclude_file:
                 for test in exclude_list:
                     exclude_file.write("{}\n".format(test))
+                exclude_file.flush()
                 remote.put_file(exclude_file.name, exclude_file.name)
 
         # Note that the device paths are interpreted using
