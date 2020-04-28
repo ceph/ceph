@@ -256,14 +256,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "round(sum(irate(ceph_rbd_write_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s])) / sum(irate(ceph_rbd_write_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])))",
+          "expr": "irate(ceph_rbd_write_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) / irate(ceph_rbd_write_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Write Latency Sum",
           "refId": "A"
         },
         {
-          "expr": "round(sum(irate(ceph_rbd_read_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s])) / sum(irate(ceph_rbd_read_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])))",
+          "expr": "irate(ceph_rbd_read_latency_sum{pool=\"$Pool\", image=\"$Image\"}[30s]) / irate(ceph_rbd_read_latency_count{pool=\"$Pool\", image=\"$Image\"}[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Read Latency Sum",
