@@ -250,6 +250,7 @@ class FSExport(object):
                 ioctx.set_namespace(self.rados_namespace)
             if append:
                 ioctx.append(obj, raw_config.encode('utf-8'))
+                ioctx.notify(obj)
             else:
                 ioctx.write_full(obj, raw_config.encode('utf-8'))
             log.debug(
