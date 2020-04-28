@@ -1461,7 +1461,6 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
   /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
    * to make changes to this process.  Also, make sure to update it
    * when you find bugs! */
-  eversion_t min_last_update_acceptable = eversion_t::max();
   epoch_t max_last_epoch_started_found = 0;
   for (auto i = infos.begin(); i != infos.end(); ++i) {
     if (!cct->_conf->osd_find_best_info_ignore_history_les &&
@@ -1475,6 +1474,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
       max_last_epoch_started_found = i->second.last_epoch_started;
     }
   }
+  eversion_t min_last_update_acceptable = eversion_t::max();
   for (auto i = infos.begin(); i != infos.end(); ++i) {
     if (max_last_epoch_started_found <= i->second.last_epoch_started) {
       if (min_last_update_acceptable > i->second.last_update)
