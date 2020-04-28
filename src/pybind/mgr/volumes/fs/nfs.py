@@ -202,11 +202,10 @@ class FSExport(object):
         fs_map = self.mgr.get('fs_map')
         return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
 
-    def check_pseudo_path(self, pseudo_path):
+    def _fetch_export(self, pseudo_path):
         for ex in self.exports[self.rados_namespace]:
             if ex.pseudo == pseudo_path:
-                return True
-        return False
+                return ex
 
     def _create_user_key(self, entity):
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data=a'.format(
@@ -257,6 +256,20 @@ class FSExport(object):
                     "write configuration into rados object %s/%s/%s:\n%s",
                     self.rados_pool, self.rados_namespace, obj, raw_config)
 
+    def _delete_export_url(self, obj, ex_id):
+        export_name = 'export-{}'.format(ex_id)
+        with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
+
+            export_urls = ioctx.read(obj)
+            url = '%url "{}"\n\n'.format(self.make_rados_url(export_name))
+            export_urls = export_urls.replace(url.encode('utf-8'), b'')
+            ioctx.remove_object(export_name)
+            ioctx.write_full(obj, export_urls)
+            ioctx.notify(obj)
+            log.debug("Export deleted: {}".format(url))
+
     def _update_common_conf(self, cluster_id, ex_id):
         common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
         conf_blocks = {
@@ -280,7 +293,7 @@ class FSExport(object):
             self.exports[cluster_id] = []
 
         self.rados_namespace = cluster_id
-        if not self.check_fs(fs_name) or self.check_pseudo_path(pseudo_path):
+        if not self.check_fs(fs_name) or self._fetch_export(pseudo_path):
             return -errno.EINVAL,"", "Invalid CephFS name or export already exists"
 
         user_id, key = self._create_user_key(cluster_id)
@@ -314,8 +327,20 @@ class FSExport(object):
 
         return (0, json.dumps(result, indent=4), '')
 
-    def delete_export(self, ex_id):
-        raise NotImplementedError()
+    def delete_export(self, pseudo_path, cluster_id):
+        try:
+            self.rados_namespace = cluster_id
+            export = self._fetch_export(pseudo_path)
+            if export:
+                common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
+                self._delete_export_url(common_conf, export.export_id)
+                self.exports[cluster_id].remove(export)
+            else:
+                log.warn("Export does not exist")
+        except KeyError:
+            log.warn("Cluster does not exist")
+
+        return 0, "", "Successfully deleted export"
 
     def make_rados_url(self, obj):
         if self.rados_namespace:
