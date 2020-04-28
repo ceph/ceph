@@ -23,7 +23,6 @@
 #include "common/async/context_pool.h"
 #include "common/config_fwd.h"
 #include "common/Cond.h"
-#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 #include "common/config_obs.h"
@@ -44,11 +43,14 @@ class AioCompletionImpl;
 class librados::RadosClient : public Dispatcher,
 			      public md_config_obs_t
 {
-  std::unique_ptr<CephContext,
-		  std::function<void(CephContext*)> > cct_deleter;
-
 public:
   using Dispatcher::cct;
+private:
+  std::unique_ptr<CephContext,
+		  std::function<void(CephContext*)> > cct_deleter{
+    cct, [](CephContext *p) {p->put();}};
+
+public:
   const ConfigProxy& conf{cct->_conf};
   ceph::async::io_context_pool poolctx;
 private:
@@ -56,13 +58,13 @@ private:
     DISCONNECTED,
     CONNECTING,
     CONNECTED,
-  } state;
+  } state{DISCONNECTED};
 
-  MonClient monclient;
-  MgrClient mgrclient;
-  Messenger *messenger;
+  MonClient monclient{cct, poolctx};
+  MgrClient mgrclient{cct, nullptr, &monclient.monmap};
+  Messenger *messenger{nullptr};
 
-  uint64_t instance_id;
+  uint64_t instance_id{0};
 
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m) override;
@@ -72,17 +74,16 @@ private:
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;
 
-  Objecter *objecter;
+  Objecter *objecter{nullptr};
 
   ceph::mutex lock = ceph::make_mutex("librados::RadosClient::lock");
   ceph::condition_variable cond;
-  SafeTimer timer;
-  int refcnt;
+  int refcnt{1};
 
-  version_t log_last_version;
-  rados_log_callback_t log_cb;
-  rados_log_callback2_t log_cb2;
-  void *log_cb_arg;
+  version_t log_last_version{0};
+  rados_log_callback_t log_cb{nullptr};
+  rados_log_callback2_t log_cb2{nullptr};
+  void *log_cb_arg{nullptr};
   string log_watch;
 
   bool service_daemon = false;
@@ -92,9 +93,9 @@ private:
   int wait_for_osdmap();
 
 public:
-  Finisher finisher;
+  boost::asio::io_context::strand finish_strand{poolctx.get_io_context()};
 
-  explicit RadosClient(CephContext *cct_);
+  explicit RadosClient(CephContext *cct);
   ~RadosClient() override;
   int ping_monitor(std::string mon_id, std::string *result);
   int connect();

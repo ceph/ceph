@@ -16,7 +16,9 @@
 #define CEPH_LIBRADOS_POOLASYNCCOMPLETIONIMPL_H
 
 #include "common/ceph_mutex.h"
-#include "include/Context.h"
+
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 
@@ -29,67 +31,68 @@ namespace librados {
     bool released = false;
     bool done = false;
 
-    rados_callback_t callback = 0;
-    void *callback_arg = nullptr;;
+    rados_callback_t callback = nullptr;
+    void *callback_arg = nullptr;
 
     PoolAsyncCompletionImpl() = default;
 
     int set_callback(void *cb_arg, rados_callback_t cb) {
-      std::scoped_lock l{lock};
+      std::scoped_lock l(lock);
       callback = cb;
       callback_arg = cb_arg;
       return 0;
     }
     int wait() {
-      std::unique_lock l{lock};
-      cond.wait(l, [this] { return done;});
+      std::unique_lock l(lock);
+      while (!done)
+	cond.wait(l);
       return 0;
     }
     int is_complete() {
-      std::scoped_lock l{lock};
+      std::scoped_lock l(lock);
       return done;
     }
     int get_return_value() {
-      std::scoped_lock l{lock};
+      std::scoped_lock l(lock);
       return rval;
     }
     void get() {
-      std::scoped_lock l{lock};
+      std::scoped_lock l(lock);
       ceph_assert(ref > 0);
       ref++;
     }
     void release() {
-      lock.lock();
+      std::scoped_lock l(lock);
       ceph_assert(!released);
       released = true;
-      put_unlock();
     }
     void put() {
-      lock.lock();
-      put_unlock();
-    }
-    void put_unlock() {
-      ceph_assert(ref > 0);
+      std::unique_lock l(lock);
       int n = --ref;
-      lock.unlock();
+      l.unlock();
       if (!n)
 	delete this;
     }
   };
 
-  class C_PoolAsync_Safe : public Context {
-    PoolAsyncCompletionImpl *c;
+  inline void intrusive_ptr_add_ref(PoolAsyncCompletionImpl* p) {
+    p->get();
+  }
+  inline void intrusive_ptr_release(PoolAsyncCompletionImpl* p) {
+    p->put();
+  }
+
+  class CB_PoolAsync_Safe {
+    boost::intrusive_ptr<PoolAsyncCompletionImpl> p;
 
   public:
-    explicit C_PoolAsync_Safe(PoolAsyncCompletionImpl *_c) : c(_c) {
-      c->get();
-    }
-    ~C_PoolAsync_Safe() override {
-      c->put();
-    }
-  
-    void finish(int r) override {
-      c->lock.lock();
+    explicit CB_PoolAsync_Safe(boost::intrusive_ptr<PoolAsyncCompletionImpl> p)
+      : p(p) {}
+    ~CB_PoolAsync_Safe() = default;
+
+    void operator()(int r) {
+      auto c(std::move(p));
+      std::unique_lock l(c->lock);
       c->rval = r;
       c->done = true;
       c->cond.notify_all();
@@ -97,12 +100,10 @@ namespace librados {
       if (c->callback) {
 	rados_callback_t cb = c->callback;
 	void *cb_arg = c->callback_arg;
-	c->lock.unlock();
-	cb(c, cb_arg);
-	c->lock.lock();
+	l.unlock();
+	cb(c.get(), cb_arg);
+	l.lock();
       }
-
-      c->lock.unlock();
     }
   };
 }

@@ -256,10 +256,10 @@ namespace std {
 // does it go in.
 struct object_locator_t {
   // You specify either the hash or the key -- not both
-  int64_t pool;     ///< pool id
-  std::string key;       ///< key std::string (if non-empty)
+  std::int64_t pool;     ///< pool id
+  std::string key;       ///< key string (if non-empty)
   std::string nspace;    ///< namespace
-  int64_t hash;     ///< hash position (if >= 0)
+  std::int64_t hash;     ///< hash position (if >= 0)
 
   explicit object_locator_t()
     : pool(-1), hash(-1) {}
@@ -267,11 +267,11 @@ struct object_locator_t {
     : pool(po), hash(-1)  {}
   explicit object_locator_t(int64_t po, int64_t ps)
     : pool(po), hash(ps)  {}
-  explicit object_locator_t(int64_t po, std::string ns)
+  explicit object_locator_t(int64_t po, std::string_view ns)
     : pool(po), nspace(ns), hash(-1) {}
-  explicit object_locator_t(int64_t po, std::string ns, int64_t ps)
+  explicit object_locator_t(int64_t po, std::string_view ns, int64_t ps)
     : pool(po), nspace(ns), hash(ps) {}
-  explicit object_locator_t(int64_t po, std::string ns, std::string s)
+  explicit object_locator_t(int64_t po, std::string_view ns, std::string_view s)
     : pool(po), key(s), nspace(ns), hash(-1) {}
   explicit object_locator_t(const hobject_t& soid)
     : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace), hash(-1) {}
@@ -1699,7 +1699,7 @@ public:
   bool is_unmanaged_snaps_mode() const;
   bool is_removed_snap(snapid_t s) const;
 
-  snapid_t snap_exists(const char *s) const;
+  snapid_t snap_exists(std::string_view s) const;
   void add_snap(const char *n, utime_t stamp);
   uint64_t add_unmanaged_snap(bool preoctopus_compat);
   void remove_snap(snapid_t s);
@@ -4964,20 +4964,24 @@ using pg_missing_t = pg_missing_set<false>;
 using pg_missing_tracker_t = pg_missing_set<true>;
 
 
+
+
 /**
  * pg list objects response format
  *
  */
-struct pg_nls_response_t {
+
+template<typename T>
+struct pg_nls_response_template {
   collection_list_handle_t handle;
-  std::list<librados::ListObjectImpl> entries;
+  std::vector<T> entries;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(handle, bl);
     __u32 n = (__u32)entries.size();
     encode(n, bl);
-    for (std::list<librados::ListObjectImpl>::const_iterator i = entries.begin(); i != entries.end(); ++i) {
+    for (auto i = entries.begin(); i != entries.end(); ++i) {
       encode(i->nspace, bl);
       encode(i->oid, bl);
       encode(i->locator, bl);
@@ -4991,7 +4995,7 @@ struct pg_nls_response_t {
     decode(n, bl);
     entries.clear();
     while (n--) {
-      librados::ListObjectImpl i;
+      T i;
       decode(i.nspace, bl);
       decode(i.oid, bl);
       decode(i.locator, bl);
@@ -5002,7 +5006,7 @@ struct pg_nls_response_t {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("handle") << handle;
     f->open_array_section("entries");
-    for (std::list<librados::ListObjectImpl>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+    for (auto p = entries.begin(); p != entries.end(); ++p) {
       f->open_object_section("object");
       f->dump_string("namespace", p->nspace);
       f->dump_string("object", p->oid);
@@ -5011,19 +5015,19 @@ struct pg_nls_response_t {
     }
     f->close_section();
   }
-  static void generate_test_instances(std::list<pg_nls_response_t*>& o) {
-    o.push_back(new pg_nls_response_t);
-    o.push_back(new pg_nls_response_t);
+  static void generate_test_instances(std::list<pg_nls_response_template<T>*>& o) {
+    o.push_back(new pg_nls_response_template<T>);
+    o.push_back(new pg_nls_response_template<T>);
     o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
     o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
     o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
     o.back()->entries.push_back(librados::ListObjectImpl("", "three", ""));
-    o.push_back(new pg_nls_response_t);
+    o.push_back(new pg_nls_response_template<T>);
     o.back()->handle = hobject_t(object_t("hi"), "key", 3, 4, -1, "");
     o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
     o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
     o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
-    o.push_back(new pg_nls_response_t);
+    o.push_back(new pg_nls_response_template<T>);
     o.back()->handle = hobject_t(object_t("hi"), "key", 5, 6, -1, "");
     o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
     o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
@@ -5033,6 +5037,8 @@ struct pg_nls_response_t {
     o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
   }
 };
+
+using pg_nls_response_t = pg_nls_response_template<librados::ListObjectImpl>;
 
 WRITE_CLASS_ENCODER(pg_nls_response_t)
 
