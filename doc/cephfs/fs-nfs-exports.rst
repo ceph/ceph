@@ -56,6 +56,15 @@ It creates export rados objects containing the export block. Here binding is
 the pseudo root name and type is export type. Currently only CephFS is
 supported.
 
+Delete CephFS Export
+====================
+
+.. code:: bash
+
+    $ ceph nfs export delete <binding> <clusterid>
+
+It deletes an export in cluster based on pseudo root name (binding).
+
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================
 
