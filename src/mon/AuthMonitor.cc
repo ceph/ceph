@@ -1802,7 +1802,7 @@ bool AuthMonitor::_upgrade_format_to_dumpling()
     // set daemon profiles
     if ((p->first.is_osd() || p->first.is_mds()) &&
         mon_caps == "allow rwx") {
-      new_caps = string("allow profile ") + p->first.get_type_name();
+      new_caps = string("allow profile ") + std::string(p->first.get_type_name());
     }
 
     // update bootstrap keys

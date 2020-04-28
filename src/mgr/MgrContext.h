@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "common/ceph_json.h"
+#include "common/Cond.h"
 #include "mon/MonClient.h"
 
 class Command

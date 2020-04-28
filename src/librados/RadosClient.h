@@ -14,36 +14,43 @@
 #ifndef CEPH_LIBRADOS_RADOSCLIENT_H
 #define CEPH_LIBRADOS_RADOSCLIENT_H
 
+#include <functional>
+#include <memory>
+#include <string>
+
+#include "msg/Dispatcher.h"
+
+#include "common/async/context_pool.h"
 #include "common/config_fwd.h"
 #include "common/Cond.h"
 #include "common/Timer.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "common/config_obs.h"
 #include "include/common_fwd.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
 #include "mgr/MgrClient.h"
-#include "msg/Dispatcher.h"
 
 #include "IoCtxImpl.h"
 
-struct AuthAuthorizer;
 struct Context;
-struct Connection;
 class Message;
 class MLog;
 class Messenger;
 class AioCompletionImpl;
 
-class librados::RadosClient : public Dispatcher
+class librados::RadosClient : public Dispatcher,
+			      public md_config_obs_t
 {
   std::unique_ptr<CephContext,
 		  std::function<void(CephContext*)> > cct_deleter;
 
 public:
   using Dispatcher::cct;
-  const ConfigProxy& conf;
+  const ConfigProxy& conf{cct->_conf};
+  ceph::async::io_context_pool poolctx;
 private:
   enum {
     DISCONNECTED,
@@ -89,7 +96,7 @@ public:
 
   explicit RadosClient(CephContext *cct_);
   ~RadosClient() override;
-  int ping_monitor(string mon_id, string *result);
+  int ping_monitor(std::string mon_id, std::string *result);
   int connect();
   void shutdown();
 
@@ -179,6 +186,9 @@ public:
   mon_feature_t get_required_monitor_features() const;
 
   int get_inconsistent_pgs(int64_t pool_id, std::vector<std::string>* pgs);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };
 
 #endif
