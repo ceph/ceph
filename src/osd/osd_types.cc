@@ -1689,7 +1689,7 @@ bool pg_pool_t::is_removed_snap(snapid_t s) const
     return removed_snaps.contains(s);
 }
 
-snapid_t pg_pool_t::snap_exists(const char *s) const
+snapid_t pg_pool_t::snap_exists(std::string_view s) const
 {
   for (auto p = snaps.cbegin(); p != snaps.cend(); ++p)
     if (p->second.name == s)

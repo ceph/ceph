@@ -29,6 +29,8 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 
+#include "common/async/waiter.h"
+
 #if defined(__FreeBSD__)
 #define XATTR_CREATE    0x1
 #define XATTR_REPLACE   0x2
@@ -11750,9 +11752,8 @@ void Client::_setxattr_maybe_wait_for_osdmap(const char *name, const void *value
     });
 
     if (r == -ENOENT) {
-      C_SaferCond ctx;
-      objecter->wait_for_latest_osdmap(&ctx);
-      ctx.wait();
+      bs::error_code ec;
+      objecter->wait_for_latest_osdmap(ca::use_blocked[ec]);
     }
   }
 }
@@ -14324,7 +14325,7 @@ int Client::check_pool_perm(Inode *in, int need)
 
     C_SaferCond rd_cond;
     ObjectOperation rd_op;
-    rd_op.stat(NULL, (ceph::real_time*)nullptr, NULL);
+    rd_op.stat(nullptr, nullptr, nullptr);
 
     objecter->mutate(oid, OSDMap::file_to_object_locator(in->layout), rd_op,
 		     nullsnapc, ceph::real_clock::now(), 0, &rd_cond);
@@ -14511,7 +14512,7 @@ void Client::set_session_timeout(unsigned timeout)
 int Client::start_reclaim(const std::string& uuid, unsigned flags,
 			  const std::string& fs_name)
 {
-  std::lock_guard l(client_lock);
+  std::unique_lock l(client_lock);
   if (!initialized)
     return -ENOTCONN;
 
@@ -14587,13 +14588,14 @@ int Client::start_reclaim(const std::string& uuid, unsigned flags,
 
   // use blacklist to check if target session was killed
   // (config option mds_session_blacklist_on_evict needs to be true)
-  C_SaferCond cond;
-  if (!objecter->wait_for_map(reclaim_osd_epoch, &cond)) {
-    ldout(cct, 10) << __func__ << ": waiting for OSD epoch " << reclaim_osd_epoch << dendl;
-    client_lock.unlock();
-    cond.wait();
-    client_lock.lock();
-  }
+  ldout(cct, 10) << __func__ << ": waiting for OSD epoch " << reclaim_osd_epoch << dendl;
+  bs::error_code ec;
+  l.unlock();
+  objecter->wait_for_map(reclaim_osd_epoch, ca::use_blocked[ec]);
+  l.lock();
+
+  if (ec)
+    return ceph::from_error_code(ec);
 
   bool blacklisted = objecter->with_osdmap(
       [this](const OSDMap &osd_map) -> bool {
@@ -14717,8 +14719,9 @@ mds_rank_t Client::_get_random_up_mds() const
 }
 
 
-StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc)
-  : Client(m, mc, new Objecter(m->cct, m, mc, nullptr, 0, 0))
+StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
+				   boost::asio::io_context& ictx)
+  : Client(m, mc, new Objecter(m->cct, m, mc, ictx, 0, 0))
 {
   monclient->set_messenger(m);
   objecter->set_client_incarnation(0);

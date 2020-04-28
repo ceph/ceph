@@ -51,6 +51,7 @@
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
 #include "common/version.h"
+#include "common/async/blocked_completion.h"
 #include "common/pick_address.h"
 #include "common/blkdev.h"
 #include "common/numa.h"
@@ -277,7 +278,7 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
   poolctx(poolctx),
   objecter(make_unique<Objecter>(osd->client_messenger->cct,
 				 osd->objecter_messenger,
-				 osd->monc, nullptr, 0, 0)),
+				 osd->monc, poolctx, 0, 0)),
   m_objecter_finishers(cct->_conf->osd_objecter_finishers),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
@@ -9918,9 +9919,8 @@ void OSD::get_latest_osdmap()
 {
   dout(10) << __func__ << " -- start" << dendl;
 
-  C_SaferCond cond;
-  service.objecter->wait_for_latest_osdmap(&cond);
-  cond.wait();
+  boost::system::error_code ec;
+  service.objecter->wait_for_latest_osdmap(ceph::async::use_blocked[ec]);
 
   dout(10) << __func__ << " -- finish" << dendl;
 }

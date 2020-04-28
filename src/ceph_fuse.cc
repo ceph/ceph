@@ -254,7 +254,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->set_policy(entity_name_t::TYPE_MDS,
 			  Messenger::Policy::lossless_client(0));
 
-    client = new StandaloneClient(messenger, mc);
+    client = new StandaloneClient(messenger, mc, icp);
     if (filer_flags) {
       client->set_filer_flags(filer_flags);
     }

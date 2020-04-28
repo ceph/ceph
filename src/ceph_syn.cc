@@ -68,7 +68,7 @@ int main(int argc, const char **argv, char *envp[])
     messengers[i]->bind(g_conf()->public_addr);
     mclients[i] = new MonClient(g_ceph_context, poolctx);
     mclients[i]->build_initial_monmap();
-    auto client = new StandaloneClient(messengers[i], mclients[i]);
+    auto client = new StandaloneClient(messengers[i], mclients[i], poolctx);
     client->set_filer_flags(syn_filer_flags);
     SyntheticClient *syn = new SyntheticClient(client);
     clients.push_back(client);

@@ -2212,7 +2212,7 @@ void CDir::_omap_commit(int op_prio)
 
       // don't create new dirfrag blindly
       if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
-	op.stat(NULL, (ceph::real_time*) NULL, NULL);
+	op.stat(nullptr, nullptr, nullptr);
 
       if (!to_set.empty())
 	op.omap_set(to_set);
@@ -2250,7 +2250,7 @@ void CDir::_omap_commit(int op_prio)
 
   // don't create new dirfrag blindly
   if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
-    op.stat(NULL, (ceph::real_time*)NULL, NULL);
+    op.stat(nullptr, nullptr, nullptr);
 
   /*
    * save the header at the last moment.. If we were to send it off before other
