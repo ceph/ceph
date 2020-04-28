@@ -612,9 +612,12 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   bufferlist bl;
   int r = cfuse->client->ll_read(fh, off, size, &bl);
-  if (r >= 0)
-    fuse_reply_buf(req, bl.c_str(), bl.length());
-  else
+  if (r >= 0) {
+    vector<iovec> iov;
+    bl.prepare_iov(&iov);
+    iov.insert(iov.begin(), {0}); // the first one is reserved for fuse_out_header
+    fuse_reply_iov(req, &iov[0], iov.size());
+  } else
     fuse_reply_err(req, -r);
 }
 
