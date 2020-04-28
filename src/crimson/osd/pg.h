@@ -23,6 +23,7 @@
 
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_collection.h"
+#include "crimson/osd/backfill_state.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
@@ -657,6 +658,7 @@ private:
   friend class PGAdvanceMap;
   friend class PeeringEvent;
   friend class RepRequest;
+  friend struct BackfillState::PGFacade;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
