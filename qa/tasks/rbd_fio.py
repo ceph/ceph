@@ -94,7 +94,7 @@ def run_fio(remote, config, rbd_test_dir):
     get the fio from github, generate binary, and use it to run on
     the generated fio config file
     """
-    fio_config=NamedTemporaryFile(prefix='fio_rbd_', dir='/tmp/', delete=False)
+    fio_config=NamedTemporaryFile(mode='w', prefix='fio_rbd_', dir='/tmp/', delete=False)
     fio_config.write('[global]\n')
     if config.get('io-engine'):
         ioengine=config['io-engine']
