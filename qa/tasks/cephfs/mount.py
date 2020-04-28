@@ -593,7 +593,7 @@ class CephFSMount(object):
             cwd = self.mountpoint
 
         return self.client_remote.run(args=args, stdin=stdin, wait=wait,
-                                      stdout=BytesIO(), stderr=BytesIO(),
+                                      stdout=StringIO(), stderr=StringIO(),
                                       cwd=cwd, check_status=check_status)
 
     def run_as_user(self, args, user, wait=True, stdin=None,
