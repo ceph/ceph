@@ -27,7 +27,7 @@
 #include "common/Cond.h"
 #include "common/ceph_context.h"
 #include "common/PriorityCache.h"
-
+#include "common/pretty_binary.h"
 
 enum {
   l_rocksdb_first = 34300,
@@ -265,54 +265,6 @@ public:
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;
     int num_seen = 0;
-    static std::string pretty_binary_string(const std::string& in) {
-      char buf[10];
-      std::string out;
-      out.reserve(in.length() * 3);
-      enum { NONE, HEX, STRING } mode = NONE;
-      unsigned from = 0, i;
-      for (i=0; i < in.length(); ++i) {
-        if ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-          (mode == HEX && in.length() - i >= 4 &&
-          ((in[i] < 32 || (unsigned char)in[i] > 126) ||
-          (in[i+1] < 32 || (unsigned char)in[i+1] > 126) ||
-          (in[i+2] < 32 || (unsigned char)in[i+2] > 126) ||
-          (in[i+3] < 32 || (unsigned char)in[i+3] > 126)))) {
-
-          if (mode == STRING) {
-            out.append(in.substr(from, i - from));
-            out.push_back('\'');
-          }
-          if (mode != HEX) {
-            out.append("0x");
-            mode = HEX;
-          }
-          if (in.length() - i >= 4) {
-            // print a whole u32 at once
-            snprintf(buf, sizeof(buf), "%08x",
-                  (uint32_t)(((unsigned char)in[i] << 24) |
-                            ((unsigned char)in[i+1] << 16) |
-                            ((unsigned char)in[i+2] << 8) |
-                            ((unsigned char)in[i+3] << 0)));
-            i += 3;
-          } else {
-            snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)in[i]);
-          }
-          out.append(buf);
-        } else {
-          if (mode != STRING) {
-            out.push_back('\'');
-            mode = STRING;
-            from = i;
-          }
-        }
-      }
-      if (mode == STRING) {
-        out.append(in.substr(from, i - from));
-        out.push_back('\'');
-      }
-      return out;
-    }
     void Put(const rocksdb::Slice& key,
                     const rocksdb::Slice& value) override {
       std::string prefix ((key.ToString()).substr(0,1));
