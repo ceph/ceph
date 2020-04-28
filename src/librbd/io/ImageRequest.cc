@@ -264,6 +264,15 @@ int ImageRequest<I>::clip_request() {
 }
 
 template <typename I>
+uint64_t ImageRequest<I>::get_total_length() const {
+  uint64_t total_bytes = 0;
+  for (auto& image_extent : this->m_image_extents) {
+    total_bytes += image_extent.second;
+  }
+  return total_bytes;
+}
+
+template <typename I>
 void ImageRequest<I>::update_timestamp() {
   bool modify = (get_aio_type() != AIO_TYPE_READ);
   uint64_t update_interval;
@@ -340,6 +349,17 @@ int ImageReadRequest<I>::clip_request() {
   }
   this->m_aio_comp->read_result.set_clip_length(buffer_length);
   return 0;
+}
+
+template <typename I>
+bool ImageReadRequest<I>::finish_request_early() {
+  auto total_bytes = this->get_total_length();
+  if (total_bytes == 0) {
+    auto *aio_comp = this->m_aio_comp;
+    aio_comp->set_request_count(0);
+    return true;
+  }
+  return false;
 }
 
 template <typename I>
@@ -420,10 +440,7 @@ bool AbstractImageWriteRequest<I>::finish_request_early() {
       return true;
     }
   }
-  uint64_t total_bytes = 0;
-  for (auto& image_extent : this->m_image_extents) {
-    total_bytes += image_extent.second;
-  }
+  auto total_bytes = this->get_total_length();
   if (total_bytes == 0) {
     aio_comp->set_request_count(0);
     return true;
