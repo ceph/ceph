@@ -91,7 +91,7 @@ public:
   /// internal state methods
   void init(Context *on_finish) override;
   void shut_down(Context *on_finish) override;
-  void invalidate(Context *on_finish);
+  void invalidate(Context *on_finish) override;
   void flush(Context *on_finish) override;
 
   using This = ReplicatedWriteLog<ImageCtxT>;
@@ -148,6 +148,7 @@ private:
 
   std::atomic<bool> m_initialized = {false};
   std::atomic<bool> m_shutting_down = {false};
+  std::atomic<bool> m_invalidating = {false};
   PMEMobjpool *m_log_pool = nullptr;
   const char* m_rwl_pool_layout_name;
 
@@ -298,7 +299,7 @@ private:
   int append_op_log_entries(rwl::GenericLogOperations &ops);
   void complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
   void schedule_complete_op_log_entries(rwl::GenericLogOperations &&ops, const int r);
-  void internal_flush(Context *on_finish);
+  void internal_flush(bool invalidate, Context *on_finish);
 };
 
 } // namespace cache
