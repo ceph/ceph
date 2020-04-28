@@ -16,7 +16,9 @@
 #include <sys/utsname.h>
 #include <iostream>
 #include <string>
+#include <optional>
 
+#include "common/async/context_pool.h"
 #include "common/config.h"
 #include "common/errno.h"
 
@@ -44,6 +46,8 @@
 #include <fuse_lowlevel.h>
 
 #define dout_context g_ceph_context
+
+ceph::async::io_context_pool icp;
 
 static void fuse_usage()
 {
@@ -234,7 +238,8 @@ int main(int argc, const char **argv, const char *envp[]) {
     int tester_r = 0;
     void *tester_rp = nullptr;
 
-    MonClient *mc = new MonClient(g_ceph_context);
+    icp.start(cct->_conf.get_val<std::uint64_t>("client_asio_thread_count"));
+    MonClient *mc = new MonClient(g_ceph_context, icp);
     int r = mc->build_initial_monmap();
     if (r == -EINVAL) {
       cerr << "failed to generate initial mon list" << std::endl;
@@ -316,6 +321,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     client->unmount();
     cfuse->finalize();
   out_shutdown:
+    icp.stop();
     client->shutdown();
   out_init_failed:
     unregister_async_signal_handler(SIGHUP, sighup_handler);
