@@ -221,6 +221,30 @@ AlienStore::read(CollectionRef ch,
   });
 }
 
+AlienStore::read_errorator::future<ceph::bufferlist>
+AlienStore::readv(CollectionRef ch,
+		  const ghobject_t& oid,
+		  interval_set<uint64_t>& m,
+		  uint32_t op_flags)
+{
+  logger().debug("{}", __func__);
+  return seastar::do_with(ceph::bufferlist{},
+    [this, ch, oid, &m, op_flags](auto& bl) {
+    return tp->submit([this, ch, oid, &m, op_flags, &bl] {
+      auto c = static_cast<AlienCollection*>(ch.get());
+      return store->readv(c->collection, oid, m, bl, op_flags);
+    }).then([&bl](int r) -> read_errorator::future<ceph::bufferlist> {
+      if (r == -ENOENT) {
+        return crimson::ct_error::enoent::make();
+      } else if (r == -EIO) {
+        return crimson::ct_error::input_output_error::make();
+      } else {
+        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+      }
+    });
+  });
+}
+
 AlienStore::get_attr_errorator::future<ceph::bufferptr>
 AlienStore::get_attr(CollectionRef ch,
                      const ghobject_t& oid,

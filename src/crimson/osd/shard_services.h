@@ -13,6 +13,7 @@
 #include "osd/PeeringState.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/object_context.h"
+#include "common/AsyncReserver.h"
 
 namespace crimson::net {
   class Messenger;
@@ -39,7 +40,7 @@ namespace crimson::osd {
 /**
  * Represents services available to each PG
  */
-class ShardServices {
+class ShardServices : public md_config_obs_t {
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
   OSDMapService &osdmap_service;
   crimson::net::Messenger &cluster_msgr;
@@ -53,6 +54,9 @@ class ShardServices {
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
 
+  const char** get_tracked_conf_keys() const final;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) final;
 public:
   ShardServices(
     OSDMapService &osdmap_service,
@@ -80,8 +84,9 @@ public:
     return osdmap_service;
   }
 
-  // Op Tracking
+  // Op Management
   OperationRegistry registry;
+  OperationThrottler throttler;
 
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
@@ -172,8 +177,18 @@ public:
 
   crimson::osd::ObjectContextRegistry obc_registry;
 
+  // Async Reservers
 private:
   unsigned num_pgs = 0;
+
+  struct DirectFinisher {
+    void queue(Context *c) {
+      c->complete(0);
+    }
+  } finisher;
+public:
+  AsyncReserver<spg_t, DirectFinisher> local_reserver;
+  AsyncReserver<spg_t, DirectFinisher> remote_reserver;
 };
 
 }

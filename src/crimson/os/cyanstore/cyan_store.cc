@@ -198,6 +198,27 @@ CyanStore::read_errorator::future<ceph::bufferlist> CyanStore::read(
   return read_errorator::make_ready_future<ceph::bufferlist>(o->read(offset, l));
 }
 
+CyanStore::read_errorator::future<ceph::bufferlist> CyanStore::readv(
+  CollectionRef ch,
+  const ghobject_t& oid,
+  interval_set<uint64_t>& m,
+  uint32_t op_flags)
+{
+  return seastar::do_with(ceph::bufferlist{},
+    [this, ch, oid, &m, op_flags](auto& bl) {
+    return crimson::do_for_each(m,
+      [this, ch, oid, op_flags, &bl](auto& p) {
+      return read(ch, oid, p.first, p.second, op_flags)
+      .safe_then([this, &bl](auto ret) {
+	bl.claim_append(ret);
+      });
+    }).safe_then([&bl] {
+      return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+    });
+  });
+}
+
+
 CyanStore::get_attr_errorator::future<ceph::bufferptr> CyanStore::get_attr(
   CollectionRef ch,
   const ghobject_t& oid,

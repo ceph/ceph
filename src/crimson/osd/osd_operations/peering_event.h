@@ -44,6 +44,7 @@ protected:
   PeeringCtx ctx;
   pg_shard_t from;
   spg_t pgid;
+  float delay = 0;
   PGPeeringEvent evt;
 
   const pg_shard_t get_from() const {
@@ -73,7 +74,17 @@ public:
     pgid(pgid),
     evt(std::forward<Args>(args)...)
   {}
-
+  template <typename... Args>
+  PeeringEvent(
+    ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
+    float delay, Args&&... args) :
+    shard_services(shard_services),
+    ctx{ceph_release_t::octopus},
+    from(from),
+    pgid(pgid),
+    delay(delay),
+    evt(std::forward<Args>(args)...)
+  {}
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;

@@ -27,7 +27,6 @@
 #include "common/ostream_temp.h"
 
 struct PGPool {
-  CephContext* cct;
   epoch_t cached_epoch;
   int64_t id;
   std::string name;
@@ -35,25 +34,24 @@ struct PGPool {
   pg_pool_t info;
   SnapContext snapc;   // the default pool snapc, ready to go.
 
-  PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
+  PGPool(OSDMapRef map, int64_t i, const pg_pool_t& info,
 	 const std::string& name)
-    : cct(cct),
-      cached_epoch(map->get_epoch()),
+    : cached_epoch(map->get_epoch()),
       id(i),
       name(name),
       info(info) {
     snapc = info.get_snap_context();
   }
 
-  void update(CephContext *cct, OSDMapRef map);
+  void update(OSDMapRef map);
 
-  ceph::timespan get_readable_interval() const {
+  ceph::timespan get_readable_interval(ConfigProxy &conf) const {
     double v = 0;
     if (info.opts.get(pool_opts_t::READ_LEASE_INTERVAL, &v)) {
       return ceph::make_timespan(v);
     } else {
-      auto hbi = cct->_conf->osd_heartbeat_grace;
-      auto fac = cct->_conf->osd_pool_default_read_lease_ratio;
+      auto hbi = conf->osd_heartbeat_grace;
+      auto fac = conf->osd_pool_default_read_lease_ratio;
       return ceph::make_timespan(hbi * fac);
     }
   }
@@ -1741,6 +1739,9 @@ public:
   /// Updates info.hit_set to hset_history, does not dirty
   void update_hset(const pg_hit_set_history_t &hset_history);
 
+  /// Get all pg_shards that needs recovery
+  std::vector<pg_shard_t> get_replica_recovery_order() const;
+
   /**
    * update_history
    *
@@ -1794,6 +1795,12 @@ public:
     ObjectStore::Transaction &t,
     bool transaction_applied,
     bool async);
+
+  /**
+   * retrieve the min last_backfill among backfill targets
+   */
+  hobject_t earliest_backfill() const;
+
 
   /**
    * Updates local log/missing to reflect new oob log update from primary
@@ -2154,6 +2161,9 @@ public:
   bool is_down() const { return state_test(PG_STATE_DOWN); }
   bool is_recovery_unfound() const {
     return state_test(PG_STATE_RECOVERY_UNFOUND);
+  }
+  bool is_backfilling() const {
+    return state_test(PG_STATE_BACKFILLING);
   }
   bool is_backfill_unfound() const {
     return state_test(PG_STATE_BACKFILL_UNFOUND);

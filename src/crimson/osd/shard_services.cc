@@ -5,6 +5,7 @@
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/mgr/client.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
@@ -38,13 +39,49 @@ ShardServices::ShardServices(
       monc(monc),
       mgrc(mgrc),
       store(store),
-      obc_registry(crimson::common::local_conf())
+      throttler(crimson::common::local_conf()),
+      obc_registry(crimson::common::local_conf()),
+      local_reserver(
+	&cct,
+	&finisher,
+	crimson::common::local_conf()->osd_max_backfills,
+	crimson::common::local_conf()->osd_min_recovery_priority),
+      remote_reserver(
+	&cct,
+	&finisher,
+	crimson::common::local_conf()->osd_max_backfills,
+	crimson::common::local_conf()->osd_min_recovery_priority)
 {
   perf = build_osd_logger(&cct);
   cct.get_perfcounters_collection()->add(perf);
 
   recoverystate_perf = build_recoverystate_perf(&cct);
   cct.get_perfcounters_collection()->add(recoverystate_perf);
+
+  crimson::common::local_conf().add_observer(this);
+}
+
+const char** ShardServices::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "osd_max_backfills",
+    "osd_min_recovery_priority",
+    nullptr
+  };
+  return KEYS;
+}
+
+void ShardServices::handle_conf_change(const ConfigProxy& conf,
+				       const std::set <std::string> &changed)
+{
+  if (changed.count("osd_max_backfills")) {
+    local_reserver.set_max(conf->osd_max_backfills);
+    remote_reserver.set_max(conf->osd_max_backfills);
+  }
+  if (changed.count("osd_min_recovery_priority")) {
+    local_reserver.set_min_priority(conf->osd_min_recovery_priority);
+    remote_reserver.set_min_priority(conf->osd_min_recovery_priority);
+  }
 }
 
 seastar::future<> ShardServices::send_to_osd(
