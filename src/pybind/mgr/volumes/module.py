@@ -246,8 +246,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
-            'cmd': 'fs nfs export delete '
-                   'name=export_id,type=CephInt,req=true ',
+            'cmd': 'nfs export delete '
+                   'name=binding,type=CephString '
+                   'name=attach,type=CephString ',
             'desc': "Delete a cephfs export",
             'perm': 'rw'
         },
@@ -456,8 +457,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False),
                 path=cmd.get('path', '/'), cluster_id=cmd.get('attach'))
 
-    def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
-        return self.fs_export.delete_export(cmd['export_id'])
+    def _cmd_nfs_export_delete(self, inbuf, cmd):
+        return self.fs_export.delete_export(pseudo_path=cmd['binding'], cluster_id=cmd.get('attach'))
 
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
         return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'], export_type=cmd['type'],
