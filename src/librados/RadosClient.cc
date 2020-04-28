@@ -28,6 +28,7 @@
 #include "common/ceph_json.h"
 #include "common/errno.h"
 #include "common/ceph_json.h"
+#include "common/async/blocked_completion.h"
 #include "include/buffer.h"
 #include "include/stringify.h"
 #include "include/util.h"
@@ -56,12 +57,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "
 
+namespace bs = boost::system;
+namespace ca = ceph::async;
+
 librados::RadosClient::RadosClient(CephContext *cct_)
   : Dispatcher(cct_->get()),
     cct_deleter{cct_, [](CephContext *p) {p->put();}},
     conf(cct_->_conf),
     state(DISCONNECTED),
-    monclient(cct_),
+    monclient(cct_, poolctx),
     mgrclient(cct_, nullptr, &monclient.monmap),
     messenger(NULL),
     instance_id(0),
@@ -233,13 +237,15 @@ int librados::RadosClient::connect()
   }
 
   {
-    MonClient mc_bootstrap(cct);
+    MonClient mc_bootstrap(cct, poolctx);
     err = mc_bootstrap.get_monmap_and_config();
     if (err < 0)
       return err;
   }
 
   common_init_finish(cct);
+
+  poolctx.start(cct->_conf.get_val<std::uint64_t>("librados_thread_count"));
 
   // get monmap
   err = monclient.build_initial_monmap();
@@ -382,6 +388,7 @@ void librados::RadosClient::shutdown()
     messenger->wait();
   }
   ldout(cct, 1) << "shutdown" << dendl;
+  poolctx.finish();
 }
 
 int librados::RadosClient::watch_flush()
@@ -848,7 +855,20 @@ void librados::RadosClient::mon_command_async(const vector<string>& cmd,
                                               Context *on_finish)
 {
   std::lock_guard l{lock};
-  monclient.start_mon_command(cmd, inbl, outbl, outs, on_finish);
+  monclient.start_mon_command(cmd, inbl,
+			      [outs, outbl,
+			       on_finish = std::unique_ptr<Context>(on_finish)]
+			      (bs::error_code e,
+			       std::string&& s,
+			       ceph::bufferlist&& b) mutable {
+				if (outs)
+				  *outs = std::move(s);
+				if (outbl)
+				  *outbl = std::move(b);
+				if (on_finish)
+				  on_finish.release()->complete(
+				    ceph::from_error_code(e));
+			      });
 }
 
 int librados::RadosClient::mgr_command(const vector<string>& cmd,
@@ -902,36 +922,30 @@ int librados::RadosClient::mon_command(int rank, const vector<string>& cmd,
 				       const bufferlist &inbl,
 				       bufferlist *outbl, string *outs)
 {
-  ceph::mutex mylock = ceph::make_mutex("RadosClient::mon_command::mylock");
-  ceph::condition_variable cond;
-  bool done;
-  int rval;
-  {
-    std::lock_guard l{mylock};
-    monclient.start_mon_command(rank, cmd, inbl, outbl, outs,
-				new C_SafeCond(mylock, cond, &done, &rval));
-  }
-  std::unique_lock l{mylock};
-  cond.wait(l, [&done] { return done;});
-  return rval;
+  bs::error_code ec;
+  auto&& [s, bl] = monclient.start_mon_command(rank, cmd, inbl,
+					       ca::use_blocked[ec]);
+  if (outs)
+    *outs = std::move(s);
+  if (outbl)
+    *outbl = std::move(bl);
+
+  return ceph::from_error_code(ec);
 }
 
 int librados::RadosClient::mon_command(string name, const vector<string>& cmd,
 				       const bufferlist &inbl,
 				       bufferlist *outbl, string *outs)
 {
-  ceph::mutex mylock = ceph::make_mutex("RadosClient::mon_command::mylock");
-  ceph::condition_variable cond;
-  bool done;
-  int rval;
-  {
-    std::lock_guard l{mylock};
-    monclient.start_mon_command(name, cmd, inbl, outbl, outs,
-				new C_SafeCond(mylock, cond, &done, &rval));
-  }
-  std::unique_lock l{mylock};
-  cond.wait(l, [&done] { return done;});
-  return rval;
+  bs::error_code ec;
+  auto&& [s, bl] = monclient.start_mon_command(name, cmd, inbl,
+					       ca::use_blocked[ec]);
+  if (outs)
+    *outs = std::move(s);
+  if (outbl)
+    *outbl = std::move(bl);
+
+  return ceph::from_error_code(ec);
 }
 
 int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
@@ -1173,4 +1187,25 @@ int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
     pgs->emplace_back(std::move(pgid));
   }
   return 0;
+}
+
+namespace {
+const char *config_keys[] = {
+  "librados_thread_count",
+  NULL
+};
+}
+
+const char** librados::RadosClient::get_tracked_conf_keys() const
+{
+  return config_keys;
+}
+
+void librados::RadosClient::handle_conf_change(const ConfigProxy& conf,
+					       const std::set<std::string> &changed)
+{
+  if (changed.count("librados_thread_count")) {
+    poolctx.stop();
+    poolctx.start(conf.get_val<std::uint64_t>("librados_thread_count"));
+  }
 }

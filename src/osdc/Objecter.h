@@ -1553,22 +1553,18 @@ public:
     }
   };
 
-  struct C_Op_Map_Latest : public Context {
+  struct CB_Op_Map_Latest {
     Objecter *objecter;
     ceph_tid_t tid;
-    version_t latest;
-    C_Op_Map_Latest(Objecter *o, ceph_tid_t t) : objecter(o), tid(t),
-						 latest(0) {}
-    void finish(int r) override;
+    CB_Op_Map_Latest(Objecter *o, ceph_tid_t t) : objecter(o), tid(t) {}
+    void operator()(boost::system::error_code err, version_t latest, version_t);
   };
 
-  struct C_Command_Map_Latest : public Context {
+  struct CB_Command_Map_Latest {
     Objecter *objecter;
     uint64_t tid;
-    version_t latest;
-    C_Command_Map_Latest(Objecter *o, ceph_tid_t t) :  objecter(o), tid(t),
-						       latest(0) {}
-    void finish(int r) override;
+    CB_Command_Map_Latest(Objecter *o, ceph_tid_t t) :  objecter(o), tid(t) {}
+    void operator()(boost::system::error_code err, version_t latest, version_t);
   };
 
   struct C_Stat : public Context {
@@ -1912,13 +1908,11 @@ public:
     }
   };
 
-  struct C_Linger_Map_Latest : public Context {
+  struct CB_Linger_Map_Latest {
     Objecter *objecter;
     uint64_t linger_id;
-    version_t latest;
-    C_Linger_Map_Latest(Objecter *o, uint64_t id) :
-      objecter(o), linger_id(id), latest(0) {}
-    void finish(int r) override;
+    CB_Linger_Map_Latest(Objecter *o, uint64_t id) : objecter(o), linger_id(id) {}
+    void operator()(boost::system::error_code err, version_t latest, version_t);
   };
 
   // -- osd sessions --
