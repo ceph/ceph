@@ -161,6 +161,50 @@ TEST_F(TestClsQueue, Dequeue)
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 }
 
+TEST_F(TestClsQueue, DequeueMarker)
+{
+  const std::string queue_name = "my-queue";
+  const uint64_t queue_size = 1024*1024;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_queue_init(op, queue_name, queue_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+
+  // test multiple enqueues
+  test_enqueue(queue_name, 10, 1000, 0);
+
+  const auto remove_elements = 1024;
+  const std::string marker;
+  bool truncated;
+  std::string end_marker;
+  std::vector<cls_queue_entry> entries;
+  auto ret = cls_queue_list_entries(ioctx, queue_name, marker, remove_elements, entries, &truncated, end_marker);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(truncated, true);
+  cls_queue_marker after_deleted_marker;
+  // remove specific markers
+  for (const auto& entry : entries) {
+    cls_queue_marker marker;
+    marker.from_str(entry.marker.c_str());
+    ASSERT_EQ(marker.from_str(entry.marker.c_str()), 0);
+    if (marker.offset > 0 && marker.offset % 2 == 0) {
+      after_deleted_marker = marker;
+      cls_queue_remove_entries(op, marker.to_str()); 
+    }
+  }
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+  entries.clear();
+  ret = cls_queue_list_entries(ioctx, queue_name, marker, remove_elements, entries, &truncated, end_marker);
+  ASSERT_EQ(0, ret);
+  for (const auto& entry : entries) {
+    cls_queue_marker marker;
+    marker.from_str(entry.marker.c_str());
+    ASSERT_EQ(marker.from_str(entry.marker.c_str()), 0);
+    ASSERT_GE(marker.gen, after_deleted_marker.gen);    
+    ASSERT_GE(marker.offset, after_deleted_marker.offset);    
+  }
+}
+
 TEST_F(TestClsQueue, ListEmpty)
 {
   const std::string queue_name = "my-queue";
