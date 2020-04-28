@@ -337,3 +337,7 @@ add_ceph_unittest(unittest_rabin_chunk)
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 target_link_libraries(unittest_rabin_chunk GTest::GTest)
 add_ceph_unittest(unittest_ceph_timer)
+
+add_executable(unittest_blocked_completion test_blocked_completion.cc)
+add_ceph_unittest(unittest_blocked_completion)
+target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
