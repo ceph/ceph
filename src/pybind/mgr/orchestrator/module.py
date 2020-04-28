@@ -927,6 +927,26 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
+        'orch apply iscsi',
+        'name=pool,type=CephString '
+        'name=trusted_ip_list,type=CephString,req=false '
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
+        'Scale an iSCSI service')
+    def _apply_iscsi(self, pool, trusted_ip_list=None, placement=None, unmanaged=False, inbuf=None):
+        spec = IscsiServiceSpec(
+            service_id='iscsi',
+            pool=pool,
+            trusted_ip_list=trusted_ip_list,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+        )
+        completion = self.apply_iscsi(spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
         'orch set backend',
         "name=module_name,type=CephString,req=true",
         'Select orchestrator module backend')
