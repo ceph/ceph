@@ -5497,29 +5497,18 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
     if (req_epoch > epoch) {
 
       // well, our map is older. consult mds.
-      Context *fin = new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr));
+      auto fin = new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr));
 
-      if (!mds->objecter->wait_for_map(req_epoch, fin))
-        return r; // wait, fin will retry this request later
-
-      delete fin;
-
-      // now we have at least as new a map as the client, try again.
-      mds->objecter->with_osdmap([&](const OSDMap& osdmap) {
-          r = parse_layout_vxattr(name, value, osdmap, layout);
-          epoch = osdmap.get_epoch();
-        });
-
-      ceph_assert(epoch >= req_epoch); // otherwise wait_for_map() told a lie
-
+      mds->objecter->wait_for_map(req_epoch, lambdafy(fin));
+      return r;
     } else if (req_epoch == 0 && !mdr->waited_for_osdmap) {
 
       // For compatibility with client w/ old code, we still need get the
       // latest map. One day if COMPACT_VERSION of MClientRequest >=3,
       // we can remove those code.
       mdr->waited_for_osdmap = true;
-      mds->objecter->wait_for_latest_osdmap(new C_IO_Wrapper(
-			      mds, new C_MDS_RetryRequest(mdcache, mdr)));
+      mds->objecter->wait_for_latest_osdmap(std::ref(*new C_IO_Wrapper(
+        mds, new C_MDS_RetryRequest(mdcache, mdr))));
       return r;
     }
   }
