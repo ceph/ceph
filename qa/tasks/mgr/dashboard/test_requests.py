@@ -21,3 +21,9 @@ class RequestsTest(DashboardTestCase):
         self.assertHeaders({
             'Content-Type': 'application/json',
         })
+
+    def test_server(self):
+        self._get('/api/summary')
+        self.assertHeaders({
+            'server': 'Ceph-Dashboard'
+        })
