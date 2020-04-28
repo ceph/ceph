@@ -37,6 +37,8 @@
 #include "crimson/osd/ops_executer.h"
 #include "crimson/osd/osd_operations/osdop_params.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/pg_recovery.h"
+#include "crimson/osd/replicated_recovery_backend.h"
 
 namespace {
   seastar::logger& logger() {
@@ -98,12 +100,16 @@ PG::PG(
 	coll_ref,
 	shard_services,
 	profile)),
+    recovery_backend(
+      std::make_unique<ReplicatedRecoveryBackend>(
+	*this, shard_services, coll_ref, backend.get())),
+    recovery_handler(
+      std::make_unique<PGRecovery>(this)),
     peering_state(
       shard_services.get_cct(),
       pg_shard,
       pgid,
       PGPool(
-	shard_services.get_cct(),
 	osdmap,
 	pgid.pool(),
 	pool,
@@ -249,6 +255,8 @@ void PG::on_activate_complete()
       get_osdmap_epoch(),
       PeeringState::RequestBackfill{});
   } else {
+    logger().debug("{}: no need to recover or backfill, AllReplicasRecovered",
+		   " for pg: {}", __func__, pgid);
     shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
@@ -418,7 +426,7 @@ void PG::do_peering_event(
   PGPeeringEvent& evt, PeeringCtx &rctx)
 {
   if (!peering_state.pg_has_reset_since(evt.get_epoch_requested())) {
-    logger().debug("{} handling {}", __func__, evt.get_desc());
+    logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
     do_peering_event(evt.get_event(), rctx);
   } else {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
@@ -512,6 +520,7 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
     logger().debug("{} op_returns: {}",
                    __func__, log_entries.back().op_returns);
   }
+  log_entries.back().clean_regions = std::move(osd_op_p.clean_regions);
   peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
 						txn, true, false);
 

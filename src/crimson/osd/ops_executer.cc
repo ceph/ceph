@@ -697,12 +697,14 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       return backend.create(os, osd_op, txn);
     }, true);
   case CEPH_OSD_OP_WRITE:
-    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
-      return backend.write(os, osd_op, txn);
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      osd_op_params = osd_op_params_t();
+      return backend.write(os, osd_op, txn, *osd_op_params);
     }, true);
   case CEPH_OSD_OP_WRITEFULL:
-    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
-      return backend.writefull(os, osd_op, txn);
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      osd_op_params = osd_op_params_t();
+      return backend.writefull(os, osd_op, txn, *osd_op_params);
     }, true);
   case CEPH_OSD_OP_SETALLOCHINT:
     return osd_op_errorator::now();
@@ -746,8 +748,9 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       return crimson::ct_error::operation_not_supported::make();
     }
 #endif
-    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
-      return backend.omap_set_vals(os, osd_op, txn);
+    return do_write_op([this, &osd_op] (auto& backend, auto& os, auto& txn) {
+      osd_op_params = osd_op_params_t();
+      return backend.omap_set_vals(os, osd_op, txn, *osd_op_params);
     }, true);
 
   // watch/notify

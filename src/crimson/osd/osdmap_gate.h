@@ -42,12 +42,11 @@ class OSDMapGate {
     }
   };
 
-  // order the promises in descending order of the waited osdmap epoch,
+  // order the promises in ascending order of the waited osdmap epoch,
   // so we can access all the waiters expecting a map whose epoch is less
-  // than a given epoch
+  // than or equal to a given epoch
   using waiting_peering_t = std::map<epoch_t,
-				     OSDMapBlocker,
-				     std::greater<epoch_t>>;
+				     OSDMapBlocker>;
   const char *blocker_type;
   waiting_peering_t waiting_peering;
   epoch_t current = 0;

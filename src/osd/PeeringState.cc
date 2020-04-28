@@ -104,7 +104,7 @@ void BufferedRecoveryMessages::send_info(
   }
 }
 
-void PGPool::update(CephContext *cct, OSDMapRef map)
+void PGPool::update(OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
   if (!pi) {
@@ -256,6 +256,16 @@ void PeeringState::update_history(const pg_history_t& new_history)
     }
   }
   pl->on_info_history_change();
+}
+
+hobject_t PeeringState::earliest_backfill() const
+{
+  hobject_t e = hobject_t::get_max();
+  for (const pg_shard_t& bt : get_backfill_targets()) {
+    const pg_info_t &pi = get_peer_info(bt);
+    e = std::min(pi.last_backfill, e);
+  }
+  return e;
 }
 
 void PeeringState::purge_strays()
@@ -421,7 +431,7 @@ void PeeringState::advance_map(
 	    << dendl;
 
   update_osdmap_ref(osdmap);
-  pool.update(cct, osdmap);
+  pool.update(osdmap);
 
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
@@ -430,7 +440,7 @@ void PeeringState::advance_map(
   if (pool.info.last_change == osdmap_ref->get_epoch()) {
     pl->on_pool_change();
   }
-  readable_interval = pool.get_readable_interval();
+  readable_interval = pool.get_readable_interval(cct->_conf);
   last_require_osd_release = osdmap->require_osd_release;
 }
 
@@ -7045,3 +7055,45 @@ ostream &operator<<(ostream &out, const PeeringState &ps) {
   }
   return out;
 }
+
+std::vector<pg_shard_t> PeeringState::get_replica_recovery_order() const
+{
+  std::vector<std::pair<unsigned int, pg_shard_t>> replicas_by_num_missing,
+    async_by_num_missing;
+  replicas_by_num_missing.reserve(get_acting_recovery_backfill().size() - 1);
+  for (auto &p : get_acting_recovery_backfill()) {
+    if (p == get_primary()) {
+      continue;
+    }
+    auto pm = get_peer_missing().find(p);
+    assert(pm != get_peer_missing().end());
+    auto nm = pm->second.num_missing();
+    if (nm != 0) {
+      if (is_async_recovery_target(p)) {
+	async_by_num_missing.push_back(make_pair(nm, p));
+      } else {
+	replicas_by_num_missing.push_back(make_pair(nm, p));
+      }
+    }
+  }
+  // sort by number of missing objects, in ascending order.
+  auto func = [](const std::pair<unsigned int, pg_shard_t> &lhs,
+		 const std::pair<unsigned int, pg_shard_t> &rhs) {
+    return lhs.first < rhs.first;
+  };
+  // acting goes first
+  std::sort(replicas_by_num_missing.begin(), replicas_by_num_missing.end(), func);
+  // then async_recovery_targets
+  std::sort(async_by_num_missing.begin(), async_by_num_missing.end(), func);
+  replicas_by_num_missing.insert(replicas_by_num_missing.end(),
+    async_by_num_missing.begin(), async_by_num_missing.end());
+
+  std::vector<pg_shard_t> ret;
+  ret.reserve(replicas_by_num_missing.size());
+  for (auto p : replicas_by_num_missing) {
+    ret.push_back(p.second);
+  }
+  return ret;
+}
+
+
