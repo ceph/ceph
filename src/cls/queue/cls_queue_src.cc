@@ -297,6 +297,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   uint64_t data_size = 0, num_ops = 0;
   uint16_t entry_start = 0;
   bufferlist bl;
+  string last_marker;
   do
   {
     CLS_LOG(10, "INFO: queue_list_entries(): start_offset is %lu", start_offset);
@@ -337,6 +338,10 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       CLS_LOG(10, "INFO: queue_list_entries(): index: %u, size_to_process: %lu", index, size_to_process);
       cls_queue_entry entry;
       ceph_assert(it.get_off() == index);
+      //Use the last marker saved in previous iteration as the marker for this entry
+      if (offset_populated) {
+        entry.marker = last_marker;
+      }
       //Populate offset if not done in previous iteration
       if (! offset_populated) {
         cls_queue_marker marker = {entry_start_offset + index, gen};
@@ -370,6 +375,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
           // Copy unprocessed data to bl
           bl_chunk.splice(index, size_to_process, &bl);
           offset_populated = true;
+          last_marker = entry.marker;
           CLS_LOG(10, "INFO: queue_list_entries: not enough data to read entry start and data size, breaking out!");
           break;
         }
@@ -386,6 +392,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
         it.copy(size_to_process, bl);
         offset_populated = true;
         entry_start_processed = true;
+        last_marker = entry.marker;
         CLS_LOG(10, "INFO: queue_list_entries(): not enough data to read data, breaking out!");
         break;
       }
@@ -396,6 +403,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       data_size = 0;
       entry_start = 0;
       num_ops++;
+      last_marker.clear();
       if (num_ops == op.max) {
         CLS_LOG(10, "INFO: queue_list_entries(): num_ops is same as op.max, hence breaking out from inner loop!");
         break;
