@@ -670,7 +670,10 @@ flushjournal_out:
 
   srand(time(NULL) + getpid());
 
-  MonClient mc(g_ceph_context);
+  ceph::async::io_context_pool poolctx(
+    cct->_conf.get_val<std::uint64_t>("osd_asio_thread_count"));
+
+  MonClient mc(g_ceph_context, poolctx);
   if (mc.build_initial_monmap() < 0)
     return -1;
   global_init_chdir(g_ceph_context);
@@ -691,7 +694,8 @@ flushjournal_out:
 		   ms_objecter,
 		   &mc,
 		   data_path,
-		   journal_path);
+		   journal_path,
+		   poolctx);
 
   int err = osdptr->pre_init();
   if (err < 0) {
@@ -746,6 +750,7 @@ flushjournal_out:
   shutdown_async_signal_handler();
 
   // done
+  poolctx.stop();
   delete osdptr;
   delete ms_public;
   delete ms_hb_front_client;
