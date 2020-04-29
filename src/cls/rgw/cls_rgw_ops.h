@@ -1194,14 +1194,14 @@ struct cls_rgw_lc_list_entries_op {
   cls_rgw_lc_list_entries_op() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(marker, bl);
     encode(max_entries, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     compat_v = struct_v;
     decode(marker, bl);
     decode(max_entries, bl);
