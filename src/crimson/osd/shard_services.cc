@@ -197,7 +197,7 @@ seastar::future<> ShardServices::send_pg_temp()
   logger().debug("{}: {}", __func__, pg_temp_wanted);
   boost::intrusive_ptr<MOSDPGTemp> ms[2] = {nullptr, nullptr};
   for (auto& [pgid, pg_temp] : pg_temp_wanted) {
-    auto m = ms[pg_temp.forced];
+    auto& m = ms[pg_temp.forced];
     if (!m) {
       m = make_message<MOSDPGTemp>(osdmap->get_epoch());
       m->forced = pg_temp.forced;
