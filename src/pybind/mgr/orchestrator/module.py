@@ -672,6 +672,12 @@ Usage:
             completion = self.add_node_exporter(spec)
         elif daemon_type == 'prometheus':
             completion = self.add_prometheus(spec)
+        elif daemon_type == 'mds':
+            completion = self.add_mds(spec)
+        elif daemon_type == 'rgw':
+            completion = self.add_rgw(spec)
+        elif daemon_type == 'nfs':
+            completion = self.add_nfs(spec)
         elif daemon_type == 'iscsi':
             completion = self.add_iscsi(spec)
         else:
