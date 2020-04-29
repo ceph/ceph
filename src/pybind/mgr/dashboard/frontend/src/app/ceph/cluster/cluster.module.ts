@@ -51,6 +51,7 @@ import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal
 import { ServiceDaemonListComponent } from './services/service-daemon-list/service-daemon-list.component';
 import { ServiceDetailsComponent } from './services/service-details/service-details.component';
 import { ServicesComponent } from './services/services.component';
+import { TelemetryComponent } from './telemetry/telemetry.component';
 
 @NgModule({
   entryComponents: [
@@ -122,7 +123,8 @@ import { ServicesComponent } from './services/services.component';
     MonitoringListComponent,
     HostFormComponent,
     ServiceDetailsComponent,
-    ServiceDaemonListComponent
+    ServiceDaemonListComponent,
+    TelemetryComponent
   ]
 })
 export class ClusterModule {}
