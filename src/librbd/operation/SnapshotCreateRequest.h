@@ -14,6 +14,7 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
+class ProgressContext;
 
 namespace operation {
 
@@ -70,7 +71,8 @@ public:
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
                         const cls::rbd::SnapshotNamespace &snap_namespace,
                         const std::string &snap_name, uint64_t journal_op_tid,
-                        uint64_t request_id, bool skip_object_map);
+                        uint64_t request_id, bool skip_object_map,
+                        ProgressContext &prog_ctx);
 
 protected:
   void send_op() override;
@@ -89,6 +91,7 @@ private:
   std::string m_snap_name;
   uint64_t m_request_id;
   bool m_skip_object_map;
+  ProgressContext &m_prog_ctx;
 
   int m_ret_val = 0;
 

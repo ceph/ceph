@@ -193,7 +193,9 @@ void SnapPayloadBase::dump(Formatter *f) const {
 }
 
 void SnapCreatePayload::encode(bufferlist &bl) const {
+  using ceph::encode;
   SnapPayloadBase::encode(bl);
+  encode(async_request_id, bl);
 }
 
 void SnapCreatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
@@ -202,9 +204,15 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   if (version == 5) {
     decode(snap_namespace, iter);
   }
+  if (version >= 7) {
+    decode(async_request_id, iter);
+  }
 }
 
 void SnapCreatePayload::dump(Formatter *f) const {
+  f->open_object_section("async_request_id");
+  async_request_id.dump(f);
+  f->close_section();
   SnapPayloadBase::dump(f);
 }
 
@@ -288,7 +296,7 @@ bool NotifyMessage::check_for_refresh() const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(6, 1, bl);
+  ENCODE_START(7, 1, bl);
   encode(static_cast<uint32_t>(payload->get_notify_op()), bl);
   payload->encode(bl);
   ENCODE_FINISH(bl);
@@ -385,7 +393,8 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(new AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
   o.push_back(new NotifyMessage(new FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(new ResizePayload(123, true, AsyncRequestId(ClientId(0, 1), 2))));
-  o.push_back(new NotifyMessage(new SnapCreatePayload(cls::rbd::UserSnapshotNamespace(),
+  o.push_back(new NotifyMessage(new SnapCreatePayload(AsyncRequestId(ClientId(0, 1), 2),
+                                                      cls::rbd::UserSnapshotNamespace(),
                                                       "foo")));
   o.push_back(new NotifyMessage(new SnapRemovePayload(cls::rbd::UserSnapshotNamespace(), "foo")));
   o.push_back(new NotifyMessage(new SnapProtectPayload(cls::rbd::UserSnapshotNamespace(), "foo")));

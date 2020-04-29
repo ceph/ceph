@@ -42,7 +42,8 @@ struct ExecuteOp : public Context {
     image_ctx.operations->execute_snap_create(event.snap_namespace,
 					      event.snap_name,
                                               on_op_complete,
-                                              event.op_tid, false);
+                                              event.op_tid, false,
+                                              no_op_progress_callback);
   }
 
   void execute(const journal::SnapRemoveEvent &_) {
