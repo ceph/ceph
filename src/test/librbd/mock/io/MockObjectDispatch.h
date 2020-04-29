@@ -20,7 +20,7 @@ public:
   MockObjectDispatch() : lock("MockObjectDispatch::lock", true, false) {
   }
 
-  MOCK_CONST_METHOD0(get_object_dispatch_layer, ObjectDispatchLayer());
+  MOCK_CONST_METHOD0(get_dispatch_layer, ObjectDispatchLayer());
 
   MOCK_METHOD1(shut_down, void(Context*));
 

@@ -34,7 +34,7 @@ public:
                              bool writethrough_until_flush);
   ~ObjectCacherObjectDispatch() override;
 
-  io::ObjectDispatchLayer get_object_dispatch_layer() const override {
+  io::ObjectDispatchLayer get_dispatch_layer() const override {
     return io::OBJECT_DISPATCH_LAYER_CACHE;
   }
 

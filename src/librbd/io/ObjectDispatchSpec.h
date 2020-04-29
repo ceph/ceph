@@ -142,7 +142,7 @@ public:
   C_Dispatcher dispatcher_ctx;
 
   ObjectDispatcherInterface* object_dispatcher;
-  ObjectDispatchLayer object_dispatch_layer;
+  ObjectDispatchLayer dispatch_layer;
   int object_dispatch_flags = 0;
   DispatchResult dispatch_result = DISPATCH_RESULT_INVALID;
 
@@ -250,7 +250,7 @@ private:
                      Request&& request, int op_flags,
                      const ZTracer::Trace& parent_trace, Context* on_finish)
     : dispatcher_ctx(this, on_finish), object_dispatcher(object_dispatcher),
-      object_dispatch_layer(object_dispatch_layer), request(std::move(request)),
+      dispatch_layer(object_dispatch_layer), request(std::move(request)),
       op_flags(op_flags), parent_trace(parent_trace) {
   }
 

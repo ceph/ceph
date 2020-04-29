@@ -41,7 +41,7 @@ public:
   SimpleSchedulerObjectDispatch(ImageCtxT* image_ctx);
   ~SimpleSchedulerObjectDispatch() override;
 
-  ObjectDispatchLayer get_object_dispatch_layer() const override {
+  ObjectDispatchLayer get_dispatch_layer() const override {
     return OBJECT_DISPATCH_LAYER_SCHEDULER;
   }
 

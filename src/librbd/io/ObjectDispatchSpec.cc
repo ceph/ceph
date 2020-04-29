@@ -3,7 +3,7 @@
 
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "include/Context.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include <boost/variant.hpp>
 
 namespace librbd {

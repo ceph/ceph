@@ -18,12 +18,18 @@ namespace librbd {
 namespace io {
 
 struct AioCompletion;
+struct ObjectDispatchInterface;
+struct ObjectDispatchSpec;
 
 struct ObjectDispatchInterface {
+  typedef ObjectDispatchInterface Dispatch;
+  typedef ObjectDispatchLayer DispatchLayer;
+  typedef ObjectDispatchSpec DispatchSpec;
+
   virtual ~ObjectDispatchInterface() {
   }
 
-  virtual ObjectDispatchLayer get_object_dispatch_layer() const = 0;
+  virtual ObjectDispatchLayer get_dispatch_layer() const = 0;
 
   virtual void shut_down(Context* on_finish) = 0;
 

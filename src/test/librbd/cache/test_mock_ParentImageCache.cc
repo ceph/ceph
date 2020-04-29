@@ -133,7 +133,7 @@ class TestMockParentImageCache : public TestMockFixture {
   void expect_io_object_dispatcher_register_state(MockParentImageCache& mparent_image_cache, 
                                                   int ret_val) {
     auto& expect = EXPECT_CALL((*(mparent_image_cache.get_image_ctx()->io_object_dispatcher)),
-                               register_object_dispatch(_));
+                               register_dispatch(_));
 
         expect.WillOnce(WithArg<0>(Invoke([ret_val, &mparent_image_cache]
                 (io::ObjectDispatchInterface* object_dispatch) {
@@ -168,7 +168,7 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
   mock_parent_image_cache->init();
   cond.wait();
 
-  ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
+  ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   expect_cache_session_state(*mock_parent_image_cache, true);
@@ -202,7 +202,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
   mock_parent_image_cache->init();
 
   // initialization fails.
-  ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
+  ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), false);
@@ -240,7 +240,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
   mock_parent_image_cache->init();
   cond.wait();
 
-  ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
+  ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   expect_cache_session_state(*mock_parent_image_cache, true);
@@ -317,7 +317,7 @@ TEST_F(TestMockParentImageCache, test_read) {
   mock_parent_image_cache->init();
   conn_cond.wait();
 
-  ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
+  ASSERT_EQ(mock_parent_image_cache->get_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   expect_cache_session_state(*mock_parent_image_cache, true);
