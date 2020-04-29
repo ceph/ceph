@@ -603,5 +603,104 @@ TEST_F(TestMockCacheReplicatedWriteLog, invalidate) {
   ASSERT_EQ(0, finish_ctx3.wait());
 }
 
+TEST_F(TestMockCacheReplicatedWriteLog, aio_compare_and_write_compare_matched) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  expect_op_work_queue(mock_image_ctx);
+  expect_metadata_set(mock_image_ctx);
+
+  MockContextRWL finish_ctx1;
+  expect_context_complete(finish_ctx1, 0);
+  rwl.init(&finish_ctx1);
+  ASSERT_EQ(0, finish_ctx1.wait());
+
+  MockContextRWL finish_ctx2;
+  expect_context_complete(finish_ctx2, 0);
+  Extents image_extents{{0, 4096}};
+  bufferlist bl1;
+  bl1.append(std::string(4096, '1'));
+  bufferlist com_bl = bl1;
+  int fadvise_flags = 0;
+  rwl.aio_write(std::move(image_extents), std::move(bl1), fadvise_flags, &finish_ctx2);
+  ASSERT_EQ(0, finish_ctx2.wait());
+
+  MockContextRWL finish_ctx_cw;
+  bufferlist bl2;
+  bl2.append(std::string(4096, '2'));
+  bufferlist bl2_copy = bl2;
+  uint64_t mismatch_offset = -1;
+  expect_context_complete(finish_ctx_cw, 0);
+  rwl.aio_compare_and_write({{0, 4096}}, std::move(com_bl), std::move(bl2),
+                            &mismatch_offset, fadvise_flags, &finish_ctx_cw);
+  ASSERT_EQ(0, finish_ctx_cw.wait());
+  ASSERT_EQ(0, mismatch_offset);
+
+  MockContextRWL finish_ctx_read;
+  bufferlist read_bl;
+  expect_context_complete(finish_ctx_read, 0);
+  rwl.aio_read({{0, 4096}}, &read_bl, fadvise_flags, &finish_ctx_read);
+  ASSERT_EQ(0, finish_ctx_read.wait());
+  ASSERT_EQ(4096, read_bl.length());
+  ASSERT_TRUE(bl2_copy.contents_equal(read_bl));
+
+  MockContextRWL finish_ctx3;
+  expect_context_complete(finish_ctx3, 0);
+  rwl.shut_down(&finish_ctx3);
+
+  ASSERT_EQ(0, finish_ctx3.wait());
+}
+
+TEST_F(TestMockCacheReplicatedWriteLog, aio_compare_and_write_compare_failed) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  expect_op_work_queue(mock_image_ctx);
+  expect_metadata_set(mock_image_ctx);
+
+  MockContextRWL finish_ctx1;
+  expect_context_complete(finish_ctx1, 0);
+  rwl.init(&finish_ctx1);
+  ASSERT_EQ(0, finish_ctx1.wait());
+
+  MockContextRWL finish_ctx2;
+  expect_context_complete(finish_ctx2, 0);
+  Extents image_extents{{0, 4096}};
+  bufferlist bl1;
+  bl1.append(std::string(4096, '1'));
+  bufferlist bl1_copy = bl1;
+  int fadvise_flags = 0;
+  rwl.aio_write(std::move(image_extents), std::move(bl1), fadvise_flags, &finish_ctx2);
+  ASSERT_EQ(0, finish_ctx2.wait());
+
+  MockContextRWL finish_ctx_cw;
+  bufferlist bl2;
+  bl2.append(std::string(4096, '2'));
+  bufferlist com_bl = bl2;
+  uint64_t mismatch_offset = -1;
+  expect_context_complete(finish_ctx_cw, -EILSEQ);
+  rwl.aio_compare_and_write({{0, 4096}}, std::move(com_bl), std::move(bl2),
+                            &mismatch_offset, fadvise_flags, &finish_ctx_cw);
+  ASSERT_EQ(-EILSEQ, finish_ctx_cw.wait());
+  ASSERT_EQ(0, mismatch_offset);
+
+  MockContextRWL finish_ctx_read;
+  bufferlist read_bl;
+  expect_context_complete(finish_ctx_read, 0);
+  rwl.aio_read({{0, 4096}}, &read_bl, fadvise_flags, &finish_ctx_read);
+  ASSERT_EQ(0, finish_ctx_read.wait());
+  ASSERT_EQ(4096, read_bl.length());
+  ASSERT_TRUE(bl1_copy.contents_equal(read_bl));
+
+  MockContextRWL finish_ctx3;
+  expect_context_complete(finish_ctx3, 0);
+  rwl.shut_down(&finish_ctx3);
+  ASSERT_EQ(0, finish_ctx3.wait());
+}
+
 } // namespace cache
 } // namespace librbd
