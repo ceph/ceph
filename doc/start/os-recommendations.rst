@@ -40,6 +40,28 @@ platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
+Octopus (15.2.z)
+-----------------
+
++----------+----------+--------------------+--------------+---------+------------+
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
++==========+==========+====================+==============+=========+============+
+| CentOS   | 8        | N/A                | linux-4.18   |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| CentOS   | 7        | N/A                | linux-3.10.0 | 4, 5    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 10       | Buster             | linux-4.19   |         | B          |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 8        | Ootpa              | linux-4.18   |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 18.04    | Bionic Beaver      | linux-4.15   | 4       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| openSUSE | 15.2     | Leap               | linux-5.3    | 6       |            |
++----------+----------+--------------------+--------------+---------+------------+
+
+
 Nautilus (14.2.z)
 -----------------
 
@@ -101,6 +123,12 @@ Notes
   file system is used.  We recommend using ``bluestore`` starting from
   Mimic, and ``XFS`` for previous releases with ``filestore``.
 
+- **4**: ``btrfs`` is no longer tested on this release. We recommend
+  using ``bluestore``.
+
+- **5**: Some additional features related to dashboard are not available.
+
+- **6**: Building packages are built regularly, but not distributed by Ceph.
 
 Testing
 -------
