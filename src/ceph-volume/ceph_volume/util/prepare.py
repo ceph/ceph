@@ -399,6 +399,10 @@ def get_monmap(osd_id):
     ])
 
 
+def get_osdspec_affinity():
+    return os.environ.get('CEPH_VOLUME_OSDSPEC_AFFINITY', '')
+
+
 def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     """
     Create the files for the OSD to function. A normal call will look like:
@@ -450,15 +454,14 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
         )
         system.chown(db)
 
+    if get_osdspec_affinity():
+        base_command.extend(['--osdspec-affinity', get_osdspec_affinity()])
+
     command = base_command + supplementary_command
 
     _, _, returncode = process.call(command, stdin=keyring, show_command=True)
     if returncode != 0:
         raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
-
-
-def get_osdspec_affinity():
-    return os.environ.get('CEPH_VOLUME_OSDSPEC_AFFINITY', '')
 
 
 def osd_mkfs_filestore(osd_id, fsid, keyring):
@@ -490,6 +493,9 @@ def osd_mkfs_filestore(osd_id, fsid, keyring):
         '-i', osd_id,
         '--monmap', monmap,
     ]
+
+    if get_osdspec_affinity():
+        command.extend(['--osdspec-affinity', get_osdspec_affinity()])
 
     if __release__ != 'luminous':
         # goes through stdin
