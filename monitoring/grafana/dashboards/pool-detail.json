@@ -50,6 +50,7 @@
         "#d44a3a"
       ],
       "datasource": "$datasource",
+      "decimals": 2,
       "format": "percentunit",
       "gauge": {
         "maxValue": 1,
