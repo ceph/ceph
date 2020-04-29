@@ -9,7 +9,7 @@
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherWriteback.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/Types.h"
 #include "librbd/io/Utils.h"
 #include "osd/osd_types.h"
@@ -151,7 +151,7 @@ void ObjectCacherObjectDispatch<I>::init() {
   if (m_max_dirty > 0) {
     m_image_ctx->disable_zero_copy = true;
   }
-  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+  m_image_ctx->io_object_dispatcher->register_dispatch(this);
 }
 
 template <typename I>

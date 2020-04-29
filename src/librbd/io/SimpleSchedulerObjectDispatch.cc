@@ -198,7 +198,7 @@ void SimpleSchedulerObjectDispatch<I>::init() {
   ldout(cct, 5) << dendl;
 
   // add ourself to the IO object dispatcher chain
-  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+  m_image_ctx->io_object_dispatcher->register_dispatch(this);
 }
 
 template <typename I>

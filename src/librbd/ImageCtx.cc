@@ -141,7 +141,7 @@ public:
       this, "librbd::io_work_queue",
       cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
       thread_pool);
-    io_object_dispatcher = new io::ObjectDispatcher<>(this);
+    io_object_dispatcher = new io::ObjectDispatcher<ImageCtx>(this);
 
     if (cct->_conf.get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);

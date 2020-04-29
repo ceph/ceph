@@ -6,7 +6,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/Utils.h"
 #include "librbd/cache/ParentCacheObjectDispatch.h"
 #include "osd/osd_types.h"
@@ -60,7 +60,7 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
   m_connecting.store(true);
   create_cache_session(create_session_ctx, false);
 
-  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+  m_image_ctx->io_object_dispatcher->register_dispatch(this);
   m_initialized = true;
 }
 

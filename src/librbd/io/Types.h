@@ -9,6 +9,8 @@
 #include <map>
 #include <vector>
 
+struct Context;
+
 namespace librbd {
 namespace io {
 
