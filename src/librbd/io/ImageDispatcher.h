@@ -21,10 +21,15 @@ struct ImageCtx;
 
 namespace io {
 
+template <typename> struct QosImageDispatch;
+
 template <typename ImageCtxT = ImageCtx>
 class ImageDispatcher : public Dispatcher<ImageCtxT, ImageDispatcherInterface> {
 public:
   ImageDispatcher(ImageCtxT* image_ctx);
+
+  void apply_qos_schedule_tick_min(uint64_t tick) override;
+  void apply_qos_limit(uint64_t flag, uint64_t limit, uint64_t burst) override;
 
   void finish(int r, ImageDispatchLayer image_dispatch_layer,
               uint64_t tid) override;
@@ -36,6 +41,8 @@ protected:
 
 private:
   struct SendVisitor;
+
+  QosImageDispatch<ImageCtxT>* m_qos_image_dispatch = nullptr;
 
 };
 

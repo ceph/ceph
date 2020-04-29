@@ -82,6 +82,7 @@ set(librbd_internal_srcs
   io/ObjectDispatchSpec.cc
   io/ObjectDispatcher.cc
   io/ObjectRequest.cc
+  io/QosImageDispatch.cc
   io/ReadResult.cc
   io/SimpleSchedulerObjectDispatch.cc
   io/Utils.cc

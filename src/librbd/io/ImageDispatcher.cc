@@ -11,6 +11,7 @@
 #include "librbd/io/ImageDispatch.h"
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/QosImageDispatch.h"
 #include <boost/variant.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -103,6 +104,20 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
   // configure the core image dispatch handler on startup
   auto image_dispatch = new ImageDispatch(image_ctx);
   this->register_dispatch(image_dispatch);
+
+  m_qos_image_dispatch = new QosImageDispatch<I>(image_ctx);
+  this->register_dispatch(m_qos_image_dispatch);
+}
+
+template <typename I>
+void ImageDispatcher<I>::apply_qos_schedule_tick_min(uint64_t tick) {
+  m_qos_image_dispatch->apply_qos_schedule_tick_min(tick);
+}
+
+template <typename I>
+void ImageDispatcher<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
+                                         uint64_t burst) {
+  m_qos_image_dispatch->apply_qos_limit(flag, limit, burst);
 }
 
 template <typename I>
