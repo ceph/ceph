@@ -12,6 +12,7 @@
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/QosImageDispatch.h"
+#include "librbd/io/RefreshImageDispatch.h"
 #include <boost/variant.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -107,6 +108,9 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
 
   m_qos_image_dispatch = new QosImageDispatch<I>(image_ctx);
   this->register_dispatch(m_qos_image_dispatch);
+
+  auto refresh_image_dispatch = new RefreshImageDispatch(image_ctx);
+  this->register_dispatch(refresh_image_dispatch);
 }
 
 template <typename I>
