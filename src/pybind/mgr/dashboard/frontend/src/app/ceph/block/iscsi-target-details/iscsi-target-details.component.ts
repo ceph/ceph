@@ -33,7 +33,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   highlightTpl: TemplateRef<any>;
 
   private detailTable: TableComponent;
-  @ViewChild('detailTable', { static: false })
+  @ViewChild('detailTable')
   set content(content: TableComponent) {
     this.detailTable = content;
     if (content) {
@@ -41,7 +41,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     }
   }
 
-  @ViewChild('tree', { static: false }) tree: TreeComponent;
+  @ViewChild('tree') tree: TreeComponent;
 
   icons = Icons;
   columns: CdTableColumn[];

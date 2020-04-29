@@ -44,11 +44,11 @@ const BASE_URL = 'block/rbd';
 export class RbdListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('usageTpl', { static: false })
+  @ViewChild('usageTpl')
   usageTpl: TemplateRef<any>;
   @ViewChild('parentTpl', { static: true })
   parentTpl: TemplateRef<any>;
-  @ViewChild('nameTpl', { static: false })
+  @ViewChild('nameTpl')
   nameTpl: TemplateRef<any>;
   @ViewChild('flattenTpl', { static: true })
   flattenTpl: TemplateRef<any>;

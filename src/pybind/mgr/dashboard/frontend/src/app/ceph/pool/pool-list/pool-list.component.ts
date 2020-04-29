@@ -45,7 +45,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild('poolUsageTpl', { static: true })
   poolUsageTpl: TemplateRef<any>;
 
-  @ViewChild('poolConfigurationSourceTpl', { static: false })
+  @ViewChild('poolConfigurationSourceTpl')
   poolConfigurationSourceTpl: TemplateRef<any>;
 
   pools: Pool[];

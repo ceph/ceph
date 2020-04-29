@@ -83,7 +83,7 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
 
   @ViewChild('confValTpl', { static: true })
   public confValTpl: TemplateRef<any>;
-  @ViewChild('confFlagTpl', { static: false })
+  @ViewChild('confFlagTpl')
   public confFlagTpl: TemplateRef<any>;
 
   constructor(

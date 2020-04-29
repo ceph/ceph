@@ -53,10 +53,10 @@ interface FormFieldDescription {
   styleUrls: ['./pool-form.component.scss']
 })
 export class PoolFormComponent extends CdForm implements OnInit {
-  @ViewChild('crushInfoTabs', { static: false }) crushInfoTabs: TabsetComponent;
-  @ViewChild('crushDeletionBtn', { static: false }) crushDeletionBtn: TooltipDirective;
-  @ViewChild('ecpInfoTabs', { static: false }) ecpInfoTabs: TabsetComponent;
-  @ViewChild('ecpDeletionBtn', { static: false }) ecpDeletionBtn: TooltipDirective;
+  @ViewChild('crushInfoTabs') crushInfoTabs: TabsetComponent;
+  @ViewChild('crushDeletionBtn') crushDeletionBtn: TooltipDirective;
+  @ViewChild('ecpInfoTabs') ecpInfoTabs: TabsetComponent;
+  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: TooltipDirective;
 
   permission: Permission;
   form: CdFormGroup;

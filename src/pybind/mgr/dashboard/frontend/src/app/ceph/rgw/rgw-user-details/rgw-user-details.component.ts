@@ -19,9 +19,9 @@ import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-u
   styleUrls: ['./rgw-user-details.component.scss']
 })
 export class RgwUserDetailsComponent implements OnChanges, OnInit {
-  @ViewChild('accessKeyTpl', { static: false })
+  @ViewChild('accessKeyTpl')
   public accessKeyTpl: TemplateRef<any>;
-  @ViewChild('secretKeyTpl', { static: false })
+  @ViewChild('secretKeyTpl')
   public secretKeyTpl: TemplateRef<any>;
 
   @Input()

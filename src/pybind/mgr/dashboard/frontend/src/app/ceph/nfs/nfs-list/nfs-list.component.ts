@@ -30,7 +30,7 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   providers: [TaskListService]
 })
 export class NfsListComponent extends ListWithDetails implements OnInit, OnDestroy {
-  @ViewChild('nfsState', { static: false })
+  @ViewChild('nfsState')
   nfsState: TemplateRef<any>;
   @ViewChild('nfsFsal', { static: true })
   nfsFsal: TemplateRef<any>;
