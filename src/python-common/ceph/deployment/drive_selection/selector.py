@@ -5,9 +5,7 @@ try:
 except ImportError:
     pass
 
-from ceph.deployment.inventory import Device
-
-from ..inventory import Devices
+from ..inventory import Device
 from ..drive_group import DriveGroupSpec, DeviceSelection
 
 from .filter import FilterGenerator
@@ -18,7 +16,7 @@ logger = logging.getLogger(__name__)
 class DriveSelection(object):
     def __init__(self,
                  spec,  # type: DriveGroupSpec
-                 disks,  # type: Devices
+                 disks,  # type: List[Device]
                  ):
         self.disks = disks.copy()
         self.spec = spec
