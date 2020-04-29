@@ -193,15 +193,21 @@ void ImageWatcher<I>::notify_resize(uint64_t request_id, uint64_t size,
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
+void ImageWatcher<I>::notify_snap_create(uint64_t request_id,
+                                         const cls::rbd::SnapshotNamespace &snap_namespace,
 					 const std::string &snap_name,
+                                         ProgressContext &prog_ctx,
                                          Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapCreatePayload(snap_namespace, snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(async_request_id,
+                       new SnapCreatePayload(async_request_id, snap_namespace,
+                                             snap_name),
+                       prog_ctx, on_finish);
 }
 
 template <typename I>
@@ -334,7 +340,9 @@ void ImageWatcher<I>::notify_header_update(librados::IoCtx &io_ctx,
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_quiesce(uint64_t request_id, Context *on_finish) {
+void ImageWatcher<I>::notify_quiesce(uint64_t request_id,
+                                     ProgressContext &prog_ctx,
+                                     Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": request_id="
                              << request_id << dendl;
 
@@ -343,24 +351,29 @@ void ImageWatcher<I>::notify_quiesce(uint64_t request_id, Context *on_finish) {
   auto attempts = m_image_ctx.config.template get_val<uint64_t>(
     "rbd_quiesce_notification_attempts");
 
-  notify_quiesce(async_request_id, attempts, on_finish);
+  notify_quiesce(async_request_id, attempts, prog_ctx, on_finish);
 }
 
 template <typename I>
 void ImageWatcher<I>::notify_quiesce(const AsyncRequestId &async_request_id,
-                                     size_t attempts, Context *on_finish) {
+                                     size_t attempts, ProgressContext &prog_ctx,
+                                     Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": async_request_id="
                              << async_request_id << " attempts=" << attempts
                              << dendl;
 
   ceph_assert(attempts > 0);
   auto on_notify = new LambdaContext(
-    [this, async_request_id, on_finish, attempts=attempts-1](int r) {
+    [this, async_request_id, &prog_ctx, on_finish, attempts=attempts-1](int r) {
+      auto total_attempts = m_image_ctx.config.template get_val<uint64_t>(
+        "rbd_quiesce_notification_attempts");
+      prog_ctx.update_progress(total_attempts - attempts, total_attempts);
+
       if (r == -ETIMEDOUT) {
         ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": async_request_id="
                                    << async_request_id << " timed out" << dendl;
         if (attempts > 0) {
-          notify_quiesce(async_request_id, attempts, on_finish);
+          notify_quiesce(async_request_id, attempts, prog_ctx, on_finish);
           return;
         }
       }
@@ -922,14 +935,36 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
     }
 
     if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
-			         << payload.snap_name << dendl;
+      bool new_request;
+      Context *ctx;
+      ProgressContext *prog_ctx;
+      bool complete;
+      if (payload.async_request_id) {
+        r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, &prog_ctx);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        prog_ctx = new NoOpProgressContext();
+        ctx = new LambdaContext(
+          [prog_ctx, on_finish=new C_ResponseMessage(ack_ctx)](int r) {
+            delete prog_ctx;
+            on_finish->complete(r);
+          });
+        complete = false;
+      }
+      if (r == 0 && new_request) {
+        ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
+				   << payload.async_request_id << " "
+                                   << payload.snap_namespace << " "
+                                   << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_create(payload.snap_namespace,
-						  payload.snap_name,
-                                                  new C_ResponseMessage(ack_ctx),
-                                                  0, false);
-      return false;
+        m_image_ctx.operations->execute_snap_create(payload.snap_namespace,
+                                                    payload.snap_name,
+                                                    ctx, 0, false, *prog_ctx);
+      }
+      return complete;
     } else if (r < 0) {
       encode(ResponseMessage(r), ack_ctx->out);
     }

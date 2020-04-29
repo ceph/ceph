@@ -34,8 +34,10 @@ public:
                       Context *on_finish);
   void notify_resize(uint64_t request_id, uint64_t size, bool allow_shrink,
                      ProgressContext &prog_ctx, Context *on_finish);
-  void notify_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
+  void notify_snap_create(uint64_t request_id,
+                          const cls::rbd::SnapshotNamespace &snap_namespace,
 			  const std::string &snap_name,
+                          ProgressContext &prog_ctx,
 			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
                           const std::string &dst_snap_name,
@@ -70,7 +72,8 @@ public:
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
 
-  void notify_quiesce(uint64_t request_id, Context *on_finish);
+  void notify_quiesce(uint64_t request_id, ProgressContext &prog_ctx,
+                      Context *on_finish);
   void notify_unquiesce(uint64_t request_id, Context *on_finish);
 
 private:
@@ -206,7 +209,8 @@ private:
   Context *prepare_unquiesce_request(const watch_notify::AsyncRequestId &request);
 
   void notify_quiesce(const watch_notify::AsyncRequestId &async_request_id,
-                      size_t attempts, Context *on_finish);
+                      size_t attempts, ProgressContext &prog_ctx,
+                      Context *on_finish);
 
   bool handle_payload(const watch_notify::HeaderUpdatePayload& payload,
                       C_NotifyAck *ctx);

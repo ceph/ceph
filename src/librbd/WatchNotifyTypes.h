@@ -47,6 +47,9 @@ struct AsyncRequestId {
   inline bool operator!=(const AsyncRequestId &rhs) const {
     return (client_id != rhs.client_id || request_id != rhs.request_id);
   }
+  inline operator bool() const {
+    return (*this != AsyncRequestId());
+  }
 };
 
 enum NotifyOp {
@@ -258,10 +261,14 @@ protected:
 };
 
 struct SnapCreatePayload : public SnapPayloadBase {
+  AsyncRequestId async_request_id;
+
   SnapCreatePayload() {}
-  SnapCreatePayload(const cls::rbd::SnapshotNamespace &_snap_namespace,
+  SnapCreatePayload(const AsyncRequestId &id,
+                    const cls::rbd::SnapshotNamespace &snap_namespace,
 		    const std::string &name)
-    : SnapPayloadBase(_snap_namespace, name) {}
+    : SnapPayloadBase(snap_namespace, name), async_request_id(id) {
+  }
 
   NotifyOp get_notify_op() const override {
     return NOTIFY_OP_SNAP_CREATE;
