@@ -37,6 +37,8 @@ class GenericLogEntry;
 typedef std::list<std::shared_ptr<WriteLogEntry>> WriteLogEntries;
 typedef std::list<std::shared_ptr<GenericLogEntry>> GenericLogEntries;
 typedef std::list<std::shared_ptr<GenericWriteLogEntry>> GenericWriteLogEntries;
+typedef std::vector<std::shared_ptr<GenericLogEntry>> GenericLogEntriesVector;
+
 typedef LogMapEntries<GenericWriteLogEntry> WriteLogMapEntries;
 typedef LogMap<GenericWriteLogEntry> WriteLogMap;
 
@@ -197,6 +199,7 @@ private:
 
   /* Acquire locks in order declared here */
 
+  mutable ceph::mutex m_log_retire_lock;
   /* Hold a read lock on m_entry_reader_lock to add readers to log entry
    * bufs. Hold a write lock to prevent readers from being added (e.g. when
    * removing log entrys from the map). No lock required to remove readers. */
@@ -275,6 +278,8 @@ private:
   bool handle_flushed_sync_point(std::shared_ptr<rwl::SyncPointLogEntry> log_entry);
   void sync_point_writer_flushed(std::shared_ptr<rwl::SyncPointLogEntry> log_entry);
   void process_writeback_dirty_entries();
+  bool can_retire_entry(const std::shared_ptr<rwl::GenericLogEntry> log_entry);
+  bool retire_entries(const unsigned long int frees_per_tx);
 
   void init_flush_new_sync_point(rwl::DeferredContexts &later);
   void new_sync_point(rwl::DeferredContexts &later);

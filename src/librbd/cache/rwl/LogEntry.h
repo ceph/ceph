@@ -36,6 +36,16 @@ public:
   virtual bool can_writeback() const {
     return false;
   }
+  // TODO: discard need to override this
+  virtual bool can_retire() const {
+    return false;
+  }
+  virtual void set_flushed(bool flushed) {
+    ceph_assert(false);
+  }
+  virtual unsigned int write_bytes() const {
+    return 0;
+  };
   virtual unsigned int bytes_dirty() const {
     return 0;
   };
@@ -71,6 +81,9 @@ public:
   ~SyncPointLogEntry() override {};
   SyncPointLogEntry(const SyncPointLogEntry&) = delete;
   SyncPointLogEntry &operator=(const SyncPointLogEntry&) = delete;
+  bool can_retire() const override {
+    return this->completed;
+  }
   std::ostream& format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const SyncPointLogEntry &entry);
@@ -88,7 +101,7 @@ public:
   ~GenericWriteLogEntry() override {};
   GenericWriteLogEntry(const GenericWriteLogEntry&) = delete;
   GenericWriteLogEntry &operator=(const GenericWriteLogEntry&) = delete;
-  virtual unsigned int write_bytes() const {
+  unsigned int write_bytes() const override {
     /* The valid bytes in this ops data buffer. Discard and WS override. */
     return ram_entry.write_bytes;
   };
@@ -109,9 +122,18 @@ public:
     return sync_point_entry;
   }
   virtual void copy_pmem_bl(bufferlist *out_bl) = 0;
+  void set_flushed(bool flushed) override {
+    m_flushed = flushed;
+  }
+  bool get_flushed() const {
+    return m_flushed;
+  }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const GenericWriteLogEntry &entry);
+
+private:
+  bool m_flushed = false; /* or invalidated */
 };
 
 class WriteLogEntry : public GenericWriteLogEntry {
@@ -150,13 +172,16 @@ public:
   void init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
             uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush);
   BlockExtent block_extent();
-  unsigned int reader_count();
+  unsigned int reader_count() const;
   /* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */
   buffer::list &get_pmem_bl();
   /* Constructs a new bl containing copies of pmem_bp */
   void copy_pmem_bl(bufferlist *out_bl) override;
   void writeback(librbd::cache::ImageWritebackInterface &image_writeback,
                  Context *ctx) override;
+  bool can_retire() const override {
+    return (this->completed && this->get_flushed() && (0 == reader_count()));
+  }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const WriteLogEntry &entry);
