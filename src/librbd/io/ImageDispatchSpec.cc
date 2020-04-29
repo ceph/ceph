@@ -5,6 +5,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include <boost/variant.hpp>
 
 namespace librbd {
@@ -53,40 +54,40 @@ struct ImageDispatchSpec<I>::SendVisitor
 
   void operator()(Read& read) const {
     ImageRequest<I>::aio_read(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      std::move(read.read_result), spec->m_op_flags, spec->m_parent_trace);
+      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
+      std::move(read.read_result), spec->op_flags, spec->parent_trace);
   }
 
   void operator()(Discard& discard) const {
     ImageRequest<I>::aio_discard(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      discard.discard_granularity_bytes, spec->m_parent_trace);
+      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
+      discard.discard_granularity_bytes, spec->parent_trace);
   }
 
   void operator()(Write& write) const {
     ImageRequest<I>::aio_write(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      std::move(write.bl), spec->m_op_flags, spec->m_parent_trace);
+      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
+      std::move(write.bl), spec->op_flags, spec->parent_trace);
   }
 
   void operator()(WriteSame& write_same) const {
     ImageRequest<I>::aio_writesame(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      std::move(write_same.bl), spec->m_op_flags, spec->m_parent_trace);
+      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
+      std::move(write_same.bl), spec->op_flags, spec->parent_trace);
   }
 
   void operator()(CompareAndWrite& compare_and_write) const {
     ImageRequest<I>::aio_compare_and_write(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
+      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
       std::move(compare_and_write.cmp_bl), std::move(compare_and_write.bl),
-      compare_and_write.mismatch_offset, spec->m_op_flags,
-      spec->m_parent_trace);
+      compare_and_write.mismatch_offset, spec->op_flags,
+      spec->parent_trace);
   }
 
   void operator()(Flush& flush) const {
     ImageRequest<I>::aio_flush(
-      &spec->m_image_ctx, spec->m_aio_comp, flush.flush_source,
-      spec->m_parent_trace);
+      &spec->m_image_ctx, spec->aio_comp, flush.flush_source,
+      spec->parent_trace);
   }
 };
 
@@ -144,7 +145,7 @@ struct ImageDispatchSpec<I>::TokenRequestedVisitor
 
 template <typename I>
 void ImageDispatchSpec<I>::send() {
-  boost::apply_visitor(SendVisitor{this}, m_request);
+  boost::apply_visitor(SendVisitor{this}, request);
 }
 
 template <typename I>
@@ -154,13 +155,13 @@ void ImageDispatchSpec<I>::finish(int r) {
 
 template <typename I>
 void ImageDispatchSpec<I>::fail(int r) {
-  m_aio_comp->fail(r);
+  aio_comp->fail(r);
 }
 
 template <typename I>
 uint64_t ImageDispatchSpec<I>::extents_length() {
   uint64_t length = 0;
-  auto &extents = this->m_image_extents;
+  auto &extents = this->image_extents;
 
   for (auto &extent : extents) {
     length += extent.second;
@@ -170,28 +171,28 @@ uint64_t ImageDispatchSpec<I>::extents_length() {
 
 template <typename I>
 const Extents& ImageDispatchSpec<I>::get_image_extents() const {
-   return this->m_image_extents;
+   return this->image_extents;
 }
 
 template <typename I>
 uint64_t ImageDispatchSpec<I>::get_tid() {
-  return this->m_tid;
+  return this->tid;
 }
 
 template <typename I>
 bool ImageDispatchSpec<I>::is_write_op() const {
-  return boost::apply_visitor(IsWriteOpVisitor(), m_request);
+  return boost::apply_visitor(IsWriteOpVisitor(), request);
 }
 
 template <typename I>
 bool ImageDispatchSpec<I>::tokens_requested(uint64_t flag, uint64_t *tokens) {
   return boost::apply_visitor(TokenRequestedVisitor{this, flag, tokens},
-                              m_request);
+                              request);
 }
 
 template <typename I>
 void ImageDispatchSpec<I>::start_op() {
-  m_aio_comp->start_op();
+  aio_comp->start_op();
 }
 
 } // namespace io
