@@ -17,10 +17,12 @@ namespace io {
 struct ImageDispatcherInterface
   : public DispatcherInterface<ImageDispatchInterface> {
 public:
+  virtual void apply_qos_schedule_tick_min(uint64_t tick) = 0;
+  virtual void apply_qos_limit(uint64_t flag, uint64_t limit,
+                               uint64_t burst) = 0;
 
   virtual void finish(int r, ImageDispatchLayer image_dispatch_layer,
                       uint64_t tid) = 0;
-
 };
 
 } // namespace io

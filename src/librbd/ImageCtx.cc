@@ -31,6 +31,7 @@
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/QosImageDispatch.h"
 #include "librbd/journal/StandardPolicy.h"
 
 #include "osdc/Striper.h"
@@ -816,31 +817,31 @@ public:
       }
     }
 
-    io_work_queue->apply_qos_schedule_tick_min(
+    io_image_dispatcher->apply_qos_schedule_tick_min(
       config.get_val<uint64_t>("rbd_qos_schedule_tick_min"));
 
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_IOPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_iops_limit"),
       config.get_val<uint64_t>("rbd_qos_iops_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_BPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_bps_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_READ_IOPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_READ_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_iops_limit"),
       config.get_val<uint64_t>("rbd_qos_read_iops_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_WRITE_IOPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_WRITE_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_iops_limit"),
       config.get_val<uint64_t>("rbd_qos_write_iops_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_READ_BPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_READ_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_read_bps_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_WRITE_BPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_WRITE_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_write_bps_burst"));
 

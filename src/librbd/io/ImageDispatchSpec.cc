@@ -105,45 +105,6 @@ struct ImageDispatchSpec<I>::IsWriteOpVisitor
 };
 
 template <typename I>
-struct ImageDispatchSpec<I>::TokenRequestedVisitor
-  : public boost::static_visitor<uint64_t> {
-  ImageDispatchSpec* spec;
-  uint64_t flag;
-  uint64_t *tokens;
-
-  TokenRequestedVisitor(ImageDispatchSpec* spec, uint64_t _flag,
-                        uint64_t *tokens)
-    : spec(spec), flag(_flag), tokens(tokens) {
-  }
-
-  uint64_t operator()(const Read&) const {
-    if (flag & RBD_QOS_WRITE_MASK) {
-      *tokens = 0;
-      return false;
-    }
-
-    *tokens = (flag & RBD_QOS_BPS_MASK) ? spec->extents_length() : 1;
-    return true;
-  }
-
-  uint64_t operator()(const Flush&) const {
-    *tokens = 0;
-    return true;
-  }
-
-  template <typename T>
-  uint64_t operator()(const T&) const {
-    if (flag & RBD_QOS_READ_MASK) {
-      *tokens = 0;
-      return false;
-    }
-
-    *tokens = (flag & RBD_QOS_BPS_MASK) ? spec->extents_length() : 1;
-    return true;
-  }
-};
-
-template <typename I>
 void ImageDispatchSpec<I>::send() {
   boost::apply_visitor(SendVisitor{this}, request);
 }
@@ -184,12 +145,6 @@ uint64_t ImageDispatchSpec<I>::get_tid() {
 template <typename I>
 bool ImageDispatchSpec<I>::is_write_op() const {
   return boost::apply_visitor(IsWriteOpVisitor(), request);
-}
-
-template <typename I>
-bool ImageDispatchSpec<I>::tokens_requested(uint64_t flag, uint64_t *tokens) {
-  return boost::apply_visitor(TokenRequestedVisitor{this, flag, tokens},
-                              request);
 }
 
 template <typename I>

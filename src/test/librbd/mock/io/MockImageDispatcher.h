@@ -26,6 +26,9 @@ public:
 
   MOCK_METHOD1(send, void(ImageDispatchSpec<>*));
   MOCK_METHOD3(finish, void(int r, ImageDispatchLayer, uint64_t));
+
+  MOCK_METHOD1(apply_qos_schedule_tick_min, void(uint64_t));
+  MOCK_METHOD3(apply_qos_limit, void(uint64_t, uint64_t, uint64_t));
 };
 
 } // namespace io

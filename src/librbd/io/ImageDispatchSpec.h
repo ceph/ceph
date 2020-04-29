@@ -106,7 +106,6 @@ public:
   int op_flags;
   ZTracer::Trace parent_trace;
   uint64_t tid;
-  std::atomic<uint64_t> throttled_flag = 0;
 
   static ImageDispatchSpec* create_read_request(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
@@ -181,20 +180,6 @@ public:
   bool is_write_op() const;
 
   void start_op();
-
-  bool tokens_requested(uint64_t flag, uint64_t *tokens);
-
-  bool was_throttled(uint64_t flag) {
-    return throttled_flag & flag;
-  }
-
-  void set_throttled(uint64_t flag) {
-    throttled_flag |= flag;
-  }
-
-  bool were_all_throttled() {
-    return (throttled_flag & RBD_QOS_MASK) == RBD_QOS_MASK;
-  }
 
   const Extents& get_image_extents() const;
 

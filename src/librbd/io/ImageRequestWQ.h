@@ -6,7 +6,6 @@
 
 #include "include/Context.h"
 #include "common/ceph_mutex.h"
-#include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "librbd/io/Types.h"
 #include "include/interval_set.h"
@@ -30,7 +29,6 @@ class ImageRequestWQ
 public:
   ImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                  ThreadPool *tp);
-  ~ImageRequestWQ();
 
   ssize_t read(uint64_t off, uint64_t len, ReadResult &&read_result,
                int op_flags);
@@ -75,18 +73,9 @@ public:
 
   void set_require_lock(Direction direction, bool enabled);
 
-  void apply_qos_schedule_tick_min(uint64_t tick);
-
-  void apply_qos_limit(const uint64_t flag, uint64_t limit, uint64_t burst);
-
 protected:
   void *_void_dequeue() override;
   void process(ImageDispatchSpec<ImageCtxT> *req) override;
-  bool _empty() override {
-    return (ThreadPool::PointerWQ<ImageDispatchSpec<ImageCtxT>>::_empty() &&
-            m_io_throttled.load() == 0);
-  }
-
 
 private:
   typedef std::list<Context *> Contexts;
@@ -107,7 +96,6 @@ private:
   std::atomic<unsigned> m_in_flight_ios { 0 };
   std::atomic<unsigned> m_in_flight_writes { 0 };
   std::atomic<unsigned> m_io_blockers { 0 };
-  std::atomic<unsigned> m_io_throttled { 0 };
 
   typedef interval_set<uint64_t> ImageExtentIntervals;
   ImageExtentIntervals m_in_flight_extents;
@@ -116,9 +104,6 @@ private:
   std::atomic<unsigned> m_last_tid { 0 };
   std::set<uint64_t> m_queued_or_blocked_io_tids;
   std::map<uint64_t, ImageDispatchSpec<ImageCtxT>*> m_queued_flushes;
-
-  std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
-  uint64_t m_qos_enabled_flag = 0;
 
   bool m_shutdown = false;
   Context *m_on_shutdown = nullptr;
@@ -133,8 +118,6 @@ private:
     std::shared_lock locker{m_lock};
     return (m_queued_writes == 0);
   }
-
-  bool needs_throttle(ImageDispatchSpec<ImageCtxT> *item);
 
   void finish_queued_io(bool write_op);
   void remove_in_flight_write_ios(uint64_t offset, uint64_t length,
@@ -157,8 +140,6 @@ private:
   void handle_acquire_lock(int r, ImageDispatchSpec<ImageCtxT> *req);
   void handle_refreshed(int r, ImageDispatchSpec<ImageCtxT> *req);
   void handle_blocked_writes(int r);
-
-  void handle_throttle_ready(ImageDispatchSpec<ImageCtxT> *item, uint64_t flag);
 };
 
 } // namespace io
