@@ -789,9 +789,10 @@ void ImageRequestWQ<I>::apply_qos_limit(const uint64_t flag,
 }
 
 template <typename I>
-void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item, uint64_t flag) {
+void ImageRequestWQ<I>::handle_throttle_ready(
+    ImageDispatchSpec<I> *item, uint64_t flag) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 15) << "r=" << r << ", " << "req=" << item << dendl;
+  ldout(cct, 15) << "req=" << item << dendl;
 
   ceph_assert(m_io_throttled.load() > 0);
   item->set_throttled(flag);
@@ -821,9 +822,8 @@ bool ImageRequestWQ<I>::needs_throttle(ImageDispatchSpec<I> *item) {
 
     throttle = t.second;
     if (item->tokens_requested(flag, &tokens) &&
-        throttle->get<ImageRequestWQ<I>, ImageDispatchSpec<I>,
-	      &ImageRequestWQ<I>::handle_throttle_ready>(
-		tokens, this, item, flag)) {
+        throttle->get(tokens, this, &ImageRequestWQ<I>::handle_throttle_ready,
+                      item, flag)) {
       blocked = true;
     } else {
       item->set_throttled(flag);

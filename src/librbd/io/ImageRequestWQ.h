@@ -158,7 +158,7 @@ private:
   void handle_refreshed(int r, ImageDispatchSpec<ImageCtxT> *req);
   void handle_blocked_writes(int r);
 
-  void handle_throttle_ready(int r, ImageDispatchSpec<ImageCtxT> *item, uint64_t flag);
+  void handle_throttle_ready(ImageDispatchSpec<ImageCtxT> *item, uint64_t flag);
 };
 
 } // namespace io
