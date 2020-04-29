@@ -5440,8 +5440,16 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_MODE) {
-    if (perms.uid() != 0 && perms.uid() != in->uid)
-      goto out;
+    if (perms.uid() != 0 && perms.uid() != in->uid) {
+      if((in->mode & S_ISUID) || (in->mode & S_ISGID)) {
+        if (in->mode & S_ISUID)
+          in->mode &= ~S_ISUID;
+        if ((in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))
+          in->mode &= ~(S_ISUID|S_ISGID);
+      }
+      else
+        goto out;
+    }
 
     gid_t i_gid = (mask & CEPH_SETATTR_GID) ? stx->stx_gid : in->gid;
     if (perms.uid() != 0 && !perms.gid_in_groups(i_gid))
@@ -9629,7 +9637,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     return r;
 
   /* clear the setuid/setgid bits, if any */
-  if (unlikely(in->mode & (S_ISUID|S_ISGID)) && size > 0) {
+  if (unlikely(in->mode & (S_ISUID|S_ISGID)) && size > 0 && 0 !=f->actor_perms.uid()) {
     struct ceph_statx stx = { 0 };
 
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
