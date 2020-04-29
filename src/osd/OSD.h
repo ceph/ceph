@@ -1996,7 +1996,7 @@ private:
   ~OSD() override;
 
   // static bits
-  static int mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami);
+  static int mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami, std::string osdspec_affinity);
 
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
@@ -2016,7 +2016,7 @@ private:
 
   static int write_meta(CephContext *cct,
 			ObjectStore *store,
-			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
+			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami, std::string& osdspec_affinity);
 
   void handle_scrub(struct MOSDScrub *m);
   void handle_fast_scrub(struct MOSDScrub2 *m);
