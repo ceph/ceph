@@ -812,18 +812,42 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
   }
   vector<iovec> iov;
   bl.prepare_iov(&iov);
-  int r = ::pwritev(choose_fd(buffered, write_hint),
-		    &iov[0], iov.size(), off);
 
-  if (r < 0) {
-    r = -errno;
-    derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  auto left = len;
+  auto o = off;
+  size_t idx = 0;
+  do {
+    auto r = ::pwritev(choose_fd(buffered, write_hint),
+      &iov[idx], iov.size() - idx, o);
+
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    o += r;
+    left -= r;
+    if (left) {
+      // skip fully processed IOVs
+      while (idx < iov.size() && (size_t)r >= iov[idx].iov_len) {
+        r -= iov[idx++].iov_len;
+      }
+      // update partially processed one if any
+      if (r) {
+        ceph_assert(idx < iov.size());
+        ceph_assert((size_t)r < iov[idx].iov_len);
+        iov[idx].iov_base = static_cast<char*>(iov[idx].iov_base) + r;
+        iov[idx].iov_len -= r;
+        r = 0;
+      }
+      ceph_assert(r == 0);
+    }
+  } while (left);
+
 #ifdef HAVE_SYNC_FILE_RANGE
   if (buffered) {
     // initiate IO and wait till it completes
-    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
+    auto r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
     if (r < 0) {
       r = -errno;
       derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
