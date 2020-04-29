@@ -1,7 +1,8 @@
 import os
 import pytest
-from mock.mock import patch, PropertyMock
+from mock.mock import patch, PropertyMock, create_autospec
 from ceph_volume.util import disk
+from ceph_volume.util import device
 from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume import conf, configuration
 
@@ -38,6 +39,16 @@ def factory():
 @pytest.fixture
 def capture():
     return Capture()
+
+
+@pytest.fixture
+def mock_devices_available():
+    dev = create_autospec(device.Device)
+    dev.path = '/dev/foo'
+    dev.available_lvm = True
+    dev.vg_size = [21474836480]
+    dev.vg_free = dev.vg_size
+    return [dev]
 
 
 @pytest.fixture
