@@ -568,7 +568,7 @@ This is an overview of the current implementation status of the orchestrators.
 =================================== ====== =========
  Command                             Rook   Cephadm
 =================================== ====== =========
- apply iscsi                         ⚪      ⚪
+ apply iscsi                         ⚪     ✔
  apply mds                           ✔      ✔
  apply mgr                           ⚪      ✔
  apply mon                           ✔      ✔
@@ -583,7 +583,7 @@ This is an overview of the current implementation status of the orchestrators.
  daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
- iscsi add                           ⚪      ⚪
+ iscsi add                           ⚪     ✔
  mds add                             ✔      ✔
  nfs add                             ✔      ✔
  rbd-mirror add                      ⚪      ✔
