@@ -924,6 +924,7 @@ Usage:
         )
         completion = self.apply_nfs(spec)
         self._orchestrator_wait([completion])
+        raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(
