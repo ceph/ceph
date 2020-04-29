@@ -84,7 +84,11 @@ export class UserFormComponent implements OnInit {
     });
     this.userForm = this.formBuilder.group(
       {
-        username: ['', [Validators.required]],
+        username: [
+          '',
+          [Validators.required],
+          [CdValidators.unique(this.userService.validateUserName, this.userService)]
+        ],
         name: [''],
         password: [
           '',
