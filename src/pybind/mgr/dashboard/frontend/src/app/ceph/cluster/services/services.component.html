@@ -8,10 +8,11 @@
             selectionType="single"
             [autoReload]="60000"
             (fetchData)="getServices($event)"
-            (updateSelection)="updateSelection($event)">
+            [hasDetails]="true"
+            (setExpandedRow)="setExpandedRow($event)">
     <cd-service-details cdTableDetail
                         [permissions]="permissions"
-                        [selection]="selection">
+                        [selection]="expandedRow">
     </cd-service-details>
   </cd-table>
 </ng-container>
