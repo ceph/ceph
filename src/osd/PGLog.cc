@@ -259,7 +259,7 @@ void PGLog::proc_replica_log(
 
   /* Because olog.head >= log.tail, we know that both pgs must at least have
    * the event represented by log.tail.  Similarly, because log.head >= olog.tail,
-   * we know that the even represented by olog.tail must be common to both logs.
+   * we know that the event represented by olog.tail must be common to both logs.
    * Furthermore, the event represented by a log tail was necessarily trimmed,
    * thus neither olog.tail nor log.tail can be divergent. It's
    * possible that olog/log contain no actual events between olog.head and
