@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/Context.h"
 #include "common/zipkin_trace.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/Types.h"
@@ -20,6 +21,19 @@ namespace io {
 
 template <typename ImageCtxT = ImageCtx>
 class ImageDispatchSpec {
+private:
+  // helper to avoid extra heap allocation per object IO
+  struct C_Dispatcher : public Context {
+    ImageDispatchSpec* image_dispatch_spec;
+
+    C_Dispatcher(ImageDispatchSpec* image_dispatch_spec)
+      : image_dispatch_spec(image_dispatch_spec) {
+    }
+
+    void complete(int r) override;
+    void finish(int r) override;
+  };
+
 public:
   struct Read {
     ReadResult read_result;
@@ -68,6 +82,10 @@ public:
     Flush(FlushSource flush_source) : flush_source(flush_source) {
     }
   };
+
+  C_Dispatcher dispatcher_ctx;
+  ImageDispatchLayer dispatch_layer = IMAGE_DISPATCH_LAYER_NONE;
+  DispatchResult dispatch_result = DISPATCH_RESULT_INVALID;
 
   static ImageDispatchSpec* create_read_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, Extents &&image_extents,
@@ -170,7 +188,7 @@ private:
   ImageDispatchSpec(ImageCtxT& image_ctx, AioCompletion* aio_comp,
                      Extents&& image_extents, Request&& request,
                      int op_flags, const ZTracer::Trace& parent_trace, uint64_t tid)
-    : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
+    : dispatcher_ctx(this), m_image_ctx(image_ctx), m_aio_comp(aio_comp),
       m_image_extents(std::move(image_extents)), m_request(std::move(request)),
       m_op_flags(op_flags), m_parent_trace(parent_trace), m_tid(tid) {
     m_aio_comp->get();
@@ -184,6 +202,8 @@ private:
   ZTracer::Trace m_parent_trace;
   uint64_t m_tid;
   std::atomic<uint64_t> m_throttled_flag = 0;
+
+  void finish(int r);
 
   uint64_t extents_length();
 };
