@@ -1,5 +1,10 @@
 from ceph.deployment.inventory import Devices, Device
 
+try:
+    from typing import Any, List
+except ImportError:
+    pass  # for type checking
+
 
 def _mk_device(rotational=True,
                locked=False,
@@ -29,6 +34,7 @@ def _mk_device(rotational=True,
 
 
 def _mk_inventory(devices):
+    # type: (Any) -> List[Device]
     devs = []
     for dev_, name in zip(devices, map(chr, range(ord('a'), ord('z')))):
         dev = Device.from_json(dev_.to_json())
