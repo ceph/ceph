@@ -654,6 +654,8 @@ Usage:
 
             spec = ServiceSpec(daemon_type, placement=placement)
 
+        daemon_type = spec.service_type
+
         if daemon_type == 'mon':
             completion = self.add_mon(spec)
         elif daemon_type == 'mgr':
