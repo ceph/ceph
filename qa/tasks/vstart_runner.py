@@ -30,6 +30,7 @@ Alternative usage:
 
 """
 
+from six import StringIO
 from io import BytesIO
 from collections import defaultdict
 import getpass
@@ -935,7 +936,7 @@ class LocalCephManager(CephManager):
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        proc = self.controller.run(args=args, wait=False, stdout=BytesIO())
+        proc = self.controller.run(args=args, wait=False, stdout=StringIO())
         return proc
 
     def raw_cluster_cmd(self, *args, **kwargs):
