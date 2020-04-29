@@ -107,7 +107,7 @@ void WriteLogEntry::init_pmem_bl() {
   bl_refs = after_bl - before_bl;
 }
 
-unsigned int WriteLogEntry::reader_count() {
+unsigned int WriteLogEntry::reader_count() const {
   if (pmem_bp.have_raw()) {
     return (pmem_bp.raw_nref() - bl_refs - 1);
   } else {
