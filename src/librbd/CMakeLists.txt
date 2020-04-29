@@ -48,6 +48,7 @@ set(librbd_internal_srcs
   deep_copy/SnapshotCreateRequest.cc
   deep_copy/Utils.cc
   exclusive_lock/AutomaticPolicy.cc
+  exclusive_lock/ImageDispatch.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
   exclusive_lock/PreReleaseRequest.cc

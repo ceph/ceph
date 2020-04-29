@@ -902,9 +902,14 @@ void RefreshRequest<I>::send_v2_open_journal() {
         !journal_disabled_by_policy &&
         m_image_ctx.exclusive_lock != nullptr &&
         m_image_ctx.journal == nullptr) {
-      m_image_ctx.io_work_queue->set_require_lock(librbd::io::DIRECTION_BOTH,
-                                                  true);
+      auto ctx = new LambdaContext([this](int) {
+          send_v2_block_writes();
+        });
+      m_image_ctx.exclusive_lock->set_require_lock(
+        librbd::io::DIRECTION_BOTH, ctx);
+      return;
     }
+
     send_v2_block_writes();
     return;
   }
@@ -1399,8 +1404,7 @@ void RefreshRequest<I>::apply() {
     if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
                                    m_image_ctx.image_lock)) {
       if (!m_image_ctx.clone_copy_on_read && m_image_ctx.journal != nullptr) {
-        m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_READ,
-                                                    false);
+        m_image_ctx.exclusive_lock->unset_require_lock(io::DIRECTION_READ);
       }
       std::swap(m_journal, m_image_ctx.journal);
     } else if (m_journal != nullptr) {

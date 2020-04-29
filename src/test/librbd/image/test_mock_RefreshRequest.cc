@@ -183,10 +183,15 @@ public:
     ASSERT_EQ(0, ictx->md_ctx.write(ictx->header_oid, hdr, hdr.length(), 0));
   }
 
-  void expect_set_require_lock(MockRefreshImageCtx &mock_image_ctx,
-                               librbd::io::Direction direction, bool enabled) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock(direction,
-                                                                enabled));
+  void expect_set_require_lock(MockExclusiveLock &mock_exclusive_lock,
+                               librbd::io::Direction direction) {
+    EXPECT_CALL(mock_exclusive_lock, set_require_lock(direction, _))
+      .WillOnce(WithArg<1>(Invoke([](Context* ctx) { ctx->complete(0); })));
+  }
+
+  void expect_unset_require_lock(MockExclusiveLock &mock_exclusive_lock,
+                                 librbd::io::Direction direction) {
+    EXPECT_CALL(mock_exclusive_lock, unset_require_lock(direction));
   }
 
   void expect_v1_read_header(MockRefreshImageCtx &mock_image_ctx, int r) {
@@ -1163,7 +1168,7 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithoutExclusiveLock) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_BOTH, true);
+  expect_set_require_lock(mock_exclusive_lock, librbd::io::DIRECTION_BOTH);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
@@ -1216,13 +1221,14 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   expect_block_writes(mock_image_ctx, 0);
   if (!mock_image_ctx.clone_copy_on_read) {
-    expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_READ, false);
+    expect_unset_require_lock(mock_exclusive_lock, librbd::io::DIRECTION_READ);
   }
   expect_close_journal(mock_image_ctx, mock_journal, 0);
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond ctx;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false,
+                                                   &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
