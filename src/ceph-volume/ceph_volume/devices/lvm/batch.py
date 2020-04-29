@@ -4,7 +4,6 @@ import logging
 import json
 from textwrap import dedent
 from ceph_volume import terminal, decorators
-from ceph_volume.api.lvm import Volume
 from ceph_volume.util import disk, prompt_bool, arg_validators, templates
 from ceph_volume.util import prepare
 from . import common
@@ -28,6 +27,48 @@ def device_formatter(devices):
         )
 
     return ''.join(lines)
+
+
+def ensure_disjoint_device_lists(data, db=[], wal=[], journal=[]):
+    # check that all device lists are disjoint with each other
+    if not(set(data).isdisjoint(set(db)) and
+           set(data).isdisjoint(set(wal)) and
+           set(data).isdisjoint(set(journal)) and
+           set(db).isdisjoint(set(wal))):
+        raise Exception('Device lists are not disjoint')
+
+
+def get_physical_osds(devices, args):
+    '''
+    Goes through passed physical devices and assigns OSDs
+    '''
+    data_slots = args.osds_per_device
+    if args.data_slots:
+        data_slots = max(args.data_slots, args.osds_per_device)
+    rel_data_size = 100 / data_slots
+    mlogger.debug('relative data size: {}'.format(rel_data_size))
+    ret = []
+    for dev in devices:
+        if dev.available_lvm:
+            dev_size = dev.vg_size[0]
+            abs_size = disk.Size(b=int(dev_size * rel_data_size / 100))
+            free_size = dev.vg_free[0]
+            if abs_size < 419430400:
+                mlogger.error('Data LV on {} would be too small (<400M)'.format(dev.path))
+                continue
+            for _ in range(args.osds_per_device):
+                if abs_size > free_size:
+                    break
+                free_size -= abs_size.b
+                osd_id = None
+                if args.osd_ids:
+                    osd_id = args.osd_ids.pop()
+                ret.append(Batch.OSD(dev.path,
+                                    rel_data_size,
+                                    abs_size,
+                                    args.osds_per_device,
+                                    osd_id))
+    return ret
 
 
 class Batch(object):
@@ -208,6 +249,9 @@ class Batch(object):
             print(report)
 
     def _check_slot_args(self):
+        '''
+        checking if -slots args are consistent with other arguments
+        '''
         if self.args.data_slots and self.args.osds_per_device:
             if self.args.data_slots < self.args.osds_per_device:
                 raise ValueError('data_slots is smaller then osds_per_device')
@@ -219,13 +263,23 @@ class Batch(object):
         #             raise ValueError('{} is smaller then osds_per_device')
 
     def _sort_rotational_disks(self):
+        '''
+        Helper for legacy auto behaviour.
+        Sorts drives into rotating and non-rotating, the latter being used for
+        db or journal.
+        '''
+        rotating = []
+        ssd = []
         for d in self.args.devices:
             if d.rotational:
-                self.args.devices.remove(d)
-                if self.args.filestore:
-                    self.args.journal_devices.append(d)
-                else:
-                    self.args.db_devices.append(d)
+                rotating.append(d)
+            else:
+                ssd.append(d)
+        self.args.devices = rotating
+        if self.args.filestore:
+            self.args.journal_devices = ssd
+        else:
+            self.args.db_devices = ssd
 
     @decorators.needs_root
     def main(self):
@@ -237,15 +291,16 @@ class Batch(object):
         if not self.args.bluestore and not self.args.filestore:
             self.args.bluestore = True
 
-        if not self.args.no_auto:
+        if (not self.args.no_auto and not self.args.db_devices and not
+            self.args.wal_devices and not self.args.journal_devices):
             self._sort_rotational_disks()
 
         self._check_slot_args()
 
-        self._ensure_disjoint_device_lists(self.args.devices,
-                                           self.args.db_devices,
-                                           self.args.wal_devices,
-                                           self.args.journal_devices)
+        ensure_disjoint_device_lists(self.args.devices,
+                                     self.args.db_devices,
+                                     self.args.wal_devices,
+                                     self.args.journal_devices)
 
         plan = self.get_plan(self.args)
 
@@ -282,15 +337,6 @@ class Batch(object):
                 c.create(argparse.Namespace(**args))
 
 
-
-    def _ensure_disjoint_device_lists(self, data, db=[], wal=[], journal=[]):
-        # check that all device lists are disjoint with each other
-        if not(set(data).isdisjoint(set(db)) and
-               set(data).isdisjoint(set(wal)) and
-               set(data).isdisjoint(set(journal)) and
-               set(db).isdisjoint(set(wal))):
-            raise Exception('Device lists are not disjoint')
-
     def get_plan(self, args):
         if args.bluestore:
             plan = self.get_deployment_layout(args, args.devices, args.db_devices,
@@ -298,6 +344,25 @@ class Batch(object):
         elif args.filestore:
             plan = self.get_deployment_layout(args, args.devices, args.journal_devices)
         return plan
+
+    def get_lvm_osds(self, lvs, args):
+        '''
+        Goes through passed LVs and assigns planned osds
+        '''
+        ret = []
+        for lv in lvs:
+            if lv.used_by_ceph:
+                continue
+            osd_id = None
+            if args.osd_ids:
+                osd_id = args.osd_ids.pop()
+            osd = self.OSD("{}/{}".format(lv.vg_name, lv.lv_name),
+                           100.0,
+                           disk.Size(b=int(lv.lv_size)),
+                           1,
+                           osd_id)
+            ret.append(osd)
+        return ret
 
     def get_deployment_layout(self, args, devices, fast_devices=[],
                               very_fast_devices=[]):
@@ -307,106 +372,64 @@ class Batch(object):
                                            set(phys_devs))]
         mlogger.debug(('passed data_devices: {} physical, {}'
                        ' LVM').format(len(phys_devs), len(lvm_devs)))
-        data_slots = args.osds_per_device
-        if args.data_slots:
-            data_slots = max(args.data_slots, args.osds_per_device)
-        rel_data_size = 100 / data_slots
-        mlogger.debug('relative data size: {}'.format(rel_data_size))
 
-        for dev in phys_devs:
-            if dev.available_lvm:
-                dev_size = dev.vg_size[0]
-                abs_size = disk.Size(b=int(dev_size * rel_data_size / 100))
-                free_size = dev.vg_free[0]
-                if abs_size < 419430400:
-                    mlogger.error('Data LV on {} would be too small (<400M)'.format(dev.path))
-                    continue
-                for _ in range(args.osds_per_device):
-                    if abs_size > free_size:
-                        break
-                    free_size -= abs_size.b
-                    osd_id = None
-                    if args.osd_ids:
-                        osd_id = args.osd_ids.pop()
-                    osd = self.OSD(dev.path,
-                                   rel_data_size,
-                                   abs_size,
-                                   args.osds_per_device,
-                                   osd_id)
-                    plan.append(osd)
-        for dev in lvm_devs:
-            if dev.used_by_ceph:
-                continue
-            osd_id = None
-            if args.osd_ids:
-                osd_id = args.osd_ids.pop()
-            osd = self.OSD("{}/{}".format(dev.vg_name, dev.lv_name),
-                           100.0,
-                           disk.Size(b=int(dev.lv_size)),
-                           1,
-                           osd_id)
-            plan.append(osd)
+        plan.extend(get_physical_osds(phys_devs, args))
+
+        plan.extend(self.get_lvm_osds(lvm_devs, args))
 
         num_osds = len(plan)
+        if num_osds == 0:
+            mlogger.info('All data devices are unavailable')
+            exit(0)
         requested_osds = args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
         fast_type = 'block_db' if args.bluestore else 'journal'
         fast_allocations = self.fast_allocations(fast_devices, requested_osds,
                                                  fast_type)
+        if fast_devices and not fast_allocations:
+            mlogger.info('{} fast devices were passed, but none are available'.format(len(fast_devices)))
+            exit(0)
+        if fast_devices and not len(fast_allocations) == num_osds:
+            mlogger.error('{} fast allocations != {} num_osds'.format(
+                len(fast_allocations), num_osds))
+            exit(1)
+
         very_fast_allocations = self.fast_allocations(very_fast_devices,
                                                       requested_osds, 'block_wal')
-        if fast_devices:
-            if not fast_allocations:
-                mlogger.info('{} fast devices were passed, but none are available'.format(len(fast_devices)))
-                exit(0)
-            assert len(fast_allocations) == num_osds, '{} fast allocations != {} num_osds'.format(fast_allocations, num_osds)
-        if very_fast_devices:
-            if not very_fast_allocations:
-                mlogger.info('{} very fast devices were passed, but none are available'.format(len(very_fast_devices)))
-                exit(0)
-            assert len(very_fast_allocations) == num_osds, '{} fast allocations != {} num_osds'.format(very_fast_allocations, num_osds)
+        if very_fast_devices and not very_fast_allocations:
+            mlogger.info('{} very fast devices were passed, but none are available'.format(len(very_fast_devices)))
+            exit(0)
+        if very_fast_devices and not len(very_fast_allocations) == num_osds:
+            mlogger.error('{} very fast allocations != {} num_osds'.format(
+                len(very_fast_allocations), num_osds))
+            exit(1)
 
         for osd in plan:
             if fast_devices:
-                type_ = 'block.db'
-                if args.filestore:
-                    type_ = 'journal'
                 osd.add_fast_device(*fast_allocations.pop(),
-                                    type_=type_)
-            if very_fast_devices:
-                assert args.bluestore and not args.filestore, 'filestore does not support wal devices'
+                                    type_=fast_type)
+            if very_fast_devices and args.bluestore:
                 osd.add_very_fast_device(*very_fast_allocations.pop(),
                                         type_='block.wal')
         return plan
 
-    def fast_allocations(self, devices, num_osds, type_):
-        ret = []
-        if not devices:
-            return ret
-        phys_devs = [d for d in devices if d.is_device]
-        lvm_devs = [d.lvs[0] for d in list(set(devices) -
-                                           set(phys_devs))]
-        ret.extend(
-            [("{}/{}".format(d.vg_name, d.lv_name), 100.0, disk.Size(b=int(d.lv_size)), 1) for d in
-                    lvm_devs if not d.used_by_ceph])
-        if (num_osds - len(lvm_devs)) % len(phys_devs):
-            used_slots = int((num_osds - len(lvm_devs)) / len(phys_devs)) + 1
-        else:
-            used_slots = int((num_osds - len(lvm_devs)) / len(phys_devs))
-
-        requested_slots = getattr(self.args, '{}_slots'.format(type_))
+    def get_physical_fast_allocs(self, devices, type_, used_slots, args):
+        requested_slots = getattr(args, '{}_slots'.format(type_))
         if not requested_slots or requested_slots < used_slots:
             if requested_slots:
                 mlogger.info('{}_slots argument is to small, ignoring'.format(type_))
             requested_slots = used_slots
-        requested_size = getattr(self.args, '{}_size'.format(type_), 0)
+        requested_size = getattr(args, '{}_size'.format(type_), 0)
+
         if requested_size == 0:
             # no size argument was specified, check ceph.conf
             get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
             requested_size = get_size_fct(lv_format=False)
 
-        available = [d for d in phys_devs if d.available_lvm]
-        for dev in available:
+        ret = []
+        for dev in devices:
+            if not dev.available_lvm:
+                continue
             # TODO this only looks at the first vg on device
             dev_size = dev.vg_size[0]
             abs_size = disk.Size(b=int(dev_size / requested_slots))
@@ -432,6 +455,33 @@ class Batch(object):
                     break
                 free_size -= abs_size.b
                 ret.append((dev.path, relative_size, abs_size, requested_slots))
+        return ret
+
+    def get_lvm_fast_allocs(self, lvs):
+        return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
+                 disk.Size(b=int(d.lv_size)), 1) for d in lvs if not
+                d.used_by_ceph]
+
+    def fast_allocations(self, devices, num_osds, type_):
+        ret = []
+        if not devices:
+            return ret
+        phys_devs = [d for d in devices if d.is_device]
+        lvm_devs = [d.lvs[0] for d in list(set(devices) -
+                                           set(phys_devs))]
+
+        ret.extend(self.get_lvm_fast_allocs(lvm_devs))
+
+        if (num_osds - len(lvm_devs)) % len(phys_devs):
+            used_slots = int((num_osds - len(lvm_devs)) / len(phys_devs)) + 1
+        else:
+            used_slots = int((num_osds - len(lvm_devs)) / len(phys_devs))
+
+
+        ret.extend(self.get_physical_fast_allocs(phys_devs,
+                                                 type_,
+                                                 used_slots,
+                                                 self.args))
         return ret
 
     class OSD(object):
