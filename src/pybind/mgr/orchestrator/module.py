@@ -684,7 +684,7 @@ Usage:
         'name=fs_name,type=CephString '
         'name=placement,type=CephString,req=false',
         'Start MDS daemon(s)')
-    def _mds_add(self, fs_name, placement=None):
+    def _mds_add(self, fs_name, placement=None, inbuf=None):
         spec = ServiceSpec(
             'mds', fs_name,
             placement=PlacementSpec.from_string(placement),
@@ -763,7 +763,7 @@ Usage:
         "name=namespace,type=CephString,req=false "
         'name=placement,type=CephString,req=false',
         'Start NFS daemon(s)')
-    def _nfs_add(self, svc_arg, pool, namespace=None, placement=None):
+    def _nfs_add(self, svc_arg, pool, namespace=None, placement=None, inbuf=None):
         spec = NFSServiceSpec(
             svc_arg,
             pool=pool,
@@ -864,7 +864,10 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of MDS instances for the given fs_name')
-    def _apply_mds(self, fs_name, placement=None, unmanaged=False):
+    def _apply_mds(self, fs_name,
+                   placement=None,
+                   unmanaged=False,
+                   inbuf=None):
         placement = PlacementSpec.from_string(placement)
         placement.validate()
         spec = ServiceSpec(
@@ -891,7 +894,8 @@ Usage:
                    port=None,
                    ssl=False,
                    placement=None,
-                   unmanaged=False):
+                   unmanaged=False,
+                   inbuf=None):
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
@@ -914,7 +918,10 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
-    def _apply_nfs(self, svc_id, pool, namespace=None, placement=None, unmanaged=False):
+    def _apply_nfs(self, svc_id, pool, namespace=None,
+                   placement=None,
+                   unmanaged=False,
+                   inbuf=None):
         spec = NFSServiceSpec(
             svc_id,
             pool=pool,
