@@ -461,7 +461,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   }
   return res;
 }
-int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) 
+int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y)
 {
   int ret = -EINVAL;
   ret = RGWOp::verify_requester(auth_registry, y);
@@ -2351,6 +2351,8 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
+  map<string, bufferlist> src_attrs;
+  size_t pos;
   int ret;
 
   map_qs_metadata(s);
@@ -6374,7 +6376,7 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
     if(it.length() == 0) {
       ldpp_dout(this, 10) << "s3select:it->_len is zero. segment " << i << " out of " << bl_len
                         <<  " obj-size " << s->obj_size << dendl;
-      continue; 
+      continue;
     }
 
     status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
