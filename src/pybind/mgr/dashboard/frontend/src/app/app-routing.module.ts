@@ -1,4 +1,4 @@
-import { NgModule } from '@angular/core';
+import { NgModule, Injectable } from '@angular/core';
 import { ActivatedRouteSnapshot, PreloadAllModules, RouterModule, Routes } from '@angular/router';
 
 import * as _ from 'lodash';
@@ -42,6 +42,7 @@ import { FeatureTogglesGuardService } from './shared/services/feature-toggles-gu
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 
+@Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
     const result: IBreadcrumb[] = [];
@@ -64,6 +65,7 @@ export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   }
 }
 
+@Injectable()
 export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
     const path = route.params.name;

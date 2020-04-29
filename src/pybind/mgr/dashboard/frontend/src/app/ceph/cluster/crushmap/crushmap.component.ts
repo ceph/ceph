@@ -17,7 +17,7 @@ import { Icons } from '../../../shared/enum/icons.enum';
   styleUrls: ['./crushmap.component.scss']
 })
 export class CrushmapComponent implements OnInit {
-  @ViewChild('tree', { static: false }) tree: TreeComponent;
+  @ViewChild('tree') tree: TreeComponent;
 
   icons = Icons;
   loadingIndicator = true;

@@ -46,7 +46,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   namespace: string;
   @Input()
   rbdName: string;
-  @ViewChild('nameTpl', { static: false })
+  @ViewChild('nameTpl')
   nameTpl: TemplateRef<any>;
   @ViewChild('rollbackTpl', { static: true })
   rollbackTpl: TemplateRef<any>;

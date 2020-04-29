@@ -10,7 +10,7 @@ import { Permissions } from '../../../../shared/models/permissions';
   styleUrls: ['./service-details.component.scss']
 })
 export class ServiceDetailsComponent implements OnInit {
-  @ViewChild(TabsetComponent, { static: false })
+  @ViewChild(TabsetComponent)
   tabsetChild: TabsetComponent;
 
   @Input()
