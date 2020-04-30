@@ -487,10 +487,19 @@ int setenv(const char *name, const char *value, int overwrite) {
   return _putenv_s(name, value);
 }
 
+ssize_t get_self_exe_path(char* path, int buff_length) {
+  return GetModuleFileName(NULL, path, buff_length - 1);
+}
+
 #else
 
 unsigned get_page_size() {
   return sysconf(_SC_PAGESIZE);
+}
+
+ssize_t get_self_exe_path(char* path, int buff_length) {
+  return readlink("/proc/self/exe", path,
+                  sizeof(buff_length) - 1);
 }
 
 #endif /* _WIN32 */
