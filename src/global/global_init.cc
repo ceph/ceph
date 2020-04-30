@@ -495,7 +495,7 @@ void global_init_daemonize(CephContext *cct)
 
 int reopen_as_null(CephContext *cct, int fd)
 {
-  int newfd = open("/dev/null", O_RDONLY|O_CLOEXEC);
+  int newfd = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
   if (newfd < 0) {
     int err = errno;
     lderr(cct) << __func__ << " failed to open /dev/null: " << cpp_strerror(err)
