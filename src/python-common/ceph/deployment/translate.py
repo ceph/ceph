@@ -101,6 +101,7 @@ class to_ceph_volume(object):
             cmd += " --report"
             cmd += " --format json"
 
-        cmd = f"CEPH_VOLUME_OSDSPEC_AFFINITY={self.spec.service_id} " + cmd
+        if self.spec.service_id is not None:
+            cmd = f"CEPH_VOLUME_OSDSPEC_AFFINITY={self.spec.service_id} " + cmd
 
         return cmd
