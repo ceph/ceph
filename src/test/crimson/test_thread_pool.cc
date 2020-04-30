@@ -37,9 +37,8 @@ seastar::future<> test_void_return(ThreadPool& tp) {
 
 int main(int argc, char** argv)
 {
-  std::unique_ptr<crimson::thread::ThreadPool> tp;
   seastar::app_template app;
-  return app.run(argc, argv, [&tp] {
+  return app.run(argc, argv, [] {
     std::vector<const char*> args;
     std::string cluster;
     std::string conf_file_list;
@@ -50,20 +49,22 @@ int main(int argc, char** argv)
     return crimson::common::sharded_conf().start(init_params.name, cluster)
     .then([conf_file_list] {
       return local_conf().parse_config_files(conf_file_list);
-    }).then([&tp] {
-      tp = std::make_unique<crimson::thread::ThreadPool>(2, 128, 0);
-      return tp->start().then([&tp] {
-        return test_accumulate(*tp);
-      }).then([&tp] {
-        return test_void_return(*tp);
-      }).handle_exception([](auto e) {
-        std::cerr << "Error: " << e << std::endl;
-        seastar::engine().exit(1);
-      }).finally([&tp] {
-        return tp->stop();
+    }).then([] {
+      return seastar::do_with(std::make_unique<crimson::thread::ThreadPool>(2, 128, 0),
+                              [](auto& tp) {
+        return tp->start().then([&tp] {
+          return test_accumulate(*tp);
+        }).then([&tp] {
+          return test_void_return(*tp);
+        }).finally([&tp] {
+          return tp->stop();
+        });
       });
     }).finally([] {
       return crimson::common::sharded_conf().stop();
+    }).handle_exception([](auto e) {
+      std::cerr << "Error: " << e << std::endl;
+      seastar::engine().exit(1);
     });
   });
 }
