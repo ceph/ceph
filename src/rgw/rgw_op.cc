@@ -4408,7 +4408,7 @@ void RGWPostObj::execute()
     }
   } while (is_next_file_to_upload());
 
-  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedPost, store);
+  const auto ret = rgw::notify::publish(s, s->object, ofs, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedPost, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -4966,18 +4966,19 @@ void RGWDeleteObj::execute()
       ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
     }
     populate_metadata_in_request(s, attrs);
+    const auto obj_state = obj_ctx->get_state(obj);
+
+    const auto ret = rgw::notify::publish(s, s->object, obj_state->size , obj_state->mtime, attrs[RGW_ATTR_ETAG].to_str(),
+        delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
+        store);
+    if (ret < 0) {
+      ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	    // TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	    // this should be global conf (probably returnign a different handler)
+      // so we don't need to read the configured values before we perform it
+    }
   } else {
     op_ret = -EINVAL;
-  }
-
-  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(),
-          delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
-          store);
-  if (ret < 0) {
-    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
-	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
-	// this should be global conf (probably returnign a different handler)
-    // so we don't need to read the configured values before we perform it
   }
 }
 
@@ -6270,7 +6271,8 @@ void RGWCompleteMultipart::execute()
     ldpp_dout(this, 0) << "WARNING: failed to remove object " << meta_obj << dendl;
   }
   
-  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedCompleteMultipartUpload, store);
+  const auto ret = rgw::notify::publish(s, s->object, ofs, ceph::real_clock::now(), final_etag_str, rgw::notify::ObjectCreatedCompleteMultipartUpload, store);
+
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -6631,7 +6633,7 @@ void RGWDeleteMultiObj::execute()
     bufferlist etag_bl;
     const auto etag = obj_state->get_attr(RGW_ATTR_ETAG, etag_bl) ? etag_bl.to_str() : "";
 
-    const auto ret = rgw::notify::publish(s, obj.key, obj_state->size, ceph::real_clock::now(), etag, 
+    const auto ret = rgw::notify::publish(s, obj.key, obj_state->size, obj_state->mtime, etag, 
             del_op.result.delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
             store);
     if (ret < 0) {
