@@ -682,9 +682,9 @@ public:
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj, RGWBucketInfo* out);
-    int init(const rgw_bucket& _bucket, int sid, RGWBucketInfo* out);
+    int init(const rgw_bucket& _bucket, int sid, const rgw::bucket_index_layout_generation& idx_layout, RGWBucketInfo* out);
     int init(const RGWBucketInfo& bucket_info, const rgw_obj& obj);
-    int init(const RGWBucketInfo& bucket_info, int sid);
+    int init(const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int sid);
   };
 
   class Object {
@@ -1411,7 +1411,7 @@ public:
   void bi_put(librados::ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry);
   int bi_put(BucketShard& bs, rgw_cls_bi_entry& entry);
   int bi_put(rgw_bucket& bucket, rgw_obj& obj, rgw_cls_bi_entry& entry);
-  int bi_list(rgw_bucket& bucket, int shard_id, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated);
+  int bi_list(const RGWBucketInfo& bucket_info, int shard_id, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated);
   int bi_list(BucketShard& bs, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated);
   int bi_list(rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max,
               list<rgw_cls_bi_entry> *entries, bool *is_truncated);

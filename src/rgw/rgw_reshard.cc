@@ -62,6 +62,7 @@ class BucketReshardShard {
   rgw::sal::RGWRadosStore *store;
   const RGWBucketInfo& bucket_info;
   int num_shard;
+  const rgw::bucket_index_layout_generation& idx_layout;
   RGWRados::BucketShard bs;
   vector<rgw_cls_bi_entry> entries;
   map<RGWObjCategory, rgw_bucket_category_stats> stats;
@@ -102,13 +103,14 @@ class BucketReshardShard {
 
 public:
   BucketReshardShard(rgw::sal::RGWRadosStore *_store, const RGWBucketInfo& _bucket_info,
-                     int _num_shard,
+                     int _num_shard, const rgw::bucket_index_layout_generation& _idx_layout,
                      deque<librados::AioCompletion *>& _completions) :
-    store(_store), bucket_info(_bucket_info), bs(store->getRados()),
+    store(_store), bucket_info(_bucket_info), idx_layout(_idx_layout), bs(store->getRados()),
     aio_completions(_completions)
   {
-    num_shard = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? _num_shard : -1);
-    bs.init(bucket_info.bucket, num_shard, nullptr /* no RGWBucketInfo */);
+    num_shard = (idx_layout.layout.normal.num_shards > 0 ? _num_shard : -1);
+
+    bs.init(bucket_info.bucket, num_shard, idx_layout, nullptr /* no RGWBucketInfo */);
 
     max_aio_completions =
       store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_max_aio");
@@ -192,10 +194,11 @@ public:
 		       int _num_target_shards) :
     store(_store), target_bucket_info(_target_bucket_info),
     num_target_shards(_num_target_shards)
-  {
+  { 
+    const auto& idx_layout = target_bucket_info.layout.current_index;
     target_shards.resize(num_target_shards);
     for (int i = 0; i < num_target_shards; ++i) {
-      target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, completions);
+      target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, idx_layout, completions);
     }
   }
 
@@ -580,7 +583,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
     marker.clear();
     while (is_truncated) {
       entries.clear();
-      ret = store->getRados()->bi_list(bucket, i, string(), marker, max_entries, &entries, &is_truncated);
+      ret = store->getRados()->bi_list(bucket_info, i, string(), marker, max_entries, &entries, &is_truncated);
       if (ret < 0 && ret != -ENOENT) {
 	derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
 	return ret;
