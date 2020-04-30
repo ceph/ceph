@@ -2061,20 +2061,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return [self._apply(spec) for spec in specs]
 
     def get_osdspec_affinity(self, osd_id: str) -> str:
-        ret, out, err = self.mon_command({
-            'prefix': 'osd metadata',
-            'id': int(osd_id),
-            'format': 'json'
-        })
-        if ret != 0:
-            self.log.warning(f"Caught error on calling 'osd metadata {osd_id}' -> {err}")
-            return ''
-        try:
-            metadata = json.loads(out)
-        except json.decoder.JSONDecodeError:
-            self.log.error(f"Could not decode json -> {out}")
-            return ''
-        return metadata.get('osdspec_affinity', '')
+        return self.get('osd_metadata').get(osd_id, {}).get('osdspec_affinity', '')
 
     def find_destroyed_osds(self) -> Dict[str, List[str]]:
         osd_host_map: Dict[str, List[str]] = dict()
