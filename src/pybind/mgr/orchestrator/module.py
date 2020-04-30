@@ -484,7 +484,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                    all_available_devices: bool = False,
                    preview: bool = False,
                    service_name: Optional[str] = None,
-                   unmanaged: Optional[bool] = None,
+                   unmanaged: bool = False,
                    format: Optional[str] = 'plain',
                    inbuf: Optional[str] = None) -> HandleCommandResult:
         """Apply DriveGroupSpecs to create OSDs"""
@@ -640,7 +640,10 @@ Usage:
         'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
         'name=placement,type=CephString,req=false',
         'Add daemon(s)')
-    def _daemon_add_misc(self, daemon_type=None, placement=None, inbuf=None):
+    def _daemon_add_misc(self,
+                         daemon_type: Optional[str] = None,
+                         placement: Optional[str] = None,
+                         inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = f"""Usage:
     ceph orch daemon add -i <json_file>
     ceph orch daemon add {daemon_type or '<daemon_type>'} <placement>"""
@@ -649,8 +652,8 @@ Usage:
                 raise OrchestratorValidationError(usage)
             spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
         else:
-            placement = PlacementSpec.from_string(placement)
-            spec = ServiceSpec(daemon_type, placement=placement)
+            placement = PlacementSpec.from_string(placement)  # type: ignore
+            spec = ServiceSpec(daemon_type, placement=placement)  # type: ignore
 
         daemon_type = spec.service_type
 
@@ -690,7 +693,10 @@ Usage:
         'name=fs_name,type=CephString '
         'name=placement,type=CephString,req=false',
         'Start MDS daemon(s)')
-    def _mds_add(self, fs_name, placement=None, inbuf=None):
+    def _mds_add(self,
+                 fs_name: str,
+                 placement: Optional[str] = None,
+                 inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
@@ -710,7 +716,11 @@ Usage:
         'name=zone_name,type=CephString '
         'name=placement,type=CephString,req=false',
         'Start RGW daemon(s)')
-    def _rgw_add(self, realm_name, zone_name, placement=None, inbuf=None):
+    def _rgw_add(self,
+                 realm_name: str,
+                 zone_name: str,
+                 placement: Optional[str] = None,
+                 inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
@@ -727,17 +737,22 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add nfs',
-        "name=svc_arg,type=CephString "
+        "name=svc_id,type=CephString "
         "name=pool,type=CephString "
         "name=namespace,type=CephString,req=false "
         'name=placement,type=CephString,req=false',
         'Start NFS daemon(s)')
-    def _nfs_add(self, svc_arg, pool, namespace=None, placement=None, inbuf=None):
+    def _nfs_add(self,
+                 svc_id: str,
+                 pool: str,
+                 namespace: Optional[str] = None,
+                 placement: Optional[str] = None,
+                 inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NFSServiceSpec(
-            svc_arg,
+            svc_id,
             pool=pool,
             namespace=namespace,
             placement=PlacementSpec.from_string(placement),
@@ -754,7 +769,11 @@ Usage:
         'name=trusted_ip_list,type=CephString,req=false '
         'name=placement,type=CephString,req=false',
         'Start iscsi daemon(s)')
-    def _iscsi_add(self, pool, trusted_ip_list=None, placement=None, inbuf=None):
+    def _iscsi_add(self,
+                   pool: str,
+                   trusted_ip_list: Optional[str] = None,
+                   placement: Optional[str] = None,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
@@ -831,7 +850,11 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the size or placement for a service or apply a large yaml spec')
-    def _apply_misc(self, service_type=None, placement=None, unmanaged=False, inbuf=None):
+    def _apply_misc(self,
+                    service_type: Optional[str] = None,
+                    placement: Optional[str] = None,
+                    unmanaged: bool = False,
+                    inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = """Usage:
   ceph orch apply -i <yaml spec>
   ceph orch apply <service_type> <placement> [--unmanaged]
@@ -842,8 +865,8 @@ Usage:
             content: Iterator = yaml.load_all(inbuf)
             specs = [ServiceSpec.from_json(s) for s in content]
         else:
-            placement = PlacementSpec.from_string(placement)
-            specs = [ServiceSpec(service_type, placement=placement, unmanaged=unmanaged)]
+            placement = PlacementSpec.from_string(placement)  # type: ignore
+            specs = [ServiceSpec(service_type, placement=placement, unmanaged=unmanaged)]  # type: ignore
 
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
@@ -856,10 +879,11 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of MDS instances for the given fs_name')
-    def _apply_mds(self, fs_name,
-                   placement=None,
-                   unmanaged=False,
-                   inbuf=None):
+    def _apply_mds(self,
+                   fs_name: str,
+                   placement: Optional[str] = None,
+                   unmanaged: bool = False,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
@@ -882,13 +906,15 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
-    def _apply_rgw(self, zone_name, realm_name,
-                   subcluster=None,
-                   port=None,
-                   ssl=False,
-                   placement=None,
-                   unmanaged=False,
-                   inbuf=None):
+    def _apply_rgw(self,
+                   realm_name: str,
+                   zone_name: str,
+                   subcluster: Optional[str] = None,
+                   port: Optional[int] = None,
+                   ssl: bool = False,
+                   placement: Optional[str] = None,
+                   unmanaged: bool = False,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
@@ -914,10 +940,13 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
-    def _apply_nfs(self, svc_id, pool, namespace=None,
-                   placement=None,
-                   unmanaged=False,
-                   inbuf=None):
+    def _apply_nfs(self,
+                   svc_id: str,
+                   pool: str,
+                   namespace: Optional[str] = None,
+                   placement: Optional[str] = None,
+                   unmanaged: bool = False,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
@@ -940,7 +969,12 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an iSCSI service')
-    def _apply_iscsi(self, pool, trusted_ip_list=None, placement=None, unmanaged=False, inbuf=None):
+    def _apply_iscsi(self,
+                     pool: str,
+                     trusted_ip_list: Optional[str] = None,
+                     placement: Optional[str] = None,
+                     unmanaged: bool = False,
+                     inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
@@ -951,6 +985,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
         )
+
         completion = self.apply_iscsi(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
