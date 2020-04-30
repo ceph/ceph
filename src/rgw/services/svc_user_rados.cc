@@ -798,13 +798,36 @@ int RGWSI_User_RADOS::cls_user_reset_stats(const rgw_user& user)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
   auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
+  int rval, r = rados_obj.open();
   if (r < 0) {
     return r;
   }
-  librados::ObjectWriteOperation op;
-  ::cls_user_reset_stats(op);
-  return rados_obj.operate(&op, null_yield);
+
+  cls_user_reset_stats2_op call;
+  cls_user_reset_stats2_ret ret;
+
+  do {
+    buffer::list in, out;
+    librados::ObjectWriteOperation op;
+
+    call.time = real_clock::now();
+    ret.update_call(call);
+
+    encode(call, in);
+    op.exec("user", "reset_user_stats2", in, &out, &rval);
+    r = rados_obj.operate(&op, null_yield, librados::OPERATION_RETURNVEC);
+    if (r < 0) {
+      return r;
+    }
+    try {
+      auto bliter = out.cbegin();
+      decode(ret, bliter);
+    } catch (ceph::buffer::error& err) {
+      return -EINVAL;
+    }
+  } while (ret.truncated);
+
+  return rval;
 }
 
 int RGWSI_User_RADOS::complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
