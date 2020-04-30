@@ -424,6 +424,13 @@ describe('TableComponent', () => {
       component.onClearSearch();
       expect(component.rows.length).toBe(10);
     });
+
+    it('should work with undefined data', () => {
+      component.data = undefined;
+      component.search = '3';
+      component.updateFilter();
+      expect(component.rows).toBeUndefined();
+    });
   });
 
   describe('after ngInit', () => {
