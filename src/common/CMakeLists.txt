@@ -8,7 +8,7 @@ add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
 
 if(WIN32)
-  add_library(dlfcn_win32 STATIC dlfcn_win32.cc)
+  add_library(dlfcn_win32 STATIC dlfcn_win32.cc win32_errno.cc)
 endif()
 
 set(common_srcs
@@ -136,7 +136,7 @@ elseif(SUN)
 elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
 elseif(WIN32)
-  list(APPEND common_srcs win32_errno.c)
+  list(APPEND common_srcs win32_errno.cc)
 endif()
 
 if(WITH_EVENTTRACE)
