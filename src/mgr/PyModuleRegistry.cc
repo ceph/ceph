@@ -25,6 +25,7 @@ namespace fs = std::experimental::filesystem;
 
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/split.h"
 
 #include "BaseMgrModule.h"
 #include "PyOSDMap.h"
@@ -267,14 +268,22 @@ void PyModuleRegistry::shutdown()
 
 std::set<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
 {
+  const auto opt = g_conf().get_val<std::string>("mgr_disabled_modules");
+  const auto disabled_modules = ceph::split(opt);
+
   std::set<std::string> modules;
   for (const auto& entry: fs::directory_iterator(path)) {
     if (!fs::is_directory(entry)) {
       continue;
     }
+    const std::string name = entry.path().filename();
+    if (std::count(disabled_modules.begin(), disabled_modules.end(), name)) {
+      dout(10) << "ignoring disabled module " << name << dendl;
+      continue;
+    }
     auto module_path = entry.path() / "module.py";
     if (fs::exists(module_path)) {
-      modules.emplace(entry.path().filename());
+      modules.emplace(name);
     }
   }
   return modules;

@@ -309,6 +309,9 @@
 
 #cmakedefine MGR_PYTHON_EXECUTABLE "@MGR_PYTHON_EXECUTABLE@"
 
+/* the default value of "mgr_disabled_module" option */
+#cmakedefine MGR_DISABLED_MODULES "@MGR_DISABLED_MODULES@"
+
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
 

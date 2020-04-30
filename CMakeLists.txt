@@ -442,6 +442,11 @@ if(WITH_MGR)
   set(MGR_PYTHON_LIBRARIES ${Python3_LIBRARIES})
   set(MGR_PYTHON_VERSION_MAJOR ${Python3_VERSION_MAJOR})
   set(MGR_PYTHON_VERSION_MINOR ${Python3_VERSION_MINOR})
+  # https://tracker.ceph.com/issues/45147
+  if(Python3_VERSION VERSION_GREATER_EQUAL 3.8)
+    set(MGR_DISABLED_MODULES "diskprediction_local")
+    message(STATUS "mgr module disabled for ${Python3_VERSION}: ${MGR_DISABLED_MODULES}")
+  endif()
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
