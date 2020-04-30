@@ -22,9 +22,9 @@ class BrotliCompressor : public Compressor
   public:
   BrotliCompressor() : Compressor(COMP_ALG_BROTLI, "brotli") {}
   
-  int compress(const bufferlist &in, bufferlist &out) override;
-  int decompress(const bufferlist &in, bufferlist &out) override;
-  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &out) override;
+  int compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message) override;
+  int decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message) override;
+  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &out, boost::optional<int32_t> compressor_message) override;
 };
 
 #endif //CEPH_BROTLICOMPRESSOR_H

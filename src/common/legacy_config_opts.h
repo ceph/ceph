@@ -82,6 +82,7 @@ SAFE_OPTION(plugin_dir, OPT_STR)
 
 OPTION(compressor_zlib_isal, OPT_BOOL)
 OPTION(compressor_zlib_level, OPT_INT) //regular zlib compression level, not applicable to isa-l optimized version
+OPTION(compressor_zlib_winsize, OPT_INT) //regular zlib compression winsize, not applicable to isa-l optimized version
 OPTION(compressor_zstd_level, OPT_INT) //regular zstd compression level
 
 OPTION(qat_compressor_enabled, OPT_BOOL)
