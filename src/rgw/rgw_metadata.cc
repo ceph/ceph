@@ -135,7 +135,7 @@ int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int sha
 }
 
 void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
-                                       string& marker, void **handle)
+                                       const string& marker, void **handle)
 {
   LogListCtx *ctx = new LogListCtx();
 
