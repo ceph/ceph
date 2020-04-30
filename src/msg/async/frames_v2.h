@@ -7,6 +7,8 @@
 #include <array>
 #include <utility>
 
+#include <boost/container/static_vector.hpp>
+
 /**
  * Protocol V2 Frame Structures
  * 
@@ -674,6 +676,9 @@ protected:
   using ControlFrame::ControlFrame;
 };
 
+using segment_bls_t =
+    boost::container::static_vector<bufferlist, MAX_NUM_SEGMENTS>;
+
 // This class is used for encoding/decoding header of the message frame.
 // Body is processed almost independently with the sole junction point
 // being the `extra_payload_len` passed to get_buffer().
@@ -683,12 +688,6 @@ struct MessageFrame : public Frame<MessageFrame,
                                    segment_t::DEFAULT_ALIGNMENT,
                                    segment_t::DEFAULT_ALIGNMENT,
                                    segment_t::PAGE_SIZE_ALIGNMENT> {
-  struct {
-    uint32_t front;
-    uint32_t middle;
-    uint32_t data;
-  } len;
-
   static const Tag tag = Tag::MESSAGE;
 
   static MessageFrame Encode(const ceph_msg_header2 &msg_header,
@@ -706,10 +705,7 @@ struct MessageFrame : public Frame<MessageFrame,
     return f;
   }
 
-  using rx_segments_t =
-    boost::container::static_vector<ceph::bufferlist,
-                                    ceph::msgr::v2::MAX_NUM_SEGMENTS>;
-  static MessageFrame Decode(rx_segments_t &&recv_segments) {
+  static MessageFrame Decode(segment_bls_t& recv_segments) {
     MessageFrame f;
     // transfer segments' bufferlists. If a MessageFrame contains less
     // SegmentsNumV segments, the missing ones will be seen as zeroed.
