@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "rgw_rest.h"
+#include "rgw_rest_s3.h"
 #include "rgw_metadata.h"
 #include "rgw_mdlog.h"
 
