@@ -241,7 +241,8 @@ class DriveGroupSpec(ServiceSpec):
         # type: () -> None
         super(DriveGroupSpec, self).validate()
 
-        if not isinstance(self.placement.host_pattern, six.string_types):
+        if not isinstance(self.placement.host_pattern, six.string_types) and \
+                self.placement.host_pattern is not None:
             raise DriveGroupValidationError('host_pattern must be of type string')
 
         specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
