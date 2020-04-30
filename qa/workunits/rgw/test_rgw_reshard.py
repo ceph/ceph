@@ -48,21 +48,6 @@ def exec_cmd(cmd):
         return False
 
 
-def install_reqs():
-    out = exec_cmd('cat /etc/*release')
-    result = {}
-    for row in out.decode('utf8').split('\n'):
-        if '=' in row:
-            k, v = row.split('=')
-            result[k.strip()] = v.strip('""')
-    if result['NAME'] == 'Ubuntu':
-        exec_cmd('sudo apt install -y python3-pip')
-    else:
-        exec_cmd('sudo yum install -y python3-pip')
-    exec_cmd('sudo pip3 install boto3')
-
-
-install_reqs()
 import boto3
 
 
