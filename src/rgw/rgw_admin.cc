@@ -234,8 +234,7 @@ void usage()
   cout << "  metadata rm                remove metadata info\n";
   cout << "  metadata list              list metadata info\n";
   cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
-  cout << "                             start-marker, end-marker)\n";
+  cout << "  mdlog trim                 trim metadata log (use marker)\n";
   cout << "  mdlog status               read metadata log status\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
@@ -1196,24 +1195,6 @@ static int read_decode_json(const string& infile, T& t, K *k)
     cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
-  return 0;
-}
-
-static int parse_date_str(const string& date_str, utime_t& ut)
-{
-  uint64_t epoch = 0;
-  uint64_t nsec = 0;
-
-  if (!date_str.empty()) {
-    int ret = utime_t::parse_date(date_str, &epoch, &nsec);
-    if (ret < 0) {
-      cerr << "ERROR: failed to parse date: " << date_str << std::endl;
-      return -EINVAL;
-    }
-  }
-
-  ut = utime_t(epoch, nsec);
-
   return 0;
 }
 
@@ -2797,18 +2778,14 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
   return -ENOENT;
 }
 
-static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
-                               const ceph::real_time& end_time,
-                               const string& start_marker, const string& end_marker,
-                               int delay_ms)
+static int trim_sync_error_log(int shard_id, const string& marker, int delay_ms)
 {
   auto oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
                                                shard_id);
   // call cls_log_trim() until it returns -ENODATA
   for (;;) {
-    int ret = store->svc()->cls->timelog.trim(oid, start_time, end_time,
-                                           start_marker, end_marker, nullptr,
-                                           null_yield);
+    int ret = store->svc()->cls->timelog.trim(oid, {}, {}, {}, marker, nullptr,
+					      null_yield);
     if (ret == -ENODATA) {
       return 0;
     }
@@ -7582,15 +7559,26 @@ next:
   }
 
   if (opt_cmd == OPT::MDLOG_LIST) {
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      if (marker.empty()) {
+	marker = start_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     int i = (specified_shard_id ? shard_id : 0);
 
@@ -7609,8 +7597,7 @@ next:
       void *handle;
       list<cls_log_entry> entries;
 
-
-      meta_log->init_list_entries(i, start_time.to_real_time(), end_time.to_real_time(), marker, &handle);
+      meta_log->init_list_entries(i, {}, {}, marker, &handle);
       bool truncated;
       do {
 	  int ret = meta_log->list_entries(handle, 1000, entries, NULL, &truncated);
@@ -7688,20 +7675,31 @@ next:
   }
 
   if (opt_cmd == OPT::MDLOG_TRIM) {
-    utime_t start_time, end_time;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      if (marker.empty()) {
+	marker = end_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     if (!specified_shard_id) {
       cerr << "ERROR: shard-id must be specified for trim operation" << std::endl;
       return EINVAL;
     }
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
 
     if (period_id.empty()) {
       std::cerr << "missing --period argument" << std::endl;
@@ -7711,8 +7709,7 @@ next:
 
     // trim until -ENODATA
     do {
-      ret = meta_log->trim(shard_id, start_time.to_real_time(),
-                           end_time.to_real_time(), start_marker, end_marker);
+      ret = meta_log->trim(shard_id, {}, {}, {}, marker);
     } while (ret == 0);
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
@@ -8106,17 +8103,28 @@ next:
     if (max_entries < 0) {
       max_entries = 1000;
     }
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      if (marker.empty()) {
+	marker = start_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     bool truncated;
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
 
     if (shard_id < 0) {
       shard_id = 0;
@@ -8134,11 +8142,10 @@ next:
 
       do {
         list<cls_log_entry> entries;
-        ret = store->svc()->cls->timelog.list(oid, start_time.to_real_time(), end_time.to_real_time(),
-                                           max_entries - count, entries, marker, &marker, &truncated,
-                                           null_yield);
-        if (ret == -ENOENT) {
-          break;
+        ret = store->svc()->cls->timelog.list(oid, {}, {}, max_entries - count, entries, marker, &marker, &truncated,
+					      null_yield);
+	if (ret == -ENOENT) {
+	  break;
         }
         if (ret < 0) {
           cerr << "ERROR: svc.cls->timelog.list(): " << cpp_strerror(-ret) << std::endl;
@@ -8181,23 +8188,29 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_ERROR_TRIM) {
-    utime_t start_time, end_time;
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
 
     if (shard_id < 0) {
       shard_id = 0;
     }
 
     for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
-      ret = trim_sync_error_log(shard_id, start_time.to_real_time(),
-                                end_time.to_real_time(), start_marker,
-                                end_marker, trim_delay_ms);
+      ret = trim_sync_error_log(shard_id, marker, trim_delay_ms);
       if (ret < 0) {
         cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -8609,16 +8622,26 @@ next:
     int count = 0;
     if (max_entries < 0)
       max_entries = 1000;
-
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!start_marker.empty()) {
+      if (marker.empty()) {
+	marker = start_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     auto datalog_svc = store->svc()->datalog_rados;
     RGWDataChangesLog::LogMarker log_marker;
@@ -8626,9 +8649,11 @@ next:
     do {
       list<rgw_data_change_log_entry> entries;
       if (specified_shard_id) {
-        ret = datalog_svc->list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, marker, &marker, &truncated);
+        ret = datalog_svc->list_entries(shard_id, {}, {}, max_entries - count,
+					entries, marker, &marker, &truncated);
       } else {
-        ret = datalog_svc->list_entries(start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, log_marker, &truncated);
+        ret = datalog_svc->list_entries({}, {}, max_entries - count, entries,
+					log_marker, &truncated);
       }
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -8691,15 +8716,26 @@ next:
   }
 
   if (opt_cmd == OPT::DATALOG_TRIM) {
-    utime_t start_time, end_time;
-
-    int ret = parse_date_str(start_date, start_time);
-    if (ret < 0)
-      return -ret;
-
-    ret = parse_date_str(end_date, end_time);
-    if (ret < 0)
-      return -ret;
+    if (!start_date.empty()) {
+      std::cerr << "start-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_date.empty()) {
+      std::cerr << "end-date not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      std::cerr << "end-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      if (marker.empty()) {
+	marker = end_marker;
+      } else {
+	std::cerr << "start-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
 
     if (!specified_shard_id) {
       cerr << "ERROR: requires a --shard-id" << std::endl;
@@ -8709,9 +8745,7 @@ next:
     // loop until -ENODATA
     do {
       auto datalog = store->svc()->datalog_rados;
-      ret = datalog->trim_entries(shard_id, start_time.to_real_time(),
-                                  end_time.to_real_time(),
-                                  start_marker, end_marker);
+      ret = datalog->trim_entries(shard_id, {}, {}, {}, marker);
     } while (ret == 0);
 
     if (ret < 0 && ret != -ENODATA) {

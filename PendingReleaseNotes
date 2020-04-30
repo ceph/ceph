@@ -1,5 +1,14 @@
 >=16.0.0
 --------
+* The allowable options for some "radosgw-admin" commands have been changed.
+
+  * "mdlog-list", "datalog-list", "sync-error-list" no longer accepts
+    start and end dates, but does accept a single optional start marker.
+  * "mdlog-trim", "datalog-trim", "sync-error-trim" only accept a
+    single marker giving the end of the trimmed range.
+
+>=15.0.0
+--------
 
 * Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
   by default. However, if enabled, user now have to pass the
