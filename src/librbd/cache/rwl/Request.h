@@ -336,6 +336,44 @@ public:
                                   const C_WriteSameRequest<U> &req);
 };
 
+/**
+ * This is the custodian of the BlockGuard cell for this compare and write. The
+ * block guard is acquired before the read begins to guarantee atomicity of this
+ * operation.  If this results in a write, the block guard will be released
+ * when the write completes to all replicas.
+ */
+template <typename T>
+class C_CompAndWriteRequest : public C_WriteRequest<T> {
+public:
+  using C_BlockIORequest<T>::rwl;
+  bool compare_succeeded = false;
+  uint64_t *mismatch_offset;
+  bufferlist cmp_bl;
+  bufferlist read_bl;
+  C_CompAndWriteRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+                        bufferlist&& cmp_bl, bufferlist&& bl, uint64_t *mismatch_offset,
+                        int fadvise_flags, ceph::mutex &lock, PerfCounters *perfcounter,
+                        Context *user_req);
+  ~C_CompAndWriteRequest();
+
+  void finish_req(int r) override;
+
+  void update_req_stats(utime_t &now) override;
+
+  /*
+   * Compare and write doesn't implement alloc_resources(), deferred_handler(),
+   * or dispatch(). We use the implementation in C_WriteRequest(), and only if the
+   * compare phase succeeds and a write is actually performed.
+   */
+
+  const char *get_name() const override {
+    return "C_CompAndWriteRequest";
+  }
+  template <typename U>
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const C_CompAndWriteRequest<U> &req);
+};
+
 struct BlockGuardReqState {
   bool barrier = false; /* This is a barrier request */
   bool current_barrier = false; /* This is the currently active barrier */
