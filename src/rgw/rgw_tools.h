@@ -94,14 +94,10 @@ extern thread_local bool is_asio_thread;
 /// perform the rados operation, using the yield context when given
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
-                      optional_yield y);
+                      optional_yield y, int flags = 0);
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectReadOperation *op, bufferlist* pbl,
-                      int flags, optional_yield y);
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectWriteOperation *op, optional_yield y);
-int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectWriteOperation *op, int flags, optional_yield y);
+                      librados::ObjectWriteOperation *op, optional_yield y,
+		      int flags = 0);
 int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y);
