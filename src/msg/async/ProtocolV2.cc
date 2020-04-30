@@ -1422,7 +1422,7 @@ CtPtr ProtocolV2::handle_message() {
 
   // we need to get the size before std::moving segments data
   const size_t cur_msg_size = get_current_msg_size();
-  auto msg_frame = MessageFrame::Decode(std::move(rx_segments_data));
+  auto msg_frame = MessageFrame::Decode(rx_segments_data);
 
   // XXX: paranoid copy just to avoid oops
   ceph_msg_header2 current_header = msg_frame.header();
