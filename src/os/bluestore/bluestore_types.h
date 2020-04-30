@@ -1074,15 +1074,19 @@ WRITE_CLASS_DENC(bluestore_deferred_transaction_t)
 struct bluestore_compression_header_t {
   uint8_t type = Compressor::COMP_ALG_NONE;
   uint32_t length = 0;
+  boost::optional<int32_t> compressor_message;
 
   bluestore_compression_header_t() {}
   bluestore_compression_header_t(uint8_t _type)
     : type(_type) {}
 
   DENC(bluestore_compression_header_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.type, p);
     denc(v.length, p);
+    if (struct_v >= 2) {
+      denc(v.compressor_message, p);
+    }
     DENC_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
