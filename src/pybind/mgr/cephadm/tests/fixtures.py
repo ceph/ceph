@@ -56,8 +56,8 @@ def cephadm_module():
             mock.patch("cephadm.module.CephadmOrchestrator.remote"),\
             mock.patch("cephadm.module.CephadmOrchestrator.set_store", set_store), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_store", get_store),\
-            mock.patch("cephadm.module.HostCache.save_host"), \
-            mock.patch("cephadm.module.HostCache.rm_host"), \
+            mock.patch("cephadm.inventory.HostCache.save_host"), \
+            mock.patch("cephadm.inventory.HostCache.rm_host"), \
             mock.patch("cephadm.module.CephadmOrchestrator.send_command"), \
             mock.patch("cephadm.module.CephadmOrchestrator.mon_command", mon_command), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix", get_store_prefix):
