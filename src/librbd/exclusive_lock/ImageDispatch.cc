@@ -9,6 +9,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ImageRequestWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -45,7 +46,7 @@ void ImageDispatch<I>::set_require_lock(io::Direction direction,
   // TODO
   if (blocked) {
     std::shared_lock owner_locker{m_image_ctx->owner_lock};
-    m_image_ctx->io_work_queue->block_writes(on_finish);
+    m_image_ctx->io_image_dispatcher->block_writes(on_finish);
   } else {
     on_finish->complete(0);
   }
@@ -57,7 +58,7 @@ void ImageDispatch<I>::unset_require_lock(io::Direction direction) {
 
   // TODO
   if (unblocked) {
-    m_image_ctx->io_work_queue->unblock_writes();
+    m_image_ctx->io_image_dispatcher->unblock_writes();
   }
 }
 

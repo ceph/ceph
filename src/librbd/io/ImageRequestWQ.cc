@@ -628,13 +628,6 @@ void ImageRequestWQ<I>::shut_down(Context *on_shutdown) {
 }
 
 template <typename I>
-int ImageRequestWQ<I>::block_writes() {
-  C_SaferCond cond_ctx;
-  block_writes(&cond_ctx);
-  return cond_ctx.wait();
-}
-
-template <typename I>
 void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
