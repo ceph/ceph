@@ -12,11 +12,17 @@
  *
  */
 
+
 #include <errno.h>
 #include <stdlib.h>
 
 #include "include/int_types.h"
+#include <ntdef.h>
+#include <ntstatus.h>
+
 #include "include/compat.h"
+#include "include/int_types.h"
+#include "include/types.h"
 
 // We're only converting errors defined in errno.h, not standard Windows
 // system error codes that are usually retrievied using GetLastErrorCode().
@@ -405,4 +411,186 @@ __s32 wsae_to_errno(__s32 r)
 {
   int sign = (r < 0 ? -1 : 1);
   return wsae_to_errno_unsigned(abs(r)) * sign;
+}
+
+__u32 errno_to_ntstatus(__u32 r) {
+  // errno -> NTSTATUS
+  // In some cases, there might be more than one applicable NTSTATUS
+  // value or there might be none. Certain values can be overridden
+  // when the caller (or whoever is supposed to handle the error) is
+  // expecting a different NTSTATUS value.
+  switch(r) {
+    case 0: return 0;
+    case EPERM: return STATUS_ACCESS_DENIED;
+    case ENOENT: return STATUS_OBJECT_NAME_NOT_FOUND;
+    case ESRCH: return STATUS_NOT_FOUND;
+    case EINTR: return STATUS_RETRY;
+    case EIO: return STATUS_DATA_ERROR;
+    case ENXIO: return STATUS_NOT_FOUND;
+    case E2BIG: return STATUS_FILE_TOO_LARGE;
+    case ENOEXEC: return STATUS_ACCESS_DENIED;
+    case EBADF: return STATUS_INVALID_HANDLE;
+    case ECHILD: return STATUS_INTERNAL_ERROR;
+    case EAGAIN: return STATUS_RETRY;
+    case EWOULDBLOCK: return STATUS_RETRY;
+    case ENOMEM: return STATUS_NO_MEMORY;
+    case EACCES: return STATUS_ACCESS_DENIED;
+    case EFAULT: return STATUS_INVALID_ADDRESS;
+    case ENOTBLK: return STATUS_BAD_DEVICE_TYPE;
+    case EBUSY: return STATUS_DEVICE_BUSY;
+    case EEXIST: return STATUS_OBJECT_NAME_COLLISION;
+    case EXDEV: return STATUS_NOT_SAME_DEVICE;
+    case ENODEV: return STATUS_SYSTEM_DEVICE_NOT_FOUND;
+    case ENOTDIR: return STATUS_NOT_A_DIRECTORY;
+    case EISDIR: return STATUS_FILE_IS_A_DIRECTORY;
+    case EINVAL: return STATUS_INVALID_PARAMETER;
+    case ENFILE: return STATUS_TOO_MANY_OPENED_FILES;
+    case EMFILE: return STATUS_TOO_MANY_OPENED_FILES;
+    case ENOTTY: return STATUS_INVALID_PARAMETER;
+    case ETXTBSY: return STATUS_DEVICE_BUSY;
+    case EFBIG: return STATUS_FILE_TOO_LARGE;
+    case ENOSPC: return STATUS_DISK_FULL;
+    case ESPIPE: return STATUS_INVALID_PARAMETER;
+    case EROFS: return STATUS_MEDIA_WRITE_PROTECTED;
+    case EMLINK: return STATUS_TOO_MANY_LINKS;
+    case EPIPE: return STATUS_PIPE_BROKEN;
+    case EDOM: return STATUS_INVALID_PARAMETER;
+    case ERANGE: return STATUS_INVALID_PARAMETER;
+    // same as EDEADLOCK
+    // case EDEADLK: return 35;
+    case EDEADLOCK: return STATUS_POSSIBLE_DEADLOCK;
+    case ENAMETOOLONG: return STATUS_NAME_TOO_LONG;
+    case ENOLCK: return STATUS_NOT_LOCKED;
+    case ENOSYS: return STATUS_NOT_IMPLEMENTED;
+    case ENOTEMPTY: return STATUS_DIRECTORY_NOT_EMPTY;
+    case ELOOP: return STATUS_TOO_MANY_LINKS;
+    case ENOMSG: return STATUS_MESSAGE_NOT_FOUND;
+    case EIDRM: return STATUS_INVALID_PARAMETER;
+    case ECHRNG: return STATUS_INVALID_PARAMETER;
+    case EL2NSYNC: return STATUS_INTERNAL_ERROR;
+    case EL3HLT: return STATUS_INTERNAL_ERROR;
+    case EL3RST: return STATUS_INTERNAL_ERROR;
+    case ELNRNG: return STATUS_INTERNAL_ERROR;
+    case EUNATCH: return STATUS_INTERNAL_ERROR;
+    case ENOCSI: return STATUS_INTERNAL_ERROR;
+    case EL2HLT: return STATUS_INTERNAL_ERROR;
+    case EBADE: return STATUS_INTERNAL_ERROR;
+    case EBADR: return STATUS_INVALID_HANDLE;
+    case EXFULL: return STATUS_DISK_FULL;
+    case ENOANO: return STATUS_INTERNAL_ERROR;
+    case EBADRQC: return STATUS_INVALID_PARAMETER;
+    case EBADSLT: return STATUS_INVALID_PARAMETER;
+    case EBFONT: return STATUS_INVALID_PARAMETER;
+    case ENOSTR: return STATUS_INVALID_PARAMETER;
+    case ENODATA: return STATUS_NOT_FOUND;
+    case ETIME: return STATUS_TIMEOUT;
+    case ENOSR: return STATUS_INSUFFICIENT_RESOURCES;
+    case ENONET: return STATUS_NETWORK_UNREACHABLE;
+    case ENOPKG: return STATUS_NO_SUCH_PACKAGE;
+    case EREMOTE: return STATUS_INVALID_PARAMETER;
+    case ENOLINK: return STATUS_INTERNAL_ERROR;
+    case EADV: return STATUS_INTERNAL_ERROR;
+    case ESRMNT: return STATUS_INTERNAL_ERROR;
+    case ECOMM: return STATUS_INTERNAL_ERROR;
+    case EPROTO: return STATUS_PROTOCOL_NOT_SUPPORTED;
+    case EMULTIHOP: return STATUS_INTERNAL_ERROR;
+    case EDOTDOT: return STATUS_INTERNAL_ERROR;
+    case EBADMSG: return STATUS_INVALID_PARAMETER;
+    case EOVERFLOW: return STATUS_BUFFER_OVERFLOW;
+    case ENOTUNIQ: return STATUS_DUPLICATE_NAME;
+    case EBADFD: return STATUS_INVALID_HANDLE;
+    case EREMCHG: return STATUS_FILE_RENAMED;
+    case ELIBACC: return STATUS_DLL_NOT_FOUND;
+    case ELIBBAD: return STATUS_BAD_DLL_ENTRYPOINT;
+    case ELIBSCN: return STATUS_BAD_DLL_ENTRYPOINT;
+    case ELIBMAX: return STATUS_TOO_MANY_OPENED_FILES;
+    case ELIBEXEC: return STATUS_INVALID_PARAMETER;
+    case EILSEQ: return STATUS_INVALID_PARAMETER;
+    // compat.h defines ERESTART as EINTR
+    // case ERESTART: return 85;
+    case ESTRPIPE: return STATUS_RETRY;
+    case EUSERS: return STATUS_TOO_MANY_SIDS;
+    case ENOTSOCK: return STATUS_INVALID_HANDLE;
+    case EDESTADDRREQ: return STATUS_INVALID_PARAMETER;
+    case EMSGSIZE: return STATUS_BUFFER_OVERFLOW;
+    case EPROTOTYPE: return STATUS_INVALID_PARAMETER;
+    case ENOPROTOOPT: return STATUS_PROTOCOL_NOT_SUPPORTED;
+    case EPROTONOSUPPORT: return STATUS_PROTOCOL_NOT_SUPPORTED;
+    case ESOCKTNOSUPPORT: return STATUS_NOT_SUPPORTED;
+    case EOPNOTSUPP: return STATUS_NOT_SUPPORTED;
+    case ENOTSUP: return STATUS_NOT_SUPPORTED;
+    case EPFNOSUPPORT: return STATUS_PROTOCOL_NOT_SUPPORTED;
+    case EAFNOSUPPORT: return STATUS_NOT_SUPPORTED;
+    case EADDRINUSE: return STATUS_ADDRESS_ALREADY_EXISTS;
+    case EADDRNOTAVAIL: return STATUS_INVALID_ADDRESS;
+    case ENETDOWN: return STATUS_NETWORK_UNREACHABLE;
+    case ENETUNREACH: return STATUS_NETWORK_UNREACHABLE;
+    case ENETRESET: return STATUS_CONNECTION_RESET;
+    case ECONNABORTED: return STATUS_CONNECTION_ABORTED;
+    case ECONNRESET: return STATUS_CONNECTION_DISCONNECTED;
+    case ENOBUFS: return STATUS_BUFFER_TOO_SMALL;
+    case EISCONN: return STATUS_CONNECTION_ACTIVE;
+    case ENOTCONN: return 107;
+    case ESHUTDOWN: return 108;
+    case ETOOMANYREFS: return 109;
+    case ETIMEDOUT: return STATUS_TIMEOUT;
+    case ECONNREFUSED: return STATUS_CONNECTION_REFUSED;
+    case EHOSTDOWN: return STATUS_FILE_CLOSED;
+    case EHOSTUNREACH: return STATUS_HOST_UNREACHABLE;
+    case EALREADY: return STATUS_PENDING;
+    case EINPROGRESS: return STATUS_PENDING;
+    case ESTALE: return STATUS_INVALID_HANDLE;
+    case EUCLEAN: return STATUS_INVALID_PARAMETER;
+    case ENOTNAM: return STATUS_INVALID_PARAMETER;
+    case ENAVAIL: return STATUS_INVALID_PARAMETER;
+    case EISNAM: return STATUS_INVALID_PARAMETER;
+    case EREMOTEIO: return STATUS_DATA_ERROR;
+    case EDQUOT: return STATUS_QUOTA_EXCEEDED;
+    case ENOMEDIUM: return STATUS_NO_MEDIA;
+    case EMEDIUMTYPE: return STATUS_INVALID_PARAMETER;
+    case ECANCELED: return STATUS_REQUEST_CANCELED;
+    case ENOKEY: return STATUS_NO_USER_KEYS;
+    case EKEYEXPIRED: return STATUS_SMARTCARD_CERT_EXPIRED;
+    case EKEYREVOKED: return STATUS_IMAGE_CERT_REVOKED;
+    case EKEYREJECTED: return STATUS_ACCESS_DENIED;
+    case EOWNERDEAD: return STATUS_INTERNAL_ERROR;
+    case ENOTRECOVERABLE: return STATUS_INTERNAL_ERROR;
+    case ERFKILL: return STATUS_INTERNAL_ERROR;
+    case EHWPOISON: return STATUS_INTERNAL_ERROR;
+    default:
+      return STATUS_INTERNAL_ERROR;
+ }
+}
+
+std::string win32_strerror(int err)
+{
+  // As opposed to dlerror messages, this has to be freed.
+  LPSTR msg = NULL;
+  DWORD msg_len = ::FormatMessageA(
+    FORMAT_MESSAGE_ALLOCATE_BUFFER |
+    FORMAT_MESSAGE_FROM_SYSTEM |
+    FORMAT_MESSAGE_IGNORE_INSERTS,
+    NULL,
+    err,
+    0,
+    (LPSTR) &msg,
+    0,
+    NULL);
+
+  std::ostringstream msg_stream;
+  msg_stream << "(" << err << ") ";
+  if (!msg_len) {
+    msg_stream << "Unknown error";
+  }
+  else {
+    msg_stream << msg;
+    ::LocalFree(msg);
+  }
+  return msg_stream.str();
+}
+
+std::string win32_lasterror_str()
+{
+  DWORD err = ::GetLastError();
+  return win32_strerror(err);
 }
