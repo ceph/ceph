@@ -29,6 +29,13 @@ public:
 
   MOCK_METHOD1(apply_qos_schedule_tick_min, void(uint64_t));
   MOCK_METHOD3(apply_qos_limit, void(uint64_t, uint64_t, uint64_t));
+
+  MOCK_CONST_METHOD0(writes_blocked, bool());
+  MOCK_METHOD0(block_writes, int());
+  MOCK_METHOD1(block_writes, void(Context*));
+
+  MOCK_METHOD0(unblock_writes, void());
+  MOCK_METHOD1(wait_on_writes_unblocked, void(Context*));
 };
 
 } // namespace io

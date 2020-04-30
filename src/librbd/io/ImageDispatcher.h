@@ -21,6 +21,7 @@ struct ImageCtx;
 
 namespace io {
 
+template <typename> struct QueueImageDispatch;
 template <typename> struct QosImageDispatch;
 
 template <typename ImageCtxT = ImageCtx>
@@ -30,6 +31,13 @@ public:
 
   void apply_qos_schedule_tick_min(uint64_t tick) override;
   void apply_qos_limit(uint64_t flag, uint64_t limit, uint64_t burst) override;
+
+  bool writes_blocked() const override;
+  int block_writes() override;
+  void block_writes(Context *on_blocked) override;
+
+  void unblock_writes() override;
+  void wait_on_writes_unblocked(Context *on_unblocked) override;
 
   void finish(int r, ImageDispatchLayer image_dispatch_layer,
               uint64_t tid) override;
@@ -42,6 +50,7 @@ protected:
 private:
   struct SendVisitor;
 
+  QueueImageDispatch<ImageCtxT>* m_queue_image_dispatch = nullptr;
   QosImageDispatch<ImageCtxT>* m_qos_image_dispatch = nullptr;
 
 };

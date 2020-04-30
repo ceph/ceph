@@ -21,6 +21,13 @@ public:
   virtual void apply_qos_limit(uint64_t flag, uint64_t limit,
                                uint64_t burst) = 0;
 
+  virtual bool writes_blocked() const = 0;
+  virtual int block_writes() = 0;
+  virtual void block_writes(Context *on_blocked) = 0;
+
+  virtual void unblock_writes() = 0;
+  virtual void wait_on_writes_unblocked(Context *on_unblocked) = 0;
+
   virtual void finish(int r, ImageDispatchLayer image_dispatch_layer,
                       uint64_t tid) = 0;
 };
