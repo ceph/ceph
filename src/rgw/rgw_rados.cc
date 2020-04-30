@@ -3916,6 +3916,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = cb.get_data_len();
+    cs_info.compressor_message = compressor->get_compressor_message();
     cs_info.blocks = move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;

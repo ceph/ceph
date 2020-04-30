@@ -88,11 +88,11 @@ public:
   CompressionAlgorithm get_type() const {
     return alg;
   }
-  virtual int compress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
-  virtual int decompress(const ceph::bufferlist &in, ceph::bufferlist &out) = 0;
+  virtual int compress(const ceph::bufferlist &in, ceph::bufferlist &out, boost::optional<int32_t> &compressor_message) = 0;
+  virtual int decompress(const ceph::bufferlist &in, ceph::bufferlist &out, boost::optional<int32_t> compressor_message) = 0;
   // this is a bit weird but we need non-const iterator to be in
   // alignment with decode methods
-  virtual int decompress(ceph::bufferlist::const_iterator &p, size_t compressed_len, ceph::bufferlist &out) = 0;
+  virtual int decompress(ceph::bufferlist::const_iterator &p, size_t compressed_len, ceph::bufferlist &out, boost::optional<int32_t> compressor_message) = 0;
 
   static CompressorRef create(CephContext *cct, const std::string &type);
   static CompressorRef create(CephContext *cct, int alg);
