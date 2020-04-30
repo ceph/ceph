@@ -1644,8 +1644,15 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
+  RGWBucket bucket;
   int ret = 0;
   const std::string& bucket_name = op_state.get_bucket_name();
+  if (!bucket_name.empty()) {
+    ret = bucket.init(store, op_state);
+    if (ret < 0)
+      return ret;
+  }
+
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
