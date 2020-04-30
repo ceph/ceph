@@ -1245,6 +1245,7 @@ class DaemonDescription(object):
                  created=None,
                  started=None,
                  last_configured=None,
+                 osdspec_affinity=None,
                  last_deployed=None):
         # Host is at the same granularity as InventoryHost
         self.hostname = hostname
@@ -1281,6 +1282,9 @@ class DaemonDescription(object):
         self.started = started    # type: Optional[datetime.datetime]
         self.last_configured = last_configured # type: Optional[datetime.datetime]
         self.last_deployed = last_deployed    # type: Optional[datetime.datetime]
+
+        # Affinity to a certain OSDSpec
+        self.osdspec_affinity = osdspec_affinity  # type: Optional[str]
 
     def name(self):
         return '%s.%s' % (self.daemon_type, self.daemon_id)
