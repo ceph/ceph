@@ -695,6 +695,7 @@ Usage:
             'mds', fs_name,
             placement=PlacementSpec.from_string(placement),
         )
+
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -702,62 +703,18 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add rgw',
-        'name=realm_name,type=CephString,req=false '
-        'name=zone_name,type=CephString,req=false '
+        'name=realm_name,type=CephString '
+        'name=zone_name,type=CephString '
         'name=placement,type=CephString,req=false',
         'Start RGW daemon(s)')
-    def _rgw_add(self, realm_name=None, zone_name=None, placement=None, inbuf=None):
-        usage = """
-Usage:
-  ceph orch daemon rgw add -i <json_file>
-  ceph orch daemon rgw add <realm_name> <zone_name>
-        """
-        if inbuf:
-            try:
-                rgw_spec = RGWSpec.from_json(json.loads(inbuf))
-            except ValueError as e:
-                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        elif realm_name and zone_name:
-            rgw_spec = RGWSpec(
-                rgw_realm=realm_name,
-                rgw_zone=zone_name,
-                placement=PlacementSpec.from_string(placement))
-        else:
-            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+    def _rgw_add(self, realm_name, zone_name, placement=None, inbuf=None):
+        spec = RGWSpec(
+            rgw_realm=realm_name,
+            rgw_zone=zone_name,
+            placement=PlacementSpec.from_string(placement),
+        )
 
-        completion = self.add_rgw(rgw_spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add iscsi',
-        'name=pool,type=CephString '
-        'name=trusted_ip_list,type=CephString,req=false '
-        'name=placement,type=CephString,req=false',
-        'Start iscsi daemon(s)')
-    def _iscsi_add(self, pool, trusted_ip_list=None, placement=None, inbuf=None):
-        usage = """
-        Usage:
-          ceph orch daemon add iscsi -i <json_file>
-          ceph orch daemon add iscsi <pool>
-                """
-        if inbuf:
-            try:
-                iscsi_spec = IscsiServiceSpec.from_json(json.loads(inbuf))
-            except ValueError as e:
-                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        else:
-            iscsi_spec = IscsiServiceSpec(
-                service_id='iscsi',
-                pool=pool,
-                trusted_ip_list=trusted_ip_list,
-                placement=PlacementSpec.from_string(placement),
-            )
-
-        completion = self.add_iscsi(iscsi_spec)
+        completion = self.add_rgw(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -778,6 +735,25 @@ Usage:
         )
         spec.validate_add()
         completion = self.add_nfs(spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch daemon add iscsi',
+        'name=pool,type=CephString '
+        'name=trusted_ip_list,type=CephString,req=false '
+        'name=placement,type=CephString,req=false',
+        'Start iscsi daemon(s)')
+    def _iscsi_add(self, pool, trusted_ip_list=None, placement=None, inbuf=None):
+        spec = IscsiServiceSpec(
+            service_id='iscsi',
+            pool=pool,
+            trusted_ip_list=trusted_ip_list,
+            placement=PlacementSpec.from_string(placement),
+        )
+
+        completion = self.add_iscsi(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
