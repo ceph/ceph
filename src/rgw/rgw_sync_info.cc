@@ -1,114 +1,130 @@
 #include "rgw_sync_info.h"
 
-int SIProviderClient::init_marker(int shard_id, bool all_history) {
-  if (!all_history) {
-    return provider->get_cur_state(shard_id, &marker);
+
+int SIProvider_SingleStage::fetch(stage_id_t sid, int shard_id, std::string marker, int max, fetch_result *result)
+{
+  if (sid != stage_id) {
+    return -ERANGE;
   }
-  return provider->get_start_marker(shard_id, &marker);
+  return do_fetch(shard_id, marker, max, result);
 }
 
+int SIProvider_SingleStage::get_start_marker(stage_id_t sid, int shard_id, std::string *marker) const
+{
+  if (sid != stage_id) {
+    return -ERANGE;
+  }
+  return do_get_start_marker(shard_id, marker);
+}
+
+int SIProvider_SingleStage::get_cur_state(stage_id_t sid, int shard_id, std::string *marker) const
+{
+  if (sid != stage_id) {
+    return -ERANGE;
+  }
+  return do_get_cur_state(shard_id, marker);
+}
+
+int SIProviderClient::init_markers()
+{
+  auto stage_ids = provider->get_stages();
+
+  if (stage_ids.empty()) {
+    return 0;
+  }
+
+  SIProvider::StageInfo prev;
+
+  for (auto& sid : stage_ids) {
+    SIProvider::StageInfo sinfo;
+    int r = provider->get_stage_info(sid, &sinfo);
+    if (r < 0) {
+      return r;
+    }
+    bool all_history = (prev.params.type != SIProvider::StageType::FULL ||
+                        sinfo.params.type != SIProvider::StageType::INC);
+    auto& stage_markers = initial_stage_markers[sinfo.sid];
+    stage_markers.reserve(sinfo.params.num_shards);
+    for (int i = 0; i < sinfo.params.num_shards; ++i) {
+      std::string marker;
+      int r = (!all_history ? provider->get_cur_state(sid, i, &marker) : 
+                              provider->get_start_marker(sid, i, &marker));
+      if (r < 0) {
+        return r;
+      }
+      stage_markers.push_back(marker);
+    }
+  }
+
+  init_stage(provider->get_first_stage());
+
+  return 0;
+}
+
+int SIProviderClient::init_stage(SIProvider::stage_id_t new_sid)
+{
+  int r = provider->get_stage_info(new_sid, &stage_info);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = initial_stage_markers.find(stage_info.sid);
+  if (iter != initial_stage_markers.end()) {
+    markers = std::move(iter->second);
+    initial_stage_markers.erase(iter);
+  } else {
+    markers.resize(stage_info.params.num_shards);
+    markers.clear();
+  }
+
+  done.resize(stage_info.params.num_shards);
+  done.clear();
+
+  num_complete = 0;
+  return 0;
+}
+
+
 int SIProviderClient::fetch(int shard_id, int max, SIProvider::fetch_result *result) {
-  int r = provider->fetch(shard_id, marker, max, result);
+  if (shard_id > stage_info.params.num_shards) {
+    return -ERANGE;
+  }
+
+  int r = provider->fetch(stage_info.sid, shard_id, markers[shard_id], max, result);
   if (r < 0) {
     return r;
   }
 
   if (!result->entries.empty()) {
-    marker = result->entries.back().key;
+    markers[shard_id] = result->entries.back().key;
   }
 
-  done = result->done;
+  if (result->done && !done[shard_id]) {
+    ++num_complete;
+    done[shard_id] = result->done;
+  }
 
   return 0;
 }
 
-int SIPShardedStage::init_markers(bool all_history) {
-  int shard_id = 0;
-  for (auto iter : shards) {
-    int r = iter->init_marker(shard_id++, all_history);
-    if (r < 0) {
-      return r;
-    }
-  }
-  return 0;
-}
+int SIProviderClient::promote_stage(int *new_num_shards)
+{
+  SIProvider::stage_id_t next_sid;
 
-int SIPShardedStage::fetch(int shard_id, int max, SIProvider::fetch_result *result) {
-  if (shard_id >= (int)shards.size()) {
-    return -ENOENT;
-  }
-
-  if (done_vec[shard_id]) {
-    result->more = false;
-    result->done = true;
-    return  0;
-  }
-
-  int r = shards[shard_id]->fetch(shard_id, max, result);
+  int r = provider->get_next_stage(stage_info.sid, &next_sid);
   if (r < 0) {
     return r;
   }
 
-  if (result->done) {
-    done_vec[shard_id] = true;
-    ++done_count;
-    complete = (done_count == (int)shards.size());
-  }
-
-  return 0;
-}
-
-
-int SIPMultiStageClient::fetch(int shard_id, int max, SIProvider::fetch_result *result) {
-  if (cur_stage >= (int)stages.size()) {
-    return -ENOENT;
-  }
-
-  auto stage = cur_stage_ref();
-
-  int r = stage->fetch(shard_id, max, result);
+  r = init_stage(next_sid);
   if (r < 0) {
     return r;
   }
 
-  if (result->done) {
-    if (stage->is_complete()) {
-      ++cur_stage;
-    }
-  }
-
-  return 0;
-}
-
-bool SIPMultiStageClient::promote_stage(int *new_num_shards) {
-  auto stage = cur_stage_ref();
-  if (!stage->is_complete()) {
-    return false;
-  }
-
-  ++cur_stage;
   if (new_num_shards) {
     *new_num_shards = num_shards();
   }
 
-  return true;
-}
-
-int SIPMultiStageClient::init_markers()
-{
-  if (stages.empty()) {
-    return -EINVAL;
-  }
-
-  auto prev_type = SIProvider::Type::UNKNOWN;
-
-  for (auto& stage : stages) {
-    bool full_history = (prev_type != SIProvider::Type::FULL);
-
-    stage->init_markers(full_history); 
-
-    prev_type = stage->get_provider_info().type;
-  }
-
   return 0;
 }
+
