@@ -186,13 +186,12 @@ template <>
 struct EnableRequest<MockTestImageCtx> {
   Context* on_finish = nullptr;
   static EnableRequest* s_instance;
-  static EnableRequest* create(librados::IoCtx &io_ctx,
-                               const std::string &image_id,
+  static EnableRequest* create(MockTestImageCtx* image_ctx,
                                cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
-                               MockContextWQ *op_work_queue,
-                               Context *on_finish) {
+                               bool image_clean, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
+    EXPECT_TRUE(image_clean);
     s_instance->on_finish = on_finish;
     return s_instance;
   }

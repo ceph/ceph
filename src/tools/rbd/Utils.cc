@@ -557,6 +557,11 @@ int get_image_options(const boost::program_options::variables_map &vm,
     return r;
   }
 
+  if (vm.count(at::IMAGE_MIRROR_IMAGE_MODE)) {
+    opts->set(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+              vm[at::IMAGE_MIRROR_IMAGE_MODE].as<librbd::mirror_image_mode_t>());
+  }
+
   return 0;
 }
 

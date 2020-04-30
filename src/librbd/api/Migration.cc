@@ -29,6 +29,7 @@
 #include "librbd/image/DetachParentRequest.h"
 #include "librbd/image/ListWatchersRequest.h"
 #include "librbd/image/RemoveRequest.h"
+#include "librbd/image/Types.h"
 #include "librbd/internal.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/mirror/DisableRequest.h"
@@ -1226,13 +1227,22 @@ int Migration<I>::create_dst_image() {
   ConfigProxy config{m_cct->_conf};
   api::Config<I>::apply_pool_overrides(m_dst_io_ctx, &config);
 
+  uint64_t mirror_image_mode;
+  if (m_image_options.get(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+                          &mirror_image_mode) == 0) {
+    m_mirroring = true;
+    m_mirror_image_mode = static_cast<cls::rbd::MirrorImageMode>(
+      mirror_image_mode);
+    m_image_options.unset(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE);
+  }
+
   int r;
   C_SaferCond on_create;
   librados::IoCtx parent_io_ctx;
   if (parent_spec.pool_id == -1) {
     auto *req = image::CreateRequest<I>::create(
       config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
-      m_image_options, true /* skip_mirror_enable */,
+      m_image_options, image::CREATE_FLAG_SKIP_MIRROR_ENABLE,
       cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", "", op_work_queue, &on_create);
     req->send();
   } else {
@@ -1495,7 +1505,7 @@ int Migration<I>::enable_mirroring(
 
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<I>::create(
-    image_ctx, mirror_image_mode, &ctx);
+    image_ctx, mirror_image_mode, "", false, &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {

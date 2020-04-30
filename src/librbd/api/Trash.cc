@@ -95,8 +95,8 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
   ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<I>::create(
-    io_ctx, image_id, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", op_work_queue,
-    &ctx);
+    io_ctx, image_id, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "", false,
+    op_work_queue, &ctx);
   req->send();
   r = ctx.wait();
   if (r < 0) {

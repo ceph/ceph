@@ -14,6 +14,7 @@
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
+#include "librbd/image/Types.h"
 #include "librbd/mirror/EnableRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -285,8 +286,9 @@ void CloneRequest<I>::create_child() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_child>(this);
 
-  CreateRequest<I> *req = CreateRequest<I>::create(
-    m_config, m_ioctx, m_name, m_id, m_size, m_opts, true,
+  auto req = CreateRequest<I>::create(
+    m_config, m_ioctx, m_name, m_id, m_size, m_opts,
+    image::CREATE_FLAG_SKIP_MIRROR_ENABLE,
     cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, m_non_primary_global_image_id,
     m_primary_mirror_uuid, m_op_work_queue, ctx);
   req->send();
@@ -424,7 +426,14 @@ template <typename I>
 void CloneRequest<I>::get_mirror_mode() {
   ldout(m_cct, 15) << dendl;
 
+  uint64_t mirror_image_mode;
   if (!m_non_primary_global_image_id.empty()) {
+    enable_mirror();
+    return;
+  } else if (m_opts.get(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+                        &mirror_image_mode) == 0) {
+    m_mirror_image_mode = static_cast<cls::rbd::MirrorImageMode>(
+      mirror_image_mode);
     enable_mirror();
     return;
   } else if (!m_imctx->test_features(RBD_FEATURE_JOURNALING)) {
@@ -459,6 +468,7 @@ void CloneRequest<I>::handle_get_mirror_mode(int r) {
 
     m_r_saved = r;
   } else if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL) {
+    m_mirror_image_mode = cls::rbd::MIRROR_IMAGE_MODE_JOURNAL;
     enable_mirror();
     return;
   }
@@ -474,8 +484,7 @@ void CloneRequest<I>::enable_mirror() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_enable_mirror>(this);
   auto req = mirror::EnableRequest<I>::create(
-    m_imctx->md_ctx, m_id, m_mirror_image_mode, m_non_primary_global_image_id,
-    m_imctx->op_work_queue, ctx);
+    m_imctx, m_mirror_image_mode, m_non_primary_global_image_id, true, ctx);
   req->send();
 }
 

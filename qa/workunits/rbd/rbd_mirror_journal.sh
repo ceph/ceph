@@ -20,7 +20,7 @@ set_image_meta ${CLUSTER2} ${POOL} ${image} "key2" "value2"
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'down+unknown'
 fi
@@ -36,7 +36,7 @@ write_image ${CLUSTER2} ${POOL} ${image1} 100
 start_mirrors ${CLUSTER1}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image1}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image1}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image1} 'up+replaying' 'primary_position'
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image1} 'down+unknown'
 fi
@@ -46,7 +46,7 @@ testlog "TEST: test the first image is replaying after restart"
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 compare_images ${POOL} ${image}
 
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
@@ -151,7 +151,7 @@ wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 compare_images ${POOL} ${image}
 
 # failover (unmodified)
@@ -170,7 +170,7 @@ wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
 promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
 compare_images ${POOL} ${image}
 
@@ -184,7 +184,7 @@ wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
 write_image ${CLUSTER1} ${POOL} ${image} 100
 wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
-wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+replaying' 'primary_position'
 compare_images ${POOL} ${image}
 
 # failback
@@ -196,7 +196,7 @@ promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
 compare_images ${POOL} ${image}
 
@@ -207,7 +207,7 @@ write_image ${CLUSTER2} ${POOL} ${force_promote_image} 100
 wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${force_promote_image}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${force_promote_image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${force_promote_image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${force_promote_image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${force_promote_image} 'up+replaying' 'primary_position'
 wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${force_promote_image} 'up+stopped'
 promote_image ${CLUSTER1} ${POOL} ${force_promote_image} '--force'
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${force_promote_image}
@@ -233,12 +233,12 @@ write_image ${CLUSTER2} ${POOL} ${clone_image} 100
 enable_mirror ${CLUSTER2} ${PARENT_POOL} ${parent_image} journal
 wait_for_image_replay_started ${CLUSTER1} ${PARENT_POOL} ${parent_image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} ${parent_image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${PARENT_POOL} ${parent_image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${PARENT_POOL} ${parent_image} 'up+replaying' 'primary_position'
 compare_images ${PARENT_POOL} ${parent_image}
 
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${clone_image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'primary_position'
 compare_images ${POOL} ${clone_image}
 
 testlog " - clone v1"
@@ -291,7 +291,7 @@ write_image ${CLUSTER2} ${POOL} ${dp_image} 100
 create_snapshot ${CLUSTER2} ${POOL} ${dp_image} 'snap2'
 write_image ${CLUSTER2} ${POOL} ${dp_image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${dp_image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${dp_image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${dp_image} 'up+replaying' 'primary_position'
 compare_images ${POOL} ${dp_image}@snap1
 compare_images ${POOL} ${dp_image}@snap2
 compare_images ${POOL} ${dp_image}
@@ -349,17 +349,17 @@ for cluster in ${CLUSTER1} ${CLUSTER2}; do
     CEPH_ARGS='' rbd --cluster ${cluster} pool init ${pool}
     rbd --cluster ${cluster} mirror pool enable ${pool} pool
 done
-rbd --cluster ${CLUSTER1} mirror pool peer add ${pool} ${CLUSTER2}
-rbd --cluster ${CLUSTER2} mirror pool peer add ${pool} ${CLUSTER1}
+peer_add ${CLUSTER1} ${pool} ${CLUSTER2}
+peer_add ${CLUSTER2} ${pool} ${CLUSTER1}
 rdp_image=test_remove_data_pool
 create_image ${CLUSTER2} ${pool} ${image} 128
 create_image ${CLUSTER2} ${POOL} ${rdp_image} 128 --data-pool ${pool}
 write_image ${CLUSTER2} ${pool} ${image} 100
 write_image ${CLUSTER2} ${POOL} ${rdp_image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${pool} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${pool} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${pool} ${image} 'up+replaying' 'primary_position'
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${rdp_image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${rdp_image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${rdp_image} 'up+replaying' 'primary_position'
 for cluster in ${CLUSTER1} ${CLUSTER2}; do
     CEPH_ARGS='' ceph --cluster ${cluster} osd pool rm ${pool} ${pool} --yes-i-really-really-mean-it
 done
@@ -405,8 +405,8 @@ write_image ${CLUSTER2} ${POOL}/${NS1} ${image} 100
 write_image ${CLUSTER2} ${POOL}/${NS2} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS2} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${image} 'up+replaying' 'master_position'
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS2} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${image} 'up+replaying' 'primary_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS2} ${image} 'up+replaying' 'primary_position'
 compare_images ${POOL}/${NS1} ${image}
 compare_images ${POOL}/${NS2} ${image}
 
@@ -426,7 +426,7 @@ data_pool=$(get_image_data_pool ${CLUSTER1} ${POOL}/${NS1} ${dp_image})
 test "${data_pool}" = "${PARENT_POOL}"
 write_image ${CLUSTER2} ${POOL}/${NS1} ${dp_image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${NS1} ${dp_image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${dp_image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/${NS1} ${dp_image} 'up+replaying' 'primary_position'
 compare_images ${POOL}/${NS1} ${dp_image}
 
 testlog "TEST: simple image resync"
@@ -434,7 +434,7 @@ request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 compare_images ${POOL} ${image}
 
 testlog "TEST: image resync while replayer is stopped"
@@ -447,7 +447,7 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   admin_daemons ${CLUSTER1} rbd mirror start ${POOL}/${image}
   wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
   compare_images ${POOL} ${image}
 fi
 
@@ -458,7 +458,7 @@ start_mirrors ${CLUSTER1}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 compare_images ${POOL} ${image}
 
 testlog "TEST: client disconnect"
@@ -535,7 +535,7 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnecte
 testlog "TEST: split-brain"
 image=split-brain
 create_image ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 promote_image ${CLUSTER1} ${POOL} ${image} --force
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
@@ -543,7 +543,7 @@ write_image ${CLUSTER1} ${POOL} ${image} 10
 demote_image ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'split-brain'
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'primary_position'
 
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   # teuthology will trash the daemon

@@ -243,7 +243,9 @@ void add_create_image_options(po::options_description *opt,
     (IMAGE_SHARED.c_str(), po::bool_switch(), "shared image")
     (IMAGE_STRIPE_UNIT.c_str(), po::value<ImageObjectSize>(), "stripe unit in B/K/M")
     (IMAGE_STRIPE_COUNT.c_str(), po::value<uint64_t>(), "stripe count")
-    (IMAGE_DATA_POOL.c_str(), po::value<std::string>(), "data pool");
+    (IMAGE_DATA_POOL.c_str(), po::value<std::string>(), "data pool")
+    (IMAGE_MIRROR_IMAGE_MODE.c_str(), po::value<MirrorImageMode>(),
+     "mirror image mode [journal or snapshot]");
 
   add_create_journal_options(opt);
 }
@@ -460,6 +462,19 @@ void validate(boost::any& v, const std::vector<std::string>& values,
         throw po::validation_error(po::validation_error::invalid_option_value);
       }
     }
+  }
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              MirrorImageMode* mirror_image_mode, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  if (s == "journal") {
+    v = boost::any(RBD_MIRROR_IMAGE_MODE_JOURNAL);
+  } else if (s == "snapshot") {
+    v = boost::any(RBD_MIRROR_IMAGE_MODE_SNAPSHOT);
+  } else {
+    throw po::validation_error(po::validation_error::invalid_option_value);
   }
 }
 

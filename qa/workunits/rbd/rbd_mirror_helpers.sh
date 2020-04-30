@@ -248,9 +248,11 @@ peer_add()
     local peer_uuid
 
     for s in 1 2 4 8 16 32; do
+        set +e
         peer_uuid=$(rbd --cluster ${cluster} mirror pool peer add \
             ${pool} ${client_cluster} $@)
         error_code=$?
+        set -e
 
         if [ $error_code -eq 17 ]; then
             # raced with a remote heartbeat ping -- remove and retry

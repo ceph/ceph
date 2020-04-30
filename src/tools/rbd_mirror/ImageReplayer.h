@@ -221,6 +221,8 @@ private:
 
   AsyncOpTracker m_in_flight_op_tracker;
 
+  Context* m_update_status_task = nullptr;
+
   static std::string to_string(const State state);
 
   bool is_stopped_() const {
@@ -232,6 +234,10 @@ private:
   bool is_replaying_() const {
     return (m_state == STATE_REPLAYING);
   }
+
+  void schedule_update_mirror_image_replay_status();
+  void handle_update_mirror_image_replay_status(int r);
+  void cancel_update_mirror_image_replay_status();
 
   void update_mirror_image_status(bool force, const OptionalState &state);
   void set_mirror_image_status_update(bool force, const OptionalState &state);
@@ -250,6 +256,7 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+
 };
 
 } // namespace mirror
