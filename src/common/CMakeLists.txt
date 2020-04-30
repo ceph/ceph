@@ -109,7 +109,8 @@ if(WIN32)
     dns_resolve_win32.cc
     SubProcess_win32.cc
     ifaddrs_win32.c
-    registry_win32.cc)
+    registry_win32.cc
+    service_win32.cc)
 else()
   list(APPEND common_srcs
     blkdev.cc
