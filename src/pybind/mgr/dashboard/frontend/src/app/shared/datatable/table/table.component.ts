@@ -682,7 +682,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   updateFilter() {
     let rows = this.columnFilters.length !== 0 ? this.doColumnFiltering() : this.data;
 
-    if (this.search.length > 0) {
+    if (this.search.length > 0 && rows) {
       const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
       // update the rows
       rows = this.subSearch(rows, TableComponent.prepareSearch(this.search), columns);
