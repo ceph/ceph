@@ -81,7 +81,7 @@ class ThreadPool {
   const size_t queue_size;
   boost::lockfree::queue<WorkItem*> pending;
 
-  void loop();
+  void loop(std::chrono::milliseconds queue_max_wait);
   bool is_stopping() const {
     return stopping.load(std::memory_order_relaxed);
   }
