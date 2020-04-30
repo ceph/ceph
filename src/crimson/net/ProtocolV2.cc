@@ -12,7 +12,6 @@
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/formatter.h"
 
-#include "Config.h"
 #include "Dispatcher.h"
 #include "Errors.h"
 #include "Socket.h"
@@ -24,6 +23,7 @@
 #endif
 
 using namespace ceph::msgr::v2;
+using crimson::common::local_conf;
 
 namespace {
 
@@ -1960,14 +1960,14 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
       logger().error("{} got old message {} <= {} {} {}, discarding",
                      conn, message->get_seq(), cur_seq, message, *message);
       if (HAVE_FEATURE(conn.features, RECONNECT_SEQ) &&
-          conf.ms_die_on_old_message) {
+          local_conf()->ms_die_on_old_message) {
         ceph_assert(0 == "old msgs despite reconnect_seq feature");
       }
       return;
     } else if (message->get_seq() > cur_seq + 1) {
       logger().error("{} missed message? skipped from seq {} to {}",
                      conn, cur_seq, message->get_seq());
-      if (conf.ms_die_on_skipped_message) {
+      if (local_conf()->ms_die_on_skipped_message) {
         ceph_assert(0 == "skipped incoming seq");
       }
     }
@@ -2111,11 +2111,11 @@ void ProtocolV2::execute_wait(bool max_backoff)
   gated_execute("execute_wait", [this, max_backoff] {
     double backoff = protocol_timer.last_dur();
     if (max_backoff) {
-      backoff = conf.ms_max_backoff;
+      backoff = local_conf().get_val<double>("ms_max_backoff");
     } else if (backoff > 0) {
-      backoff = std::min(conf.ms_max_backoff, 2 * backoff);
+      backoff = std::min(local_conf().get_val<double>("ms_max_backoff"), 2 * backoff);
     } else {
-      backoff = conf.ms_initial_backoff;
+      backoff = local_conf().get_val<double>("ms_initial_backoff");
     }
     return protocol_timer.backoff(backoff).then([this] {
       if (unlikely(state != state_t::WAIT)) {
