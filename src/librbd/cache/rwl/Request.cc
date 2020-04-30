@@ -622,6 +622,54 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 };
 
+template <typename T>
+C_CompAndWriteRequest<T>::C_CompAndWriteRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
+                                                bufferlist&& cmp_bl, bufferlist&& bl, uint64_t *mismatch_offset,
+                                                int fadvise_flags, ceph::mutex &lock, PerfCounters *perfcounter,
+                                                Context *user_req)
+  : C_WriteRequest<T>(rwl, arrived, std::move(image_extents), std::move(bl), fadvise_flags, lock, perfcounter, user_req),
+  mismatch_offset(mismatch_offset), cmp_bl(std::move(cmp_bl)) {
+  ldout(rwl.get_context(), 20) << dendl;
+}
+
+template <typename T>
+C_CompAndWriteRequest<T>::~C_CompAndWriteRequest() {
+  ldout(rwl.get_context(), 20) << dendl;
+}
+
+template <typename T>
+void C_CompAndWriteRequest<T>::finish_req(int r) {
+  if (compare_succeeded) {
+    C_WriteRequest<T>::finish_req(r);
+  } else {
+    utime_t now = ceph_clock_now();
+    update_req_stats(now);
+  }
+}
+
+template <typename T>
+void C_CompAndWriteRequest<T>::update_req_stats(utime_t &now) {
+  /* Compare-and-write stats. Compare-and-write excluded from most write
+   * stats because the read phase will make them look like slow writes in
+   * those histograms. */
+  if (!compare_succeeded) {
+    this->m_perfcounter->inc(l_librbd_rwl_cmp_fails, 1);
+  }
+  utime_t comp_latency = now - this->m_arrived_time;
+  this->m_perfcounter->tinc(l_librbd_rwl_cmp_latency, comp_latency);
+}
+
+template <typename T>
+std::ostream &operator<<(std::ostream &os,
+                         const C_CompAndWriteRequest<T> &req) {
+  os << (C_WriteRequest<T>&)req
+     << "cmp_bl=" << req.cmp_bl << ", "
+     << "read_bl=" << req.read_bl << ", "
+     << "compare_succeeded=" << req.compare_succeeded << ", "
+     << "mismatch_offset=" << req.mismatch_offset;
+  return os;
+};
+
 std::ostream &operator<<(std::ostream &os,
                          const BlockGuardReqState &r) {
   os << "barrier=" << r.barrier << ", "
