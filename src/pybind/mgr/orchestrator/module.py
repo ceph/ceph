@@ -650,8 +650,6 @@ Usage:
             spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
         else:
             placement = PlacementSpec.from_string(placement)
-            placement.validate()
-
             spec = ServiceSpec(daemon_type, placement=placement)
 
         daemon_type = spec.service_type
@@ -857,8 +855,6 @@ Usage:
             specs = [ServiceSpec.from_json(s) for s in content]
         else:
             placement = PlacementSpec.from_string(placement)
-            placement.validate()
-
             specs = [ServiceSpec(service_type, placement=placement, unmanaged=unmanaged)]
 
         completion = self.apply(specs)
@@ -876,11 +872,9 @@ Usage:
                    placement=None,
                    unmanaged=False,
                    inbuf=None):
-        placement = PlacementSpec.from_string(placement)
-        placement.validate()
         spec = ServiceSpec(
             'mds', fs_name,
-            placement=placement,
+            placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged)
         completion = self.apply_mds(spec)
         self._orchestrator_wait([completion])
