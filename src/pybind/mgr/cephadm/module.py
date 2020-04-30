@@ -1734,6 +1734,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
             sd.version = d.get('version')
+            if sd.daemon_type == 'osd':
+                sd.osdspec_affinity = self.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
@@ -1803,6 +1805,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 self._refresh_host_daemons(host)
         # <service_map>
         sm = {}  # type: Dict[str, orchestrator.ServiceDescription]
+        osd_count = 0
         for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
                 if service_type and service_type != dd.daemon_type:
@@ -1811,9 +1814,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if service_name and service_name != n:
                     continue
                 if dd.daemon_type == 'osd':
-                    continue                # ignore OSDs for now
-                if dd.service_name() in self.spec_store.specs:
-                    spec = self.spec_store.specs[dd.service_name()]
+                    """
+                    OSDs do not know the affinity to their spec out of the box.
+                    """
+                    n = f"osd.{dd.osdspec_affinity}"
+                if n in self.spec_store.specs:
+                    spec = self.spec_store.specs[n]
                 else:
                     spec = ServiceSpec(
                         unmanaged=True,
@@ -1830,9 +1836,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         container_image_name=dd.container_image_name,
                         spec=spec,
                     )
-                if dd.service_name() in self.spec_store.specs:
-                    sm[n].size = self._get_spec_size(spec)
-                    sm[n].created = self.spec_store.spec_created[dd.service_name()]
+                if n in self.spec_store.specs:
+                    if dd.daemon_type == 'osd':
+                        """
+                        The osd count can't be determined by the Placement spec.
+                        It's rather pointless to show a actual/expected representation 
+                        here. So we're setting running = size for now.
+                        """
+                        osd_count += 1
+                        sm[n].size = osd_count
+                    else:
+                        sm[n].size = self._get_spec_size(spec)
+
+                    sm[n].created = self.spec_store.spec_created[n]
                     if service_type == 'nfs':
                         spec = cast(NFSServiceSpec, spec)
                         sm[n].rados_config_location = spec.rados_config_location()
@@ -2043,6 +2059,22 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     @trivial_completion
     def apply_drivegroups(self, specs: List[DriveGroupSpec]):
         return [self._apply(spec) for spec in specs]
+
+    def get_osdspec_affinity(self, osd_id: str) -> str:
+        ret, out, err = self.mon_command({
+            'prefix': 'osd metadata',
+            'id': int(osd_id),
+            'format': 'json'
+        })
+        if ret != 0:
+            self.log.warning(f"Caught error on calling 'osd metadata {osd_id}' -> {err}")
+            return ''
+        try:
+            metadata = json.loads(out)
+        except json.decoder.JSONDecodeError:
+            self.log.error(f"Could not decode json -> {out}")
+            return ''
+        return metadata.get('osdspec_affinity', '')
 
     def find_destroyed_osds(self) -> Dict[str, List[str]]:
         osd_host_map: Dict[str, List[str]] = dict()
