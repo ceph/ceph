@@ -34,7 +34,9 @@
     "fix:audit": "npx npm-force-resolutions",
     "compodoc": "compodoc",
     "doc-build": "compodoc -p src/tsconfig.app.json",
-    "doc-serve": "compodoc --port 8444 -s src/tsconfig.app.json"
+    "doc-serve": "compodoc --port 8444 -s src/tsconfig.app.json",
+    "cdi": "node cd --preci && npm ci && node cd --postci || exit 0"
+
   },
   "private": true,
   "jest": {

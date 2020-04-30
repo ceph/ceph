@@ -16,12 +16,20 @@
  *        languages, p.e.: 'pt' and 'pt-BR'
  *
  * --res: Restores 'angular.json' to its original and removes the backup file.
+ *
+ * --preci: Compares the current 'package-lock.json' hash with the one generated
+ *          in the previous call of --postci.
+ *          Throws an error if the hash is the same, so we don't run 'npm ci' after.
+ *
+ * --postci: Called after 'npm ci'. This will generate the hash of the current 'package-lock.json'.
+ *           This hash will be used in the next call of --preci.
  */
 
 const fs = require('fs');
 
 const filename = './angular.json';
 const backup = './angular.backup.json';
+const hashFile = './node_modules/cd-package-lock-hash';
 
 if (process.argv.includes('--env')) {
   envBuild();
@@ -33,6 +41,14 @@ if (process.argv.includes('--pre')) {
 
 if (process.argv.includes('--res')) {
   restoreLocales();
+}
+
+if (process.argv.includes('--preci')) {
+  preCI();
+}
+
+if (process.argv.includes('--postci')) {
+  postCI();
 }
 
 function prepareLocales() {
@@ -136,6 +152,31 @@ function envBuild() {
   });
 }
 
+function preCI() {
+  let oldHash;
+  try {
+    oldHash = fs.readFileSync(hashFile);
+  } catch (error) {
+    oldHash = '';
+  }
+
+  newHash = _getPackageHash();
+
+  if (oldHash == newHash) {
+    logger("Found the same 'package-lock.json' as in previous run. Skipping 'npm ci'.");
+    process.exit(1);
+  }
+}
+
+function postCI() {
+  newHash = _getPackageHash();
+
+  fs.writeFile(hashFile, newHash, { flag: 'w+' }, (err) => {
+    if (err) throw err;
+    logger(`Writing to ${hashFile}`);
+  });
+}
+
 /**
  * Replace strings in a file.
  *
@@ -163,4 +204,15 @@ function replace(filename, replacements) {
  */
 function logger(message) {
   console.log(`[cd.js] ${message}`);
+}
+
+/**
+ * Generates the hash of package-lock.json
+ */
+function _getPackageHash() {
+  const crypto = require('crypto');
+  let file_buffer = fs.readFileSync('package-lock.json');
+  let sum = crypto.createHash('sha256');
+  sum.update(file_buffer);
+  return sum.digest('hex');
 }

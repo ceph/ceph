@@ -220,7 +220,7 @@ Angular CLI:
 Package installation
 ~~~~~~~~~~~~~~~~~~~~
 
-Run ``npm ci`` in directory ``src/pybind/mgr/dashboard/frontend`` to
+Run ``npm run cdi`` in directory ``src/pybind/mgr/dashboard/frontend`` to
 install the required packages locally.
 
 Adding or updating packages
@@ -230,7 +230,7 @@ Run the following commands to add/update a package::
 
   npm install <PACKAGE_NAME>
   npm run fix:audit
-  npm ci
+  npm run cdi
 
 ``fix:audit`` is required because we have some packages that need to be fixed
 to a specific version and npm install tends to overwrite this.
