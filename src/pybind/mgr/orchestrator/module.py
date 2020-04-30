@@ -691,6 +691,9 @@ Usage:
         'name=placement,type=CephString,req=false',
         'Start MDS daemon(s)')
     def _mds_add(self, fs_name, placement=None, inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = ServiceSpec(
             'mds', fs_name,
             placement=PlacementSpec.from_string(placement),
@@ -708,6 +711,9 @@ Usage:
         'name=placement,type=CephString,req=false',
         'Start RGW daemon(s)')
     def _rgw_add(self, realm_name, zone_name, placement=None, inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
@@ -727,6 +733,9 @@ Usage:
         'name=placement,type=CephString,req=false',
         'Start NFS daemon(s)')
     def _nfs_add(self, svc_arg, pool, namespace=None, placement=None, inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = NFSServiceSpec(
             svc_arg,
             pool=pool,
@@ -746,6 +755,9 @@ Usage:
         'name=placement,type=CephString,req=false',
         'Start iscsi daemon(s)')
     def _iscsi_add(self, pool, trusted_ip_list=None, placement=None, inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = IscsiServiceSpec(
             service_id='iscsi',
             pool=pool,
@@ -848,6 +860,9 @@ Usage:
                    placement=None,
                    unmanaged=False,
                    inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = ServiceSpec(
             'mds', fs_name,
             placement=PlacementSpec.from_string(placement),
@@ -874,6 +889,9 @@ Usage:
                    placement=None,
                    unmanaged=False,
                    inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
@@ -900,6 +918,9 @@ Usage:
                    placement=None,
                    unmanaged=False,
                    inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = NFSServiceSpec(
             svc_id,
             pool=pool,
@@ -920,6 +941,9 @@ Usage:
         'name=unmanaged,type=CephBool,req=false',
         'Scale an iSCSI service')
     def _apply_iscsi(self, pool, trusted_ip_list=None, placement=None, unmanaged=False, inbuf=None):
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = IscsiServiceSpec(
             service_id='iscsi',
             pool=pool,
