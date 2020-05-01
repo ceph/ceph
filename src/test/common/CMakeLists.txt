@@ -193,6 +193,13 @@ add_executable(unittest_url_escape
 add_ceph_unittest(unittest_url_escape)
 target_link_libraries(unittest_url_escape ceph-common)
 
+# unittest_pretty_binary
+add_executable(unittest_pretty_binary
+  test_pretty_binary.cc
+  )
+add_ceph_unittest(unittest_pretty_binary)
+target_link_libraries(unittest_pretty_binary ceph-common)
+
 # unittest_readahead
 add_executable(unittest_readahead
   Readahead.cc
