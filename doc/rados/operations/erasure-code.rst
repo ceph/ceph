@@ -46,7 +46,7 @@ to be created and all objects from the previous pool moved to the new.
 The most important parameters of the profile are *K*, *M* and
 *crush-failure-domain* because they define the storage overhead and
 the data durability. For instance, if the desired architecture must
-sustain the loss of two racks with a storage overhead of 67% overhead,
+sustain the loss of two racks with a storage overhead of 60% overhead,
 the following profile can be defined::
 
     $ ceph osd erasure-code-profile set myprofile \
@@ -57,6 +57,31 @@ the following profile can be defined::
     $ echo ABCDEFGHI | rados --pool ecpool put NYAN -
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI
+
+Formula for calculating the raw size percentage overhead::
+
+    K/(K+M) * 100
+
+For example for profile (*K=3*) and (*M=2*) the percentage overhead is 60%.
+
+Formula for calculating the raw size overhead::
+
+    K/(K+M) * (total raw size)
+
+For example for profile (*K=3*) and (*M=2*) for total raw size 256T, the raw size overhead is 153.6T.
+
+Formula for calculating the plain used overhead::
+
+    M/K * (plain used size)
+
+For example for profile (*K=3*) and (*M=2*) when plain used size is 120T, the plain used overhead is 80T.
+In this case the total raw used size is 200T which is an addition of 120T plain used and overhead 80T.
+
+Formula for calculating the total raw used with overhead::
+
+    (K+M)/K * (plain used size)
+
+For example for profile (*K=3*) and (*M=2*) when plain used size is 120T, the total raw used with overhead is 200T.
 
 The *NYAN* object will be divided in three (*K=3*) and two additional
 *chunks* will be created (*M=2*). The value of *M* defines how many
