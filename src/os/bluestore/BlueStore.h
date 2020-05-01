@@ -1945,6 +1945,8 @@ public:
     uint32_t used = 0;
     uint64_t head_read = 0;
     uint64_t tail_read = 0;
+    BlobRef blob_ref;
+    uint64_t blob_start = 0;
     PExtentVector res_extents;
 
     inline uint64_t blob_aligned_len() const {
@@ -1956,7 +1958,7 @@ public:
       uint64_t block_size,
       uint64_t offset,
       uint64_t l);
-    bool apply_defer(BlueStore::extent_map_t::iterator ep);
+    bool apply_defer();
   };
 
   // --------------------------------------------------------
@@ -3094,7 +3096,6 @@ private:
     TransContext* txc,
     CollectionRef& c,
     OnodeRef o,
-    BlueStore::extent_map_t::iterator ep,
     BigDeferredWriteContext& dctx,
     bufferlist::iterator& blp,
     WriteContext* wctx);

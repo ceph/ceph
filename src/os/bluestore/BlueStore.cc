@@ -13320,14 +13320,17 @@ bool BlueStore::BigDeferredWriteContext::can_defer(
     res = blob_aligned_len() <= prefer_deferred_size &&
       blob_aligned_len() <= ondisk &&
       blob.is_allocated(b_off, blob_aligned_len());
+    if (res) {
+      blob_ref = ep->blob;
+      blob_start = ep->blob_start();
+    }
   }
   return res;
 }
 
-bool BlueStore::BigDeferredWriteContext::apply_defer(
-    BlueStore::extent_map_t::iterator ep)
+bool BlueStore::BigDeferredWriteContext::apply_defer()
 {
-  int r = ep->blob->get_blob().map(
+  int r = blob_ref->get_blob().map(
     b_off, blob_aligned_len(),
     [&](const bluestore_pextent_t& pext,
       uint64_t offset,
@@ -13348,7 +13351,6 @@ void BlueStore::_do_write_big_apply_deferred(
     TransContext* txc,
     CollectionRef& c,
     OnodeRef o,
-    BlueStore::extent_map_t::iterator ep,
     BlueStore::BigDeferredWriteContext& dctx,
     bufferlist::iterator& blp,
     WriteContext* wctx)
@@ -13386,14 +13388,14 @@ void BlueStore::_do_write_big_apply_deferred(
     bl.claim_append(tail_bl);
     logger->inc(l_bluestore_write_penalty_read_ops);
   }
-  auto b0 = ep->blob;
+  auto& b0 = dctx.blob_ref;
   _buffer_cache_write(txc, b0, dctx.b_off, bl,
     wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
   b0->dirty_blob().calc_csum(dctx.b_off, bl);
 
   Extent* le = o->extent_map.set_lextent(c, dctx.off,
-    dctx.off - ep->blob_start(), dctx.used, b0, &wctx->old_extents);
+    dctx.off - dctx.blob_start, dctx.used, b0, &wctx->old_extents);
 
   // in fact this is a no-op for big writes but left here to maintain
   // uniformity and avoid missing after some refactor.
@@ -13459,7 +13461,6 @@ void BlueStore::_do_write_big(
           false;
         auto offset_next = offset + head_info.used;
         auto remaining = l - head_info.used;
-
         if (will_defer && remaining) {
           will_defer = false;
           if (remaining <= prefer_deferred_size_snapshot) {
@@ -13472,31 +13473,30 @@ void BlueStore::_do_write_big(
                 block_size,
                 offset_next,
                 remaining);
-
             will_defer = will_defer && remaining == tail_info.used;
           }
         }
         if (will_defer) {
-          dout(20) << __func__ << " " << *(ep->blob)
+          dout(20) << __func__ << " " << *(head_info.blob_ref)
             << " deferring big " << std::hex
             << " (0x" << head_info.b_off << "~" << head_info.blob_aligned_len() << ")"
             << std::dec << " write via deferred"
             << dendl;
           if (remaining) {
-            dout(20) << __func__ << " " << *(ep_next->blob)
+            dout(20) << __func__ << " " << *(tail_info.blob_ref)
               << " deferring big " << std::hex
               << " (0x" << tail_info.b_off << "~" << tail_info.blob_aligned_len() << ")"
               << std::dec << " write via deferred"
               << dendl;
           }
 
-          will_defer = head_info.apply_defer(ep);
+          will_defer = head_info.apply_defer();
           if (!will_defer) {
             dout(20) << __func__
               << " deferring big fell back, head isn't continuous"
               << dendl;
           } else if (remaining) {
-            will_defer = tail_info.apply_defer(ep_next);
+            will_defer = tail_info.apply_defer();
             if (!will_defer) {
               dout(20) << __func__
                 << " deferring big fell back, tail isn't continuous"
@@ -13505,9 +13505,9 @@ void BlueStore::_do_write_big(
           }
         }
         if (will_defer) {
-          _do_write_big_apply_deferred(txc, c, o, ep, head_info, blp, wctx);
+          _do_write_big_apply_deferred(txc, c, o, head_info, blp, wctx);
           if (remaining) {
-            _do_write_big_apply_deferred(txc, c, o, ep_next, tail_info,
+            _do_write_big_apply_deferred(txc, c, o, tail_info,
               blp, wctx);
           }
           offset += l;
