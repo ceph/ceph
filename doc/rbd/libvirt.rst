@@ -111,11 +111,12 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
 
    The ``client.libvirt`` section name should match the cephx user you created
-   above.
+   above.  
    If SELinux or AppArmor is enabled, note that this could prevent the client
    process (qemu via libvirt) from doing some operations, such as writing logs
    or operate the images or admin socket to the destination locations (``/var/
-   log/ceph`` or ``/var/run/ceph``).
+   log/ceph`` or ``/var/run/ceph``). Additionally, make sure that the libvirt
+   and qemu users have appropriate access to the specified directory.
 
 
 Preparing the VM Manager
