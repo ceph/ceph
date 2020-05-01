@@ -11,9 +11,21 @@
  * Foundation.  See file COPYING.
  */
 
+#include "PyModuleRegistry.h"
+
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#else
+#error std::filesystem not available!
+#endif
 
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/split.h"
 
 #include "BaseMgrModule.h"
 #include "PyOSDMap.h"
@@ -23,8 +35,6 @@
 #include "mgr/mgr_commands.h"
 
 #include "ActivePyModules.h"
-
-#include "PyModuleRegistry.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -258,29 +268,25 @@ void PyModuleRegistry::shutdown()
 
 std::set<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
 {
-  DIR *dir = opendir(path.c_str());
-  if (!dir) {
-    return {};
-  }
+  const auto opt = g_conf().get_val<std::string>("mgr_disabled_modules");
+  const auto disabled_modules = ceph::split(opt);
 
-  std::set<std::string> modules_out;
-  struct dirent *entry = NULL;
-  while ((entry = readdir(dir)) != NULL) {
-    string n(entry->d_name);
-    string fn = path + "/" + n;
-    struct stat st;
-    int r = ::stat(fn.c_str(), &st);
-    if (r == 0 && S_ISDIR(st.st_mode)) {
-      string initfn = fn + "/module.py";
-      r = ::stat(initfn.c_str(), &st);
-      if (r == 0) {
-	modules_out.insert(n);
-      }
+  std::set<std::string> modules;
+  for (const auto& entry: fs::directory_iterator(path)) {
+    if (!fs::is_directory(entry)) {
+      continue;
+    }
+    const std::string name = entry.path().filename();
+    if (std::count(disabled_modules.begin(), disabled_modules.end(), name)) {
+      dout(10) << "ignoring disabled module " << name << dendl;
+      continue;
+    }
+    auto module_path = entry.path() / "module.py";
+    if (fs::exists(module_path)) {
+      modules.emplace(name);
     }
   }
-  closedir(dir);
-
-  return modules_out;
+  return modules;
 }
 
 int PyModuleRegistry::handle_command(
