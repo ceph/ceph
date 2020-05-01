@@ -207,6 +207,8 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
     auto tenant = name.substr(0, pos);
     bucket->tenant.assign(tenant.begin(), tenant.end());
     name = name.substr(pos + 1);
+  } else {
+    bucket->tenant.clear();
   }
 
   // split name:instance
