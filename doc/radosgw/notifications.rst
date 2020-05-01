@@ -71,7 +71,7 @@ To update a topic, use the same command used for topic creation, with the topic 
    Action=CreateTopic
    &Name=<topic-name>
    [&Attributes.entry.1.key=amqp-exchange&Attributes.entry.1.value=<exchange>]
-   [&Attributes.entry.2.key=amqp-ack-level&Attributes.entry.2.value=none|broker]
+   [&Attributes.entry.2.key=amqp-ack-level&Attributes.entry.2.value=none|broker|routable]
    [&Attributes.entry.3.key=verify-ssl&Attributes.entry.3.value=true|false]
    [&Attributes.entry.4.key=kafka-ack-level&Attributes.entry.4.value=none|broker]
    [&Attributes.entry.5.key=use-ssl&Attributes.entry.5.value=true|false]
@@ -98,10 +98,11 @@ Request parameters:
  - port defaults to: 5672
  - vhost defaults to: "/"
  - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1)
- - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
+ - amqp-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Three ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
+  - "routable": message is considered "delivered" if broker can route to a consumer
 
 - Kafka endpoint 
 
