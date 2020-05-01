@@ -106,6 +106,38 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
 }
 
 template <typename I>
+void ImageDispatcher<I>::finish(int r, ImageDispatchLayer image_dispatch_layer,
+                                uint64_t tid) {
+  auto cct = this->m_image_ctx->cct;
+  ldout(cct, 20) << "tid=" << tid << dendl;
+
+  // loop in reverse order from last invoked dispatch layer calling its
+  // handle_finished method
+  while (image_dispatch_layer != IMAGE_DISPATCH_LAYER_NONE) {
+    std::shared_lock locker{this->m_lock};
+    auto it = this->m_dispatches.find(image_dispatch_layer);
+    image_dispatch_layer = static_cast<ImageDispatchLayer>(
+      image_dispatch_layer - 1);
+
+    if (it == this->m_dispatches.end()) {
+      continue;
+    }
+
+    // track callback while lock is dropped so that the layer cannot be shutdown
+    auto& dispatch_meta = it->second;
+    auto dispatch = dispatch_meta.dispatch;
+    auto async_op_tracker = dispatch_meta.async_op_tracker;
+    async_op_tracker->start_op();
+    locker.unlock();
+
+    dispatch->handle_finished(r, tid);
+
+    // safe since dispatch_meta cannot be deleted until ops finished
+    async_op_tracker->finish_op();
+  }
+}
+
+template <typename I>
 bool ImageDispatcher<I>::send_dispatch(
     ImageDispatchInterface* image_dispatch,
     ImageDispatchSpec<I>* image_dispatch_spec) {

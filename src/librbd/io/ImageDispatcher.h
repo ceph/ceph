@@ -26,6 +26,9 @@ class ImageDispatcher : public Dispatcher<ImageCtxT, ImageDispatcherInterface> {
 public:
   ImageDispatcher(ImageCtxT* image_ctx);
 
+  void finish(int r, ImageDispatchLayer image_dispatch_layer,
+              uint64_t tid) override;
+
 protected:
   bool send_dispatch(
     ImageDispatchInterface* object_dispatch,

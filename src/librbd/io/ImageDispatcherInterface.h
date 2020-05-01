@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "librbd/io/DispatcherInterface.h"
 #include "librbd/io/ImageDispatchInterface.h"
+#include "librbd/io/Types.h"
 
 struct Context;
 
@@ -16,6 +17,10 @@ namespace io {
 struct ImageDispatcherInterface
   : public DispatcherInterface<ImageDispatchInterface> {
 public:
+
+  virtual void finish(int r, ImageDispatchLayer image_dispatch_layer,
+                      uint64_t tid) = 0;
+
 };
 
 } // namespace io
