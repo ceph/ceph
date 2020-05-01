@@ -2482,7 +2482,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     daemon_type, daemon_id, host))
                 if daemon_type == 'mon':
                     create_func(daemon_id, host, network)  # type: ignore
-                elif daemon_type == 'nfs':
+                elif daemon_type in ('nfs', 'iscsi'):
                     create_func(daemon_id, host, spec)  # type: ignore
                 else:
                     create_func(daemon_id, host)           # type: ignore
