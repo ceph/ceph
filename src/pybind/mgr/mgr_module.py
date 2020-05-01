@@ -96,6 +96,9 @@ class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout',
         return super(HandleCommandResult, cls).__new__(cls, retval, stdout, stderr)
 
 
+class MonCommandFailed(RuntimeError): pass
+
+
 class OSDMap(ceph_module.BasePyOSDMap):
     def get_epoch(self):
         return self._get_epoch()
@@ -1081,6 +1084,17 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :return: dict, or None if the service is not found
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
+
+    def check_mon_command(self, cmd_dict: dict) -> HandleCommandResult:
+        """
+        Wrapper around :func:`~mgr_module.MgrModule.mon_command`, but raises,
+        if ``retval != 0``.
+        """
+
+        r = HandleCommandResult(*self.mon_command(cmd_dict))
+        if r.retval:
+            raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr}')
+        return r
 
     def mon_command(self, cmd_dict):
         """
