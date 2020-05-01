@@ -28,6 +28,7 @@
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
+#include "librbd/io/ImageDispatcher.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/journal/StandardPolicy.h"
@@ -141,6 +142,7 @@ public:
       this, "librbd::io_work_queue",
       cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
       thread_pool);
+    io_image_dispatcher = new io::ImageDispatcher<ImageCtx>(this);
     io_object_dispatcher = new io::ObjectDispatcher<ImageCtx>(this);
 
     if (cct->_conf.get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
@@ -176,6 +178,7 @@ public:
     io_work_queue->drain();
 
     delete io_object_dispatcher;
+    delete io_image_dispatcher;
 
     delete journal_policy;
     delete exclusive_lock_policy;

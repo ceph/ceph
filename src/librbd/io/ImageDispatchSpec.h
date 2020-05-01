@@ -215,10 +215,11 @@ private:
                     AioCompletion* aio_comp, Extents&& image_extents,
                     Request&& request, int op_flags,
                     const ZTracer::Trace& parent_trace, uint64_t tid)
-    : dispatcher_ctx(this), dispatch_layer(image_dispatch_layer),
-      aio_comp(aio_comp), image_extents(std::move(image_extents)),
-      request(std::move(request)), op_flags(op_flags),
-      parent_trace(parent_trace), tid(tid), m_image_ctx(image_ctx) {
+    : dispatcher_ctx(this), image_dispatcher(image_ctx.io_image_dispatcher),
+      dispatch_layer(image_dispatch_layer), aio_comp(aio_comp),
+      image_extents(std::move(image_extents)), request(std::move(request)),
+      op_flags(op_flags), parent_trace(parent_trace), tid(tid),
+      m_image_ctx(image_ctx) {
     aio_comp->get();
   }
 
