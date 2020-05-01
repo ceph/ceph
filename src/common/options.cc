@@ -5169,6 +5169,20 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("Filesystem path to manager modules."),
 
+    Option("mgr_disabled_modules", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+#ifdef MGR_DISABLED_MODULES
+    .set_default(MGR_DISABLED_MODULES)
+#endif
+    .set_flag(Option::FLAG_STARTUP)
+    .add_service("mgr")
+    .set_description("List of manager modules never get loaded")
+    .set_long_description("A comma delimited list of module names. This list "
+        "is read by manager when it starts. By default, manager loads all "
+        "modules found in specified 'mgr_module_path', and it starts the "
+        "enabled ones as instructed. The modules in this list will not be "
+        "loaded at all.")
+    .add_see_also("mgr_module_path"),
+
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("restful iostat")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
