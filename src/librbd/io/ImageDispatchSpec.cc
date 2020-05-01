@@ -150,11 +150,13 @@ void ImageDispatchSpec<I>::send() {
 
 template <typename I>
 void ImageDispatchSpec<I>::finish(int r) {
+  image_dispatcher->finish(r, dispatch_layer, tid);
   delete this;
 }
 
 template <typename I>
 void ImageDispatchSpec<I>::fail(int r) {
+  dispatch_result = DISPATCH_RESULT_COMPLETE;
   aio_comp->fail(r);
 }
 
