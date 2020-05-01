@@ -450,7 +450,7 @@ public:
     size_t value_size() override;
   };
 
-  Iterator get_iterator(const std::string& prefix) override;
+  Iterator get_iterator(const std::string& prefix, IteratorOpts opts = 0) override;
 private:
   /// this iterator spans single cf
   rocksdb::Iterator* new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
@@ -565,7 +565,7 @@ err:
         bbt_opts.block_cache);
   }
 
-  WholeSpaceIterator get_wholespace_iterator() override;
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 private:
   WholeSpaceIterator get_default_cf_iterator();
 };

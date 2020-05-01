@@ -2625,7 +2625,7 @@ public:
   }
 };
 
-KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix)
+KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, IteratorOpts opts)
 {
   auto cf_it = cf_handles.find(prefix);
   if (cf_it != cf_handles.end()) {
@@ -2640,7 +2640,7 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix)
         cf_it->second.handles);
     }
   } else {
-    return KeyValueDB::get_iterator(prefix);
+    return KeyValueDB::get_iterator(prefix, opts);
   }
 }
 
@@ -2649,11 +2649,14 @@ rocksdb::Iterator* RocksDBStore::new_shard_iterator(rocksdb::ColumnFamilyHandle*
   return db->NewIterator(rocksdb::ReadOptions(), cf);
 }
 
-RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator()
+RocksDBStore::WholeSpaceIterator RocksDBStore::get_wholespace_iterator(IteratorOpts opts)
 {
   if (cf_handles.size() == 0) {
+    rocksdb::ReadOptions opt = rocksdb::ReadOptions();
+    if (opts & ITERATOR_NOCACHE)
+      opt.fill_cache=false;
     return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
-      db->NewIterator(rocksdb::ReadOptions(), default_cf));
+      db->NewIterator(opt, default_cf));
   } else {
     return std::make_shared<WholeMergeIteratorImpl>(this);
   }
