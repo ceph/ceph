@@ -312,12 +312,13 @@ private:
     }
   };
 public:
-
-  virtual WholeSpaceIterator get_wholespace_iterator() = 0;
-  virtual Iterator get_iterator(const std::string &prefix) {
+  typedef uint32_t IteratorOpts;
+  static const uint32_t ITERATOR_NOCACHE = 1;
+  virtual WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) = 0;
+  virtual Iterator get_iterator(const std::string &prefix, IteratorOpts opts = 0) {
     return std::make_shared<PrefixIteratorImpl>(
       prefix,
-      get_wholespace_iterator());
+      get_wholespace_iterator(opts));
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;

@@ -6138,7 +6138,7 @@ void BlueStore::_fsck_collections(int64_t* errors)
 {
   if (collections_had_errors) {
     dout(10) << __func__ << dendl;
-    KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
+    KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL, KeyValueDB::ITERATOR_NOCACHE);
     for (it->upper_bound(string());
       it->valid();
       it->next()) {
@@ -6187,7 +6187,7 @@ void BlueStore::_open_statfs()
   } else {
     per_pool_stat_collection = true;
     dout(10) << __func__ << " per-pool statfs is enabled" << dendl;
-    KeyValueDB::Iterator it = db->get_iterator(PREFIX_STAT);
+    KeyValueDB::Iterator it = db->get_iterator(PREFIX_STAT, KeyValueDB::ITERATOR_NOCACHE);
     for (it->upper_bound(string());
 	 it->valid();
 	 it->next()) {
@@ -7236,7 +7236,7 @@ void BlueStore::_fsck_check_pool_statfs(
   int64_t& warnings,
   BlueStoreRepairer* repairer)
 {
-  auto it = db->get_iterator(PREFIX_STAT);
+  auto it = db->get_iterator(PREFIX_STAT, KeyValueDB::ITERATOR_NOCACHE);
   if (it) {
     for (it->lower_bound(string()); it->valid(); it->next()) {
       string key = it->key();
@@ -7864,7 +7864,7 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
 
   size_t processed_myself = 0;
 
-  auto it = db->get_iterator(PREFIX_OBJ);
+  auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
   mempool::bluestore_fsck::list<string> expecting_shards;
   if (it) {
     const size_t thread_count = cct->_conf->bluestore_fsck_quick_fix_threads;
@@ -8369,7 +8369,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   }
 
   dout(1) << __func__ << " checking shared_blobs" << dendl;
-  it = db->get_iterator(PREFIX_SHARED_BLOB);
+  it = db->get_iterator(PREFIX_SHARED_BLOB, KeyValueDB::ITERATOR_NOCACHE);
   if (it) {
     // FIXME minor: perhaps simplify for shallow mode?
     // fill global if not overriden below
@@ -8453,7 +8453,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     auto& space_tracker = repairer.get_space_usage_tracker();
     auto& misref_extents = repairer.get_misreferences();
     interval_set<uint64_t> to_release;
-    it = db->get_iterator(PREFIX_OBJ);
+    it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       // fill global if not overriden below
       auto expected_statfs = &expected_store_statfs;
@@ -8690,7 +8690,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   if (depth != FSCK_SHALLOW) {
     dout(1) << __func__ << " checking for stray omap data " << dendl;
-    it = db->get_iterator(PREFIX_OMAP);
+    it = db->get_iterator(PREFIX_OMAP, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       uint64_t last_omap_head = 0;
       for (it->lower_bound(string()); it->valid(); it->next()) {
@@ -8706,7 +8706,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         }
       }
     }
-    it = db->get_iterator(PREFIX_PGMETA_OMAP);
+    it = db->get_iterator(PREFIX_PGMETA_OMAP, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       uint64_t last_omap_head = 0;
       for (it->lower_bound(string()); it->valid(); it->next()) {
@@ -8722,7 +8722,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         }
       }
     }
-    it = db->get_iterator(PREFIX_PERPOOL_OMAP);
+    it = db->get_iterator(PREFIX_PERPOOL_OMAP, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       uint64_t last_omap_head = 0;
       for (it->lower_bound(string()); it->valid(); it->next()) {
@@ -8743,7 +8743,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       }
     }
     dout(1) << __func__ << " checking deferred events" << dendl;
-    it = db->get_iterator(PREFIX_DEFERRED);
+    it = db->get_iterator(PREFIX_DEFERRED, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       for (it->lower_bound(string()); it->valid(); it->next()) {
         bufferlist bl = it->value();
