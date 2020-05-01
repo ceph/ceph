@@ -266,6 +266,49 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 };
 
+DiscardLogOperation::DiscardLogOperation(std::shared_ptr<SyncPoint> sync_point,
+                                         const uint64_t image_offset_bytes,
+                                         const uint64_t write_bytes,
+                                         uint32_t discard_granularity_bytes,
+                                         const utime_t dispatch_time,
+                                         PerfCounters *perfcounter,
+                                         CephContext *cct)
+  : GenericWriteLogOperation(sync_point, dispatch_time, perfcounter, cct),
+    log_entry(std::make_shared<DiscardLogEntry>(sync_point->log_entry,
+                                                image_offset_bytes,
+                                                write_bytes,
+                                                discard_granularity_bytes)) {
+  on_write_append = sync_point->prior_persisted_gather_new_sub();
+  on_write_persist = nullptr;
+  log_entry->sync_point_entry->writes++;
+  log_entry->sync_point_entry->bytes += write_bytes;
+}
+
+DiscardLogOperation::~DiscardLogOperation() { }
+
+void DiscardLogOperation::init(uint64_t current_sync_gen, bool persist_on_flush,
+                               uint64_t last_op_sequence_num, Context *write_persist) {
+  log_entry->init(current_sync_gen, persist_on_flush, last_op_sequence_num);
+  this->on_write_persist = write_persist;
+}
+
+std::ostream &DiscardLogOperation::format(std::ostream &os) const {
+  os << "(Discard) ";
+  GenericWriteLogOperation::format(os);
+  os << ", ";
+  if (log_entry) {
+    os << "log_entry=[" << *log_entry << "], ";
+  } else {
+    os << "log_entry=nullptr, ";
+  }
+  return os;
+};
+
+std::ostream &operator<<(std::ostream &os,
+                         const DiscardLogOperation &op) {
+  return op.format(os);
+}
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
