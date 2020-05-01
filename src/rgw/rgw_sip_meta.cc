@@ -104,7 +104,7 @@ std::string SIProvider_MetaFull::to_marker(const std::string& section, const std
   return section + "/" + k;
 }
 
-int SIProvider_MetaFull::fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
 {
   if (shard_id > 0) {
     return -ERANGE;
@@ -185,20 +185,22 @@ int SIProvider_MetaFull::fetch(int shard_id, std::string marker, int max, fetch_
   return 0;
 }
 
+SIProvider_MetaInc::SIProvider_MetaInc(CephContext *_cct,
+				       RGWSI_MDLog *_mdlog,
+				       const string& _period_id) : SIProvider_SingleStage(_cct,
+                                                                                          "meta.inc",
+                                                                                          SIProvider::StageType::INC,
+                                                                                          _cct->_conf->rgw_md_log_max_shards),
+                                                                   mdlog(_mdlog),
+                                                                   period_id(_period_id) {}
+
 int SIProvider_MetaInc::init()
 {
   meta_log = mdlog->get_log(period_id);
-  num_shards = cct->_conf->rgw_md_log_max_shards;
-
   return 0;
 }
 
-SIProvider::Info SIProvider_MetaInc::get_info() const
-{
-  return { SIProvider::Type::INC, num_shards };
-}
-
-int SIProvider_MetaInc::fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_MetaInc::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
 {
   if (shard_id >= stage_info.num_shards) {
     return -ERANGE;
@@ -240,13 +242,13 @@ int SIProvider_MetaInc::fetch(int shard_id, std::string marker, int max, fetch_r
 }
 
 
-int SIProvider_MetaInc::get_start_marker(int shard_id, std::string *marker) const
+int SIProvider_MetaInc::do_get_start_marker(int shard_id, std::string *marker) const
 {
   marker->clear();
   return 0;
 }
 
-int SIProvider_MetaInc::get_cur_state(int shard_id, std::string *marker) const
+int SIProvider_MetaInc::do_get_cur_state(int shard_id, std::string *marker) const
 {
 #warning FIXME
   return 0;

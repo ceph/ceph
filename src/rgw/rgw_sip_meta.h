@@ -28,8 +28,7 @@ WRITE_CLASS_ENCODER(siprovider_meta_info)
 
 class RGWMetadataManager;
 
-class SIProvider_MetaFull : public SIProvider {
-  CephContext *cct;
+class SIProvider_MetaFull : public SIProvider_SingleStage {
   struct {
     RGWMetadataManager *mgr;
   } meta;
@@ -43,29 +42,29 @@ class SIProvider_MetaFull : public SIProvider {
 
   int next_section(const std::string& section, string *next);
 
-public:
-  SIProvider_MetaFull(CephContext *_cct,
-                      RGWMetadataManager *meta_mgr) : cct(_cct) {
-    meta.mgr = meta_mgr;
-  }
+protected:
+  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int init();
-
-  Info get_info() const override {
-    return { Type::FULL, 1 };
-  }
-
-  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
-
-  int get_start_marker(int shard_id, std::string *marker) const override {
+  int do_get_start_marker(int shard_id, std::string *marker) const override {
     marker->clear();
     return 0;
   }
 
-  int get_cur_state(int shard_id, std::string *marker) const {
+  int do_get_cur_state(int shard_id, std::string *marker) const {
     marker->clear(); /* full data, no current incremental state */
     return 0;
   }
+
+public:
+  SIProvider_MetaFull(CephContext *_cct,
+                      RGWMetadataManager *meta_mgr) : SIProvider_SingleStage(_cct,
+									     "meta.full",
+									     SIProvider::StageType::FULL,
+									     1) {
+    meta.mgr = meta_mgr;
+  }
+
+  int init();
 
   int next_meta_section(const std::string& cur_section, std::string *next) const;
 
@@ -84,26 +83,22 @@ public:
 class RGWSI_MDLog;
 class RGWMetadataLog;
 
-class SIProvider_MetaInc : public SIProvider {
+class SIProvider_MetaInc : public SIProvider_SingleStage {
   RGWSI_MDLog *mdlog;
   string period_id;
 
   RGWMetadataLog *meta_log{nullptr};
 
+protected:
+  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
+
+  int do_get_start_marker(int shard_id, std::string *marker) const override;
+  int do_get_cur_state(int shard_id, std::string *marker) const;
 public:
   SIProvider_MetaInc(CephContext *_cct,
                      RGWSI_MDLog *_mdlog,
-                     const string& _period_id) : cct(_cct),
-                                                 mdlog(_mdlog),
-                                                 period_id(_period_id) {}
+                     const string& _period_id);
 
   int init();
-
-  Info get_info() const override;
-
-  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
-
-  int get_start_marker(int shard_id, std::string *marker) const override;
-  int get_cur_state(int shard_id, std::string *marker) const;
 };
 

@@ -89,25 +89,37 @@ struct BasicData {
 };
 WRITE_CLASS_ENCODER(BasicData)
 
-class BasicProvider : public SIProvider
+class BasicProvider : public SIProvider_SingleStage
 {
-  int id;
-  uint32_t max_entries;
+  vector<uint32_t> max_entries;
 
-  string gen_data(uint32_t val) {
+  string gen_data(int shard_id, uint32_t val) {
     stringstream ss;
-    ss << id << ": basic test data -- " << val;
+    ss << shard_id << ": basic test data -- " << val;
     return ss.str();
   }
 
 public: 
-  BasicProvider(int _id, uint32_t _max_entries) : id(_id), max_entries(_max_entries) {}
-
-  SIProvider::Info get_info() const {
-    return { SIProvider::Type::FULL, 1 };
+  BasicProvider(int _num_shards, uint32_t _max_entries) : SIProvider_SingleStage(g_ceph_context,
+                                                                                 "basic",
+                                                                                 SIProvider::StageType::FULL,
+                                                                                 _num_shards) {
+    for (int i = 0; i < _num_shards; ++i) {
+      max_entries.push_back(_max_entries);
+    }
   }
 
-  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override {
+  BasicProvider(vector<uint32_t> _max_entries) : SIProvider_SingleStage(g_ceph_context,
+                                                                   "basic",
+                                                                   SIProvider::StageType::FULL,
+                                                                   _max_entries.size()),
+                                            max_entries(_max_entries) {}
+
+  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override {
+    if (shard_id >= (int)max_entries.size()) {
+      return -ERANGE;
+    }
+
     BasicMarker pos;
 
     result->entries.clear();
@@ -122,73 +134,78 @@ public:
       val++;
     }
 
-    for (int i = 0; i < max && val < max_entries; ++i, ++val) {
+    for (int i = 0; i < max && val < max_entries[shard_id]; ++i, ++val) {
       SIProvider::Entry e;
 
-      BasicData d{gen_data(val)};
+      BasicData d{gen_data(shard_id, val)};
       d.encode(e.data);
       e.key = encode_marker(BasicMarker{val});
 
       result->entries.push_back(std::move(e));
     }
 
-    result->more = (max_entries > 0 && val < max_entries);
+    result->more = (max_entries[shard_id] > 0 && val < max_entries[shard_id]);
     result->done = !result->more; /* simple provider, no intermediate state */
 
     return 0;
   }
 
-  int get_start_marker(int shard_id, std::string *marker) const override {
+  int do_get_start_marker(int shard_id, std::string *marker) const override {
+    if (shard_id >= (int)max_entries.size()) {
+      return -ERANGE;
+    }
+
     marker->clear();
     return 0;
   }
 
-  int get_cur_state(int shard_id, std::string *marker) const override {
+  int do_get_cur_state(int shard_id, std::string *marker) const override {
     /* non incremental, no cur state */
     return -EINVAL;
   }
 };
 
-class LogProvider : public SIProvider
+class LogProvider : public SIProvider_SingleStage
 {
-  int id;
-
-  uint32_t min_val;
-  uint32_t max_val;
+  vector<uint32_t> min_val;
+  vector<uint32_t> max_val;
 
   bool done;
 
 
-  string gen_data(uint32_t val) {
+  string gen_data(int shard_id, uint32_t val) {
     stringstream ss;
-    ss << id << ": log test data (" << min_val << "-" << max_val << ") -- " << val;
+    ss << shard_id << ": log test data (" << min_val << "-" << max_val << ") -- " << val;
     return ss.str();
   }
 
 public: 
-  LogProvider(int _id,
+  LogProvider(int _num_shards,
               uint32_t _min_val,
-              uint32_t _max_val) : id(_id),
-                                   min_val(_min_val),
-                                   max_val(_max_val) {}
-
-  SIProvider::Info get_info() const {
-    return { SIProvider::Type::INC, 1 };
+              uint32_t _max_val) : SIProvider_SingleStage(g_ceph_context,
+                                                          "log",
+                                                          SIProvider::StageType::INC,
+                                                          _num_shards)
+  {
+    for (int i = 0; i < _num_shards; ++i) {
+      min_val.push_back(_min_val);
+      max_val.push_back(_max_val);
+    }
   }
 
-  void add_entries(int count) {
-    max_val += count;
+  void add_entries(int shard_id, int count) {
+    max_val[shard_id] += count;
   }
 
-  void trim(int new_min) {
-    min_val = new_min;
+  void trim(int shard_id, int new_min) {
+    min_val[shard_id] = new_min;
   }
 
-  void set_done(bool _done) {
-    done = _done;
-  }
+  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override {
+    if (shard_id >= (int)min_val.size()) {
+      return -ERANGE;
+    }
 
-  int fetch(int shard_id, std::string marker, int max, fetch_result *result) override {
     BasicMarker pos;
 
     result->entries.clear();
@@ -200,9 +217,9 @@ public:
     uint32_t val = pos.val;
 
     if (marker.empty()) {
-      val = min_val;
+      val = min_val[shard_id];
     } else {
-      if (val >= max_val) {
+      if (val >= max_val[shard_id]) {
         result->more = false;
         result->done = done;
         return 0;
@@ -210,29 +227,29 @@ public:
       val++;
     }
 
-    for (int i = 0; i < max && val <= max_val; ++i, ++val) {
+    for (int i = 0; i < max && val <= max_val[shard_id]; ++i, ++val) {
       SIProvider::Entry e;
 
-      BasicData d{gen_data(val)};
+      BasicData d{gen_data(shard_id, val)};
       d.encode(e.data);
       e.key = encode_marker(BasicMarker{val});
 
       result->entries.push_back(std::move(e));
     }
 
-    result->more = (val <= max_val);
+    result->more = (val <= max_val[shard_id]);
     result->done = (!result->more && done);
 
     return 0;
   }
 
-  int get_start_marker(int shard_id, std::string *marker) const override {
+  int do_get_start_marker(int shard_id, std::string *marker) const override {
     marker->clear();
     return 0;
   }
 
-  int get_cur_state(int shard_id, std::string *marker) const override {
-    return max_val;
+  int do_get_cur_state(int shard_id, std::string *marker) const override {
+    return max_val[shard_id];
   }
 };
 
@@ -275,10 +292,12 @@ TEST(TestRGWSIP, test_basic_provider)
 {
   int max_entries = 25;
 
-  BasicProvider bp(0, max_entries);
+  BasicProvider bp(1, max_entries);
+
+  auto snum = bp.get_first_stage();
 
   string marker;
-  ASSERT_EQ(0, bp.get_start_marker(0, &marker));
+  ASSERT_EQ(0, bp.get_start_marker(snum, 0, &marker));
 
   int total = 0;
 
@@ -286,7 +305,7 @@ TEST(TestRGWSIP, test_basic_provider)
 
   do {
     SIProvider::fetch_result result;
-    ASSERT_EQ(0, bp.fetch(0, marker, chunk_size, &result));
+    ASSERT_EQ(0, bp.fetch(snum, 0, marker, chunk_size, &result));
 
     total += result.entries.size();
 
@@ -304,10 +323,12 @@ TEST(TestRGWSIP, test_log_provider)
 
   int max_entries = max_val - min_val + 1;
 
-  LogProvider lp(0, min_val, max_val);
+  LogProvider lp(1, min_val, max_val);
+
+  auto snum = lp.get_first_stage();
 
   string marker;
-  ASSERT_EQ(0, lp.get_start_marker(0, &marker));
+  ASSERT_EQ(0, lp.get_start_marker(snum, 0, &marker));
 
   int total = 0;
 
@@ -315,7 +336,7 @@ TEST(TestRGWSIP, test_log_provider)
 
   do {
     SIProvider::fetch_result result;
-    ASSERT_EQ(0, lp.fetch(0, marker, chunk_size, &result));
+    ASSERT_EQ(0, lp.fetch(snum, 0, marker, chunk_size, &result));
 
     total += result.entries.size();
 
@@ -331,10 +352,12 @@ TEST(TestRGWSIP, test_basic_provider_client)
 {
   int max_entries = 25;
 
-  auto bp = std::make_shared<BasicProvider>(0, max_entries);
+  auto bp = std::make_shared<BasicProvider>(1, max_entries);
   auto base = std::static_pointer_cast<SIProvider>(bp);
 
   TestProviderClient pc(base);
+
+  ASSERT_EQ(0, pc.init_markers());
 
   int total = 0;
   int chunk_size = 10;
@@ -356,23 +379,23 @@ struct stage_info {
   int num_shards;
   int first_shard_size;
   int shard_entries_limit;
-  vector<int> max_entries;
+  vector<uint32_t> max_entries;
   int all_entries{0};
-  vector<SIClientRef> shards;
+  SIClientRef client;
 
   stage_info() {}
   stage_info(int _num_shards,
              int _start,
              int _limit,
-             std::function<std::shared_ptr<SIProvider>(int, int)> alloc) : num_shards(_num_shards),
-                                                                           first_shard_size(_start),
-                                                                           shard_entries_limit(_limit) {
+             std::function<std::shared_ptr<SIProvider>(vector<uint32_t>)> alloc) : num_shards(_num_shards),
+                                                                                   first_shard_size(_start),
+                                                                                   shard_entries_limit(_limit) {
     max_entries.resize(num_shards);
 
     init(alloc);
   }
 
-  void init(std::function<std::shared_ptr<SIProvider>(int, int)> alloc) {
+  void init(std::function<std::shared_ptr<SIProvider>(vector<uint32_t>)> alloc) {
     all_entries = 0;
 
     for (int i = 0; i < num_shards; ++i) {
@@ -380,27 +403,26 @@ struct stage_info {
       all_entries += max;
       max_entries[i] = max;
       cout << "max_entries[" << i << "]=" << max_entries[i] << std::endl;
-  
-      auto base = alloc(i, max_entries[i]);
-      auto pc = std::make_shared<TestProviderClient>(base);
-
-      shards.push_back(std::static_pointer_cast<SIClient>(pc));
     }
+
+    auto base = alloc(max_entries);
+    auto pc = std::make_shared<TestProviderClient>(base);
+    client = std::static_pointer_cast<SIClient>(pc);
   }
 };
 
 TEST(TestRGWSIP, test_sharded_stage)
 {
-  stage_info si(20, 20, 40, [](int id, int max_entries){ 
-    auto bp = std::make_shared<BasicProvider>(id, max_entries);
+  stage_info si(20, 20, 40, [](vector<uint32_t> max_entries){ 
+    auto bp = std::make_shared<BasicProvider>(max_entries);
     return std::static_pointer_cast<SIProvider>(bp);
   });
 
-  auto stage = make_shared<SIPShardedStage>(si.shards);
+  auto client = si.client;
 
-  ASSERT_EQ(0, stage->init_markers(true));
+  ASSERT_EQ(0, client->init_markers());
 
-  int total[si.num_shards];
+  uint32_t total[si.num_shards];
   int chunk_size = 10;
 
   memset(total, 0, sizeof(total));
@@ -408,13 +430,13 @@ TEST(TestRGWSIP, test_sharded_stage)
   int total_iter = 0;
   int all_count = 0;
 
-  while (!stage->is_complete()) {
-    for (int i = 0; i < stage->num_shards(); ++i) {
-      if (stage->is_shard_done(i)) {
+  while (!client->stage_complete()) {
+    for (int i = 0; i < client->stage_num_shards(); ++i) {
+      if (client->is_shard_done(i)) {
         continue;
       }
       SIProvider::fetch_result result;
-      ASSERT_EQ(0, stage->fetch(i, chunk_size, &result));
+      ASSERT_EQ(0, client->fetch(i, chunk_size, &result));
 
       total[i] += result.entries.size();
       all_count += result.entries.size();
@@ -430,25 +452,28 @@ TEST(TestRGWSIP, test_sharded_stage)
   ASSERT_EQ(si.all_entries, all_count);
 }
 
+#if 0
 TEST(TestRGWSIP, test_multistage)
 {
   vector<SIPShardedStageRef> stages;
 
   stage_info sis[2];
 
-  sis[0] = stage_info(1, 35, 40, [](int id, int max_entries){ 
-    auto bp = std::make_shared<BasicProvider>(id, max_entries);
+  sis[0] = stage_info(1, 35, 40, [](vector<int> max_entries){ 
+    auto bp = std::make_shared<BasicProvider>(max_entries);
     return std::static_pointer_cast<SIProvider>(bp);
   });
 
-  auto stage1 = make_shared<SIPShardedStage>(sis[0].shards);
+  auto stage1 = sis[0].client
 
-  sis[1] = stage_info(10, 5, 20, [](int id, int max_entries){ 
-    auto bp = std::make_shared<LogProvider>(id, 0, max_entries);
-
-    /* simulate half read log */
-    bp->trim(max_entries + 1);
-    bp->add_entries(max_entries);
+  sis[1] = stage_info(10, 5, 20, [](vector<int> max_entries){ 
+    auto bp = std::make_shared<LogProvider>(max_entries.size(), 0, max_entries);
+   
+    for (int i = 0; i < max_entries.size(); ++i) {
+      /* simulate half read log */
+      bp->trim(i, max_entries[i] + 1);
+      bp->add_entries(i, max_entries[i]);
+    }
     return std::static_pointer_cast<SIProvider>(bp);
   });
 
@@ -506,14 +531,16 @@ TEST(TestRGWSIP, test_multistage)
   }
 }
 
+#endif
+
 
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
