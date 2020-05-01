@@ -170,17 +170,32 @@ private:
   const std::string endpoint;
   const std::string topic;
   const std::string exchange;
-  amqp::connection_ptr_t conn;
   ack_level_t ack_level;
-  std::string str_ack_level;
+  amqp::connection_ptr_t conn;
 
-  static std::string get_exchange(const RGWHTTPArgs& args) {
+  std::string get_exchange(const RGWHTTPArgs& args) {
     bool exists;
     const auto exchange = args.get("amqp-exchange", &exists);
     if (!exists) {
       throw configuration_error("AMQP: missing amqp-exchange");
     }
     return exchange;
+  }
+
+  ack_level_t get_ack_level(const RGWHTTPArgs& args) {
+    bool exists;
+    const auto& str_ack_level = args.get("amqp-ack-level", &exists);
+    if (!exists || str_ack_level == "broker") {
+      // "broker" is default
+      return ack_level_t::Broker;
+    }
+    if (str_ack_level == "none") {
+      return ack_level_t::None;
+    }
+    if (str_ack_level == "routable") {
+      return ack_level_t::Routable;
+    }
+    throw configuration_error("AMQP: invalid amqp-ack-level: " + str_ack_level);
   }
 
   // NoAckPublishCR implements async amqp publishing via coroutine
@@ -220,16 +235,14 @@ private:
     const std::string topic;
     amqp::connection_ptr_t conn;
     const std::string message;
-    [[maybe_unused]] const ack_level_t ack_level; // TODO not used for now
 
   public:
     AckPublishCR(CephContext* cct,
               const std::string& _topic,
               amqp::connection_ptr_t& _conn,
-              const std::string& _message,
-              ack_level_t _ack_level) :
+              const std::string& _message) :
       RGWCoroutine(cct),
-      topic(_topic), conn(_conn), message(_message), ack_level(_ack_level) {}
+      topic(_topic), conn(_conn), message(_message) {}
 
     // send message to endpoint, waiting for reply
     int operate() override {
@@ -273,7 +286,7 @@ private:
       return nullptr;
     }
   };
-
+  
 public:
   RGWPubSubAMQPEndpoint(const std::string& _endpoint,
       const std::string& _topic,
@@ -283,22 +296,10 @@ public:
         endpoint(_endpoint), 
         topic(_topic),
         exchange(get_exchange(args)),
-        conn(amqp::connect(endpoint, exchange)) {
+        ack_level(get_ack_level(args)),
+        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker))) {
     if (!conn) { 
       throw configuration_error("AMQP: failed to create connection to: " + endpoint);
-    }
-    bool exists;
-    // get ack level
-    str_ack_level = args.get("amqp-ack-level", &exists);
-    if (!exists || str_ack_level == "broker") {
-      // "broker" is default
-      ack_level = ack_level_t::Broker;
-    } else if (str_ack_level == "none") {
-      ack_level = ack_level_t::None;
-    } else if (str_ack_level == "routable") {
-      ack_level = ack_level_t::Routable;
-    } else {
-      throw configuration_error("AMQP: invalid amqp-ack-level: " + str_ack_level);
     }
   }
 
@@ -307,9 +308,7 @@ public:
     if (ack_level == ack_level_t::None) {
       return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     } else {
-      // TODO: currently broker and routable are the same - this will require different flags
-      // but the same mechanism
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event), ack_level);
+      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     }
   }
   
@@ -318,9 +317,7 @@ public:
     if (ack_level == ack_level_t::None) {
       return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
     } else {
-      // TODO: currently broker and routable are the same - this will require different flags
-      // but the same mechanism
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(record), ack_level);
+      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
     }
   }
 
@@ -405,7 +402,6 @@ public:
     str += "\nURI: " + endpoint;
     str += "\nTopic: " + topic;
     str += "\nExchange: " + exchange;
-    str += "\nAck Level: " + str_ack_level;
     return str;
   }
 };
@@ -428,7 +424,7 @@ private:
   kafka::connection_ptr_t conn;
   const ack_level_t ack_level;
 
-  static bool get_verify_ssl(const RGWHTTPArgs& args) {
+  bool get_verify_ssl(const RGWHTTPArgs& args) {
     bool exists;
     auto str_verify_ssl = args.get("verify-ssl", &exists);
     if (!exists) {
@@ -445,7 +441,7 @@ private:
     throw configuration_error("'verify-ssl' must be true/false, not: " + str_verify_ssl);
   }
 
-  static bool get_use_ssl(const RGWHTTPArgs& args) {
+  bool get_use_ssl(const RGWHTTPArgs& args) {
     bool exists;
     auto str_use_ssl = args.get("use-ssl", &exists);
     if (!exists) {
@@ -462,7 +458,7 @@ private:
     throw configuration_error("'use-ssl' must be true/false, not: " + str_use_ssl);
   }
 
-  static ack_level_t get_ack_level(const RGWHTTPArgs& args) {
+  ack_level_t get_ack_level(const RGWHTTPArgs& args) {
     bool exists;
     // get ack level
     const auto str_ack_level = args.get("kafka-ack-level", &exists);
