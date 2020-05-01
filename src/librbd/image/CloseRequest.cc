@@ -11,6 +11,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatcher.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
@@ -249,6 +250,29 @@ void CloseRequest<I>::handle_shut_down_object_dispatcher(int r) {
   save_result(r);
   if (r < 0) {
     lderr(cct) << "failed to shut down object dispatcher: "
+               << cpp_strerror(r) << dendl;
+  }
+  send_shut_down_image_dispatcher();
+}
+
+template <typename I>
+void CloseRequest<I>::send_shut_down_image_dispatcher() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  m_image_ctx->io_image_dispatcher->shut_down(create_context_callback<
+    CloseRequest<I>,
+    &CloseRequest<I>::handle_shut_down_image_dispatcher>(this));
+}
+
+template <typename I>
+void CloseRequest<I>::handle_shut_down_image_dispatcher(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "failed to shut down image dispatcher: "
                << cpp_strerror(r) << dendl;
   }
   send_flush_op_work_queue();
