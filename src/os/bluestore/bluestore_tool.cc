@@ -261,7 +261,8 @@ int main(int argc, char **argv)
         "prime-osd-dir, "
         "bluefs-log-dump, "
         "free-dump, "
-        "free-score")
+        "free-score, "
+        "bluefs-stats")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -845,10 +846,10 @@ int main(int argc, char **argv)
     for (auto alloc_name : allocs_name) {
       ceph::bufferlist in, out;
       ostringstream err;
-      bool b = admin_socket->execute_command(
+      int r = admin_socket->execute_command(
 	{"{\"prefix\": \"bluestore allocator " + action_name + " " + alloc_name + "\"}"},
 	in, err, &out);
-      if (!b) {
+      if (r != 0) {
         cerr << "failure querying '" << alloc_name << "'" << std::endl;
         exit(EXIT_FAILURE);
       }
@@ -857,6 +858,28 @@ int main(int argc, char **argv)
     }
 
     bluestore.cold_close();
+  } else  if (action == "bluefs-stats") {
+    AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+    ceph_assert(admin_socket);
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.cold_open();
+    if (r < 0) {
+      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    ceph::bufferlist in, out;
+    ostringstream err;
+    r = admin_socket->execute_command(
+      { "{\"prefix\": \"bluefs stats\"}" },
+      in, err, &out);
+    if (r != 0) {
+      cerr << "failure querying bluefs stats: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    cout << std::string(out.c_str(), out.length()) << std::endl;
+     bluestore.cold_close();
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
