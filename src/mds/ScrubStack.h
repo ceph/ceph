@@ -33,36 +33,20 @@ public:
     mdcache(mdc),
     clog(clog),
     finisher(finisher_),
-    inode_stack(member_offset(CInode, item_scrub)),
+    scrub_stack(member_offset(MDSCacheObject, item_scrub)),
     scrub_kick(mdc, this) {}
   ~ScrubStack() {
-    ceph_assert(inode_stack.empty());
+    ceph_assert(scrub_stack.empty());
     ceph_assert(!scrubs_in_progress);
   }
   /**
-   * Put a inode on the top of the scrub stack, so it is the highest priority.
-   * If there are other scrubs in progress, they will not continue scrubbing new
-   * entries until this one is completed.
-   * @param in The inodey to scrub
+   * Put the inode at either the top or bottom of the stack, with the
+   * given scrub params, and kick off more scrubbing.
+   * @param in The inode to scrub
    * @param header The ScrubHeader propagated from wherever this scrub
-   *               was initiated
    */
-  void enqueue_inode_top(CInode *in, ScrubHeaderRef& header,
-			 MDSContext *on_finish) {
-    enqueue_inode(in, header, on_finish, true);
-    scrub_origins.emplace(in);
-    clog_scrub_summary(in);
-  }
-  /** Like enqueue_inode_top, but we wait for all pending scrubs before
-   * starting this one.
-   */
-  void enqueue_inode_bottom(CInode *in, ScrubHeaderRef& header,
-			    MDSContext *on_finish) {
-    enqueue_inode(in, header, on_finish, false);
-    scrub_origins.emplace(in);
-    clog_scrub_summary(in);
-  }
-
+  void enqueue(CInode *in, ScrubHeaderRef& header,
+	       MDSContext *on_finish, bool top);
   /**
    * Abort an ongoing scrub operation. The abort operation could be
    * delayed if there are in-progress scrub operations on going. The
@@ -108,7 +92,7 @@ public:
     return state_str == "idle";
   }
 
-  bool is_scrubbing() const { return !inode_stack.empty(); }
+  bool is_scrubbing() const { return !scrub_stack.empty(); }
 
   MDCache *mdcache;
 
@@ -137,7 +121,7 @@ protected:
   Finisher *finisher;
 
   /// The stack of inodes we want to scrub
-  elist<CInode*> inode_stack;
+  elist<MDSCacheObject*> scrub_stack;
   /// current number of dentries we're actually scrubbing
   int scrubs_in_progress = 0;
   int stack_size = 0;
@@ -157,32 +141,18 @@ private:
 
   friend class C_InodeValidated;
 
+  void _enqueue(MDSCacheObject *obj, CDentry *parent, ScrubHeaderRef& header,
+		MDSContext *on_finish, bool top);
   /**
-   * Put the inode at either the top or bottom of the stack, with
-   * the given scrub params, and then try and kick off more scrubbing.
+   * Remove the inode/dirfrag from the stack.
    */
-  void enqueue_inode(CInode *in, ScrubHeaderRef& header,
-                      MDSContext *on_finish, bool top);
-  void _enqueue_inode(CInode *in, CDentry *parent, ScrubHeaderRef& header,
-                      MDSContext *on_finish, bool top);
+  inline void dequeue(MDSCacheObject *obj);
+
   /**
    * Kick off as many scrubs as are appropriate, based on the current
    * state of the stack.
    */
   void kick_off_scrubs();
-  /**
-   * Push a inode on top of the stack.
-   */
-  inline void push_inode(CInode *in);
-  /**
-   * Push a inode to the bottom of the stack.
-   */
-  inline void push_inode_bottom(CInode *in);
-  /**
-   * Pop the given inode off the stack.
-   */
-  inline void pop_inode(CInode *in);
-
   /**
    * Scrub a file inode.
    * @param in The inode to scrub
@@ -214,12 +184,10 @@ private:
    * @param in The CInode to scrub as a directory
    * @param added_children set to true if we pushed some of our children
    * onto the ScrubStack
-   * @param is_terminal set to true if there are no descendant dentries
    * remaining to start scrubbing.
    * @param done set to true if we and all our children have finished scrubbing
    */
-  void scrub_dir_inode(CInode *in, bool *added_children, bool *is_terminal,
-                       bool *done);
+  void scrub_dir_inode(CInode *in, bool *added_children, bool *done);
   /**
    * Make progress on scrubbing a dirfrag. It may return after each of the
    * following steps, but will report making progress on each one.
@@ -234,8 +202,7 @@ private:
    * progress. Try again later.
    *
    */
-  void scrub_dirfrag(CDir *dir, ScrubHeaderRef& header,
-		     bool *added_children, bool *is_terminal, bool *done);
+  void scrub_dirfrag(CDir *dir, bool *added_children, bool *done);
   /**
    * Scrub a directory-representing dentry.
    *
@@ -296,7 +263,7 @@ private:
   void clog_scrub_summary(CInode *in=nullptr);
 
   State state = STATE_IDLE;
-  bool clear_inode_stack = false;
+  bool clear_stack = false;
 
   // list of pending context completions for asynchronous scrub
   // control operations.

@@ -18,6 +18,7 @@ std::string_view MDSCacheObject::generic_pin_name(int p) const {
     case PIN_TEMPEXPORTING: return "tempexporting";
     case PIN_CLIENTLEASE: return "clientlease";
     case PIN_DISCOVERBASE: return "discoverbase";
+    case PIN_SCRUBQUEUE: return "scrubqueue";
     default: ceph_abort(); return std::string_view();
   }
 }

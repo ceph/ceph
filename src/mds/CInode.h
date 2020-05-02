@@ -350,7 +350,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
-  static const int PIN_SCRUBQUEUE =       25;
 
   // -- dump flags --
   static const int DUMP_INODE_STORE_BASE = (1 << 0);
@@ -1131,7 +1130,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
-  elist<CInode*>::item item_scrub;
 
   // also update RecoveryQueue::RecoveryQueue() if you change this
   elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
