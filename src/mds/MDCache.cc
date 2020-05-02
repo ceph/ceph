@@ -12833,13 +12833,9 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     mds->mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, flush_finish));
   });
 
-  if (!header->get_recursive()) {
-    mds->scrubstack->enqueue_inode_top(in, header,
-				       new MDSInternalContextWrapper(mds, scrub_finish));
-  } else {
-    mds->scrubstack->enqueue_inode_bottom(in, header, 
-				       new MDSInternalContextWrapper(mds, scrub_finish));
-  }
+  mds->scrubstack->enqueue(in, header,
+			   new MDSInternalContextWrapper(mds, scrub_finish),
+			   !header->get_recursive());
 
   mds->server->respond_to_request(mdr, 0);
   return;

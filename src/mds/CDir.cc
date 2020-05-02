@@ -3480,11 +3480,20 @@ void CDir::scrub_info_create() const
   me->scrub_infop.swap(si);
 }
 
-void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
+void CDir::scrub_initialize(const ScrubHeaderRef& header, MDSContext* f)
+{
+  ceph_assert(header);
+  // FIXME: weird implicit construction, is someone else meant
+  // to be calling scrub_info_create first?
+  scrub_info();
+  scrub_infop->header = header;
+  scrub_infop->on_finish = f;
+}
+
+void CDir::scrub_initialize_data()
 {
   dout(20) << __func__ << dendl;
   ceph_assert(is_complete());
-  ceph_assert(header != nullptr);
 
   // FIXME: weird implicit construction, is someone else meant
   // to be calling scrub_info_create first?
@@ -3519,10 +3528,24 @@ void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
     }
   }
   scrub_infop->directory_scrubbing = true;
-  scrub_infop->header = header;
 }
 
-void CDir::scrub_finished()
+void CDir::scrub_aborted(MDSContext **c) {
+  dout(20) << __func__ << dendl;
+  ceph_assert(scrub_infop && scrub_infop->directory_scrubbing);
+
+  *c = scrub_infop->on_finish;
+  scrub_infop->on_finish = nullptr;
+
+  scrub_infop->directory_scrubbing = false;
+  scrub_infop->need_scrub_local = false;
+  scrub_infop->last_scrub_dirty = false;
+  scrub_infop->pending_scrub_error = false;
+  scrub_infop->dirty_scrub_stamps.clear();
+  scrub_infop.reset();
+}
+
+void CDir::scrub_finished(MDSContext **c)
 {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_infop && scrub_infop->directory_scrubbing);
@@ -3537,6 +3560,9 @@ void CDir::scrub_finished()
 
   scrub_infop->last_recursive = scrub_infop->recursive_start;
   scrub_infop->last_scrub_dirty = true;
+
+  *c = scrub_infop->on_finish;
+  scrub_infop->on_finish = nullptr;
 }
 
 int CDir::_next_dentry_on_set(dentry_key_set &dns, bool missing_okay,

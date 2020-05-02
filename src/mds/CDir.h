@@ -108,6 +108,7 @@ public:
     /// inodes we contain with dirty scrub stamps
     dentry_key_map dirty_scrub_stamps; // TODO: make use of this!
 
+    MDSContext *on_finish = nullptr;
     scrub_stamps recursive_start; // when we last started a recursive scrub
     scrub_stamps last_recursive; // when we last finished a recursive scrub
     scrub_stamps last_local; // when we last did a local scrub
@@ -125,7 +126,7 @@ public:
     dentry_key_set others_scrubbing;
     dentry_key_set others_scrubbed;
 
-    ScrubHeaderRefConst header;
+    ScrubHeaderRef header;
   };
 
   // -- pins --
@@ -320,7 +321,13 @@ public:
    * @pre The CDir is marked complete.
    * @post It has set up its internal scrubbing state.
    */
-  void scrub_initialize(const ScrubHeaderRefConst& header);
+  void scrub_initialize(const ScrubHeaderRef& header,
+			MDSContext* f);
+  void scrub_initialize_data();
+  ScrubHeaderRef get_scrub_header() {
+    return scrub_infop ? scrub_infop->header : nullptr;
+  }
+
   /**
    * Get the next dentry to scrub. Gives you a CDentry* and its meaning. This
    * function will give you all directory-representing dentries before any
@@ -353,7 +360,9 @@ public:
    * Call this once all CDentries have been scrubbed, according to
    * scrub_dentry_next's listing. It finalizes the scrub statistics.
    */
-  void scrub_finished();
+  void scrub_finished(MDSContext **c);
+
+  void scrub_aborted(MDSContext **c);
   /**
    * Tell the CDir to do a local scrub of itself.
    * @pre The CDir is_complete().

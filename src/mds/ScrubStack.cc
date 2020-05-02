@@ -49,60 +49,57 @@ std::ostream &operator<<(std::ostream &os, const ScrubStack::State &state) {
   return os;
 }
 
-void ScrubStack::push_inode(CInode *in)
+void ScrubStack::dequeue(MDSCacheObject *obj)
 {
-  dout(20) << "pushing " << *in << " on top of ScrubStack" << dendl;
-  if (!in->item_scrub.is_on_list()) {
-    in->get(CInode::PIN_SCRUBQUEUE);
-    stack_size++;
-  }
-  inode_stack.push_front(&in->item_scrub);
-}
-
-void ScrubStack::push_inode_bottom(CInode *in)
-{
-  dout(20) << "pushing " << *in << " on bottom of ScrubStack" << dendl;
-  if (!in->item_scrub.is_on_list()) {
-    in->get(CInode::PIN_SCRUBQUEUE);
-    stack_size++;
-  }
-  inode_stack.push_back(&in->item_scrub);
-}
-
-void ScrubStack::pop_inode(CInode *in)
-{
-  dout(20) << "popping " << *in
-          << " off of ScrubStack" << dendl;
-  ceph_assert(in->item_scrub.is_on_list());
-  in->put(CInode::PIN_SCRUBQUEUE);
-  in->item_scrub.remove_myself();
+  dout(20) << "dequeue " << *obj << " from ScrubStack" << dendl;
+  ceph_assert(obj->item_scrub.is_on_list());
+  obj->put(MDSCacheObject::PIN_SCRUBQUEUE);
+  obj->item_scrub.remove_myself();
   stack_size--;
 }
 
-void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
-				ScrubHeaderRef& header,
-				MDSContext *on_finish, bool top)
+void ScrubStack::_enqueue(MDSCacheObject *obj, CDentry *parent,
+			  ScrubHeaderRef& header,
+			  MDSContext *on_finish, bool top)
 {
-  dout(10) << __func__ << " with {" << *in << "}"
-           << ", on_finish=" << on_finish << ", top=" << top << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
-  in->scrub_initialize(parent, header, on_finish);
+  if (CInode *in = dynamic_cast<CInode*>(obj)) {
+    dout(10) << __func__ << " with {" << *in << "}"
+	     << ", on_finish=" << on_finish << ", top=" << top << dendl;
+    in->scrub_initialize(parent, header, on_finish);
+  } else if (CDir *dir = dynamic_cast<CDir*>(obj)) {
+    dout(10) << __func__ << " with {" << *dir << "}"
+	     << ", on_finish=" << on_finish << ", top=" << top << dendl;
+    // The edge directory must be in memory
+    dir->scrub_initialize(header, on_finish);
+  } else {
+    ceph_assert(0 == "queue dentry to scrub stack");
+  }
+
+  dout(20) << "enqueue " << *obj << " to " << (top ? "top" : "bottom") << " of ScrubStack" << dendl;
+  if (!obj->item_scrub.is_on_list()) {
+    obj->get(MDSCacheObject::PIN_SCRUBQUEUE);
+    stack_size++;
+  }
   if (top)
-    push_inode(in);
+    scrub_stack.push_front(&obj->item_scrub);
   else
-    push_inode_bottom(in);
+    scrub_stack.push_back(&obj->item_scrub);
 }
 
-void ScrubStack::enqueue_inode(CInode *in, ScrubHeaderRef& header,
-                               MDSContext *on_finish, bool top)
+void ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header,
+                         MDSContext *on_finish, bool top)
 {
   // abort in progress
-  if (clear_inode_stack) {
+  if (clear_stack) {
     on_finish->complete(-EAGAIN);
     return;
   }
 
-  _enqueue_inode(in, NULL, header, on_finish, top);
+  scrub_origins.emplace(in);
+  clog_scrub_summary(in);
+
+  _enqueue(in, nullptr, header, on_finish, top);
   kick_off_scrubs();
 }
 
@@ -111,13 +108,13 @@ void ScrubStack::kick_off_scrubs()
   ceph_assert(ceph_mutex_is_locked(mdcache->mds->mds_lock));
   dout(20) << __func__ << ": state=" << state << dendl;
 
-  if (clear_inode_stack || state == STATE_PAUSING || state == STATE_PAUSED) {
+  if (clear_stack || state == STATE_PAUSING || state == STATE_PAUSED) {
     if (scrubs_in_progress == 0) {
       dout(10) << __func__ << ": in progress scrub operations finished, "
                << stack_size << " in the stack" << dendl;
 
       State final_state = state;
-      if (clear_inode_stack) {
+      if (clear_stack) {
         abort_pending_scrubs();
         final_state = STATE_IDLE;
       }
@@ -135,10 +132,10 @@ void ScrubStack::kick_off_scrubs()
   dout(20) << __func__ << " entering with " << scrubs_in_progress << " in "
               "progress and " << stack_size << " in the stack" << dendl;
   bool can_continue = true;
-  elist<CInode*>::iterator i = inode_stack.begin();
+  elist<MDSCacheObject*>::iterator it = scrub_stack.begin();
   while (g_conf()->mds_max_scrub_ops_in_progress > scrubs_in_progress &&
          can_continue) {
-    if (i.end()) {
+    if (it.end()) {
       if (scrubs_in_progress == 0) {
         set_state(STATE_IDLE);
       }
@@ -149,51 +146,64 @@ void ScrubStack::kick_off_scrubs()
     assert(state == STATE_RUNNING || state == STATE_IDLE);
     set_state(STATE_RUNNING);
 
-    CInode *curi = *i;
-    ++i; // we have our reference, push iterator forward
+    if (CInode *in = dynamic_cast<CInode*>(*it)) {
+      ++it; // we have our reference, push iterator forward
+      dout(20) << __func__ << " examining " << *in << dendl;
 
-    dout(20) << __func__ << " examining " << *curi << dendl;
+      if (!in->is_dir()) {
+	// it's a regular file, symlink, or hard link
+	dequeue(in); // we only touch it this once, so remove from stack
 
-    if (!curi->is_dir()) {
-      // it's a regular file, symlink, or hard link
-      pop_inode(curi); // we only touch it this once, so remove from stack
-
-      if (!curi->scrub_info()->on_finish) {
-	scrubs_in_progress++;
-	curi->scrub_set_finisher(&scrub_kick);
-      }
-      scrub_file_inode(curi);
-      can_continue = true;
-    } else {
-      bool completed; // it's done, so pop it off the stack
-      bool terminal; // not done, but we can start ops on other directories
-      bool progress; // it added new dentries to the top of the stack
-      scrub_dir_inode(curi, &progress, &terminal, &completed);
-      if (completed) {
-        dout(20) << __func__ << " dir completed" << dendl;
-        pop_inode(curi);
-      } else if (progress) {
-        dout(20) << __func__ << " dir progressed" << dendl;
-        // we added new stuff to top of stack, so reset ourselves there
-        i = inode_stack.begin();
+	if (!in->scrub_info()->on_finish) {
+	  scrubs_in_progress++;
+	  in->scrub_set_finisher(&scrub_kick);
+	}
+	scrub_file_inode(in);
+	can_continue = true;
       } else {
-        dout(20) << __func__ << " dir no-op" << dendl;
+	bool done; // it's done, so pop it off the stack
+	bool added_children; // it added new dentries to the top of the stack
+	scrub_dir_inode(in, &added_children, &done);
+	if (done) {
+	  dout(20) << __func__ << " dir inode, done" << dendl;
+	  dequeue(in);
+	} else if (added_children) {
+	  dout(20) << __func__ << " dir inode, added_children" << dendl;
+	  // we added new stuff to top of stack, so reset ourselves there
+	  it = scrub_stack.begin();
+	} else {
+	  dout(20) << __func__ << " dir inode, no progress" << dendl;
+	  can_continue = false;
+	}
       }
-
-      can_continue = progress || terminal || completed;
+    } else if (CDir *dir = dynamic_cast<CDir*>(*it)) {
+      bool done; // it's done, so pop it off the stack
+      bool added_children; // it added new dentries to the top of the stack
+      scrub_dirfrag(dir, &added_children, &done);
+      if (done) {
+	dout(20) << __func__ << " dirfrag, done" << dendl;
+	dequeue(dir);
+      } else if (added_children) {
+	dout(20) << __func__ << " dirfrag, added_children" << dendl;
+	// we added new stuff to top of stack, so reset ourselves there
+	it = scrub_stack.begin();
+      } else {
+	dout(20) << __func__ << " dirfrag, no progress" << dendl;
+	can_continue = false;
+      }
+    } else {
+      ceph_assert(0 == "dentry in scrub stack");
     }
   }
 }
 
 void ScrubStack::scrub_dir_inode(CInode *in,
                                  bool *added_children,
-                                 bool *terminal,
                                  bool *done)
 {
   dout(10) << __func__ << " " << *in << dendl;
 
   *added_children = false;
-  bool all_frags_terminal = true;
   bool all_frags_done = true;
 
   ScrubHeaderRef header = in->get_scrub_header();
@@ -232,11 +242,11 @@ void ScrubStack::scrub_dir_inode(CInode *in,
 	dout(20) << __func__ << " get_next_cdir ready=" << ready << dendl;
 
 	if (ready && cur_dir) {
+	  cur_dir->scrub_initialize(header, nullptr);
 	  scrubbing_cdirs.push(cur_dir);
 	} else if (!ready) {
 	  // We are waiting for load of a frag
 	  all_frags_done = false;
-	  all_frags_terminal = false;
 	  break;
 	} else {
 	  // Finished with all frags
@@ -245,20 +255,17 @@ void ScrubStack::scrub_dir_inode(CInode *in,
       }
       // scrub that CDir
       bool frag_added_children = false;
-      bool frag_terminal = true;
       bool frag_done = false;
-      scrub_dirfrag(cur_dir, header,
-		    &frag_added_children, &frag_terminal, &frag_done);
+      scrub_dirfrag(cur_dir,
+		    &frag_added_children, &frag_done);
       if (frag_done) {
 	cur_dir->inode->scrub_dirfrag_finished(cur_dir->frag);
       }
       *added_children |= frag_added_children;
-      all_frags_terminal = all_frags_terminal && frag_terminal;
       all_frags_done = all_frags_done && frag_done;
     }
 
-    dout(20) << "finished looping; all_frags_terminal=" << all_frags_terminal
-	     << ", all_frags_done=" << all_frags_done << dendl;
+    dout(20) << "finished looping, all_frags_done=" << all_frags_done << dendl;
   } else {
     dout(20) << "!scrub_recursive" << dendl;
   }
@@ -272,9 +279,8 @@ void ScrubStack::scrub_dir_inode(CInode *in,
     scrub_dir_inode_final(in);
   }
 
-  *terminal = all_frags_terminal;
   *done = all_frags_done;
-  dout(10) << __func__ << " is exiting " << *terminal << " " << *done << dendl;
+  dout(10) << __func__ << " is exiting " << *done << dendl;
   return;
 }
 
@@ -348,18 +354,15 @@ void ScrubStack::scrub_dir_inode_final(CInode *in)
   return;
 }
 
-void ScrubStack::scrub_dirfrag(CDir *dir,
-			       ScrubHeaderRef& header,
-			       bool *added_children, bool *is_terminal,
-			       bool *done)
+void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children, bool *done)
 {
   ceph_assert(dir != NULL);
 
   dout(20) << __func__ << " on " << *dir << dendl;
   *added_children = false;
-  *is_terminal = false;
   *done = false;
 
+  ScrubHeaderRef header = dir->get_scrub_header();
 
   if (!dir->scrub_info()->directory_scrubbing) {
     // Get the frag complete before calling
@@ -371,7 +374,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
       return;
     }
 
-    dir->scrub_initialize(header);
+    dir->scrub_initialize_data();
   }
 
   int r = 0;
@@ -393,11 +396,12 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
       // Nothing left to scrub, are we done?
       auto&& scrubbing = dir->scrub_dentries_scrubbing();
       if (scrubbing.empty()) {
-        dout(20) << __func__ << " dirfrag done: " << *dir << dendl;
-        // FIXME: greg: What's the diff meant to be between done and terminal
-	dir->scrub_finished();
-        *done = true;
-        *is_terminal = true;
+	dout(20) << __func__ << " dirfrag done: " << *dir << dendl;
+	MDSContext *c = nullptr;
+	dir->scrub_finished(&c);
+	if (c)
+	  finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
+	*done = true;
       } else {
         dout(20) << __func__ << " " << scrubbing.size() << " dentries still "
                    "scrubbing in " << *dir << dendl;
@@ -409,7 +413,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
     // never get random IO errors here.
     ceph_assert(r == 0);
 
-    _enqueue_inode(dn->get_projected_inode(), dn, header, NULL, true);
+    _enqueue(dn->get_projected_inode(), dn, header, nullptr, true);
 
     *added_children = true;
   }
@@ -475,8 +479,10 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     dout(10) << __func__ << " scrub passed on inode " << *in << dendl;
   }
 
-  MDSContext *c = NULL;
+  MDSContext *c = nullptr;
   in->scrub_finished(&c);
+  if (c)
+    finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
 
   if (in == header->get_origin()) {
     scrub_origins.erase(in);
@@ -490,9 +496,6 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
         header->get_formatter().close_section(); // results
       }
     }
-  }
-  if (c) {
-    finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
   }
 }
 
@@ -541,7 +544,7 @@ std::string_view ScrubStack::scrub_summary() {
   }
 
   if (state == STATE_RUNNING) {
-    if (clear_inode_stack) {
+    if (clear_stack) {
       *cs << "aborting";
     } else {
       *cs << "active";
@@ -555,7 +558,7 @@ std::string_view ScrubStack::scrub_summary() {
       *cs << "paused";
     }
 
-    if (clear_inode_stack) {
+    if (clear_stack) {
       if (have_more) {
         *cs << "+";
       }
@@ -589,7 +592,7 @@ void ScrubStack::scrub_status(Formatter *f) {
   if (state == STATE_IDLE) {
     *css << "no active scrubs running";
   } else if (state == STATE_RUNNING) {
-    if (clear_inode_stack) {
+    if (clear_stack) {
       *css << "ABORTING";
     } else {
       *css << "scrub active";
@@ -600,7 +603,7 @@ void ScrubStack::scrub_status(Formatter *f) {
       have_more = true;
       *css << state;
     }
-    if (clear_inode_stack) {
+    if (clear_stack) {
       if (have_more) {
         *css << "+";
       }
@@ -649,25 +652,33 @@ void ScrubStack::scrub_status(Formatter *f) {
 
 void ScrubStack::abort_pending_scrubs() {
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
-  ceph_assert(clear_inode_stack);
+  ceph_assert(clear_stack);
 
-  for (auto inode = inode_stack.begin(); !inode.end(); ++inode) {
-    CInode *in = *inode;
-    if (in == in->scrub_info()->header->get_origin()) {
-      scrub_origins.erase(in);
-      clog_scrub_summary(in);
-    }
-
-    MDSContext *ctx = nullptr;
-    in->scrub_aborted(&ctx);
-    if (ctx != nullptr) {
-      ctx->complete(-ECANCELED);
+  for (auto it = scrub_stack.begin(); !it.end(); ++it) {
+    if (CInode *in = dynamic_cast<CInode*>(*it))  {
+      if (in == in->scrub_info()->header->get_origin()) {
+	scrub_origins.erase(in);
+	clog_scrub_summary(in);
+      }
+      MDSContext *ctx = nullptr;
+      in->scrub_aborted(&ctx);
+      if (ctx != nullptr) {
+	ctx->complete(-ECANCELED);
+      }
+    } else if (CDir *dir = dynamic_cast<CDir*>(*it)) {
+      MDSContext *ctx = nullptr;
+      dir->scrub_aborted(&ctx);
+      if (ctx != nullptr) {
+	ctx->complete(-ECANCELED);
+      }
+    } else {
+      ceph_abort(0 == "dentry in scrub stack");
     }
   }
 
   stack_size = 0;
-  inode_stack.clear();
-  clear_inode_stack = false;
+  scrub_stack.clear();
+  clear_stack = false;
 }
 
 void ScrubStack::scrub_abort(Context *on_finish) {
@@ -678,7 +689,7 @@ void ScrubStack::scrub_abort(Context *on_finish) {
            << " scrubs in progress and " << stack_size << " in the"
            << " stack" << dendl;
 
-  clear_inode_stack = true;
+  clear_stack = true;
   if (scrub_in_transition_state()) {
     control_ctxs.push_back(on_finish);
     return;
@@ -700,7 +711,7 @@ void ScrubStack::scrub_pause(Context *on_finish) {
            << " stack" << dendl;
 
   // abort is in progress
-  if (clear_inode_stack) {
+  if (clear_stack) {
     on_finish->complete(-EINVAL);
     return;
   }
@@ -722,7 +733,7 @@ bool ScrubStack::scrub_resume() {
 
   int r = 0;
 
-  if (clear_inode_stack) {
+  if (clear_stack) {
     r = -EINVAL;
   } else if (state == STATE_PAUSING) {
     set_state(STATE_RUNNING);
@@ -739,7 +750,7 @@ bool ScrubStack::scrub_resume() {
 void ScrubStack::clog_scrub_summary(CInode *in) {
   if (in) {
     std::string what;
-    if (clear_inode_stack) {
+    if (clear_stack) {
       what = "aborted";
     } else if (scrub_origins.count(in)) {
       what = "queued";
