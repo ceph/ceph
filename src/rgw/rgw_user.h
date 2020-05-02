@@ -282,7 +282,8 @@ struct RGWUserAdminOpState {
     if (_subuser.empty())
       return;
 
-    size_t pos = _subuser.find(":");
+    // user_id can have ":" in it so we should find the last ":" for user_id:subuser pattern
+    size_t pos = _subuser.find_last_of(":");
     if (pos != string::npos) {
       rgw_user tmp_id;
       tmp_id.from_str(_subuser.substr(0, pos));
