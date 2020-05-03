@@ -34,7 +34,6 @@ public:
     clog(clog),
     finisher(finisher_),
     inode_stack(member_offset(CInode, item_scrub)),
-    scrubstack(this),
     scrub_kick(mdc, this) {}
   ~ScrubStack() {
     ceph_assert(inode_stack.empty());
@@ -141,7 +140,6 @@ protected:
   elist<CInode*> inode_stack;
   /// current number of dentries we're actually scrubbing
   int scrubs_in_progress = 0;
-  ScrubStack *scrubstack; // hack for dout
   int stack_size = 0;
 
   C_KickOffScrubs scrub_kick;
