@@ -22,15 +22,12 @@ public:
     INC = 1,
   };
 
-  struct StageParams {
-    std::string name;
-    StageType type{UNKNOWN};
-    int num_shards{0};
-  };
+  using stage_id_t = std::string;
 
   struct StageInfo {
-    int snum{0};
-    StageParams params;
+    stage_id_t sid;
+    StageType type{UNKNOWN};
+    int num_shards{0};
   };
 
   struct Entry {
@@ -47,22 +44,21 @@ public:
   SIProvider(CephContext *_cct) : cct(_cct) {}
   virtual ~SIProvider() {}
 
-  virtual int get_first_stage() const = 0;
-  virtual int get_last_stage() const = 0;
-  virtual int get_next_stage(int snum, int *next_sid) = 0;
-  virtual std::vector<int> get_stages() = 0;
+  virtual stage_id_t get_first_stage() const = 0;
+  virtual stage_id_t get_last_stage() const = 0;
+  virtual int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) = 0;
+  virtual std::vector<stage_id_t> get_stages() = 0;
 
-  virtual int get_stage_info(int stage_num, StageInfo *stage_info) const = 0;
-  virtual int fetch(int stage_num, int shard_id, std::string marker, int max, fetch_result *result) = 0;
-  virtual int get_start_marker(int stage_num, int shard_id, std::string *marker) const = 0;
-  virtual int get_cur_state(int stage_num, int shard_id, std::string *marker) const = 0;
+  virtual int get_stage_info(const stage_id_t& sid, StageInfo *stage_info) const = 0;
+  virtual int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) = 0;
+  virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
+  virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
 };
 
 class SIProvider_SingleStage : public SIProvider
 {
 protected:
   StageInfo stage_info;
-  int stage_num{0};
 
   virtual int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int do_get_start_marker(int shard_id, std::string *marker) const = 0;
@@ -72,23 +68,23 @@ public:
                          const std::string& name,
                          StageType type,
                          int num_shards) : SIProvider(_cct),
-                                           stage_info({0, {name, type, num_shards}}) {}
-  int get_first_stage() const override {
-    return stage_num;
+                                           stage_info({name, type, num_shards}) {}
+  stage_id_t get_first_stage() const override {
+    return stage_info.sid;
   }
-  int get_last_stage() const override {
-    return stage_num;
+  stage_id_t get_last_stage() const override {
+    return stage_info.sid;
   }
 
-  int get_next_stage(int snum, int *next_sid) override {
+  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override {
     return -ERANGE;
   }
-  std::vector<int> get_stages() override {
-    return { stage_num };
+  std::vector<stage_id_t> get_stages() override {
+    return { stage_info.sid };
   }
 
-  int get_stage_info(int snum, StageInfo *sinfo) const override {
-    if (snum != stage_num) {
+  int get_stage_info(const stage_id_t& sid, StageInfo *sinfo) const override {
+    if (sid != stage_info.sid) {
       return -ERANGE;
     }
 
@@ -96,9 +92,9 @@ public:
     return 0;
   }
 
-  int fetch(int snum, int shard_id, std::string marker, int max, fetch_result *result) override;
-  int get_start_marker(int stage_num, int shard_id, std::string *marker) const override;
-  int get_cur_state(int stage_num, int shard_id, std::string *marker) const override;
+  int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
+  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const override;
+  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const override;
 };
 
 using SIProviderRef = std::shared_ptr<SIProvider>;
@@ -135,14 +131,17 @@ class SIProviderClient : public SIClient
 {
   SIProviderRef provider;
   std::vector<std::string> markers;
-  std::map<int, std::vector<std::string> > initial_stage_markers;
+
+  using stage_id_t = SIProvider::stage_id_t;
+
+  std::map<stage_id_t, std::vector<std::string> > initial_stage_markers;
 
   SIProvider::StageInfo stage_info;
   int num_complete{0};
 
   std::vector<bool> done;
 
-  int init_stage(int new_stage);
+  int init_stage(const stage_id_t& new_stage);
 
 public:
   SIProviderClient(SIProviderRef& _provider) : provider(_provider) {}
@@ -156,7 +155,7 @@ public:
   }
 
   int stage_num_shards() const override {
-    return stage_info.params.num_shards;
+    return stage_info.num_shards;
   }
 
   bool is_shard_done(int shard_id) const override {
