@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from cephadm.osd import OSDRemoval
+from cephadm.services.osd import OSDRemoval
 
 try:
     from typing import Any, List
@@ -341,7 +341,7 @@ class TestCephadm(object):
             )
         ])
     ))
-    @mock.patch("cephadm.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
+    @mock.patch("cephadm.services.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
     def test_remove_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
