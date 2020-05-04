@@ -2263,7 +2263,7 @@ bool RGWDataChangesLog::filter_bucket(const rgw_bucket& bucket, optional_yield y
     return true;
   }
 
-  return bucket_filter->filter(bucket, y);
+  return bucket_filter(bucket, y);
 }
 
 int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
@@ -3154,16 +3154,10 @@ public:
   }
 };
 
-bool RGWBucketCtl::DataLogFilter::filter(const rgw_bucket& bucket, optional_yield y) const
-{
-  return bucket_ctl->bucket_exports_data(bucket, null_yield);
-}
-
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
-                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx()),
-                                                        datalog_filter(this)
+                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
@@ -3184,7 +3178,10 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
   bucket_be_handler = bm_handler->get_be_handler();
   bi_be_handler = bmi_handler->get_be_handler();
 
-  datalog->set_bucket_filter(&datalog_filter);
+  datalog->set_bucket_filter(
+    [this](const rgw_bucket& bucket, optional_yield y) {
+      return bucket_exports_data(bucket, y);
+    });
 }
 
 int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {
