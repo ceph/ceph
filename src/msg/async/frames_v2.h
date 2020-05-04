@@ -130,13 +130,13 @@ static_assert(std::is_standard_layout<preamble_block_t>::value);
 // conveys late_flags. The initial user of this field will be the late
 // frame abortion facility.
 struct epilogue_crc_rev0_block_t {
-  __u8 late_flags;
+  __u8 late_flags;  // FRAME_LATE_FLAG_ABORTED
   ceph_le32 crc_values[MAX_NUM_SEGMENTS];
 } __attribute__((packed));
 static_assert(std::is_standard_layout_v<epilogue_crc_rev0_block_t>);
 
 struct epilogue_secure_rev0_block_t {
-  __u8 late_flags;
+  __u8 late_flags;  // FRAME_LATE_FLAG_ABORTED
   __u8 padding[CRYPTO_BLOCK_SIZE - sizeof(late_flags)];
 
   __u8 ciphers_private_data[];
@@ -144,7 +144,10 @@ struct epilogue_secure_rev0_block_t {
 static_assert(sizeof(epilogue_secure_rev0_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout_v<epilogue_secure_rev0_block_t>);
 
-#define FRAME_FLAGS_LATEABRT      (1<<0)   /* frame was aborted after txing data */
+// A frame can be aborted by the sender after transmitting the
+// preamble and the first segment.  The remainder of the frame
+// is filled with zeros, up until the epilogue.
+#define FRAME_LATE_FLAG_ABORTED           (1<<0)
 
 struct FrameError : std::runtime_error {
   using runtime_error::runtime_error;

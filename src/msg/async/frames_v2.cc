@@ -215,7 +215,7 @@ bool FrameAssembler::disasm_all_crc_rev0(bufferlist segment_bls[],
     ceph_assert(segment_bls[i].length() == m_descs[i].logical_len);
     check_segment_crc(segment_bls[i], epilogue->crc_values[i]);
   }
-  return !(epilogue->late_flags & FRAME_FLAGS_LATEABRT);
+  return !(epilogue->late_flags & FRAME_LATE_FLAG_ABORTED);
 }
 
 bool FrameAssembler::disasm_all_secure_rev0(bufferlist segment_bls[],
@@ -233,7 +233,7 @@ bool FrameAssembler::disasm_all_secure_rev0(bufferlist segment_bls[],
   m_crypto->rx->authenticated_decrypt_update_final(epilogue_bl);
   auto epilogue = reinterpret_cast<const epilogue_secure_rev0_block_t*>(
       epilogue_bl.c_str());
-  return !(epilogue->late_flags & FRAME_FLAGS_LATEABRT);
+  return !(epilogue->late_flags & FRAME_LATE_FLAG_ABORTED);
 }
 
 bool FrameAssembler::disassemble_segments(bufferlist segment_bls[],

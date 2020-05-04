@@ -377,7 +377,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
     // we do have a mechanism that allows transmitter to start sending message
     // and abort after putting entire data field on wire. This will be used by
     // the kernel client to avoid unnecessary buffering.
-    if (late_flags & FRAME_FLAGS_LATEABRT) {
+    if (late_flags & FRAME_LATE_FLAG_ABORTED) {
       // TODO
       ceph_assert(false);
     }
