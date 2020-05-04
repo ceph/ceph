@@ -164,7 +164,7 @@ class Module(MgrModule):
         constituent components, such as when Ceph has been built with
         ENABLE_GIT_VERSION=OFF.
         """
-        r = "ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
+        r = r"ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
         m = re.match(r, version)
         ver = {} if not m else {
             "release": m.group("release"),
