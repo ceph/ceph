@@ -38,7 +38,7 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 
 from . import remotes
 from . import utils
-from .services.cephadmservice import MonService, MgrService
+from .services.cephadmservice import MonService, MgrService, MdsService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
 from .inventory import Inventory, SpecStore, HostCache
@@ -425,6 +425,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.nfs_service = NFSService(self)
         self.mon_service = MonService(self)
         self.mgr_service = MgrService(self)
+        self.mds_service = MdsService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1930,7 +1931,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'mon': self.mon_service.create,
             'mgr': self.mgr_service.create,
             'osd': self.create_osds,  # osds work a bit different.
-            'mds': self._create_mds,
+            'mds': self.mds_service.create,
             'rgw': self._create_rgw,
             'rbd-mirror': self._create_rbd_mirror,
             'nfs': self.nfs_service.create,
@@ -1942,7 +1943,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'iscsi': self._create_iscsi,
         }
         config_fns = {
-            'mds': self._config_mds,
+            'mds': self.mds_service.config,
             'rgw': self._config_rgw,
             'nfs': self.nfs_service.config,
             'iscsi': self._config_iscsi,
@@ -2230,32 +2231,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._apply(spec)
 
     def add_mds(self, spec: ServiceSpec):
-        return self._add_daemon('mds', spec, self._create_mds, self._config_mds)
+        return self._add_daemon('mds', spec, self.mds_service.create, self.mds_service.config)
 
     @trivial_completion
     def apply_mds(self, spec: ServiceSpec):
         return self._apply(spec)
-
-    def _config_mds(self, spec):
-        # ensure mds_join_fs is set for these daemons
-        assert spec.service_id
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': 'mds.' + spec.service_id,
-            'name': 'mds_join_fs',
-            'value': spec.service_id,
-        })
-
-    def _create_mds(self, mds_id, host):
-        # get mgr. key
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'mds.' + mds_id,
-            'caps': ['mon', 'profile mds',
-                     'osd', 'allow rwx',
-                     'mds', 'allow'],
-        })
-        return self._create_daemon('mds', mds_id, host, keyring=keyring)
 
     def add_rgw(self, spec):
         return self._add_daemon('rgw', spec, self._create_rgw, self._config_rgw)

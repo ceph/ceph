@@ -1,5 +1,6 @@
 from typing import  TYPE_CHECKING
 
+from ceph.deployment.service_spec import ServiceSpec
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -70,3 +71,26 @@ class MgrService(CephadmService):
         })
 
         return self.mgr._create_daemon('mgr', mgr_id, host, keyring=keyring)
+
+
+class MdsService(CephadmService):
+    def config(self, spec: ServiceSpec):
+        # ensure mds_join_fs is set for these daemons
+        assert spec.service_id
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config set',
+            'who': 'mds.' + spec.service_id,
+            'name': 'mds_join_fs',
+            'value': spec.service_id,
+        })
+
+    def create(self, mds_id, host) -> str:
+        # get mgr. key
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'mds.' + mds_id,
+            'caps': ['mon', 'profile mds',
+                     'osd', 'allow rwx',
+                     'mds', 'allow'],
+        })
+        return self.mgr._create_daemon('mds', mds_id, host, keyring=keyring)
