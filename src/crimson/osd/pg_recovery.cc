@@ -399,3 +399,49 @@ void PGRecovery::_committed_pushed_object(epoch_t epoch,
 	__func__);
   }
 }
+
+void PGRecovery::request_replica_scan(
+  const pg_shard_t& target,
+  const hobject_t& begin,
+  const hobject_t& end)
+{
+  ceph_abort_msg("Not implemented");
+}
+
+void PGRecovery::request_primary_scan(
+  const hobject_t& begin)
+{
+  ceph_abort_msg("Not implemented");
+}
+
+void PGRecovery::enqueue_push(
+  const pg_shard_t& target,
+  const hobject_t& obj,
+  const eversion_t& v)
+{
+  ceph_abort_msg("Not implemented");
+}
+
+void PGRecovery::enqueue_drop(
+  const pg_shard_t& target,
+  const hobject_t& obj,
+  const eversion_t& v)
+{
+  ceph_abort_msg("Not implemented");
+}
+
+void PGRecovery::update_peers_last_backfill(
+  const hobject_t& new_last_backfill)
+{
+  ceph_abort_msg("Not implemented");
+}
+
+bool PGRecovery::budget_available() const
+{
+  ceph_abort_msg("Not implemented");
+}
+
+void PGRecovery::backfilled()
+{
+  ceph_abort_msg("Not implemented");
+}
