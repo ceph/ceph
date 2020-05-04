@@ -349,6 +349,7 @@ public:
   void on_backfill_canceled() final {
     ceph_assert(0 == "Not implemented");
   }
+
   void on_recovery_reserved() final {
     recovery_handler->start_pglogbased_recovery();
   }

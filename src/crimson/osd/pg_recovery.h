@@ -5,6 +5,7 @@
 
 #include <seastar/core/future.hh>
 
+#include "crimson/osd/backfill_state.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/scheduler/scheduler.h"
@@ -14,7 +15,7 @@
 
 class PGBackend;
 
-class PGRecovery {
+class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
 public:
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
@@ -74,4 +75,26 @@ private:
       Ref<MOSDPGRecoveryDeleteReply> m);
   seastar::future<> handle_pull_response(Ref<MOSDPGPush> m);
   seastar::future<> handle_scan(MOSDPGScan& m);
+
+  // backfill begin
+  void request_replica_scan(
+    const pg_shard_t& target,
+    const hobject_t& begin,
+    const hobject_t& end) final;
+  void request_primary_scan(
+    const hobject_t& begin) final;
+  void enqueue_push(
+    const pg_shard_t& target,
+    const hobject_t& obj,
+    const eversion_t& v) final;
+  void enqueue_drop(
+    const pg_shard_t& target,
+    const hobject_t& obj,
+    const eversion_t& v) final;
+  void update_peers_last_backfill(
+    const hobject_t& new_last_backfill) final;
+  bool budget_available() const final;
+  void backfilled() final;
+  friend crimson::osd::BackfillState::PGFacade;
+  // backfill end
 };
