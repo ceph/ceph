@@ -5,10 +5,12 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
+import { CrushNodeSelectionClass } from '../../../shared/classes/crush.node.selection.class';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
+import { CrushNode } from '../../../shared/models/crush-node';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -18,19 +20,12 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   templateUrl: './erasure-code-profile-form-modal.component.html',
   styleUrls: ['./erasure-code-profile-form-modal.component.scss']
 })
-export class ErasureCodeProfileFormModalComponent implements OnInit {
+export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClass
+  implements OnInit {
   @Output()
   submitAction = new EventEmitter();
 
-  form: CdFormGroup;
-  failureDomains: string[];
-  plugins: string[];
-  names: string[];
-  techniques: string[];
-  requiredControls: string[] = [];
-  devices: string[] = [];
   tooltips = this.ecpService.formTooltips;
-
   PLUGIN = {
     LRC: 'lrc', // Locally Repairable Erasure Code
     SHEC: 'shec', // Shingled Erasure Code
@@ -38,8 +33,15 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
     ISA: 'isa' // Intel Storage Acceleration
   };
   plugin = this.PLUGIN.JERASURE;
+
+  form: CdFormGroup;
+  plugins: string[];
+  names: string[];
+  techniques: string[];
   action: string;
   resource: string;
+  lrcGroups: number;
+  lrcMultiK: number;
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -49,6 +51,7 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.action = this.actionLabels.CREATE;
     this.resource = this.i18n('EC Profile');
     this.createForm();
@@ -69,26 +72,115 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
         ]
       ],
       plugin: [this.PLUGIN.JERASURE, [Validators.required]],
-      k: [1], // Will be replaced by plugin defaults
-      m: [1], // Will be replaced by plugin defaults
-      crushFailureDomain: ['host'],
-      crushRoot: ['default'], // default for all - is a list possible???
-      crushDeviceClass: [''], // set none to empty at submit - get list from configs?
-      directory: [''],
+      k: [
+        4, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(2),
+          CdValidators.custom('max', () => this.baseValueValidation(true)),
+          CdValidators.custom('unequal', (v: number) => this.lrcDataValidation(v)),
+          CdValidators.custom('kLowerM', (v: number) => this.shecDataValidation(v))
+        ]
+      ],
+      m: [
+        2, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(1),
+          CdValidators.custom('max', () => this.baseValueValidation())
+        ]
+      ],
+      crushFailureDomain: '', // Will be preselected
+      crushRoot: null, // Will be preselected
+      crushDeviceClass: '', // Will be preselected
+      directory: '',
       // Only for 'jerasure' and 'isa' use
-      technique: ['reed_sol_van'],
+      technique: 'reed_sol_van',
       // Only for 'jerasure' use
       packetSize: [2048, [Validators.min(1)]],
       // Only for 'lrc' use
-      l: [1, [Validators.required, Validators.min(1)]],
-      crushLocality: [''], // set to none at the end (same list as for failure domains)
+      l: [
+        3, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(1),
+          CdValidators.custom('unequal', (v: number) => this.lrcLocalityValidation(v))
+        ]
+      ],
+      crushLocality: '', // set to none at the end (same list as for failure domains)
       // Only for 'shec' use
-      c: [1, [Validators.required, Validators.min(1)]]
+      c: [
+        2, // Will be overwritten with plugin defaults
+        [
+          Validators.required,
+          Validators.min(1),
+          CdValidators.custom('cGreaterM', (v: number) => this.shecDurabilityValidation(v))
+        ]
+      ]
     });
+    this.form.get('k').valueChanges.subscribe(() => this.updateValidityOnChange(['m', 'l']));
+    this.form.get('m').valueChanges.subscribe(() => this.updateValidityOnChange(['k', 'l', 'c']));
+    this.form.get('l').valueChanges.subscribe(() => this.updateValidityOnChange(['k', 'm']));
     this.form.get('plugin').valueChanges.subscribe((plugin) => this.onPluginChange(plugin));
   }
 
-  onPluginChange(plugin: string) {
+  private baseValueValidation(dataChunk: boolean = false): boolean {
+    return this.validValidation(() => {
+      return (
+        this.getKMSum() > this.deviceCount &&
+        this.form.getValue('k') > this.form.getValue('m') === dataChunk
+      );
+    });
+  }
+
+  private validValidation(fn: () => boolean, plugin?: string): boolean {
+    if (!this.form || plugin ? this.plugin !== plugin : false) {
+      return false;
+    }
+    return fn();
+  }
+
+  private getKMSum(): number {
+    return this.form.getValue('k') + this.form.getValue('m');
+  }
+
+  private lrcDataValidation(k: number): boolean {
+    return this.validValidation(() => {
+      const m = this.form.getValue('m');
+      const l = this.form.getValue('l');
+      const km = k + m;
+      this.lrcMultiK = k / (km / l);
+      return k % (km / l) !== 0;
+    }, 'lrc');
+  }
+
+  private shecDataValidation(k: number): boolean {
+    return this.validValidation(() => {
+      const m = this.form.getValue('m');
+      return m > k;
+    }, 'shec');
+  }
+
+  private lrcLocalityValidation(l: number) {
+    return this.validValidation(() => {
+      const value = this.getKMSum();
+      this.lrcGroups = l > 0 ? value / l : 0;
+      return l > 0 && value % l !== 0;
+    }, 'lrc');
+  }
+
+  private shecDurabilityValidation(c: number): boolean {
+    return this.validValidation(() => {
+      const m = this.form.getValue('m');
+      return c > m;
+    }, 'shec');
+  }
+
+  private updateValidityOnChange(names: string[]) {
+    names.forEach((name) => this.form.get(name).updateValueAndValidity({ emitEvent: false }));
+  }
+
+  private onPluginChange(plugin: string) {
     this.plugin = plugin;
     if (plugin === this.PLUGIN.JERASURE) {
       this.setJerasureDefaults();
@@ -99,27 +191,14 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
     } else if (plugin === this.PLUGIN.SHEC) {
       this.setShecDefaults();
     }
-  }
-
-  private setNumberValidators(name: string, required: boolean) {
-    const validators = [Validators.min(1)];
-    if (required) {
-      validators.push(Validators.required);
-    }
-    this.form.get(name).setValidators(validators);
-  }
-
-  private setKMValidators(required: boolean) {
-    ['k', 'm'].forEach((name) => this.setNumberValidators(name, required));
+    this.updateValidityOnChange(['m']); // Triggers k, m, c and l
   }
 
   private setJerasureDefaults() {
-    this.requiredControls = ['k', 'm'];
     this.setDefaults({
       k: 4,
       m: 2
     });
-    this.setKMValidators(true);
     this.techniques = [
       'reed_sol_van',
       'reed_sol_r6_op',
@@ -132,9 +211,6 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
   }
 
   private setLrcDefaults() {
-    this.requiredControls = ['k', 'm', 'l'];
-    this.setKMValidators(true);
-    this.setNumberValidators('l', true);
     this.setDefaults({
       k: 4,
       m: 2,
@@ -143,8 +219,11 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
   }
 
   private setIsaDefaults() {
-    this.requiredControls = [];
-    this.setKMValidators(false);
+    /**
+     * Actually k and m are not required - but they will be set to the default values in case
+     * if they are not set, therefore it's fine to mark them as required in order to get
+     * strange values that weren't set.
+     */
     this.setDefaults({
       k: 7,
       m: 3
@@ -153,8 +232,11 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
   }
 
   private setShecDefaults() {
-    this.requiredControls = [];
-    this.setKMValidators(false);
+    /**
+     * Actually k, c and m are not required - but they will be set to the default values in case
+     * if they are not set, therefore it's fine to mark them as required in order to get
+     * strange values that weren't set.
+     */
     this.setDefaults({
       k: 4,
       m: 3,
@@ -164,8 +246,22 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
 
   private setDefaults(defaults: object) {
     Object.keys(defaults).forEach((controlName) => {
-      if (this.form.get(controlName).pristine) {
-        this.form.silentSet(controlName, defaults[controlName]);
+      const control = this.form.get(controlName);
+      const value = control.value;
+      let overwrite = control.pristine;
+      /**
+       * As k, m, c and l are now set touched and dirty on the beginning, plugin change will
+       * overwrite their values as we can't determine if the user has changed anything.
+       * k and m can have two default values where as l and c can only have one,
+       * so there is no need to overwrite them.
+       */
+      if ('k' === controlName) {
+        overwrite = [4, 7].includes(value);
+      } else if ('m' === controlName) {
+        overwrite = [2, 3].includes(value);
+      }
+      if (overwrite) {
+        this.form.get(controlName).setValue(defaults[controlName]);
       }
     });
   }
@@ -175,63 +271,41 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
       .getInfo()
       .subscribe(
         ({
-          failure_domains,
           plugins,
           names,
           directory,
-          devices
+          nodes
         }: {
-          failure_domains: string[];
           plugins: string[];
           names: string[];
           directory: string;
-          devices: string[];
+          nodes: CrushNode[];
         }) => {
-          this.failureDomains = failure_domains;
+          this.initCrushNodeSelection(
+            nodes,
+            this.form.get('crushRoot'),
+            this.form.get('crushFailureDomain'),
+            this.form.get('crushDeviceClass')
+          );
           this.plugins = plugins;
           this.names = names;
-          this.devices = devices;
           this.form.silentSet('directory', directory);
+          this.preValidateNumericInputFields();
         }
       );
   }
 
-  private createJson() {
-    const pluginControls = {
-      technique: [this.PLUGIN.ISA, this.PLUGIN.JERASURE],
-      packetSize: [this.PLUGIN.JERASURE],
-      l: [this.PLUGIN.LRC],
-      crushLocality: [this.PLUGIN.LRC],
-      c: [this.PLUGIN.SHEC]
-    };
-    const ecp = new ErasureCodeProfile();
-    const plugin = this.form.getValue('plugin');
-    Object.keys(this.form.controls)
-      .filter((name) => {
-        const pluginControl = pluginControls[name];
-        const control = this.form.get(name);
-        const usable = (pluginControl && pluginControl.includes(plugin)) || !pluginControl;
-        return (
-          usable &&
-          (control.dirty || this.requiredControls.includes(name)) &&
-          this.form.getValue(name)
-        );
-      })
-      .forEach((name) => {
-        this.extendJson(name, ecp);
-      });
-    return ecp;
-  }
-
-  private extendJson(name: string, ecp: ErasureCodeProfile) {
-    const differentApiAttributes = {
-      crushFailureDomain: 'crush-failure-domain',
-      crushRoot: 'crush-root',
-      crushDeviceClass: 'crush-device-class',
-      packetSize: 'packetsize',
-      crushLocality: 'crush-locality'
-    };
-    ecp[differentApiAttributes[name] || name] = this.form.getValue(name);
+  /**
+   * This allows k, m, l and c to be validated instantly on change, before the
+   * fields got changed before by the user.
+   */
+  private preValidateNumericInputFields() {
+    const kml = ['k', 'm', 'l', 'c'].map((name) => this.form.get(name));
+    kml.forEach((control) => {
+      control.markAsTouched();
+      control.markAsDirty();
+    });
+    kml[1].updateValueAndValidity(); // Update validity of k, m, c and l
   }
 
   onSubmit() {
@@ -255,5 +329,40 @@ export class ErasureCodeProfileFormModalComponent implements OnInit {
           this.submitAction.emit(profile);
         }
       );
+  }
+
+  private createJson() {
+    const pluginControls = {
+      technique: [this.PLUGIN.ISA, this.PLUGIN.JERASURE],
+      packetSize: [this.PLUGIN.JERASURE],
+      l: [this.PLUGIN.LRC],
+      crushLocality: [this.PLUGIN.LRC],
+      c: [this.PLUGIN.SHEC]
+    };
+    const ecp = new ErasureCodeProfile();
+    const plugin = this.form.getValue('plugin');
+    Object.keys(this.form.controls)
+      .filter((name) => {
+        const pluginControl = pluginControls[name];
+        const value = this.form.getValue(name);
+        const usable = (pluginControl && pluginControl.includes(plugin)) || !pluginControl;
+        return usable && value && value !== '';
+      })
+      .forEach((name) => {
+        this.extendJson(name, ecp);
+      });
+    return ecp;
+  }
+
+  private extendJson(name: string, ecp: ErasureCodeProfile) {
+    const differentApiAttributes = {
+      crushFailureDomain: 'crush-failure-domain',
+      crushRoot: 'crush-root',
+      crushDeviceClass: 'crush-device-class',
+      packetSize: 'packetsize',
+      crushLocality: 'crush-locality'
+    };
+    const value = this.form.getValue(name);
+    ecp[differentApiAttributes[name] || name] = name === 'crushRoot' ? value.name : value;
   }
 }
