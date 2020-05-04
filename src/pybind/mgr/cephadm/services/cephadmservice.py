@@ -157,3 +157,15 @@ class RgwService(CephadmService):
                      'osd', 'allow rwx'],
         })
         return self.mgr._create_daemon('rgw', rgw_id, host, keyring=keyring)
+
+
+class RbdMirrorService(CephadmService):
+    def create(self, daemon_id, host) -> str:
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.rbd-mirror.' + daemon_id,
+            'caps': ['mon', 'profile rbd-mirror',
+                     'osd', 'profile rbd'],
+        })
+        return self.mgr._create_daemon('rbd-mirror', daemon_id, host,
+                                       keyring=keyring)
