@@ -31,9 +31,6 @@ private:
   size_t start_replica_recovery_ops(
     size_t max_to_start,
     std::vector<crimson::osd::blocking_future<>> *out);
-  size_t start_backfill_ops(
-    size_t max_to_start,
-    std::vector<crimson::osd::blocking_future<>> *out);
 
   std::vector<pg_shard_t> get_replica_recovery_order() const {
     return pg->get_replica_recovery_order();
