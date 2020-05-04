@@ -129,27 +129,20 @@ static_assert(std::is_standard_layout<preamble_block_t>::value);
 // In addition to integrity/authenticity data each variant of epilogue
 // conveys late_flags. The initial user of this field will be the late
 // frame abortion facility.
-struct epilogue_plain_block_t {
+struct epilogue_crc_rev0_block_t {
   __u8 late_flags;
   ceph_le32 crc_values[MAX_NUM_SEGMENTS];
 } __attribute__((packed));
-static_assert(std::is_standard_layout<epilogue_plain_block_t>::value);
+static_assert(std::is_standard_layout_v<epilogue_crc_rev0_block_t>);
 
-struct epilogue_secure_block_t {
+struct epilogue_secure_rev0_block_t {
   __u8 late_flags;
   __u8 padding[CRYPTO_BLOCK_SIZE - sizeof(late_flags)];
 
   __u8 ciphers_private_data[];
 } __attribute__((packed));
-static_assert(sizeof(epilogue_secure_block_t) % CRYPTO_BLOCK_SIZE == 0);
-static_assert(std::is_standard_layout<epilogue_secure_block_t>::value);
-
-
-static constexpr uint32_t FRAME_PREAMBLE_SIZE = sizeof(preamble_block_t);
-static constexpr uint32_t FRAME_PLAIN_EPILOGUE_SIZE =
-    sizeof(epilogue_plain_block_t);
-static constexpr uint32_t FRAME_SECURE_EPILOGUE_SIZE =
-    sizeof(epilogue_secure_block_t);
+static_assert(sizeof(epilogue_secure_rev0_block_t) % CRYPTO_BLOCK_SIZE == 0);
+static_assert(std::is_standard_layout_v<epilogue_secure_rev0_block_t>);
 
 #define FRAME_FLAGS_LATEABRT      (1<<0)   /* frame was aborted after txing data */
 
@@ -193,9 +186,9 @@ public:
   uint32_t get_epilogue_onwire_len() const {
     ceph_assert(!m_descs.empty());
     if (m_crypto->rx) {
-      return sizeof(epilogue_secure_block_t) + get_auth_tag_len();
+      return sizeof(epilogue_secure_rev0_block_t) + get_auth_tag_len();
     }
-    return sizeof(epilogue_plain_block_t);
+    return sizeof(epilogue_crc_rev0_block_t);
   }
 
   uint64_t get_frame_logical_len() const;

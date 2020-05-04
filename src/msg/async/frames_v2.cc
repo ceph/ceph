@@ -87,7 +87,7 @@ uint64_t FrameAssembler::get_frame_onwire_len() const {
 
 bufferlist FrameAssembler::asm_crc_rev0(const preamble_block_t& preamble,
                                         bufferlist segment_bls[]) const {
-  epilogue_plain_block_t epilogue;
+  epilogue_crc_rev0_block_t epilogue;
   // FIPS zeroization audit 20191115: this memset is not security related.
   ::memset(&epilogue, 0, sizeof(epilogue));
 
@@ -110,7 +110,7 @@ bufferlist FrameAssembler::asm_secure_rev0(const preamble_block_t& preamble,
   preamble_bl.append(reinterpret_cast<const char*>(&preamble),
                      sizeof(preamble));
 
-  epilogue_secure_block_t epilogue;
+  epilogue_secure_rev0_block_t epilogue;
   // FIPS zeroization audit 20191115: this memset is not security related.
   ::memset(&epilogue, 0, sizeof(epilogue));
   bufferlist epilogue_bl(sizeof(epilogue));
@@ -207,8 +207,8 @@ Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
 
 bool FrameAssembler::disasm_all_crc_rev0(bufferlist segment_bls[],
                                          bufferlist& epilogue_bl) const {
-  ceph_assert(epilogue_bl.length() == sizeof(epilogue_plain_block_t));
-  auto epilogue = reinterpret_cast<const epilogue_plain_block_t*>(
+  ceph_assert(epilogue_bl.length() == sizeof(epilogue_crc_rev0_block_t));
+  auto epilogue = reinterpret_cast<const epilogue_crc_rev0_block_t*>(
       epilogue_bl.c_str());
 
   for (size_t i = 0; i < m_descs.size(); i++) {
@@ -228,10 +228,10 @@ bool FrameAssembler::disasm_all_secure_rev0(bufferlist segment_bls[],
     }
   }
 
-  ceph_assert(epilogue_bl.length() == sizeof(epilogue_secure_block_t) +
+  ceph_assert(epilogue_bl.length() == sizeof(epilogue_secure_rev0_block_t) +
                                       get_auth_tag_len());
   m_crypto->rx->authenticated_decrypt_update_final(epilogue_bl);
-  auto epilogue = reinterpret_cast<const epilogue_secure_block_t*>(
+  auto epilogue = reinterpret_cast<const epilogue_secure_rev0_block_t*>(
       epilogue_bl.c_str());
   return !(epilogue->late_flags & FRAME_FLAGS_LATEABRT);
 }
