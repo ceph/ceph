@@ -1360,7 +1360,7 @@ EOF
 fi
 
 # Ganesha Daemons
-if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
+if [ $GANESHA_DAEMON_NUM -gt 0 ] && [ "$cephadm" -eq 0 ]; then
     start_ganesha
 fi
 
