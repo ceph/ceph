@@ -1,8 +1,11 @@
 add_library(crimson-seastore
+  cached_extent.cc
   seastore_types.cc
   segment_manager/ephemeral.cc
   segment_manager.cc
   journal.cc
+  cache.cc
+  root_block.cc
 	)
 target_link_libraries(crimson-seastore
   crimson)
