@@ -262,4 +262,5 @@ class PoolUi(Pool):
             "erasure_code_profiles": profiles,
             "used_rules": used_rules,
             "used_profiles": used_profiles,
+            'nodes': mgr.get('osd_map_tree')['nodes']
         }
