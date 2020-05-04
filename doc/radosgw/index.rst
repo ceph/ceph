@@ -71,6 +71,7 @@ you may write data with one API and retrieve it with the other.
    STS Lite <STSLite>
    Keycloak <keycloak>
    Role <role>
+   Orphan List and Associated Tooliing <orphans>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>

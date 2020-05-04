@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <iomanip>
+
 #include "rgw/rgw_service.h"
 
 #include "svc_rados.h"
@@ -54,7 +56,7 @@ public:
     s.append(buf);
     return s;
   }
-  string get_part(string& part) const {
+  string get_part(const string& part) const {
     string s = prefix;
     s.append(".");
     s.append(part);
@@ -66,7 +68,7 @@ public:
   const string& get_key() const {
     return oid;
   }
-  bool from_meta(string& meta) {
+  bool from_meta(const string& meta) {
     int end_pos = meta.rfind('.'); // search for ".meta"
     if (end_pos < 0)
       return false;
@@ -83,6 +85,10 @@ public:
     prefix = "";
     meta = "";
     upload_id = "";
+  }
+  friend std::ostream& operator<<(std::ostream& out, const RGWMPObj& obj) {
+    return out << "RGWMPObj:{ prefix=" << std::quoted(obj.prefix) <<
+      ", meta=" << std::quoted(obj.meta) << " }";
   }
 }; // class RGWMPObj
 
