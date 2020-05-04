@@ -284,7 +284,7 @@ size_t ProtocolV2::get_current_msg_size() const
 
 seastar::future<Tag> ProtocolV2::read_main_preamble()
 {
-  return read_exactly(FRAME_PREAMBLE_SIZE)
+  return read_exactly(sizeof(preamble_block_t))
     .then([this] (auto bl) {
       if (session_stream_handlers.rx) {
         session_stream_handlers.rx->reset_rx_handler();
@@ -372,7 +372,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
   ).then([this] {
     // TODO: get_epilogue_size()
     ceph_assert(!session_stream_handlers.rx);
-    return read_exactly(FRAME_PLAIN_EPILOGUE_SIZE);
+    return read_exactly(sizeof(epilogue_crc_rev0_block_t));
   }).then([this] (auto bl) {
     logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
 
@@ -381,7 +381,7 @@ seastar::future<> ProtocolV2::read_frame_payload()
       // TODO
       ceph_assert(false);
     } else {
-      auto& epilogue = *reinterpret_cast<const epilogue_plain_block_t*>(bl.get());
+      auto& epilogue = *reinterpret_cast<const epilogue_crc_rev0_block_t*>(bl.get());
       for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
         const __u32 expected_crc = epilogue.crc_values[idx];
         const __u32 calculated_crc = rx_segments_data[idx].crc32c(-1);
