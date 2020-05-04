@@ -1,4 +1,4 @@
-import { Component, ViewChild } from '@angular/core';
+import { Component, NgZone, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalService } from 'ngx-bootstrap/modal';
@@ -34,6 +34,8 @@ export class RgwBucketListComponent {
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
+  isStale = false;
+  staleTimeout: number;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -41,7 +43,8 @@ export class RgwBucketListComponent {
     private bsModalService: BsModalService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private ngZone: NgZone
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
@@ -80,9 +83,23 @@ export class RgwBucketListComponent {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.tableActions = [addAction, editAction, deleteAction];
+    this.timeConditionReached();
+  }
+
+  timeConditionReached() {
+    clearTimeout(this.staleTimeout);
+    this.ngZone.runOutsideAngular(() => {
+      this.staleTimeout = window.setTimeout(() => {
+        this.ngZone.run(() => {
+          this.isStale = true;
+        });
+      }, 10000);
+    });
   }
 
   getBucketList(context: CdTableFetchDataContext) {
+    this.isStale = false;
+    this.timeConditionReached();
     this.rgwBucketService.list().subscribe(
       (resp: object[]) => {
         this.buckets = resp;
