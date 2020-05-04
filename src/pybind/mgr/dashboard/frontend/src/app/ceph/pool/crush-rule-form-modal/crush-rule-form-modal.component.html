@@ -9,11 +9,11 @@
       <div class="modal-body">
         <div class="form-group row">
           <label for="name"
-                 class="col-form-label col-sm-3">
+                 class="cd-col-form-label">
             <ng-container i18n>Name</ng-container>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input type="text"
                    id="name"
                    name="name"
@@ -36,13 +36,13 @@
         <!-- Root -->
         <div class="form-group row">
           <label for="root"
-                 class="col-form-label col-sm-3">
+                 class="cd-col-form-label">
             <ng-container i18n>Root</ng-container>
             <cd-helper [html]="tooltips.root">
             </cd-helper>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     id="root"
                     name="root"
@@ -64,13 +64,13 @@
         <!-- Failure Domain Type -->
         <div class="form-group row">
           <label for="failure_domain"
-                 class="col-form-label col-sm-3">
+                 class="cd-col-form-label">
             <ng-container i18n>Failure domain type</ng-container>
             <cd-helper [html]="tooltips.failure_domain">
             </cd-helper>
             <span class="required"></span>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     id="failure_domain"
                     name="failure_domain"
@@ -78,7 +78,7 @@
               <option *ngIf="!failureDomains"
                       ngValue=""
                       i18n>Loading...</option>
-              <option *ngFor="let domain of failureDomainKeys()"
+              <option *ngFor="let domain of failureDomainKeys"
                       [ngValue]="domain">
                 {{ domain }} ( {{failureDomains[domain].length}} )
               </option>
@@ -92,12 +92,12 @@
         <!-- Class -->
         <div class="form-group row">
           <label for="device_class"
-                 class="col-form-label col-sm-3">
+                 class="cd-col-form-label">
             <ng-container i18n>Device class</ng-container>
             <cd-helper [html]="tooltips.device_class">
             </cd-helper>
           </label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <select class="form-control custom-select"
                     id="device_class"
                     name="device_class"

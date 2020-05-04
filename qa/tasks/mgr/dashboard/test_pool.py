@@ -414,4 +414,5 @@ class PoolTest(DashboardTestCase):
             'pg_autoscale_modes': JList(six.string_types),
             'erasure_code_profiles': JList(JObj({}, allow_unknown=True)),
             'used_rules': JObj({}, allow_unknown=True),
+            'used_profiles': JObj({}, allow_unknown=True),
         }))
