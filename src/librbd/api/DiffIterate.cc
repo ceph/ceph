@@ -251,7 +251,8 @@ int DiffIterate<I>::diff_iterate(I *ictx,
     auto aio_comp = io::AioCompletion::create_and_start(&flush_ctx, ictx,
                                                         io::AIO_TYPE_FLUSH);
     auto req = io::ImageDispatchSpec<I>::create_flush_request(
-      *ictx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+      *ictx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
+      aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
     req->send();
     delete req;
   }
