@@ -1082,10 +1082,12 @@ def _get_default_image():
     if DEFAULT_IMAGE_IS_MASTER:
         yellow = '\033[93m'
         end = '\033[0m'
-        s = '{}Warning: This is a development version of cephadm. Please refer to https://docs.ceph.com/docs/{}/cephadm/install{}'.format(
-            yellow, LATEST_STABLE_RELEASE, end
-        )
-        print(s)
+        warn = '''This is a development version of cephadm.
+For information regarding the latest stable release:
+    https://docs.ceph.com/docs/{}/cephadm/install
+'''.format(LATEST_STABLE_RELEASE)
+        for line in warn.splitlines():
+            logger.warning('{}{}{}'.format(yellow, line, end))
     return DEFAULT_IMAGE
 
 def infer_image(func):
@@ -2810,8 +2812,8 @@ def command_ceph_volume():
     if args.fsid:
         make_log_dir(args.fsid)
 
-    l = FileLock(args.fsid)
-    l.acquire()
+        l = FileLock(args.fsid)
+        l.acquire()
 
     (uid, gid) = (0, 0) # ceph-volume runs as root
     mounts = get_container_mounts(args.fsid, 'osd', None)
@@ -3319,6 +3321,7 @@ def command_adopt_prometheus(daemon_id, fsid):
     config_src = '/etc/prometheus/prometheus.yml'
     config_src = os.path.abspath(args.legacy_dir + config_src)
     config_dst = os.path.join(data_dir_dst, 'etc/prometheus')
+    makedirs(config_dst, uid, gid, 0o755)
     copy_files([config_src], config_dst, uid=uid, gid=gid)
 
     # data
