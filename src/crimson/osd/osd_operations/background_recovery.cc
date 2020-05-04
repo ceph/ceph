@@ -27,15 +27,6 @@ BackgroundRecovery::BackgroundRecovery(
     scheduler_class(scheduler_class)
 {}
 
-seastar::future<bool> BackgroundRecovery::do_recovery()
-{
-  if (pg->has_reset_since(epoch_started))
-    return seastar::make_ready_future<bool>(false);
-  return with_blocking_future(
-    pg->get_recovery_handler()->start_recovery_ops(
-      crimson::common::local_conf()->osd_recovery_max_single_start));
-}
-
 void BackgroundRecovery::print(std::ostream &lhs) const
 {
   lhs << "BackgroundRecovery(" << pg->get_pgid() << ")";
@@ -95,6 +86,26 @@ void UrgentRecovery::dump_detail(Formatter *f) const
     f->dump_stream("version") << need;
   }
   f->close_section();
+}
+
+PglogBasedRecovery::PglogBasedRecovery(
+  Ref<PG> pg,
+  ShardServices &ss,
+  const epoch_t epoch_started)
+  : BackgroundRecovery(
+      std::move(pg),
+      ss,
+      epoch_started,
+      crimson::osd::scheduler::scheduler_class_t::background_recovery)
+{}
+
+seastar::future<bool> PglogBasedRecovery::do_recovery()
+{
+  if (pg->has_reset_since(epoch_started))
+    return seastar::make_ready_future<bool>(false);
+  return with_blocking_future(
+    pg->get_recovery_handler()->start_recovery_ops(
+      crimson::common::local_conf()->osd_recovery_max_single_start));
 }
 
 }

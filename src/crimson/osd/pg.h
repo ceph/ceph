@@ -350,8 +350,7 @@ public:
     ceph_assert(0 == "Not implemented");
   }
   void on_recovery_reserved() final {
-    recovery_handler->start_background_recovery(
-      crimson::osd::scheduler::scheduler_class_t::background_recovery);
+    recovery_handler->start_pglogbased_recovery();
   }
 
 

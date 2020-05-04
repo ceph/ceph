@@ -26,15 +26,13 @@ namespace {
   }
 }
 
-void PGRecovery::start_background_recovery(
-  crimson::osd::scheduler::scheduler_class_t klass)
+void PGRecovery::start_pglogbased_recovery()
 {
-  using BackgroundRecovery = crimson::osd::BackgroundRecovery;
-  (void) pg->get_shard_services().start_operation<BackgroundRecovery>(
+  using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;
+  (void) pg->get_shard_services().start_operation<PglogBasedRecovery>(
     static_cast<crimson::osd::PG*>(pg),
     pg->get_shard_services(),
-    pg->get_osdmap_epoch(),
-    klass);
+    pg->get_osdmap_epoch());
 }
 
 crimson::osd::blocking_future<bool>
