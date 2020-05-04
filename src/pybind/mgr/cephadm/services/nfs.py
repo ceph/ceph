@@ -8,7 +8,7 @@ from ceph.deployment.service_spec import NFSServiceSpec
 import cephadm
 from orchestrator import OrchestratorError
 
-from . import utils
+from .. import utils
 
 logger = logging.getLogger(__name__)
 
