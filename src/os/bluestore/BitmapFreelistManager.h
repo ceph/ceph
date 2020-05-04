@@ -46,6 +46,17 @@ class BitmapFreelistManager : public FreelistManager {
     uint64_t offset, uint64_t length,
     KeyValueDB::Transaction txn);
 
+  int _init_from_label(const bluestore_bdev_label_t& label);
+
+  int _expand(uint64_t new_size, KeyValueDB* db);
+
+  uint64_t size_2_block_count(uint64_t target_size) const;
+
+  int read_size_meta_from_db(KeyValueDB* kvdb, uint64_t* res);
+  void _sync(KeyValueDB* kvdb, bool read_only);
+
+  void _load_from_db(KeyValueDB* kvdb);
+
 public:
   BitmapFreelistManager(CephContext* cct, string meta_prefix,
 			string bitmap_prefix);
@@ -55,11 +66,12 @@ public:
   int create(uint64_t size, uint64_t granularity,
 	     KeyValueDB::Transaction txn) override;
 
-  int expand(uint64_t new_size,
-             KeyValueDB::Transaction txn) override;
+  int init(const bluestore_bdev_label_t& l,
+    KeyValueDB *kvdb,
+    bool db_in_read_only) override;
 
-  int init(KeyValueDB *kvdb) override;
   void shutdown() override;
+  void sync(KeyValueDB* kvdb) override;
 
   void dump(KeyValueDB *kvdb) override;
 
@@ -82,7 +94,8 @@ public:
   inline uint64_t get_alloc_size() const override {
     return bytes_per_block;
   }
-
+  void get_meta(uint64_t target_size,
+    std::vector<std::pair<string, string>>*) const override;
 };
 
 #endif
