@@ -96,6 +96,7 @@ int RGWCivetWebFrontend::run()
   set_conf_default(conf_map, "canonicalize_url_path", "no");
   set_conf_default(conf_map, "enable_auth_domain_check", "no");
   set_conf_default(conf_map, "allow_unicode_in_urls", "yes");
+  set_conf_default(conf_map, "request_timeout_ms", "65000");
 
   std::string listening_ports;
   // support multiple port= entries
