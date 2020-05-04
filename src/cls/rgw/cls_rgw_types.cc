@@ -331,6 +331,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
       {
         rgw_bucket_dir_entry entry;
         decode(entry, iter);
+        account = (account && entry.exists);
         *key = entry.key;
         *category = entry.meta.category;
         accounted_stats->num_entries++;
