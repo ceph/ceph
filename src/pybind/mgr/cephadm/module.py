@@ -38,7 +38,7 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 
 from . import remotes
 from . import utils
-from .services.cephadmservice import MonService
+from .services.cephadmservice import MonService, MgrService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
 from .inventory import Inventory, SpecStore, HostCache
@@ -424,6 +424,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.osd_service = OSDService(self)
         self.nfs_service = NFSService(self)
         self.mon_service = MonService(self)
+        self.mgr_service = MgrService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1927,7 +1928,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.debug('Applying service %s spec' % service_name)
         create_fns = {
             'mon': self.mon_service.create,
-            'mgr': self._create_mgr,
+            'mgr': self.mgr_service.create,
             'osd': self.create_osds,  # osds work a bit different.
             'mds': self._create_mds,
             'rgw': self._create_rgw,
@@ -2180,24 +2181,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: (ServiceSpec) -> orchestrator.Completion
         return self._add_daemon('mon', spec, self.mon_service.create)
 
-    def _create_mgr(self, mgr_id, host):
-        """
-        Create a new manager instance on a host.
-        """
-        # get mgr. key
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % mgr_id,
-            'caps': ['mon', 'profile mgr',
-                     'osd', 'allow *',
-                     'mds', 'allow *'],
-        })
-
-        return self._create_daemon('mgr', mgr_id, host, keyring=keyring)
-
     def add_mgr(self, spec):
         # type: (ServiceSpec) -> orchestrator.Completion
-        return self._add_daemon('mgr', spec, self._create_mgr)
+        return self._add_daemon('mgr', spec, self.mgr_service.create)
 
     def _apply(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():

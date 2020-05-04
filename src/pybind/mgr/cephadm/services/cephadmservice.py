@@ -53,3 +53,20 @@ class MonService(CephadmService):
         return self.mgr._create_daemon('mon', name, host,
                                        keyring=keyring,
                                        extra_config={'config': extra_config})
+
+
+class MgrService(CephadmService):
+    def create(self, mgr_id, host):
+        """
+        Create a new manager instance on a host.
+        """
+        # get mgr. key
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'mgr.%s' % mgr_id,
+            'caps': ['mon', 'profile mgr',
+                     'osd', 'allow *',
+                     'mds', 'allow *'],
+        })
+
+        return self.mgr._create_daemon('mgr', mgr_id, host, keyring=keyring)
