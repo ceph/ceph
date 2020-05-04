@@ -2745,7 +2745,7 @@ def test_ps_s3_multipart_on_master():
     assert_equal(len(events), 1)
     assert_equal(events[0]['Records'][0]['eventName'], 's3:ObjectCreated:CompleteMultipartUpload')
     assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_3')
-    print events[0]['Records'][0]['s3']['object']['size']
+    print(events[0]['Records'][0]['s3']['object']['size'])
 
     # cleanup
     stop_amqp_receiver(receiver1, task1)
