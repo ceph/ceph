@@ -39,8 +39,8 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 
 from . import remotes
 from . import utils
-from .nfs import NFSGanesha
-from .osd import RemoveUtil, OSDRemoval
+from .services.nfs import NFSGanesha
+from .services.osd import RemoveUtil, OSDRemoval
 from .inventory import Inventory, SpecStore, HostCache
 
 try:
