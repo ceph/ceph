@@ -45,6 +45,34 @@ inline auto do_for_each(Container& c, AsyncAction action) {
   return ::crimson::do_for_each(std::begin(c), std::end(c), std::move(action));
 }
 
+template<typename AsyncAction>
+inline auto do_until(AsyncAction action) {
+  using futurator = \
+    ::seastar::futurize<std::result_of_t<AsyncAction()>>;
+
+  while (true) {
+    auto f = futurator::invoke(action);
+    if (!seastar::need_preempt() && f.available() && std::get<0>(f.get())) {
+      return futurator::type::errorator_type::template make_ready_future<>();
+    }
+    if (!f.available() || seastar::need_preempt()) {
+      return std::move(f)._then(
+        [ action = std::move(action)] (auto &&done) mutable {
+	  if (done) {
+	    return futurator::type::errorator_type::template make_ready_future<>();
+	  }
+          return ::crimson::do_until(
+	    std::move(action));
+	});
+    }
+    if (f.failed()) {
+      return futurator::type::errorator_type::template make_exception_future2<>(
+	f.get_exception()
+      );
+    }
+  }
+}
+
 // define the interface between error types and errorator
 template <class ConcreteErrorT>
 class error_t {
@@ -619,6 +647,9 @@ private:
     friend inline auto ::crimson::do_for_each(Iterator begin,
                                               Iterator end,
                                               AsyncAction action);
+
+    template<typename AsyncAction>
+    friend inline auto ::crimson::do_until(AsyncAction action);
 
     template <class...>
     friend class ::seastar::future;
