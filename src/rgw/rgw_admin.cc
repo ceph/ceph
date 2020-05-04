@@ -1666,7 +1666,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   if (remote.empty() && url.empty()) {
     // use the new master zone's connection
     remote = master_zone.id;
-    cout << "Sending period to new master zone " << remote << std::endl;
+    cerr << "Sending period to new master zone " << remote << std::endl;
   }
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
