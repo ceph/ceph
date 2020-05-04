@@ -652,8 +652,9 @@ Usage:
                 raise OrchestratorValidationError(usage)
             spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
         else:
-            placement = PlacementSpec.from_string(placement)  # type: ignore
-            spec = ServiceSpec(daemon_type, placement=placement)  # type: ignore
+            spec = PlacementSpec.from_string(placement)
+            assert daemon_type
+            spec = ServiceSpec(daemon_type, placement=spec)
 
         daemon_type = spec.service_type
 
@@ -875,8 +876,9 @@ Usage:
             content: Iterator = yaml.load_all(inbuf)
             specs = [ServiceSpec.from_json(s) for s in content]
         else:
-            placement = PlacementSpec.from_string(placement)  # type: ignore
-            specs = [ServiceSpec(service_type, placement=placement, unmanaged=unmanaged)]  # type: ignore
+            spec = PlacementSpec.from_string(placement)
+            assert service_type
+            specs = [ServiceSpec(service_type, placement=spec, unmanaged=unmanaged)]
 
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
