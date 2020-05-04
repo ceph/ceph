@@ -52,6 +52,10 @@ struct paddr_t {
     return segment == REL_SEG_ID;
   }
 
+  paddr_t add_offset(segment_off_t o) const {
+    return paddr_t{segment, offset + o};
+  }
+
   paddr_t add_relative(paddr_t o) const {
     assert(o.is_relative());
     assert(!is_relative());
@@ -98,18 +102,19 @@ constexpr laddr_t L_ADDR_ROOT = std::numeric_limits<laddr_t>::max() - 1;
 constexpr laddr_t L_ADDR_LBAT = std::numeric_limits<laddr_t>::max() - 2;
 
 // logical offset, see LBAManager, TransactionManager
-using loff_t = uint32_t;
-constexpr loff_t L_OFF_NULL = std::numeric_limits<loff_t>::max();
+using extent_len_t = uint32_t;
+constexpr extent_len_t EXTENT_LEN_MAX =
+  std::numeric_limits<extent_len_t>::max();
 
-struct laddr_list_t : std::list<std::pair<laddr_t, loff_t>> {
+struct laddr_list_t : std::list<std::pair<laddr_t, extent_len_t>> {
   template <typename... T>
   laddr_list_t(T&&... args)
-    : std::list<std::pair<laddr_t, loff_t>>(std::forward<T>(args)...) {}
+    : std::list<std::pair<laddr_t, extent_len_t>>(std::forward<T>(args)...) {}
 };
-struct paddr_list_t : std::list<std::pair<paddr_t, loff_t>> {
+struct paddr_list_t : std::list<std::pair<paddr_t, extent_len_t>> {
   template <typename... T>
   paddr_list_t(T&&... args)
-    : std::list<std::pair<paddr_t, loff_t>>(std::forward<T>(args)...) {}
+    : std::list<std::pair<paddr_t, extent_len_t>>(std::forward<T>(args)...) {}
 };
 
 std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs);
