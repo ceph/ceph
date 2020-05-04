@@ -1,10 +1,14 @@
+import logging
 from typing import  TYPE_CHECKING
 
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from orchestrator import OrchestratorError
+from cephadm import utils
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
+
+logger = logging.getLogger(__name__)
 
 
 class CephadmService:
@@ -94,3 +98,62 @@ class MdsService(CephadmService):
                      'mds', 'allow'],
         })
         return self.mgr._create_daemon('mds', mds_id, host, keyring=keyring)
+
+
+class RgwService(CephadmService):
+    def config(self, spec: RGWSpec):
+        # ensure rgw_realm and rgw_zone is set for these daemons
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config set',
+            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
+            'name': 'rgw_zone',
+            'value': spec.rgw_zone,
+        })
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config set',
+            'who': f"{utils.name_to_config_section('rgw')}.{spec.rgw_realm}",
+            'name': 'rgw_realm',
+            'value': spec.rgw_realm,
+        })
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'config set',
+            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
+            'name': 'rgw_frontends',
+            'value': spec.rgw_frontends_config_value(),
+        })
+
+        if spec.rgw_frontend_ssl_certificate:
+            if isinstance(spec.rgw_frontend_ssl_certificate, list):
+                cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
+            else:
+                cert_data = spec.rgw_frontend_ssl_certificate
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config-key set',
+                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
+                'val': cert_data,
+            })
+
+        if spec.rgw_frontend_ssl_key:
+            if isinstance(spec.rgw_frontend_ssl_key, list):
+                key_data = '\n'.join(spec.rgw_frontend_ssl_key)
+            else:
+                key_data = spec.rgw_frontend_ssl_key  # type: ignore
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config-key set',
+                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
+                'val': key_data,
+            })
+
+        logger.info('Saving service %s spec with placement %s' % (
+            spec.service_name(), spec.placement.pretty_str()))
+        self.mgr.spec_store.save(spec)
+
+    def create(self, rgw_id, host) -> str:
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
+            'caps': ['mon', 'allow *',
+                     'mgr', 'allow rw',
+                     'osd', 'allow rwx'],
+        })
+        return self.mgr._create_daemon('rgw', rgw_id, host, keyring=keyring)

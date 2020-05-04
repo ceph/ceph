@@ -38,7 +38,7 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 
 from . import remotes
 from . import utils
-from .services.cephadmservice import MonService, MgrService, MdsService
+from .services.cephadmservice import MonService, MgrService, MdsService, RgwService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
 from .inventory import Inventory, SpecStore, HostCache
@@ -426,6 +426,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.mon_service = MonService(self)
         self.mgr_service = MgrService(self)
         self.mds_service = MdsService(self)
+        self.rgw_service = RgwService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1932,7 +1933,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'mgr': self.mgr_service.create,
             'osd': self.create_osds,  # osds work a bit different.
             'mds': self.mds_service.create,
-            'rgw': self._create_rgw,
+            'rgw': self.rgw_service.create,
             'rbd-mirror': self._create_rbd_mirror,
             'nfs': self.nfs_service.create,
             'grafana': self._create_grafana,
@@ -1944,7 +1945,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         }
         config_fns = {
             'mds': self.mds_service.config,
-            'rgw': self._config_rgw,
+            'rgw': self.rgw_service.config,
             'nfs': self.nfs_service.config,
             'iscsi': self._config_iscsi,
         }
@@ -2238,64 +2239,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._apply(spec)
 
     def add_rgw(self, spec):
-        return self._add_daemon('rgw', spec, self._create_rgw, self._config_rgw)
-
-    def _config_rgw(self, spec):
-        # ensure rgw_realm and rgw_zone is set for these daemons
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
-            'name': 'rgw_zone',
-            'value': spec.rgw_zone,
-        })
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.rgw_realm}",
-            'name': 'rgw_realm',
-            'value': spec.rgw_realm,
-        })
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
-            'name': 'rgw_frontends',
-            'value': spec.rgw_frontends_config_value(),
-        })
-
-        if spec.rgw_frontend_ssl_certificate:
-            if isinstance(spec.rgw_frontend_ssl_certificate, list):
-                cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
-            else:
-                cert_data = spec.rgw_frontend_ssl_certificate
-            ret, out, err = self.check_mon_command({
-                'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
-                'val': cert_data,
-            })
-
-        if spec.rgw_frontend_ssl_key:
-            if isinstance(spec.rgw_frontend_ssl_key, list):
-                key_data = '\n'.join(spec.rgw_frontend_ssl_key)
-            else:
-                key_data = spec.rgw_frontend_ssl_key
-            ret, out, err = self.check_mon_command({
-                'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
-                'val': key_data,
-            })
-
-        logger.info('Saving service %s spec with placement %s' % (
-            spec.service_name(), spec.placement.pretty_str()))
-        self.spec_store.save(spec)
-
-    def _create_rgw(self, rgw_id, host):
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
-            'caps': ['mon', 'allow *',
-                     'mgr', 'allow rw',
-                     'osd', 'allow rwx'],
-        })
-        return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
+        return self._add_daemon('rgw', spec, self.rgw_service.create, self.rgw_service.config)
 
     @trivial_completion
     def apply_rgw(self, spec):
