@@ -413,3 +413,6 @@ if(WITH_TESTS)
     ceph_rgw_multiparser
     DESTINATION bin)
 endif(WITH_TESTS)
+
+install(PROGRAMS rgw-orphan-list
+  DESTINATION bin)

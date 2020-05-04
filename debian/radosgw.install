@@ -1,7 +1,11 @@
 lib/systemd/system/ceph-radosgw*
+usr/bin/ceph-diff-sorted
 usr/bin/radosgw
 usr/bin/radosgw-es
 usr/bin/radosgw-object-expirer
 usr/bin/radosgw-token
+usr/bin/rgw-orphan-list
 usr/lib/libradosgw.so*
+usr/share/man/man8/ceph-diff-sorted.8
 usr/share/man/man8/radosgw.8
+usr/share/man/man8/rgw-orphan-list.8
