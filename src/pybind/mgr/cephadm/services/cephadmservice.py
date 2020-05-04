@@ -169,3 +169,14 @@ class RbdMirrorService(CephadmService):
         })
         return self.mgr._create_daemon('rbd-mirror', daemon_id, host,
                                        keyring=keyring)
+
+
+class CrashService(CephadmService):
+    def create(self, daemon_id, host) -> str:
+        ret, keyring, err = self.mgr.check_mon_command({
+            'prefix': 'auth get-or-create',
+            'entity': 'client.crash.' + host,
+            'caps': ['mon', 'profile crash',
+                     'mgr', 'profile crash'],
+        })
+        return self.mgr._create_daemon('crash', daemon_id, host, keyring=keyring)
