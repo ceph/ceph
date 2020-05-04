@@ -714,11 +714,17 @@ Usage:
         'orch daemon add rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
+        'name=subcluster,type=CephString,req=false '
+        'name=port,type=CephInt,req=false '
+        'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false',
         'Start RGW daemon(s)')
     def _rgw_add(self,
                  realm_name: str,
                  zone_name: str,
+                 subcluster: Optional[str] = None,
+                 port: Optional[int] = None,
+                 ssl: bool = False,
                  placement: Optional[str] = None,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
@@ -727,6 +733,9 @@ Usage:
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
+            subcluster=subcluster,
+            rgw_frontend_port=port,
+            ssl=ssl,
             placement=PlacementSpec.from_string(placement),
         )
 
@@ -757,6 +766,7 @@ Usage:
             namespace=namespace,
             placement=PlacementSpec.from_string(placement),
         )
+
         spec.validate_add()
         completion = self.add_nfs(spec)
         self._orchestrator_wait([completion])
@@ -891,6 +901,7 @@ Usage:
             'mds', fs_name,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged)
+
         completion = self.apply_mds(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -922,11 +933,12 @@ Usage:
             rgw_realm=realm_name,
             rgw_zone=zone_name,
             subcluster=subcluster,
-            placement=PlacementSpec.from_string(placement),
-            unmanaged=unmanaged,
             rgw_frontend_port=port,
             ssl=ssl,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
         )
+
         completion = self.apply_rgw(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -957,6 +969,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
         )
+
         completion = self.apply_nfs(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
