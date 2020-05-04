@@ -344,8 +344,7 @@ public:
   }
 
   void on_backfill_reserved() final {
-    recovery_handler->start_background_recovery(
-      crimson::osd::scheduler::scheduler_class_t::background_best_effort);
+    ceph_assert(0 == "Not implemented");
   }
   void on_backfill_canceled() final {
     ceph_assert(0 == "Not implemented");

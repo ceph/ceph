@@ -20,6 +20,12 @@
 #include "osd/osd_types.h"
 #include "osd/PeeringState.h"
 
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
+
 void PGRecovery::start_background_recovery(
   crimson::osd::scheduler::scheduler_class_t klass)
 {
@@ -36,20 +42,21 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
 {
   assert(pg->is_primary());
   assert(pg->is_peered());
+  assert(pg->is_recovering());
+  // in ceph-osd the do_recovery() path handles both the pg log-based
+  // recovery and the backfill, albeit they are separated at the layer
+  // of PeeringState. In crimson-osd backfill has been cut from it, so
+  // and do_recovery() is actually solely for pg log-based recovery.
+  // At the time of writing it's considered to move it to FSM and fix
+  // the naming as well.
+  assert(!pg->is_backfilling());
   assert(!pg->get_peering_state().is_deleting());
-
-  if (!pg->is_recovering() && !pg->is_backfilling()) {
-    return crimson::osd::make_ready_blocking_future<bool>(false);
-  }
 
   std::vector<crimson::osd::blocking_future<>> started;
   started.reserve(max_to_start);
   max_to_start -= start_primary_recovery_ops(max_to_start, &started);
   if (max_to_start > 0) {
     max_to_start -= start_replica_recovery_ops(max_to_start, &started);
-  }
-  if (max_to_start > 0) {
-    max_to_start -= start_backfill_ops(max_to_start, &started);
   }
   return crimson::osd::join_blocking_futures(std::move(started)).then(
     [this] {
@@ -58,14 +65,29 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
       crimson::get_logger(ceph_subsys_osd).debug("start_recovery_ops: AllReplicasRecovered for pg: {}",
 		     pg->get_pgid());
       using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
-      (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
-	static_cast<crimson::osd::PG*>(pg),
-	pg->get_shard_services(),
-	pg->get_pg_whoami(),
-	pg->get_pgid(),
-	pg->get_osdmap_epoch(),
-	pg->get_osdmap_epoch(),
-	PeeringState::AllReplicasRecovered{});
+      if (!pg->get_peering_state().needs_backfill()) {
+        logger().debug("start_recovery_ops: AllReplicasRecovered for pg: {}",
+                      pg->get_pgid());
+        (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
+          static_cast<crimson::osd::PG*>(pg),
+          pg->get_shard_services(),
+          pg->get_pg_whoami(),
+          pg->get_pgid(),
+          pg->get_osdmap_epoch(),
+          pg->get_osdmap_epoch(),
+          PeeringState::AllReplicasRecovered{});
+      } else {
+        logger().debug("start_recovery_ops: RequestBackfill for pg: {}",
+                      pg->get_pgid());
+        (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
+          static_cast<crimson::osd::PG*>(pg),
+          pg->get_shard_services(),
+          pg->get_pg_whoami(),
+          pg->get_pgid(),
+          pg->get_osdmap_epoch(),
+          pg->get_osdmap_epoch(),
+          PeeringState::RequestBackfill{});
+      }
     }
     return seastar::make_ready_future<bool>(!done);
   });
@@ -253,15 +275,6 @@ size_t PGRecovery::start_replica_recovery_ops(
   }
 
   return started;
-}
-
-size_t PGRecovery::start_backfill_ops(
-  size_t max_to_start,
-  std::vector<crimson::osd::blocking_future<>> *out)
-{
-  if (pg->get_peering_state().get_backfill_targets().empty())
-    return 0;
-  ceph_abort("not implemented!");
 }
 
 std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
