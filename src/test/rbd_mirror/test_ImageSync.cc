@@ -36,7 +36,8 @@ int flush(librbd::ImageCtx *image_ctx) {
   auto aio_comp = librbd::io::AioCompletion::create_and_start(
     &ctx, image_ctx, librbd::io::AIO_TYPE_FLUSH);
   auto req = librbd::io::ImageDispatchSpec<>::create_flush_request(
-    *image_ctx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
+    *image_ctx, librbd::io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+    librbd::io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
   delete req;
   return ctx.wait();

@@ -111,8 +111,9 @@ struct ImageDispatchSpec<librbd::MockRefreshImageCtx> {
   AioCompletion *aio_comp = nullptr;
 
   static ImageDispatchSpec* create_flush_request(
-      librbd::MockRefreshImageCtx &image_ctx, AioCompletion *aio_comp,
-      FlushSource flush_source, const ZTracer::Trace &parent_trace) {
+      librbd::MockRefreshImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
+      AioCompletion *aio_comp, FlushSource flush_source,
+      const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;

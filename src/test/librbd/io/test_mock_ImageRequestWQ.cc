@@ -43,17 +43,18 @@ struct ImageDispatchSpec<librbd::MockTestImageCtx> {
   bool blocked = false;
 
   static ImageDispatchSpec* create_write_request(
-      librbd::MockTestImageCtx &image_ctx, AioCompletion *aio_comp,
-      Extents &&image_extents, bufferlist &&bl, int op_flags,
-      const ZTracer::Trace &parent_trace, uint64_t tid) {
+      librbd::MockTestImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
+      AioCompletion *aio_comp, Extents &&image_extents, bufferlist &&bl,
+      int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;
   }
 
   static ImageDispatchSpec* create_flush_request(
-      librbd::MockTestImageCtx &image_ctx, AioCompletion *aio_comp,
-      FlushSource flush_source, const ZTracer::Trace &parent_trace) {
+      librbd::MockTestImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
+      AioCompletion *aio_comp, FlushSource flush_source,
+      const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;

@@ -168,7 +168,8 @@ void CloseRequest<I>::send_flush() {
   auto aio_comp = io::AioCompletion::create_and_start(ctx, m_image_ctx,
                                                       io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec<I>::create_flush_request(
-    *m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    *m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+    io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
   delete req;
 }
