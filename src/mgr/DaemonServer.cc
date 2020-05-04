@@ -812,20 +812,12 @@ public:
 bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 {
   std::lock_guard l(lock);
-  // a blank fsid in MCommand signals a legacy client sending a "mon-mgr" CLI
-  // command.
-  if (m->fsid != uuid_d()) {
-    cct->get_admin_socket()->queue_tell_command(m);
+  auto cmdctx = std::make_shared<CommandContext>(m);
+  try {
+    return _handle_command(cmdctx);
+  } catch (const bad_cmd_get& e) {
+    cmdctx->reply(-EINVAL, e.what());
     return true;
-  } else {
-    // legacy client; send to CLI processing
-    auto cmdctx = std::make_shared<CommandContext>(m);
-    try {
-      return _handle_command(cmdctx);
-    } catch (const bad_cmd_get& e) {
-      cmdctx->reply(-EINVAL, e.what());
-      return true;
-    }
   }
 }
 
@@ -857,8 +849,12 @@ bool DaemonServer::_handle_command(
   std::shared_ptr<CommandContext>& cmdctx)
 {
   MessageRef m;
+  bool admin_socket_cmd = false;
   if (cmdctx->m_tell) {
     m = cmdctx->m_tell;
+    // a blank fsid in MCommand signals a legacy client sending a "mon-mgr" CLI
+    // command.
+    admin_socket_cmd = (cmdctx->m_tell->fsid != uuid_d());
   } else {
     m = cmdctx->m_mgr;
   }
@@ -892,7 +888,10 @@ bool DaemonServer::_handle_command(
 
   dout(10) << "decoded-size=" << cmdctx->cmdmap.size() << " prefix=" << prefix  << dendl;
 
-  if (prefix == "get_command_descriptions") {
+  // this is just for mgr commands - admin socket commands will fall
+  // through and use the admin socket version of
+  // get_command_descriptions
+  if (prefix == "get_command_descriptions" && !admin_socket_cmd) {
     dout(10) << "reading commands from python modules" << dendl;
     const auto py_commands = py_modules.get_commands();
 
@@ -929,7 +928,10 @@ bool DaemonServer::_handle_command(
 
   bool is_allowed = false;
   ModuleCommand py_command;
-  if (!mgr_cmd) {
+  if (admin_socket_cmd) {
+    // admin socket commands require all capabilities
+    is_allowed = session->caps.is_allow_all();
+  } else if (!mgr_cmd) {
     // Resolve the command to the name of the module that will
     // handle it (if the command exists)
     auto py_commands = py_modules.get_py_commands();
@@ -961,6 +963,11 @@ bool DaemonServer::_handle_command(
     << "from='" << session->inst << "' "
     << "entity='" << session->entity_name << "' "
     << "cmd=" << cmdctx->cmd << ": dispatch";
+
+  if (admin_socket_cmd) {
+    cct->get_admin_socket()->queue_tell_command(cmdctx->m_tell);
+    return true;
+  }
 
   // ----------------
   // service map commands
