@@ -268,3 +268,8 @@ scrape_configs:
             r['files']['/etc/prometheus/alerting/ceph_alerts.yml'] = alerts
 
         return r, sorted(deps)
+
+
+class NodeExporterService(CephadmService):
+    def create(self, daemon_id, host) -> str:
+        return self.mgr._create_daemon('node-exporter', daemon_id, host)
