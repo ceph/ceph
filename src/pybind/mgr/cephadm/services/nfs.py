@@ -10,6 +10,7 @@ from orchestrator import OrchestratorError
 
 from .. import utils
 
+from .cephadmservice import CephadmService
 logger = logging.getLogger(__name__)
 
 class NFSGanesha(object):
