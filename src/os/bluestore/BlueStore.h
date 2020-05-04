@@ -2218,7 +2218,7 @@ private:
   int _minimal_open_bluefs(bool create);
   void _minimal_close_bluefs();
   int _open_bluefs(bool create);
-  void _close_bluefs();
+  void _close_bluefs(bool cold_close);
 
   // Limited (u)mount intended for BlueFS operations only
   int _mount_for_bluefs();
@@ -2231,7 +2231,7 @@ private:
   * in the proper order
   */
   int _open_db_and_around(bool read_only);
-  void _close_db_and_around();
+  void _close_db_and_around(bool read_only);
 
   // updates legacy bluefs related recs in DB to a state valid for
   // downgrades from nautilus.
@@ -2244,7 +2244,7 @@ private:
   int _open_db(bool create,
 	       bool to_repair_db=false,
 	       bool read_only = false);
-  void _close_db();
+  void _close_db(bool read_only);
   int _open_fm(KeyValueDB::Transaction t);
   void _close_fm();
   int _open_alloc();
@@ -2530,6 +2530,8 @@ public:
     const string& path);
   int expand_devices(ostream& out);
   string get_device_path(unsigned id);
+
+  int dump_bluefs_sizes(ostream& out);
 
 public:
   int statfs(struct store_statfs_t *buf,

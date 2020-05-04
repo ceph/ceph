@@ -351,7 +351,9 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  unsigned _get_slow_device_id() {
+    return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
+  }
   const char* get_device_name(unsigned id);
   int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
@@ -440,7 +442,7 @@ public:
   // the super is always stored on bdev 0
   int mkfs(uuid_d osd_uuid);
   int mount();
-  void umount();
+  void umount(bool avoid_compact = false);
   int prepare_new_device(int id);
   
   int log_dump();
@@ -506,11 +508,10 @@ public:
   int lock_file(const string& dirname, const string& filename, FileLock **p);
   int unlock_file(FileLock *l);
 
-  void flush_log();
   void compact_log();
 
   /// sync any uncommitted state to disk
-  void sync_metadata();
+  void sync_metadata(bool avoid_compact);
 
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;

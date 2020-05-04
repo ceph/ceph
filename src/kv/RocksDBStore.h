@@ -498,9 +498,6 @@ err:
     return 0;
   }
 
-  int set_cache_capacity(int64_t capacity);
-  int64_t get_cache_capacity();
-
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() 
       const override {
     return dynamic_pointer_cast<PriorityCache::PriCache>(
