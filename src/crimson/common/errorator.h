@@ -564,6 +564,23 @@ private:
         });
     }
 
+    /**
+     * unsafe_thread_get
+     *
+     * Only valid within a seastar_thread.  Ignores errorator protections
+     * and throws any contained exceptions.
+     *
+     * Should really only be used within test code
+     * (see test/crimson/gtest_seastar.h).
+     */
+    auto &&unsafe_get() {
+      return seastar::future<ValuesT...>::get();
+    }
+    auto unsafe_get0() {
+      return seastar::future<ValuesT...>::get0();
+    }
+
+
     template <class FuncT>
     auto finally(FuncT &&func) {
       using func_result_t = std::invoke_result_t<FuncT>;
