@@ -334,21 +334,21 @@ done
 ${CEPHADM//--image $IMAGE_MASTER/} deploy \
     --name node-exporter.a --fsid $FSID
 cond="curl 'http://localhost:9100' | grep -q 'Node Exporter'"
-is_available "node-exporter" "$cond" 5
+is_available "node-exporter" "$cond" 10
 
 # add prometheus
 cat ${CEPHADM_SAMPLES_DIR}/prometheus.json | \
         ${CEPHADM//--image $IMAGE_MASTER/} deploy \
 	    --name prometheus.a --fsid $FSID --config-json -
 cond="curl 'localhost:9095/api/v1/query?query=up'"
-is_available "prometheus" "$cond" 5
+is_available "prometheus" "$cond" 10
 
 # add grafana
 cat ${CEPHADM_SAMPLES_DIR}/grafana.json | \
         ${CEPHADM//--image $IMAGE_MASTER/} deploy \
             --name grafana.a --fsid $FSID --config-json -
 cond="curl --insecure 'https://localhost:3000' | grep -q 'grafana'"
-is_available "grafana" "$cond" 30
+is_available "grafana" "$cond" 50
 
 # add nfs-ganesha
 nfs_stop
