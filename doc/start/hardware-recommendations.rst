@@ -105,7 +105,7 @@ Data Storage
 
 Plan your data storage configuration carefully. There are significant cost and
 performance tradeoffs to consider when planning for data storage. Simultaneous
-OS operations, and simultaneous request for read and write operations from
+OS operations and request for read and write operations from
 multiple daemons against a single drive can slow performance considerably.
 
 .. important:: Since Ceph has to write all data to the journal before it can 
