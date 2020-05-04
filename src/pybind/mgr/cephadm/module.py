@@ -37,7 +37,7 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 from . import remotes
 from . import utils
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService
+    RbdMirrorService, CrashService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -433,6 +433,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.alertmanager_service = AlertmanagerService(self)
         self.prometheus_service = PrometheusService(self)
         self.node_exporter_service = NodeExporterService(self)
+        self.crash_service = CrashService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1946,7 +1947,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'alertmanager': self.alertmanager_service.create,
             'prometheus': self.prometheus_service.create,
             'node-exporter': self.node_exporter_service.create,
-            'crash': self._create_crash,
+            'crash': self.crash_service.create,
             'iscsi': self._create_iscsi,
         }
         config_fns = {
@@ -2352,20 +2353,11 @@ api_secure = {api_secure}
     def add_crash(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('crash', spec,
-                                self._create_crash)
+                                self.crash_service.create)
 
     @trivial_completion
     def apply_crash(self, spec):
         return self._apply(spec)
-
-    def _create_crash(self, daemon_id, host):
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'client.crash.' + host,
-            'caps': ['mon', 'profile crash',
-                     'mgr', 'profile crash'],
-        })
-        return self._create_daemon('crash', daemon_id, host, keyring=keyring)
 
     def add_grafana(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
