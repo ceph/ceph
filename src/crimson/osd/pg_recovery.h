@@ -18,8 +18,7 @@ class PGRecovery {
 public:
   PGRecovery(PGRecoveryListener* pg) : pg(pg) {}
   virtual ~PGRecovery() {}
-  void start_background_recovery(
-    crimson::osd::scheduler::scheduler_class_t klass);
+  void start_pglogbased_recovery();
 
   crimson::osd::blocking_future<bool> start_recovery_ops(size_t max_to_start);
   seastar::future<> stop() { return seastar::now(); }
