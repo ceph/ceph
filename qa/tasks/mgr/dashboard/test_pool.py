@@ -416,4 +416,5 @@ class PoolTest(DashboardTestCase):
             'erasure_code_profiles': JList(JObj({}, allow_unknown=True)),
             'used_rules': JObj({}, allow_unknown=True),
             'used_profiles': JObj({}, allow_unknown=True),
+            'nodes': JList(JObj({}, allow_unknown=True)),
         }))

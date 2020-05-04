@@ -142,7 +142,7 @@
               <span class="invalid-feedback"
                     *ngIf="form.showError('size', formDir)"
                     i18n>The size specified is out of range. A value from
-                {{ getMinSize() }} to {{ getMaxSize() }} is valid.</span>
+                {{ getMinSize() }} to {{ getMaxSize() }} is usable.</span>
             </div>
           </div>
 
@@ -343,7 +343,8 @@
                     <tab i18n-heading
                          heading="Crush rule"
                          class="crush-rule-info">
-                      <cd-table-key-value [renderObjects]="true"
+                      <cd-table-key-value [renderObjects]="false"
+                                          [hideKeys]="['steps', 'ruleset', 'type', 'rule_name']"
                                           [data]="form.getValue('crushRule')"
                                           [autoReload]="false">
                       </cd-table-key-value>
