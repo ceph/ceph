@@ -255,10 +255,10 @@ class FsNewHandler : public FileSystemCommandHandler
     }
     mon->osdmon()->do_application_enable(data,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", fs_name);
+					 "data", fs_name, true);
     mon->osdmon()->do_application_enable(metadata,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "metadata", fs_name);
+					 "metadata", fs_name, true);
     mon->osdmon()->do_set_pool_opt(metadata,
 				   pool_opts_t::RECOVERY_PRIORITY,
 				   static_cast<int64_t>(5));
@@ -697,7 +697,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     }
     mon->osdmon()->do_application_enable(poolid,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", fs_name);
+					 "data", fs_name, true);
     mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(

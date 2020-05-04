@@ -746,7 +746,8 @@ public:
 
   void do_application_enable(int64_t pool_id, const std::string &app_name,
 			     const std::string &app_key="",
-			     const std::string &app_value="");
+			     const std::string &app_value="",
+			     bool force=false);
   void do_set_pool_opt(int64_t pool_id, pool_opts_t::key_t opt,
 		       pool_opts_t::value_t);
 
