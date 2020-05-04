@@ -40,7 +40,8 @@ from .services.cephadmservice import MonService, MgrService, MdsService, RgwServ
     RbdMirrorService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
-from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService
+from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
+    NodeExporterService
 from .inventory import Inventory, SpecStore, HostCache
 
 try:
@@ -431,6 +432,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.grafana_service = GrafanaService(self)
         self.alertmanager_service = AlertmanagerService(self)
         self.prometheus_service = PrometheusService(self)
+        self.node_exporter_service = NodeExporterService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1943,7 +1945,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'grafana': self.grafana_service.create,
             'alertmanager': self.alertmanager_service.create,
             'prometheus': self.prometheus_service.create,
-            'node-exporter': self._create_node_exporter,
+            'node-exporter': self.node_exporter_service.create,
             'crash': self._create_crash,
             'iscsi': self._create_iscsi,
         }
@@ -2341,14 +2343,11 @@ api_secure = {api_secure}
     def add_node_exporter(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('node-exporter', spec,
-                                self._create_node_exporter)
+                                self.node_exporter_service.create)
 
     @trivial_completion
     def apply_node_exporter(self, spec):
         return self._apply(spec)
-
-    def _create_node_exporter(self, daemon_id, host):
-        return self._create_daemon('node-exporter', daemon_id, host)
 
     def add_crash(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
