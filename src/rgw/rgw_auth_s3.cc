@@ -975,61 +975,96 @@ AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
                                         const size_t metabuf_len)
 {
   std::string_view metastr(metabuf, metabuf_len);
-
-  const size_t semicolon_pos = metastr.find(";");
-  if (semicolon_pos == std::string_view::npos) {
-    ldout(cct, 20) << "AWSv4ComplMulti cannot find the ';' separator"
-                   << dendl;
-    throw rgw::io::Exception(EINVAL, std::system_category());
-  }
-
   char* data_field_end;
-  /* strtoull ignores the "\r\n" sequence after each non-first chunk. */
+  static const std::string_view chunk_signature{"chunk-signature"};
+  std::string_view signature;
+
   const size_t data_length = std::strtoull(metabuf, &data_field_end, 16);
   if (data_length == 0 && data_field_end == metabuf) {
     ldout(cct, 20) << "AWSv4ComplMulti: cannot parse the data size"
                    << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
   }
+  size_t i = data_field_end - metabuf;
+  size_t fieldname_end;
+  size_t field_end;
 
-  /* Parse the chunk_signature=... part. */
-  const auto signature_part = metastr.substr(semicolon_pos + 1);
-  const size_t eq_sign_pos = signature_part.find("=");
-  if (eq_sign_pos == std::string_view::npos) {
-    ldout(cct, 20) << "AWSv4ComplMulti: cannot find the '=' separator"
-                   << dendl;
-    throw rgw::io::Exception(EINVAL, std::system_category());
+  for (;; (i = field_end)) {
+    if (i+2 > metastr.length()) {
+      ldout(cct, 20) << "AWSv4ComplMulti: no new line at signature end"
+		     << dendl;
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    if (metastr[i] ==  '\r') {
+      if (metastr[i+1] == '\n') {
+	i += 2;
+	break;		// good chunk termination case
+      }
+      ldout(cct, 20) << "AWSv4ComplMulti: chunk metadata stray carriage return"
+		     << dendl;
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    } else if (metastr[i] == '\n') {
+      ldout(cct, 20) << "AWSv4ComplMulti: chunk metadata stray newline"
+		     << dendl;
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    if (metastr[i++] != ';') {
+      ldout(cct, 20) << "AWSv4ComplMulti: missing ';' field prefix"
+		     << dendl;
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    fieldname_end = metastr.substr(i).find_first_of("=;\r\n");
+    if (fieldname_end == std::string::npos) {
+      ldout(cct, 20) << "AWSv4ComplMulti: missing fieldname terminator"
+		     << dendl;
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    fieldname_end += i;
+    if (metastr[fieldname_end] == '=') {
+      field_end = metastr.substr(fieldname_end+1).find_first_of(";\r\n");
+      if (field_end == std::string::npos) {
+	ldout(cct, 20) << "AWSv4ComplMulti: missing field data terminator"
+		       << dendl;
+	throw rgw::io::Exception(EINVAL, std::system_category());
+      }
+      field_end += fieldname_end+1;
+    } else {
+      field_end = fieldname_end;
+    }
+    if (!boost::iequals(chunk_signature, metastr.substr(i, fieldname_end-i))) {
+      continue;
+    }
+    if (field_end == fieldname_end) {
+      ldout(cct, 20) << "AWSv4ComplMulti: chunk-signature: missing value"
+		     << dendl;
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
+    signature = metastr.substr(fieldname_end+1, (field_end - (fieldname_end+1)));
+    if (signature.length() != SIG_SIZE) {
+      ldout(cct, 20) << "AWSv4ComplMulti: signature.length() != 64"
+		     << dendl;
+      throw rgw::io::Exception(EINVAL, std::system_category());
+    }
   }
 
-  /* OK, we have at least the beginning of a signature. */
-  const size_t data_sep_pos = signature_part.find("\r\n");
-  if (data_sep_pos == std::string_view::npos) {
-    ldout(cct, 20) << "AWSv4ComplMulti: no new line at signature end"
-                   << dendl;
-    throw rgw::io::Exception(EINVAL, std::system_category());
-  }
-
-  const auto signature = \
-    signature_part.substr(eq_sign_pos + 1, data_sep_pos - 1 - eq_sign_pos);
   if (signature.length() != SIG_SIZE) {
-    ldout(cct, 20) << "AWSv4ComplMulti: signature.length() != 64"
-                   << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: can't find chunk-signature in chunk headers"
+		   << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
   }
 
-  const size_t data_starts_in_stream = \
-    + semicolon_pos + strlen(";") + data_sep_pos  + strlen("\r\n")
-    + old.data_offset_in_stream + old.data_length;
+  const size_t data_starts_in_stream =
+    i + old.data_offset_in_stream + old.data_length;
 
   ldout(cct, 20) << "parsed new chunk; signature=" << signature
-                 << ", data_length=" << data_length
-                 << ", data_starts_in_stream=" << data_starts_in_stream
-                 << dendl;
+		 << ", data_length=" << data_length
+		 << ", data_starts_in_stream=" << data_starts_in_stream
+		 << dendl;
 
   return std::make_pair(ChunkMeta(data_starts_in_stream,
                                   data_length,
                                   signature),
-                        semicolon_pos + 83);
+			i);
 }
 
 std::string
