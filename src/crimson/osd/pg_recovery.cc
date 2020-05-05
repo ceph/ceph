@@ -5,6 +5,7 @@
 #include <fmt/ostream.h>
 
 #include "crimson/common/type_helpers.h"
+#include "crimson/osd/backfill_facades.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/pg.h"
@@ -444,4 +445,30 @@ bool PGRecovery::budget_available() const
 void PGRecovery::backfilled()
 {
   ceph_abort_msg("Not implemented");
+}
+
+void PGRecovery::dispatch_backfill_event(
+  boost::intrusive_ptr<const boost::statechart::event_base> evt)
+{
+  logger().debug("{}", __func__);
+  backfill_state->process_event(evt);
+}
+
+void PGRecovery::on_backfill_reserved()
+{
+  logger().debug("{}", __func__);
+  // PIMP and depedency injection for the sake unittestability.
+  // I'm not afraid about the performance here.
+  using BackfillState = crimson::osd::BackfillState;
+  backfill_state = std::make_unique<BackfillState>(
+    *this,
+    std::make_unique<BackfillState::PeeringFacade>(pg->get_peering_state()),
+    std::make_unique<BackfillState::PGFacade>(
+      *static_cast<crimson::osd::PG*>(pg)));
+  using BackfillRecovery = crimson::osd::BackfillRecovery;
+  pg->get_shard_services().start_operation<BackfillRecovery>(
+    static_cast<crimson::osd::PG*>(pg),
+    pg->get_shard_services(),
+    pg->get_osdmap_epoch(),
+    BackfillState::Triggered{});
 }

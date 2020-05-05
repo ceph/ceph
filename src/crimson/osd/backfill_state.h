@@ -243,6 +243,11 @@ public:
                 std::unique_ptr<PGFacade> pg);
   ~BackfillState();
 
+  void process_event(
+    boost::intrusive_ptr<const sc::event_base> evt) {
+    backfill_machine.process_event(*std::move(evt));
+  }
+
 private:
   hobject_t last_backfill_started;
   BackfillInterval backfill_info;

@@ -72,4 +72,32 @@ public:
     epoch_t epoch_started);
 };
 
+class BackfillRecovery final : public BackgroundRecovery {
+  boost::intrusive_ptr<const boost::statechart::event_base> evt;
+  seastar::future<bool> do_recovery() override;
+
+public:
+  template <class EventT>
+  BackfillRecovery(
+    Ref<PG> pg,
+    ShardServices &ss,
+    epoch_t epoch_started,
+    const EventT& evt);
+};
+
+template <class EventT>
+BackfillRecovery::BackfillRecovery(
+  Ref<PG> pg,
+  ShardServices &ss,
+  const epoch_t epoch_started,
+  const EventT& evt)
+  : BackgroundRecovery(
+      std::move(pg),
+      ss,
+      epoch_started,
+      crimson::osd::scheduler::scheduler_class_t::background_best_effort),
+    evt(evt.intrusive_from_this())
+{}
+
+
 }
