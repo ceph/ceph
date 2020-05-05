@@ -193,6 +193,18 @@ public:
     }
   }
 
+  LogProvider(int _num_shards,
+              uint32_t _min_val,
+              vector<uint32_t >_max_val) : SIProvider_SingleStage(g_ceph_context,
+                                                          "log",
+                                                          SIProvider::StageType::INC,
+                                                          _num_shards), max_val(_max_val)
+  {
+    for (int i = 0; i < _num_shards; ++i) {
+      min_val.push_back(_min_val);
+    }
+  }
+
   void add_entries(int shard_id, int count) {
     max_val[shard_id] += count;
   }
@@ -380,14 +392,14 @@ struct stage_info {
   int first_shard_size;
   int shard_entries_limit;
   vector<uint32_t> max_entries;
+  SIProviderRef provider_base;
   int all_entries{0};
-  SIClientRef client;
 
   stage_info() {}
   stage_info(int _num_shards,
              int _start,
              int _limit,
-             std::function<std::shared_ptr<SIProvider>(vector<uint32_t>)> alloc) : num_shards(_num_shards),
+             std::function<SIProviderRef(vector<uint32_t>)> alloc) : num_shards(_num_shards),
                                                                                    first_shard_size(_start),
                                                                                    shard_entries_limit(_limit) {
     max_entries.resize(num_shards);
@@ -405,9 +417,12 @@ struct stage_info {
       cout << "max_entries[" << i << "]=" << max_entries[i] << std::endl;
     }
 
-    auto base = alloc(max_entries);
-    auto pc = std::make_shared<TestProviderClient>(base);
-    client = std::static_pointer_cast<SIClient>(pc);
+    provider_base = alloc(max_entries);
+  }
+
+  SIClientRef alloc_client() {
+    auto pc = std::make_shared<TestProviderClient>(provider_base);
+    return std::static_pointer_cast<SIClient>(pc);
   }
 };
 
@@ -418,7 +433,7 @@ TEST(TestRGWSIP, test_sharded_stage)
     return std::static_pointer_cast<SIProvider>(bp);
   });
 
-  auto client = si.client;
+  auto client = si.alloc_client();
 
   ASSERT_EQ(0, client->init_markers());
 
@@ -452,24 +467,19 @@ TEST(TestRGWSIP, test_sharded_stage)
   ASSERT_EQ(si.all_entries, all_count);
 }
 
-#if 0
 TEST(TestRGWSIP, test_multistage)
 {
-  vector<SIPShardedStageRef> stages;
-
   stage_info sis[2];
 
-  sis[0] = stage_info(1, 35, 40, [](vector<int> max_entries){ 
+  sis[0] = stage_info(1, 35, 40, [](vector<uint32_t> max_entries){ 
     auto bp = std::make_shared<BasicProvider>(max_entries);
     return std::static_pointer_cast<SIProvider>(bp);
   });
 
-  auto stage1 = sis[0].client
-
-  sis[1] = stage_info(10, 5, 20, [](vector<int> max_entries){ 
+  sis[1] = stage_info(10, 5, 20, [](vector<uint32_t> max_entries){ 
     auto bp = std::make_shared<LogProvider>(max_entries.size(), 0, max_entries);
    
-    for (int i = 0; i < max_entries.size(); ++i) {
+    for (int i = 0; i < (int)max_entries.size(); ++i) {
       /* simulate half read log */
       bp->trim(i, max_entries[i] + 1);
       bp->add_entries(i, max_entries[i]);
@@ -477,17 +487,15 @@ TEST(TestRGWSIP, test_multistage)
     return std::static_pointer_cast<SIProvider>(bp);
   });
 
-  auto stage2 = make_shared<SIPShardedStage>(sis[1].shards);
+  vector<SIProviderRef> providers = { sis[0].provider_base, sis[1].provider_base };
 
-  stages.push_back(stage1);
-  stages.push_back(stage2);
+  SIProviderRef pvd_container = std::make_shared<SIProvider_Container>(g_ceph_context, "container", providers);
 
-  SIPMultiStageClient client(stages);
+  TestProviderClient client(pvd_container);
 
   ASSERT_EQ(0, client.init_markers());
 
   for (int stage_num = 0; stage_num < 2; ++stage_num) {
-    auto stage = client.cur_stage_ref();
     auto& si = sis[stage_num];
 
     int total[si.num_shards];
@@ -504,13 +512,13 @@ TEST(TestRGWSIP, test_multistage)
 
       fetched_now = 0;
       
-      for (int i = 0; i < client.num_shards(); ++i) {
+      for (int i = 0; i < client.stage_num_shards(); ++i) {
 
-        if (stage->is_shard_done(i)) {
+        if (client.is_shard_done(i)) {
           continue;
         }
         SIProvider::fetch_result result;
-        ASSERT_EQ(0, stage->fetch(i, chunk_size, &result));
+        ASSERT_EQ(0, client.fetch(i, chunk_size, &result));
 
         fetched_now = result.entries.size();
 
@@ -518,7 +526,7 @@ TEST(TestRGWSIP, test_multistage)
         all_count += fetched_now;
 
         ASSERT_TRUE(handle_result(result, nullptr));
-        ASSERT_NE((total[i] < si.max_entries[i]), !result.more);
+        ASSERT_NE((total[i] < (int)si.max_entries[i]), !result.more);
       }
 
       ++total_iter;
@@ -530,8 +538,6 @@ TEST(TestRGWSIP, test_multistage)
     ASSERT_EQ(si.all_entries, all_count);
   }
 }
-
-#endif
 
 
 int main(int argc, char **argv) {

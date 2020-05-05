@@ -8,13 +8,19 @@
 
 #include "include/buffer.h"
 
+class SIProvider_Container;
+
 /*
  * non-stateful entity that is responsible for providing data
  */
 class SIProvider
 {
+  friend class SIProvider_Container;
+
 protected:
   CephContext *cct;
+  std::string name;
+
 public:
   enum StageType {
     UNKNOWN = -1,
@@ -41,7 +47,8 @@ public:
     bool done{false}; /* stage done */
   };
 
-  SIProvider(CephContext *_cct) : cct(_cct) {}
+  SIProvider(CephContext *_cct, const std::string& _name) : cct(_cct),
+                                                            name(_name) {}
   virtual ~SIProvider() {}
 
   virtual stage_id_t get_first_stage() const = 0;
@@ -53,6 +60,10 @@ public:
   virtual int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
   virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
+
+  const std::string& get_name() {
+    return name;
+  }
 };
 
 class SIProvider_SingleStage : public SIProvider
@@ -67,7 +78,7 @@ public:
   SIProvider_SingleStage(CephContext *_cct,
                          const std::string& name,
                          StageType type,
-                         int num_shards) : SIProvider(_cct),
+                         int num_shards) : SIProvider(_cct, name),
                                            stage_info({name, type, num_shards}) {}
   stage_id_t get_first_stage() const override {
     return stage_info.sid;
@@ -77,7 +88,7 @@ public:
   }
 
   int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override {
-    return -ERANGE;
+    return -ENOENT;
   }
   std::vector<stage_id_t> get_stages() override {
     return { stage_info.sid };
@@ -91,6 +102,40 @@ public:
     *sinfo = stage_info;
     return 0;
   }
+
+  int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
+  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const override;
+  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const override;
+};
+
+using SIProviderRef = std::shared_ptr<SIProvider>;
+
+class SIProvider_Container : public SIProvider
+{
+protected:
+  std::vector<SIProviderRef> providers;
+  std::vector<std::string> pids; /* provider ids */
+  std::map<std::string, int> providers_index;
+
+  SIProvider::stage_id_t encode_sid(const std::string& pid,
+                                    const SIProvider::stage_id_t& provider_sid) const;
+  bool decode_sid(const stage_id_t& sid,
+                  SIProviderRef *provider,
+                  SIProvider::stage_id_t *provider_sid,
+                  int *index = nullptr) const;
+
+public:
+  SIProvider_Container(CephContext *_cct,
+                       const std::string& _name,
+                       std::vector<SIProviderRef>& _providers);
+
+  stage_id_t get_first_stage() const override;
+  stage_id_t get_last_stage() const override;
+
+  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override;
+  std::vector<SIProvider::stage_id_t> get_stages() override;
+
+  int get_stage_info(const stage_id_t& sid, StageInfo *sinfo) const override;
 
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const override;
