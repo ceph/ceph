@@ -2,7 +2,9 @@ import json
 
 import pytest
 
-from ceph.deployment.service_spec import ServiceSpec, RGWSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
+    ServiceSpecValidationError, IscsiServiceSpec, PlacementSpec
+
 from orchestrator import DaemonDescription, OrchestratorError
 
 
@@ -224,8 +226,8 @@ def test_spec_octopus():
 
 @pytest.mark.parametrize("spec,dd,valid",
 [
+    # https://tracker.ceph.com/issues/44934
     (
-        # https://tracker.ceph.com/issues/44934
         RGWSpec(
             rgw_realm="default-rgw-realm",
             rgw_zone="eu-central-1",
@@ -280,8 +282,140 @@ def test_spec_octopus():
         ),
         False
     ),
+    (
+        # zone contains hostname
+        # https://tracker.ceph.com/issues/45294
+        RGWSpec(
+            rgw_realm="default.rgw.realm",
+            rgw_zone="ceph.001",
+            subcluster='1',
+        ),
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id="default.rgw.realm.ceph.001.1.ceph.001.ytywjo",
+            hostname="ceph.001",
+        ),
+        True
+    ),
+
+    # https://tracker.ceph.com/issues/45293
+    (
+        ServiceSpec(
+            service_type='mds',
+            service_id="a",
+        ),
+        DaemonDescription(
+            daemon_type='mds',
+            daemon_id="a.host1.abc123",
+            hostname="host1",
+        ),
+        True
+    ),
+    (
+        # '.' char in service_id
+        ServiceSpec(
+            service_type='mds',
+            service_id="a.b.c",
+        ),
+        DaemonDescription(
+            daemon_type='mds',
+            daemon_id="a.b.c.host1.abc123",
+            hostname="host1",
+        ),
+        True
+    ),
+
+    # https://tracker.ceph.com/issues/45293
+    (
+        NFSServiceSpec(
+            service_id="a",
+        ),
+        DaemonDescription(
+            daemon_type='nfs',
+            daemon_id="a.host1",
+            hostname="host1",
+        ),
+        True
+    ),
+    (
+        # service_id contains a '.' char
+        NFSServiceSpec(
+            service_id="a.b.c",
+        ),
+        DaemonDescription(
+            daemon_type='nfs',
+            daemon_id="a.b.c.host1",
+            hostname="host1",
+        ),
+        True
+    ),
+    (
+        # trailing chars after hostname
+        NFSServiceSpec(
+            service_id="a.b.c",
+        ),
+        DaemonDescription(
+            daemon_type='nfs',
+            daemon_id="a.b.c.host1.abc123",
+            hostname="host1",
+        ),
+        True
+    ),
+    (
+        # chars after hostname without '.'
+        NFSServiceSpec(
+            service_id="a",
+        ),
+        DaemonDescription(
+            daemon_type='nfs',
+            daemon_id="a.host1abc123",
+            hostname="host1",
+        ),
+        False
+    ),
+    (
+        # chars before hostname without '.'
+        NFSServiceSpec(
+            service_id="a",
+        ),
+        DaemonDescription(
+            daemon_type='nfs',
+            daemon_id="a.abc123",
+            hostname="host1",
+        ),
+        False
+    ),
+
+    # https://tracker.ceph.com/issues/45293
+    (
+        IscsiServiceSpec(
+            service_type='iscsi',
+            service_id="a",
+        ),
+        DaemonDescription(
+            daemon_type='iscsi',
+            daemon_id="a.host1.abc123",
+            hostname="host1",
+        ),
+        True
+    ),
+    (
+        # '.' char in service_id
+        IscsiServiceSpec(
+            service_type='iscsi',
+            service_id="a.b.c",
+        ),
+        DaemonDescription(
+            daemon_type='iscsi',
+            daemon_id="a.b.c.host1.abc123",
+            hostname="host1",
+        ),
+        True
+    ),
 ])
-def test_rgw_service_name(spec: RGWSpec, dd: DaemonDescription, valid):
+def test_daemon_description_service_name(spec: ServiceSpec,
+                                         dd: DaemonDescription,
+                                         valid: bool):
     if valid:
         assert spec.service_name() == dd.service_name()
     else:
