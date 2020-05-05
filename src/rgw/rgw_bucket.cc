@@ -2128,8 +2128,10 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
 }
 
 
-RGWDataChangesLog::RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc)
-  : cct(zone_svc->ctx()), changes(cct->_conf->rgw_data_log_changes_size)
+RGWDataChangesLog::RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc,
+				     R::RADOS& rados)
+  : cct(zone_svc->ctx()), rados(rados),
+    changes(cct->_conf->rgw_data_log_changes_size)
 {
   svc.zone = zone_svc;
   svc.cls = cls_svc;

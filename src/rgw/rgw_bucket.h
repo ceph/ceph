@@ -8,6 +8,9 @@
 #include <memory>
 
 #include "include/types.h"
+#include "include/neorados/RADOS.hpp"
+#include "neorados/cls/fifo.h"
+
 #include "rgw_common.h"
 #include "rgw_tools.h"
 #include "rgw_metadata.h"
@@ -23,6 +26,8 @@
 #include "services/svc_bucket_types.h"
 #include "services/svc_bucket_sync.h"
 
+namespace R = neorados;
+namespace ca = ceph::async;
 
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
@@ -490,9 +495,11 @@ struct RGWDataChangesLogMarker {
   RGWDataChangesLogMarker() = default;
 };
 
+
 class RGWDataChangesLog {
   CephContext *cct;
   rgw::BucketChangeObserver *observer = nullptr;
+  R::RADOS& rados;
 
   struct Svc {
     RGWSI_Zone *zone{nullptr};
@@ -547,7 +554,7 @@ class RGWDataChangesLog {
 
 public:
 
-  RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc);
+  RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc, R::RADOS& rados);
   ~RGWDataChangesLog();
 
   int choose_oid(const rgw_bucket_shard& bs);

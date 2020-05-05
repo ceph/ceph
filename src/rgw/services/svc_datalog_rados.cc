@@ -16,18 +16,20 @@ RGWSI_DataLog_RADOS::RGWSI_DataLog_RADOS(CephContext *cct) : RGWServiceInstance(
 RGWSI_DataLog_RADOS::~RGWSI_DataLog_RADOS() {
 }
 
-int RGWSI_DataLog_RADOS::init(RGWSI_Zone *_zone_svc, RGWSI_Cls *_cls_svc)
+int RGWSI_DataLog_RADOS::init(RGWSI_Zone *_zone_svc, RGWSI_Cls *_cls_svc,
+			      R::RADOS* r)
 {
   svc.zone = _zone_svc;
   svc.cls = _cls_svc;
+  rados = r;
 
   return 0;
 }
 
 int RGWSI_DataLog_RADOS::do_start()
 {
-  log.reset(new RGWDataChangesLog(svc.zone, svc.cls));
-  
+  log.reset(new RGWDataChangesLog(svc.zone, svc.cls, *rados));
+
   return 0;
 }
 

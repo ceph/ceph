@@ -31,6 +31,7 @@ namespace rgw {
 class RGWSI_DataLog_RADOS : public RGWServiceInstance
 {
   std::unique_ptr<RGWDataChangesLog> log;
+  R::RADOS* rados;
 
 public:
   RGWSI_DataLog_RADOS(CephContext *cct);
@@ -42,7 +43,8 @@ public:
   } svc;
 
   int init(RGWSI_Zone *_zone_svc,
-           RGWSI_Cls *_cls_svc);
+           RGWSI_Cls *_cls_svc,
+	   R::RADOS* r);
 
   int do_start() override;
   void shutdown() override;
