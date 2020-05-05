@@ -297,17 +297,17 @@ class TestCephadm(object):
             # no preview and only one disk, prepare is used due the hack that is in place.
             (['/dev/sda'], False, "lvm prepare --bluestore --data /dev/sda --no-systemd"),
             # no preview and multiple disks, uses batch
-            (['/dev/sda', '/dev/sdb'], False, "lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
+            (['/dev/sda', '/dev/sdb'], False, "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
             # preview and only one disk needs to use batch again to generate the preview
             (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --report --format json"),
             # preview and multiple disks work the same
-            (['/dev/sda', '/dev/sdb'], True, "lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
+            (['/dev/sda', '/dev/sdb'], True, "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_driveselection_to_ceph_volume(self, cephadm_module, devices, preview, exp_command):
         with self._with_host(cephadm_module, 'test'):
-            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
+            dg = DriveGroupSpec(service_id='test.spec', placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
             out = cephadm_module.driveselection_to_ceph_volume(dg, ds, [], preview)
