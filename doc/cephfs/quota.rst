@@ -28,7 +28,8 @@ Limitations
    Linux kernel clients >= 4.17 support CephFS quotas but only on
    mimic+ clusters.  Kernel clients (even recent versions) will fail
    to handle quotas on older clusters, even if they may be able to set
-   the quotas extended attributes.
+   the quotas extended attributes. Quota resize is supported only on
+   nautilus+ clusters.
 
 #. *Quotas must be configured carefully when used with path-based
    mount restrictions.* The client needs to have access to the
