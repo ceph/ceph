@@ -1,21 +1,22 @@
-<tabset *ngIf="selection"
+<tabset #tabset
+        *ngIf="selection"
         id="tabset-osd-details">
   <tab heading="Devices"
        i18n-heading>
-    <cd-device-list *ngIf="osd.loaded && osd.id !== null"
+    <cd-device-list *ngIf="osd.loaded && osd.id !== null && tabset.tabs[0]?.active"
                     [osdId]="osd.id"></cd-device-list>
   </tab>
 
   <tab heading="Attributes (OSD map)"
        i18n-heading>
-    <cd-table-key-value *ngIf="osd.loaded"
+    <cd-table-key-value *ngIf="osd.loaded && tabset.tabs[1]?.active"
                         [data]="osd.details.osd_map">
     </cd-table-key-value>
   </tab>
 
   <tab heading="Metadata"
        i18n-heading>
-    <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
+    <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata && tabset.tabs[2]?.active; else noMetaData"
                         (fetchData)="refresh()"
                         [data]="osd.details.osd_metadata">
     </cd-table-key-value>
@@ -27,12 +28,13 @@
 
   <tab heading="Device health"
        i18n-heading>
-    <cd-smart-list [osdId]="osd.id"></cd-smart-list>
+    <cd-smart-list *ngIf="tabset.tabs[3]?.active"
+                   [osdId]="osd.id"></cd-smart-list>
   </tab>
 
   <tab heading="Performance counter"
        i18n-heading>
-    <cd-table-performance-counter *ngIf="osd.loaded"
+    <cd-table-performance-counter *ngIf="osd.loaded && tabset.tabs[4]?.active"
                                   serviceType="osd"
                                   [serviceId]="osd.id">
     </cd-table-performance-counter>
@@ -40,29 +42,32 @@
 
   <tab heading="Histogram"
        i18n-heading>
-    <cd-alert-panel *ngIf="osd.loaded && osd.histogram_failed"
-                    type="warning"
-                    i18n>Histogram not available: {{ osd.histogram_failed }}</cd-alert-panel>
+    <ng-container *ngIf="tabset.tabs[5]?.active">
+      <cd-alert-panel *ngIf="osd.loaded && osd.histogram_failed"
+                      type="warning"
+                      i18n>Histogram not available: {{ osd.histogram_failed }}</cd-alert-panel>
 
-    <div class="row"
-         *ngIf="osd.loaded && osd.details.histogram">
-      <div class="col-md-6">
-        <h4 i18n>Writes</h4>
-        <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_w_latency_in_bytes_histogram">
-        </cd-osd-performance-histogram>
+      <div class="row"
+           *ngIf="osd.loaded && osd.details.histogram">
+        <div class="col-md-6">
+          <h4 i18n>Writes</h4>
+          <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_w_latency_in_bytes_histogram">
+          </cd-osd-performance-histogram>
+        </div>
+        <div class="col-md-6">
+          <h4 i18n>Reads</h4>
+          <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_r_latency_out_bytes_histogram">
+          </cd-osd-performance-histogram>
+        </div>
       </div>
-      <div class="col-md-6">
-        <h4 i18n>Reads</h4>
-        <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_r_latency_out_bytes_histogram">
-        </cd-osd-performance-histogram>
-      </div>
-    </div>
+    </ng-container>
   </tab>
 
   <tab i18n-heading
        *ngIf="grafanaPermission.read"
        heading="Performance Details">
-    <cd-grafana [grafanaPath]="'osd-device-details?var-osd=osd.' + osd['id']"
+    <cd-grafana *ngIf="tabset.tabs[6]?.active"
+                [grafanaPath]="'osd-device-details?var-osd=osd.' + osd['id']"
                 uid="CrAHE0iZz"
                 grafanaStyle="GrafanaStyles.two">
     </cd-grafana>
