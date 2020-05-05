@@ -108,4 +108,13 @@ seastar::future<bool> PglogBasedRecovery::do_recovery()
       crimson::common::local_conf()->osd_recovery_max_single_start));
 }
 
+seastar::future<bool> BackfillRecovery::do_recovery()
+{
+  if (pg->has_reset_since(epoch_started))
+    return seastar::make_ready_future<bool>(false);
+  // FIXME: blocking future, limits
+  pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
+  return seastar::make_ready_future<bool>(false);
 }
+
+} // namespace crimson::osd

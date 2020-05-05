@@ -344,7 +344,7 @@ public:
   }
 
   void on_backfill_reserved() final {
-    ceph_assert(0 == "Not implemented");
+    recovery_handler->on_backfill_reserved();
   }
   void on_backfill_canceled() final {
     ceph_assert(0 == "Not implemented");
