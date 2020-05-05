@@ -4,6 +4,7 @@ import logging as log
 import time
 import subprocess
 import json
+import boto3
 
 """
 Rgw manual and dynamic resharding  testing against a running instance
@@ -20,7 +21,6 @@ log.getLogger('botocore').setLevel(log.CRITICAL)
 log.getLogger('boto3').setLevel(log.CRITICAL)
 log.getLogger('urllib3').setLevel(log.CRITICAL)
 
-
 """ Constants """
 USER = 'tester'
 DISPLAY_NAME = 'Testing'
@@ -29,7 +29,6 @@ SECRET_KEY = 'LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn'
 BUCKET_NAME1 = 'myfoo'
 BUCKET_NAME2 = 'mybar'
 VER_BUCKET_NAME = 'myver'
-ENDPOINT = 'http://localhost:80'
 
 
 def exec_cmd(cmd):
@@ -48,7 +47,13 @@ def exec_cmd(cmd):
         return False
 
 
-import boto3
+def get_radosgw_port():
+    out = exec_cmd('sudo netstat -nltp | grep radosgw')
+    log.debug('output: %s' % out)
+    x = out.decode('utf8').split(" ")
+    port = [i for i in x if ':' in i][0].split(':')[1]
+    log.info('radosgw port: %s' % port)
+    return port
 
 
 class BucketStats:
@@ -100,17 +105,27 @@ def main():
     execute manual and dynamic resharding commands
     """
     # create user
-    cmd = exec_cmd('radosgw-admin user create --uid %s --display-name %s --access-key %s --secret %s'
+    exec_cmd('radosgw-admin user create --uid %s --display-name %s --access-key %s --secret %s'
                    % (USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY))
 
-    connection = boto3.resource('s3',
-        aws_access_key_id=ACCESS_KEY,
-        aws_secret_access_key=SECRET_KEY,
-        use_ssl=False,
-        endpoint_url=ENDPOINT,
-        verify=False,
-        config=None,
-        )
+    def boto_connect(portnum, ssl, proto):
+        endpoint = proto + '://localhost:' + portnum
+        conn = boto3.resource('s3',
+                              aws_access_key_id=ACCESS_KEY,
+                              aws_secret_access_key=SECRET_KEY,
+                              use_ssl=ssl,
+                              endpoint_url=endpoint,
+                              verify=False,
+                              config=None,
+                              )
+        return conn
+
+    port = get_radosgw_port()
+
+    if port == '80':
+        connection = boto_connect(port, ssl=False, proto='http')
+    elif port == '443':
+        connection = boto_connect(port, ssl=True, proto='https')
 
     # create a bucket
     bucket1 = connection.create_bucket(Bucket=BUCKET_NAME1)

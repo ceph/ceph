@@ -2,6 +2,7 @@
 set -ex
 
 #assume working ceph environment (radosgw-admin in path) and rgw on localhost:80
+# localhost::443 for ssl
 
 mydir=`dirname $0`
 
