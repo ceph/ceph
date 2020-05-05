@@ -28,6 +28,9 @@ struct BackfillState {
   // events comes first
   struct PrimaryScanned : sc::event<PrimaryScanned> {
     BackfillInterval result;
+    PrimaryScanned(BackfillInterval&& result)
+      : result(std::move(result)) {
+    }
   };
 
   struct ReplicaScanned : sc::event<ReplicaScanned> {
