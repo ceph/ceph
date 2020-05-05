@@ -4,15 +4,18 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+
+import copy
+import datetime
+import errno
 import logging
 import pickle
+import re
 import time
+import uuid
+
 from collections import namedtuple
 from functools import wraps
-import uuid
-import datetime
-import copy
-import errno
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
@@ -1292,20 +1295,22 @@ class DaemonDescription(object):
         return False
 
     def service_id(self):
-        if self.daemon_type == 'rgw':
-            if self.hostname and self.hostname in self.daemon_id:
-                pre, post_ = self.daemon_id.split(self.hostname)
-                return pre[:-1]
-            else:
-                # daemon_id == "realm.zone.host.random"
-                v = self.daemon_id.split('.')
-                if len(v) == 4:
-                    return '.'.join(v[0:2])
-                # subcluster or fqdn? undecidable.
-                raise OrchestratorError(f"DaemonDescription: Cannot calculate service_id: {v}")
-        if self.daemon_type in ['mds', 'nfs', 'iscsi']:
-            return self.daemon_id.split('.')[0]
-        return self.daemon_type
+        def _match():
+            if self.hostname:
+                # daemon_id == "service_id.hostname"
+                # daemon_id == "service_id.hostname.random"
+                p = re.compile(r'(.*)\.%s(\.{1}\w+)?$' % (self.hostname))
+                m = p.match(self.daemon_id)
+                if m:
+                    return m.group(1)
+
+            raise OrchestratorError("DaemonDescription: Cannot calculate service_id: " \
+                    f"daemon_id='{self.daemon_id}' hostname='{self.hostname}'")
+
+        if self.daemon_type in ['mds', 'nfs', 'iscsi', 'rgw']:
+            return _match()
+
+        return self.daemon_id
 
     def service_name(self):
         if self.daemon_type in ['rgw', 'mds', 'nfs', 'iscsi']:
