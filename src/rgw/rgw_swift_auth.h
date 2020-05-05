@@ -4,6 +4,8 @@
 #ifndef CEPH_RGW_SWIFT_AUTH_H
 #define CEPH_RGW_SWIFT_AUTH_H
 
+#include "rgw_common.h"
+#include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_auth.h"
@@ -142,6 +144,16 @@ public:
   }
 };
 
+/* SwiftAnonymous: applier. */
+class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
+  public:
+    SwiftAnonymousApplier(CephContext* const cct,
+                          const RGWUserInfo& user_info)
+      : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none) {
+      };
+    bool is_admin_of(const rgw_user& uid) const {return false;}
+    bool is_owner_of(const rgw_user& uid) const {return false;}
+};
 
 class SwiftAnonymousEngine : public rgw::auth::AnonymousEngine {
   const rgw::auth::TokenExtractor* const extractor;
@@ -152,7 +164,7 @@ class SwiftAnonymousEngine : public rgw::auth::AnonymousEngine {
 
 public:
   SwiftAnonymousEngine(CephContext* const cct,
-                       const rgw::auth::LocalApplier::Factory* const apl_factory,
+                       const SwiftAnonymousApplier::Factory* const apl_factory,
                        const rgw::auth::TokenExtractor* const extractor)
     : AnonymousEngine(cct, apl_factory),
       extractor(extractor) {
@@ -195,8 +207,11 @@ class DefaultStrategy : public rgw::auth::Strategy,
                              const req_state* const s,
                              acl_strategy_t&& extra_acl_strategy,
                              const rgw::auth::RemoteApplier::AuthInfo &info) const override {
+    rgw_user user(s->account_name);
+    if (info.is_anon())
+      user = rgw_user(RGW_USER_ANON_ID);
     auto apl = \
-      rgw::auth::add_3rdparty(ctl, rgw_user(s->account_name),
+      rgw::auth::add_3rdparty(ctl, user,
         rgw::auth::add_sysreq(cct, ctl, s,
           rgw::auth::RemoteApplier(cct, ctl, std::move(extra_acl_strategy), info,
                                    implicit_tenant_context,
@@ -210,8 +225,11 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
+    rgw_user user(s->account_name);
+    if (user_info.user_id.compare(RGW_USER_ANON_ID) == 0)
+      user = rgw_user(user_info.user_id);
     auto apl = \
-      rgw::auth::add_3rdparty(ctl, rgw_user(s->account_name),
+      rgw::auth::add_3rdparty(ctl, user,
         rgw::auth::add_sysreq(cct, ctl, s,
           rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask)));
     /* TODO(rzarzynski): replace with static_ptr. */
