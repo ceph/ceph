@@ -258,7 +258,7 @@ scrubbing operations.
               Already running scrubs will be continued. This might be useful to reduce
               load on busy clusters.
 :Type: Boolean
-:Default: ``true``
+:Default: ``false``
 
 
 ``osd scrub thread timeout``
