@@ -1649,6 +1649,9 @@ def get_container(fsid, daemon_type, daemon_id,
     elif daemon_type == CephIscsi.daemon_type:
         entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
+        # So the container can modprobe iscsi_target_mod and have write perms
+        # to configfs we need to make this a privileged container.
+        privileged = True
     else:
         entrypoint = ''
         name = ''
