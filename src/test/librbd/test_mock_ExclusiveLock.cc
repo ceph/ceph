@@ -275,12 +275,12 @@ public:
 
   void expect_block_writes(MockExclusiveLockImageCtx &mock_image_ctx,
                            MockImageDispatch& mock_image_dispatch) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockExclusiveLockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes());
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes());
   }
 
   void expect_register_dispatch(MockExclusiveLockImageCtx &mock_image_ctx) {
