@@ -43,8 +43,8 @@ def bash(cmd, **kwargs):
     check_retcode = kwargs.pop('check_retcode', True)
     kwargs['stdout'] = subprocess.PIPE
     process = subprocess.Popen(cmd, **kwargs)
-    s = process.communicate()[0]
-    log.debug('command returned status=%d stdout=%s', process.returncode, s.decode('utf-8'))
+    s = process.communicate()[0].decode('utf-8')
+    log.debug('command returned status=%d stdout=%s', process.returncode, s)
     if check_retcode:
         assert(process.returncode == 0)
     return (s, process.returncode)
