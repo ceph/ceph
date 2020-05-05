@@ -4981,6 +4981,28 @@ void OSDMonitor::tick()
   // always update osdmap manifest, regardless of being the leader.
   load_osdmap_manifest();
 
+  // always tune priority cache manager memory on leader and peons
+  if (ceph_using_tcmalloc() && mon_memory_autotune) {
+    std::lock_guard l(balancer_lock);
+    if (pcm != nullptr) {
+      pcm->tune_memory();
+      pcm->balance();
+      _set_new_cache_sizes();
+      dout(10) << "tick balancer "
+               << " inc cache_bytes: " << inc_cache->get_cache_bytes()
+               << " inc comtd_bytes: " << inc_cache->get_committed_size()
+               << " inc used_bytes: " << inc_cache->_get_used_bytes()
+               << " inc num_osdmaps: " << inc_cache->_get_num_osdmaps()
+               << dendl;
+      dout(10) << "tick balancer "
+               << " full cache_bytes: " << full_cache->get_cache_bytes()
+               << " full comtd_bytes: " << full_cache->get_committed_size()
+               << " full used_bytes: " << full_cache->_get_used_bytes()
+               << " full num_osdmaps: " << full_cache->_get_num_osdmaps()
+               << dendl;
+    }
+  }
+
   if (!mon->is_leader()) return;
 
   bool do_propose = false;
@@ -5113,27 +5135,6 @@ void OSDMonitor::tick()
   if (do_propose ||
       !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
     propose_pending();
-
-  {
-    std::lock_guard l(balancer_lock);
-    if (ceph_using_tcmalloc() && mon_memory_autotune && pcm != nullptr) {
-      pcm->tune_memory();
-      pcm->balance();
-      _set_new_cache_sizes();
-      dout(10) << "tick balancer "
-               << " inc cache_bytes: " << inc_cache->get_cache_bytes()
-               << " inc comtd_bytes: " << inc_cache->get_committed_size()
-               << " inc used_bytes: " << inc_cache->_get_used_bytes()
-               << " inc num_osdmaps: " << inc_cache->_get_num_osdmaps()
-               << dendl;
-      dout(10) << "tick balancer "
-               << " full cache_bytes: " << full_cache->get_cache_bytes()
-               << " full comtd_bytes: " << full_cache->get_committed_size()
-               << " full used_bytes: " << full_cache->_get_used_bytes()
-               << " full num_osdmaps: " << full_cache->_get_num_osdmaps()
-               << dendl;
-    }
-  }
 }
 
 void OSDMonitor::_set_new_cache_sizes()
