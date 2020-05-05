@@ -256,7 +256,7 @@ template <typename I>
 void QueueImageDispatch<I>::flush_image(Context* on_finish) {
   auto aio_comp = AioCompletion::create_and_start(
     on_finish, util::get_image_ctx(m_image_ctx), librbd::io::AIO_TYPE_FLUSH);
-  auto req = ImageDispatchSpec<I>::create_flush_request(
+  auto req = ImageDispatchSpec<I>::create_flush(
     *m_image_ctx, IMAGE_DISPATCH_LAYER_QUEUE, aio_comp, FLUSH_SOURCE_INTERNAL,
     {});
   req->send();
