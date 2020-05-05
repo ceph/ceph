@@ -958,35 +958,22 @@ def crush_setup(ctx, config):
     yield
 
 @contextlib.contextmanager
-def task(ctx, config):
-    if config is None:
-        config = {}
+def _bypass():
+    yield
 
-    assert isinstance(config, dict), \
-        "task only supports a dictionary for configuration"
-
-    overrides = ctx.config.get('overrides', {})
-    teuthology.deep_merge(config, overrides.get('ceph', {}))
-    log.info('Config: ' + str(config))
-
-    testdir = teuthology.get_testdir(ctx)
-
-    # set up cluster context
-    first_ceph_cluster = False
-    if not hasattr(ctx, 'daemons'):
-        first_ceph_cluster = True
-    if not hasattr(ctx, 'ceph'):
-        ctx.ceph = {}
-        ctx.managers = {}
-    if 'cluster' not in config:
-        config['cluster'] = 'ceph'
+@contextlib.contextmanager
+def initialize_config(ctx, config):
     cluster_name = config['cluster']
-    ctx.ceph[cluster_name] = argparse.Namespace()
+    testdir = teuthology.get_testdir(ctx)
 
     ctx.ceph[cluster_name].thrashers = []
     # fixme: setup watchdog, ala ceph.py
 
     ctx.ceph[cluster_name].roleless = False  # see below
+
+    first_ceph_cluster = False
+    if not hasattr(ctx, 'daemons'):
+        first_ceph_cluster = True
 
     # cephadm mode?
     if 'cephadm_mode' not in config:
@@ -1002,21 +989,6 @@ def task(ctx, config):
         ctx.daemons = DaemonGroup(
             use_cephadm=ctx.cephadm)
 
-    # image
-    ctx.ceph[cluster_name].image = config.get('image')
-    ref = None
-    if not ctx.ceph[cluster_name].image:
-        sha1 = config.get('sha1')
-        if sha1:
-            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % sha1
-            ref = sha1
-        else:
-            # hmm, fall back to branch?
-            branch = config.get('branch', 'master')
-            ref = branch
-            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % branch
-    log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
-
     # uuid
     fsid = str(uuid.uuid1())
     log.info('Cluster fsid is %s' % fsid)
@@ -1031,7 +1003,6 @@ def task(ctx, config):
 
     if config.get('roleless', False):
         # mons will be named after hosts
-        n = len(roles)
         roles = []
         first_mon = None
         for remote, _ in remotes_and_roles:
@@ -1040,7 +1011,7 @@ def task(ctx, config):
                 first_mon = remote.shortname
                 bootstrap_remote = remote
         log.info('No roles; fabricating mons %s' % roles)
-        
+
     ctx.ceph[cluster_name].mons = get_mons(
         roles, ips, cluster_name,
         mon_bind_msgr2=config.get('mon_bind_msgr2', True),
@@ -1071,15 +1042,61 @@ def task(ctx, config):
         _, _, first_mgr = teuthology.split_role(mgrs[0])
         log.info('First mgr is %s' % (first_mgr))
         ctx.ceph[cluster_name].first_mgr = first_mgr
-        
+    yield
+
+@contextlib.contextmanager
+def task(ctx, config):
+    if config is None:
+        config = {}
+
+    assert isinstance(config, dict), \
+        "task only supports a dictionary for configuration"
+
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('ceph', {}))
+    log.info('Config: ' + str(config))
+
+    testdir = teuthology.get_testdir(ctx)
+
+    # set up cluster context
+    if not hasattr(ctx, 'ceph'):
+        ctx.ceph = {}
+        ctx.managers = {}
+    if 'cluster' not in config:
+        config['cluster'] = 'ceph'
+    cluster_name = config['cluster']
+    if cluster_name not in ctx.ceph:
+        ctx.ceph[cluster_name] = argparse.Namespace()
+        ctx.ceph[cluster_name].bootstrapped = False
+ 
+    # image
+    ctx.ceph[cluster_name].image = config.get('image')
+    ref = None
+    if not ctx.ceph[cluster_name].image:
+        sha1 = config.get('sha1')
+        if sha1:
+            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % sha1
+            ref = sha1
+        else:
+            # hmm, fall back to branch?
+            branch = config.get('branch', 'master')
+            ref = branch
+            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % branch
+    log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
+
 
     with contextutil.nested(
+            #if the cluster is already bootstrapped bypass corresponding methods
+            lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
+                              else initialize_config(ctx=ctx, config=config),
             lambda: ceph_initial(),
             lambda: normalize_hostnames(ctx=ctx),
-            lambda: download_cephadm(ctx=ctx, config=config, ref=ref),
+            lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
+                              else download_cephadm(ctx=ctx, config=config, ref=ref),
             lambda: ceph_log(ctx=ctx, config=config),
             lambda: ceph_crash(ctx=ctx, config=config),
-            lambda: ceph_bootstrap(ctx=ctx, config=config),
+            lambda: _bypass() if (ctx.ceph[cluster_name].bootstrapped)\
+                              else ceph_bootstrap(ctx=ctx, config=config),
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
