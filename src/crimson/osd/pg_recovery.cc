@@ -423,7 +423,17 @@ void PGRecovery::request_replica_scan(
 void PGRecovery::request_primary_scan(
   const hobject_t& begin)
 {
-  ceph_abort_msg("Not implemented");
+  logger().debug("{}", __func__);
+  using crimson::common::local_conf;
+  std::ignore = pg->get_recovery_backend()->scan_for_backfill(
+    begin,
+    local_conf()->osd_backfill_scan_min,
+    local_conf()->osd_backfill_scan_max
+  ).then([this] (BackfillInterval bi) {
+    logger().debug("request_primary_scan:{}", __func__);
+    using BackfillState = crimson::osd::BackfillState;
+    start_backfill_recovery(BackfillState::PrimaryScanned{ std::move(bi) });
+  });
 }
 
 void PGRecovery::enqueue_push(
