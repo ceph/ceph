@@ -15,7 +15,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/registry_win32.h"
+#include "common/win32/registry.h"
 
 RegistryKey::RegistryKey(CephContext *cct_, HKEY hRootKey, LPCTSTR strKey,
                          bool create_value): cct(cct_)
