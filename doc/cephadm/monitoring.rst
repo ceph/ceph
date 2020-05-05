@@ -1,9 +1,9 @@
 Monitoring Stack with Cephadm
 =============================
 
-The Ceph dashboard makes use of prometheus, grafana, and related tools
-to store and visualize detailed metrics on cluster utilization and
-performance.  Ceph users have three options:
+Ceph Dashboard uses `Prometheus <https://prometheus.io/>`_, `Grafana
+<https://grafana.com/>`_, and related tools to store and visualize detailed
+metrics on cluster utilization and performance.  Ceph users have three options:
 
 #. Have cephadm deploy and configure these services.  This is the default
    when bootstrapping a new cluster unless the ``--skip-monitoring-stack``
@@ -14,8 +14,27 @@ performance.  Ceph users have three options:
 #. Skip the monitoring stack completely.  Some Ceph dashboard graphs will
    not be available.
 
-Deploying monitoring with cephadm
----------------------------------
+The monitoring stack consists of `Prometheus <https://prometheus.io/>`_,
+Prometheus exporters (:ref:`mgr-prometheus`, `Node exporter
+<https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus Alert
+Manager <https://prometheus.io/docs/alerting/alertmanager/>`_ and `Grafana
+<https://grafana.com/>`_.
+
+.. note::
+
+  Prometheus' security model presumes that untrusted users have access to the
+  Prometheus HTTP endpoint and logs. Untrusted users have access to all the
+  (meta)data Prometheus collects that is contained in the database, plus a
+  variety of operational and debugging information.
+
+  However, Prometheus' HTTP API is limited to read-only operations.
+  Configurations can *not* be changed using the API and secrets are not
+  exposed. Moreover, Prometheus has some built-in measures to mitigate the
+  impact of denial of service attacks.
+
+  Please see `Prometheus' Security model
+  <https://prometheus.io/docs/operating/security/>` for more detailed
+  information.
 
 By default, bootstrap will deploy a basic monitoring stack.  If you
 did not do this (by passing ``--skip-monitoring-stack``, or if you
