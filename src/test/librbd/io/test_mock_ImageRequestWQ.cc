@@ -45,7 +45,7 @@ struct ImageDispatchSpec<librbd::MockTestImageCtx> {
 
   std::atomic<uint32_t> image_dispatch_flags = {0};
 
-  static ImageDispatchSpec* create_write_request(
+  static ImageDispatchSpec* create_write(
       librbd::MockTestImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents, bufferlist &&bl,
       int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid) {
@@ -54,7 +54,7 @@ struct ImageDispatchSpec<librbd::MockTestImageCtx> {
     return s_instance;
   }
 
-  static ImageDispatchSpec* create_flush_request(
+  static ImageDispatchSpec* create_flush(
       librbd::MockTestImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
       AioCompletion *aio_comp, FlushSource flush_source,
       const ZTracer::Trace &parent_trace) {

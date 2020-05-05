@@ -252,7 +252,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
       require_lock_on_read()) {
-    queue(ImageDispatchSpec<I>::create_read_request(
+    queue(ImageDispatchSpec<I>::create_read(
             m_image_ctx, IMAGE_DISPATCH_LAYER_API_START, c, {{off, len}},
             std::move(read_result), op_flags, trace));
   } else {
@@ -296,7 +296,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
     m_queued_or_blocked_io_tids.insert(tid);
   }
 
-  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_write_request(
+  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_write(
     m_image_ctx, IMAGE_DISPATCH_LAYER_API_START, c, {{off, len}}, std::move(bl),
     op_flags, trace, tid);
 
@@ -338,7 +338,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
     m_queued_or_blocked_io_tids.insert(tid);
   }
 
-  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_discard_request(
+  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_discard(
     m_image_ctx, IMAGE_DISPATCH_LAYER_API_START, c, off, len,
     discard_granularity_bytes, trace, tid);
 
@@ -371,7 +371,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
 
   auto tid = ++m_last_tid;
 
-  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_flush_request(
+  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_flush(
     m_image_ctx, IMAGE_DISPATCH_LAYER_API_START, c, FLUSH_SOURCE_USER, trace);
 
   {
@@ -422,7 +422,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     m_queued_or_blocked_io_tids.insert(tid);
   }
 
-  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_write_same_request(
+  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_write_same(
     m_image_ctx, IMAGE_DISPATCH_LAYER_API_START, c, off, len, std::move(bl),
     op_flags, trace, tid);
 
@@ -466,7 +466,7 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
     m_queued_or_blocked_io_tids.insert(tid);
   }
 
-  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_compare_and_write_request(
+  ImageDispatchSpec<I> *req = ImageDispatchSpec<I>::create_compare_and_write(
     m_image_ctx, IMAGE_DISPATCH_LAYER_API_START, c, {{off, len}},
     std::move(cmp_bl), std::move(bl), mismatch_off, op_flags, trace, tid);
 

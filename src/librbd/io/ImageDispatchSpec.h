@@ -107,7 +107,7 @@ public:
   ZTracer::Trace parent_trace;
   uint64_t tid;
 
-  static ImageDispatchSpec* create_read_request(
+  static ImageDispatchSpec* create_read(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
       ReadResult &&read_result, int op_flags,
@@ -118,7 +118,7 @@ public:
                                  op_flags, parent_trace, 0);
   }
 
-  static ImageDispatchSpec* create_discard_request(
+  static ImageDispatchSpec* create_discard(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, uint64_t off, uint64_t len,
       uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
@@ -129,7 +129,7 @@ public:
                                  0, parent_trace, tid);
   }
 
-  static ImageDispatchSpec* create_write_request(
+  static ImageDispatchSpec* create_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
       bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace,
@@ -139,7 +139,7 @@ public:
                                  op_flags, parent_trace, tid);
   }
 
-  static ImageDispatchSpec* create_write_same_request(
+  static ImageDispatchSpec* create_write_same(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, uint64_t off, uint64_t len,
       bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace,
@@ -149,7 +149,7 @@ public:
                                  op_flags, parent_trace, tid);
   }
 
-  static ImageDispatchSpec* create_compare_and_write_request(
+  static ImageDispatchSpec* create_compare_and_write(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, Extents &&image_extents,
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
@@ -162,7 +162,7 @@ public:
                                  op_flags, parent_trace, tid);
   }
 
-  static ImageDispatchSpec* create_flush_request(
+  static ImageDispatchSpec* create_flush(
       ImageCtxT &image_ctx, ImageDispatchLayer image_dispatch_layer,
       AioCompletion *aio_comp, FlushSource flush_source,
       const ZTracer::Trace &parent_trace) {
