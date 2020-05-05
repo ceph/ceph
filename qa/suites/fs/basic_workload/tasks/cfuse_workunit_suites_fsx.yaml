@@ -1,16 +1,4 @@
 tasks:
-- install:
-    extra_system_packages:
-      deb:
-      - libaio-dev
-      - libtool-bin
-      - uuid-dev
-      - xfslibs-dev
-      rpm:
-      - libaio-devel
-      - libtool
-      - libuuid-devel
-      - xfsprogs-devel
 - check-counter:
     counters:
       mds:
