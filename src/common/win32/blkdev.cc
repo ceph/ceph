@@ -13,7 +13,7 @@
  */
 
 #include <errno.h>
-#include "blkdev.h"
+#include "common/blkdev.h"
 
 int get_device_by_path(const char *path, char* partition, char* device,
                size_t max)
