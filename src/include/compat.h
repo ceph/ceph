@@ -208,6 +208,18 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 
 #include "include/win32/winsock_compat.h"
 
+#include <windows.h>
+
+// There are a few name collisions between Windows headers and Ceph.
+// Updating Ceph definitions would be the prefferable fix in order to avoid
+// confussion, unless it requires too many changes, in which case we're going
+// to redefine Windows values by adding the "WIN32_" prefix.
+#define WIN32_DELETE 0x00010000L
+#undef DELETE
+
+#define WIN32_ERROR 0
+#undef ERROR
+
 typedef _sigset_t sigset_t;
 
 typedef int uid_t;

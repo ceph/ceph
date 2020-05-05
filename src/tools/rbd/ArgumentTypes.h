@@ -79,7 +79,7 @@ static const std::string NO_PROGRESS("no-progress");
 static const std::string FORMAT("format");
 static const std::string PRETTY_FORMAT("pretty-format");
 static const std::string VERBOSE("verbose");
-static const std::string NO_ERROR("no-error");
+static const std::string NO_ERR("no-error");
 
 static const std::string LIMIT("limit");
 
@@ -87,7 +87,7 @@ static const std::string SKIP_QUIESCE("skip-quiesce");
 static const std::string IGNORE_QUIESCE_ERROR("ignore-quiesce-error");
 
 static const std::set<std::string> SWITCH_ARGUMENTS = {
-  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERROR, SKIP_QUIESCE,
+  WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
   IGNORE_QUIESCE_ERROR
 };
 
