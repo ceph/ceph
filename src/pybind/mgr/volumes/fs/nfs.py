@@ -207,13 +207,13 @@ class FSExport(object):
             if ex.pseudo == pseudo_path:
                 return ex
 
-    def _create_user_key(self, entity):
-        osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data=a'.format(
-                self.rados_pool, self.rados_namespace)
+    def _create_user_key(self, entity, path, fs_name):
+        osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
+                self.rados_pool, self.rados_namespace, fs_name)
         ret, out, err = self.mgr.mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.{}'.format(entity),
-            'caps' : ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path=/'],
+            'caps' : ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
             'format': 'json',
             })
 
@@ -296,9 +296,12 @@ class FSExport(object):
         if not self.check_fs(fs_name) or self._fetch_export(pseudo_path):
             return -errno.EINVAL,"", "Invalid CephFS name or export already exists"
 
-        user_id, key = self._create_user_key(cluster_id)
-        if isinstance(user_id, int):
-            return user_id, "", key
+        ex_id = self._gen_export_id()
+        user_id = f"{cluster_id}{ex_id}"
+        user_out, key = self._create_user_key(user_id, path, fs_name)
+        if isinstance(user_out, int):
+            return user_out, "", key
+
         access_type = "RW"
         if read_only:
             access_type = "R"
@@ -308,11 +311,10 @@ class FSExport(object):
             'pseudo': self.format_path(pseudo_path),
             'cluster_id': cluster_id,
             'access_type': access_type,
-            'fsal': {"name": "CEPH", "user_id":cluster_id, "fs_name": fs_name, "sec_label_xattr": ""},
+            'fsal': {"name": "CEPH", "user_id": user_id, "fs_name": fs_name, "sec_label_xattr": ""},
             'clients': []
             }
 
-        ex_id = self._gen_export_id()
         export = Export.from_dict(ex_id, ex_dict)
         export.fsal.cephx_key = key
         self._save_export(export)
