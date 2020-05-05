@@ -265,9 +265,9 @@ void InstanceReplayer<I>::stop()
 {
   dout(10) << dendl;
 
+  auto on_finish = new C_TrackedOp(m_async_op_tracker, nullptr);
   auto cct = static_cast<CephContext *>(m_local_rados->cct());
-  auto gather_ctx = new C_Gather(
-    cct, new C_TrackedOp(m_async_op_tracker, nullptr));
+  auto gather_ctx = new C_Gather(cct, on_finish);
   {
     Mutex::Locker locker(m_lock);
 
