@@ -15,7 +15,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/service_win32.h"
+#include "common/win32/service.h"
 
 // Initialize the singleton service instance.
 ServiceBase *ServiceBase::s_service = NULL;
