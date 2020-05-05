@@ -254,3 +254,23 @@ You can remove a broken host from management with::
 You can disable this health warning with::
 
   ceph config set mgr mgr/cephadm/warn_on_failed_host_check false
+
+/etc/ceph/ceph.conf
+===================
+
+Cephadm uses a minimized ``ceph.conf`` that only contains 
+a minimal set of information to connect to the Ceph cluster.
+
+To update the configuration settings, use::
+
+  ceph config set ...
+
+
+To set up an initial configuration before calling
+`bootstrap`, create an initial ``ceph.conf`` file. For example::
+
+  cat <<EOF > /etc/ceph/ceph.conf
+  [global]
+  osd crush chooseleaf type = 0
+  EOF
+  cephadm bootstrap -c /root/ceph.conf ...
