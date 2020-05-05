@@ -19,6 +19,11 @@ tasks:
         # for xfstests-dev
         - dump
         - indent
+        # for fsx
+        - libaio-dev
+        - libtool-bin
+        - uuid-dev
+        - xfslibs-dev
         rpm:
         - bison
         - flex
@@ -35,5 +40,10 @@ tasks:
         - libuuid-devel
         - xfsdump
         - xfsprogs
+        - xfsprogs-devel
+        # for fsx
+        - libaio-devel
+        - libtool
+        - libuuid-devel
         - xfsprogs-devel
   - ceph:
