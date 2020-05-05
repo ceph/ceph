@@ -172,7 +172,6 @@ void CloseRequest<I>::send_flush() {
     *m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
     io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
-  delete req;
 }
 
 template <typename I>

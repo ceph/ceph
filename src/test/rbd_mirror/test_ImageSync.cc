@@ -39,7 +39,6 @@ int flush(librbd::ImageCtx *image_ctx) {
     *image_ctx, librbd::io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
     librbd::io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
-  delete req;
   return ctx.wait();
 }
 

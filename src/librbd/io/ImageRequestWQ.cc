@@ -30,21 +30,6 @@ using util::create_context_callback;
 
 namespace io {
 
-namespace {
-
-template <typename I>
-void flush_image(I& image_ctx, Context* on_finish) {
-  auto aio_comp = librbd::io::AioCompletion::create_and_start(
-    on_finish, util::get_image_ctx(&image_ctx), librbd::io::AIO_TYPE_FLUSH);
-  auto req = librbd::io::ImageDispatchSpec<I>::create_flush_request(
-    image_ctx, IMAGE_DISPATCH_LAYER_API_START, aio_comp, FLUSH_SOURCE_INTERNAL,
-    {});
-  req->send();
-  delete req;
-}
-
-} // anonymous namespace
-
 template <typename I>
 struct ImageRequestWQ<I>::C_AcquireLock : public Context {
   ImageRequestWQ *work_queue;
@@ -316,12 +301,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
     op_flags, trace, tid);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(req);
-  } else {
-    process_io(req, false);
-    finish_in_flight_io();
-  }
+  queue(req);
   trace.event("finish");
 }
 
@@ -363,12 +343,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
     discard_granularity_bytes, trace, tid);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(req);
-  } else {
-    process_io(req, false);
-    finish_in_flight_io();
-  }
+  queue(req);
   trace.event("finish");
 }
 
@@ -410,12 +385,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
   }
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
-    queue(req);
-  } else {
-    process_io(req, false);
-    finish_in_flight_io();
-  }
+  queue(req);
   trace.event("finish");
 }
 
@@ -457,12 +427,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
     op_flags, trace, tid);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(req);
-  } else {
-    process_io(req, false);
-    finish_in_flight_io();
-  }
+  queue(req);
   trace.event("finish");
 }
 
@@ -506,12 +471,7 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
     std::move(cmp_bl), std::move(bl), mismatch_off, op_flags, trace, tid);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(req);
-  } else {
-    process_io(req, false);
-    finish_in_flight_io();
-  }
+  queue(req);
   trace.event("finish");
 }
 
@@ -623,8 +583,7 @@ void ImageRequestWQ<I>::shut_down(Context *on_shutdown) {
     }
   }
 
-  // ensure that all in-flight IO is flushed
-  flush_image(m_image_ctx, on_shutdown);
+  m_image_ctx.op_work_queue->queue(on_shutdown, 0);
 }
 
 template <typename I>
@@ -643,8 +602,7 @@ void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
     }
   }
 
-  // ensure that all in-flight IO is flushed
-  flush_image(m_image_ctx, on_blocked);
+  m_image_ctx.op_work_queue->queue(on_blocked, 0);
 }
 
 template <typename I>
@@ -844,7 +802,6 @@ void ImageRequestWQ<I>::process_io(ImageDispatchSpec<I> *req,
     unblock_overlapping_io(offset, length, tid);
     unblock_flushes();
   }
-  delete req;
 }
 
 template <typename I>
@@ -909,8 +866,10 @@ void ImageRequestWQ<I>::finish_in_flight_write() {
       writes_blocked = true;
     }
   }
+
   if (writes_blocked) {
-    flush_image(m_image_ctx, new C_BlockedWrites(this));
+    m_image_ctx.op_work_queue->queue(create_context_callback<
+      ImageRequestWQ<I>, &ImageRequestWQ<I>::handle_blocked_writes>(this), 0);
   }
 }
 
@@ -952,8 +911,7 @@ void ImageRequestWQ<I>::finish_in_flight_io() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "completing shut down" << dendl;
 
-  ceph_assert(on_shutdown != nullptr);
-  flush_image(m_image_ctx, on_shutdown);
+  on_shutdown->complete(0);
 }
 
 template <typename I>
@@ -970,7 +928,6 @@ void ImageRequestWQ<I>::fail_in_flight_io(
 
   finish_queued_io(write_op);
   remove_in_flight_write_ios(offset, length, write_op, tid);
-  delete req;
   finish_in_flight_io();
 }
 

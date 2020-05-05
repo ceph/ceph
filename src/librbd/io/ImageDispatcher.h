@@ -11,6 +11,7 @@
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/Types.h"
+#include <atomic>
 #include <map>
 
 struct Context;
@@ -49,6 +50,8 @@ protected:
 
 private:
   struct SendVisitor;
+
+  std::atomic<uint64_t> m_next_tid{0};
 
   QueueImageDispatch<ImageCtxT>* m_queue_image_dispatch = nullptr;
   QosImageDispatch<ImageCtxT>* m_qos_image_dispatch = nullptr;
