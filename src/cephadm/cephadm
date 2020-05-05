@@ -2120,6 +2120,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
+            '--ipc=host',
         ] + self.container_args + priv + \
         cname + envs + \
         vols + entrypoint + \
@@ -2153,6 +2154,7 @@ class CephContainer:
             'run',
             '--rm',
             '--net=host',
+            '--ipc=host',
         ] + self.container_args + priv + envs + vols + [
             '--entrypoint', cmd[0],
             self.image
