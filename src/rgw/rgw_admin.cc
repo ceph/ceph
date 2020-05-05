@@ -243,9 +243,10 @@ void usage()
   cout << "  datalog list               list data log\n";
   cout << "  datalog trim               trim data log\n";
   cout << "  datalog status             read data log status\n";
-  cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
-  cout << "  orphans finish             clean up search for leaked rados objects\n";
-  cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
+  cout << "  orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
+  cout << "  orphans finish             deprecated -- clean up search for leaked rados objects\n";
+  cout << "  orphans list-jobs          deprecated -- list the current job-ids for orphans search\n";
+  cout << "                           * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool\n";
   cout << "  role create                create a AWS role for use with STS\n";
   cout << "  role rm                    remove a role\n";
   cout << "  role get                   get a role\n";
@@ -7305,10 +7306,14 @@ next:
 
   if (opt_cmd == OPT::ORPHANS_FIND) {
     if (!yes_i_really_mean_it) {
-      cerr << "accidental removal of active objects can not be reversed; "
+      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
+	   << "accidental removal of active objects cannot be reversed; "
 	   << "do you really mean it? (requires --yes-i-really-mean-it)"
 	   << std::endl;
       return EINVAL;
+    } else {
+      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
+	   << std::endl;
     }
 
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
@@ -7340,6 +7345,17 @@ next:
   }
 
   if (opt_cmd == OPT::ORPHANS_FINISH) {
+    if (!yes_i_really_mean_it) {
+      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
+	   << "accidental removal of active objects cannot be reversed; "
+	   << "do you really mean it? (requires --yes-i-really-mean-it)"
+	   << std::endl;
+      return EINVAL;
+    } else {
+      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
+	   << std::endl;
+    }
+
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
@@ -7360,6 +7376,16 @@ next:
   }
 
   if (opt_cmd == OPT::ORPHANS_LIST_JOBS){
+    if (!yes_i_really_mean_it) {
+      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
+	   << "do you really mean it? (requires --yes-i-really-mean-it)"
+	   << std::endl;
+      return EINVAL;
+    } else {
+      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
+	   << std::endl;
+    }
+
     RGWOrphanStore orphan_store(store);
     int ret = orphan_store.init();
     if (ret < 0){
