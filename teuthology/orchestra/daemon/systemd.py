@@ -94,8 +94,20 @@ class SystemDState(DaemonState):
 
     @property
     def pid(self):
+        """
+        Method to retrieve daemon process id
+        """
         proc_name = 'ceph-%s' % self.type_
-        proc_regex = '"%s.*--id %s"' % (proc_name, self.id_)
+
+        # process regex to match OSD, MON, MGR, MDS process command string
+        # eg. "/usr/bin/ceph-<daemon-type> -f --cluster ceph --id <daemon-id>"
+        proc_regex = '"%s.*--id %s "' % (proc_name, self.id_)
+
+        # process regex to match RADOSGW process command string
+        # eg. "/usr/bin/radosgw -f --cluster ceph --name <daemon-id=self.id_>"
+        if self.type_ == "rgw":
+            proc_regex = "{}.* --name .*{}".format(self.daemon_type, self.id_)
+
         args = ['ps', '-ef',
                 run.Raw('|'),
                 'grep',
@@ -109,7 +121,6 @@ class SystemDState(DaemonState):
         if not pid_string.isdigit():
             return None
         return int(pid_string)
-
 
     def reset(self):
         """
