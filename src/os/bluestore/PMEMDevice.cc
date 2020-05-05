@@ -201,7 +201,7 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered, int write_hin
   }
 
   bufferlist::iterator p = bl.begin();
-  uint32_t off1 = off;
+  uint64_t off1 = off;
   while (len) {
     const char *data;
     uint32_t l = p.get_ptr_and_advance(len, &data);
