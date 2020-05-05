@@ -9,7 +9,7 @@
 #include "librbd/exclusive_lock/PreAcquireRequest.h"
 #include "librbd/exclusive_lock/PostAcquireRequest.h"
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
-#include "librbd/io/ImageDispatcher.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/Utils.h"
 #include "common/ceph_mutex.h"
@@ -133,7 +133,7 @@ void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
   auto ctx = new LambdaContext([this, features, on_init](int r) {
       handle_init_complete(r, features, on_init);
     });
-  m_image_ctx.io_work_queue->block_writes(ctx);
+  m_image_ctx.io_image_dispatcher->block_writes(ctx);
 }
 
 template <typename I>
@@ -182,7 +182,7 @@ template <typename I>
 void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
                                             Context* on_finish) {
   if (r < 0) {
-    m_image_ctx.io_work_queue->unblock_writes();
+    m_image_ctx.io_image_dispatcher->unblock_writes();
     on_finish->complete(r);
     return;
   }
@@ -193,7 +193,7 @@ void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
   m_image_ctx.io_image_dispatcher->register_dispatch(m_image_dispatch);
 
   on_finish = new LambdaContext([this, on_finish](int r) {
-      m_image_ctx.io_work_queue->unblock_writes();
+      m_image_ctx.io_image_dispatcher->unblock_writes();
 
       {
         std::lock_guard locker{ML<I>::m_lock};

@@ -45,6 +45,10 @@ void QueueImageDispatch<I>::block_writes(Context *on_blocked) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx->owner_lock));
   auto cct = m_image_ctx->cct;
 
+  // ensure onwer lock is not held after block_writes completes
+  on_blocked = util::create_async_context_callback(
+    *m_image_ctx, on_blocked);
+
   // TODO temp
   auto ctx = new C_Gather(cct, on_blocked);
   m_image_ctx->io_work_queue->block_writes(ctx->new_sub());
