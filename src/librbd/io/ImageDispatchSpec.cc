@@ -44,54 +44,6 @@ void ImageDispatchSpec<I>::C_Dispatcher::finish(int r) {
 }
 
 template <typename I>
-struct ImageDispatchSpec<I>::SendVisitor
-  : public boost::static_visitor<void> {
-  ImageDispatchSpec* spec;
-
-  explicit SendVisitor(ImageDispatchSpec* spec)
-    : spec(spec) {
-  }
-
-  void operator()(Read& read) const {
-    ImageRequest<I>::aio_read(
-      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
-      std::move(read.read_result), spec->op_flags, spec->parent_trace);
-  }
-
-  void operator()(Discard& discard) const {
-    ImageRequest<I>::aio_discard(
-      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
-      discard.discard_granularity_bytes, spec->parent_trace);
-  }
-
-  void operator()(Write& write) const {
-    ImageRequest<I>::aio_write(
-      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
-      std::move(write.bl), spec->op_flags, spec->parent_trace);
-  }
-
-  void operator()(WriteSame& write_same) const {
-    ImageRequest<I>::aio_writesame(
-      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
-      std::move(write_same.bl), spec->op_flags, spec->parent_trace);
-  }
-
-  void operator()(CompareAndWrite& compare_and_write) const {
-    ImageRequest<I>::aio_compare_and_write(
-      &spec->m_image_ctx, spec->aio_comp, std::move(spec->image_extents),
-      std::move(compare_and_write.cmp_bl), std::move(compare_and_write.bl),
-      compare_and_write.mismatch_offset, spec->op_flags,
-      spec->parent_trace);
-  }
-
-  void operator()(Flush& flush) const {
-    ImageRequest<I>::aio_flush(
-      &spec->m_image_ctx, spec->aio_comp, flush.flush_source,
-      spec->parent_trace);
-  }
-};
-
-template <typename I>
 struct ImageDispatchSpec<I>::IsWriteOpVisitor
   : public boost::static_visitor<bool> {
   bool operator()(const Read&) const {
@@ -106,7 +58,7 @@ struct ImageDispatchSpec<I>::IsWriteOpVisitor
 
 template <typename I>
 void ImageDispatchSpec<I>::send() {
-  boost::apply_visitor(SendVisitor{this}, request);
+  image_dispatcher->send(this);
 }
 
 template <typename I>
@@ -149,6 +101,7 @@ bool ImageDispatchSpec<I>::is_write_op() const {
 
 template <typename I>
 void ImageDispatchSpec<I>::start_op() {
+  tid = 0;
   aio_comp->start_op();
 }
 

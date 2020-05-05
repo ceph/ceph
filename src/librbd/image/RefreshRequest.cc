@@ -1233,7 +1233,6 @@ Context *RefreshRequest<I>::send_flush_aio() {
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
       io::FLUSH_SOURCE_INTERNAL, {});
     req->send();
-    delete req;
     return nullptr;
   } else if (m_error_result < 0) {
     // propagate saved error back to caller

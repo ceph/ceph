@@ -157,7 +157,7 @@ template <typename I>
 void ImageDispatcher<I>::finish(int r, ImageDispatchLayer image_dispatch_layer,
                                 uint64_t tid) {
   auto cct = this->m_image_ctx->cct;
-  ldout(cct, 20) << "tid=" << tid << dendl;
+  ldout(cct, 20) << "r=" << r << ", tid=" << tid << dendl;
 
   // loop in reverse order from last invoked dispatch layer calling its
   // handle_finished method
@@ -189,6 +189,10 @@ template <typename I>
 bool ImageDispatcher<I>::send_dispatch(
     ImageDispatchInterface* image_dispatch,
     ImageDispatchSpec<I>* image_dispatch_spec) {
+  if (image_dispatch_spec->tid == 0) {
+    image_dispatch_spec->tid = ++m_next_tid;
+  }
+
   return boost::apply_visitor(
     SendVisitor{image_dispatch, image_dispatch_spec},
     image_dispatch_spec->request);

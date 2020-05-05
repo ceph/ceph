@@ -180,8 +180,8 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
   }
 
   void expect_front(MockImageRequestWQ &image_request_wq,
-                    MockImageDispatchSpec *image_request) {
-    EXPECT_CALL(image_request_wq, front()).WillOnce(Return(image_request));
+                    MockImageDispatchSpec& image_request) {
+    EXPECT_CALL(image_request_wq, front()).WillOnce(Return(&image_request));
   }
 
   void expect_is_refresh_request(MockTestImageCtx &mock_image_ctx,
@@ -191,8 +191,8 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
   }
 
   void expect_dequeue(MockImageRequestWQ &image_request_wq,
-                      MockImageDispatchSpec *image_request) {
-    EXPECT_CALL(image_request_wq, dequeue()).WillOnce(Return(image_request));
+                      MockImageDispatchSpec &image_request) {
+    EXPECT_CALL(image_request_wq, dequeue()).WillOnce(Return(&image_request));
   }
 
   void expect_get_exclusive_lock_policy(MockTestImageCtx &mock_image_ctx,
@@ -257,16 +257,16 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  auto mock_queued_image_request = new MockImageDispatchSpec();
-  expect_get_image_extents(*mock_queued_image_request, {});
-  expect_get_tid(*mock_queued_image_request, 0);
+  MockImageDispatchSpec mock_queued_image_request;
+  expect_get_image_extents(mock_queued_image_request, {});
+  expect_get_tid(mock_queued_image_request, 0);
 
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
   expect_signal(mock_image_request_wq);
   mock_image_request_wq.set_require_lock(DIRECTION_WRITE, true);
 
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_queue(mock_image_request_wq);
   auto *aio_comp = new librbd::io::AioCompletion();
   mock_image_request_wq.aio_write(aio_comp, 0, 0, {}, 0);
@@ -274,7 +274,7 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
   librbd::exclusive_lock::MockPolicy mock_exclusive_lock_policy;
   expect_front(mock_image_request_wq, mock_queued_image_request);
   expect_is_refresh_request(mock_image_ctx, false);
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_dequeue(mock_image_request_wq, mock_queued_image_request);
   expect_get_exclusive_lock_policy(mock_image_ctx, mock_exclusive_lock_policy);
   expect_may_auto_request_lock(mock_exclusive_lock_policy, true);
@@ -284,8 +284,8 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
   ASSERT_TRUE(on_acquire != nullptr);
 
   expect_process_finish(mock_image_request_wq);
-  expect_fail(*mock_queued_image_request, -EPERM);
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_fail(mock_queued_image_request, -EPERM);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_signal(mock_image_request_wq);
   on_acquire->complete(-EPERM);
 
@@ -304,16 +304,16 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockBlacklisted) {
   MockExclusiveLock mock_exclusive_lock;
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  auto mock_queued_image_request = new MockImageDispatchSpec();
-  expect_get_image_extents(*mock_queued_image_request, {});
-  expect_get_tid(*mock_queued_image_request, 0);
+  MockImageDispatchSpec mock_queued_image_request;
+  expect_get_image_extents(mock_queued_image_request, {});
+  expect_get_tid(mock_queued_image_request, 0);
 
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
   expect_signal(mock_image_request_wq);
   mock_image_request_wq.set_require_lock(DIRECTION_WRITE, true);
 
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_queue(mock_image_request_wq);
   auto *aio_comp = new librbd::io::AioCompletion();
   mock_image_request_wq.aio_write(aio_comp, 0, 0, {}, 0);
@@ -321,15 +321,15 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockBlacklisted) {
   librbd::exclusive_lock::MockPolicy mock_exclusive_lock_policy;
   expect_front(mock_image_request_wq, mock_queued_image_request);
   expect_is_refresh_request(mock_image_ctx, false);
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_dequeue(mock_image_request_wq, mock_queued_image_request);
   expect_get_exclusive_lock_policy(mock_image_ctx, mock_exclusive_lock_policy);
   expect_may_auto_request_lock(mock_exclusive_lock_policy, false);
   EXPECT_CALL(*mock_image_ctx.exclusive_lock, get_unlocked_op_error())
     .WillOnce(Return(-EBLACKLISTED));
   expect_process_finish(mock_image_request_wq);
-  expect_fail(*mock_queued_image_request, -EBLACKLISTED);
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_fail(mock_queued_image_request, -EBLACKLISTED);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_signal(mock_image_request_wq);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 
@@ -344,21 +344,21 @@ TEST_F(TestMockIoImageRequestWQ, RefreshError) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
 
-  auto mock_queued_image_request = new MockImageDispatchSpec();
-  expect_get_image_extents(*mock_queued_image_request, {});
-  expect_get_tid(*mock_queued_image_request, 0);
+  MockImageDispatchSpec mock_queued_image_request;
+  expect_get_image_extents(mock_queued_image_request, {});
+  expect_get_tid(mock_queued_image_request, 0);
 
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
 
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_queue(mock_image_request_wq);
   auto *aio_comp = new librbd::io::AioCompletion();
   mock_image_request_wq.aio_write(aio_comp, 0, 0, {}, 0);
 
   expect_front(mock_image_request_wq, mock_queued_image_request);
   expect_is_refresh_request(mock_image_ctx, true);
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_dequeue(mock_image_request_wq, mock_queued_image_request);
   Context *on_refresh = nullptr;
   expect_refresh(mock_image_ctx, &on_refresh);
@@ -366,8 +366,8 @@ TEST_F(TestMockIoImageRequestWQ, RefreshError) {
   ASSERT_TRUE(on_refresh != nullptr);
 
   expect_process_finish(mock_image_request_wq);
-  expect_fail(*mock_queued_image_request, -EPERM);
-  expect_is_write_op(*mock_queued_image_request, true);
+  expect_fail(mock_queued_image_request, -EPERM);
+  expect_is_write_op(mock_queued_image_request, true);
   expect_signal(mock_image_request_wq);
   on_refresh->complete(-EPERM);
 

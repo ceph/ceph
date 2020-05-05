@@ -203,12 +203,10 @@ private:
     : dispatcher_ctx(this), image_dispatcher(image_ctx.io_image_dispatcher),
       dispatch_layer(image_dispatch_layer), aio_comp(aio_comp),
       image_extents(std::move(image_extents)), request(std::move(request)),
-      op_flags(op_flags), parent_trace(parent_trace), tid(tid),
-      m_image_ctx(image_ctx) {
+      op_flags(op_flags), parent_trace(parent_trace), tid(tid) {
+    aio_comp->image_dispatcher_ctx = &dispatcher_ctx;
     aio_comp->get();
   }
-
-  ImageCtxT& m_image_ctx;
 
   void finish(int r);
 

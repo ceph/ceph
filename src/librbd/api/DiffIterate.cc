@@ -254,7 +254,6 @@ int DiffIterate<I>::diff_iterate(I *ictx,
       *ictx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
       aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
     req->send();
-    delete req;
   }
   int r = flush_ctx.wait();
   if (r < 0) {
