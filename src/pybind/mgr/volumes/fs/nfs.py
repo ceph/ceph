@@ -225,6 +225,15 @@ class FSExport(object):
 
         return json_res[0]['entity'], json_res[0]['key']
 
+    def _delete_user(self, entity):
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'auth del',
+            'entity': 'client.{}'.format(entity),
+            })
+
+        if ret!= 0:
+            log.error(f"User could not be deleted: {err}")
+
     def format_path(self, path):
         if path is not None:
             path = path.strip()
@@ -337,6 +346,7 @@ class FSExport(object):
                 common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
                 self._delete_export_url(common_conf, export.export_id)
                 self.exports[cluster_id].remove(export)
+                self._delete_user(export.fsal.user_id)
             else:
                 log.warn("Export does not exist")
         except KeyError:
