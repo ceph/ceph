@@ -243,6 +243,25 @@ class CephfsClient(object):
         # second, delete all libcephfs handles from connection pool
         self.connection_pool.del_all_handles()
 
+    def get_fs(self, fs_name):
+        fs_map = self.mgr.get('fs_map')
+        for fs in fs_map['filesystems']:
+            if fs['mdsmap']['fs_name'] == fs_name:
+                return fs
+        return None
+
+    def get_mds_names(self, fs_name):
+        fs = self.get_fs(fs_name)
+        if fs is None:
+            return []
+        return [mds['name'] for mds in fs['mdsmap']['info'].values()]
+
+    def get_metadata_pool(self, fs_name):
+        fs = self.get_fs(fs_name)
+        if fs:
+            return fs['mdsmap']['metadata_pool']
+        return None
+
 
 @contextlib.contextmanager
 def open_filesystem(fsc, fs_name):
