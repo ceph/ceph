@@ -42,8 +42,8 @@ describe('SummaryService', () => {
   });
 
   beforeEach(() => {
-    summaryService = TestBed.get(SummaryService);
-    authStorageService = TestBed.get(AuthStorageService);
+    summaryService = TestBed.inject(SummaryService);
+    authStorageService = TestBed.inject(AuthStorageService);
   });
 
   it('should be created', () => {

@@ -41,10 +41,10 @@ describe('BootstrapCreateModalComponent', () => {
     component = fixture.componentInstance;
     component.siteName = 'site-A';
 
-    notificationService = TestBed.get(NotificationService);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
 
-    rbdMirroringService = TestBed.get(RbdMirroringService);
+    rbdMirroringService = TestBed.inject(RbdMirroringService);
 
     formHelper = new FormHelper(component.createBootstrapForm);
 

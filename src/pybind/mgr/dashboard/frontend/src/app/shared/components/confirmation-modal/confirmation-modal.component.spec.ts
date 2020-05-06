@@ -103,7 +103,7 @@ describe('ConfirmationModalComponent', () => {
     mockFixture = TestBed.createComponent(MockComponent);
     mockComponent = mockFixture.componentInstance;
     mockFixture.detectChanges();
-    modalService = TestBed.get(BsModalService);
+    modalService = TestBed.inject(BsModalService);
     spyOn(modalService, 'show').and.callFake((_modalComp, config) => {
       const data = modalServiceShow(ConfirmationModalComponent, config);
       fixture = data.fixture;

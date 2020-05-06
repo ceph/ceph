@@ -45,7 +45,7 @@ describe('SilenceListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(SilenceListComponent);
     component = fixture.componentInstance;
-    prometheusService = TestBed.get(PrometheusService);
+    prometheusService = TestBed.inject(PrometheusService);
   });
 
   it('should create', () => {
@@ -117,7 +117,7 @@ describe('SilenceListComponent', () => {
       const mockObservable = () => of([]);
       spyOn(component, 'refresh').and.callFake(mockObservable);
       spyOn(prometheusService, 'expireSilence').and.callFake(mockObservable);
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake((deletionClass, config) => {
+      spyOn(TestBed.inject(BsModalService), 'show').and.callFake((deletionClass, config) => {
         return {
           content: Object.assign(new deletionClass(), config.initialState)
         };
@@ -125,7 +125,7 @@ describe('SilenceListComponent', () => {
     });
 
     it('should expire a silence', () => {
-      const notificationService = TestBed.get(NotificationService);
+      const notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.stub();
       expectSilenceToExpire('someSilenceId');
       expect(notificationService.show).toHaveBeenCalledWith(

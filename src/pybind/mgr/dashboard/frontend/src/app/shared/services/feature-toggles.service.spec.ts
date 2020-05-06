@@ -14,8 +14,8 @@ describe('FeatureTogglesService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(FeatureTogglesService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(FeatureTogglesService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

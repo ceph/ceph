@@ -42,8 +42,8 @@ describe('MgrModuleListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(MgrModuleListComponent);
     component = fixture.componentInstance;
-    mgrModuleService = TestBed.get(MgrModuleService);
-    notificationService = TestBed.get(NotificationService);
+    mgrModuleService = TestBed.inject(MgrModuleService);
+    notificationService = TestBed.inject(NotificationService);
   });
 
   it('should create', () => {

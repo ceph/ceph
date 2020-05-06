@@ -24,9 +24,9 @@ describe('AuthGuardService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(AuthGuardService);
-    authStorageService = TestBed.get(AuthStorageService);
-    ngZone = TestBed.get(NgZone);
+    service = TestBed.inject(AuthGuardService);
+    authStorageService = TestBed.inject(AuthStorageService);
+    ngZone = TestBed.inject(NgZone);
   });
 
   it('should be created', () => {
@@ -39,7 +39,7 @@ describe('AuthGuardService', () => {
   });
 
   it('should prevent user if not loggedIn and redirect to login page', fakeAsync(() => {
-    const router = TestBed.get(Router);
+    const router = TestBed.inject(Router);
     ngZone.run(() => {
       expect(service.canActivate()).toBe(false);
     });

@@ -50,9 +50,9 @@ describe('NfsListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    nfsService = TestBed.get(NfsService);
-    httpTesting = TestBed.get(HttpTestingController);
+    summaryService = TestBed.inject(SummaryService);
+    nfsService = TestBed.inject(NfsService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   it('should create', () => {

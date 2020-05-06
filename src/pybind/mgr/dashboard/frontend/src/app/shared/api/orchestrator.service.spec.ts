@@ -15,8 +15,8 @@ describe('OrchestratorService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(OrchestratorService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(OrchestratorService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

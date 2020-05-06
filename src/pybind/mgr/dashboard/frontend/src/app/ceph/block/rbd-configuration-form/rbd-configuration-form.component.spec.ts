@@ -43,7 +43,7 @@ describe('RbdConfigurationFormComponent', () => {
     component.form = new CdFormGroup({}, null);
     fh = new FormHelper(component.form);
     fixture.detectChanges();
-    sections = TestBed.get(RbdConfigurationService).sections;
+    sections = TestBed.inject(RbdConfigurationService).sections;
   });
 
   it('should create', () => {

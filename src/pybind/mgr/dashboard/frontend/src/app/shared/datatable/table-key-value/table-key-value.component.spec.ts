@@ -166,7 +166,7 @@ describe('TableKeyValueComponent', () => {
     let datePipe: CdDatePipe;
 
     beforeEach(() => {
-      datePipe = TestBed.get(CdDatePipe);
+      datePipe = TestBed.inject(CdDatePipe);
       spyOn(datePipe, 'transform').and.callThrough();
     });
 

@@ -51,8 +51,8 @@ describe('IscsiTargetListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiTargetListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    iscsiService = TestBed.get(IscsiService);
+    summaryService = TestBed.inject(SummaryService);
+    iscsiService = TestBed.inject(IscsiService);
 
     // this is needed because summaryService isn't being reset after each test.
     summaryService['summaryDataSource'] = new BehaviorSubject(null);

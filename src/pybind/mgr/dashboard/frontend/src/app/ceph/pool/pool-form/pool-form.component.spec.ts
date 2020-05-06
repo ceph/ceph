@@ -109,7 +109,7 @@ describe('PoolFormComponent', () => {
     poolServiceMethod: 'create' | 'update' = 'create'
   ) => {
     spyOn(poolService, poolServiceMethod).and.stub();
-    const taskWrapper = TestBed.get(TaskWrapperService);
+    const taskWrapper = TestBed.inject(TaskWrapperService);
     spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
     component.submit();
     expect(poolService[poolServiceMethod]).toHaveBeenCalledWith(pool);
@@ -190,14 +190,14 @@ describe('PoolFormComponent', () => {
   let navigationSpy: jasmine.Spy;
 
   beforeEach(() => {
-    poolService = TestBed.get(PoolService);
+    poolService = TestBed.inject(PoolService);
     setInfo();
     spyOn(poolService, 'getInfo').and.callFake(() => of(infoReturn));
 
-    ecpService = TestBed.get(ErasureCodeProfileService);
-    crushRuleService = TestBed.get(CrushRuleService);
+    ecpService = TestBed.inject(ErasureCodeProfileService);
+    crushRuleService = TestBed.inject(CrushRuleService);
 
-    router = TestBed.get(Router);
+    router = TestBed.inject(Router);
     navigationSpy = spyOn(router, 'navigate').and.stub();
 
     setUpPoolComponent();
@@ -226,7 +226,7 @@ describe('PoolFormComponent', () => {
         read: false,
         delete: false
       };
-      authStorageService = TestBed.get(AuthStorageService);
+      authStorageService = TestBed.inject(AuthStorageService);
       spyOn(authStorageService, 'getPermissions').and.callFake(() => ({
         pool: poolPermissions
       }));
@@ -811,7 +811,7 @@ describe('PoolFormComponent', () => {
     it('should select the newly created rule', () => {
       expect(form.getValue('crushRule').rule_name).toBe('rep1');
       const name = 'awesomeRule';
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(BsModalService), 'show').and.callFake(() => {
         return {
           content: {
             submitAction: of({ name })
@@ -874,7 +874,7 @@ describe('PoolFormComponent', () => {
       };
 
       beforeEach(() => {
-        modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(BsModalService), 'show').and.callFake(
           (deletionClass: any, config: any) => {
             deletion = Object.assign(new deletionClass(), config.initialState);
             return {
@@ -888,7 +888,7 @@ describe('PoolFormComponent', () => {
           rules.splice(index, 1);
           return of(undefined);
         });
-        taskWrapper = TestBed.get(TaskWrapperService);
+        taskWrapper = TestBed.inject(TaskWrapperService);
         spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
       });
 
@@ -986,7 +986,7 @@ describe('PoolFormComponent', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile').name).toBe('ecp1');
       const name = 'awesomeProfile';
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(BsModalService), 'show').and.callFake(() => {
         return {
           content: {
             submitAction: of({ name })
@@ -1030,7 +1030,7 @@ describe('PoolFormComponent', () => {
 
       beforeEach(() => {
         deletion = undefined;
-        modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(BsModalService), 'show').and.callFake(
           (comp: any, init: any) => {
             modal = modalServiceShow(comp, init);
             return modal.ref;
@@ -1042,7 +1042,7 @@ describe('PoolFormComponent', () => {
           profiles.splice(index, 1);
           return of({ status: 202 });
         });
-        taskWrapper = TestBed.get(TaskWrapperService);
+        taskWrapper = TestBed.inject(TaskWrapperService);
         spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
 
         const ecp2 = new ErasureCodeProfile();

@@ -102,7 +102,7 @@ describe('SilenceFormComponent', () => {
     spyOn(global, 'Date').and.callFake((arg) => (arg ? new originalDate(arg) : beginningDate));
 
     prometheus = new PrometheusHelper();
-    prometheusService = TestBed.get(PrometheusService);
+    prometheusService = TestBed.inject(PrometheusService);
     spyOn(prometheusService, 'getAlerts').and.callFake(() =>
       of([prometheus.createAlert('alert0')])
     );
@@ -126,12 +126,12 @@ describe('SilenceFormComponent', () => {
       })
     );
 
-    router = TestBed.get(Router);
+    router = TestBed.inject(Router);
 
-    notificationService = TestBed.get(NotificationService);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
 
-    authStorageService = TestBed.get(AuthStorageService);
+    authStorageService = TestBed.inject(AuthStorageService);
     spyOn(authStorageService, 'getUsername').and.returnValue('someUser');
 
     fixture = TestBed.createComponent(SilenceFormComponent);
@@ -460,7 +460,7 @@ describe('SilenceFormComponent', () => {
       addMatcher('alertname', 'alert.*', true);
       expectMatch(null);
 
-      const modalService = TestBed.get(BsModalService);
+      const modalService = TestBed.inject(BsModalService);
       spyOn(modalService, 'show').and.callFake(() => {
         return {
           content: {

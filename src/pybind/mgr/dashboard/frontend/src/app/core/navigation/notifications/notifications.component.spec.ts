@@ -24,7 +24,7 @@ describe('NotificationsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(NotificationsComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
+    summaryService = TestBed.inject(SummaryService);
 
     fixture.detectChanges();
   });

@@ -14,8 +14,8 @@ describe('RgwDaemonService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(RgwDaemonService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(RgwDaemonService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

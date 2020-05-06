@@ -15,8 +15,8 @@ describe('ConfigurationService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(ConfigurationService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(ConfigurationService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

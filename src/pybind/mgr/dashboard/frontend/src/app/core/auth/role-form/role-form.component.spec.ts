@@ -47,12 +47,12 @@ describe('RoleFormComponent', () => {
     fixture = TestBed.createComponent(RoleFormComponent);
     component = fixture.componentInstance;
     form = component.roleForm;
-    httpTesting = TestBed.get(HttpTestingController);
-    roleService = TestBed.get(RoleService);
-    router = TestBed.get(Router);
+    httpTesting = TestBed.inject(HttpTestingController);
+    roleService = TestBed.inject(RoleService);
+    router = TestBed.inject(Router);
     spyOn(router, 'navigate');
     fixture.detectChanges();
-    const notify = TestBed.get(NotificationService);
+    const notify = TestBed.inject(NotificationService);
     spyOn(notify, 'show');
   });
 
@@ -172,7 +172,7 @@ describe('RoleFormComponent', () => {
     const scopes = ['osd', 'user'];
     beforeEach(() => {
       spyOn(roleService, 'get').and.callFake(() => of(role));
-      spyOn(TestBed.get(ScopeService), 'list').and.callFake(() => of(scopes));
+      spyOn(TestBed.inject(ScopeService), 'list').and.callFake(() => of(scopes));
       setUrl('/user-management/roles/edit/role1');
       component.ngOnInit();
       const reqScopes = httpTesting.expectOne('ui-api/scope');

@@ -35,7 +35,7 @@ describe('RbdTrashPurgeModalComponent', () => {
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdTrashPurgeModalComponent);
-    httpTesting = TestBed.get(HttpTestingController);
+    httpTesting = TestBed.inject(HttpTestingController);
     component = fixture.componentInstance;
   });
 
@@ -76,8 +76,8 @@ describe('RbdTrashPurgeModalComponent', () => {
 
     beforeEach(() => {
       fixture.detectChanges();
-      notificationService = TestBed.get(NotificationService);
-      modalRef = TestBed.get(BsModalRef);
+      notificationService = TestBed.inject(NotificationService);
+      modalRef = TestBed.inject(BsModalRef);
 
       component.purgeForm.patchValue({ poolName: 'foo' });
 

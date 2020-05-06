@@ -383,14 +383,14 @@ describe('CephfsDirectoriesComponent', () => {
       updatedQuotas: {}
     };
 
-    cephfsService = TestBed.get(CephfsService);
+    cephfsService = TestBed.inject(CephfsService);
     lsDirSpy = spyOn(cephfsService, 'lsDir').and.callFake(mockLib.lsDir);
     spyOn(cephfsService, 'mkSnapshot').and.callFake(mockLib.mkSnapshot);
     spyOn(cephfsService, 'rmSnapshot').and.callFake(mockLib.rmSnapshot);
     spyOn(cephfsService, 'updateQuota').and.callFake(mockLib.updateQuota);
 
-    modalShowSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(mockLib.modalShow);
-    notificationShowSpy = spyOn(TestBed.get(NotificationService), 'show').and.stub();
+    modalShowSpy = spyOn(TestBed.inject(BsModalService), 'show').and.callFake(mockLib.modalShow);
+    notificationShowSpy = spyOn(TestBed.inject(NotificationService), 'show').and.stub();
 
     fixture = TestBed.createComponent(CephfsDirectoriesComponent);
     component = fixture.componentInstance;

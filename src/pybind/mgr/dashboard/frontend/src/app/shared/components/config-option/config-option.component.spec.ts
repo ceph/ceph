@@ -28,7 +28,7 @@ describe('ConfigOptionComponent', () => {
     fixture = TestBed.createComponent(ConfigOptionComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    configurationService = TestBed.get(ConfigurationService);
+    configurationService = TestBed.inject(ConfigurationService);
 
     const configOptions: Record<string, any> = [
       {

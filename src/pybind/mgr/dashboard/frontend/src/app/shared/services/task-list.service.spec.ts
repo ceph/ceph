@@ -34,9 +34,9 @@ describe('TaskListService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(TaskListService);
-    summaryService = TestBed.get(SummaryService);
-    taskMessageService = TestBed.get(TaskMessageService);
+    service = TestBed.inject(TaskListService);
+    summaryService = TestBed.inject(SummaryService);
+    taskMessageService = TestBed.inject(TaskMessageService);
     summaryService['summaryDataSource'].next({ executing_tasks: [] });
 
     taskMessageService.messages['test/create'] = taskMessageService.messages['rbd/create'];

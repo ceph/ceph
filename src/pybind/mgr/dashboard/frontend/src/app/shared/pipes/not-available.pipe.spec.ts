@@ -13,7 +13,7 @@ describe('NotAvailablePipe', () => {
   });
 
   beforeEach(() => {
-    const i18n = TestBed.get(I18n);
+    const i18n = TestBed.inject(I18n);
     pipe = new NotAvailablePipe(i18n);
   });
 
