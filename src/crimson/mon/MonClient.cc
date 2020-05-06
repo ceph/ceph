@@ -939,7 +939,7 @@ seastar::future<> Client::reopen_session(int rank)
 #warning fixme
     auto peer = monmap.get_addrs(rank).front();
     logger().info("connecting to mon.{}", rank);
-    return seastar::futurize_apply(
+    return seastar::futurize_invoke(
         [peer, this] () -> seastar::future<Connection::AuthResult> {
       auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
       auto& mc = pending_conns.emplace_back(

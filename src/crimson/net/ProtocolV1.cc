@@ -208,7 +208,7 @@ ProtocolV1::handle_connect_reply(msgr_tag_t tag)
       logger().error("{} missing required features", __func__);
       throw std::system_error(make_error_code(error::negotiation_failure));
     }
-    return seastar::futurize_apply([this, tag] {
+    return seastar::futurize_invoke([this, tag] {
         if (tag == CEPH_MSGR_TAG_SEQ) {
           return socket->read_exactly(sizeof(seq_num_t))
             .then([this] (auto buf) {

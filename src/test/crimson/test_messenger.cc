@@ -148,7 +148,7 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> dispatch_pingpong(const entity_addr_t& peer_addr) {
         mono_time start_time = mono_clock::now();
         auto conn = msgr->connect(peer_addr, entity_name_t::TYPE_OSD);
-        return seastar::futurize_apply([this, conn] {
+        return seastar::futurize_invoke([this, conn] {
           return do_dispatch_pingpong(conn.get());
         }).finally([this, conn, start_time] {
           auto session = find_session(conn.get());
@@ -1626,7 +1626,7 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
           policy_t::lossy_client,
           policy_t::stateless_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&suite] {
+        return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
           return suite.connect_peer();
@@ -1658,7 +1658,7 @@ test_v2_lossy_connect_fault(FailoverTest& test) {
           policy_t::lossy_client,
           policy_t::stateless_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&suite] {
+        return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
           return suite.connect_peer();
@@ -1690,7 +1690,7 @@ test_v2_lossy_connected_fault(FailoverTest& test) {
           policy_t::lossy_client,
           policy_t::stateless_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.send_bidirectional();
         }).then([&suite] {
           return suite.connect_peer();
@@ -1729,7 +1729,7 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
           policy_t::stateless_server,
           policy_t::lossy_client,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.peer_send_me();
         }).then([&test] {
           return test.peer_connect_me();
@@ -1761,7 +1761,7 @@ test_v2_lossy_accept_fault(FailoverTest& test) {
       policy_t::stateless_server,
       policy_t::lossy_client,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_send_me();
     }).then([&test] {
       return test.peer_connect_me();
@@ -1791,7 +1791,7 @@ test_v2_lossy_establishing_fault(FailoverTest& test) {
       policy_t::stateless_server,
       policy_t::lossy_client,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_send_me();
     }).then([&test] {
       return test.peer_connect_me();
@@ -1825,7 +1825,7 @@ test_v2_lossy_accepted_fault(FailoverTest& test) {
           policy_t::stateless_server,
           policy_t::lossy_client,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.send_bidirectional();
         }).then([&test] {
           return test.peer_connect_me();
@@ -1857,7 +1857,7 @@ test_v2_lossless_connect_fault(FailoverTest& test) {
           policy_t::lossless_client,
           policy_t::stateful_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.send_bidirectional();
         }).then([&suite] {
           return suite.connect_peer();
@@ -1889,7 +1889,7 @@ test_v2_lossless_connected_fault(FailoverTest& test) {
           policy_t::lossless_client,
           policy_t::stateful_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.send_bidirectional();
         }).then([&suite] {
           return suite.connect_peer();
@@ -1925,7 +1925,7 @@ test_v2_lossless_connected_fault2(FailoverTest& test) {
           policy_t::lossless_client,
           policy_t::stateful_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&suite] {
+        return seastar::futurize_invoke([&suite] {
           return suite.connect_peer();
         }).then([&suite] {
           return suite.wait_established();
@@ -1981,7 +1981,7 @@ test_v2_lossless_reconnect_fault(FailoverTest& test) {
           policy_t::lossless_client,
           policy_t::stateful_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.send_bidirectional();
         }).then([&suite] {
           return suite.connect_peer();
@@ -2009,7 +2009,7 @@ test_v2_lossless_accept_fault(FailoverTest& test) {
       policy_t::stateful_server,
       policy_t::lossless_client,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.send_bidirectional();
     }).then([&test] {
       return test.peer_connect_me();
@@ -2039,7 +2039,7 @@ test_v2_lossless_establishing_fault(FailoverTest& test) {
       policy_t::stateful_server,
       policy_t::lossless_client,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.send_bidirectional();
     }).then([&test] {
       return test.peer_connect_me();
@@ -2073,7 +2073,7 @@ test_v2_lossless_accepted_fault(FailoverTest& test) {
           policy_t::stateful_server,
           policy_t::lossless_client,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.send_bidirectional();
         }).then([&test] {
           return test.peer_connect_me();
@@ -2113,7 +2113,7 @@ test_v2_lossless_reaccept_fault(FailoverTest& test) {
           policy_t::stateful_server,
           policy_t::lossless_client,
           [&test, bp = bp_pair.second] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.send_bidirectional();
         }).then([&test] {
           return test.peer_connect_me();
@@ -2161,7 +2161,7 @@ test_v2_peer_connect_fault(FailoverTest& test) {
           policy_t::lossless_peer,
           policy_t::lossless_peer,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&suite] {
+        return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
           return suite.connect_peer();
@@ -2189,7 +2189,7 @@ test_v2_peer_accept_fault(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_send_me();
     }).then([&test] {
       return test.peer_connect_me();
@@ -2219,7 +2219,7 @@ test_v2_peer_establishing_fault(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_send_me();
     }).then([&test] {
       return test.peer_connect_me();
@@ -2249,7 +2249,7 @@ test_v2_peer_connected_fault_reconnect(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       return suite.send_peer();
     }).then([&suite] {
       return suite.connect_peer();
@@ -2275,7 +2275,7 @@ test_v2_peer_connected_fault_reaccept(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_send_me();
     }).then([&suite] {
       return suite.connect_peer();
@@ -2340,7 +2340,7 @@ test_v2_racing_reconnect_win(FailoverTest& test) {
           policy_t::lossless_peer,
           policy_t::lossless_peer,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.peer_send_me();
         }).then([&test] {
           return test.peer_connect_me();
@@ -2393,7 +2393,7 @@ test_v2_racing_reconnect_lose(FailoverTest& test) {
           policy_t::lossless_peer,
           policy_t::lossless_peer,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&suite] {
+        return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
           return suite.connect_peer();
@@ -2444,7 +2444,7 @@ test_v2_racing_connect_win(FailoverTest& test) {
           policy_t::lossless_peer,
           policy_t::lossless_peer,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
+        return seastar::futurize_invoke([&test] {
           return test.peer_send_me();
         }).then([&test] {
           return test.peer_connect_me();
@@ -2497,7 +2497,7 @@ test_v2_racing_connect_lose(FailoverTest& test) {
           policy_t::lossless_peer,
           policy_t::lossless_peer,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&suite] {
+        return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
           return suite.connect_peer();
@@ -2537,7 +2537,7 @@ test_v2_racing_connect_reconnect_lose(FailoverTest& test) {
                         policy_t::lossless_peer,
                         policy_t::lossless_peer,
                         [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       return suite.send_peer();
     }).then([&suite] {
       return suite.connect_peer();
@@ -2573,7 +2573,7 @@ test_v2_racing_connect_reconnect_win(FailoverTest& test) {
                         policy_t::lossless_peer,
                         policy_t::lossless_peer,
                         [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_send_me();
     }).then([&suite] {
       return suite.connect_peer();
@@ -2610,7 +2610,7 @@ test_v2_stale_connect(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       return suite.connect_peer();
     }).then([&suite] {
       return suite.wait_blocked();
@@ -2646,7 +2646,7 @@ test_v2_stale_reconnect(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       return suite.send_peer();
     }).then([&suite] {
       return suite.connect_peer();
@@ -2683,7 +2683,7 @@ test_v2_stale_accept(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_connect_me();
     }).then([&suite] {
       return suite.wait_blocked();
@@ -2718,7 +2718,7 @@ test_v2_stale_establishing(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_connect_me();
     }).then([&suite] {
       return suite.wait_blocked();
@@ -2754,7 +2754,7 @@ test_v2_stale_reaccept(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       return test.peer_send_me();
     }).then([&test] {
       return test.peer_connect_me();
@@ -2792,7 +2792,7 @@ test_v2_lossy_client(FailoverTest& test) {
       policy_t::lossy_client,
       policy_t::stateless_server,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return suite.connect_peer();
@@ -2872,7 +2872,7 @@ test_v2_stateless_server(FailoverTest& test) {
       policy_t::stateless_server,
       policy_t::lossy_client,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return test.peer_connect_me();
@@ -2952,7 +2952,7 @@ test_v2_lossless_client(FailoverTest& test) {
       policy_t::lossless_client,
       policy_t::stateful_server,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return suite.connect_peer();
@@ -3028,7 +3028,7 @@ test_v2_stateful_server(FailoverTest& test) {
       policy_t::stateful_server,
       policy_t::lossless_client,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return test.peer_connect_me();
@@ -3112,7 +3112,7 @@ test_v2_peer_reuse_connector(FailoverTest& test) {
       policy_t::lossless_peer_reuse,
       policy_t::lossless_peer_reuse,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return suite.connect_peer();
@@ -3180,7 +3180,7 @@ test_v2_peer_reuse_acceptor(FailoverTest& test) {
       policy_t::lossless_peer_reuse,
       policy_t::lossless_peer_reuse,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return test.peer_connect_me();
@@ -3262,7 +3262,7 @@ test_v2_lossless_peer_connector(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&suite] {
+    return seastar::futurize_invoke([&suite] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return suite.connect_peer();
@@ -3330,7 +3330,7 @@ test_v2_lossless_peer_acceptor(FailoverTest& test) {
       policy_t::lossless_peer,
       policy_t::lossless_peer,
       [&test] (FailoverSuite& suite) {
-    return seastar::futurize_apply([&test] {
+    return seastar::futurize_invoke([&test] {
       logger().info("-- 0 --");
       logger().info("[Test] setup connection...");
       return test.peer_connect_me();
@@ -3427,7 +3427,7 @@ test_v2_protocol(entity_addr_t test_addr,
   }
 
   return FailoverTest::create(test_peer_addr, test_addr).then([] (auto test) {
-    return seastar::futurize_apply([test] {
+    return seastar::futurize_invoke([test] {
       return test_v2_lossy_early_connect_fault(*test);
     }).then([test] {
       return test_v2_lossy_connect_fault(*test);
@@ -3471,13 +3471,13 @@ test_v2_protocol(entity_addr_t test_addr,
       return peer_wins(*test);
     }).then([test] (bool peer_wins) {
       if (peer_wins) {
-        return seastar::futurize_apply([test] {
+        return seastar::futurize_invoke([test] {
           return test_v2_racing_connect_lose(*test);
         }).then([test] {
           return test_v2_racing_reconnect_lose(*test);
         });
       } else {
-        return seastar::futurize_apply([test] {
+        return seastar::futurize_invoke([test] {
           return test_v2_racing_connect_win(*test);
         }).then([test] {
           return test_v2_racing_reconnect_win(*test);

@@ -85,7 +85,7 @@ class ProtocolV2 final : public Protocol {
   template <typename Func>
   void gated_execute(const char* what, Func&& func) {
     gated_dispatch(what, [this, &func] {
-      execution_done = seastar::futurize_apply(std::forward<Func>(func));
+      execution_done = seastar::futurize_invoke(std::forward<Func>(func));
       return execution_done.get_future();
     });
   }

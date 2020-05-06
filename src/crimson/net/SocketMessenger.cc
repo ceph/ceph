@@ -153,7 +153,7 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
 seastar::future<> SocketMessenger::shutdown()
 {
   assert(seastar::engine().cpu_id() == master_sid);
-  return seastar::futurize_apply([this] {
+  return seastar::futurize_invoke([this] {
     if (listener) {
       auto d_listener = listener;
       listener = nullptr;
