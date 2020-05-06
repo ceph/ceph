@@ -202,6 +202,28 @@ public:
                                   const DiscardLogOperation &op);
 };
 
+class WriteSameLogOperation : public WriteLogOperation {
+public:
+  using GenericWriteLogOperation::m_lock;
+  using GenericWriteLogOperation::sync_point;
+  using GenericWriteLogOperation::on_write_append;
+  using GenericWriteLogOperation::on_write_persist;
+  using WriteLogOperation::log_entry;
+  using WriteLogOperation::bl;
+  using WriteLogOperation::buffer_alloc;
+  WriteSameLogOperation(WriteLogOperationSet &set,
+                        const uint64_t image_offset_bytes,
+                        const uint64_t write_bytes,
+                        const uint32_t data_len,
+                        CephContext *cct);
+  ~WriteSameLogOperation();
+  WriteSameLogOperation(const WriteSameLogOperation&) = delete;
+  WriteSameLogOperation &operator=(const WriteSameLogOperation&) = delete;
+  std::ostream &format(std::ostream &os) const;
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const WriteSameLogOperation &op);
+};
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd

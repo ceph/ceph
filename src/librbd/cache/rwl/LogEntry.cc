@@ -192,6 +192,37 @@ std::ostream &operator<<(std::ostream &os,
   return entry.format(os);
 }
 
+void WriteSameLogEntry::init_bl(buffer::ptr &bp, buffer::list &bl) {
+  for (uint64_t i = 0; i < ram_entry.write_bytes / ram_entry.ws_datalen; i++) {
+    bl.append(bp);
+  }
+  int trailing_partial = ram_entry.write_bytes % ram_entry.ws_datalen;
+  if (trailing_partial) {
+    bl.append(bp, 0, trailing_partial);
+  }
+};
+
+void WriteSameLogEntry::writeback(librbd::cache::ImageWritebackInterface &image_writeback,
+                                  Context *ctx) {
+  bufferlist entry_bl;
+  buffer::list entry_bl_copy;
+  copy_pmem_bl(&entry_bl_copy);
+  entry_bl_copy.begin(0).copy(write_bytes(), entry_bl);
+  image_writeback.aio_writesame(ram_entry.image_offset_bytes, ram_entry.write_bytes,
+                                std::move(entry_bl), 0, ctx);
+}
+
+std::ostream &WriteSameLogEntry::format(std::ostream &os) const {
+  os << "(WriteSame) ";
+  WriteLogEntry::format(os);
+  return os;
+};
+
+std::ostream &operator<<(std::ostream &os,
+                         const WriteSameLogEntry &entry) {
+  return entry.format(os);
+}
+
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
