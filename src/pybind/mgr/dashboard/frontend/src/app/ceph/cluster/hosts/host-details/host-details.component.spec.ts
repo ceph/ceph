@@ -6,11 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ToastrModule } from 'ngx-toastr';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  TabHelper
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, TabHelper } from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
 import { Permissions } from '../../../../shared/models/permissions';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -33,9 +29,7 @@ describe('HostDetailsComponent', () => {
       CephSharedModule,
       SharedModule,
       ToastrModule.forRoot()
-    ],
-    declarations: [],
-    providers: [i18nProviders]
+    ]
   });
 
   beforeEach(() => {

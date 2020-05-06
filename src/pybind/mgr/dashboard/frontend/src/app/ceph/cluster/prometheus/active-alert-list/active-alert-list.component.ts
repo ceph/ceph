@@ -1,7 +1,5 @@
 import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
@@ -44,7 +42,6 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     private authStorageService: AuthStorageService,
     public prometheusAlertService: PrometheusAlertService,
     private urlBuilder: URLBuilderService,
-    private i18n: I18n,
     private cdDatePipe: CdDatePipe,
     @Inject(PrometheusService) prometheusService: PrometheusService,
     @Inject(SummaryService) summaryService: SummaryService,
@@ -61,7 +58,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         icon: Icons.add,
         routerLink: () =>
           '/monitoring' + this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
-        name: this.i18n('Create Silence')
+        name: $localize`Create Silence`
       }
     ];
   }
@@ -70,31 +67,31 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     super.ngOnInit();
     this.columns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'labels.alertname',
         flexGrow: 2
       },
       {
-        name: this.i18n('Job'),
+        name: $localize`Job`,
         prop: 'labels.job',
         flexGrow: 2
       },
       {
-        name: this.i18n('Severity'),
+        name: $localize`Severity`,
         prop: 'labels.severity'
       },
       {
-        name: this.i18n('State'),
+        name: $localize`State`,
         prop: 'status.state',
         cellTransformation: CellTemplate.classAdding
       },
       {
-        name: this.i18n('Started'),
+        name: $localize`Started`,
         prop: 'startsAt',
         pipe: this.cdDatePipe
       },
       {
-        name: this.i18n('URL'),
+        name: $localize`URL`,
         prop: 'generatorURL',
         sortable: false,
         cellTemplate: this.externalLinkTpl

@@ -2,7 +2,6 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
@@ -50,11 +49,10 @@ export class RoleFormComponent extends CdForm implements OnInit {
     private roleService: RoleService,
     private scopeService: ScopeService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     super();
-    this.resource = this.i18n('role');
+    this.resource = $localize`role`;
     this.createForm();
     this.listenToChanges();
   }
@@ -74,14 +72,14 @@ export class RoleFormComponent extends CdForm implements OnInit {
     this.columns = [
       {
         prop: 'scope',
-        name: this.i18n('All'),
+        name: $localize`All`,
         flexGrow: 2,
         cellTemplate: this.cellScopeCheckboxTpl,
         headerTemplate: this.headerPermissionCheckboxTpl
       },
       {
         prop: 'read',
-        name: this.i18n('Read'),
+        name: $localize`Read`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -89,7 +87,7 @@ export class RoleFormComponent extends CdForm implements OnInit {
       },
       {
         prop: 'create',
-        name: this.i18n('Create'),
+        name: $localize`Create`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -97,7 +95,7 @@ export class RoleFormComponent extends CdForm implements OnInit {
       },
       {
         prop: 'update',
-        name: this.i18n('Update'),
+        name: $localize`Update`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -105,7 +103,7 @@ export class RoleFormComponent extends CdForm implements OnInit {
       },
       {
         prop: 'delete',
-        name: this.i18n('Delete'),
+        name: $localize`Delete`,
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -281,7 +279,7 @@ export class RoleFormComponent extends CdForm implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Created role '{{role_name}}'`, { role_name: roleFormModel.name })
+          $localize`Created role '${roleFormModel.name}'`
         );
         this.router.navigate(['/user-management/roles']);
       },
@@ -297,7 +295,7 @@ export class RoleFormComponent extends CdForm implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n(`Updated role '{{role_name}}'`, { role_name: roleFormModel.name })
+          $localize`Updated role '${roleFormModel.name}'`
         );
         this.router.navigate(['/user-management/roles']);
       },

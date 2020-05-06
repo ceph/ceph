@@ -14,7 +14,6 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders,
   PrometheusHelper
 } from '../../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../../core/not-found/not-found.component';
@@ -64,7 +63,6 @@ describe('SilenceFormComponent', () => {
       ReactiveFormsModule
     ],
     providers: [
-      i18nProviders,
       {
         provide: ActivatedRoute,
         useValue: { params: { subscribe: (fn: Function) => fn(params) } }

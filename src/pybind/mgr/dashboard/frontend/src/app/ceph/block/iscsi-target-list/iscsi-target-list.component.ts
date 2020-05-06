@@ -1,7 +1,6 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
 
@@ -61,7 +60,6 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
 
   constructor(
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private iscsiService: IscsiService,
     private taskListService: TaskListService,
     private cephReleaseNamePipe: CephReleaseNamePipe,
@@ -103,23 +101,23 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Target'),
+        name: $localize`Target`,
         prop: 'target_iqn',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: this.i18n('Portals'),
+        name: $localize`Portals`,
         prop: 'cdPortals',
         flexGrow: 2
       },
       {
-        name: this.i18n('Images'),
+        name: $localize`Images`,
         prop: 'cdImages',
         flexGrow: 2
       },
       {
-        name: this.i18n('# Sessions'),
+        name: $localize`# Sessions`,
         prop: 'info.num_sessions',
         pipe: this.notAvailablePipe,
         flexGrow: 1
@@ -168,7 +166,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
       return first.cdExecuting;
     }
     if (first && _.isUndefined(first['info'])) {
-      return this.i18n('Unavailable gateway(s)');
+      return $localize`Unavailable gateway(s)`;
     }
 
     return undefined;
@@ -180,10 +178,10 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
       return first.cdExecuting;
     }
     if (first && _.isUndefined(first['info'])) {
-      return this.i18n('Unavailable gateway(s)');
+      return $localize`Unavailable gateway(s)`;
     }
     if (first && first['info'] && first['info']['num_sessions']) {
-      return this.i18n('Target has active sessions');
+      return $localize`Target has active sessions`;
     }
 
     return undefined;
@@ -222,7 +220,7 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
     const target_iqn = this.selection.first().target_iqn;
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.i18n('iSCSI target'),
+      itemDescription: $localize`iSCSI target`,
       itemNames: [target_iqn],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({

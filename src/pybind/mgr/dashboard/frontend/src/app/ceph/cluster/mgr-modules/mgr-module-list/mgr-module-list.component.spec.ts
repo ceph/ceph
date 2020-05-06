@@ -7,11 +7,7 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../../testing/unit-test-helper';
+import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
 import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
@@ -36,7 +32,7 @@ describe('MgrModuleListComponent', () => {
       NgbNavModule,
       ToastrModule.forRoot()
     ],
-    providers: [MgrModuleService, NotificationService, i18nProviders]
+    providers: [MgrModuleService, NotificationService]
   });
 
   beforeEach(() => {

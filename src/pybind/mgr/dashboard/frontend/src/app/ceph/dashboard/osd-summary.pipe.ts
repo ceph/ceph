@@ -1,14 +1,11 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 @Pipe({
   name: 'osdSummary'
 })
 export class OsdSummaryPipe implements PipeTransform {
-  constructor(private i18n: I18n) {}
-
   transform(value: any): any {
     if (!value) {
       return '';
@@ -27,7 +24,7 @@ export class OsdSummaryPipe implements PipeTransform {
 
     const osdSummary = [
       {
-        content: `${value.osds.length} ${this.i18n('total')}`,
+        content: `${value.osds.length} ${$localize`total`}`,
         class: ''
       }
     ];
@@ -36,7 +33,7 @@ export class OsdSummaryPipe implements PipeTransform {
       class: 'card-text-line-break'
     });
     osdSummary.push({
-      content: `${upCount} ${this.i18n('up')}, ${inCount} ${this.i18n('in')}`,
+      content: `${upCount} ${$localize`up`}, ${inCount} ${$localize`in`}`,
       class: ''
     });
 
@@ -48,9 +45,9 @@ export class OsdSummaryPipe implements PipeTransform {
         class: 'card-text-line-break'
       });
 
-      const downText = downCount > 0 ? `${downCount} ${this.i18n('down')}` : '';
+      const downText = downCount > 0 ? `${downCount} ${$localize`down`}` : '';
       const separator = downCount > 0 && outCount > 0 ? ', ' : '';
-      const outText = outCount > 0 ? `${outCount} ${this.i18n('out')}` : '';
+      const outText = outCount > 0 ? `${outCount} ${$localize`out`}` : '';
       osdSummary.push({
         content: `${downText}${separator}${outText}`,
         class: 'card-text-error'

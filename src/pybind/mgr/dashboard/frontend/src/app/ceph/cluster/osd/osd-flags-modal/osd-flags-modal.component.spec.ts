@@ -7,7 +7,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -34,7 +34,7 @@ describe('OsdFlagsModalComponent', () => {
       ToastrModule.forRoot()
     ],
     declarations: [OsdFlagsModalComponent],
-    providers: [i18nProviders, NgbActiveModal]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

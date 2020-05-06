@@ -1,6 +1,5 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -35,11 +34,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
 
   objectValues = Object.values;
 
-  constructor(
-    private dimlessBinary: DimlessBinaryPipe,
-    private dimless: DimlessPipe,
-    private i18n: I18n
-  ) {}
+  constructor(private dimlessBinary: DimlessBinaryPipe, private dimless: DimlessPipe) {}
 
   ngOnChanges() {
     this.setStandbys();
@@ -48,7 +43,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   private setStandbys() {
     this.standbys = [
       {
-        key: this.i18n('Standby daemons'),
+        key: $localize`Standby daemons`,
         value: this.data.standbys
       }
     ];
@@ -57,19 +52,19 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   ngOnInit() {
     this.columns = {
       ranks: [
-        { prop: 'rank', name: this.i18n('Rank') },
-        { prop: 'state', name: this.i18n('State') },
-        { prop: 'mds', name: this.i18n('Daemon') },
-        { prop: 'activity', name: this.i18n('Activity'), cellTemplate: this.activityTmpl },
-        { prop: 'dns', name: this.i18n('Dentries'), pipe: this.dimless },
-        { prop: 'inos', name: this.i18n('Inodes'), pipe: this.dimless }
+        { prop: 'rank', name: $localize`Rank` },
+        { prop: 'state', name: $localize`State` },
+        { prop: 'mds', name: $localize`Daemon` },
+        { prop: 'activity', name: $localize`Activity`, cellTemplate: this.activityTmpl },
+        { prop: 'dns', name: $localize`Dentries`, pipe: this.dimless },
+        { prop: 'inos', name: $localize`Inodes`, pipe: this.dimless }
       ],
       pools: [
-        { prop: 'pool', name: this.i18n('Pool') },
-        { prop: 'type', name: this.i18n('Type') },
-        { prop: 'size', name: this.i18n('Size'), pipe: this.dimlessBinary },
+        { prop: 'pool', name: $localize`Pool` },
+        { prop: 'type', name: $localize`Type` },
+        { prop: 'size', name: $localize`Size`, pipe: this.dimlessBinary },
         {
-          name: this.i18n('Usage'),
+          name: $localize`Usage`,
           cellTemplate: this.poolUsageTpl,
           comparator: (_valueA: any, _valueB: any, rowA: any, rowB: any) => {
             const valA = rowA.used / rowA.avail;
