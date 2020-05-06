@@ -2060,7 +2060,7 @@ KillMode=none
 Restart=on-failure
 RestartSec=10s
 TimeoutStartSec=120
-TimeoutStopSec=15
+TimeoutStopSec=120
 StartLimitInterval=30min
 StartLimitBurst=5
 
