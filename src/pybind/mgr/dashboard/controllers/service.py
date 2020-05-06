@@ -7,7 +7,7 @@ from . import CreatePermission, DeletePermission
 from .orchestrator import raise_if_no_orchestrator
 from ..exceptions import DashboardException
 from ..security import Scope
-from ..services.orchestrator import OrchClient
+from ..services.orchestrator import OrchClient, OrchFeature
 from ..services.exception import handle_orchestrator_error
 
 
@@ -27,12 +27,12 @@ class Service(RESTController):
         """
         return ServiceSpec.KNOWN_SERVICE_TYPES
 
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST])
     def list(self, service_name: Optional[str] = None) -> List[dict]:
         orch = OrchClient.instance()
         return [service.to_json() for service in orch.services.list(service_name)]
 
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST])
     def get(self, service_name: str) -> List[dict]:
         orch = OrchClient.instance()
         services = orch.services.get(service_name)
@@ -41,14 +41,14 @@ class Service(RESTController):
         return services[0].to_json()
 
     @RESTController.Resource('GET')
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
     def daemons(self, service_name: str) -> List[dict]:
         orch = OrchClient.instance()
         daemons = orch.services.list_daemons(service_name)
         return [d.to_json() for d in daemons]
 
     @CreatePermission
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.SERVICE_CREATE])
     @handle_orchestrator_error('service')
     @service_task('create', {'service_name': '{service_name}'})
     def create(self, service_spec: Dict, service_name: str):  # pylint: disable=W0613
@@ -64,7 +64,7 @@ class Service(RESTController):
             raise DashboardException(e, component='service')
 
     @DeletePermission
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.SERVICE_DELETE])
     @handle_orchestrator_error('service')
     @service_task('delete', {'service_name': '{service_name}'})
     def delete(self, service_name: str):

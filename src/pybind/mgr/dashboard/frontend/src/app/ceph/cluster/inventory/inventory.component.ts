@@ -2,6 +2,7 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 
 import { OrchestratorService } from '../../../shared/api/orchestrator.service';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { OrchestratorStatus } from '../../../shared/models/orchestrator.interface';
 import { InventoryDevice } from './inventory-devices/inventory-device.model';
 
 @Component({
@@ -15,7 +16,7 @@ export class InventoryComponent implements OnChanges, OnInit {
 
   icons = Icons;
 
-  hasOrchestrator = false;
+  orchStatus: OrchestratorStatus;
 
   devices: Array<InventoryDevice> = [];
 
@@ -23,7 +24,7 @@ export class InventoryComponent implements OnChanges, OnInit {
 
   ngOnInit() {
     this.orchService.status().subscribe((status) => {
-      this.hasOrchestrator = status.available;
+      this.orchStatus = status;
       if (status.available) {
         this.getInventory();
       }
@@ -31,7 +32,7 @@ export class InventoryComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
-    if (this.hasOrchestrator) {
+    if (this.orchStatus) {
       this.devices = [];
       this.getInventory();
     }

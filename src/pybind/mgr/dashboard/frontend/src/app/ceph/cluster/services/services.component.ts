@@ -15,6 +15,8 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { OrchestratorFeature } from '../../../shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '../../../shared/models/orchestrator.interface';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephServiceSpec } from '../../../shared/models/service.interface';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -42,8 +44,11 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   permissions: Permissions;
   tableActions: CdTableAction[];
 
-  checkingOrchestrator = true;
-  hasOrchestrator = false;
+  orchStatus: OrchestratorStatus;
+  actionOrchFeatures = {
+    create: [OrchestratorFeature.SERVICE_CREATE],
+    delete: [OrchestratorFeature.SERVICE_DELETE]
+  };
 
   columns: Array<CdTableColumn> = [];
   services: Array<CephServiceSpec> = [];
@@ -67,14 +72,15 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         icon: Icons.add,
         routerLink: () => this.urlBuilder.getCreate(),
         name: this.actionLabels.CREATE,
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: (selection: CdTableSelection) => this.getDisable('create', selection)
       },
       {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteAction(),
-        disable: () => !this.selection.hasSingleSelection,
-        name: this.actionLabels.DELETE
+        name: this.actionLabels.DELETE,
+        disable: (selection: CdTableSelection) => this.getDisable('delete', selection)
       }
     ];
   }
@@ -121,16 +127,28 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       return !this.hiddenColumns.includes(col.prop);
     });
 
-    this.orchService.status().subscribe((status) => {
-      this.hasOrchestrator = status.available;
+    this.orchService.status().subscribe((status: OrchestratorStatus) => {
+      this.orchStatus = status;
     });
   }
 
   ngOnChanges() {
-    if (this.hasOrchestrator) {
+    if (this.orchStatus?.available) {
       this.services = [];
       this.table.reloadData();
     }
+  }
+
+  getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
+    if (action === 'delete') {
+      if (!selection?.hasSingleSelection) {
+        return true;
+      }
+    }
+    return this.orchService.getTableActionDisableDesc(
+      this.orchStatus,
+      this.actionOrchFeatures[action]
+    );
   }
 
   getServices(context: CdTableFetchDataContext) {
