@@ -21,6 +21,8 @@ import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '../../../../shared/models/orchestrator.interface';
 import { Permission } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
@@ -67,6 +69,12 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
   tableActions: CdTableAction[];
   fetchInventorySub: Subscription;
 
+  @Input() orchStatus: OrchestratorStatus = undefined;
+
+  actionOrchFeatures = {
+    identify: [OrchestratorFeature.DEVICE_BLINK_LIGHT]
+  };
+
   constructor(
     private authStorageService: AuthStorageService,
     private dimlessBinary: DimlessBinaryPipe,
@@ -83,7 +91,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
         icon: Icons.show,
         click: () => this.identifyDevice(),
         name: $localize`Identify`,
-        disable: () => !this.selection.hasSingleSelection,
+        disable: (selection: CdTableSelection) => this.getDisable('identify', selection),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
         visible: () => _.isString(this.selectionType)
       }
@@ -173,6 +181,16 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
 
   onColumnFiltersChanged(event: CdTableColumnFiltersChange) {
     this.filterChange.emit(event);
+  }
+
+  getDisable(action: 'identify', selection: CdTableSelection): boolean | string {
+    if (!selection.hasSingleSelection) {
+      return true;
+    }
+    return this.orchService.getTableActionDisableDesc(
+      this.orchStatus,
+      this.actionOrchFeatures[action]
+    );
   }
 
   updateSelection(selection: CdTableSelection) {

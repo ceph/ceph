@@ -6,8 +6,10 @@ import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/t
 
 import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
 import { configureTestSuite } from 'ng-bullet';
+import { of } from 'rxjs';
 
 import { InventoryDevice } from '../app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { OrchestratorService } from '../app/shared/api/orchestrator.service';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
@@ -15,6 +17,7 @@ import { CdTableAction } from '../app/shared/models/cd-table-action';
 import { CdTableSelection } from '../app/shared/models/cd-table-selection';
 import { CrushNode } from '../app/shared/models/crush-node';
 import { CrushRule, CrushRuleConfig } from '../app/shared/models/crush-rule';
+import { OrchestratorFeature } from '../app/shared/models/orchestrator.enum';
 import { Permission } from '../app/shared/models/permissions';
 import {
   AlertmanagerAlert,
@@ -578,4 +581,62 @@ export class TabHelper {
     const debugElem: DebugElement = fixture.debugElement;
     return debugElem.queryAll(By.directive(NgbNavItem));
   }
+}
+
+export class OrchestratorHelper {
+  /**
+   * Mock Orchestrator status.
+   * @param available is the Orchestrator enabled?
+   * @param features A list of enabled Orchestrator features.
+   */
+  static mockStatus(available: boolean, features?: OrchestratorFeature[]) {
+    const orchStatus = { available: available, description: '', features: {} };
+    if (features) {
+      features.forEach((feature: OrchestratorFeature) => {
+        orchStatus.features[feature] = { available: true };
+      });
+    }
+    spyOn(TestBed.inject(OrchestratorService), 'status').and.callFake(() => of(orchStatus));
+  }
+}
+
+export class TableActionHelper {
+  /**
+   * Verify table action buttons, including the button disabled state and disable description.
+   *
+   * @param fixture  test fixture
+   * @param tableActions table actions
+   * @param expectResult expected values. e.g. {Create: { disabled: true, disableDesc: 'not supported'}}.
+   *                     Expect the Create button to be disabled with 'not supported' tooltip.
+   */
+  static verifyTableActions = async (
+    fixture: ComponentFixture<any>,
+    tableActions: CdTableAction[],
+    expectResult: {
+      [action: string]: { disabled: boolean; disableDesc: string };
+    }
+  ) => {
+    // click dropdown to update all actions buttons
+    const dropDownToggle = fixture.debugElement.query(By.css('.dropdown-toggle'));
+    dropDownToggle.triggerEventHandler('click', null);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
+    const toClassName = TestBed.inject(TableActionsComponent).toClassName;
+    const getActionElement = (action: CdTableAction) =>
+      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action.name)}`));
+
+    const actions = {};
+    tableActions.forEach((action) => {
+      const actionElement = getActionElement(action);
+      if (expectResult[action.name]) {
+        actions[action.name] = {
+          disabled: actionElement.classes.disabled,
+          disableDesc: actionElement.properties.title
+        };
+      }
+    });
+    expect(actions).toEqual(expectResult);
+  };
 }

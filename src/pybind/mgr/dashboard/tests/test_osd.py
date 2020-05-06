@@ -295,6 +295,7 @@ class OsdTest(ControllerTestCase):
 
         # With orchestrator service
         fake_client.available.return_value = True
+        fake_client.get_missing_features.return_value = []
         self._task_post('/api/osd', data)
         self.assertStatus(201)
         dg_specs = [DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
@@ -308,6 +309,7 @@ class OsdTest(ControllerTestCase):
         # without orchestrator service
         fake_client = mock.Mock()
         instance.return_value = fake_client
+        fake_client.get_missing_features.return_value = []
 
         # Invalid DriveGroup
         data = {

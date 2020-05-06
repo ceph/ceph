@@ -11,7 +11,7 @@ from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
-from ..services.orchestrator import OrchClient
+from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import TaskManager
 
 
@@ -53,16 +53,26 @@ def orchestrator_task(name, metadata, wait_for=2.0):
     return Task("orchestrator/{}".format(name), metadata, wait_for)
 
 
-def raise_if_no_orchestrator(method):
-    @wraps(method)
-    def inner(self, *args, **kwargs):
-        orch = OrchClient.instance()
-        if not orch.available():
-            raise DashboardException(code='orchestrator_status_unavailable',  # pragma: no cover
-                                     msg='Orchestrator is unavailable',
-                                     component='orchestrator',
-                                     http_status_code=503)
-        return method(self, *args, **kwargs)
+def raise_if_no_orchestrator(features=None):
+    def inner(method):
+        @wraps(method)
+        def _inner(self, *args, **kwargs):
+            orch = OrchClient.instance()
+            if not orch.available():
+                raise DashboardException(code='orchestrator_status_unavailable',  # pragma: no cover
+                                         msg='Orchestrator is unavailable',
+                                         component='orchestrator',
+                                         http_status_code=503)
+            if features is not None:
+                missing = orch.get_missing_features(features)
+                if missing:
+                    msg = 'Orchestrator feature(s) are unavailable: {}'.format(', '.join(missing))
+                    raise DashboardException(code='orchestrator_features_unavailable',
+                                             msg=msg,
+                                             component='orchestrator',
+                                             http_status_code=503)
+            return method(self, *args, **kwargs)
+        return _inner
     return inner
 
 
@@ -76,7 +86,7 @@ class Orchestrator(RESTController):
 
     @Endpoint(method='POST')
     @UpdatePermission
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.DEVICE_BLINK_LIGHT])
     @handle_orchestrator_error('osd')
     @orchestrator_task('identify_device', ['{hostname}', '{device}'])
     def identify_device(self, hostname, device, duration):  # pragma: no cover
@@ -102,7 +112,7 @@ class Orchestrator(RESTController):
 @ApiController('/orchestrator/inventory', Scope.HOSTS)
 class OrchestratorInventory(RESTController):
 
-    @raise_if_no_orchestrator
+    @raise_if_no_orchestrator([OrchFeature.DEVICE_LIST])
     def list(self, hostname=None):
         orch = OrchClient.instance()
         hosts = [hostname] if hostname else None

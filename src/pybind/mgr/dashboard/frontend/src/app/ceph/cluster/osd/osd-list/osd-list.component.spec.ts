@@ -10,7 +10,12 @@ import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { EMPTY, of } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  OrchestratorHelper,
+  PermissionHelper,
+  TableActionHelper
+} from '../../../../../testing/unit-test-helper';
 import { CoreModule } from '../../../../core/core.module';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -20,6 +25,7 @@ import { FormModalComponent } from '../../../../shared/components/form-modal/for
 import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
 import { Permissions } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { ModalService } from '../../../../shared/services/modal.service';
@@ -33,6 +39,7 @@ describe('OsdListComponent', () => {
   let fixture: ComponentFixture<OsdListComponent>;
   let modalServiceShowSpy: jasmine.Spy;
   let osdService: OsdService;
+  let orchService: OrchestratorService;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -80,10 +87,9 @@ describe('OsdListComponent', () => {
     );
   };
 
-  const mockOrchestratorStatus = () => {
-    spyOn(TestBed.inject(OrchestratorService), 'status').and.callFake(() =>
-      of({ available: true })
-    );
+  const mockOrch = () => {
+    const features = [OrchestratorFeature.OSD_CREATE, OrchestratorFeature.OSD_DELETE];
+    OrchestratorHelper.mockStatus(true, features);
   };
 
   configureTestBed({
@@ -110,7 +116,11 @@ describe('OsdListComponent', () => {
     fixture = TestBed.createComponent(OsdListComponent);
     component = fixture.componentInstance;
     osdService = TestBed.inject(OsdService);
-    modalServiceShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.stub();
+    modalServiceShowSpy = spyOn(TestBed.inject(ModalService), 'show').and.returnValue({
+      // mock the close function, it might be called if there are async tests.
+      close: jest.fn()
+    });
+    orchService = TestBed.inject(OrchestratorService);
   });
 
   it('should create', () => {
@@ -404,7 +414,7 @@ describe('OsdListComponent', () => {
       expectOpensModal('Mark Lost', modalClass);
       expectOpensModal('Purge', modalClass);
       expectOpensModal('Destroy', modalClass);
-      mockOrchestratorStatus();
+      mockOrch();
       mockSafeToDelete();
       expectOpensModal('Delete', modalClass);
     });
@@ -447,9 +457,111 @@ describe('OsdListComponent', () => {
       expectOsdServiceMethodCalled('Mark Lost', 'markLost');
       expectOsdServiceMethodCalled('Purge', 'purge');
       expectOsdServiceMethodCalled('Destroy', 'destroy');
-      mockOrchestratorStatus();
+      mockOrch();
       mockSafeToDelete();
       expectOsdServiceMethodCalled('Delete', 'delete');
+    });
+  });
+
+  describe('table actions', () => {
+    const fakeOsds = require('./fixtures/osd_list_response.json');
+
+    beforeEach(() => {
+      component.permissions = fakeAuthStorageService.getPermissions();
+      spyOn(osdService, 'getList').and.callFake(() => of(fakeOsds));
+    });
+
+    const testTableActions = async (
+      orch: boolean,
+      features: OrchestratorFeature[],
+      tests: { selectRow?: number; expectResults: any }[]
+    ) => {
+      OrchestratorHelper.mockStatus(orch, features);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      for (const test of tests) {
+        if (test.selectRow) {
+          component.selection = new CdTableSelection();
+          component.selection.selected = [test.selectRow];
+        }
+        await TableActionHelper.verifyTableActions(
+          fixture,
+          component.tableActions,
+          test.expectResults
+        );
+      }
+    };
+
+    it('should have correct states when Orchestrator is enabled', async () => {
+      const tests = [
+        {
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[0],
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: false, disableDesc: '' }
+          }
+        }
+      ];
+
+      const features = [
+        OrchestratorFeature.OSD_CREATE,
+        OrchestratorFeature.OSD_DELETE,
+        OrchestratorFeature.OSD_GET_REMOVE_STATUS
+      ];
+      await testTableActions(true, features, tests);
+    });
+
+    it('should have correct states when Orchestrator is disabled', async () => {
+      const resultNoOrchestrator = {
+        disabled: true,
+        disableDesc: orchService.disableMessages.noOrchestrator
+      };
+      const tests = [
+        {
+          expectResults: {
+            Create: resultNoOrchestrator,
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[0],
+          expectResults: {
+            Create: resultNoOrchestrator,
+            Delete: resultNoOrchestrator
+          }
+        }
+      ];
+      await testTableActions(false, [], tests);
+    });
+
+    it('should have correct states when Orchestrator features are missing', async () => {
+      const resultMissingFeatures = {
+        disabled: true,
+        disableDesc: orchService.disableMessages.missingFeature
+      };
+      const tests = [
+        {
+          expectResults: {
+            Create: resultMissingFeatures,
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[0],
+          expectResults: {
+            Create: resultMissingFeatures,
+            Delete: resultMissingFeatures
+          }
+        }
+      ];
+      await testTableActions(true, [], tests);
     });
   });
 });
