@@ -9,6 +9,7 @@ import copy
 import datetime
 import errno
 import logging
+import multiprocessing
 import pickle
 import re
 import time
@@ -671,6 +672,9 @@ class Orchestrator(object):
     while you scan hosts every time.
     """
 
+    _features = None
+    _lock = multiprocessing.Lock()
+
     @_hide_in_features
     def is_orchestrator_module(self):
         """
@@ -748,12 +752,14 @@ class Orchestrator(object):
 
         :returns: Dict of API method names to ``{'available': True or False}``
         """
-        module = self.__class__
-        features = {a: {'available': getattr(Orchestrator, a, None) != getattr(module, a)}
-                    for a in Orchestrator.__dict__
-                    if not a.startswith('_') and not getattr(getattr(Orchestrator, a), '_hide_in_features', False)
-                    }
-        return features
+        with self._lock:
+            if self._features is None:
+                module = self.__class__
+                self._features = {a: {'available': getattr(Orchestrator, a, None) != getattr(module, a)}
+                            for a in Orchestrator.__dict__
+                            if not a.startswith('_') and not getattr(getattr(Orchestrator, a), '_hide_in_features', False)
+                            }
+            return self._features
 
     def cancel_completions(self):
         # type: () -> None
