@@ -46,7 +46,7 @@ describe('IscsiComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiComponent);
     component = fixture.componentInstance;
-    iscsiService = TestBed.get(IscsiService);
+    iscsiService = TestBed.inject(IscsiService);
     fixture.detectChanges();
     tcmuiscsiData = {
       images: []

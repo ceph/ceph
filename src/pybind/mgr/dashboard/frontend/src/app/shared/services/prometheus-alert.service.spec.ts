@@ -35,13 +35,13 @@ describe('PrometheusAlertService', () => {
   });
 
   it('should create', () => {
-    expect(TestBed.get(PrometheusAlertService)).toBeTruthy();
+    expect(TestBed.inject(PrometheusAlertService)).toBeTruthy();
   });
 
   describe('test failing status codes and verify disabling of the alertmanager', () => {
     const isDisabledByStatusCode = (statusCode: number, expectedStatus: boolean, done: any) => {
-      service = TestBed.get(PrometheusAlertService);
-      prometheusService = TestBed.get(PrometheusService);
+      service = TestBed.inject(PrometheusAlertService);
+      prometheusService = TestBed.inject(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
       spyOn(prometheusService, 'getAlerts').and.returnValue(
         Observable.create((observer: any) => observer.error({ status: statusCode, error: {} }))
@@ -73,8 +73,8 @@ describe('PrometheusAlertService', () => {
   });
 
   it('should flatten the response of getRules()', () => {
-    service = TestBed.get(PrometheusAlertService);
-    prometheusService = TestBed.get(PrometheusService);
+    service = TestBed.inject(PrometheusAlertService);
+    prometheusService = TestBed.inject(PrometheusService);
 
     spyOn(service['prometheusService'], 'ifPrometheusConfigured').and.callFake((fn) => fn());
     spyOn(prometheusService, 'getRules').and.returnValue(
@@ -108,16 +108,16 @@ describe('PrometheusAlertService', () => {
 
   describe('refresh', () => {
     beforeEach(() => {
-      service = TestBed.get(PrometheusAlertService);
+      service = TestBed.inject(PrometheusAlertService);
       service['alerts'] = [];
       service['canAlertsBeNotified'] = false;
 
       spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
-      notificationService = TestBed.get(NotificationService);
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.stub();
 
-      prometheusService = TestBed.get(PrometheusService);
+      prometheusService = TestBed.inject(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
       spyOn(prometheusService, 'getAlerts').and.callFake(() => of(alerts));
 

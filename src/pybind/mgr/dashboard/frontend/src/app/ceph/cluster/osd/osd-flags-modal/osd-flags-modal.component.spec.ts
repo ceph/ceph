@@ -39,7 +39,7 @@ describe('OsdFlagsModalComponent', () => {
   });
 
   beforeEach(() => {
-    httpTesting = TestBed.get(HttpTestingController);
+    httpTesting = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(OsdFlagsModalComponent);
     component = fixture.componentInstance;
   });
@@ -66,12 +66,12 @@ describe('OsdFlagsModalComponent', () => {
     let bsModalRef: BsModalRef;
 
     beforeEach(() => {
-      notificationService = TestBed.get(NotificationService);
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.callFake((type) => {
         notificationType = type;
       });
 
-      bsModalRef = TestBed.get(BsModalRef);
+      bsModalRef = TestBed.inject(BsModalRef);
       spyOn(bsModalRef, 'hide').and.callThrough();
       component.unknownFlags = ['foo'];
     });

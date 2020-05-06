@@ -90,7 +90,7 @@ describe('OsdSmartListComponent', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
 
-    osdService = TestBed.get(OsdService);
+    osdService = TestBed.inject(OsdService);
   });
 
   it('should create', () => {
