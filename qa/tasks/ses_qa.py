@@ -183,14 +183,14 @@ class Validation(SESQA):
 
     def ses_rack_dc_region_unavailability(self, **kwargs):
         """
-        Simulates rack, DC and region unavailability by 
+        Simulates rack, DC and region unavailability by
         modifying Ceph crushmap
         """
         self.scripts.run(
                 self.master_remote,
                 'ses_rack_dc_region_unavailability.sh',
                 )
-    
+
     def ses_network_failure(self, **kwargs):
         """
         Simulates network failure using tc netem tool

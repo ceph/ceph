@@ -1197,6 +1197,12 @@ class Orch(DeepSea):
             'ceph_cluster_status.sh',
             )
         self.__ceph_health_test()
+        self.log.info("Entering temporary post-Stage-3 sleep (3 minutes). "
+                      "Purpose is to avoid transient failures that started "
+                      "appearing with ceph 14.2.9. Once the DeepSea suite "
+                      "is shown to pass reliably on 14.2.9+ without this sleep, "
+                      "it can be removed.")
+        time.sleep(180)
 
     def _run_stage_4(self):
         """
