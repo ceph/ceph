@@ -335,5 +335,4 @@ target_link_libraries(unittest_rabin_chunk global ceph-common)
 add_ceph_unittest(unittest_rabin_chunk)
 
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
-target_link_libraries(unittest_rabin_chunk GTest::GTest)
 add_ceph_unittest(unittest_ceph_timer)
