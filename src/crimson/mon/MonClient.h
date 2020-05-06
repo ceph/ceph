@@ -59,14 +59,14 @@ class Client : public crimson::net::Dispatcher,
   crimson::net::Messenger& msgr;
 
   // commands
-  using get_version_t = seastar::future<version_t, version_t>;
+  using get_version_t = seastar::future<std::tuple<version_t, version_t>>;
 
   ceph_tid_t last_version_req_id = 0;
   std::map<ceph_tid_t, typename get_version_t::promise_type> version_reqs;
 
   ceph_tid_t last_mon_command_id = 0;
   using command_result_t =
-    seastar::future<std::int32_t, string, ceph::bufferlist>;
+    seastar::future<std::tuple<std::int32_t, string, ceph::bufferlist>>;
   std::map<ceph_tid_t, typename command_result_t::promise_type> mon_commands;
 
   MonSub sub;

@@ -135,7 +135,8 @@ class ProtocolV2 final : public Protocol {
  private:
   void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
   void reset_session(bool full);
-  seastar::future<entity_type_t, entity_addr_t> banner_exchange(bool is_connect);
+  seastar::future<std::tuple<entity_type_t, entity_addr_t>>
+  banner_exchange(bool is_connect);
 
   enum class next_step_t {
     ready,

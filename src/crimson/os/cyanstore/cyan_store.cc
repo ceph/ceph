@@ -83,7 +83,8 @@ seastar::future<> CyanStore::umount()
 
 seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
-  return read_meta("fsid").then([=](auto r, auto fsid_str) {
+  return read_meta("fsid").then([=](auto&& ret) {
+    auto& [r, fsid_str] = ret;
     if (r == -ENOENT) {
       if (new_osd_fsid.is_zero()) {
         osd_fsid.generate_random();
@@ -124,7 +125,7 @@ seastar::future<store_statfs_t> CyanStore::stat() const
   return seastar::make_ready_future<store_statfs_t>(std::move(st));
 }
 
-seastar::future<std::vector<ghobject_t>, ghobject_t>
+seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
 CyanStore::list_objects(CollectionRef ch,
                         const ghobject_t& start,
                         const ghobject_t& end,
@@ -146,8 +147,8 @@ CyanStore::list_objects(CollectionRef ch,
     }
     objects.push_back(oid);
   }
-  return seastar::make_ready_future<std::vector<ghobject_t>, ghobject_t>(
-    std::move(objects), next);
+  return seastar::make_ready_future<std::tuple<std::vector<ghobject_t>, ghobject_t>>(
+    std::make_tuple(std::move(objects), next));
 }
 
 seastar::future<CollectionRef> CyanStore::create_new_collection(const coll_t& cid)
@@ -273,7 +274,7 @@ CyanStore::omap_get_values(CollectionRef ch,
   return seastar::make_ready_future<omap_values_t>(std::move(values));
 }
 
-seastar::future<bool, CyanStore::omap_values_t>
+seastar::future<std::tuple<bool, CyanStore::omap_values_t>>
 CyanStore::omap_get_values(
     CollectionRef ch,
     const ghobject_t &oid,
@@ -293,8 +294,8 @@ CyanStore::omap_get_values(
        ++i) {
     values.insert(*i);
   }
-  return seastar::make_ready_future<bool, omap_values_t>(
-    true, values);
+  return seastar::make_ready_future<std::tuple<bool, omap_values_t>>(
+    std::make_tuple(true, std::move(values)));
 }
 
 seastar::future<ceph::bufferlist>
@@ -657,7 +658,8 @@ seastar::future<> CyanStore::write_meta(const std::string& key,
   return seastar::make_ready_future<>();
 }
 
-seastar::future<int, std::string> CyanStore::read_meta(const std::string& key)
+seastar::future<std::tuple<int, std::string>>
+CyanStore::read_meta(const std::string& key)
 {
   std::string fsid(4096, '\0');
   int r = safe_read_file(path.c_str(), key.c_str(), fsid.data(), fsid.size());
@@ -669,7 +671,8 @@ seastar::future<int, std::string> CyanStore::read_meta(const std::string& key)
   } else {
     fsid.clear();
   }
-  return seastar::make_ready_future<int, std::string>(r, fsid);
+  return seastar::make_ready_future<std::tuple<int, std::string>>(
+    std::make_tuple(r, fsid));
 }
 
 uuid_d CyanStore::get_fsid() const

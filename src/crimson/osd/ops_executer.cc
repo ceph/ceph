@@ -527,7 +527,8 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
   }
 
   return backend.list_objects(lower_bound, limit).then(
-    [&backend, filter, nspace](auto objects, auto next) {
+    [&backend, filter, nspace](auto&& ret) {
+      auto& [objects, next] = ret;
       auto in_my_namespace = [&nspace](const hobject_t& obj) {
         using crimson::common::local_conf;
         if (obj.get_namespace() == local_conf()->osd_hit_set_namespace) {
@@ -792,7 +793,8 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
 
   using entries_t = decltype(pg_ls_response_t::entries);
   return backend.list_objects(lower_bound, limit).then(
-    [&backend, filter, nspace](auto objects, auto next) {
+    [&backend, filter, nspace](auto&& ret) {
+      auto& [objects, next] = ret;
       return seastar::when_all_succeed(
         seastar::map_reduce(std::move(objects),
           [&backend, filter, nspace](const hobject_t& obj) {
