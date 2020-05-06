@@ -59,7 +59,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
     fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     formHelper = new FormHelper(component.form);
-    ecpService = TestBed.get(ErasureCodeProfileService);
+    ecpService = TestBed.inject(ErasureCodeProfileService);
     data = {
       plugins: ['isa', 'jerasure', 'shec', 'lrc'],
       names: ['ecp1', 'ecp2'],
@@ -400,7 +400,7 @@ describe('ErasureCodeProfileFormModalComponent', () => {
       submittedEcp['packetsize'] = 2048;
       submittedEcp['technique'] = 'reed_sol_van';
 
-      const taskWrapper = TestBed.get(TaskWrapperService);
+      const taskWrapper = TestBed.inject(TaskWrapperService);
       spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
       spyOn(ecpService, 'create').and.stub();
     });

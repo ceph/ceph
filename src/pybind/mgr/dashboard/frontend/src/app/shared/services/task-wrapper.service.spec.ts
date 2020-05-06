@@ -52,8 +52,8 @@ describe('TaskWrapperService', () => {
 
     beforeEach(() => {
       passed = false;
-      notify = TestBed.get(NotificationService);
-      summaryService = TestBed.get(SummaryService);
+      notify = TestBed.inject(NotificationService);
+      summaryService = TestBed.inject(SummaryService);
       spyOn(notify, 'show');
       spyOn(notify, 'notifyTask').and.stub();
       spyOn(service, '_handleExecutingTasks').and.callThrough();
@@ -75,7 +75,7 @@ describe('TaskWrapperService', () => {
     });
 
     it('should call notifyTask if asynchronous task would have been finished', () => {
-      const taskManager = TestBed.get(TaskManagerService);
+      const taskManager = TestBed.inject(TaskManagerService);
       spyOn(taskManager, 'subscribe').and.callFake((_name, _metadata, onTaskFinished) => {
         onTaskFinished();
       });

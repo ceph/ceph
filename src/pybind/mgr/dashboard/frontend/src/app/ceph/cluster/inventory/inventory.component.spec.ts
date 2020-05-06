@@ -34,7 +34,7 @@ describe('InventoryComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(InventoryComponent);
     component = fixture.componentInstance;
-    orchService = TestBed.get(OrchestratorService);
+    orchService = TestBed.inject(OrchestratorService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
     spyOn(orchService, 'inventoryDeviceList').and.callThrough();
   });

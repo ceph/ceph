@@ -12,7 +12,7 @@ describe('MgrSummaryPipe', () => {
   });
 
   beforeEach(() => {
-    pipe = TestBed.get(MgrSummaryPipe);
+    pipe = TestBed.inject(MgrSummaryPipe);
   });
 
   it('create an instance', () => {

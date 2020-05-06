@@ -36,7 +36,7 @@ describe('SelectBadgesComponent', () => {
       { name: 'option1', description: '', selected: false, enabled: true },
       { name: 'option2', description: '', selected: false, enabled: true }
     ];
-    const i18n = TestBed.get(I18n);
+    const i18n = TestBed.inject(I18n);
     const messages = new SelectMessages({ empty: 'foo bar' }, i18n);
     const selectionLimit = 2;
     const customBadges = true;

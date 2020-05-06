@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { AlertModule } from 'ngx-bootstrap/alert';
+import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -45,7 +46,7 @@ describe('GrafanaComponent', () => {
 
   describe('with grafana initialized', () => {
     beforeEach(() => {
-      TestBed.get(SettingsService).settings = { 'api/grafana/url': 'http:localhost:3000' };
+      TestBed.inject(SettingsService)['settings'] = { 'api/grafana/url': 'http:localhost:3000' };
       fixture.detectChanges();
     });
 
@@ -76,7 +77,7 @@ describe('GrafanaComponent', () => {
     });
 
     it('should have Dashboard', () => {
-      TestBed.get(SettingsService).validateGrafanaDashboardUrl = { uid: 200 };
+      TestBed.inject(SettingsService).validateGrafanaDashboardUrl = () => of({ uid: 200 });
       expect(component.dashboardExist).toBe(true);
     });
   });

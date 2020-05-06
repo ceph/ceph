@@ -48,9 +48,9 @@ describe('RbdTrashRestoreModalComponent', () => {
     let req: TestRequest;
 
     beforeEach(() => {
-      httpTesting = TestBed.get(HttpTestingController);
-      notificationService = TestBed.get(NotificationService);
-      modalRef = TestBed.get(BsModalRef);
+      httpTesting = TestBed.inject(HttpTestingController);
+      notificationService = TestBed.inject(NotificationService);
+      modalRef = TestBed.inject(BsModalRef);
 
       component.poolName = 'foo';
       component.imageName = 'bar';

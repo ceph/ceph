@@ -14,7 +14,7 @@ describe('DepCheckerService', () => {
   });
 
   it('should be created', () => {
-    const service: DepCheckerService = TestBed.get(DepCheckerService);
+    const service: DepCheckerService = TestBed.inject(DepCheckerService);
     expect(service).toBeTruthy();
   });
 });

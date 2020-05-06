@@ -49,7 +49,7 @@ describe('HostsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HostsComponent);
     component = fixture.componentInstance;
-    hostListSpy = spyOn(TestBed.get(HostService), 'list');
+    hostListSpy = spyOn(TestBed.inject(HostService), 'list');
     fixture.detectChanges();
   });
 

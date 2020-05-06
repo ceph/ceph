@@ -46,8 +46,8 @@ describe('RbdTrashListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdTrashListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    rbdService = TestBed.get(RbdService);
+    summaryService = TestBed.inject(SummaryService);
+    rbdService = TestBed.inject(RbdService);
     fixture.detectChanges();
   });
 

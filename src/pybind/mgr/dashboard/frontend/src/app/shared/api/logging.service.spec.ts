@@ -14,8 +14,8 @@ describe('LoggingService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(LoggingService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(LoggingService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

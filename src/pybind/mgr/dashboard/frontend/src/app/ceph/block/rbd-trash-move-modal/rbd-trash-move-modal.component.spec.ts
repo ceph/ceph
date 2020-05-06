@@ -34,7 +34,7 @@ describe('RbdTrashMoveModalComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdTrashMoveModalComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
+    httpTesting = TestBed.inject(HttpTestingController);
 
     component.poolName = 'foo';
     component.imageName = 'bar';
@@ -55,7 +55,7 @@ describe('RbdTrashMoveModalComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      notificationService = TestBed.get(NotificationService);
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.stub();
       spyOn(component.modalRef, 'hide').and.callThrough();
     });

@@ -45,7 +45,7 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiTargetDiscoveryModalComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   describe('with update permissions', () => {

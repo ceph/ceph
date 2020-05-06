@@ -19,7 +19,7 @@ describe('TaskManagerMessageService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(TaskMessageService);
+    service = TestBed.inject(TaskMessageService);
     finishedTask = new FinishedTask();
     finishedTask.duration = 30;
   });

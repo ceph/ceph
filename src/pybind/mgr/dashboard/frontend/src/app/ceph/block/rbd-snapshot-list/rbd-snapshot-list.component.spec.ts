@@ -71,7 +71,7 @@ describe('RbdSnapshotListComponent', () => {
     fixture = TestBed.createComponent(RbdSnapshotListComponent);
     component = fixture.componentInstance;
     component.ngOnChanges();
-    summaryService = TestBed.get(SummaryService);
+    summaryService = TestBed.inject(SummaryService);
   });
 
   it('should create', () => {
@@ -87,8 +87,8 @@ describe('RbdSnapshotListComponent', () => {
 
     beforeEach(() => {
       fixture.detectChanges();
-      const i18n = TestBed.get(I18n);
-      const actionLabelsI18n = TestBed.get(ActionLabelsI18n);
+      const i18n = TestBed.inject(I18n);
+      const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
       called = false;
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
@@ -190,15 +190,15 @@ describe('RbdSnapshotListComponent', () => {
     beforeEach(() => {
       component.poolName = 'pool01';
       component.rbdName = 'image01';
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(BsModalService), 'show').and.callFake(() => {
         const ref = new BsModalRef();
         ref.content = new RbdSnapshotFormModalComponent(
           null,
           null,
           null,
           null,
-          TestBed.get(I18n),
-          TestBed.get(ActionLabelsI18n)
+          TestBed.inject(I18n),
+          TestBed.inject(ActionLabelsI18n)
         );
         ref.content.onSubmit = new Subject();
         return ref;

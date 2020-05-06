@@ -44,7 +44,7 @@ describe('NfsFormComponent', () => {
   });
 
   beforeEach(() => {
-    const summaryService = TestBed.get(SummaryService);
+    const summaryService = TestBed.inject(SummaryService);
     spyOn(summaryService, 'refresh').and.callFake(() => true);
     spyOn(summaryService, 'subscribeOnce').and.callFake(() =>
       of({
@@ -54,8 +54,8 @@ describe('NfsFormComponent', () => {
 
     fixture = TestBed.createComponent(NfsFormComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
-    activatedRoute = TestBed.get(ActivatedRoute);
+    httpTesting = TestBed.inject(HttpTestingController);
+    activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
     fixture.detectChanges();
 
     httpTesting.expectOne('api/nfs-ganesha/daemon').flush([

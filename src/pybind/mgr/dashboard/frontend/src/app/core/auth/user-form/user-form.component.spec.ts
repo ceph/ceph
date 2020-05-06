@@ -60,17 +60,17 @@ describe('UserFormComponent', () => {
   });
 
   beforeEach(() => {
-    spyOn(TestBed.get(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));
+    spyOn(TestBed.inject(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));
     fixture = TestBed.createComponent(UserFormComponent);
     component = fixture.componentInstance;
     form = component.userForm;
-    httpTesting = TestBed.get(HttpTestingController);
-    userService = TestBed.get(UserService);
-    modalService = TestBed.get(BsModalService);
-    router = TestBed.get(Router);
+    httpTesting = TestBed.inject(HttpTestingController);
+    userService = TestBed.inject(UserService);
+    modalService = TestBed.inject(BsModalService);
+    router = TestBed.inject(Router);
     spyOn(router, 'navigate');
     fixture.detectChanges();
-    const notify = TestBed.get(NotificationService);
+    const notify = TestBed.inject(NotificationService);
     spyOn(notify, 'show');
     formHelper = new FormHelper(form);
   });
@@ -176,9 +176,9 @@ describe('UserFormComponent', () => {
 
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
-      spyOn(TestBed.get(RoleService), 'list').and.callFake(() => of(roles));
+      spyOn(TestBed.inject(RoleService), 'list').and.callFake(() => of(roles));
       setUrl('/user-management/users/edit/user1');
-      spyOn(TestBed.get(SettingsService), 'getStandardSettings').and.callFake(() =>
+      spyOn(TestBed.inject(SettingsService), 'getStandardSettings').and.callFake(() =>
         of({
           user_pwd_expiration_warning_1: 10,
           user_pwd_expiration_warning_2: 5,
@@ -215,7 +215,7 @@ describe('UserFormComponent', () => {
     });
 
     it('should alert if user is removing needed role permission', () => {
-      spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       let modalBodyTpl = null;
       spyOn(modalService, 'show').and.callFake((_content, config) => {
         modalBodyTpl = config.initialState.bodyTpl;
@@ -226,7 +226,7 @@ describe('UserFormComponent', () => {
     });
 
     it('should logout if current user roles have been changed', () => {
-      spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       formHelper.setValue('roles', ['user-manager']);
       component.submit();
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
@@ -237,7 +237,7 @@ describe('UserFormComponent', () => {
     });
 
     it('should submit', () => {
-      spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       component.submit();
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
       expect(userReq.request.method).toBe('PUT');
