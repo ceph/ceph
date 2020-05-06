@@ -90,6 +90,12 @@
 /* Define if you have fuse */
 #cmakedefine HAVE_LIBFUSE
 
+/* Define version major */
+#define CEPH_FUSE_MAJOR_VERSION @FUSE_MAJOR_VERSION@
+
+/* Define version minor */
+#define CEPH_FUSE_MINOR_VERSION @FUSE_MINOR_VERSION@
+
 /* Define to 1 if you have libxfs */
 #cmakedefine HAVE_LIBXFS 1
 

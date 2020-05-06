@@ -28,14 +28,25 @@ find_library(FUSE_LIBRARIES
   NAMES ${fuse_names}
   PATHS /usr/local/lib64 /usr/local/lib)
 
-foreach(ver "MAJOR" "MINOR")
-  file(STRINGS "${FUSE_INCLUDE_DIR}/fuse_common.h" fuse_ver_${ver}_line
-    REGEX "^#define[\t ]+FUSE_${ver}_VERSION[\t ]+[0-9]+$")
-  string(REGEX REPLACE ".*#define[\t ]+FUSE_${ver}_VERSION[\t ]+([0-9]+)$"
-    "\\1" FUSE_VERSION_${ver} "${fuse_ver_${ver}_line}")
-endforeach()
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+  pkg_search_module(PKG_FUSE QUIET ${fuse_names})
+
+  string(REGEX REPLACE "([0-9]+)\.([0-9]+)\.([0-9]+)"
+    "\\1" FUSE_MAJOR_VERSION "${PKG_FUSE_VERSION}")
+  string(REGEX REPLACE "([0-9]+)\.([0-9]+)\.([0-9]+)"
+    "\\2" FUSE_MINOR_VERSION "${PKG_FUSE_VERSION}")
+else()
+  foreach(ver "MAJOR" "MINOR")
+    file(STRINGS "${FUSE_INCLUDE_DIR}/fuse_common.h" fuse_ver_${ver}_line
+      REGEX "^#define[\t ]+FUSE_${ver}_VERSION[\t ]+[0-9]+$")
+    string(REGEX REPLACE ".*#define[\t ]+FUSE_${ver}_VERSION[\t ]+([0-9]+)$"
+      "\\1" FUSE_${ver}_VERSION "${fuse_ver_${ver}_line}")
+  endforeach()
+endif()
+
 set(FUSE_VERSION
-  "${FUSE_VERSION_MAJOR}.${FUSE_VERSION_MINOR}")
+  "${FUSE_MAJOR_VERSION}.${FUSE_MINOR_VERSION}")
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(FUSE
