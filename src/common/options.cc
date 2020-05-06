@@ -8364,7 +8364,7 @@ std::vector<Option> get_mds_client_options() {
     .set_flag(Option::FLAG_STARTUP),
 
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description("big_writes is deprecated in libfuse 3.0.0"),
 
     Option("fuse_max_write", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
