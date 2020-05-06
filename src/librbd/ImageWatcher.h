@@ -18,19 +18,11 @@ class entity_name_t;
 
 namespace librbd {
 
-namespace watcher {
-namespace util {
-template <typename> struct HandlePayloadVisitor;
-}
-}
-
 class ImageCtx;
 template <typename> class TaskFinisher;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageWatcher : public Watcher {
-  friend struct watcher::util::HandlePayloadVisitor<ImageWatcher<ImageCtxT>>;
-
 public:
   ImageWatcher(ImageCtxT& image_ctx);
   ~ImageWatcher() override;
@@ -42,8 +34,10 @@ public:
                       Context *on_finish);
   void notify_resize(uint64_t request_id, uint64_t size, bool allow_shrink,
                      ProgressContext &prog_ctx, Context *on_finish);
-  void notify_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
+  void notify_snap_create(uint64_t request_id,
+                          const cls::rbd::SnapshotNamespace &snap_namespace,
 			  const std::string &snap_name,
+                          ProgressContext &prog_ctx,
 			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
                           const std::string &dst_snap_name,
@@ -78,13 +72,18 @@ public:
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
 
+  void notify_quiesce(uint64_t request_id, ProgressContext &prog_ctx,
+                      Context *on_finish);
+  void notify_unquiesce(uint64_t request_id, Context *on_finish);
+
 private:
   enum TaskCode {
     TASK_CODE_REQUEST_LOCK,
     TASK_CODE_CANCEL_ASYNC_REQUESTS,
     TASK_CODE_REREGISTER_WATCH,
     TASK_CODE_ASYNC_REQUEST,
-    TASK_CODE_ASYNC_PROGRESS
+    TASK_CODE_ASYNC_PROGRESS,
+    TASK_CODE_QUIESCE,
   };
 
   typedef std::pair<Context *, ProgressContext *> AsyncRequest;
@@ -182,14 +181,13 @@ private:
   void handle_request_lock(int r);
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
 
-  void notify_lock_owner(const watch_notify::Payload& payload,
-                         Context *on_finish);
+  void notify_lock_owner(watch_notify::Payload *payload, Context *on_finish);
 
   Context *remove_async_request(const watch_notify::AsyncRequestId &id);
   void schedule_async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void async_request_timed_out(const watch_notify::AsyncRequestId &id);
   void notify_async_request(const watch_notify::AsyncRequestId &id,
-                            const watch_notify::Payload &payload,
+                            watch_notify::Payload *payload,
                             ProgressContext& prog_ctx,
                             Context *on_finish);
 
@@ -205,6 +203,14 @@ private:
   int prepare_async_request(const watch_notify::AsyncRequestId& id,
                             bool* new_request, Context** ctx,
                             ProgressContext** prog_ctx);
+
+  Context *prepare_quiesce_request(const watch_notify::AsyncRequestId &request,
+                                   C_NotifyAck *ack_ctx);
+  Context *prepare_unquiesce_request(const watch_notify::AsyncRequestId &request);
+
+  void notify_quiesce(const watch_notify::AsyncRequestId &async_request_id,
+                      size_t attempts, ProgressContext &prog_ctx,
+                      Context *on_finish);
 
   bool handle_payload(const watch_notify::HeaderUpdatePayload& payload,
                       C_NotifyAck *ctx);
@@ -242,18 +248,21 @@ private:
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::SparsifyPayload& payload,
                       C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::QuiescePayload& payload,
+                      C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::UnquiescePayload& payload,
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
   void process_payload(uint64_t notify_id, uint64_t handle,
-                       const watch_notify::Payload &payload);
+                       watch_notify::Payload *payload);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;
   void handle_error(uint64_t cookie, int err) override;
   void handle_rewatch_complete(int r) override;
 
-  void send_notify(const watch_notify::Payload& payload,
-                   Context *ctx = nullptr);
+  void send_notify(watch_notify::Payload *payload, Context *ctx = nullptr);
 
 };
 

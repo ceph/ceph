@@ -8175,6 +8175,257 @@ TEST_F(TestLibRBD, SnapRemoveWithChildMissing)
   rados_ioctx_destroy(ioctx1);
 }
 
+TEST_F(TestLibRBD, QuiesceWatch)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  uint64_t handle1, handle2;
+  rbd_image_t image1, image2;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image1, NULL));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image2, NULL));
+
+  struct Watcher {
+    static void quiesce_cb(void *arg) {
+      Watcher *watcher = static_cast<Watcher *>(arg);
+      watcher->handle_quiesce();
+    }
+    static void unquiesce_cb(void *arg) {
+      Watcher *watcher = static_cast<Watcher *>(arg);
+      watcher->handle_unquiesce();
+    }
+
+    rbd_image_t &image;
+    size_t quiesce_count = 0;
+    size_t unquiesce_count = 0;
+
+    Watcher(rbd_image_t &image) : image(image) {
+    }
+
+    void handle_quiesce() {
+      ASSERT_EQ(quiesce_count, unquiesce_count);
+      quiesce_count++;
+      rbd_quiesce_complete(image);
+    }
+    void handle_unquiesce() {
+      unquiesce_count++;
+      ASSERT_EQ(quiesce_count, unquiesce_count);
+    }
+  } watcher1(image1), watcher2(image2);
+
+  ASSERT_EQ(0, rbd_quiesce_watch(image1, Watcher::quiesce_cb,
+                                 Watcher::unquiesce_cb, &watcher1, &handle1));
+  ASSERT_EQ(0, rbd_quiesce_watch(image2, Watcher::quiesce_cb,
+                                 Watcher::unquiesce_cb, &watcher2, &handle2));
+
+  ASSERT_EQ(0, rbd_snap_create(image1, "snap1"));
+  ASSERT_EQ(1U, watcher1.quiesce_count);
+  ASSERT_EQ(1U, watcher1.unquiesce_count);
+  ASSERT_EQ(1U, watcher2.quiesce_count);
+  ASSERT_EQ(1U, watcher2.unquiesce_count);
+
+  ASSERT_EQ(0, rbd_snap_create(image2, "snap2"));
+  ASSERT_EQ(2U, watcher1.quiesce_count);
+  ASSERT_EQ(2U, watcher1.unquiesce_count);
+  ASSERT_EQ(2U, watcher2.quiesce_count);
+  ASSERT_EQ(2U, watcher2.unquiesce_count);
+
+  ASSERT_EQ(0, rbd_quiesce_unwatch(image1, handle1));
+
+  ASSERT_EQ(0, rbd_snap_create(image1, "snap3"));
+  ASSERT_EQ(2U, watcher1.quiesce_count);
+  ASSERT_EQ(2U, watcher1.unquiesce_count);
+  ASSERT_EQ(3U, watcher2.quiesce_count);
+  ASSERT_EQ(3U, watcher2.unquiesce_count);
+
+  ASSERT_EQ(0, rbd_quiesce_unwatch(image2, handle2));
+
+  ASSERT_EQ(0, rbd_snap_remove(image1, "snap1"));
+  ASSERT_EQ(0, rbd_snap_remove(image1, "snap2"));
+  ASSERT_EQ(0, rbd_snap_remove(image1, "snap3"));
+  ASSERT_EQ(0, rbd_close(image1));
+  ASSERT_EQ(0, rbd_close(image2));
+  ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, QuiesceWatchPP)
+{
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  {
+    librbd::Image image1, image2;
+    ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+    ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+    struct Watcher : public librbd::QuiesceWatchCtx {
+      librbd::Image &image;
+      size_t quiesce_count = 0;
+      size_t unquiesce_count = 0;
+
+      Watcher(librbd::Image &image) : image(image) {
+      }
+
+      void handle_quiesce() override {
+        ASSERT_EQ(quiesce_count, unquiesce_count);
+        quiesce_count++;
+        image.quiesce_complete();
+      }
+      void handle_unquiesce() override {
+        unquiesce_count++;
+        ASSERT_EQ(quiesce_count, unquiesce_count);
+      }
+    } watcher1(image1), watcher2(image2);
+    uint64_t handle1, handle2;
+
+    ASSERT_EQ(0, image1.quiesce_watch(&watcher1, &handle1));
+    ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &handle2));
+
+    ASSERT_EQ(0, image1.snap_create("snap1"));
+    ASSERT_EQ(1U, watcher1.quiesce_count);
+    ASSERT_EQ(1U, watcher1.unquiesce_count);
+    ASSERT_EQ(1U, watcher2.quiesce_count);
+    ASSERT_EQ(1U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image2.snap_create("snap2"));
+    ASSERT_EQ(2U, watcher1.quiesce_count);
+    ASSERT_EQ(2U, watcher1.unquiesce_count);
+    ASSERT_EQ(2U, watcher2.quiesce_count);
+    ASSERT_EQ(2U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
+
+    ASSERT_EQ(0, image1.snap_create("snap3"));
+    ASSERT_EQ(2U, watcher1.quiesce_count);
+    ASSERT_EQ(2U, watcher1.unquiesce_count);
+    ASSERT_EQ(3U, watcher2.quiesce_count);
+    ASSERT_EQ(3U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
+
+    ASSERT_EQ(0, image1.snap_remove("snap1"));
+    ASSERT_EQ(0, image1.snap_remove("snap2"));
+    ASSERT_EQ(0, image1.snap_remove("snap3"));
+  }
+
+  ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, QuiesceWatchTimeout)
+{
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  ASSERT_EQ(0, _rados.conf_set("rbd_quiesce_notification_attempts", "2"));
+
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    struct Watcher : public librbd::QuiesceWatchCtx {
+      librbd::Image &image;
+      mutex m_lock;
+      condition_variable m_cond;
+      size_t quiesce_count = 0;
+      size_t unquiesce_count = 0;
+
+      Watcher(librbd::Image &image) : image(image) {
+      }
+
+      void handle_quiesce() override {
+        lock_guard<mutex> locker(m_lock);
+        quiesce_count++;
+        m_cond.notify_one();
+      }
+
+      void handle_unquiesce() override {
+        lock_guard<mutex> locker(m_lock);
+        unquiesce_count++;
+        m_cond.notify_one();
+      }
+
+      void wait_for_quiesce_count(size_t count) {
+        unique_lock<mutex> locker(m_lock);
+        ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
+                                    [this, count] {
+                                      return this->quiesce_count == count;
+                                    }));
+      }
+
+      void wait_for_unquiesce_count(size_t count) {
+        unique_lock<mutex> locker(m_lock);
+        ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
+                                    [this, count] {
+                                      return this->unquiesce_count == count;
+                                    }));
+      }
+    } watcher(image);
+    uint64_t handle;
+
+    ASSERT_EQ(0, image.quiesce_watch(&watcher, &handle));
+
+    thread quiesce1([&image, &watcher]() {
+      watcher.wait_for_quiesce_count(1);
+      sleep(8);
+      image.quiesce_complete();
+    });
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    quiesce1.join();
+    ASSERT_EQ(1U, watcher.quiesce_count);
+    watcher.wait_for_unquiesce_count(1);
+    ASSERT_EQ(1U, watcher.unquiesce_count);
+
+    thread quiesce2([&image, &watcher]() {
+      watcher.wait_for_quiesce_count(2);
+      sleep(13);
+      image.quiesce_complete();
+    });
+
+    ASSERT_EQ(-ETIMEDOUT, image.snap_create("snap2"));
+    quiesce2.join();
+    ASSERT_EQ(2U, watcher.quiesce_count);
+    watcher.wait_for_unquiesce_count(2);
+    ASSERT_EQ(2U, watcher.unquiesce_count);
+
+    thread quiesce3([&image, &watcher]() {
+      watcher.wait_for_quiesce_count(3);
+      image.quiesce_complete();
+    });
+
+    ASSERT_EQ(0, image.snap_create("snap2"));
+    quiesce3.join();
+    ASSERT_EQ(3U, watcher.quiesce_count);
+    watcher.wait_for_unquiesce_count(3);
+    ASSERT_EQ(3U, watcher.unquiesce_count);
+
+    ASSERT_EQ(0, image.snap_remove("snap1"));
+    ASSERT_EQ(0, image.snap_remove("snap2"));
+  }
+
+  ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
+  ioctx.close();
+}
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,

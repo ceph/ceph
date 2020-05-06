@@ -219,7 +219,7 @@ public:
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
     EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(_, StrEq(snap_name), _,
-                                                                op_tid, false))
+                                                                op_tid, false, _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }

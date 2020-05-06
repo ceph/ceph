@@ -7478,6 +7478,11 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_rwl_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/tmp")
     .set_description("location of the persistent write back cache in a DAX-enabled filesystem on persistent memory"),
+
+    Option("rbd_quiesce_notification_attempts", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(10)
+    .set_min(1)
+    .set_description("the number of quiesce notification attempts"),
   });
 }
 

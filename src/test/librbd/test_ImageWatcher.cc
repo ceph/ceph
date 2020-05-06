@@ -154,7 +154,7 @@ public:
 
     bufferlist payload = m_notify_payloads[op];
     auto iter = payload.cbegin();
-    
+
     switch (op) {
     case NOTIFY_OP_FLATTEN:
       {
@@ -167,6 +167,13 @@ public:
       {
         ResizePayload payload;
         payload.decode(2, iter);
+        *id = payload.async_request_id;
+      }
+      return true;
+    case NOTIFY_OP_SNAP_CREATE:
+      {
+        SnapCreatePayload payload;
+        payload.decode(7, iter);
         *id = payload.async_request_id;
       }
       return true;
@@ -186,14 +193,14 @@ public:
   int notify_async_progress(librbd::ImageCtx *ictx, const AsyncRequestId &id,
                             uint64_t offset, uint64_t total) {
     bufferlist bl;
-    encode(NotifyMessage(AsyncProgressPayload(id, offset, total)), bl);
+    encode(NotifyMessage(new AsyncProgressPayload(id, offset, total)), bl);
     return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
   }
 
   int notify_async_complete(librbd::ImageCtx *ictx, const AsyncRequestId &id,
                             int r) {
     bufferlist bl;
-    encode(NotifyMessage(AsyncCompletePayload(id, r)), bl);
+    encode(NotifyMessage(new AsyncCompletePayload(id, r)), bl);
     return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
   }
 
@@ -272,6 +279,23 @@ struct ResizeTask {
     C_SaferCond ctx;
     ictx->image_watcher->notify_resize(0, 0, true, *progress_context, &ctx);
     result = ctx.wait();
+  }
+};
+
+struct SnapCreateTask {
+  librbd::ImageCtx *ictx;
+  ProgressContext *progress_context;
+  int result;
+
+  SnapCreateTask(librbd::ImageCtx *ictx_, ProgressContext *ctx)
+    : ictx(ictx_), progress_context(ctx), result(0) {}
+
+  void operator()() {
+    std::shared_lock l{ictx->owner_lock};
+    C_SaferCond ctx;
+    ictx->image_watcher->notify_snap_create(0, cls::rbd::UserSnapshotNamespace(),
+                                            "snap", *progress_context, &ctx);
+    ASSERT_EQ(0, ctx.wait());
   }
 };
 
@@ -424,15 +448,27 @@ TEST_F(TestImageWatcher, NotifySnapCreate) {
 
   m_notify_acks = {{NOTIFY_OP_SNAP_CREATE, create_response_message(0)}};
 
-  std::shared_lock l{ictx->owner_lock};
-  C_SaferCond notify_ctx;
-  ictx->image_watcher->notify_snap_create(cls::rbd::UserSnapshotNamespace(),
-	"snap", &notify_ctx);
-  ASSERT_EQ(0, notify_ctx.wait());
+  ProgressContext progress_context;
+  SnapCreateTask snap_create_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(snap_create_task));
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
 
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_SNAP_CREATE;
   ASSERT_EQ(expected_notify_ops, m_notifies);
+
+  AsyncRequestId async_request_id;
+  ASSERT_TRUE(extract_async_request_id(NOTIFY_OP_SNAP_CREATE,
+                                       &async_request_id));
+
+  ASSERT_EQ(0, notify_async_progress(ictx, async_request_id, 1, 10));
+  ASSERT_TRUE(progress_context.wait(ictx, 1, 10));
+
+  ASSERT_EQ(0, notify_async_complete(ictx, async_request_id, 0));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(0, snap_create_task.result);
 }
 
 TEST_F(TestImageWatcher, NotifySnapCreateError) {
@@ -449,8 +485,9 @@ TEST_F(TestImageWatcher, NotifySnapCreateError) {
 
   std::shared_lock l{ictx->owner_lock};
   C_SaferCond notify_ctx;
-  ictx->image_watcher->notify_snap_create(cls::rbd::UserSnapshotNamespace(),
-       "snap", &notify_ctx);
+  librbd::NoOpProgressContext prog_ctx;
+  ictx->image_watcher->notify_snap_create(0, cls::rbd::UserSnapshotNamespace(),
+       "snap", prog_ctx, &notify_ctx);
   ASSERT_EQ(-EEXIST, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;

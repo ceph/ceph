@@ -489,6 +489,20 @@ public:
   virtual void handle_notify() = 0;
 };
 
+class CEPH_RBD_API QuiesceWatchCtx {
+public:
+  virtual ~QuiesceWatchCtx() {}
+  /**
+   * Callback activated when we want to quiesce.
+   */
+  virtual void handle_quiesce() = 0;
+
+  /**
+   * Callback activated when we want to unquiesce.
+   */
+  virtual void handle_unquiesce() = 0;
+};
+
 class CEPH_RBD_API Image
 {
 public:
@@ -767,6 +781,10 @@ public:
   int list_watchers(std::list<image_watcher_t> &watchers);
 
   int config_list(std::vector<config_option_t> *options);
+
+  int quiesce_watch(QuiesceWatchCtx *ctx, uint64_t *handle);
+  int quiesce_unwatch(uint64_t handle);
+  void quiesce_complete();
 
 private:
   friend class RBD;

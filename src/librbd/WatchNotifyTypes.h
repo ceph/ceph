@@ -10,6 +10,7 @@
 #include "librbd/watcher/Types.h"
 #include <iosfwd>
 #include <list>
+#include <memory>
 #include <string>
 #include <boost/variant.hpp>
 
@@ -46,6 +47,9 @@ struct AsyncRequestId {
   inline bool operator!=(const AsyncRequestId &rhs) const {
     return (client_id != rhs.client_id || request_id != rhs.request_id);
   }
+  inline operator bool() const {
+    return (*this != AsyncRequestId());
+  }
 };
 
 enum NotifyOp {
@@ -67,69 +71,98 @@ enum NotifyOp {
   NOTIFY_OP_UPDATE_FEATURES    = 15,
   NOTIFY_OP_MIGRATE            = 16,
   NOTIFY_OP_SPARSIFY           = 17,
+  NOTIFY_OP_QUIESCE            = 18,
+  NOTIFY_OP_UNQUIESCE          = 19,
 };
 
-struct AcquiredLockPayload {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_ACQUIRED_LOCK;
-  static const bool CHECK_FOR_REFRESH = false;
+struct Payload {
+  virtual ~Payload() {}
 
+  virtual NotifyOp get_notify_op() const = 0;
+  virtual bool check_for_refresh() const = 0;
+
+  virtual void encode(bufferlist &bl) const = 0;
+  virtual void decode(__u8 version, bufferlist::const_iterator &iter) = 0;
+  virtual void dump(Formatter *f) const = 0;
+};
+
+struct AcquiredLockPayload : public Payload {
   ClientId client_id;
 
   AcquiredLockPayload() {}
-  AcquiredLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
+  AcquiredLockPayload(const ClientId &client_id) : client_id(client_id) {}
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_ACQUIRED_LOCK;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
+
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
-struct ReleasedLockPayload {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_RELEASED_LOCK;
-  static const bool CHECK_FOR_REFRESH = false;
-
+struct ReleasedLockPayload : public Payload {
   ClientId client_id;
 
   ReleasedLockPayload() {}
-  ReleasedLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
+  ReleasedLockPayload(const ClientId &client_id) : client_id(client_id) {}
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_RELEASED_LOCK;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
+
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
-struct RequestLockPayload {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_REQUEST_LOCK;
-  static const bool CHECK_FOR_REFRESH = false;
-
+struct RequestLockPayload : public Payload {
   ClientId client_id;
   bool force = false;
 
   RequestLockPayload() {}
-  RequestLockPayload(const ClientId &client_id_, bool force_)
-    : client_id(client_id_), force(force_) {
+  RequestLockPayload(const ClientId &client_id, bool force)
+    : client_id(client_id), force(force) {
   }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_REQUEST_LOCK;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
+
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
-struct HeaderUpdatePayload {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_HEADER_UPDATE;
-  static const bool CHECK_FOR_REFRESH = false;
+struct HeaderUpdatePayload : public Payload {
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_HEADER_UPDATE;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
-struct AsyncRequestPayloadBase {
+struct AsyncRequestPayloadBase : public Payload {
 public:
   AsyncRequestId async_request_id;
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 
 protected:
   AsyncRequestPayloadBase() {}
@@ -137,229 +170,290 @@ protected:
 };
 
 struct AsyncProgressPayload : public AsyncRequestPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_PROGRESS;
-  static const bool CHECK_FOR_REFRESH = false;
+  uint64_t offset = 0;
+  uint64_t total = 0;
 
-  AsyncProgressPayload() : offset(0), total(0) {}
-  AsyncProgressPayload(const AsyncRequestId &id, uint64_t offset_, uint64_t total_)
-    : AsyncRequestPayloadBase(id), offset(offset_), total(total_) {}
+  AsyncProgressPayload() {}
+  AsyncProgressPayload(const AsyncRequestId &id, uint64_t offset, uint64_t total)
+    : AsyncRequestPayloadBase(id), offset(offset), total(total) {}
 
-  uint64_t offset;
-  uint64_t total;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_ASYNC_PROGRESS;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
 struct AsyncCompletePayload : public AsyncRequestPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_ASYNC_COMPLETE;
-  static const bool CHECK_FOR_REFRESH = false;
+  int result = 0;
 
-  AsyncCompletePayload() : result(0) {}
+  AsyncCompletePayload() {}
   AsyncCompletePayload(const AsyncRequestId &id, int r)
     : AsyncRequestPayloadBase(id), result(r) {}
 
-  int result;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_ASYNC_COMPLETE;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
 struct FlattenPayload : public AsyncRequestPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_FLATTEN;
-  static const bool CHECK_FOR_REFRESH = true;
-
   FlattenPayload() {}
   FlattenPayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_FLATTEN;
+  }
+  bool check_for_refresh() const override {
+    return true;
+  }
 };
 
 struct ResizePayload : public AsyncRequestPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_RESIZE;
-  static const bool CHECK_FOR_REFRESH = true;
+  uint64_t size = 0;
+  bool allow_shrink = true;
 
-  ResizePayload() : size(0), allow_shrink(true) {}
-  ResizePayload(uint64_t size_, bool allow_shrink_, const AsyncRequestId &id)
-    : AsyncRequestPayloadBase(id), size(size_), allow_shrink(allow_shrink_) {}
+  ResizePayload() {}
+  ResizePayload(uint64_t size, bool allow_shrink, const AsyncRequestId &id)
+    : AsyncRequestPayloadBase(id), size(size), allow_shrink(allow_shrink) {}
 
-  uint64_t size;
-  bool allow_shrink;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_RESIZE;
+  }
+  bool check_for_refresh() const override {
+    return true;
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
-struct SnapPayloadBase {
+struct SnapPayloadBase : public Payload {
 public:
-  static const bool CHECK_FOR_REFRESH = true;
-
   cls::rbd::SnapshotNamespace snap_namespace;
   std::string snap_name;
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  bool check_for_refresh() const override {
+    return true;
+  }
+
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 
 protected:
   SnapPayloadBase() {}
-  SnapPayloadBase(const cls::rbd::SnapshotNamespace& _snap_namespace,
+  SnapPayloadBase(const cls::rbd::SnapshotNamespace& snap_namespace,
 		  const std::string &name)
-    : snap_namespace(_snap_namespace), snap_name(name) {}
+    : snap_namespace(snap_namespace), snap_name(name) {}
 };
 
 struct SnapCreatePayload : public SnapPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_CREATE;
+  AsyncRequestId async_request_id;
 
   SnapCreatePayload() {}
-  SnapCreatePayload(const cls::rbd::SnapshotNamespace &_snap_namespace,
+  SnapCreatePayload(const AsyncRequestId &id,
+                    const cls::rbd::SnapshotNamespace &snap_namespace,
 		    const std::string &name)
-    : SnapPayloadBase(_snap_namespace, name) {}
+    : SnapPayloadBase(snap_namespace, name), async_request_id(id) {
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_SNAP_CREATE;
+  }
+
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
 struct SnapRenamePayload : public SnapPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_RENAME;
+  uint64_t snap_id = 0;
 
   SnapRenamePayload() {}
   SnapRenamePayload(const uint64_t &src_snap_id,
 		    const std::string &dst_name)
     : SnapPayloadBase(cls::rbd::UserSnapshotNamespace(), dst_name), snap_id(src_snap_id) {}
 
-  uint64_t snap_id = 0;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_SNAP_RENAME;
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
 struct SnapRemovePayload : public SnapPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_REMOVE;
-
   SnapRemovePayload() {}
   SnapRemovePayload(const cls::rbd::SnapshotNamespace& snap_namespace,
 		    const std::string &name)
     : SnapPayloadBase(snap_namespace, name) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_SNAP_REMOVE;
+  }
 };
 
 struct SnapProtectPayload : public SnapPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_PROTECT;
-
   SnapProtectPayload() {}
   SnapProtectPayload(const cls::rbd::SnapshotNamespace& snap_namespace,
 		     const std::string &name)
     : SnapPayloadBase(snap_namespace, name) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_SNAP_PROTECT;
+  }
 };
 
 struct SnapUnprotectPayload : public SnapPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SNAP_UNPROTECT;
-
   SnapUnprotectPayload() {}
   SnapUnprotectPayload(const cls::rbd::SnapshotNamespace& snap_namespace,
 		       const std::string &name)
     : SnapPayloadBase(snap_namespace, name) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_SNAP_UNPROTECT;
+  }
 };
 
 struct RebuildObjectMapPayload : public AsyncRequestPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_REBUILD_OBJECT_MAP;
-  static const bool CHECK_FOR_REFRESH = true;
-
   RebuildObjectMapPayload() {}
   RebuildObjectMapPayload(const AsyncRequestId &id)
     : AsyncRequestPayloadBase(id) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_REBUILD_OBJECT_MAP;
+  }
+  bool check_for_refresh() const override {
+    return true;
+  }
 };
 
-struct RenamePayload {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_RENAME;
-  static const bool CHECK_FOR_REFRESH = true;
+struct RenamePayload : public Payload {
+  std::string image_name;
 
   RenamePayload() {}
   RenamePayload(const std::string _image_name) : image_name(_image_name) {}
 
-  std::string image_name;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_RENAME;
+  }
+  bool check_for_refresh() const override {
+    return true;
+  }
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::const_iterator &iter);
   void dump(Formatter *f) const;
 };
 
-struct UpdateFeaturesPayload {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_UPDATE_FEATURES;
-  static const bool CHECK_FOR_REFRESH = true;
+struct UpdateFeaturesPayload : public Payload {
+  uint64_t features = 0;
+  bool enabled = false;
 
-  UpdateFeaturesPayload() : features(0), enabled(false) {}
-  UpdateFeaturesPayload(uint64_t features_, bool enabled_)
-    : features(features_), enabled(enabled_) {}
+  UpdateFeaturesPayload() {}
+  UpdateFeaturesPayload(uint64_t features, bool enabled)
+    : features(features), enabled(enabled) {}
 
-  uint64_t features;
-  bool enabled;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_UPDATE_FEATURES;
+  }
+  bool check_for_refresh() const override {
+    return true;
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
 struct MigratePayload : public AsyncRequestPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_MIGRATE;
-  static const bool CHECK_FOR_REFRESH = true;
-
   MigratePayload() {}
   MigratePayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_MIGRATE;
+  }
+  bool check_for_refresh() const override {
+    return true;
+  }
 };
 
 struct SparsifyPayload : public AsyncRequestPayloadBase {
-  static const NotifyOp NOTIFY_OP = NOTIFY_OP_SPARSIFY;
-  static const bool CHECK_FOR_REFRESH = true;
+  size_t sparse_size = 0;
 
   SparsifyPayload() {}
   SparsifyPayload(const AsyncRequestId &id, size_t sparse_size)
-    : AsyncRequestPayloadBase(id), sparse_size(sparse_size) {}
+    : AsyncRequestPayloadBase(id), sparse_size(sparse_size) {
+  }
 
-  size_t sparse_size = 0;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_SPARSIFY;
+  }
+  bool check_for_refresh() const override {
+    return true;
+  }
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
 };
 
-struct UnknownPayload {
-  static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
-  static const bool CHECK_FOR_REFRESH = false;
+struct QuiescePayload : public AsyncRequestPayloadBase {
+  QuiescePayload() {}
+  QuiescePayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
 
-  void encode(bufferlist &bl) const;
-  void decode(__u8 version, bufferlist::const_iterator &iter);
-  void dump(Formatter *f) const;
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_QUIESCE;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
 };
 
-typedef boost::variant<AcquiredLockPayload,
-                       ReleasedLockPayload,
-                       RequestLockPayload,
-                       HeaderUpdatePayload,
-                       AsyncProgressPayload,
-                       AsyncCompletePayload,
-                       FlattenPayload,
-                       ResizePayload,
-                       SnapCreatePayload,
-                       SnapRemovePayload,
-                       SnapRenamePayload,
-                       SnapProtectPayload,
-                       SnapUnprotectPayload,
-                       RebuildObjectMapPayload,
-                       RenamePayload,
-                       UpdateFeaturesPayload,
-                       MigratePayload,
-                       SparsifyPayload,
-                       UnknownPayload> Payload;
+struct UnquiescePayload : public AsyncRequestPayloadBase {
+  UnquiescePayload() {}
+  UnquiescePayload(const AsyncRequestId &id) : AsyncRequestPayloadBase(id) {}
+
+  NotifyOp get_notify_op() const override {
+    return NOTIFY_OP_UNQUIESCE;
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
+};
+
+struct UnknownPayload : public Payload {
+  NotifyOp get_notify_op() const override {
+    return static_cast<NotifyOp>(-1);
+  }
+  bool check_for_refresh() const override {
+    return false;
+  }
+
+  void encode(bufferlist &bl) const override;
+  void decode(__u8 version, bufferlist::const_iterator &iter) override;
+  void dump(Formatter *f) const override;
+};
 
 struct NotifyMessage {
-  NotifyMessage() : payload(UnknownPayload()) {}
-  NotifyMessage(const Payload &payload_) : payload(payload_) {}
+  NotifyMessage() : payload(new UnknownPayload()) {}
+  NotifyMessage(Payload *payload) : payload(payload) {}
 
-  Payload payload;
+  std::unique_ptr<Payload> payload;
 
   bool check_for_refresh() const;
 
