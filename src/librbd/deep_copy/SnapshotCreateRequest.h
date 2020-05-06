@@ -9,6 +9,8 @@
 #include "common/snap_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Types.h"
+#include "librbd/internal.h"
+
 #include <map>
 #include <set>
 #include <string>
@@ -72,6 +74,7 @@ private:
   Context *m_on_finish;
 
   CephContext *m_cct;
+  NoOpProgressContext m_prog_ctx;
 
   void send_set_head();
   void handle_set_head(int r);

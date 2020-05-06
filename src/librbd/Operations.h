@@ -52,7 +52,8 @@ public:
   void execute_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
 			   const std::string &snap_name,
 			   Context *on_finish,
-                           uint64_t journal_op_tid, bool skip_object_map);
+                           uint64_t journal_op_tid, bool skip_object_map,
+                           ProgressContext &prog_ctx);
 
   int snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
 		    const std::string& snap_name,

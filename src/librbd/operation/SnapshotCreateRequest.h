@@ -14,6 +14,7 @@ class Context;
 namespace librbd {
 
 class ImageCtx;
+class ProgressContext;
 
 namespace operation {
 
@@ -28,33 +29,38 @@ public:
    *            <start>
    *               |
    *               v
+   *           STATE_NOTIFY_QUIESCE
+   *               |
+   *               v
    *           STATE_SUSPEND_REQUESTS
    *               |
    *               v
-   *           STATE_SUSPEND_AIO * * * * * * * * * * * * *
-   *               |                                     *
-   *               v                                     *
-   *           STATE_APPEND_OP_EVENT (skip if journal    *
-   *               |                  disabled)          *
-   *   (retry)     v                                     *
-   *   . . . > STATE_ALLOCATE_SNAP_ID                    *
-   *   .           |                                     *
-   *   .           v                                     *
-   *   . . . . STATE_CREATE_SNAP * * * * * * * * * * *   *
-   *               |                                 *   *
-   *               v                                 *   *
-   *           STATE_CREATE_OBJECT_MAP (skip if      *   *
-   *               |                    disabled)    *   *
-   *               v                                 *   *
-   *           STATE_CREATE_IMAGE_STATE (skip if     *   *
-   *               |                     not mirror  *   *
-   *               |                     snapshot)   *   *
-   *               |                                 v   *
-   *               |              STATE_RELEASE_SNAP_ID  *
-   *               |                     |               *
-   *               |                     v               *
-   *               \----------------> <finish> < * * * * *
-   *
+   *           STATE_SUSPEND_AIO * * * * * * * * * * * * * * *
+   *               |                                         *
+   *               v                                         *
+   *           STATE_APPEND_OP_EVENT (skip if journal        *
+   *               |                  disabled)              *
+   *   (retry)     v                                         *
+   *   . . . > STATE_ALLOCATE_SNAP_ID                        *
+   *   .           |                                         *
+   *   .           v                                         *
+   *   . . . . STATE_CREATE_SNAP * * * * * * * * * * *       *
+   *               |                                 *       *
+   *               v                                 *       *
+   *           STATE_CREATE_OBJECT_MAP (skip if      *       *
+   *               |                    disabled)    *       *
+   *               v                                 *       *
+   *           STATE_CREATE_IMAGE_STATE (skip if     *       *
+   *               |                     not mirror  *       *
+   *               |                     snapshot)   *       *
+   *               |                                 v       *
+   *               |              STATE_RELEASE_SNAP_ID      *
+   *               |                     |                   *
+   *               |                     v                   *
+   *               \------------> STATE_NOTIFY_UNQUIESCE < * *
+   *                                     |
+   *                                     v
+   *                                  <finish>
    * @endverbatim
    *
    * The _CREATE_STATE state may repeat back to the _ALLOCATE_SNAP_ID state
@@ -63,10 +69,10 @@ public:
    * (if enabled) and bubble the originating error code back to the client.
    */
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
-			const cls::rbd::SnapshotNamespace &snap_namespace,
-		        const std::string &snap_name,
-			uint64_t journal_op_tid,
-                        bool skip_object_map);
+                        const cls::rbd::SnapshotNamespace &snap_namespace,
+                        const std::string &snap_name, uint64_t journal_op_tid,
+                        uint64_t request_id, bool skip_object_map,
+                        ProgressContext &prog_ctx);
 
 protected:
   void send_op() override;
@@ -83,13 +89,18 @@ protected:
 private:
   cls::rbd::SnapshotNamespace m_snap_namespace;
   std::string m_snap_name;
+  uint64_t m_request_id;
   bool m_skip_object_map;
+  ProgressContext &m_prog_ctx;
 
-  int m_ret_val;
+  int m_ret_val = 0;
 
-  uint64_t m_snap_id;
+  uint64_t m_snap_id = CEPH_NOSNAP;
   uint64_t m_size;
   ParentImageInfo m_parent_info;
+
+  void send_notify_quiesce();
+  Context *handle_notify_quiesce(int *result);
 
   void send_suspend_requests();
   Context *handle_suspend_requests(int *result);
@@ -114,6 +125,9 @@ private:
 
   void send_release_snap_id();
   Context *handle_release_snap_id(int *result);
+
+  void send_notify_unquiesce();
+  Context *handle_notify_unquiesce(int *result);
 
   void update_snap_context();
 
