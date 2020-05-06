@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-from io import BytesIO
 import json
 import logging
 import datetime
@@ -198,8 +197,8 @@ class CephFSMount(object):
             args = args.split()
 
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
-        return self.client_remote.run(args=args, stdout=BytesIO(),
-                                      stderr=BytesIO(), wait=wait,
+        return self.client_remote.run(args=args, stdout=StringIO(),
+                                      stderr=StringIO(), wait=wait,
                                       stdin=stdin, check_status=check_status,
                                       omit_sudo=omit_sudo)
 
