@@ -1132,7 +1132,7 @@ struct error_code;
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
 
-    reserve_t obtain_contiguous_space(unsigned len);
+    reserve_t obtain_contiguous_space(const unsigned len);
 
     /*
      * get a char
