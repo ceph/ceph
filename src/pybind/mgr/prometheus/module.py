@@ -94,7 +94,8 @@ OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
 
 OSD_STATUS = ['weight', 'up', 'in']
 
-OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
+OSD_STATS = ['apply_latency_ms', 'commit_latency_ms', 'kb_used', 'kb',
+             'num_pgs']
 
 POOL_METADATA = ('pool_id', 'name')
 
