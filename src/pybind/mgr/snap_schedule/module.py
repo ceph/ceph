@@ -47,33 +47,33 @@ class Module(MgrModule):
         self._initialized.wait()
         return -errno.EINVAL, "", "Unknown command"
 
-    @CLIReadCommand('fs snap-schedule ls',
+    @CLIReadCommand('fs snap-schedule dump',
                     'name=path,type=CephString,req=false '
                     'name=subvol,type=CephString,req=false '
                     'name=fs,type=CephString,req=false',
                     'List current snapshot schedules')
-    def snap_schedule_ls(self, path='/', subvol=None, fs=None):
+    def snap_schedule_dump(self, path='/', subvol=None, fs=None):
         use_fs = fs if fs else self.default_fs
         try:
-            ret_scheds = self.client.list_snap_schedule(use_fs, path)
+            ret_scheds = self.client.dump_snap_schedule(use_fs, path)
         except CephfsConnectionException as e:
             return e.to_tuple()
         return 0, ' '.join(str(ret_scheds)), ''
 
-    @CLIReadCommand('fs snap-schedule get',
+    @CLIReadCommand('fs snap-schedule list',
                     'name=path,type=CephString '
                     'name=subvol,type=CephString,req=false '
                     'name=fs,type=CephString,req=false',
                     'Get current snapshot schedule for <path>')
-    def snap_schedule_get(self, path, subvol=None, fs=None):
+    def snap_schedule_list(self, path, subvol=None, fs=None):
         try:
             use_fs = fs if fs else self.default_fs
-            sched = self.client.get_snap_schedule(use_fs, path)
+            scheds = self.client.list_snap_schedules(use_fs, path)
         except CephfsConnectionException as e:
             return e.to_tuple()
-        if not sched:
+        if not scheds:
             return -1, '', f'SnapSchedule for {path} not found'
-        return 0, str(sched), ''
+        return 0, str([str(sched) for sched in scheds]), ''
 
     @CLIWriteCommand('fs snap-schedule set',
                      'name=path,type=CephString '
@@ -87,7 +87,7 @@ class Module(MgrModule):
                           path,
                           snap_schedule,
                           retention_policy='',
-                          start='now',
+                          start='00:00',
                           fs=None,
                           subvol=None):
         try:
@@ -100,15 +100,15 @@ class Module(MgrModule):
             self.client.store_snap_schedule(use_fs, sched)
             suc_msg = f'Schedule set for path {path}'
         except sqlite3.IntegrityError:
-            existing_sched = self.client.get_snap_schedule(use_fs, path)
-            self.log.info(f'Found existing schedule {existing_sched}...updating')
-            self.client.update_snap_schedule(use_fs, sched)
-            suc_msg = f'Schedule set for path {path}, updated existing schedule {existing_sched}'
+            existing_sched = self.client.list_snap_schedule(use_fs, path)
+            error_msg = f'Found existing schedule {existing_sched}'
+            self.log.error(error_msg)
+            return 1, '', error_msg
         except CephfsConnectionException as e:
             return e.to_tuple()
         return 0, suc_msg, ''
 
-    @CLIWriteCommand('fs snap-schedule rm',
+    @CLIWriteCommand('fs snap-schedule remove',
                      'name=path,type=CephString '
                      'name=subvol,type=CephString,req=false '
                      'name=fs,type=CephString,req=false',
