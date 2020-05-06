@@ -56,9 +56,9 @@ seastar::future<OSDSuperblock> OSDMeta::load_superblock()
     }));
 }
 
-seastar::future<pg_pool_t,
-                std::string,
-                OSDMeta::ec_profile_t>
+seastar::future<std::tuple<pg_pool_t,
+			   std::string,
+			   OSDMeta::ec_profile_t>>
 OSDMeta::load_final_pool_info(int64_t pool) {
   return store->read(coll, final_pool_info_oid(pool),
                      0, 0).safe_then([this] (bufferlist&& bl) {
@@ -69,11 +69,12 @@ OSDMeta::load_final_pool_info(int64_t pool) {
     decode(pi, p);
     decode(name, p);
     decode(ec_profile, p);
-    return seastar::make_ready_future<pg_pool_t,
-                                      string,
-                                      ec_profile_t>(std::move(pi),
-                                                    std::move(name),
-                                                    std::move(ec_profile));
+    return seastar::make_ready_future<std::tuple<pg_pool_t,
+						 string,
+						 ec_profile_t>>(
+      std::make_tuple(std::move(pi),
+		      std::move(name),
+		      std::move(ec_profile)));
   },read_errorator::all_same_way([pool] {
     throw std::runtime_error(fmt::format("read gave enoent on {}",
                                          final_pool_info_oid(pool)));

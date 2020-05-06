@@ -91,7 +91,7 @@ public:
     epoch_t min_epoch,
     epoch_t map_epoch,
     std::vector<pg_log_entry_t>&& log_entries);
-  seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
+  seastar::future<std::tuple<std::vector<hobject_t>, hobject_t>> list_objects(
     const hobject_t& start,
     uint64_t limit) const;
   seastar::future<> setxattr(

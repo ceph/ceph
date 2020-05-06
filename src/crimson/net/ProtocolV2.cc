@@ -451,7 +451,8 @@ void ProtocolV2::reset_session(bool full)
   }
 }
 
-seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange(bool is_connect)
+seastar::future<std::tuple<entity_type_t, entity_addr_t>>
+ProtocolV2::banner_exchange(bool is_connect)
 {
   // 1. prepare and send banner
   bufferlist banner_payload;
@@ -558,8 +559,8 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange(bool i
       logger().debug("{} GOT HelloFrame: my_type={} peer_addr={}",
                      conn, ceph_entity_type_name(hello.entity_type()),
                      hello.peer_addr());
-      return seastar::make_ready_future<entity_type_t, entity_addr_t>(
-          hello.entity_type(), hello.peer_addr());
+      return seastar::make_ready_future<std::tuple<entity_type_t, entity_addr_t>>(
+        std::make_tuple(hello.entity_type(), hello.peer_addr()));
     });
 }
 
@@ -903,8 +904,8 @@ void ProtocolV2::execute_connecting()
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
           return banner_exchange(true);
-        }).then([this] (entity_type_t _peer_type,
-                        entity_addr_t _my_addr_from_peer) {
+        }).then([this] (auto&& ret) {
+          auto [_peer_type, _my_addr_from_peer] = std::move(ret);
           if (conn.get_peer_type() != _peer_type) {
             logger().warn("{} connection peer type does not match what peer advertises {} != {}",
                           conn, ceph_entity_type_name(conn.get_peer_type()),
@@ -1532,8 +1533,8 @@ void ProtocolV2::execute_accepting()
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
           return banner_exchange(false);
-        }).then([this] (entity_type_t _peer_type,
-                        entity_addr_t _my_addr_from_peer) {
+        }).then([this] (auto&& ret) {
+          auto [_peer_type, _my_addr_from_peer] = std::move(ret);
           ceph_assert(conn.get_peer_type() == 0);
           conn.set_peer_type(_peer_type);
 
