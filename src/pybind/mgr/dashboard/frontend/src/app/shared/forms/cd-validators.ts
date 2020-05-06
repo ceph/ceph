@@ -6,7 +6,6 @@ import {
   Validators
 } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { Observable, of as observableOf, timer as observableTimer } from 'rxjs';
 import { map, switchMapTo, take } from 'rxjs/operators';
@@ -333,7 +332,7 @@ export class CdValidators {
    * be called in a static one.
    */
   static binaryMin(bytes: number): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: (i18n: I18n) => string } | null => {
+    return (control: AbstractControl): { [key: string]: () => string } | null => {
       const formatterService = new FormatterService();
       const currentBytes = new FormatterService().toBytes(control.value);
       if (bytes <= currentBytes) {
@@ -341,7 +340,7 @@ export class CdValidators {
       }
       const value = new DimlessBinaryPipe(formatterService).transform(bytes);
       return {
-        binaryMin: (i18n: I18n) => i18n(`Size has to be at least {{value}} or more`, { value })
+        binaryMin: () => $localize`Size has to be at least ${value} or more`
       };
     };
   }
@@ -353,7 +352,7 @@ export class CdValidators {
    * be called in a static one.
    */
   static binaryMax(bytes: number): ValidatorFn {
-    return (control: AbstractControl): { [key: string]: (i18n: I18n) => string } | null => {
+    return (control: AbstractControl): { [key: string]: () => string } | null => {
       const formatterService = new FormatterService();
       const currentBytes = formatterService.toBytes(control.value);
       if (bytes >= currentBytes) {
@@ -361,7 +360,7 @@ export class CdValidators {
       }
       const value = new DimlessBinaryPipe(formatterService).transform(bytes);
       return {
-        binaryMax: (i18n: I18n) => i18n(`Size has to be at most {{value}} or less`, { value })
+        binaryMax: () => $localize`Size has to be at most ${value} or less`
       };
     };
   }

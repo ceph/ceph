@@ -6,7 +6,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { InventoryDevicesComponent } from './inventory-devices.component';
 
@@ -22,7 +22,6 @@ describe('InventoryDevicesComponent', () => {
       SharedModule,
       ToastrModule.forRoot()
     ],
-    providers: [i18nProviders],
     declarations: [InventoryDevicesComponent]
   });
 

@@ -2,7 +2,6 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -33,10 +32,9 @@ export class RgwUserSubuserModalComponent {
   constructor(
     private formBuilder: CdFormBuilder,
     public bsModalRef: NgbActiveModal,
-    private i18n: I18n,
     private actionLabels: ActionLabelsI18n
   ) {
-    this.resource = this.i18n('Subuser');
+    this.resource = $localize`Subuser`;
     this.createForm();
   }
 

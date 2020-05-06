@@ -1,11 +1,10 @@
-import { DebugElement, LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
+import { DebugElement, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
 import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { configureTestSuite } from 'ng-bullet';
 
 import { InventoryDevice } from '../app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
@@ -338,24 +337,6 @@ export class PrometheusHelper {
     return `<a href="${url}" target="_blank"><i class="${Icons.lineChart}"></i></a>`;
   }
 }
-
-const XLIFF = `<?xml version="1.0" encoding="UTF-8" ?>
-<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
-  <file source-language="en" datatype="plaintext" original="ng2.template">
-    <body>
-    </body>
-  </file>
-</xliff>
-`;
-
-const i18nProviders = [
-  { provide: TRANSLATIONS_FORMAT, useValue: 'xlf' },
-  { provide: TRANSLATIONS, useValue: XLIFF },
-  { provide: LOCALE_ID, useValue: 'en' },
-  I18n
-];
-
-export { i18nProviders };
 
 export function expectItemTasks(item: any, executing: string, percentage?: number) {
   if (executing) {

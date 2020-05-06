@@ -1,6 +1,5 @@
 import { Component, NgZone, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -42,7 +41,6 @@ export class RgwUserListComponent extends ListWithDetails {
     private authStorageService: AuthStorageService,
     private rgwUserService: RgwUserService,
     private modalService: ModalService,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
     private ngZone: NgZone
@@ -51,35 +49,35 @@ export class RgwUserListComponent extends ListWithDetails {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
-        name: this.i18n('Username'),
+        name: $localize`Username`,
         prop: 'uid',
         flexGrow: 1
       },
       {
-        name: this.i18n('Full name'),
+        name: $localize`Full name`,
         prop: 'display_name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Email address'),
+        name: $localize`Email address`,
         prop: 'email',
         flexGrow: 1
       },
       {
-        name: this.i18n('Suspended'),
+        name: $localize`Suspended`,
         prop: 'suspended',
         flexGrow: 1,
         cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: this.i18n('Max. buckets'),
+        name: $localize`Max. buckets`,
         prop: 'max_buckets',
         flexGrow: 1,
         cellTransformation: CellTemplate.map,
         customTemplateConfig: {
-          '-1': this.i18n('Disabled'),
-          0: this.i18n('Unlimited')
+          '-1': $localize`Disabled`,
+          0: $localize`Unlimited`
         }
       }
     ];
@@ -140,7 +138,7 @@ export class RgwUserListComponent extends ListWithDetails {
 
   deleteAction() {
     this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: this.selection.hasSingleSelection ? this.i18n('user') : this.i18n('users'),
+      itemDescription: this.selection.hasSingleSelection ? $localize`user` : $localize`users`,
       itemNames: this.selection.selected.map((user: any) => user['uid']),
       submitActionObservable: (): Observable<any> => {
         return new Observable((observer: Subscriber<any>) => {

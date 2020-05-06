@@ -2,7 +2,6 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -32,10 +31,9 @@ export class RgwUserS3KeyModalComponent {
   constructor(
     private formBuilder: CdFormBuilder,
     public activeModal: NgbActiveModal,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
-    this.resource = this.i18n('S3 Key');
+    this.resource = $localize`S3 Key`;
     this.createForm();
   }
 

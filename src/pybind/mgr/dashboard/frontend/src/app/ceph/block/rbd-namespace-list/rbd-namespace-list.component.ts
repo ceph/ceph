@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin, Observable } from 'rxjs';
 
@@ -41,7 +40,6 @@ export class RbdNamespaceListComponent implements OnInit {
     private poolService: PoolService,
     private modalService: ModalService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
@@ -65,17 +63,17 @@ export class RbdNamespaceListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Namespace'),
+        name: $localize`Namespace`,
         prop: 'namespace',
         flexGrow: 1
       },
       {
-        name: this.i18n('Pool'),
+        name: $localize`Pool`,
         prop: 'pool',
         flexGrow: 1
       },
       {
-        name: this.i18n('Total images'),
+        name: $localize`Total images`,
         prop: 'num_images',
         flexGrow: 1
       }
@@ -137,10 +135,7 @@ export class RbdNamespaceListComponent implements OnInit {
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n(`Deleted namespace '{{pool}}/{{namespace}}'`, {
-                pool: pool,
-                namespace: namespace
-              })
+              $localize`Deleted namespace '${pool}/${namespace}'`
             );
             this.modalRef.close();
             this.refresh();
@@ -156,7 +151,7 @@ export class RbdNamespaceListComponent implements OnInit {
     const first = this.selection.first();
     if (first) {
       if (first.num_images > 0) {
-        return this.i18n('Namespace contains images');
+        return $localize`Namespace contains images`;
       }
     }
 

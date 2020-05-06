@@ -8,7 +8,7 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { OsdService } from '../../../shared/api/osd.service';
 import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '../../../shared/models/smart';
 import { SharedModule } from '../../../shared/shared.module';
@@ -81,8 +81,7 @@ describe('OsdSmartListComponent', () => {
 
   configureTestBed({
     declarations: [SmartListComponent],
-    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule],
-    providers: [i18nProviders]
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule]
   });
 
   beforeEach(() => {

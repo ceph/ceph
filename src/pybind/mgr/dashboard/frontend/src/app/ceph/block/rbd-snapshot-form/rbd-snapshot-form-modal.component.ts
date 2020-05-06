@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Subject } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -37,11 +36,10 @@ export class RbdSnapshotFormModalComponent implements OnInit {
     private rbdService: RbdService,
     private taskManagerService: TaskManagerService,
     private notificationService: NotificationService,
-    private i18n: I18n,
     private actionLabels: ActionLabelsI18n
   ) {
     this.action = this.actionLabels.CREATE;
-    this.resource = this.i18n('RBD Snapshot');
+    this.resource = $localize`RBD Snapshot`;
     this.createForm();
   }
 

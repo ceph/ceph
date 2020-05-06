@@ -1,7 +1,6 @@
 import { Component, Inject } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import { Observable, Subscriber } from 'rxjs';
 
@@ -52,7 +51,6 @@ export class SilenceListComponent extends PrometheusListHelper {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private cdDatePipe: CdDatePipe,
     private modalService: ModalService,
     private notificationService: NotificationService,
@@ -116,32 +114,32 @@ export class SilenceListComponent extends PrometheusListHelper {
     ];
     this.columns = [
       {
-        name: this.i18n('ID'),
+        name: $localize`ID`,
         prop: 'id',
         flexGrow: 3
       },
       {
-        name: this.i18n('Created by'),
+        name: $localize`Created by`,
         prop: 'createdBy',
         flexGrow: 2
       },
       {
-        name: this.i18n('Started'),
+        name: $localize`Started`,
         prop: 'startsAt',
         pipe: this.cdDatePipe
       },
       {
-        name: this.i18n('Updated'),
+        name: $localize`Updated`,
         prop: 'updatedAt',
         pipe: this.cdDatePipe
       },
       {
-        name: this.i18n('Ends'),
+        name: $localize`Ends`,
         prop: 'endsAt',
         pipe: this.cdDatePipe
       },
       {
-        name: this.i18n('Status'),
+        name: $localize`Status`,
         prop: 'status.state',
         cellTransformation: CellTemplate.classAdding
       }
@@ -167,7 +165,7 @@ export class SilenceListComponent extends PrometheusListHelper {
 
   expireSilence() {
     const id = this.selection.first().id;
-    const i18nSilence = this.i18n('Silence');
+    const i18nSilence = $localize`Silence`;
     const applicationName = 'Prometheus';
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: i18nSilence,

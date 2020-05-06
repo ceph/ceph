@@ -1,7 +1,5 @@
 import { Injectable } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 export class AppConstants {
   public static readonly organization = 'ceph';
   public static readonly projectName = 'Ceph Dashboard';
@@ -109,52 +107,52 @@ export class ActionLabelsI18n {
   UNSET: string;
   UPDATE: string;
 
-  constructor(private i18n: I18n) {
+  constructor() {
     /* Create a new item */
-    this.CREATE = this.i18n('Create');
+    this.CREATE = $localize`Create`;
 
     /* Destroy an existing item */
-    this.DELETE = this.i18n('Delete');
+    this.DELETE = $localize`Delete`;
 
     /* Add an existing item to a container */
-    this.ADD = this.i18n('Add');
-    this.SET = this.i18n('Set');
+    this.ADD = $localize`Add`;
+    this.SET = $localize`Set`;
 
     /* Remove an item from a container WITHOUT deleting it */
-    this.REMOVE = this.i18n('Remove');
-    this.UNSET = this.i18n('Unset');
+    this.REMOVE = $localize`Remove`;
+    this.UNSET = $localize`Unset`;
 
     /* Make changes to an existing item */
-    this.EDIT = this.i18n('Edit');
-    this.UPDATE = this.i18n('Update');
-    this.CANCEL = this.i18n('Cancel');
+    this.EDIT = $localize`Edit`;
+    this.UPDATE = $localize`Update`;
+    this.CANCEL = $localize`Cancel`;
 
     /* Non-standard actions */
-    this.CLONE = this.i18n('Clone');
-    this.COPY = this.i18n('Copy');
-    this.DEEP_SCRUB = this.i18n('Deep Scrub');
-    this.DESTROY = this.i18n('Destroy');
-    this.EVICT = this.i18n('Evict');
-    this.FLATTEN = this.i18n('Flatten');
-    this.MARK_DOWN = this.i18n('Mark Down');
-    this.MARK_IN = this.i18n('Mark In');
-    this.MARK_LOST = this.i18n('Mark Lost');
-    this.MARK_OUT = this.i18n('Mark Out');
-    this.PROTECT = this.i18n('Protect');
-    this.PURGE = this.i18n('Purge');
-    this.RENAME = this.i18n('Rename');
-    this.RESTORE = this.i18n('Restore');
-    this.REWEIGHT = this.i18n('Reweight');
-    this.ROLLBACK = this.i18n('Rollback');
-    this.SCRUB = this.i18n('Scrub');
-    this.SHOW = this.i18n('Show');
-    this.TRASH = this.i18n('Move to Trash');
-    this.UNPROTECT = this.i18n('Unprotect');
-    this.CHANGE = this.i18n('Change');
+    this.CLONE = $localize`Clone`;
+    this.COPY = $localize`Copy`;
+    this.DEEP_SCRUB = $localize`Deep Scrub`;
+    this.DESTROY = $localize`Destroy`;
+    this.EVICT = $localize`Evict`;
+    this.FLATTEN = $localize`Flatten`;
+    this.MARK_DOWN = $localize`Mark Down`;
+    this.MARK_IN = $localize`Mark In`;
+    this.MARK_LOST = $localize`Mark Lost`;
+    this.MARK_OUT = $localize`Mark Out`;
+    this.PROTECT = $localize`Protect`;
+    this.PURGE = $localize`Purge`;
+    this.RENAME = $localize`Rename`;
+    this.RESTORE = $localize`Restore`;
+    this.REWEIGHT = $localize`Reweight`;
+    this.ROLLBACK = $localize`Rollback`;
+    this.SCRUB = $localize`Scrub`;
+    this.SHOW = $localize`Show`;
+    this.TRASH = $localize`Move to Trash`;
+    this.UNPROTECT = $localize`Unprotect`;
+    this.CHANGE = $localize`Change`;
 
     /* Prometheus wording */
-    this.RECREATE = this.i18n('Recreate');
-    this.EXPIRE = this.i18n('Expire');
+    this.RECREATE = $localize`Recreate`;
+    this.EXPIRE = $localize`Expire`;
   }
 }
 
@@ -194,47 +192,47 @@ export class SucceededActionLabelsI18n {
   RECREATED: string;
   EXPIRED: string;
 
-  constructor(private i18n: I18n) {
+  constructor() {
     /* Create a new item */
-    this.CREATED = this.i18n('Created');
+    this.CREATED = $localize`Created`;
 
     /* Destroy an existing item */
-    this.DELETED = this.i18n('Deleted');
+    this.DELETED = $localize`Deleted`;
 
     /* Add an existing item to a container */
-    this.ADDED = this.i18n('Added');
+    this.ADDED = $localize`Added`;
 
     /* Remove an item from a container WITHOUT deleting it */
-    this.REMOVED = this.i18n('Removed');
+    this.REMOVED = $localize`Removed`;
 
     /* Make changes to an existing item */
-    this.EDITED = this.i18n('Edited');
-    this.CANCELED = this.i18n('Canceled');
+    this.EDITED = $localize`Edited`;
+    this.CANCELED = $localize`Canceled`;
 
     /* Non-standard actions */
-    this.CLONED = this.i18n('Cloned');
-    this.COPIED = this.i18n('Copied');
-    this.DEEP_SCRUBBED = this.i18n('Deep Scrubbed');
-    this.DESTROYED = this.i18n('Destroyed');
-    this.FLATTENED = this.i18n('Flattened');
-    this.MARKED_DOWN = this.i18n('Marked Down');
-    this.MARKED_IN = this.i18n('Marked In');
-    this.MARKED_LOST = this.i18n('Marked Lost');
-    this.MARKED_OUT = this.i18n('Marked Out');
-    this.PROTECTED = this.i18n('Protected');
-    this.PURGED = this.i18n('Purged');
-    this.RENAMED = this.i18n('Renamed');
-    this.RESTORED = this.i18n('Restored');
-    this.REWEIGHTED = this.i18n('Reweighted');
-    this.ROLLED_BACK = this.i18n('Rolled back');
-    this.SCRUBBED = this.i18n('Scrubbed');
-    this.SHOWED = this.i18n('Showed');
-    this.TRASHED = this.i18n('Moved to Trash');
-    this.UNPROTECTED = this.i18n('Unprotected');
-    this.CHANGE = this.i18n('Change');
+    this.CLONED = $localize`Cloned`;
+    this.COPIED = $localize`Copied`;
+    this.DEEP_SCRUBBED = $localize`Deep Scrubbed`;
+    this.DESTROYED = $localize`Destroyed`;
+    this.FLATTENED = $localize`Flattened`;
+    this.MARKED_DOWN = $localize`Marked Down`;
+    this.MARKED_IN = $localize`Marked In`;
+    this.MARKED_LOST = $localize`Marked Lost`;
+    this.MARKED_OUT = $localize`Marked Out`;
+    this.PROTECTED = $localize`Protected`;
+    this.PURGED = $localize`Purged`;
+    this.RENAMED = $localize`Renamed`;
+    this.RESTORED = $localize`Restored`;
+    this.REWEIGHTED = $localize`Reweighted`;
+    this.ROLLED_BACK = $localize`Rolled back`;
+    this.SCRUBBED = $localize`Scrubbed`;
+    this.SHOWED = $localize`Showed`;
+    this.TRASHED = $localize`Moved to Trash`;
+    this.UNPROTECTED = $localize`Unprotected`;
+    this.CHANGE = $localize`Change`;
 
     /* Prometheus wording */
-    this.RECREATED = this.i18n('Recreated');
-    this.EXPIRED = this.i18n('Expired');
+    this.RECREATED = $localize`Recreated`;
+    this.EXPIRED = $localize`Expired`;
   }
 }

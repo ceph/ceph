@@ -6,7 +6,7 @@ import { By } from '@angular/platform-browser';
 import * as _ from 'lodash';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -59,7 +59,6 @@ describe('HealthComponent', () => {
     ],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
-      i18nProviders,
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       PgCategoryService,
       RefreshIntervalService

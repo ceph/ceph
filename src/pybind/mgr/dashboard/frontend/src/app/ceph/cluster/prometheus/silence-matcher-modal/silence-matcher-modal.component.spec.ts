@@ -11,7 +11,6 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders,
   PrometheusHelper
 } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -34,7 +33,7 @@ describe('SilenceMatcherModalComponent', () => {
       RouterTestingModule,
       ReactiveFormsModule
     ],
-    providers: [NgbActiveModal, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

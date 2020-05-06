@@ -2,7 +2,6 @@ import { Component, OnInit } from '@angular/core';
 import { ValidatorFn, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
@@ -50,7 +49,6 @@ export class TelemetryComponent extends CdForm implements OnInit {
     private notificationService: NotificationService,
     private router: Router,
     private telemetryService: TelemetryService,
-    private i18n: I18n,
     private textToDownloadService: TextToDownloadService,
     private telemetryNotificationService: TelemetryNotificationService
   ) {
@@ -151,11 +149,9 @@ export class TelemetryComponent extends CdForm implements OnInit {
     this.mgrModuleService.updateConfig('telemetry', config).subscribe(
       () => {
         this.disableModule(
-          this.i18n(
-            `Your settings have been applied successfully. \
-Due to privacy/legal reasons the Telemetry module is now disabled until you \
-complete the next step and accept the license.`
-          ),
+          $localize`Your settings have been applied successfully. \
+ Due to privacy/legal reasons the Telemetry module is now disabled until you \
+ complete the next step and accept the license.`,
           () => {
             this.getReport();
           }
@@ -203,7 +199,7 @@ complete the next step and accept the license.`
       this.telemetryNotificationService.setVisibility(false);
       this.notificationService.show(
         NotificationType.success,
-        this.i18n('The Telemetry module has been configured and activated successfully.')
+        $localize`The Telemetry module has been configured and activated successfully.`
       );
       this.router.navigate(['']);
     });

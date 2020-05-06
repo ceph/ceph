@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { NfsService } from './nfs.service';
 
 describe('NfsService', () => {
@@ -9,7 +9,7 @@ describe('NfsService', () => {
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    providers: [NfsService, i18nProviders],
+    providers: [NfsService],
     imports: [HttpClientTestingModule]
   });
 

@@ -2,7 +2,6 @@ import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
@@ -36,12 +35,11 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
     public activeModal: NgbActiveModal,
     private taskWrapper: TaskWrapperService,
     private crushRuleService: CrushRuleService,
-    private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
     super();
     this.action = this.actionLabels.CREATE;
-    this.resource = this.i18n('Crush Rule');
+    this.resource = $localize`Crush Rule`;
     this.createForm();
   }
 

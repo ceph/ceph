@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiSettingComponent } from '../iscsi-setting/iscsi-setting.component';
 import { IscsiTargetIqnSettingsModalComponent } from './iscsi-target-iqn-settings-modal.component';
@@ -17,7 +17,7 @@ describe('IscsiTargetIqnSettingsModalComponent', () => {
   configureTestBed({
     declarations: [IscsiTargetIqnSettingsModalComponent, IscsiSettingComponent],
     imports: [SharedModule, ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule],
-    providers: [NgbActiveModal, i18nProviders]
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

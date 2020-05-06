@@ -13,7 +13,6 @@ describe('SparklineComponent', () => {
   configureTestBed({
     declarations: [SparklineComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    imports: [],
     providers: [DimlessBinaryPipe, FormatterService]
   });
 

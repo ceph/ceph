@@ -4,7 +4,7 @@ import { By } from '@angular/platform-browser';
 
 import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { AlertPanelComponent } from '../components/alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../components/loading-panel/loading-panel.component';
 import { CdForm } from '../forms/cd-form';
@@ -31,8 +31,7 @@ describe('FormLoadingDirective', () => {
   configureTestBed(
     {
       declarations: [TestComponent],
-      imports: [SharedModule, NgbAlertModule],
-      providers: [i18nProviders]
+      imports: [SharedModule, NgbAlertModule]
     },
     [LoadingPanelComponent, AlertPanelComponent]
   );
@@ -48,7 +47,7 @@ describe('FormLoadingDirective', () => {
   });
 
   it('should create an instance', () => {
-    const directive = new FormLoadingDirective(null, null, null, null);
+    const directive = new FormLoadingDirective(null, null, null);
     expect(directive).toBeTruthy();
   });
 

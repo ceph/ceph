@@ -10,7 +10,6 @@ import { of } from 'rxjs';
 import {
   configureTestBed,
   expectItemTasks,
-  i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
 import { NfsService } from '../../../shared/api/nfs.service';
@@ -44,7 +43,7 @@ describe('NfsListComponent', () => {
       NgbNavModule,
       ToastrModule.forRoot()
     ],
-    providers: [TaskListService, i18nProviders]
+    providers: [TaskListService]
   });
 
   beforeEach(() => {

@@ -1,6 +1,5 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Subscription } from 'rxjs';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
@@ -33,45 +32,45 @@ export class ImageListComponent implements OnInit, OnDestroy {
     columns: {}
   };
 
-  constructor(private rbdMirroringService: RbdMirroringService, private i18n: I18n) {}
+  constructor(private rbdMirroringService: RbdMirroringService) {}
 
   ngOnInit() {
     this.image_error.columns = [
-      { prop: 'pool_name', name: this.i18n('Pool'), flexGrow: 2 },
-      { prop: 'name', name: this.i18n('Image'), flexGrow: 2 },
-      { prop: 'description', name: this.i18n('Issue'), flexGrow: 4 },
+      { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
+      { prop: 'name', name: $localize`Image`, flexGrow: 2 },
+      { prop: 'description', name: $localize`Issue`, flexGrow: 4 },
       {
         prop: 'state',
-        name: this.i18n('State'),
+        name: $localize`State`,
         cellTemplate: this.stateTmpl,
         flexGrow: 1
       }
     ];
 
     this.image_syncing.columns = [
-      { prop: 'pool_name', name: this.i18n('Pool'), flexGrow: 2 },
-      { prop: 'name', name: this.i18n('Image'), flexGrow: 2 },
+      { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
+      { prop: 'name', name: $localize`Image`, flexGrow: 2 },
       {
         prop: 'progress',
-        name: this.i18n('Progress'),
+        name: $localize`Progress`,
         cellTemplate: this.progressTmpl,
         flexGrow: 2
       },
       {
         prop: 'state',
-        name: this.i18n('State'),
+        name: $localize`State`,
         cellTemplate: this.syncTmpl,
         flexGrow: 1
       }
     ];
 
     this.image_ready.columns = [
-      { prop: 'pool_name', name: this.i18n('Pool'), flexGrow: 2 },
-      { prop: 'name', name: this.i18n('Image'), flexGrow: 2 },
-      { prop: 'description', name: this.i18n('Description'), flexGrow: 4 },
+      { prop: 'pool_name', name: $localize`Pool`, flexGrow: 2 },
+      { prop: 'name', name: $localize`Image`, flexGrow: 2 },
+      { prop: 'description', name: $localize`Description`, flexGrow: 4 },
       {
         prop: 'state',
-        name: this.i18n('State'),
+        name: $localize`State`,
         cellTemplate: this.stateTmpl,
         flexGrow: 1
       }

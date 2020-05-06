@@ -2,7 +2,6 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { HostService } from '../../../shared/api/host.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
@@ -56,7 +55,6 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private hostService: HostService,
     private cephShortVersionPipe: CephShortVersionPipe,
     private joinPipe: JoinPipe,
-    private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
@@ -75,7 +73,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         click: () => {
           this.depCheckerService.checkOrchestratorOrModal(
             this.actionLabels.CREATE,
-            this.i18n('Host'),
+            $localize`Host`,
             () => {
               this.router.navigate([this.urlBuilder.getCreate()]);
             }
@@ -89,7 +87,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         click: () => {
           this.depCheckerService.checkOrchestratorOrModal(
             this.actionLabels.EDIT,
-            this.i18n('Host'),
+            $localize`Host`,
             () => this.editAction()
           );
         },
@@ -104,7 +102,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         click: () => {
           this.depCheckerService.checkOrchestratorOrModal(
             this.actionLabels.DELETE,
-            this.i18n('Host'),
+            $localize`Host`,
             () => this.deleteAction()
           );
         },
@@ -119,24 +117,24 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: this.i18n('Hostname'),
+        name: $localize`Hostname`,
         prop: 'hostname',
         flexGrow: 1
       },
       {
-        name: this.i18n('Services'),
+        name: $localize`Services`,
         prop: 'services',
         flexGrow: 3,
         cellTemplate: this.servicesTpl
       },
       {
-        name: this.i18n('Labels'),
+        name: $localize`Labels`,
         prop: 'labels',
         flexGrow: 1,
         pipe: this.joinPipe
       },
       {
-        name: this.i18n('Version'),
+        name: $localize`Version`,
         prop: 'ceph_version',
         flexGrow: 1,
         pipe: this.cephShortVersionPipe
@@ -155,33 +153,30 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         return { enabled: true, name: label };
       });
       this.modalService.show(FormModalComponent, {
-        titleText: this.i18n('Edit Host: {{hostname}}', host),
+        titleText: $localize`Edit Host: ${host.hostname}`,
         fields: [
           {
             type: 'select-badges',
             name: 'labels',
             value: host['labels'],
-            label: this.i18n('Labels'),
+            label: $localize`Labels`,
             typeConfig: {
               customBadges: true,
               options: allLabels,
-              messages: new SelectMessages(
-                {
-                  empty: this.i18n('There are no labels.'),
-                  filter: this.i18n('Filter or add labels'),
-                  add: this.i18n('Add label')
-                },
-                this.i18n
-              )
+              messages: new SelectMessages({
+                empty: $localize`There are no labels.`,
+                filter: $localize`Filter or add labels`,
+                add: $localize`Add label`
+              })
             }
           }
         ],
-        submitButtonText: this.i18n('Edit Host'),
+        submitButtonText: $localize`Edit Host`,
         onSubmit: (values: any) => {
           this.hostService.update(host['hostname'], values.labels).subscribe(() => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Updated Host "{{hostname}}"', host)
+              $localize`Updated Host "${host.hostname}"`
             );
             // Reload the data table content.
             this.table.refreshBtn();
@@ -193,9 +188,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   getEditDisableDesc(selection: CdTableSelection): string | undefined {
     if (selection && selection.hasSingleSelection && !selection.first().sources.orchestrator) {
-      return this.i18n(
-        'Host editing is disabled because the selected host is not managed by Orchestrator.'
-      );
+      return $localize`Host editing is disabled because the selected host is not managed by Orchestrator.`;
     }
     return undefined;
   }
@@ -220,9 +213,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
       selection.hasSelection &&
       !selection.selected.every((selected) => selected.sources.orchestrator)
     ) {
-      return this.i18n(
-        'Host deletion is disabled because a selected host is not managed by Orchestrator.'
-      );
+      return $localize`Host deletion is disabled because a selected host is not managed by Orchestrator.`;
     }
     return undefined;
   }
