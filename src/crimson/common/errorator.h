@@ -19,7 +19,7 @@ inline auto do_for_each(Iterator begin, Iterator end, AsyncAction action) {
     return futurator::type::errorator_type::template make_ready_future<>();
   }
   while (true) {
-    auto f = futurator::apply(action, *begin);
+    auto f = futurator::invoke(action, *begin);
     ++begin;
     if (begin == end) {
       return f;
@@ -547,7 +547,7 @@ private:
       return this->then_wrapped(
 	[ func = std::forward<FuncT>(func)
 	] (auto&& future) mutable noexcept {
-	  return futurator_t::apply(std::forward<FuncT>(func)).safe_then(
+	  return futurator_t::invoke(std::forward<FuncT>(func)).safe_then(
 	    [future = std::forward<decltype(future)>(future)]() mutable {
 	      return std::move(future);
 	    });
@@ -786,8 +786,8 @@ private:
     template <class Func, class... Args>
     static type apply(Func&& func, std::tuple<Args...>&& args) {
       try {
-        return ::seastar::apply(std::forward<Func>(func),
-                                std::forward<std::tuple<Args...>>(args));
+        return ::seastar::futurize_apply(std::forward<Func>(func),
+					 std::forward<std::tuple<Args...>>(args));
       } catch (...) {
         return make_exception_future(std::current_exception());
       }
@@ -942,7 +942,7 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   }
 
   template<typename Func, typename... FuncArgs>
-  static inline type apply(Func&& func, FuncArgs&&... args) noexcept {
+  static inline type invoke(Func&& func, FuncArgs&&... args) noexcept {
     try {
         return func(std::forward<FuncArgs>(args)...);
     } catch (...) {

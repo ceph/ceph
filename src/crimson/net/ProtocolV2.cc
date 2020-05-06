@@ -1526,7 +1526,7 @@ void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
   gated_dispatch("execute_accepting", [this] {
-      return seastar::futurize_apply([this] {
+      return seastar::futurize_invoke([this] {
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
@@ -1658,7 +1658,7 @@ void ProtocolV2::execute_establishing(
   });
 
   gated_execute("execute_establishing", [this] {
-    return seastar::futurize_apply([this] {
+    return seastar::futurize_invoke([this] {
       return send_server_ident();
     }).then([this] {
       if (unlikely(state != state_t::ESTABLISHING)) {
@@ -2009,7 +2009,7 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
       .then([this] (Tag tag) {
         switch (tag) {
           case Tag::MESSAGE: {
-            return seastar::futurize_apply([this] {
+            return seastar::futurize_invoke([this] {
               // throttle_message() logic
               if (!conn.policy.throttler_messages) {
                 return seastar::now();
