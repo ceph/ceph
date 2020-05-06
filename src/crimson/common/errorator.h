@@ -623,11 +623,11 @@ private:
     template <class...>
     friend class ::seastar::future;
 
-    // let seastar::do_with to up-cast us to seastar::future.
+    // let seastar::do_with_impl to up-cast us to seastar::future.
     template<typename T, typename F>
-    friend inline auto ::seastar::do_with(T&&, F&&) noexcept;
+    friend inline auto ::seastar::internal::do_with_impl(T&& rvalue, F&& f);
     template<typename T1, typename T2, typename T3_or_F, typename... More>
-    friend inline auto ::seastar::do_with(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more) noexcept;
+    friend inline auto ::seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
   };
 
   class Enabler {};
