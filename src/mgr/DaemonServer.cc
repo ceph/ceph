@@ -2336,10 +2336,19 @@ void DaemonServer::_prune_pending_service_map()
     while (q != p->second.daemons.end()) {
       DaemonKey key(p->first, q->first);
       if (!daemon_state.exists(key)) {
-	derr << "missing key " << key << dendl;
-	++q;
-	continue;
+        if (ServiceMap::is_normal_ceph_entity(p->first)) {
+          dout(10) << "daemon " << key << " in service map but not in daemon state "
+                   << "index -- force pruning" << dendl;
+          q = p->second.daemons.erase(q);
+          pending_service_map_dirty = pending_service_map.epoch;
+        } else {
+          derr << "missing key " << key << dendl;
+          ++q;
+        }
+
+        continue;
       }
+
       auto daemon = daemon_state.get(key);
       std::lock_guard l(daemon->lock);
       if (daemon->last_service_beacon == utime_t()) {
