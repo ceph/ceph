@@ -168,6 +168,14 @@ class PlacementSpec(object):
             not self.host_pattern and \
             self.count is None
 
+    def __eq__(self, other):
+        if isinstance(other, PlacementSpec):
+            return self.label == other.label \
+                   and self.hosts == other.hosts \
+                   and self.count == other.count \
+                   and self.host_pattern == other.host_pattern
+        return NotImplemented
+
     def set_hosts(self, hosts):
         # To backpopulate the .hosts attribute when using labels or count
         # in the orchestrator backend.
