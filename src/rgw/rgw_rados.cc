@@ -2167,6 +2167,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             real_time creation_time,
                             rgw_bucket *pmaster_bucket,
                             uint32_t *pmaster_num_shards,
+                            bool is_identity_role,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -2205,6 +2206,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     info.layout.current_index.layout.type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
+    info.is_owner_role = is_identity_role;
     if (pmaster_num_shards) {
       info.layout.current_index.layout.normal.num_shards = *pmaster_num_shards;
     } else {
@@ -7635,6 +7637,7 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
   entry_point.owner = info.owner;
   entry_point.creation_time = info.creation_time;
   entry_point.linked = true;
+  entry_point.is_owner_role = info.is_owner_role;
   RGWObjVersionTracker ot;
   if (pep_objv && !pep_objv->tag.empty()) {
     ot.write_version = *pep_objv;

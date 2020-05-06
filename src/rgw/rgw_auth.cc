@@ -709,9 +709,11 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
 void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
 {
   /* Load the user id */
-  user_info.user_id = this->user_id;
+  user_info.user_id = this->role.name;
 
-  user_info.user_id.tenant = role.tenant;
+  user_info.user_id.tenant = this->role.tenant;
+
+  user_info.display_name = this->user_id.to_str();
 }
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const

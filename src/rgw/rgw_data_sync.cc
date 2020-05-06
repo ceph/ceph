@@ -2030,7 +2030,7 @@ class RGWUserPermHandler {
         ret = RGWUserPermHandler::policy_from_attrs(sync_env->cct, uattrs, &info->user_acl);
       }
       if (ret == -ENOENT) {
-        info->user_acl.create_default(uid, info->user_info.display_name);
+        info->user_acl.create_default(uid, info->user_info.display_name, info->identity->get_identity_type());
       }
 
       return 0;

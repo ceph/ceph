@@ -2799,20 +2799,22 @@ int RGWUserCtl::remove_info(const RGWUserInfo& info, optional_yield y,
 
 int RGWUserCtl::add_bucket(const rgw_user& user,
                            const rgw_bucket& bucket,
-                           ceph::real_time creation_time)
+                           ceph::real_time creation_time,
+                           bool identity_type_role)
 
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->add_bucket(op->ctx(), user, bucket, creation_time);
+    return svc.user->add_bucket(op->ctx(), user, bucket, creation_time, identity_type_role);
   });
 }
 
 int RGWUserCtl::remove_bucket(const rgw_user& user,
-                              const rgw_bucket& bucket)
+                              const rgw_bucket& bucket,
+                              bool identity_type_role)
 
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->remove_bucket(op->ctx(), user, bucket);
+    return svc.user->remove_bucket(op->ctx(), user, bucket, identity_type_role);
   });
 }
 
@@ -2823,6 +2825,7 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
                              bool need_stats,
                              RGWUserBuckets *buckets,
                              bool *is_truncated,
+                             bool identity_type_role,
                              uint64_t default_max)
 {
   if (!max) {
@@ -2831,7 +2834,7 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
 
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     int ret = svc.user->list_buckets(op->ctx(), user, marker, end_marker,
-                                     max, buckets, is_truncated);
+                                     max, buckets, is_truncated, identity_type_role);
     if (ret < 0) {
       return ret;
     }
@@ -2848,10 +2851,11 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
 }
 
 int RGWUserCtl::flush_bucket_stats(const rgw_user& user,
-                                   const RGWBucketEnt& ent)
+                                   const RGWBucketEnt& ent,
+                                   bool identity_type_role)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->flush_bucket_stats(op->ctx(), user, ent);
+    return svc.user->flush_bucket_stats(op->ctx(), user, ent, identity_type_role);
   });
 }
 

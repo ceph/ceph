@@ -170,7 +170,7 @@ void RGWDeleteRole::execute()
     return;
   }
 
-  op_ret = _role.delete_obj();
+  op_ret = _role.delete_obj(store);
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;

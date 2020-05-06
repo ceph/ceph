@@ -952,9 +952,11 @@ public:
 
   int add_bucket(const rgw_user& user,
                  const rgw_bucket& bucket,
-                 ceph::real_time creation_time);
+                 ceph::real_time creation_time,
+                 bool identity_type_role = false);
   int remove_bucket(const rgw_user& user,
-                    const rgw_bucket& bucket);
+                    const rgw_bucket& bucket,
+                    bool identity_type_role = false);
   int list_buckets(const rgw_user& user,
                    const string& marker,
                    const string& end_marker,
@@ -962,10 +964,13 @@ public:
                    bool need_stats,
                    RGWUserBuckets *buckets,
                    bool *is_truncated,
-                   uint64_t default_max = 1000);
+                   bool identity_type_role = false,
+                   uint64_t default_max = 1000
+                   );
 
   int flush_bucket_stats(const rgw_user& user,
-                         const RGWBucketEnt& ent);
+                         const RGWBucketEnt& ent,
+                         bool identity_type_role = false);
   int complete_flush_stats(const rgw_user& user);
   int reset_stats(const rgw_user& user);
   int read_stats(const rgw_user& user, RGWStorageStats *stats,

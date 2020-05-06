@@ -670,6 +670,7 @@ public:
                             ceph::real_time creation_time,
                             rgw_bucket *master_bucket,
                             uint32_t *master_num_shards,
+                            bool is_identity_role = false,
                             bool exclusive = true);
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }

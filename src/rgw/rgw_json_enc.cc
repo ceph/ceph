@@ -661,6 +661,9 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
   encode_json("creation_time", ut, f);
   encode_json("linked", linked, f);
   encode_json("has_bucket_info", has_bucket_info, f);
+  if (is_owner_role) {
+    encode_json("owner_type", "role", f);
+  }
   if (has_bucket_info) {
     encode_json("old_bucket_info", old_bucket_info, f);
   }
@@ -795,6 +798,9 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
+  }
+  if (is_owner_role) {
+    encode_json("owner_type", "role", f);
   }
 }
 

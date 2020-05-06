@@ -11,6 +11,7 @@
 #include "common/ceph_time.h"
 #include "rgw_rados.h"
 #include "rgw_zone.h"
+#include "rgw_sal.h"
 
 #include "include/types.h"
 #include "rgw_string.h"
@@ -166,7 +167,7 @@ int RGWRole::create(bool exclusive)
   return 0;
 }
 
-int RGWRole::delete_obj()
+int RGWRole::delete_obj(rgw::sal::RGWRadosStore* store)
 {
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().roles_pool;
@@ -183,6 +184,30 @@ int RGWRole::delete_obj()
 
   if (! perm_policy_map.empty()) {
     return -ERR_DELETE_CONFLICT;
+  }
+
+  rgw::sal::RGWBucketList buckets;
+  rgw_user role(name, tenant);
+  rgw::sal::RGWRadosUser user(store, role);
+  string marker, end_marker;
+  ret = user.list_buckets(marker, end_marker, 1, false, buckets, true);
+  if (ret < 0) {
+    ldout(cct, 10) << "WARNING: failed on rgw_get_user_buckets role =" << role << dendl;
+    return ret;
+  }
+
+  if (buckets.count() > 0) {
+    ldout(cct, 10) << "WARNING: role has buckets attached to it, role: " << role << dendl;
+    return -ERR_DELETE_CONFLICT;
+  }
+
+  //remove <rolename>.buckets
+  rgw_user user_id(tenant, id);
+  string buckets_oid = user_id.to_str() + ".buckets";
+  ret = rgw_delete_system_obj(svc->sysobj, pool, buckets_oid, NULL);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(cct, 0) << "ERROR: could not remove " << buckets_oid << ", should be fixed (err=" << ret << ")" << dendl;
+    return ret;
   }
 
   // Delete id

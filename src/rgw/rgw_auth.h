@@ -659,6 +659,12 @@ public:
     return false;
   }
   bool is_owner_of(const rgw_user& uid) const override {
+    if (uid.id == role.name && uid.tenant == role.tenant) {
+      return true;
+    }
+    if (uid.id == this->user_id.id) {
+      return true;
+    }
     return false;
   }
   bool is_identity(const idset_t& ids) const override;

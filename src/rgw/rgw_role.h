@@ -7,6 +7,7 @@
 #include <string>
 
 #include "common/ceph_context.h"
+#include "rgw_sal.h"
 
 class RGWCtl;
 
@@ -137,7 +138,7 @@ public:
   void set_id(const string& id) { this->id = id; }
 
   int create(bool exclusive);
-  int delete_obj();
+  int delete_obj(rgw::sal::RGWRadosStore* store);
   int get();
   int get_by_id();
   int update();

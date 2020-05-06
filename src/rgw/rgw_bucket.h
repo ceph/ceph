@@ -19,6 +19,7 @@
 #include "common/ceph_time.h"
 
 #include "rgw_formats.h"
+#include "rgw_role.h"
 
 #include "services/svc_bucket_types.h"
 #include "services/svc_bucket_sync.h"
@@ -236,6 +237,7 @@ extern void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const 
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
+  std::string type;
   std::string display_name;
   std::string bucket_name;
   std::string bucket_id;
@@ -269,6 +271,12 @@ struct RGWBucketAdminOpState {
   void set_tenant(const std::string& tenant_str) {
     uid.tenant = tenant_str;
   }
+  void set_identity_type(const std::string& type) {
+    this->type = type;
+  }
+  void set_identity_display_name(const string& name) {
+    display_name = name;
+  }
   void set_bucket_name(const std::string& bucket_str) {
     bucket_name = bucket_str; 
   }
@@ -287,6 +295,7 @@ struct RGWBucketAdminOpState {
 
   rgw_user& get_user_id() { return uid; }
   std::string& get_user_display_name() { return display_name; }
+  std::string& get_identity_type() { return type; }
   std::string& get_bucket_name() { return bucket_name; }
   std::string& get_object_name() { return object_name; }
   std::string& get_tenant() { return uid.tenant; }
@@ -334,6 +343,7 @@ class RGWBucket
 
   RGWBucketInfo bucket_info;
   RGWObjVersionTracker ep_objv; // entrypoint object version
+  RGWRole role_info;
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
@@ -868,12 +878,14 @@ public:
                   ceph::real_time creation_time,
 		  optional_yield y,
                   bool update_entrypoint = true,
-                  rgw_ep_info *pinfo = nullptr);
+                  rgw_ep_info *pinfo = nullptr,
+                  bool identity_type_role = false);
 
   int unlink_bucket(const rgw_user& user_id,
                     const rgw_bucket& bucket,
 		    optional_yield y,
-                    bool update_entrypoint = true);
+                    bool update_entrypoint = true,
+                    bool identity_type_role = false);
 
   int chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
             const rgw_user& user_id, const std::string& display_name,
@@ -891,7 +903,8 @@ public:
 
   /* quota related */
   int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info,
-                      RGWBucketEnt* pent = nullptr);
+                      RGWBucketEnt* pent = nullptr,
+                      bool identity_type_role = false);
 
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,
@@ -929,13 +942,15 @@ private:
                      ceph::real_time creation_time,
 		     optional_yield y,
                      bool update_entrypoint,
-                     rgw_ep_info *pinfo);
+                     rgw_ep_info *pinfo,
+                     bool identity_type_role = false);
 
   int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                        const rgw_user& user_id,
                        const rgw_bucket& bucket,
 		       optional_yield y,
-                       bool update_entrypoint);
+                       bool update_entrypoint,
+                       bool identity_type_role = false);
 
 };
 

@@ -2942,6 +2942,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
       /* Populate the owner info. */
       s->owner.set_id(s->user->get_id());
       s->owner.set_name(s->user->get_display_name());
+      bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
+      s->owner.set_identity_type(is_role);
       ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
@@ -4819,6 +4821,8 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
     /* Populate the owner info. */
     s->owner.set_id(s->user->get_id());
     s->owner.set_name(s->user->get_display_name());
+    bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
+    s->owner.set_identity_type(is_role);
   }
   return ret;
 }

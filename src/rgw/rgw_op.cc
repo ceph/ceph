@@ -213,9 +213,12 @@ int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
 				       rgw::sal::RGWRadosStore *store,
 				       RGWBucketInfo& bucket_info,
 				       map<string, bufferlist>& bucket_attrs,
-				       RGWAccessControlPolicy *policy)
+				       RGWAccessControlPolicy *policy,
+               bool is_role,
+               string role_display_name)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
+  string display_name;
 
   if (aiter != bucket_attrs.end()) {
     int ret = decode_policy(cct, aiter->second, policy);
@@ -223,13 +226,25 @@ int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
       return ret;
   } else {
     ldout(cct, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    rgw::sal::RGWRadosUser user(store);
-    /* object exists, but policy is broken */
-    int r = user.get_by_id(bucket_info.owner, null_yield);
-    if (r < 0)
-      return r;
-
-    policy->create_default(bucket_info.owner, user.get_display_name());
+    if (is_role) {
+      RGWRole role(cct, store->getRados()->pctl, bucket_info.owner.id, bucket_info.owner.tenant);
+      int r = role.get();
+      if (r < 0) {
+        ldout(cct, 0) << "WARNING: couldn't find role" << dendl;
+        return r;
+      }
+      display_name = role_display_name;
+    } else {
+      rgw::sal::RGWRadosUser user(store);
+      /* object exists, but policy is broken */
+      int r = user.get_by_id(bucket_info.owner, null_yield);
+      if (r < 0) {
+        ldout(cct, 0) << "WARNING: couldn't find user" << dendl;
+        return r;
+      }
+      display_name = user.get_display_name();
+    }
+    policy->create_default(bucket_info.owner, display_name, is_role);
   }
   return 0;
 }
@@ -481,7 +496,8 @@ static int read_bucket_policy(rgw::sal::RGWRadosStore *store,
     return 0;
   }
 
-  int ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, policy);
+  bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
+  int ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, policy, is_role, s->user->get_display_name());
   if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -527,13 +543,15 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
-    ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy);
+    bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
+    ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy, is_role, s->user->get_display_name());
     if (ret < 0) {
       return ret;
     }
     const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
     if (bucket_owner.compare(s->user->get_id()) != 0 &&
-        ! s->auth.identity->is_admin_of(bucket_owner)) {
+        ! s->auth.identity->is_admin_of(bucket_owner) &&
+        (bucket_owner.compare(s->user->get_id()) == 0 && bucket_policy.get_owner().is_identity_role() != is_role )) {
       if (policy) {
         auto r =  policy->eval(s->env, *s->auth.identity, rgw::IAM::s3ListBucket, ARN(bucket));
         if (r == Effect::Allow)
@@ -2453,7 +2471,8 @@ void RGWListBuckets::execute()
 
     rgw::sal::RGWRadosUser user(store, s->user->get_id());
 
-    op_ret = user.list_buckets(marker, end_marker, read_count, should_get_stats(), buckets);
+    bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
+    op_ret = user.list_buckets(marker, end_marker, read_count, should_get_stats(), buckets, is_role);
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -3257,16 +3276,27 @@ void RGWCreateBucket::execute()
 
   s->bucket_owner.set_id(s->user->get_id());
   s->bucket_owner.set_name(s->user->get_display_name());
+
+  bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
+  s->bucket_owner.set_identity_type(is_role);
+
   if (s->bucket_exists) {
     s->bucket_info = bucket->get_info();
     s->bucket_attrs = bucket->get_attrs();
     delete bucket;
     int r = rgw_op_get_bucket_policy_from_attr(s->cct, store, s->bucket_info,
-                                               s->bucket_attrs, &old_policy);
+                                               s->bucket_attrs, &old_policy,
+                                               is_role,
+                                               s->user->get_display_name());
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user->get_id()) != 0) {
         op_ret = -EEXIST;
         return;
+      } else { //owner id matches
+        if (old_policy.get_owner().is_identity_role() != is_role) {
+          op_ret = -EEXIST;
+          return;
+        }
       }
     }
   }
@@ -3376,7 +3406,7 @@ void RGWCreateBucket::execute()
                                 placement_rule, s->bucket_info.swift_ver_location,
                                 pquota_info, attrs,
                                 info, pobjv, &ep_objv, creation_time,
-                                pmaster_bucket, pmaster_num_shards, true);
+                                pmaster_bucket, pmaster_num_shards, is_role);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret << " bucket=" << s->bucket << dendl;
@@ -3393,18 +3423,24 @@ void RGWCreateBucket::execute()
      * If all is ok then update the user's list of buckets.
      * Otherwise inform client about a name conflict.
      */
-    if (info.owner.compare(s->user->get_id()) != 0) {
+    if (info.owner.compare(s->user->get_id()) != 0 ||
+        (info.owner.compare(s->user->get_id()) == 0 && info.is_owner_role != is_role)) {
       op_ret = -EEXIST;
       return;
+    } else {
+      if (info.is_owner_role != is_role) {
+        op_ret = -EEXIST;
+        return;
+      }
     }
     s->bucket = info.bucket;
   }
 
   op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket,
-                                          info.creation_time, s->yield, false);
+                                          info.creation_time, s->yield, false, nullptr, is_role);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket, s->yield);
+    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket, s->yield, true, is_role);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -3427,7 +3463,8 @@ void RGWCreateBucket::execute()
                                       binfo, nullptr, s->yield, &battrs);
       if (op_ret < 0) {
         return;
-      } else if (binfo.owner.compare(s->user->get_id()) != 0) {
+      } else if (binfo.owner.compare(s->user->get_id()) != 0 ||
+                (binfo.owner.compare(s->user->get_id()) == 0 && binfo.is_owner_role != is_role)) {
         /* New bucket doesn't belong to the account we're operating on. */
         op_ret = -EEXIST;
         return;
@@ -3518,7 +3555,8 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = store->ctl()->bucket->sync_user_stats(s->user->get_id(), s->bucket_info);
+  bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
+  op_ret = store->ctl()->bucket->sync_user_stats(s->user->get_id(), s->bucket_info, nullptr, is_role);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -3574,7 +3612,7 @@ void RGWDeleteBucket::execute()
 
   if (op_ret == 0) {
     op_ret = store->ctl()->bucket->unlink_bucket(s->bucket_info.owner,
-                                              s->bucket, s->yield, false);
+                                              s->bucket, s->yield, false, is_role);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -7010,15 +7048,21 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     return op_ret;
   }
   const bool bucket_exists = (op_ret != -ENOENT);
-
+  bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
   if (bucket_exists) {
     RGWAccessControlPolicy old_policy(s->cct);
     int r = rgw_op_get_bucket_policy_from_attr(s->cct, store, binfo,
-                                               battrs, &old_policy);
+                                               battrs, &old_policy,
+                                               is_role, s->user->get_display_name());
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user->get_user()) != 0) {
         op_ret = -EEXIST;
         return op_ret;
+      } else { //owner id matches
+        if (old_policy.get_owner().is_identity_role() != is_role) {
+          op_ret = -EEXIST;
+          return op_ret;
+        }
       }
     }
   }
@@ -7077,7 +7121,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   /* Create metadata: ACLs. */
   std::map<std::string, ceph::bufferlist> attrs;
   RGWAccessControlPolicy policy;
-  policy.create_default(s->user->get_id(), s->user->get_display_name());
+  policy.create_default(s->user->get_id(), s->user->get_display_name(), is_role);
   ceph::bufferlist aclbl;
   policy.encode(aclbl);
   attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));
@@ -7125,10 +7169,10 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
   op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), bucket,
                                           out_info.creation_time,
-					  s->yield, false);
+					  s->yield, true, nullptr, is_role);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), bucket, s->yield);
+    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), bucket, s->yield, true, is_role);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret << dendl;
     }

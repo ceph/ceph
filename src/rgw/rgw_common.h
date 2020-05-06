@@ -1138,6 +1138,7 @@ struct RGWBucketInfo {
   RGWObjectLock obj_lock;
 
   std::optional<rgw_sync_policy_info> sync_policy;
+  bool is_owner_role;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -1174,6 +1175,7 @@ struct RGWBucketEntryPoint
   rgw_user owner;
   ceph::real_time creation_time;
   bool linked;
+  bool is_owner_role;
 
   bool has_bucket_info;
   RGWBucketInfo old_bucket_info;
@@ -1181,7 +1183,7 @@ struct RGWBucketEntryPoint
   RGWBucketEntryPoint() : linked(false), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(10, 8, bl);
+    ENCODE_START(11, 8, bl);
     encode(bucket, bl);
     encode(owner.id, bl);
     encode(linked, bl);
@@ -1189,11 +1191,12 @@ struct RGWBucketEntryPoint
     encode(ctime, bl);
     encode(owner, bl);
     encode(creation_time, bl);
+    encode(is_owner_role, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
     auto orig_iter = bl;
-    DECODE_START_LEGACY_COMPAT_LEN_32(10, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(11, 4, 4, bl);
     if (struct_v < 8) {
       /* ouch, old entry, contains the bucket info itself */
       old_bucket_info.decode(orig_iter);
@@ -1214,6 +1217,11 @@ struct RGWBucketEntryPoint
     }
     if (struct_v >= 10) {
       decode(creation_time, bl);
+    }
+    if (struct_v >= 11) {
+      decode(is_owner_role, bl);
+    } else {
+      is_owner_role = false;
     }
     DECODE_FINISH(bl);
   }

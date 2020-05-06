@@ -78,7 +78,9 @@ int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
 				       rgw::sal::RGWRadosStore *store,
                                        RGWBucketInfo& bucket_info,
                                        map<string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy);
+                                       RGWAccessControlPolicy *policy,
+                                       bool is_role = false,
+                                       string role_display_name="");
 
 class RGWHandler {
 protected:

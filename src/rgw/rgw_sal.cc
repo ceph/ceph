@@ -30,14 +30,14 @@
 namespace rgw::sal {
 
 int RGWRadosUser::list_buckets(const string& marker, const string& end_marker,
-			       uint64_t max, bool need_stats, RGWBucketList &buckets)
+			       uint64_t max, bool need_stats, RGWBucketList &buckets, bool identity_type_role)
 {
   RGWUserBuckets ulist;
   bool is_truncated = false;
   int ret;
 
   ret = store->ctl()->user->list_buckets(info.user_id, marker, end_marker, max,
-					 need_stats, &ulist, &is_truncated);
+					 need_stats, &ulist, &is_truncated, identity_type_role);
   if (ret < 0)
     return ret;
 

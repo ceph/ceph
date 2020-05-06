@@ -44,7 +44,7 @@
 #include "rgw_common.h"
 #include "rgw_reshard.h"
 #include "rgw_lc.h"
-
+#include "rgw_role.h"
 // stolen from src/cls/version/cls_version.cc
 #define VERSION_ATTR "ceph.objclass.version"
 
@@ -624,13 +624,22 @@ int RGWBucket::init(rgw::sal::RGWRadosStore *storage, RGWBucketAdminOpState& op_
   }
 
   if (!user_id.empty()) {
-    int r = store->ctl()->user->get_info_by_uid(user_id, &user_info, y);
-    if (r < 0) {
-      set_err_msg(err_msg, "failed to fetch user info");
-      return r;
-    }
+    if (op_state.get_identity_type() == "role") {
+      RGWRole role(store->ctx(), store->getRados()->pctl, user_id.id, user_id.tenant);
+      int r = role.get();
+      if (r < 0) {
+        set_err_msg(err_msg, "failed to fetch role info");
+        return r;
+      }
 
-    op_state.display_name = user_info.display_name;
+    } else {
+      int r = store->ctl()->user->get_info_by_uid(user_id, &user_info, y);
+      if (r < 0) {
+        set_err_msg(err_msg, "failed to fetch user info");
+        return r;
+      }
+      op_state.display_name = user_info.display_name;
+    }
   }
 
   clear_failure();
@@ -729,19 +738,20 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
   }
 
   auto bucket_ctl = store->ctl()->bucket;
-  int r = bucket_ctl->unlink_bucket(owner.get_id(), old_bucket, y, false);
+  int r = bucket_ctl->unlink_bucket(owner.get_id(), old_bucket, y, owner.is_identity_role());
   if (r < 0) {
-    set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id().to_str());
+    set_err_msg(err_msg, "could not unlink policy from user/role " + owner.get_id().to_str());
     return r;
   }
 
   // now update the user for the bucket...
   if (display_name.empty()) {
-    ldout(store->ctx(), 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
+    ldout(store->ctx(), 0) << "WARNING: user " << user_id << " has no display name set" << dendl;
   }
 
   RGWAccessControlPolicy policy_instance;
-  policy_instance.create_default(user_info.user_id, display_name);
+  bool is_role = op_state.get_identity_type() == "role" ? true : false;
+  policy_instance.create_default(user_id, display_name, is_role);
   owner = policy_instance.get_owner();
 
   aclbl.clear();
@@ -749,7 +759,14 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
 
   auto instance_params = RGWBucketCtl::BucketInstance::PutParams().set_attrs(&attrs);
 
-  bucket_info.owner = user_info.user_id;
+  if (is_role) {
+    bucket_info.owner = user_id;
+    bucket_info.is_owner_role = true;
+  } else {
+    bucket_info.owner = user_info.user_id;
+    bucket_info.is_owner_role = false;
+  }
+
   if (bucket != old_bucket) {
     bucket_info.bucket = bucket;
     bucket_info.objv_tracker.version_for_read()->ver = 0;
@@ -764,17 +781,19 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
 
   RGWBucketEntryPoint ep;
   ep.bucket = bucket_info.bucket;
-  ep.owner = user_info.user_id;
+  //ep.owner = user_info.user_id;
+  ep.owner = bucket_info.owner;
+  ep.is_owner_role = bucket_info.is_owner_role;
   ep.creation_time = bucket_info.creation_time;
   ep.linked = true;
   map<string, bufferlist> ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
   /* link to user */
-  r = store->ctl()->bucket->link_bucket(user_info.user_id,
+  r = store->ctl()->bucket->link_bucket(user_id,
                                      bucket_info.bucket,
                                      ep.creation_time,
-                                     y, true, &ep_data);
+                                     y, true, &ep_data, is_role);
   if (r < 0) {
     set_err_msg(err_msg, "failed to relink bucket");
     return r;
@@ -805,8 +824,8 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
                      optional_yield y, std::string *err_msg)
 {
-  int ret = store->ctl()->bucket->chown(store, bucket_info, user_info.user_id,
-                                     user_info.display_name, marker, y);
+  int ret = store->ctl()->bucket->chown(store, bucket_info, op_state.get_user_id(),
+                                     op_state.get_user_display_name(), marker, y);
   if (ret < 0) {
     set_err_msg(err_msg, "Failed to change object ownership: " + cpp_strerror(-ret));
   }
@@ -823,7 +842,8 @@ int RGWBucket::unlink(RGWBucketAdminOpState& op_state, optional_yield y, std::st
     return -EINVAL;
   }
 
-  int r = store->ctl()->bucket->unlink_bucket(user_info.user_id, bucket, y);
+  bool is_role = op_state.get_identity_type() == "role" ? true : false;
+  int r = store->ctl()->bucket->unlink_bucket(op_state.get_user_id(), bucket, y, true, is_role);
   if (r < 0) {
     set_err_msg(err_msg, "error unlinking bucket" + cpp_strerror(-r));
   }
@@ -1444,6 +1464,7 @@ static int bucket_stats(rgw::sal::RGWRadosStore *store,
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_stream("index_type") << bucket_info.layout.current_index.layout.type;
   ::encode_json("owner", bucket_info.owner, formatter);
+  formatter->dump_bool("is_owner_role", bucket_info.is_owner_role);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
   ut.gmtime(formatter->dump_stream("mtime"));
@@ -1616,12 +1637,14 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store,
     std::string marker;
     const std::string empty_end_marker;
     constexpr bool no_need_stats = false; // set need_stats to false
+    bool is_role = (op_state.get_identity_type() == "role") ? true : false;
 
     do {
       buckets.clear();
       ret = user.list_buckets(marker, empty_end_marker, max_entries,
-			      no_need_stats, buckets);
+			      no_need_stats, buckets, is_role);
       if (ret < 0) {
+
         return ret;
       }
 
@@ -3487,11 +3510,12 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               ceph::real_time creation_time,
 			      optional_yield y,
                               bool update_entrypoint,
-                              rgw_ep_info *pinfo)
+                              rgw_ep_info *pinfo,
+                              bool identity_type_role)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return do_link_bucket(ctx, user_id, bucket, creation_time, y,
-                          update_entrypoint, pinfo);
+                          update_entrypoint, pinfo, identity_type_role);
   });
 }
 
@@ -3501,7 +3525,8 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                  ceph::real_time creation_time,
 				 optional_yield y,
                                  bool update_entrypoint,
-                                 rgw_ep_info *pinfo)
+                                 rgw_ep_info *pinfo,
+                                 bool identity_type_role)
 {
   int ret;
 
@@ -3530,7 +3555,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     }
   }
 
-  ret = ctl.user->add_bucket(user_id, bucket, creation_time);
+  ret = ctl.user->add_bucket(user_id, bucket, creation_time, identity_type_role);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
@@ -3562,10 +3587,10 @@ done_err:
   return ret;
 }
 
-int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint)
+int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, bool update_entrypoint, bool identity_type_role)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_unlink_bucket(ctx, user_id, bucket, y, update_entrypoint);
+    return do_unlink_bucket(ctx, user_id, bucket, y, update_entrypoint, identity_type_role);
   });
 }
 
@@ -3573,9 +3598,10 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                                    const rgw_user& user_id,
                                    const rgw_bucket& bucket,
 				   optional_yield y,
-                                   bool update_entrypoint)
+                                   bool update_entrypoint,
+                                   bool identity_type_role)
 {
-  int ret = ctl.user->remove_bucket(user_id, bucket);
+  int ret = ctl.user->remove_bucket(user_id, bucket, identity_type_role);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3701,6 +3727,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
         //Update the ACL owner to the new user
         owner.set_id(user_id);
         owner.set_name(display_name);
+        owner.set_identity_type(bucket_info.is_owner_role);
         policy.set_owner(owner);
 
         bl.clear();
@@ -3739,7 +3766,8 @@ int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
 
 int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
                                   const RGWBucketInfo& bucket_info,
-                                  RGWBucketEnt* pent)
+                                  RGWBucketEnt* pent,
+                                  bool identity_type_role)
 {
   RGWBucketEnt ent;
   if (!pent) {
@@ -3751,7 +3779,7 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
     return r;
   }
 
-  return ctl.user->flush_bucket_stats(user_id, *pent);
+  return ctl.user->flush_bucket_stats(user_id, *pent, identity_type_role);
 }
 
 int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,

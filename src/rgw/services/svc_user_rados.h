@@ -56,7 +56,7 @@ class RGWSI_User_RADOS : public RGWSI_User
   using RGWChainedCacheImpl_user_info_cache_entry = RGWChainedCacheImpl<user_info_cache_entry>;
   unique_ptr<RGWChainedCacheImpl_user_info_cache_entry> uinfo_cache;
 
-  rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const;
+  rgw_raw_obj get_buckets_obj(const rgw_user& user_id, bool identity_type_role = false) const;
 
   int get_user_info_from_index(RGWSI_MetaBackend::Context *ctx,
                                const string& key,
@@ -165,22 +165,26 @@ public:
   int add_bucket(RGWSI_MetaBackend::Context *ctx,
                  const rgw_user& user,
                  const rgw_bucket& bucket,
-                 ceph::real_time creation_time) override;
+                 ceph::real_time creation_time,
+                 bool identity_type_role = false) override;
   int remove_bucket(RGWSI_MetaBackend::Context *ctx,
                     const rgw_user& user,
-                    const rgw_bucket& _bucket) override;
+                    const rgw_bucket& _bucket,
+                    bool identity_type_role = false) override;
   int list_buckets(RGWSI_MetaBackend::Context *ctx,
                    const rgw_user& user,
                    const string& marker,
                    const string& end_marker,
                    uint64_t max,
                    RGWUserBuckets *buckets,
-                   bool *is_truncated) override;
+                   bool *is_truncated,
+                   bool identity_type_role = false) override;
 
   /* quota related */
   int flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
                          const rgw_user& user,
-                         const RGWBucketEnt& ent) override;
+                         const RGWBucketEnt& ent,
+                         bool identity_type_role = false) override;
 
   int complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
 			   const rgw_user& user) override;

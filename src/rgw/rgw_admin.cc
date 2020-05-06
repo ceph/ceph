@@ -3136,6 +3136,7 @@ int main(int argc, const char **argv)
   string quota_scope;
   string object_version;
   string placement_id;
+  string type;
   std::optional<string> opt_storage_class;
   list<string> tags;
   list<string> tags_add;
@@ -3302,6 +3303,8 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
       job_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--type", (char*)NULL)) {
+      type = val;
     } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, NULL, "--gen-access-key", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, NULL, "--gen-secret", (char*)NULL)) {
@@ -5781,7 +5784,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.delete_obj();
+      ret = role.delete_obj(store);
       if (ret < 0) {
         return -ret;
       }
@@ -6118,6 +6121,7 @@ int main(int argc, const char **argv)
       bucket_op.set_tenant(bucket.tenant);
       bucket_op.set_bucket_name(bucket.name);
     }
+    bucket_op.set_identity_type(type);
     bucket_op.set_fetch_stats(true);
 
     int r = RGWBucketAdminOp::info(store, bucket_op, f);
@@ -6130,6 +6134,8 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT::BUCKET_LINK) {
     bucket_op.set_bucket_id(bucket_id);
     bucket_op.set_new_bucket_name(new_bucket_name);
+    bucket_op.set_identity_type(type);
+    bucket_op.set_identity_display_name(display_name);
     string err;
     int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
@@ -6139,6 +6145,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT::BUCKET_UNLINK) {
+    bucket_op.set_identity_type(type);
     int r = RGWBucketAdminOp::unlink(store, bucket_op);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
@@ -6150,6 +6157,8 @@ int main(int argc, const char **argv)
 
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
+    bucket_op.set_identity_type(type);
+    bucket_op.set_identity_display_name(display_name);
     string err;
     string marker;
 

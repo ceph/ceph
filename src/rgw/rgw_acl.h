@@ -366,24 +366,32 @@ class ACLOwner
 protected:
   rgw_user id;
   string display_name;
+  bool is_role;
 public:
   ACLOwner() {}
   ~ACLOwner() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     string s;
     id.to_str(s);
     encode(s, bl);
     encode(display_name, bl);
+    encode(is_role, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     string s;
     decode(s, bl);
     id.from_str(s);
     decode(display_name, bl);
+    if (struct_v >= 4) {
+      decode(is_role, bl);
+    } else {
+      is_role = false;
+    }
+  
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -391,10 +399,12 @@ public:
   static void generate_test_instances(list<ACLOwner*>& o);
   void set_id(const rgw_user& _id) { id = _id; }
   void set_name(const string& name) { display_name = name; }
+  void set_identity_type(bool is_role) { this->is_role = is_role;}
 
   rgw_user& get_id() { return id; }
   const rgw_user& get_id() const { return id; }
   string& get_display_name() { return display_name; }
+  bool is_identity_role() { return is_role; }
 };
 WRITE_CLASS_ENCODER(ACLOwner)
 
@@ -452,10 +462,11 @@ public:
     return owner;
   }
 
-  void create_default(const rgw_user& id, string& name) {
+  void create_default(const rgw_user& id, string& name, bool is_identity_role = false) {
     acl.create_default(id, name);
     owner.set_id(id);
     owner.set_name(name);
+    owner.set_identity_type(is_identity_role);
   }
   RGWAccessControlList& get_acl() {
     return acl;

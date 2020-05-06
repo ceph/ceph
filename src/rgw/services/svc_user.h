@@ -86,21 +86,25 @@ public:
   virtual int add_bucket(RGWSI_MetaBackend::Context *ctx,
                          const rgw_user& user,
                          const rgw_bucket& bucket,
-                         ceph::real_time creation_time) = 0;
+                         ceph::real_time creation_time,
+                         bool identity_type_role = false) = 0;
   virtual int remove_bucket(RGWSI_MetaBackend::Context *ctx,
                             const rgw_user& user,
-                            const rgw_bucket& _bucket) = 0;
+                            const rgw_bucket& _bucket,
+                            bool identity_type_role = false) = 0;
   virtual int list_buckets(RGWSI_MetaBackend::Context *ctx,
                            const rgw_user& user,
                            const string& marker,
                            const string& end_marker,
                            uint64_t max,
                            RGWUserBuckets *buckets,
-                           bool *is_truncated) = 0;
+                           bool *is_truncated,
+                           bool identity_type_role = false) = 0;
 
   virtual int flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
                                  const rgw_user& user,
-                                 const RGWBucketEnt& ent) = 0;
+                                 const RGWBucketEnt& ent,
+                                 bool identity_type_role = false) = 0;
   virtual int complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
 				   const rgw_user& user) = 0;
   virtual int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
