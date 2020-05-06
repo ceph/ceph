@@ -122,7 +122,7 @@ class Schedule(object):
                    table_row['pruned_count'])
 
     def __str__(self):
-        return f'''{self.path}: {self.schedule}; {self.retention}'''
+        return f'''{self.path} {self.schedule} {self.retention}'''
 
     CREATE_TABLES = '''CREATE TABLE schedules(
         id integer PRIMARY KEY ASC,
@@ -160,21 +160,17 @@ class Schedule(object):
             strftime("%s", "now") - strftime("%s", sm.start) > 0
         ORDER BY until;'''
 
-    GET_SCHEDULES = '''SELECT
-        s.path, s.subvol, s.rel_path, s.active,
-        sm.schedule, sm.retention, sm.start, sm.first, sm.last,
-        sm.last_pruned, sm.created, sm.created_count, sm.pruned_count
-        FROM schedules s
-            INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
-        WHERE s.path = ?'''
+    PROTO_GET_SCHEDULES = '''SELECT
+          s.path, s.subvol, s.rel_path, s.active,
+          sm.schedule, sm.retention, sm.start, sm.first, sm.last,
+          sm.last_pruned, sm.created, sm.created_count, sm.pruned_count
+          FROM schedules s
+              INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
+          WHERE'''
 
-    GET_SCHEDULE = '''SELECT
-        s.path, s.subvol, s.rel_path, s.active,
-        sm.schedule, sm.retention, sm.start, sm.first, sm.last,
-        sm.last_pruned, sm.created, sm.created_count, sm.pruned_count
-        FROM schedules s
-            INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
-        WHERE s.path = ? and sm.start = ? AND sm.repeat = ?'''
+    GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'
+
+    GET_SCHEDULE = PROTO_GET_SCHEDULES + ' s.path = ? and sm.start = ? AND sm.repeat = ?'
 
     @classmethod
     def get_db_schedules(cls, path, db, fs):
@@ -192,22 +188,16 @@ class Schedule(object):
         else:
             return None
 
-    LIST_SCHEDULES = '''SELECT
-        s.path, sm.schedule, sm.retention
-        FROM schedules s
-            INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
-        WHERE'''
-
     @classmethod
     def list_schedules(cls, path, db, fs, recursive):
         with db:
             if recursive:
-                c = db.execute(cls.LIST_SCHEDULES + ' path LIKE ?',
+                c = db.execute(cls.PROTO_GET_SCHEDULES + ' path LIKE ?',
                                (f'{path}%',))
             else:
-                c = db.execute(cls.LIST_SCHEDULES + ' path = ?',
+                c = db.execute(cls.PROTO_GET_SCHEDULES + ' path = ?',
                                (f'{path}',))
-        return [row for row in c.fetchall()]
+        return [cls._from_get_query(row, fs) for row in c.fetchall()]
 
     INSERT_SCHEDULE = '''INSERT INTO
         schedules(path, subvol, rel_path, active)
@@ -527,7 +517,8 @@ class SnapSchedClient(CephfsClient):
         return Schedule.list_schedules(path, db, fs, recursive)
 
     @updates_schedule_db
-    def store_snap_schedule(self, fs, sched):
+    def store_snap_schedule(self, fs, args):
+        sched = Schedule(*args)
         log.debug(f'attempting to add schedule {sched}')
         db = self.get_schedule_db(fs)
         sched.store_schedule(db)
