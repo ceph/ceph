@@ -116,6 +116,10 @@ void AioCompletion::complete() {
     cond.notify_all();
   }
 
+  if (image_dispatcher_ctx != nullptr) {
+    image_dispatcher_ctx->complete(rval);
+  }
+
   // note: possible for image to be closed after op marked finished
   if (async_op.started()) {
     async_op.finish_op();
