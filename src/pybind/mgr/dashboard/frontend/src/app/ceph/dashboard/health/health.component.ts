@@ -78,7 +78,6 @@ export class HealthComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    this.getHealth();
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
     });
