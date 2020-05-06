@@ -63,7 +63,7 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   g_ceph_context = cct.get();
   cct->_conf.set_config_values(values);
   store = std::make_unique<BlueStore>(cct.get(), path);
-  tp = std::make_unique<crimson::thread::ThreadPool>(1, 128, seastar::engine().cpu_id() + 10);
+  tp = std::make_unique<crimson::thread::ThreadPool>(1, 128, seastar::this_shard_id() + 10);
 }
 
 seastar::future<> AlienStore::start()
@@ -327,7 +327,7 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
                                              ceph::os::Transaction&& txn)
 {
   logger().debug("{}", __func__);
-  auto id = seastar::engine().cpu_id();
+  auto id = seastar::this_shard_id();
   auto done = seastar::promise<>();
   return seastar::do_with(
     std::move(txn),

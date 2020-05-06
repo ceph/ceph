@@ -7,7 +7,7 @@ namespace crimson::common {
 
 ConfigProxy::ConfigProxy(const EntityName& name, std::string_view cluster)
 {
-  if (seastar::engine().cpu_id() != 0) {
+  if (seastar::this_shard_id() != 0) {
     return;
   }
   // set the initial value on CPU#0

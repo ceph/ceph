@@ -69,7 +69,7 @@ class SocketMessenger final : public Messenger {
                         const entity_name_t& peer_name) override;
   // can only wait once
   seastar::future<> wait() override {
-    assert(seastar::engine().cpu_id() == master_sid);
+    assert(seastar::this_shard_id() == master_sid);
     return shutdown_promise.get_future();
   }
 
@@ -102,7 +102,7 @@ class SocketMessenger final : public Messenger {
   void register_conn(SocketConnectionRef);
   void unregister_conn(SocketConnectionRef);
   seastar::shard_id shard_id() const {
-    assert(seastar::engine().cpu_id() == master_sid);
+    assert(seastar::this_shard_id() == master_sid);
     return master_sid;
   }
 };

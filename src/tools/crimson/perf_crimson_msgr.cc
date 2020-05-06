@@ -145,7 +145,7 @@ static seastar::future<> run(
       bufferlist msg_data;
 
       Server(unsigned msg_len)
-        : msgr_sid{seastar::engine().cpu_id()},
+        : msgr_sid{seastar::this_shard_id()},
           msg_len{msg_len} {
         lname = "server#";
         lname += std::to_string(msgr_sid);
@@ -281,7 +281,7 @@ static seastar::future<> run(
       seastar::promise<> stopped_send_promise;
 
       Client(unsigned jobs, unsigned msg_len, unsigned depth)
-        : sid{seastar::engine().cpu_id()},
+        : sid{seastar::this_shard_id()},
           jobs{jobs},
           msg_len{msg_len},
           nr_depth{depth/jobs},
@@ -326,7 +326,7 @@ static seastar::future<> run(
 
       // should start messenger at this shard?
       bool is_active() {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         return sid != 0 && sid <= jobs;
       }
 
@@ -569,7 +569,7 @@ static seastar::future<> run(
 
      private:
       seastar::future<> send_msg(crimson::net::Connection* conn) {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         return depth.wait(1).then([this, conn] {
           const static pg_t pgid;
           const static object_locator_t oloc;
@@ -602,7 +602,7 @@ static seastar::future<> run(
       }
 
       void do_dispatch_messages(crimson::net::Connection* conn) {
-        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(seastar::this_shard_id() == sid);
         ceph_assert(sent_count == 0);
         conn_stats.start_time = mono_clock::now();
         // forwarded to stopped_send_promise

@@ -52,20 +52,20 @@ SocketConnection::get_messenger() const {
 
 bool SocketConnection::is_connected() const
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_connected();
 }
 
 #ifdef UNIT_TESTS_BUILT
 bool SocketConnection::is_closed() const
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_closed();
 }
 
 bool SocketConnection::is_closed_clean() const
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->is_closed_clean;
 }
 
@@ -77,19 +77,19 @@ bool SocketConnection::peer_wins() const
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->send(std::move(msg));
 }
 
 seastar::future<> SocketConnection::keepalive()
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   return protocol->keepalive();
 }
 
 void SocketConnection::mark_down()
 {
-  assert(seastar::engine().cpu_id() == shard_id());
+  assert(seastar::this_shard_id() == shard_id());
   protocol->close(false);
 }
 
