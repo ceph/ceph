@@ -1,5 +1,7 @@
 import time
 import fnmatch
+from contextlib import contextmanager
+
 try:
     from typing import Any
 except ImportError:
@@ -7,7 +9,7 @@ except ImportError:
 import pytest
 
 from cephadm import CephadmOrchestrator
-from orchestrator import raise_if_exception, Completion
+from orchestrator import raise_if_exception, Completion, HostSpec
 from tests import mock
 
 
@@ -70,3 +72,11 @@ def wait(m, c):
                 return c.result
             time.sleep(0.1)
     assert False, "timeout" + str(c._state)
+
+
+@contextmanager
+def with_host(m:CephadmOrchestrator, name):
+    # type: (CephadmOrchestrator, str) -> None
+    wait(m, m.add_host(HostSpec(hostname=name)))
+    yield
+    wait(m, m.remove_host(name))
