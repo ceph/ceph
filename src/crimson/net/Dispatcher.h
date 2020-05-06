@@ -50,13 +50,6 @@ class Dispatcher {
   virtual seastar::future<> ms_handle_remote_reset(ConnectionRef conn) {
     return seastar::make_ready_future<>();
   }
-
-  virtual seastar::future<msgr_tag_t, bufferlist>
-  ms_verify_authorizer(entity_type_t,
-		       auth_proto_t,
-		       bufferlist&) {
-    return seastar::make_ready_future<msgr_tag_t, bufferlist>(0, bufferlist{});
-  }
 };
 
 } // namespace crimson::net
