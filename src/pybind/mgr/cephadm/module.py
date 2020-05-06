@@ -31,6 +31,7 @@ from orchestrator._interface import GenericSpec
 
 from . import remotes
 from . import utils
+from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
     RbdMirrorService, CrashService, CephadmService
 from .services.iscsi import IscsiService
@@ -258,6 +259,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'default': '/etc/prometheus/ceph/ceph_default_alerts.yml',
             'desc': 'location of alerts to include in prometheus deployments',
         },
+        {
+            'name': 'migration_current',
+            'type': 'int',
+            'default': None,
+            'desc': 'internal - do not modify',
+            # used to track track spec and other data migrations.
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -290,6 +298,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.warn_on_failed_host_check = True
             self.allow_ptrace = False
             self.prometheus_alerts_path = ''
+            self.migration_current = None
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
@@ -334,6 +343,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         # in-memory only.
         self.offline_hosts: Set[str] = set()
+
+        self.migration = Migrations(self)
 
         # services:
         self.osd_service = OSDService(self)
@@ -500,6 +511,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     self.set_health_checks(self.health_checks)
 
                 self.rm_util._remove_osds_bg()
+
+                self.migration.migrate()
+                if self.migration.is_migration_ongoing():
+                    continue
 
                 if self._apply_all_services():
                     continue  # did something, refresh
@@ -1999,6 +2014,8 @@ you may want to run:
         return self._add_daemon('mgr', spec, self.mgr_service.create)
 
     def _apply(self, spec: GenericSpec) -> str:
+        self.migration.verify_no_migration()
+
         if spec.service_type == 'host':
             return self._add_host(cast(HostSpec, spec))
 
