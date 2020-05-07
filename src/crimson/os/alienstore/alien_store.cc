@@ -63,7 +63,7 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
   g_ceph_context = cct.get();
   cct->_conf.set_config_values(values);
   store = std::make_unique<BlueStore>(cct.get(), path);
-  tp = std::make_unique<crimson::thread::ThreadPool>(1, 128, seastar::engine().cpu_id() + 10);
+  tp = std::make_unique<crimson::thread::ThreadPool>(1, 128, seastar::this_shard_id() + 10);
 }
 
 seastar::future<> AlienStore::start()
@@ -117,7 +117,7 @@ seastar::future<> AlienStore::mkfs(uuid_d new_osd_fsid)
   });
 }
 
-seastar::future<std::vector<ghobject_t>, ghobject_t>
+seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
 AlienStore::list_objects(CollectionRef ch,
                         const ghobject_t& start,
                         const ghobject_t& end,
@@ -133,8 +133,8 @@ AlienStore::list_objects(CollectionRef ch,
                                     store->get_ideal_list_max(),
                                     &objects, &next);
     }).then([&objects, &next] (int) {
-      return seastar::make_ready_future<std::vector<ghobject_t>, ghobject_t>(
-                                         std::move(objects), std::move(next));
+      return seastar::make_ready_future<std::tuple<std::vector<ghobject_t>, ghobject_t>>(
+	std::make_tuple(std::move(objects), std::move(next)));
     });
   });
 }
@@ -306,7 +306,7 @@ AlienStore::omap_get_values(CollectionRef ch,
   });
 }
 
-seastar::future<bool, AlienStore::omap_values_t>
+seastar::future<std::tuple<bool, AlienStore::omap_values_t>>
 AlienStore::omap_get_values(CollectionRef ch,
                             const ghobject_t &oid,
                             const std::optional<string> &start)
@@ -318,7 +318,8 @@ AlienStore::omap_get_values(CollectionRef ch,
       return store->omap_get_values(c->collection, oid, start,
 		                    reinterpret_cast<map<string, bufferlist>*>(&values));
     }).then([&values] (int r) {
-      return seastar::make_ready_future<bool, omap_values_t>(true, std::move(values));
+      return seastar::make_ready_future<std::tuple<bool, omap_values_t>>(
+        std::make_tuple(true, std::move(values)));
     });
   });
 }
@@ -327,7 +328,7 @@ seastar::future<> AlienStore::do_transaction(CollectionRef ch,
                                              ceph::os::Transaction&& txn)
 {
   logger().debug("{}", __func__);
-  auto id = seastar::engine().cpu_id();
+  auto id = seastar::this_shard_id();
   auto done = seastar::promise<>();
   return seastar::do_with(
     std::move(txn),
@@ -361,7 +362,8 @@ seastar::future<> AlienStore::write_meta(const std::string& key,
   });
 }
 
-seastar::future<int, std::string> AlienStore::read_meta(const std::string& key)
+seastar::future<std::tuple<int, std::string>>
+AlienStore::read_meta(const std::string& key)
 {
   logger().debug("{}", __func__);
   return tp->submit([this, key] {
@@ -376,7 +378,8 @@ seastar::future<int, std::string> AlienStore::read_meta(const std::string& key)
     }
     return std::make_pair(r, value);
   }).then([] (auto entry) {
-    return seastar::make_ready_future<int, std::string>(entry.first, entry.second);
+    return seastar::make_ready_future<std::tuple<int, std::string>>(
+      std::move(entry));
   });
 }
 

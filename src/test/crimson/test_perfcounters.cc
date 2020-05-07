@@ -21,7 +21,7 @@ static constexpr uint64_t PERF_VAL = 42;
 static seastar::future<> test_perfcounters(){
   return crimson::common::sharded_perf_coll().start().then([] {
     return crimson::common::sharded_perf_coll().invoke_on_all([] (auto& s){
-      std::string name =fmt::format("seastar-osd::shard-{}",seastar::engine().cpu_id());
+      std::string name =fmt::format("seastar-osd::shard-{}",seastar::this_shard_id());
       PerfCountersBuilder plb(NULL, name, PERFTEST_FIRST,PERFTEST_LAST);
       plb.add_u64_counter(PERFTEST_INDEX, "perftest_count", "count perftest");
       auto perf_logger = plb.create_perf_counters();

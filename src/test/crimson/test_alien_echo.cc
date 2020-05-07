@@ -53,13 +53,6 @@ struct Server {
         on_reply.signal();
       });
     }
-    seastar::future<crimson::net::msgr_tag_t, bufferlist>
-    ms_verify_authorizer(entity_type_t peer_type,
-                         auth_proto_t protocol,
-                         bufferlist& auth) override {
-      return seastar::make_ready_future<crimson::net::msgr_tag_t, bufferlist>(
-          0, bufferlist{});
-    }
   } dispatcher;
   Server(crimson::net::MessengerRef msgr)
     : byte_throttler(local_conf()->osd_client_message_size_cap),

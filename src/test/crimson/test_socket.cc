@@ -129,7 +129,7 @@ class SocketFactory {
   // cb_client() on CPU#0, cb_server() on CPU#1
   template <typename FuncC, typename FuncS>
   static future<> dispatch_sockets(FuncC&& cb_client, FuncS&& cb_server) {
-    assert(engine().cpu_id() == 0u);
+    assert(seastar::this_shard_id() == 0u);
     auto owner = std::make_unique<SocketFactory>();
     auto psf = owner.get();
     return seastar::smp::submit_to(1u, [psf] {

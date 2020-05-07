@@ -301,7 +301,8 @@ seastar::future<> OSD::start()
 seastar::future<> OSD::start_boot()
 {
   state.set_preboot();
-  return monc->get_version("osdmap").then([this](version_t newest, version_t oldest) {
+  return monc->get_version("osdmap").then([this](auto&& ret) {
+    auto [newest, oldest] = ret;
     return _preboot(oldest, newest);
   });
 }
@@ -385,7 +386,8 @@ seastar::future<> OSD::_add_me_to_crush()
       "args": [{}]
     }})", whoami, weight, loc);
     return monc->run_command({cmd}, {});
-  }).then([](int32_t code, string message, bufferlist) {
+  }).then([](auto&& command_result) {
+    [[maybe_unused]] auto [code, message, out] = std::move(command_result);
     if (code) {
       logger().warn("fail to add to crush: {} ({})", message, code);
       throw std::runtime_error("fail to add to crush");
@@ -517,10 +519,10 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
       if (pi.is_erasure()) {
 	ec_profile = create_map->get_erasure_code_profile(pi.erasure_code_profile);
       }
-      return seastar::make_ready_future<pg_pool_t, string, ec_profile_t>(
-	std::move(pi),
-	std::move(name),
-	std::move(ec_profile));
+      return seastar::make_ready_future<std::tuple<pg_pool_t, string, ec_profile_t>>(
+        std::make_tuple(std::move(pi),
+			std::move(name),
+			std::move(ec_profile)));
     } else {
       // pool was deleted; grab final pg_pool_t off disk.
       return meta_coll->load_final_pool_info(pgid.pool());
@@ -770,7 +772,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
     [this](auto &info) -> seastar::future<Ref<PG>> {
       return get_map(info->epoch).then(
 	[&info, this](cached_map_t startmap) ->
-	seastar::future<Ref<PG>, cached_map_t> {
+	seastar::future<std::tuple<Ref<PG>, cached_map_t>> {
 	  const spg_t &pgid = info->pgid;
 	  if (info->by_mon) {
 	    int64_t pool_id = pgid.pgid.pool();
@@ -780,9 +782,8 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 		"{} ignoring pgid {}, pool dne",
 		__func__,
 		pgid);
-	      return seastar::make_ready_future<Ref<PG>, cached_map_t>(
-		Ref<PG>(),
-		startmap);
+	      return seastar::make_ready_future<std::tuple<Ref<PG>, cached_map_t>>(
+                std::make_tuple(Ref<PG>(), startmap));
 	    }
 	    ceph_assert(osdmap->require_osd_release >= ceph_release_t::octopus);
 	    if (!pool->has_flag(pg_pool_t::FLAG_CREATING)) {
@@ -793,19 +794,18 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 		"{} dropping {} create, pool does not have CREATING flag set",
 		__func__,
 		pgid);
-	      return seastar::make_ready_future<Ref<PG>, cached_map_t>(
-		Ref<PG>(),
-		startmap);
+	      return seastar::make_ready_future<std::tuple<Ref<PG>, cached_map_t>>(
+                std::make_tuple(Ref<PG>(), startmap));
 	    }
 	  }
 	  return make_pg(startmap, pgid, true).then(
 	    [startmap=std::move(startmap)](auto pg) mutable {
-	      return seastar::make_ready_future<Ref<PG>, cached_map_t>(
-		std::move(pg),
-		std::move(startmap));
+	      return seastar::make_ready_future<std::tuple<Ref<PG>, cached_map_t>>(
+                std::make_tuple(std::move(pg), std::move(startmap)));
 	    });
-      }).then([this, &info](auto pg, auto startmap) ->
+      }).then([this, &info](auto&& ret) ->
               seastar::future<Ref<PG>> {
+        auto [pg, startmap] = std::move(ret);
         if (!pg)
           return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
         PeeringCtx rctx{ceph_release_t::octopus};

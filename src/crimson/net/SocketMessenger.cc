@@ -34,14 +34,14 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce)
   : Messenger{myname},
-    master_sid{seastar::engine().cpu_id()},
+    master_sid{seastar::this_shard_id()},
     logic_name{logic_name},
     nonce{nonce}
 {}
 
 seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
-  assert(seastar::engine().cpu_id() == master_sid);
+  assert(seastar::this_shard_id() == master_sid);
   auto my_addrs = addrs;
   for (auto& addr : my_addrs.v) {
     addr.nonce = nonce;
@@ -51,7 +51,7 @@ seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 
 seastar::future<> SocketMessenger::do_bind(const entity_addrvec_t& addrs)
 {
-  assert(seastar::engine().cpu_id() == master_sid);
+  assert(seastar::this_shard_id() == master_sid);
   ceph_assert(addrs.front().get_family() == AF_INET);
   return set_myaddrs(addrs).then([this] {
     if (!listener) {
@@ -112,7 +112,7 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
 }
 
 seastar::future<> SocketMessenger::start(Dispatcher *disp) {
-  assert(seastar::engine().cpu_id() == master_sid);
+  assert(seastar::this_shard_id() == master_sid);
 
   dispatcher = disp;
   if (listener) {
@@ -121,7 +121,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
     ceph_assert(get_myaddr().get_port() > 0);
 
     return listener->accept([this] (SocketRef socket, entity_addr_t peer_addr) {
-      assert(seastar::engine().cpu_id() == master_sid);
+      assert(seastar::this_shard_id() == master_sid);
       SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
           *this, *dispatcher, get_myaddr().is_msgr2());
       conn->start_accept(std::move(socket), peer_addr);
@@ -134,7 +134,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
 crimson::net::ConnectionRef
 SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& peer_name)
 {
-  assert(seastar::engine().cpu_id() == master_sid);
+  assert(seastar::this_shard_id() == master_sid);
 
   // make sure we connect to a valid peer_addr
   ceph_assert(peer_addr.is_legacy() || peer_addr.is_msgr2());
@@ -152,8 +152,8 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
 
 seastar::future<> SocketMessenger::shutdown()
 {
-  assert(seastar::engine().cpu_id() == master_sid);
-  return seastar::futurize_apply([this] {
+  assert(seastar::this_shard_id() == master_sid);
+  return seastar::futurize_invoke([this] {
     if (listener) {
       auto d_listener = listener;
       listener = nullptr;
@@ -179,7 +179,7 @@ seastar::future<> SocketMessenger::shutdown()
 
 seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me, const SocketConnection& conn)
 {
-  assert(seastar::engine().cpu_id() == master_sid);
+  assert(seastar::this_shard_id() == master_sid);
   if (!need_addr) {
     if ((!get_myaddr().is_any() &&
          get_myaddr().get_type() != peer_addr_for_me.get_type()) ||

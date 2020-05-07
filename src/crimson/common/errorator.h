@@ -19,7 +19,7 @@ inline auto do_for_each(Iterator begin, Iterator end, AsyncAction action) {
     return futurator::type::errorator_type::template make_ready_future<>();
   }
   while (true) {
-    auto f = futurator::apply(action, *begin);
+    auto f = futurator::invoke(action, *begin);
     ++begin;
     if (begin == end) {
       return f;
@@ -547,7 +547,7 @@ private:
       return this->then_wrapped(
 	[ func = std::forward<FuncT>(func)
 	] (auto&& future) mutable noexcept {
-	  return futurator_t::apply(std::forward<FuncT>(func)).safe_then(
+	  return futurator_t::invoke(std::forward<FuncT>(func)).safe_then(
 	    [future = std::forward<decltype(future)>(future)]() mutable {
 	      return std::move(future);
 	    });
@@ -623,11 +623,11 @@ private:
     template <class...>
     friend class ::seastar::future;
 
-    // let seastar::do_with to up-cast us to seastar::future.
+    // let seastar::do_with_impl to up-cast us to seastar::future.
     template<typename T, typename F>
-    friend inline auto ::seastar::do_with(T&&, F&&);
+    friend inline auto ::seastar::internal::do_with_impl(T&& rvalue, F&& f);
     template<typename T1, typename T2, typename T3_or_F, typename... More>
-    friend inline auto ::seastar::do_with(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
+    friend inline auto ::seastar::internal::do_with_impl(T1&& rv1, T2&& rv2, T3_or_F&& rv3, More&&... more);
   };
 
   class Enabler {};
@@ -786,8 +786,8 @@ private:
     template <class Func, class... Args>
     static type apply(Func&& func, std::tuple<Args...>&& args) {
       try {
-        return ::seastar::apply(std::forward<Func>(func),
-                                std::forward<std::tuple<Args...>>(args));
+        return ::seastar::futurize_apply(std::forward<Func>(func),
+					 std::forward<std::tuple<Args...>>(args));
       } catch (...) {
         return make_exception_future(std::current_exception());
       }
@@ -942,7 +942,7 @@ struct futurize<Container<::crimson::errorated_future_marker<Values...>>> {
   }
 
   template<typename Func, typename... FuncArgs>
-  static inline type apply(Func&& func, FuncArgs&&... args) noexcept {
+  static inline type invoke(Func&& func, FuncArgs&&... args) noexcept {
     try {
         return func(std::forward<FuncArgs>(args)...);
     } catch (...) {

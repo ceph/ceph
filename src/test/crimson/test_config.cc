@@ -65,7 +65,7 @@ static seastar::future<> test_config()
   }).then([] {
     return crimson::common::sharded_conf().invoke_on_all([](Config& config) {
       return config.set_val(test_uint_option,
-                            std::to_string(seastar::engine().cpu_id()));
+                            std::to_string(seastar::this_shard_id()));
     });
   }).then([] {
     auto expected = crimson::common::local_conf().get_val<uint64_t>(test_uint_option);
