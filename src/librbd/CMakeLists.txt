@@ -74,6 +74,7 @@ set(librbd_internal_srcs
   io/AioCompletion.cc
   io/AsyncOperation.cc
   io/CopyupRequest.cc
+  io/FlushTracker.cc
   io/ImageDispatch.cc
   io/ImageDispatchSpec.cc
   io/ImageDispatcher.cc
