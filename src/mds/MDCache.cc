@@ -11455,7 +11455,7 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 
   CDir *first = dirs.front();
   int bits = first->get_frag().bits() - frag.bits();
-  dout(10) << " we are merginb by " << bits << " bits" << dendl;
+  dout(10) << " we are merging by " << bits << " bits" << dendl;
 
   dirfrag_t basedirfrag(diri->ino(), frag);
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
