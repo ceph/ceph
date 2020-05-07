@@ -25,7 +25,8 @@
               The data being reported does <b>not</b> contain any sensitive data like pool names, object names, object contents,
               hostnames, or device serial numbers. It contains counters and statistics on how the cluster has been
               deployed, the version of Ceph, the distribution of the hosts and other parameters which help the project
-              to gain a better understanding of the way Ceph is used. The data is sent secured to https://telemetry.ceph.com.</p>
+              to gain a better understanding of the way Ceph is used. The data is sent secured to {{ sendToUrl }} and
+              {{ sendToDeviceUrl }} (device report).</p>
             <div *ngIf="moduleEnabled">
               The plugin is already <b>enabled</b>. Click <b>Deactivate</b> to disable it.&nbsp;
               <button type="button"
