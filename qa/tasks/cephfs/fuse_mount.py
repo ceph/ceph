@@ -258,8 +258,14 @@ class FuseMount(CephFSMount):
     def _mountpoint_exists(self):
         return self.client_remote.run(args=["ls", "-d", self.mountpoint], check_status=False, cwd=self.test_dir, timeout=(15*60)).exitstatus == 0
 
-    def umount(self):
+    def umount(self, cleanup=True):
+        """
+        umount() must not run cleanup() when it's called by umount_wait()
+        since "run.wait([self.fuse_daemon], timeout)" would hang otherwise.
+        """
         if not self.is_mounted():
+            if cleanup:
+                self.cleanup()
             return
 
         try:
@@ -328,6 +334,8 @@ class FuseMount(CephFSMount):
         self.id = None
         self.inst = None
         self.addr = None
+        if cleanup:
+            self.cleanup()
 
     def umount_wait(self, force=False, require_clean=False, timeout=900):
         """
@@ -337,6 +345,7 @@ class FuseMount(CephFSMount):
             log.debug('ceph-fuse client.{id} is not mounted at {remote} {mnt}'.format(id=self.client_id,
                                                                                       remote=self.client_remote,
                                                                                       mnt=self.mountpoint))
+            self.cleanup()
             return
 
         if force:
@@ -351,7 +360,9 @@ class FuseMount(CephFSMount):
             # mount -o remount (especially if the remount is stuck because MDSs
             # are unavailable)
 
-        self.umount()
+        # cleanup is set to to fail since clieanup must happen after umount is
+        # complete; otherwise following call to run.wait hangs.
+        self.umount(cleanup=False)
 
         try:
             # Permit a timeout, so that we do not block forever
@@ -365,7 +376,6 @@ class FuseMount(CephFSMount):
             if require_clean:
                 raise
 
-        self.cleanup_netns()
         self.mounted = False
         self.cleanup()
 
@@ -384,7 +394,6 @@ class FuseMount(CephFSMount):
             except CommandFailedError:
                 pass
 
-        self.cleanup_netns()
         self.mounted = False
 
         # Indiscriminate, unlike the touchier cleanup()
