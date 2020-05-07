@@ -1070,3 +1070,168 @@ and loosely coupled fashion.
 
 .. include:: dashboard_plugins/feature_toggles.inc.rst
 .. include:: dashboard_plugins/debug.inc.rst
+
+
+Troubleshooting the Dashboard
+-----------------------------
+
+Locating the Dashboard
+^^^^^^^^^^^^^^^^^^^^^^
+
+If you are unsure of the location of the Ceph Dashboard, run the following command::
+
+    $ ceph mgr services | jq .dashboard
+    "https://host:port"
+
+The command returns the URL where the Ceph Dashboard is located: ``https://<host>:<port>/``
+
+.. note::
+
+    Many Ceph command line tools return results in JSON format. You may have to install
+    the `jq <https://stedolan.github.io/jq>`_ command-line JSON processor utility on
+    your operating system beforehand.
+
+
+Accessing the Dashboard
+^^^^^^^^^^^^^^^^^^^^^^^
+
+If you are unable to access the Ceph Dashboard, run through the following
+commands:
+
+#. Verify the Ceph Dashboard module is enabled::
+
+    $ ceph mgr module ls | jq .enabled_modules
+
+   Ensure the Ceph Dashboard module is listed in the return value of the
+   command. Example snipped output from the command above::
+
+    [
+      "dashboard",
+      "iostat",
+      "restful"
+    ]
+
+#. If it is not listed, activate the module with the following command::
+
+    $ ceph mgr module enable dashboard
+
+#. Check the Ceph Dashboard and/or mgr log file for any errors. The exact
+   location of the log files depends on the Ceph configuration.
+
+   * Check if mgr log messages are written to a file by::
+
+        $ ceph config get mgr log_to_file
+        true
+
+   * Get the location of the log file (it's ``/var/log/ceph/<cluster-name>-<daemon-name>.log``
+     by default)::
+
+        $ ceph config get mgr log_file
+        /var/log/ceph/$cluster-$name.log
+
+#. Ensure the SSL/TSL support is configured properly:
+
+   * Check if the SSL/TSL support is enabled::
+
+       $ ceph config get mgr mgr/dashboard/ssl
+
+   * If the command returns ``true``, verify a certificate exists by::
+
+       $ ceph config-key get mgr/dashboard/crt
+
+     and::
+
+       $ ceph config-key get mgr/dashboard/key
+
+   * If it doesn't, run the following command to generate a self-signed
+     certificate or follow the instructions outlined in
+     :ref:`dashboard-ssl-tls-support`::
+
+       $ ceph dashboard create-self-signed-cert
+
+
+Trouble Logging into the Dashboard
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you are unable to log into the Ceph Dashboard and you receive the following
+error, run through the procedural checks below:
+
+.. image:: ../images/dashboard/invalid-credentials.png
+   :align: center
+
+#. Check that your user credentials are correct. If you are seeing the
+   notification message above when trying to log into the Ceph Dashboard, it
+   is likely you are using the wrong credentials. Double check your username
+   and password, and ensure the caps lock key is not enabled by accident.
+
+#. If your user credentials are correct, but you are experiencing the same
+   error, check that the user account exists::
+
+    $ ceph dashboard ac-user-show <username>
+
+   This command returns your user data. If the user does not exist, it will
+   print::
+
+    $ Error ENOENT: User <username> does not exist
+
+#. Check if the user is enabled::
+
+    $ ceph dashboard ac-user-show <username> | jq .enabled
+    true
+
+   Check if ``enabled`` is set to ``true`` for your user. If not the user is
+   not enabled, run::
+
+    $ ceph dashboard ac-user-enable <username>
+
+Please see :ref:`dashboard-user-role-management` for more information.
+
+
+A Dashboard Feature is Not Working
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When an error occurs on the backend, you will usually receive an error
+notification on the frontend. Run through the following scenarios to debug.
+
+#. Check the Ceph Dashboard/mgr logfile(s) for any errors. These can be
+   identified by searching for keywords, such as *500 Internal Server Error*,
+   followed by ``traceback``. The end of a traceback contains more details about
+   what exact error occurred.
+#. Check your web browser's Javascript Console for any errors.
+
+
+Ceph Dashboard Logs
+^^^^^^^^^^^^^^^^^^^
+
+Dashboard Debug Flag
+''''''''''''''''''''
+
+With this flag enabled, traceback of errors are included in backend responses.
+
+To enable this flag via the Ceph Dashboard, navigate from *Cluster* to *Manager
+modules*. Select *Dashboard module* and click the edit button. Click the
+*debug* checkbox and update.
+
+To enable it via the CLI, run the following command::
+
+    $ ceph dashboard debug enable
+
+
+Setting Logging Level of Dashboard Module
+'''''''''''''''''''''''''''''''''''''''''
+
+Setting the logging level to debug makes the log more verbose and helpful for
+debugging.
+
+#. Increase the logging level of manager daemons::
+
+   $ ceph tell mgr config set debug_mgr 20
+
+#. Adjust the logging level of the Ceph Dashboard module via the Dashboard or
+   CLI:
+
+   * Navigate from *Cluster* to *Manager modules*. Select *Dashboard module*
+     and click the edit button. Modify the ``log_level`` configuration.
+   * To adjust it via the CLI, run the following command::
+
+        $ bin/ceph config set mgr mgr/dashboard/log_level debug
