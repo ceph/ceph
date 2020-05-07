@@ -455,3 +455,19 @@ Usage :
 
 Options:
   -h, --help   Shows the help message
+
+du
+--
+
+Show disk usage of a directory
+
+Usage :
+
+    du [-h] [-r] [paths [paths ...]]
+
+* paths - name of the directory
+
+Options:
+  -h, --help   Shows the help message
+
+  -r     Recursive Disk usage of all directories
