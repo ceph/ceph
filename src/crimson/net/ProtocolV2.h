@@ -85,7 +85,7 @@ class ProtocolV2 final : public Protocol {
   template <typename Func>
   void gated_execute(const char* what, Func&& func) {
     gated_dispatch(what, [this, &func] {
-      execution_done = seastar::futurize_apply(std::forward<Func>(func));
+      execution_done = seastar::futurize_invoke(std::forward<Func>(func));
       return execution_done.get_future();
     });
   }
@@ -135,7 +135,8 @@ class ProtocolV2 final : public Protocol {
  private:
   void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
   void reset_session(bool full);
-  seastar::future<entity_type_t, entity_addr_t> banner_exchange(bool is_connect);
+  seastar::future<std::tuple<entity_type_t, entity_addr_t>>
+  banner_exchange(bool is_connect);
 
   enum class next_step_t {
     ready,

@@ -845,7 +845,7 @@ Client::handle_get_version_reply(Ref<MMonGetVersionReply> m)
     auto& result = found->second;
     logger().trace("{}: {} returns {}",
                  __func__, m->handle, m->version);
-    result.set_value(m->version, m->oldest_version);
+    result.set_value(std::make_tuple(m->version, m->oldest_version));
     version_reqs.erase(found);
   } else {
     logger().warn("{}: version request with handle {} not found",
@@ -861,7 +861,7 @@ seastar::future<> Client::handle_mon_command_ack(Ref<MMonCommandAck> m)
       found != mon_commands.end()) {
     auto& result = found->second;
     logger().trace("{} {}", __func__, tid);
-    result.set_value(m->r, m->rs, std::move(m->get_data()));
+    result.set_value(std::make_tuple(m->r, m->rs, std::move(m->get_data())));
     mon_commands.erase(found);
   } else {
     logger().warn("{} {} not found", __func__, tid);
@@ -939,7 +939,7 @@ seastar::future<> Client::reopen_session(int rank)
 #warning fixme
     auto peer = monmap.get_addrs(rank).front();
     logger().info("connecting to mon.{}", rank);
-    return seastar::futurize_apply(
+    return seastar::futurize_invoke(
         [peer, this] () -> seastar::future<Connection::AuthResult> {
       auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
       auto& mc = pending_conns.emplace_back(

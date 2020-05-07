@@ -36,7 +36,7 @@ class Socket
   };
 
   Socket(seastar::connected_socket&& _socket, side_t _side, uint16_t e_port, construct_tag)
-    : sid{seastar::engine().cpu_id()},
+    : sid{seastar::this_shard_id()},
       socket(std::move(_socket)),
       in(socket.input()),
       // the default buffer size 8192 is too small that may impact our write
@@ -198,7 +198,7 @@ public:
   FixedCPUServerSocket& operator=(const FixedCPUServerSocket&) = delete;
 
   seastar::future<> listen(entity_addr_t addr) {
-    assert(seastar::engine().cpu_id() == cpu);
+    assert(seastar::this_shard_id() == cpu);
     logger().trace("FixedCPUServerSocket::listen({})...", addr);
     return container().invoke_on_all([addr] (auto& ss) {
       ss.addr = addr;
@@ -223,7 +223,7 @@ public:
   // seastar::future<>(SocketRef, entity_addr_t)
   template <typename Func>
   seastar::future<> accept(Func&& fn_accept) {
-    assert(seastar::engine().cpu_id() == cpu);
+    assert(seastar::this_shard_id() == cpu);
     logger().trace("FixedCPUServerSocket({})::accept()...", addr);
     return container().invoke_on_all(
         [fn_accept = std::move(fn_accept)] (auto& ss) mutable {
@@ -238,7 +238,7 @@ public:
               [&ss, fn_accept = std::move(fn_accept)]
               (seastar::accept_result accept_result) mutable {
             // assert seastar::listen_options::set_fixed_cpu() works
-            assert(seastar::engine().cpu_id() == ss.cpu);
+            assert(seastar::this_shard_id() == ss.cpu);
             auto [socket, paddr] = std::move(accept_result);
             entity_addr_t peer_addr;
             peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
@@ -278,7 +278,7 @@ public:
   }
 
   seastar::future<> shutdown() {
-    assert(seastar::engine().cpu_id() == cpu);
+    assert(seastar::this_shard_id() == cpu);
     logger().trace("FixedCPUServerSocket({})::shutdown()...", addr);
     return container().invoke_on_all([] (auto& ss) {
       if (ss.listener) {
@@ -291,7 +291,7 @@ public:
   }
 
   seastar::future<> destroy() {
-    assert(seastar::engine().cpu_id() == cpu);
+    assert(seastar::this_shard_id() == cpu);
     return shutdown().then([this] {
       // we should only construct/stop shards on #0
       return container().invoke_on(0, [] (auto& ss) {
@@ -302,7 +302,7 @@ public:
   }
 
   static seastar::future<FixedCPUServerSocket*> create() {
-    auto cpu = seastar::engine().cpu_id();
+    auto cpu = seastar::this_shard_id();
     // we should only construct/stop shards on #0
     return seastar::smp::submit_to(0, [cpu] {
       auto service = std::make_unique<sharded_service_t>();

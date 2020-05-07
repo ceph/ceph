@@ -374,7 +374,7 @@ seastar::future<> PGBackend::remove(ObjectState& os,
   return seastar::now();
 }
 
-seastar::future<std::vector<hobject_t>, hobject_t>
+seastar::future<std::tuple<std::vector<hobject_t>, hobject_t>>
 PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 {
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
@@ -382,7 +382,8 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
                              gstart,
                              ghobject_t::get_max(),
                              limit)
-    .then([](std::vector<ghobject_t> gobjects, ghobject_t next) {
+    .then([](auto ret) {
+      auto& [gobjects, next] = ret;
       std::vector<hobject_t> objects;
       boost::copy(gobjects |
         boost::adaptors::filtered([](const ghobject_t& o) {
@@ -398,8 +399,8 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
           return o.hobj;
         }),
         std::back_inserter(objects));
-      return seastar::make_ready_future<std::vector<hobject_t>, hobject_t>(
-        objects, next.hobj);
+      return seastar::make_ready_future<std::tuple<std::vector<hobject_t>, hobject_t>>(
+        std::make_tuple(objects, next.hobj));
     });
 }
 
@@ -482,7 +483,7 @@ maybe_get_omap_vals_by_keys(
   }
 }
 
-static seastar::future<bool, crimson::os::FuturizedStore::omap_values_t>
+static seastar::future<std::tuple<bool, crimson::os::FuturizedStore::omap_values_t>>
 maybe_get_omap_vals(
   crimson::os::FuturizedStore* store,
   const crimson::os::CollectionRef& coll,
@@ -492,8 +493,8 @@ maybe_get_omap_vals(
   if (oi.is_omap()) {
     return store->omap_get_values(coll, ghobject_t{oi.soid}, start_after);
   } else {
-    return seastar::make_ready_future<bool, crimson::os::FuturizedStore::omap_values_t>(
-      true, crimson::os::FuturizedStore::omap_values_t{});
+    return seastar::make_ready_future<std::tuple<bool, crimson::os::FuturizedStore::omap_values_t>>(
+      std::make_tuple(true, crimson::os::FuturizedStore::omap_values_t{}));
   }
 }
 
@@ -522,11 +523,11 @@ seastar::future<> PGBackend::omap_get_keys(
 
   // TODO: truly chunk the reading
   return maybe_get_omap_vals(store, coll, os.oi, start_after).then(
-    [=, &osd_op] (bool, crimson::os::FuturizedStore::omap_values_t vals) {
+    [=, &osd_op] (auto ret) {
       ceph::bufferlist result;
       bool truncated = false;
       uint32_t num = 0;
-      for (auto& [key, val] : vals) {
+      for (auto& [key, val] : std::get<1>(ret)) {
         if (num++ >= max_return ||
             result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
           truncated = true;
@@ -566,8 +567,8 @@ seastar::future<> PGBackend::omap_get_vals(
 
   // TODO: truly chunk the reading
   return maybe_get_omap_vals(store, coll, os.oi, start_after).then(
-    [=, &osd_op] (const bool done,
-                  crimson::os::FuturizedStore::omap_values_t vals) {
+    [=, &osd_op] (auto&& ret) {
+      auto [done, vals] = std::move(ret);
       assert(done);
       ceph::bufferlist result;
       bool truncated = false;
