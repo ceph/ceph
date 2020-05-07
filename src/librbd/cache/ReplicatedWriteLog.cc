@@ -866,6 +866,67 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
                                                   uint64_t *mismatch_offset,
                                                   int fadvise_flags,
                                                   Context *on_finish) {
+  ldout(m_image_ctx.cct, 20) << dendl;
+
+  utime_t now = ceph_clock_now();
+  m_perfcounter->inc(l_librbd_rwl_cmp, 1);
+  ceph_assert(m_initialized);
+
+  /* A compare and write request is also a write request. We only allocate
+   * resources and dispatch this write request if the compare phase
+   * succeeds. */
+  auto *cw_req =
+    new C_CompAndWriteRequestT(*this, now, std::move(image_extents), std::move(cmp_bl), std::move(bl),
+                               mismatch_offset, fadvise_flags, m_lock, m_perfcounter, on_finish);
+  m_perfcounter->inc(l_librbd_rwl_cmp_bytes, cw_req->image_extents_summary.total_bytes);
+
+  /* The lambda below will be called when the block guard for all
+   * blocks affected by this write is obtained */
+  GuardedRequestFunctionContext *guarded_ctx =
+    new GuardedRequestFunctionContext([this, cw_req](GuardedRequestFunctionContext &guard_ctx) {
+      cw_req->blockguard_acquired(guard_ctx);
+
+      auto read_complete_ctx = new LambdaContext(
+        [this, cw_req](int r) {
+          ldout(m_image_ctx.cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
+                                     << "cw_req=" << cw_req << dendl;
+
+          /* Compare read_bl to cmp_bl to determine if this will produce a write */
+          if (cw_req->cmp_bl.contents_equal(cw_req->read_bl)) {
+            /* Compare phase succeeds. Begin write */
+            ldout(m_image_ctx.cct, 5) << " cw_req=" << cw_req << " compare matched" << dendl;
+            cw_req->compare_succeeded = true;
+            *cw_req->mismatch_offset = 0;
+            /* Continue with this request as a write. Blockguard release and
+             * user request completion handled as if this were a plain
+             * write. */
+            alloc_and_dispatch_io_req(cw_req);
+          } else {
+            /* Compare phase fails. Comp-and write ends now. */
+            ldout(m_image_ctx.cct, 15) << " cw_req=" << cw_req << " compare failed" << dendl;
+            /* Bufferlist doesn't tell us where they differed, so we'll have to determine that here */
+            ceph_assert(cw_req->read_bl.length() == cw_req->cmp_bl.length());
+            uint64_t bl_index = 0;
+            for (bl_index = 0; bl_index < cw_req->cmp_bl.length(); bl_index++) {
+              if (cw_req->cmp_bl[bl_index] != cw_req->read_bl[bl_index]) {
+                ldout(m_image_ctx.cct, 15) << " cw_req=" << cw_req << " mismatch at " << bl_index << dendl;
+                break;
+              }
+            }
+            cw_req->compare_succeeded = false;
+            *cw_req->mismatch_offset = bl_index;
+            cw_req->complete_user_request(-EILSEQ);
+            cw_req->release_cell();
+            cw_req->complete(0);
+          }
+        });
+
+      /* Read phase of comp-and-write must read through RWL */
+      Extents image_extents_copy = cw_req->image_extents;
+      aio_read(std::move(image_extents_copy), &cw_req->read_bl, cw_req->fadvise_flags, read_complete_ctx);
+    });
+
+  detain_guarded_request(cw_req, guarded_ctx, false);
 }
 
 template <typename I>
