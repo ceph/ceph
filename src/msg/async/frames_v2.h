@@ -110,44 +110,64 @@ struct preamble_block_t {
 static_assert(sizeof(preamble_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<preamble_block_t>::value);
 
-// Each Frame has an epilogue for integrity or authenticity validation.
-// For plain mode it's quite straightforward - the structure stores up
-// to MAX_NUM_SEGMENTS crc32 checksums, one per each segment.
-// For secure mode things become very different. The fundamental thing
-// is that epilogue format is **an implementation detail of particular
-// cipher**. ProtocolV2 only knows:
-//   * where the data is placed (always at the end of ciphertext),
-//   * how long it is. RxHandler provides get_extra_size_at_final() but
-//     ProtocolV2 has NO WAY to alter this.
-//
-// The intention behind the contract is to provide flexibility of cipher
-// selection. Currently AES in GCM mode is used and epilogue conveys its
-// *auth tag* (following OpenSSL's terminology). However, it would be OK
-// to switch to e.g. AES128-CBC + HMAC-SHA512 without affecting protocol
-// (expect the cipher negotiation, of course).
-//
-// In addition to integrity/authenticity data each variant of epilogue
-// conveys late_flags. The initial user of this field will be the late
-// frame abortion facility.
 struct epilogue_crc_rev0_block_t {
   __u8 late_flags;  // FRAME_LATE_FLAG_ABORTED
   ceph_le32 crc_values[MAX_NUM_SEGMENTS];
 } __attribute__((packed));
 static_assert(std::is_standard_layout_v<epilogue_crc_rev0_block_t>);
 
+struct epilogue_crc_rev1_block_t {
+  __u8 late_status;  // FRAME_LATE_STATUS_*
+  ceph_le32 crc_values[MAX_NUM_SEGMENTS - 1];
+} __attribute__((packed));
+static_assert(std::is_standard_layout_v<epilogue_crc_rev1_block_t>);
+
 struct epilogue_secure_rev0_block_t {
   __u8 late_flags;  // FRAME_LATE_FLAG_ABORTED
   __u8 padding[CRYPTO_BLOCK_SIZE - sizeof(late_flags)];
-
-  __u8 ciphers_private_data[];
 } __attribute__((packed));
 static_assert(sizeof(epilogue_secure_rev0_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout_v<epilogue_secure_rev0_block_t>);
 
+// epilogue_secure_rev0_block_t with late_flags changed to late_status
+struct epilogue_secure_rev1_block_t {
+  __u8 late_status;  // FRAME_LATE_STATUS_*
+  __u8 padding[CRYPTO_BLOCK_SIZE - sizeof(late_status)];
+} __attribute__((packed));
+static_assert(sizeof(epilogue_secure_rev1_block_t) % CRYPTO_BLOCK_SIZE == 0);
+static_assert(std::is_standard_layout_v<epilogue_secure_rev1_block_t>);
+
+static constexpr uint32_t FRAME_CRC_SIZE = 4;
+static constexpr uint32_t FRAME_PREAMBLE_INLINE_SIZE = 48;
+static_assert(FRAME_PREAMBLE_INLINE_SIZE % CRYPTO_BLOCK_SIZE == 0);
+// just for performance, nothing should break otherwise
+static_assert(sizeof(ceph_msg_header2) <= FRAME_PREAMBLE_INLINE_SIZE);
+static constexpr uint32_t FRAME_PREAMBLE_WITH_INLINE_SIZE =
+    sizeof(preamble_block_t) + FRAME_PREAMBLE_INLINE_SIZE;
+
 // A frame can be aborted by the sender after transmitting the
 // preamble and the first segment.  The remainder of the frame
 // is filled with zeros, up until the epilogue.
+//
+// This flag is for msgr2.0.  Note that in crc mode, late_flags
+// is not covered by any crc -- a single bit flip can result in
+// a completed frame being dropped or in an aborted frame with
+// garbage segment payloads being dispatched.
 #define FRAME_LATE_FLAG_ABORTED           (1<<0)
+
+// For msgr2.1, FRAME_LATE_STATUS_ABORTED has the same meaning
+// as FRAME_LATE_FLAG_ABORTED and late_status replaces late_flags.
+// Bit error detection in crc mode is achieved by using a 4-bit
+// nibble per flag with two code words that are far apart in terms
+// of Hamming Distance (HD=4, same as provided by CRC32-C for
+// input lengths over ~5K).
+#define FRAME_LATE_STATUS_ABORTED         0x1
+#define FRAME_LATE_STATUS_COMPLETE        0xe
+#define FRAME_LATE_STATUS_ABORTED_MASK    0xf
+
+#define FRAME_LATE_STATUS_RESERVED_TRUE   0x10
+#define FRAME_LATE_STATUS_RESERVED_FALSE  0xe0
+#define FRAME_LATE_STATUS_RESERVED_MASK   0xf0
 
 struct FrameError : std::runtime_error {
   using runtime_error::runtime_error;
@@ -156,8 +176,8 @@ struct FrameError : std::runtime_error {
 class FrameAssembler {
 public:
   // crypto must be non-null
-  FrameAssembler(const ceph::crypto::onwire::rxtx_t* crypto)
-      : m_crypto(crypto) {}
+  FrameAssembler(const ceph::crypto::onwire::rxtx_t* crypto, bool is_rev1)
+      : m_crypto(crypto), m_is_rev1(is_rev1) {}
 
   size_t get_num_segments() const {
     ceph_assert(!m_descs.empty());
@@ -174,24 +194,91 @@ public:
     return m_descs[seg_idx].align;
   }
 
+  // Preamble:
+  //
+  //   preamble_block_t
+  //   [preamble inline buffer + auth tag -- only in msgr2.1 secure mode]
+  //
+  // The preamble is generated unconditionally.
+  //
+  // In msgr2.1 secure mode, the first segment is inlined into the
+  // preamble inline buffer, either fully or partially.
   uint32_t get_preamble_onwire_len() const {
+    if (m_is_rev1 && m_crypto->rx) {
+      return FRAME_PREAMBLE_WITH_INLINE_SIZE + get_auth_tag_len();
+    }
     return sizeof(preamble_block_t);
   }
 
+  // Segment:
+  //
+  //   segment payload
+  //   [zero padding -- only in secure mode]
+  //   [crc or auth tag -- only in msgr2.1, only for the first segment]
+  //
+  // For an empty segment, nothing is generated.  In msgr2.1 secure
+  // mode, if the first segment gets fully inlined into the preamble
+  // inline buffer, it is considered empty.
   uint32_t get_segment_onwire_len(size_t seg_idx) const {
     ceph_assert(seg_idx < m_descs.size());
     if (m_crypto->rx) {
-      return get_segment_padded_len(seg_idx);
+      uint32_t padded_len = get_segment_padded_len(seg_idx);
+      if (m_is_rev1 && seg_idx == 0) {
+        if (padded_len > FRAME_PREAMBLE_INLINE_SIZE) {
+          return padded_len + get_auth_tag_len() - FRAME_PREAMBLE_INLINE_SIZE;
+        }
+        return 0;
+      }
+      return padded_len;
+    }
+    if (m_is_rev1 && seg_idx == 0 && m_descs[0].logical_len > 0) {
+      return m_descs[0].logical_len + FRAME_CRC_SIZE;
     }
     return m_descs[seg_idx].logical_len;
   }
 
+  // Epilogue:
+  //
+  //   epilogue_*_block_t
+  //   [auth tag -- only in secure mode]
+  //
+  // For msgr2.0, the epilogue is generated unconditionally.  In
+  // crc mode, it stores crcs for all segments; the preamble is
+  // covered by its own crc.  In secure mode, the epilogue auth tag
+  // covers the whole frame.
+  //
+  // For msgr2.1, the epilogue is generated only if the frame has
+  // more than one segment (i.e. at least one of second to fourth
+  // segments is not empty).  In crc mode, it stores crcs for
+  // second to fourh segments; the preamble and the first segment
+  // are covered by their own crcs.  In secure mode, the epilogue
+  // auth tag covers second to fourth segments; the preamble and the
+  // first segment (if not fully inlined into the preamble inline
+  // buffer) are covered by their own auth tags.
+  //
+  // Note that the auth tag format is an implementation detail of a
+  // particular cipher.  FrameAssembler is concerned only with where
+  // the auth tag is placed (at the end of the ciphertext) and how
+  // long it is (RxHandler::get_extra_size_at_final()).  This is to
+  // provide room for other encryption algorithms: currently we use
+  // AES-128-GCM with 16-byte tags, but it is possible to switch to
+  // e.g. AES-128-CBC + HMAC-SHA512 without affecting the protocol
+  // (except for the cipher negotiation, of course).
+  //
+  // Additionally, each variant of the epilogue contains either
+  // late_flags or late_status field that directs handling of frames
+  // with more than one segment.
   uint32_t get_epilogue_onwire_len() const {
     ceph_assert(!m_descs.empty());
-    if (m_crypto->rx) {
-      return sizeof(epilogue_secure_rev0_block_t) + get_auth_tag_len();
+    if (m_is_rev1 && m_descs.size() == 1) {
+      return 0;
     }
-    return sizeof(epilogue_crc_rev0_block_t);
+    if (m_crypto->rx) {
+      return (m_is_rev1 ? sizeof(epilogue_secure_rev1_block_t) :
+                  sizeof(epilogue_secure_rev0_block_t)) + get_auth_tag_len();
+    }
+    return m_is_rev1 ? sizeof(epilogue_crc_rev1_block_t) :
+                       sizeof(epilogue_crc_rev0_block_t);
   }
 
   uint64_t get_frame_logical_len() const;
@@ -203,8 +290,36 @@ public:
 
   Tag disassemble_preamble(bufferlist& preamble_bl);
 
-  bool disassemble_segments(bufferlist segment_bls[],
-                            bufferlist& epilogue_bl) const;
+  // Like msgr1, and unlike msgr2.0, msgr2.1 allows interpreting the
+  // first segment before reading in the rest of the frame.
+  //
+  // For msgr2.1 (set_is_rev1(true)), you may:
+  //
+  // - read in the first segment
+  // - call disassemble_first_segment()
+  // - use the contents of the first segment, for example to
+  //   look up user-provided buffers based on ceph_msg_header2::tid
+  // - read in the remaining segments, possibly directly into
+  //   user-provided buffers
+  // - read in epilogue
+  // - call disassemble_remaining_segments()
+  //
+  // For msgr2.0 (set_is_rev1(false)), disassemble_first_segment() is
+  // a noop.  To accomodate, disassemble_remaining_segments() always
+  // takes all segments and skips over the first segment in msgr2.1
+  // case.  You must:
+  //
+  // - read in all segments
+  // - read in epilogue
+  // - call disassemble_remaining_segments()
+  //
+  // disassemble_remaining_segments() returns true if the frame is
+  // ready for dispatching, or false if it was aborted by the sender
+  // and must be dropped.
+  void disassemble_first_segment(bufferlist& preamble_bl,
+                                 bufferlist& segment_bl) const;
+  bool disassemble_remaining_segments(bufferlist segment_bls[],
+                                      bufferlist& epilogue_bl) const;
 
 private:
   struct segment_desc_t {
@@ -225,11 +340,23 @@ private:
                           bufferlist segment_bls[]) const;
   bufferlist asm_secure_rev0(const preamble_block_t& preamble,
                              bufferlist segment_bls[]) const;
+  bufferlist asm_crc_rev1(const preamble_block_t& preamble,
+                          bufferlist segment_bls[]) const;
+  bufferlist asm_secure_rev1(const preamble_block_t& preamble,
+                             bufferlist segment_bls[]) const;
 
   bool disasm_all_crc_rev0(bufferlist segment_bls[],
                            bufferlist& epilogue_bl) const;
   bool disasm_all_secure_rev0(bufferlist segment_bls[],
                               bufferlist& epilogue_bl) const;
+  void disasm_first_crc_rev1(bufferlist& preamble_bl,
+                             bufferlist& segment_bl) const;
+  bool disasm_remaining_crc_rev1(bufferlist segment_bls[],
+                                 bufferlist& epilogue_bl) const;
+  void disasm_first_secure_rev1(bufferlist& preamble_bl,
+                                bufferlist& segment_bl) const;
+  bool disasm_remaining_secure_rev1(bufferlist segment_bls[],
+                                    bufferlist& epilogue_bl) const;
 
   void fill_preamble(Tag tag, preamble_block_t& preamble) const;
   friend std::ostream& operator<<(std::ostream& os,
@@ -237,6 +364,7 @@ private:
 
   boost::container::static_vector<segment_desc_t, MAX_NUM_SEGMENTS> m_descs;
   const ceph::crypto::onwire::rxtx_t* m_crypto;
+  bool m_is_rev1;  // msgr2.1?
 };
 
 template <class T, uint16_t... SegmentAlignmentVs>
