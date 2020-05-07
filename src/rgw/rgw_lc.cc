@@ -1735,7 +1735,7 @@ bool s3_multipart_abort_header(
     std::optional<ceph::real_time> rule_abort_date;
     if (mp_expiration.has_days()) {
       rule_abort_date = std::optional<ceph::real_time>(
-              mtime + make_timespan(mp_expiration.get_days()*24*60*60));
+              mtime + make_timespan(mp_expiration.get_days()*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
     }
 
     // update earliest abort date
