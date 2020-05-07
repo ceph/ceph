@@ -36,7 +36,6 @@ public:
   virtual bool can_writeback() const {
     return false;
   }
-  // TODO: discard need to override this
   virtual bool can_retire() const {
     return false;
   }
@@ -210,6 +209,9 @@ public:
     /* The bytes in the image this op makes dirty. */
     return ram_entry.write_bytes;
   };
+  bool can_retire() const override {
+    return this->completed;
+  }
   void copy_pmem_bl(bufferlist *out_bl) override {
     ceph_assert(false);
   }

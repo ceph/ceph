@@ -606,6 +606,7 @@ void C_WriteSameRequest<T>::setup_buffer_resources(
   if (pattern_length > buffer.allocation_size) {
     buffer.allocation_size = pattern_length;
   }
+  bytes_allocated += buffer.allocation_size;
 }
 
 template <typename T>

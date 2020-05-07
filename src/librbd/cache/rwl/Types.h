@@ -212,6 +212,23 @@ struct WriteLogPmemEntry {
   BlockExtent block_extent();
   uint64_t get_offset_bytes();
   uint64_t get_write_bytes();
+  bool is_sync_point() {
+    return sync_point;
+  }
+  bool is_discard() {
+    return discard;
+  }
+  bool is_writesame() {
+    return writesame;
+  }
+  bool is_write() {
+    /* Log entry is a basic write */
+    return !is_sync_point() && !is_discard() && !is_writesame();
+  }
+  bool is_writer() {
+    /* Log entry is any type that writes data */
+    return is_write() || is_discard() || is_writesame();
+  }
   friend std::ostream& operator<<(std::ostream& os,
                                   const WriteLogPmemEntry &entry);
 };
