@@ -22,6 +22,7 @@ struct ImageCtx;
 namespace io {
 
 struct AioCompletion;
+template <typename> class FlushTracker;
 
 template <typename ImageCtxT>
 class QosImageDispatch : public ImageDispatchInterface {
@@ -82,7 +83,7 @@ public:
       std::atomic<uint32_t>* image_dispatch_flags,
       DispatchResult* dispatch_result, Context* on_dispatched) override;
 
-  void handle_finished(int r, uint64_t tid) override {}
+  void handle_finished(int r, uint64_t tid) override;
 
 private:
   ImageCtxT* m_image_ctx;
@@ -90,9 +91,11 @@ private:
   std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
   uint64_t m_qos_enabled_flag = 0;
 
+  FlushTracker<ImageCtxT>* m_flush_tracker;
+
   bool set_throttle_flag(std::atomic<uint32_t>* image_dispatch_flags,
                          uint32_t flag);
-  bool needs_throttle(bool read_op, const Extents& image_extents,
+  bool needs_throttle(bool read_op, const Extents& image_extents, uint64_t tid,
                       std::atomic<uint32_t>* image_dispatch_flags,
                       DispatchResult* dispatch_result, Context* on_dispatched);
   void handle_throttle_ready(Tag&& tag, uint64_t flag);

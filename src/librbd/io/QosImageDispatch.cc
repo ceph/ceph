@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/io/FlushTracker.h"
 #include <map>
 
 #define dout_subsys ceph_subsys_rbd
@@ -48,7 +49,7 @@ static std::map<uint64_t, std::string> throttle_flags = {
 
 template <typename I>
 QosImageDispatch<I>::QosImageDispatch(I* image_ctx)
-  : m_image_ctx(image_ctx) {
+  : m_image_ctx(image_ctx), m_flush_tracker(new FlushTracker<I>(image_ctx)) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
 
@@ -67,10 +68,12 @@ QosImageDispatch<I>::~QosImageDispatch() {
   for (auto t : m_throttles) {
     delete t.second;
   }
+  delete m_flush_tracker;
 }
 
 template <typename I>
 void QosImageDispatch<I>::shut_down(Context* on_finish) {
+  m_flush_tracker->shut_down();
   on_finish->complete(0);
 }
 
@@ -120,7 +123,7 @@ bool QosImageDispatch<I>::read(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (needs_throttle(true, image_extents, image_dispatch_flags,
+  if (needs_throttle(true, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_dispatched)) {
     return true;
   }
@@ -138,7 +141,7 @@ bool QosImageDispatch<I>::write(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (needs_throttle(false, image_extents, image_dispatch_flags,
+  if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_dispatched)) {
     return true;
   }
@@ -156,7 +159,7 @@ bool QosImageDispatch<I>::discard(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (needs_throttle(false, image_extents, image_dispatch_flags,
+  if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_dispatched)) {
     return true;
   }
@@ -174,7 +177,7 @@ bool QosImageDispatch<I>::write_same(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (needs_throttle(false, image_extents, image_dispatch_flags,
+  if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_dispatched)) {
     return true;
   }
@@ -193,7 +196,7 @@ bool QosImageDispatch<I>::compare_and_write(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (needs_throttle(false, image_extents, image_dispatch_flags,
+  if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_dispatched)) {
     return true;
   }
@@ -210,7 +213,17 @@ bool QosImageDispatch<I>::flush(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << dendl;
 
-  return false;
+  *dispatch_result = DISPATCH_RESULT_CONTINUE;
+  m_flush_tracker->flush(on_dispatched);
+  return true;
+}
+
+template <typename I>
+void QosImageDispatch<I>::handle_finished(int r, uint64_t tid) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << "tid=" << tid << dendl;
+
+  m_flush_tracker->finish_io(tid);
 }
 
 template <typename I>
@@ -228,13 +241,16 @@ bool QosImageDispatch<I>::set_throttle_flag(
 
 template <typename I>
 bool QosImageDispatch<I>::needs_throttle(
-    bool read_op, const Extents& image_extents,
+    bool read_op, const Extents& image_extents, uint64_t tid,
     std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   auto extent_length = get_extent_length(image_extents);
   bool all_qos_flags_set = false;
 
+  if (!read_op) {
+    m_flush_tracker->start_io(tid);
+  }
   *dispatch_result = DISPATCH_RESULT_CONTINUE;
 
   auto qos_enabled_flag = m_qos_enabled_flag;
