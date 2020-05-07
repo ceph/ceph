@@ -441,21 +441,21 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
     return r;
   }
 
-  auto sip = std::make_shared<SIProvider_MetaFull>(cct, meta.mgr);
+  auto sip = new SIProvider_MetaFull(cct, meta.mgr);
   r = sip->init();
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;
   }
-  si.mgr->register_sip("meta.full", static_pointer_cast<SIProvider>(sip));
+  si.mgr->register_sip("meta.full", std::make_shared<RGWSIPGen_Single>(sip));
 
-  auto inc_sip = std::make_shared<SIProvider_MetaInc>(cct, svc->mdlog, svc->zone->get_current_period_id());
+  auto inc_sip = new SIProvider_MetaInc(cct, svc->mdlog, svc->zone->get_current_period_id());
   r = inc_sip->init();
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.inc)" << dendl;
     return r;
   }
-  si.mgr->register_sip("meta.inc", static_pointer_cast<SIProvider>(inc_sip));
+  si.mgr->register_sip("meta.inc", std::make_shared<RGWSIPGen_Single>(inc_sip));
 
   return 0;
 }

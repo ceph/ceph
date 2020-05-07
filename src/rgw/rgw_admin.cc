@@ -3600,7 +3600,8 @@ int main(int argc, const char **argv)
   ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
-  std::optional<string> opt_provider;
+  std::optional<string> opt_sip;
+  std::optional<string> opt_sip_instance;
   std::optional<SIProvider::stage_id_t> opt_stage_id;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
@@ -4072,6 +4073,10 @@ int main(int argc, const char **argv)
       opt_retry_delay_ms = std::chrono::milliseconds(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--timeout-sec", (char*)NULL)) {
       opt_timeout_sec = std::chrono::seconds(atoi(val.c_str()));
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip", "--si-provider", (char*)NULL)) {
+      opt_sip = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--sip-instance", (char*)NULL)) {
+      opt_sip_instance = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--stage-id", (char*)NULL)) {
       opt_stage_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
@@ -10112,11 +10117,11 @@ next:
  }
 
  if (opt_cmd == OPT::SI_PROVIDER_FETCH) {
-   if (!opt_provider) {
-     cerr << "ERROR: --provider not specified" << std::endl;
+   if (!opt_sip) {
+     cerr << "ERROR: --sip not specified" << std::endl;
      return EINVAL;
    }
-   auto provider = store->ctl()->si.mgr->find_sip(*opt_provider);
+   auto provider = store->ctl()->si.mgr->find_sip(*opt_sip, opt_sip_instance);
    if (!provider) {
      cerr << "ERROR: sync info provider not found" << std::endl;
      return ENOENT;

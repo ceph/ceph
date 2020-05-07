@@ -215,30 +215,52 @@ public:
   int promote_stage(int *new_num_shards);
 };
 
+class RGWSIPGenerator {
+public:
+  virtual ~RGWSIPGenerator() {}
+
+  virtual SIProviderRef get(std::optional<std::string> instance) = 0;
+};
+
+using RGWSIPGeneratorRef = std::shared_ptr<RGWSIPGenerator>;
+
+
+class RGWSIPGen_Single : public RGWSIPGenerator
+{
+  SIProviderRef sip;
+
+public:
+  RGWSIPGen_Single(SIProvider *_sip) : sip(_sip) {}
+
+  SIProviderRef get(std::optional<std::string> instance) {
+    return sip;
+  }
+};
+
 
 class RGWSIPManager
 {
-  std::map<std::string, SIProviderRef> providers;
+  std::map<std::string, RGWSIPGeneratorRef> sip_gens;
 
 public:
   RGWSIPManager() {}
 
-  void register_sip(const std::string& id, SIProviderRef provider) {
-    providers[id] = provider;
+  void register_sip(const std::string& id, RGWSIPGeneratorRef gen) {
+    sip_gens[id] = gen;
   }
 
-  SIProviderRef find_sip(const std::string& id) {
-    auto iter = providers.find(id);
-    if (iter == providers.end()) {
+  SIProviderRef find_sip(const std::string& id, std::optional<std::string> instance) {
+    auto iter = sip_gens.find(id);
+    if (iter == sip_gens.end()) {
       return nullptr;
     }
-    return iter->second;
+    return iter->second->get(instance);
   }
 
   std::vector<std::string> list_sip() const {
     std::vector<std::string> result;
-    result.reserve(providers.size());
-    for (auto& entry : providers) {
+    result.reserve(sip_gens.size());
+    for (auto& entry : sip_gens) {
       result.push_back(entry.first);
     }
     return result;
