@@ -415,10 +415,11 @@ class Remote(object):
         args.extend([
             'tar',
             'cz',
-            '-f', remote_temp_path,
+            '-f', '-',
             '-C', path,
             '--',
             '.',
+            run.Raw('>'), remote_temp_path
             ])
         self.run(args=args)
         if sudo:
