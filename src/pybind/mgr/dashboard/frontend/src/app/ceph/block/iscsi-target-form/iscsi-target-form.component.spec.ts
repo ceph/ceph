@@ -141,26 +141,23 @@ describe('IscsiTargetFormComponent', () => {
     }
   ];
 
-  configureTestBed(
-    {
-      declarations: [IscsiTargetFormComponent],
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        ToastrModule.forRoot()
-      ],
-      providers: [
-        i18nProviders,
-        {
-          provide: ActivatedRoute,
-          useValue: new ActivatedRouteStub({ target_iqn: undefined })
-        }
-      ]
-    },
-    true
-  );
+  configureTestBed({
+    declarations: [IscsiTargetFormComponent],
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [
+      i18nProviders,
+      {
+        provide: ActivatedRoute,
+        useValue: new ActivatedRouteStub({ target_iqn: undefined })
+      }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiTargetFormComponent);
