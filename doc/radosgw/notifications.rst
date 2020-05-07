@@ -17,8 +17,8 @@ user can only manage its own topics, and can only associate them with buckets it
 
 In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
-The notification may also filter out events based on preffix/suffix and/or regular expression matching of the keys. As well as, 
-on the metadata attributes attached to the object.
+The notification may also filter out events based on prefix/suffix and/or regular expression matching of the keys. As well as,
+on the metadata attributes attached to the object, or the object tags.
 There can be multiple notifications for any specific topic, and the same topic could be used for multiple notifications.
 
 REST API has been defined to provide configuration and control interfaces for the bucket notification
@@ -72,10 +72,13 @@ To update a topic, use the same command used for topic creation, with the topic 
    [&Attributes.entry.4.key=kafka-ack-level&Attributes.entry.4.value=none|broker]
    [&Attributes.entry.5.key=use-ssl&Attributes.entry.5.value=true|false]
    [&Attributes.entry.6.key=ca-location&Attributes.entry.6.value=<file path>]
+   [&Attributes.entry.7.key=OpaqueData&Attributes.entry.7.value=<opaque data>]
 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
+- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic
+
 - HTTP endpoint 
 
  - URI: ``http[s]://<fqdn>[:<port]``
@@ -158,6 +161,7 @@ Response will have the following format:
                     <EndpointTopic></EndpointTopic>
                 </EndPoint>
                 <TopicArn></TopicArn>
+                <OpaqueData></OpaqueData>
             </Topic>
         </GetTopicResult>
         <ResponseMetadata>
@@ -219,6 +223,7 @@ Response will have the following format:
                         <EndpointTopic></EndpointTopic>
                     </EndPoint>
                     <TopicArn></TopicArn>
+                    <OpaqueData></OpaqueData>
                 </member>
             </Topics>
         </ListTopicsResult>
@@ -283,10 +288,12 @@ pushed or pulled using the pubsub sync module.
                    "eTag":"",
                    "versionId":"",
                    "sequencer": "",
-                   "metadata":[]
+                   "metadata":[],
+                   "tags":[]
                }
            },
            "eventId":"",
+           "opaqueData":"",
        }
    ]}
 
@@ -308,7 +315,9 @@ pushed or pulled using the pubsub sync module.
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 - s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API) 
+- s3.object.tags: any tags set on the objcet (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
+- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic (an extension to the S3 notification API)
 
 .. _PubSub Module : ../pubsub-module
 .. _S3 Notification Compatibility: ../s3-notification-compatibility

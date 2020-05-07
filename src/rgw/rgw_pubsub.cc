@@ -76,8 +76,8 @@ bool rgw_s3_key_filter::has_content() const {
     return !(prefix_rule.empty() && suffix_rule.empty() && regex_rule.empty());
 }
 
-bool rgw_s3_metadata_filter::decode_xml(XMLObj* obj) {
-  metadata.clear();
+bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
+  kvl.clear();
   XMLObjIter iter = obj->find("FilterRule");
   XMLObj *o;
 
@@ -89,13 +89,13 @@ bool rgw_s3_metadata_filter::decode_xml(XMLObj* obj) {
   while ((o = iter.get_next())) {
     RGWXMLDecoder::decode_xml("Name", key, o, throw_if_missing);
     RGWXMLDecoder::decode_xml("Value", value, o, throw_if_missing);
-    metadata.emplace(key, value);
+    kvl.emplace(key, value);
   }
   return true;
 }
 
-void rgw_s3_metadata_filter::dump_xml(Formatter *f) const {
-  for (const auto& key_value : metadata) {
+void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
+  for (const auto& key_value : kvl) {
     f->open_object_section("FilterRule");
     ::encode_xml("Name", key_value.first, f);
     ::encode_xml("Value", key_value.second, f);
@@ -103,13 +103,14 @@ void rgw_s3_metadata_filter::dump_xml(Formatter *f) const {
   }
 }
 
-bool rgw_s3_metadata_filter::has_content() const {
-    return !metadata.empty();
+bool rgw_s3_key_value_filter::has_content() const {
+    return !kvl.empty();
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
     RGWXMLDecoder::decode_xml("S3Key", key_filter, obj);
     RGWXMLDecoder::decode_xml("S3Metadata", metadata_filter, obj);
+    RGWXMLDecoder::decode_xml("S3Tags", tag_filter, obj);
   return true;
 }
 
@@ -120,11 +121,15 @@ void rgw_s3_filter::dump_xml(Formatter *f) const {
   if (metadata_filter.has_content()) {
       ::encode_xml("S3Metadata", metadata_filter, f);
   }
+  if (tag_filter.has_content()) {
+      ::encode_xml("S3Tags", tag_filter, f);
+  }
 }
 
 bool rgw_s3_filter::has_content() const {
     return key_filter.has_content()  ||
-           metadata_filter.has_content();
+           metadata_filter.has_content() ||
+           tag_filter.has_content();
 }
 
 bool match(const rgw_s3_key_filter& filter, const std::string& key) {
@@ -161,10 +166,10 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   return true;
 }
 
-bool match(const rgw_s3_metadata_filter& filter, const Metadata& metadata) {
-  // all filter pairs must exist with the same value in the object's metadata
-  // object metadata may include items not in the filter
-  return std::includes(metadata.begin(), metadata.end(), filter.metadata.begin(), filter.metadata.end());
+bool match(const rgw_s3_key_value_filter& filter, const KeyValueList& kvl) {
+  // all filter pairs must exist with the same value in the object's metadata/tags
+  // object metadata/tags may include items not in the filter
+  return std::includes(kvl.begin(), kvl.end(), filter.kvl.begin(), filter.kvl.end());
 }
 
 bool match(const rgw::notify::EventTypeList& events, rgw::notify::EventType event) {
@@ -273,9 +278,11 @@ void rgw_pubsub_s3_record::dump(Formatter *f) const {
         encode_json("versionId", object_versionId, f);
         encode_json("sequencer", object_sequencer, f);
         encode_json("metadata", x_meta_map, f);
+        encode_json("tags", tags, f);
     }
   }
   encode_json("eventId", id, f);
+  encode_json("opaqueData", opaque_data, f);
 }
 
 void rgw_pubsub_event::dump(Formatter *f) const
@@ -293,6 +300,7 @@ void rgw_pubsub_topic::dump(Formatter *f) const
   encode_json("name", name, f);
   encode_json("dest", dest, f);
   encode_json("arn", arn, f);
+  encode_json("opaqueData", opaque_data, f);
 }
 
 void rgw_pubsub_topic::dump_xml(Formatter *f) const
@@ -301,6 +309,7 @@ void rgw_pubsub_topic::dump_xml(Formatter *f) const
   encode_xml("Name", name, f);
   encode_xml("EndPoint", dest, f);
   encode_xml("TopicArn", arn, f);
+  encode_xml("OpaqueData", opaque_data, f);
 }
 
 void encode_json(const char *name, const rgw::notify::EventTypeList& l, Formatter *f)
@@ -550,10 +559,10 @@ int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
 }
 
 int RGWUserPubSub::create_topic(const string& name) {
-  return create_topic(name, rgw_pubsub_sub_dest(), "");
+  return create_topic(name, rgw_pubsub_sub_dest(), "", "");
 }
 
-int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn) {
+int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn, const std::string& opaque_data) {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_user_topics topics;
 
@@ -569,6 +578,7 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& d
   new_topic.topic.name = name;
   new_topic.topic.dest = dest;
   new_topic.topic.arn = arn;
+  new_topic.topic.opaque_data = opaque_data;
 
   ret = write_user_topics(topics, &objv_tracker);
   if (ret < 0) {
