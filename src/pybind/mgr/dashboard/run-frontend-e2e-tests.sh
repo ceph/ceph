@@ -30,7 +30,6 @@ stop() {
 }
 
 check_device_available() {
-    : ${DEVICE:="chrome"}
     failed=false
 
     if [ "$DEVICE" == "docker" ]; then
@@ -56,13 +55,13 @@ check_device_available() {
     fi
 }
 
-CYPRESS_BASE_URL=''
-DEVICE=''
-CYPRESS_LOGIN_PWD=''
-CYPRESS_LOGIN_USER=''
-NO_COLOR=1
-RECORD=''
-REMOTE='false'
+: ${CYPRESS_BASE_URL:=''}
+: ${CYPRESS_LOGIN_PWD:=''}
+: ${CYPRESS_LOGIN_USER:=''}
+: ${DEVICE:="chrome"}
+: ${NO_COLOR:=1}
+: ${CYPRESS_ARGS:=''}
+: ${REMOTE:='false'}
 
 while getopts 'd:p:r:u:' flag; do
   case "${flag}" in
@@ -93,20 +92,7 @@ fi
 
 cd $DASH_DIR/frontend
 
-if [ -n "$CYPRESS_RECORD_KEY" ]; then
-    RECORD="--record --key $CYPRESS_RECORD_KEY"
-fi
-
 case "$DEVICE" in
-    electron)
-        npx cypress run $RECORD || stop 1
-        ;;
-    chrome)
-        npx cypress run $RECORD --browser chrome --headless || stop 1
-        ;;
-    chromium)
-        npx cypress run $RECORD --browser chromium --headless || stop 1
-        ;;
     docker)
         failed=0
         docker run \
@@ -119,6 +105,9 @@ case "$DEVICE" in
             --network=host \
             cypress/included:4.4.0 || failed=1
         stop $failed
+        ;;
+    *)
+        npx cypress run $CYPRESS_ARGS --browser $DEVICE --headless || stop 1
         ;;
 esac
 
