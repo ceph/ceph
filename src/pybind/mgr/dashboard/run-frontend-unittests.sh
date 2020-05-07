@@ -14,18 +14,7 @@ fi
 npm run build -- --prod --progress=false || failed=true
 
 # Unit Tests
-config='src/unit-test-configuration.ts'
-if [ -e $config ]; then
-  mv $config ${config}_old
-fi
-cp ${config}.sample $config
-
 npm run test:ci || failed=true
-
-rm $config
-if [ -e ${config}_old ]; then
-  mv ${config}_old $config
-fi
 
 # Linting
 npm run lint --silent

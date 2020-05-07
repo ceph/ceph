@@ -121,10 +121,6 @@ to be visible in the rendered template.
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
 
-Create ``unit-test-configuration.ts`` file based on
-``unit-test-configuration.ts.sample`` in directory
-``src/pybind/mgr/dashboard/frontend/src``.
-
 Run ``npm run test`` to execute the unit tests via `Jest
 <https://facebook.github.io/jest/>`_.
 

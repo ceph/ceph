@@ -22,29 +22,26 @@ describe('NfsFormComponent', () => {
   let httpTesting: HttpTestingController;
   let activatedRoute: ActivatedRouteStub;
 
-  configureTestBed(
-    {
-      declarations: [NfsFormComponent, NfsFormClientComponent],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot(),
-        TypeaheadModule.forRoot()
-      ],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
-        },
-        i18nProviders,
-        SummaryService,
-        CephReleaseNamePipe
-      ]
-    },
-    true
-  );
+  configureTestBed({
+    declarations: [NfsFormComponent, NfsFormClientComponent],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      ToastrModule.forRoot(),
+      TypeaheadModule.forRoot()
+    ],
+    providers: [
+      {
+        provide: ActivatedRoute,
+        useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
+      },
+      i18nProviders,
+      SummaryService,
+      CephReleaseNamePipe
+    ]
+  });
 
   beforeEach(() => {
     const summaryService = TestBed.get(SummaryService);

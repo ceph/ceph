@@ -31,7 +31,6 @@
 npm-debug.log
 testem.log
 /typings
-/src/unit-test-configuration.ts
 
 # e2e
 /cypress/screenshots

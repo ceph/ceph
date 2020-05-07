@@ -27,13 +27,10 @@ describe('RbdMirroringService', () => {
     executing_tasks: [{}]
   };
 
-  configureTestBed(
-    {
-      providers: [RbdMirroringService],
-      imports: [HttpClientTestingModule]
-    },
-    true
-  );
+  configureTestBed({
+    providers: [RbdMirroringService],
+    imports: [HttpClientTestingModule]
+  });
 
   beforeEach(() => {
     service = TestBed.get(RbdMirroringService);
