@@ -207,6 +207,8 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
     auto tenant = name.substr(0, pos);
     bucket->tenant.assign(tenant.begin(), tenant.end());
     name = name.substr(pos + 1);
+  } else {
+    bucket->tenant.clear();
   }
 
   // split name:instance
@@ -633,6 +635,43 @@ int RGWBucket::init(rgw::sal::RGWRadosStore *storage, RGWBucketAdminOpState& op_
 
   clear_failure();
   return 0;
+}
+
+bool rgw_find_bucket_by_id(CephContext *cct, RGWMetadataManager *mgr,
+                           const string& marker, const string& bucket_id, rgw_bucket* bucket_out)
+{
+  void *handle = NULL;
+  bool truncated = false;
+  string s;
+
+  int ret = mgr->list_keys_init("bucket.instance", marker, &handle);
+  if (ret < 0) {
+    cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+    mgr->list_keys_complete(handle);
+    return -ret;
+  }
+  do {
+      list<string> keys;
+      ret = mgr->list_keys_next(handle, 1000, keys, &truncated);
+      if (ret < 0) {
+        cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
+        mgr->list_keys_complete(handle);
+        return -ret;
+      }
+      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+        s = *iter;
+        ret = rgw_bucket_parse_bucket_key(cct, s, bucket_out, nullptr);
+        if (ret < 0) {
+          continue;
+        }
+        if (bucket_id == bucket_out->bucket_id) {
+          mgr->list_keys_complete(handle);
+          return true;
+        }
+      }
+  } while (truncated);
+  mgr->list_keys_complete(handle);
+  return false;
 }
 
 int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
