@@ -48,10 +48,6 @@ MDSUtility::~MDSUtility()
 int MDSUtility::init()
 {
   // Initialize Messenger
-  int r = messenger->bind(g_conf()->public_addr);
-  if (r < 0)
-    return r;
-
   poolctx.start(1);
   messenger->start();
 
@@ -73,7 +69,7 @@ int MDSUtility::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD|CEPH_ENTITY_TYPE_MDS);
   monc->set_messenger(messenger);
   monc->init();
-  r = monc->authenticate();
+  int r = monc->authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify an MDS ID with a valid keyring?" << dendl;
     monc->shutdown();
