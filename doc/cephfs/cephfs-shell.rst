@@ -441,3 +441,17 @@ Usage :
 
 Options:
   -h, --help   Shows the help message
+
+df
+--
+
+Display amount of available disk space
+
+Usage :
+
+    df [-h] [file [file ...]]
+
+* file - name of the file
+
+Options:
+  -h, --help   Shows the help message
