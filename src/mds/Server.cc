@@ -8365,6 +8365,12 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     }
   }
 
+  if (!linkmerge && destdnl->is_remote() && oldin->is_auth()) {
+    CDir *oldin_dir = oldin->get_projected_parent_dir();
+    if (oldin_dir != srcdn->get_dir() && oldin_dir != destdn->get_dir())
+      mdcache->predirty_journal_parents(mdr, metablob, oldin, oldin_dir, PREDIRTY_PRIMARY);
+  }
+
   // sub off target
   if (destdn->is_auth() && !destdnl->is_null()) {
     mdcache->predirty_journal_parents(mdr, metablob, oldin, destdn->get_dir(),
@@ -8429,10 +8435,9 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	    ceph_assert(!new_srnode->is_parent_global());
 	}
 	// auth for targeti
-	metablob->add_dir_context(oldin->get_projected_parent_dir());
-	mdcache->journal_cow_dentry(mdr.get(), metablob, oldin->get_projected_parent_dn(),
-				    CEPH_NOSNAP, 0, destdnl);
-	metablob->add_primary_dentry(oldin->get_projected_parent_dn(), oldin, true);
+	CDentry *oldin_pdn = oldin->get_projected_parent_dn();
+	mdcache->journal_cow_dentry(mdr.get(), metablob, oldin_pdn);
+	metablob->add_primary_dentry(oldin_pdn, oldin, true);
       }
     }
   }
@@ -8462,8 +8467,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       }
 
       CDentry *srci_pdn = srci->get_projected_parent_dn();
-      metablob->add_dir_context(srci_pdn->get_dir());
-      mdcache->journal_cow_dentry(mdr.get(), metablob, srci_pdn, CEPH_NOSNAP, 0, srcdnl);
+      mdcache->journal_cow_dentry(mdr.get(), metablob, srci_pdn);
       metablob->add_primary_dentry(srci_pdn, srci, true);
     }
   } else if (srcdnl->is_primary()) {
