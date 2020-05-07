@@ -447,6 +447,15 @@ configuration parameters.
 :Type: Integer
 :Default: ``3600``
 
+
+``rgw gc max concurrent io``
+
+:Description: The maximum number of concurrent IO operations that the RGW garbage
+              collection thread will use when purging old data.
+:Type: Integer
+:Default: ``10``
+
+
 Multisite Settings
 ==================
 
