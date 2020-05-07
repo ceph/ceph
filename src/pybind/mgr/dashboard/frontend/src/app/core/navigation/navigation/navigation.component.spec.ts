@@ -1,10 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import { configureTestSuite } from 'ng-bullet';
 import { MockModule } from 'ng-mocks';
 import { of } from 'rxjs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { Permission, Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import {
@@ -49,23 +49,21 @@ describe('NavigationComponent', () => {
   let component: NavigationComponent;
   let fixture: ComponentFixture<NavigationComponent>;
 
-  configureTestSuite(() => {
-    TestBed.configureTestingModule({
-      declarations: [NavigationComponent],
-      imports: [MockModule(NavigationModule)],
-      providers: [
-        {
-          provide: AuthStorageService,
-          useValue: {
-            getPermissions: jest.fn(),
-            isPwdDisplayed$: { subscribe: jest.fn() }
-          }
-        },
-        { provide: SummaryService, useValue: { subscribe: jest.fn() } },
-        { provide: FeatureTogglesService, useValue: { get: jest.fn() } },
-        { provide: PrometheusAlertService, useValue: { alerts: [] } }
-      ]
-    });
+  configureTestBed({
+    declarations: [NavigationComponent],
+    imports: [MockModule(NavigationModule)],
+    providers: [
+      {
+        provide: AuthStorageService,
+        useValue: {
+          getPermissions: jest.fn(),
+          isPwdDisplayed$: { subscribe: jest.fn() }
+        }
+      },
+      { provide: SummaryService, useValue: { subscribe: jest.fn() } },
+      { provide: FeatureTogglesService, useValue: { get: jest.fn() } },
+      { provide: PrometheusAlertService, useValue: { alerts: [] } }
+    ]
   });
 
   beforeEach(() => {
