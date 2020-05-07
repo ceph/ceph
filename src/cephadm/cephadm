@@ -1787,9 +1787,8 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
             uid, gid,
             config, keyring)
 
-    if not reconfig:
-        deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
-                            osd_fsid=osd_fsid)
+    deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
+                        osd_fsid=osd_fsid)
 
     if not os.path.exists(data_dir + '/unit.created'):
         with open(data_dir + '/unit.created', 'w') as f:
