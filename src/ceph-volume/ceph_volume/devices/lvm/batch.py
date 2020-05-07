@@ -369,7 +369,12 @@ class Batch(object):
                 self.filtered_devices.update({d: used_reason for d in
                                               getattr(self.args, dev_list_prop)
                                               if d.used_by_ceph})
-                if self.args.yes and dev_list and devs != usable:
+                # only fail if non-interactive, this iteration concerns
+                # non-data devices, there are usable data devices (or not all
+                # data devices were filtered) and non-data devices were filtered
+                # so in short this branch is not taken if all data devices are
+                # filtered
+                if self.args.yes and dev_list and self.usable and devs != usable:
                     err = '{} devices were filtered in non-interactive mode, bailing out'
                     raise RuntimeError(err.format(len(devs) - len(usable)))
 
