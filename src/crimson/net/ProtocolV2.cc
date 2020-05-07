@@ -149,7 +149,7 @@ ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
   : Protocol(proto_t::v2, dispatcher, conn),
     messenger{messenger},
     protocol_timer{conn},
-    tx_frame_asm(&session_stream_handlers)
+    tx_frame_asm(&session_stream_handlers, false)
 {}
 
 ProtocolV2::~ProtocolV2() {}

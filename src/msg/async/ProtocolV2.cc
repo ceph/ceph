@@ -92,8 +92,8 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       replacing(false),
       can_write(false),
       bannerExchangeCallback(nullptr),
-      tx_frame_asm(&session_stream_handlers),
-      rx_frame_asm(&session_stream_handlers),
+      tx_frame_asm(&session_stream_handlers, false),
+      rx_frame_asm(&session_stream_handlers, false),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
 }
@@ -1290,8 +1290,9 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r)
 
   bool aborted;
   try {
-    aborted = !rx_frame_asm.disassemble_segments(rx_segments_data.data(),
-                                                 rx_epilogue);
+    rx_frame_asm.disassemble_first_segment(rx_preamble, rx_segments_data[0]);
+    aborted = !rx_frame_asm.disassemble_remaining_segments(
+        rx_segments_data.data(), rx_epilogue);
   } catch (FrameError& e) {
     ldout(cct, 1) << __func__ << " " << e.what() << dendl;
     return _fault();
