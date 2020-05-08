@@ -108,6 +108,8 @@ class DeepSea(Task):
                       invocation of deepsea task only)
         upgrade_branch: (git branch for DeepSea re-install/upgrade - used by
                         second invocation of deepsea task only)
+        cluster_network: defines ceph cluster network, 'network ip/netmask'
+        public_network: defines ceph public netwotk, 'network ip/netmask'
 
     Example:
 
@@ -116,6 +118,7 @@ class DeepSea(Task):
             repo: https://github.com/SUSE/DeepSea.git
             branch: wip-foo
             install: source
+            public_network: '192.168.0.0/24'
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
@@ -188,6 +191,8 @@ class DeepSea(Task):
         self.scripts = Scripts(self.ctx, self.log)
         self.sm = deepsea_ctx['salt_manager_instance']
         self.drive_group = deepsea_ctx['drive_group']
+        self.cluster_network = deepsea_ctx['cluster_network']
+        self.public_network = deepsea_ctx['public_network']
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
@@ -385,6 +390,27 @@ class DeepSea(Task):
                     )
         dump_file_that_might_not_exist(self.master_remote, global_yml)
 
+    def _maybe_apply_network(self):
+        network_cfg_dir = '/srv/pillar/ceph/stack/ceph'
+        network_cfg = network_cfg_dir + '/cluster.yml'
+
+        if self.cluster_network or self.public_network:
+            self.master_remote.sh('sudo mkdir -p {dir} && '
+                                  'sudo touch {cfg} && '
+                                  'sudo chown salt.salt {dir} -R'
+                                  .format(dir=network_cfg_dir,
+                                          cfg=network_cfg))
+            if self.cluster_network:
+                sudo_append_to_file(
+                    self.master_remote, network_cfg,
+                    'cluster_network: %s/24\n' % self.cluster_network)
+            if self.public_network:
+                sudo_append_to_file(
+                    self.master_remote, network_cfg,
+                    'public_network: %s/24\n' % self.public_network)
+
+        dump_file_that_might_not_exist(self.master_remote, network_cfg)
+
     def _populate_deepsea_context(self):
         global deepsea_ctx
         deepsea_ctx['allow_python2'] = self.config.get('allow_python2', True)
@@ -411,6 +437,8 @@ class DeepSea(Task):
         deepsea_ctx['repositories'] = self.config.get("repositories", None)
         deepsea_ctx['rgw_ssl'] = self.config.get('rgw_ssl', False)
         deepsea_ctx['validation_tests_already_run'] = []
+        deepsea_ctx['cluster_network'] = self.config.get('cluster_network', '')
+        deepsea_ctx['public_network'] = self.config.get('public_network', '')
         self.__populate_install_method('install')
 
     def __populate_install_method_basic(self, key):
@@ -570,6 +598,7 @@ class DeepSea(Task):
         self._deepsea_version()
         self._deepsea_minions()
         self._maybe_apply_alternative_defaults()
+        self._maybe_apply_network()
         # Stage 0 does this, but we have no guarantee Stage 0 will run
         self.sm.sync_pillar_data(quiet=self.quiet_salt)
 
