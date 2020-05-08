@@ -3141,6 +3141,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
 
+  // FIX: reset grace timer if interval exceeds halflife period
   utime_t grace = orig_grace;
   double my_grace = 0, peer_grace = 0;
   double decay_k = 0;
