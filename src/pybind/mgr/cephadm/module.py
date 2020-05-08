@@ -5,8 +5,6 @@ import time
 from threading import Event
 from functools import wraps
 
-from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
-
 import string
 try:
     from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
@@ -26,21 +24,24 @@ import shutil
 import subprocess
 import uuid
 
-from ceph.deployment import inventory, translate
+from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.service_spec import \
     HostPlacementSpec, NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
 
-from mgr_module import MgrModule, HandleCommandResult, MonCommandFailed
+from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta
 
 from . import remotes
 from . import utils
-from .nfs import NFSGanesha
-from .osd import RemoveUtil, OSDRemoval
+from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
+    RbdMirrorService, CrashService, IscsiService
+from .services.nfs import NFSService
+from .services.osd import RemoveUtil, OSDRemoval, OSDService
+from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
+    NodeExporterService
 from .inventory import Inventory, SpecStore, HostCache
 
 try:
@@ -419,6 +420,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         # in-memory only.
         self.offline_hosts: Set[str] = set()
+
+        # services:
+        self.osd_service = OSDService(self)
+        self.nfs_service = NFSService(self)
+        self.mon_service = MonService(self)
+        self.mgr_service = MgrService(self)
+        self.mds_service = MdsService(self)
+        self.rgw_service = RgwService(self)
+        self.rbd_mirror_service = RbdMirrorService(self)
+        self.grafana_service = GrafanaService(self)
+        self.alertmanager_service = AlertmanagerService(self)
+        self.prometheus_service = PrometheusService(self)
+        self.node_exporter_service = NodeExporterService(self)
+        self.crash_service = CrashService(self)
+        self.iscsi_servcie = IscsiService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1430,7 +1446,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             sd.container_image_id = d.get('container_image_id')
             sd.version = d.get('version')
             if sd.daemon_type == 'osd':
-                sd.osdspec_affinity = self.get_osdspec_affinity(sd.daemon_id)
+                sd.osdspec_affinity = self.osd_service.get_osdspec_affinity(sd.daemon_id)
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
@@ -1755,197 +1771,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_drivegroups(self, specs: List[DriveGroupSpec]):
         return [self._apply(spec) for spec in specs]
 
-    def get_osdspec_affinity(self, osd_id: str) -> str:
-        return self.get('osd_metadata').get(osd_id, {}).get('osdspec_affinity', '')
-
-    def find_destroyed_osds(self) -> Dict[str, List[str]]:
-        osd_host_map: Dict[str, List[str]] = dict()
-        try:
-            ret, out, err = self.check_mon_command({
-                'prefix': 'osd tree',
-                'states': ['destroyed'],
-                'format': 'json'
-            })
-        except MonCommandFailed as e:
-            logger.exception('osd tree failed')
-            raise OrchestratorError(str(e))
-        try:
-            tree = json.loads(out)
-        except json.decoder.JSONDecodeError:
-            self.log.exception(f"Could not decode json -> {out}")
-            return osd_host_map
-
-        nodes = tree.get('nodes', {})
-        for node in nodes:
-            if node.get('type') == 'host':
-                osd_host_map.update(
-                    {node.get('name'): [str(_id) for _id in node.get('children', list())]}
-                )
-        return osd_host_map
-
     @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
-        self.log.debug(f"Processing DriveGroup {drive_group}")
-        ret = []
-        drive_group.osd_id_claims = self.find_destroyed_osds()
-        self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
-        for host, drive_selection in self.prepare_drivegroup(drive_group):
-            self.log.info('Applying %s on host %s...' % (drive_group.service_id, host))
-            cmd = self.driveselection_to_ceph_volume(drive_group, drive_selection,
-                                                     drive_group.osd_id_claims.get(host, []))
-            if not cmd:
-                self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
-                continue
-            ret_msg = self._create_osd(host, cmd,
-                                       replace_osd_ids=drive_group.osd_id_claims.get(host, []))
-            ret.append(ret_msg)
-        return ", ".join(ret)
+        return self.osd_service.create_from_spec(drive_group)
 
-    def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
-        # 1) use fn_filter to determine matching_hosts
-        matching_hosts = drive_group.placement.pattern_matches_hosts([x for x in self.cache.get_hosts()])
-        # 2) Map the inventory to the InventoryHost object
-        host_ds_map = []
-
-        # set osd_id_claims
-
-        def _find_inv_for_host(hostname: str, inventory_dict: dict):
-            # This is stupid and needs to be loaded with the host
-            for _host, _inventory in inventory_dict.items():
-                if _host == hostname:
-                    return _inventory
-            raise OrchestratorError("No inventory found for host: {}".format(hostname))
-
-        # 3) iterate over matching_host and call DriveSelection
-        self.log.debug(f"Checking matching hosts -> {matching_hosts}")
-        for host in matching_hosts:
-            inventory_for_host = _find_inv_for_host(host, self.cache.devices)
-            self.log.debug(f"Found inventory for host {inventory_for_host}")
-            drive_selection = DriveSelection(drive_group, inventory_for_host)
-            self.log.debug(f"Found drive selection {drive_selection}")
-            host_ds_map.append((host, drive_selection))
-        return host_ds_map
-
-    def driveselection_to_ceph_volume(self, drive_group: DriveGroupSpec,
-                                      drive_selection: DriveSelection,
-                                      osd_id_claims: Optional[List[str]] = None,
-                                      preview: bool = False) -> Optional[str]:
-        self.log.debug(f"Translating DriveGroup <{drive_group}> to ceph-volume command")
-        cmd: Optional[str] = translate.to_ceph_volume(drive_group, drive_selection, osd_id_claims, preview=preview).run()
-        self.log.debug(f"Resulting ceph-volume cmd: {cmd}")
-        return cmd
-
+    # @trivial_completion
     def preview_drivegroups(self, drive_group_name: Optional[str] = None,
                             dg_specs: Optional[List[DriveGroupSpec]] = None) -> List[Dict[str, Dict[Any, Any]]]:
-        # find drivegroups
-        if drive_group_name:
-            drive_groups = cast(List[DriveGroupSpec],
-                                self.spec_store.find(service_name=drive_group_name))
-        elif dg_specs:
-            drive_groups = dg_specs
-        else:
-            drive_groups = []
-        ret_all = []
-        for drive_group in drive_groups:
-            drive_group.osd_id_claims = self.find_destroyed_osds()
-            self.log.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
-            # prepare driveselection
-            for host, ds in self.prepare_drivegroup(drive_group):
-                cmd = self.driveselection_to_ceph_volume(drive_group, ds,
-                                                         drive_group.osd_id_claims.get(host, []), preview=True)
-                if not cmd:
-                    self.log.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_name()))
-                    continue
-                out, err, code = self._run_ceph_volume_command(host, cmd)
-                if out:
-                    concat_out = json.loads(" ".join(out))
-                    ret_all.append({'data': concat_out, 'drivegroup': drive_group.service_id, 'host': host})
-        return ret_all
-
-    def _run_ceph_volume_command(self, host: str, cmd: str) -> Tuple[List[str], List[str], int]:
-        self.inventory.assert_host(host)
-
-        # get bootstrap key
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get',
-            'entity': 'client.bootstrap-osd',
-        })
-
-        # generate config
-        ret, config, err = self.check_mon_command({
-            "prefix": "config generate-minimal-conf",
-        })
-
-        j = json.dumps({
-            'config': config,
-            'keyring': keyring,
-        })
-
-        split_cmd = cmd.split(' ')
-        _cmd = ['--config-json', '-', '--']
-        _cmd.extend(split_cmd)
-        out, err, code = self._run_cephadm(
-            host, 'osd', 'ceph-volume',
-            _cmd,
-            stdin=j,
-            error_ok=True)
-        return out, err, code
-
-    def _create_osd(self, host, cmd, replace_osd_ids=None):
-        out, err, code = self._run_ceph_volume_command(host, cmd)
-
-        if code == 1 and ', it is already prepared' in '\n'.join(err):
-            # HACK: when we create against an existing LV, ceph-volume
-            # returns an error and the above message.  To make this
-            # command idempotent, tolerate this "error" and continue.
-            self.log.debug('the device was already prepared; continuing')
-            code = 0
-        if code:
-            raise RuntimeError(
-                'cephadm exited with an error code: %d, stderr:%s' % (
-                    code, '\n'.join(err)))
-
-        # check result
-        out, err, code = self._run_cephadm(
-            host, 'osd', 'ceph-volume',
-            [
-                '--',
-                'lvm', 'list',
-                '--format', 'json',
-            ])
-        before_osd_uuid_map = self.get_osd_uuid_map(only_up=True)
-        osds_elems = json.loads('\n'.join(out))
-        fsid = self._cluster_fsid
-        osd_uuid_map = self.get_osd_uuid_map()
-        created = []
-        for osd_id, osds in osds_elems.items():
-            for osd in osds:
-                if osd['tags']['ceph.cluster_fsid'] != fsid:
-                    self.log.debug('mismatched fsid, skipping %s' % osd)
-                    continue
-                if osd_id in before_osd_uuid_map and osd_id not in replace_osd_ids:
-                    # if it exists but is part of the replacement operation, don't skip
-                    continue
-                if osd_id not in osd_uuid_map:
-                    self.log.debug('osd id {} does not exist in cluster'.format(osd_id))
-                    continue
-                if osd_uuid_map.get(osd_id) != osd['tags']['ceph.osd_fsid']:
-                    self.log.debug('mismatched osd uuid (cluster has %s, osd '
-                                   'has %s)' % (
-                                       osd_uuid_map.get(osd_id),
-                                       osd['tags']['ceph.osd_fsid']))
-                    continue
-
-                created.append(osd_id)
-                self._create_daemon(
-                    'osd', osd_id, host,
-                    osd_uuid_map=osd_uuid_map)
-
-        if created:
-            self.cache.invalidate_host_devices(host)
-            return "Created osd(s) %s on host '%s'" % (','.join(created), host)
-        else:
-            return "Created no osd(s) on host %s; already created?" % host
+        return self.osd_service.preview_drivegroups(drive_group_name, dg_specs)
 
     def _calc_daemon_deps(self, daemon_type, daemon_id):
         need = {
@@ -1990,7 +1823,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                        keyring=None,
                        extra_args=None, extra_config=None,
                        reconfig=False,
-                       osd_uuid_map=None):
+                       osd_uuid_map=None) -> str:
         if not extra_args:
             extra_args = []
         if not extra_config:
@@ -2001,17 +1834,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         deps = []  # type: List[str]
         cephadm_config = {} # type: Dict[str, Any]
         if daemon_type == 'prometheus':
-            cephadm_config, deps = self._generate_prometheus_config()
+            cephadm_config, deps = self.prometheus_service.generate_config()
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'grafana':
-            cephadm_config, deps = self._generate_grafana_config()
+            cephadm_config, deps = self.grafana_service.generate_config()
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'nfs':
             cephadm_config, deps = \
-                    self._generate_nfs_config(daemon_type, daemon_id, host)
+                    self.nfs_service._generate_nfs_config(daemon_type, daemon_id, host)
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'alertmanager':
-            cephadm_config, deps = self._generate_alertmanager_config()
+            cephadm_config, deps = self.alertmanager_service.generate_config()
             extra_args.extend(['--config-json', '-'])
         else:
             # Ceph.daemons (mon, mgr, mds, osd, etc)
@@ -2092,7 +1925,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.invalidate_host_daemons(host)
         return "Removed {} from host '{}'".format(name, host)
 
-    def _apply_service(self, spec):
+    def _apply_service(self, spec) -> bool:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
         on the target label and count specified in the placement.
@@ -2104,25 +1937,25 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             return False
         self.log.debug('Applying service %s spec' % service_name)
         create_fns = {
-            'mon': self._create_mon,
-            'mgr': self._create_mgr,
-            'osd': self.create_osds,
-            'mds': self._create_mds,
-            'rgw': self._create_rgw,
-            'rbd-mirror': self._create_rbd_mirror,
-            'nfs': self._create_nfs,
-            'grafana': self._create_grafana,
-            'alertmanager': self._create_alertmanager,
-            'prometheus': self._create_prometheus,
-            'node-exporter': self._create_node_exporter,
-            'crash': self._create_crash,
-            'iscsi': self._create_iscsi,
+            'mon': self.mon_service.create,
+            'mgr': self.mgr_service.create,
+            'osd': self.create_osds,  # osds work a bit different.
+            'mds': self.mds_service.create,
+            'rgw': self.rgw_service.create,
+            'rbd-mirror': self.rbd_mirror_service.create,
+            'nfs': self.nfs_service.create,
+            'grafana': self.grafana_service.create,
+            'alertmanager': self.alertmanager_service.create,
+            'prometheus': self.prometheus_service.create,
+            'node-exporter': self.node_exporter_service.create,
+            'crash': self.crash_service.create,
+            'iscsi': self.iscsi_servcie.create,
         }
         config_fns = {
-            'mds': self._config_mds,
-            'rgw': self._config_rgw,
-            'nfs': self._config_nfs,
-            'iscsi': self._config_iscsi,
+            'mds': self.mds_service.config,
+            'rgw': self.rgw_service.config,
+            'nfs': self.nfs_service.config,
+            'iscsi': self.iscsi_servcie.config,
         }
         create_func = create_fns.get(daemon_type, None)
         if not create_func:
@@ -2354,67 +2187,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_mon(self, spec):
         return self._apply(spec)
 
-    def _create_mon(self, name, host, network):
-        """
-        Create a new monitor on the given host.
-        """
-        # get mon. key
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get',
-            'entity': 'mon.',
-        })
-
-        extra_config = '[mon.%s]\n' % name
-        if network:
-            # infer whether this is a CIDR network, addrvec, or plain IP
-            if '/' in network:
-                extra_config += 'public network = %s\n' % network
-            elif network.startswith('[v') and network.endswith(']'):
-                extra_config += 'public addrv = %s\n' % network
-            elif ':' not in network:
-                extra_config += 'public addr = %s\n' % network
-            else:
-                raise OrchestratorError('Must specify a CIDR network, ceph addrvec, or plain IP: \'%s\'' % network)
-        else:
-            # try to get the public_network from the config
-            ret, network, err = self.check_mon_command({
-                'prefix': 'config get',
-                'who': 'mon',
-                'key': 'public_network',
-            })
-            network = network.strip() # type: ignore
-            if not network:
-                raise OrchestratorError('Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP')
-            if '/' not in network:
-                raise OrchestratorError('public_network is set but does not look like a CIDR network: \'%s\'' % network)
-            extra_config += 'public network = %s\n' % network
-
-        return self._create_daemon('mon', name, host,
-                                   keyring=keyring,
-                                   extra_config={'config': extra_config})
-
     def add_mon(self, spec):
         # type: (ServiceSpec) -> orchestrator.Completion
-        return self._add_daemon('mon', spec, self._create_mon)
-
-    def _create_mgr(self, mgr_id, host):
-        """
-        Create a new manager instance on a host.
-        """
-        # get mgr. key
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'mgr.%s' % mgr_id,
-            'caps': ['mon', 'profile mgr',
-                     'osd', 'allow *',
-                     'mds', 'allow *'],
-        })
-
-        return self._create_daemon('mgr', mgr_id, host, keyring=keyring)
+        return self._add_daemon('mon', spec, self.mon_service.create)
 
     def add_mgr(self, spec):
         # type: (ServiceSpec) -> orchestrator.Completion
-        return self._add_daemon('mgr', spec, self._create_mgr)
+        return self._add_daemon('mgr', spec, self.mgr_service.create)
 
     def _apply(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
@@ -2461,92 +2240,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return self._apply(spec)
 
     def add_mds(self, spec: ServiceSpec):
-        return self._add_daemon('mds', spec, self._create_mds, self._config_mds)
+        return self._add_daemon('mds', spec, self.mds_service.create, self.mds_service.config)
 
     @trivial_completion
     def apply_mds(self, spec: ServiceSpec):
         return self._apply(spec)
 
-    def _config_mds(self, spec):
-        # ensure mds_join_fs is set for these daemons
-        assert spec.service_id
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': 'mds.' + spec.service_id,
-            'name': 'mds_join_fs',
-            'value': spec.service_id,
-        })
-
-    def _create_mds(self, mds_id, host):
-        # get mgr. key
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'mds.' + mds_id,
-            'caps': ['mon', 'profile mds',
-                     'osd', 'allow rwx',
-                     'mds', 'allow'],
-        })
-        return self._create_daemon('mds', mds_id, host, keyring=keyring)
-
     def add_rgw(self, spec):
-        return self._add_daemon('rgw', spec, self._create_rgw, self._config_rgw)
-
-    def _config_rgw(self, spec):
-        # ensure rgw_realm and rgw_zone is set for these daemons
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
-            'name': 'rgw_zone',
-            'value': spec.rgw_zone,
-        })
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.rgw_realm}",
-            'name': 'rgw_realm',
-            'value': spec.rgw_realm,
-        })
-        ret, out, err = self.check_mon_command({
-            'prefix': 'config set',
-            'who': f"{utils.name_to_config_section('rgw')}.{spec.service_id}",
-            'name': 'rgw_frontends',
-            'value': spec.rgw_frontends_config_value(),
-        })
-
-        if spec.rgw_frontend_ssl_certificate:
-            if isinstance(spec.rgw_frontend_ssl_certificate, list):
-                cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
-            else:
-                cert_data = spec.rgw_frontend_ssl_certificate
-            ret, out, err = self.check_mon_command({
-                'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
-                'val': cert_data,
-            })
-
-        if spec.rgw_frontend_ssl_key:
-            if isinstance(spec.rgw_frontend_ssl_key, list):
-                key_data = '\n'.join(spec.rgw_frontend_ssl_key)
-            else:
-                key_data = spec.rgw_frontend_ssl_key
-            ret, out, err = self.check_mon_command({
-                'prefix': 'config-key set',
-                'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',
-                'val': key_data,
-            })
-
-        logger.info('Saving service %s spec with placement %s' % (
-            spec.service_name(), spec.placement.pretty_str()))
-        self.spec_store.save(spec)
-
-    def _create_rgw(self, rgw_id, host):
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
-            'caps': ['mon', 'allow *',
-                     'mgr', 'allow rw',
-                     'osd', 'allow rwx'],
-        })
-        return self._create_daemon('rgw', rgw_id, host, keyring=keyring)
+        return self._add_daemon('rgw', spec, self.rgw_service.create, self.rgw_service.config)
 
     @trivial_completion
     def apply_rgw(self, spec):
@@ -2554,401 +2255,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def add_iscsi(self, spec):
         # type: (ServiceSpec) -> orchestrator.Completion
-        return self._add_daemon('iscsi', spec, self._create_iscsi, self._config_iscsi)
-
-    def _config_iscsi(self, spec):
-        self._check_pool_exists(spec.pool, spec.service_name())
-
-        logger.info('Saving service %s spec with placement %s' % (
-            spec.service_name(), spec.placement.pretty_str()))
-        self.spec_store.save(spec)
-
-    def _create_iscsi(self, igw_id, host, spec):
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': utils.name_to_config_section('iscsi') + '.' + igw_id,
-            'caps': ['mon', 'profile rbd, '
-                            'allow command "osd blacklist", '
-                            'allow command "config-key get" with "key" prefix "iscsi/"',
-                     'osd', f'allow rwx pool={spec.pool}'],
-        })
-
-        if spec.ssl_cert:
-            if isinstance(spec.ssl_cert, list):
-                cert_data = '\n'.join(spec.ssl_cert)
-            else:
-                cert_data = spec.ssl_cert
-            ret, out, err = self.mon_command({
-                'prefix': 'config-key set',
-                'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.crt',
-                'val': cert_data,
-            })
-
-        if spec.ssl_key:
-            if isinstance(spec.ssl_key, list):
-                key_data = '\n'.join(spec.ssl_key)
-            else:
-                key_data = spec.ssl_key
-            ret, out, err = self.mon_command({
-                'prefix': 'config-key set',
-                'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.key',
-                'val': key_data,
-            })
-
-        api_secure = 'false' if spec.api_secure is None else spec.api_secure
-        igw_conf = f"""
-# generated by cephadm
-[config]
-cluster_client_name = {utils.name_to_config_section('iscsi')}.{igw_id}
-pool = {spec.pool}
-trusted_ip_list = {spec.trusted_ip_list or ''}
-minimum_gateways = 1
-api_port = {spec.api_port or ''}
-api_user = {spec.api_user or ''}
-api_password = {spec.api_password or ''}
-api_secure = {api_secure}
-"""
-        extra_config = {'iscsi-gateway.cfg': igw_conf}
-        return self._create_daemon('iscsi', igw_id, host, keyring=keyring,
-                                   extra_config=extra_config)
+        return self._add_daemon('iscsi', spec, self.iscsi_servcie.create, self.iscsi_servcie.config)
 
     @trivial_completion
     def apply_iscsi(self, spec):
         return self._apply(spec)
 
     def add_rbd_mirror(self, spec):
-        return self._add_daemon('rbd-mirror', spec, self._create_rbd_mirror)
-
-    def _create_rbd_mirror(self, daemon_id, host):
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'client.rbd-mirror.' + daemon_id,
-            'caps': ['mon', 'profile rbd-mirror',
-                     'osd', 'profile rbd'],
-        })
-        return self._create_daemon('rbd-mirror', daemon_id, host,
-                                   keyring=keyring)
+        return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.create)
 
     @trivial_completion
     def apply_rbd_mirror(self, spec):
         return self._apply(spec)
 
-    def _generate_nfs_config(self, daemon_type, daemon_id, host):
-        # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
-        deps = [] # type: List[str]
-
-        # find the matching NFSServiceSpec
-        # TODO: find the spec and pass via _create_daemon instead ??
-        dd = orchestrator.DaemonDescription()
-        dd.daemon_type = daemon_type
-        dd.daemon_id = daemon_id
-        dd.hostname = host
-
-        service_name = dd.service_name()
-        specs = self.spec_store.find(service_name)
-
-        if not specs:
-            raise OrchestratorError('Cannot find service spec %s' % (service_name))
-        elif len(specs) > 1:
-            raise OrchestratorError('Found multiple service specs for %s' % (service_name))
-        else:
-            # cast to keep mypy happy
-            spec = cast(NFSServiceSpec, specs[0])
-
-        nfs = NFSGanesha(self, daemon_id, spec)
-
-        # create the keyring
-        entity = nfs.get_keyring_entity()
-        keyring = nfs.get_or_create_keyring(entity=entity)
-
-        # update the caps after get-or-create, the keyring might already exist!
-        nfs.update_keyring_caps(entity=entity)
-
-        # create the rados config object
-        nfs.create_rados_config_obj()
-
-        # generate the cephadm config
-        cephadm_config = nfs.get_cephadm_config()
-        cephadm_config.update(
-                self._get_config_and_keyring(
-                    daemon_type, daemon_id,
-                    keyring=keyring))
-
-        return cephadm_config, deps
-
     def add_nfs(self, spec):
-        return self._add_daemon('nfs', spec, self._create_nfs, self._config_nfs)
-
-    def _config_nfs(self, spec):
-        self._check_pool_exists(spec.pool, spec.service_name())
-
-        logger.info('Saving service %s spec with placement %s' % (
-            spec.service_name(), spec.placement.pretty_str()))
-        self.spec_store.save(spec)
-
-    def _create_nfs(self, daemon_id, host, spec):
-        return self._create_daemon('nfs', daemon_id, host)
+        return self._add_daemon('nfs', spec, self.nfs_service.create, self.nfs_service.config)
 
     @trivial_completion
     def apply_nfs(self, spec):
         return self._apply(spec)
 
-    def _generate_prometheus_config(self):
-        # type: () -> Tuple[Dict[str, Any], List[str]]
-        deps = []  # type: List[str]
-
-        # scrape mgrs
-        mgr_scrape_list = []
-        mgr_map = self.get('mgr_map')
-        port = None
-        t = mgr_map.get('services', {}).get('prometheus', None)
-        if t:
-            t = t.split('/')[2]
-            mgr_scrape_list.append(t)
-            port = '9283'
-            if ':' in t:
-                port = t.split(':')[1]
-        # scan all mgrs to generate deps and to get standbys too.
-        # assume that they are all on the same port as the active mgr.
-        for dd in self.cache.get_daemons_by_service('mgr'):
-            # we consider the mgr a dep even if the prometheus module is
-            # disabled in order to be consistent with _calc_daemon_deps().
-            deps.append(dd.name())
-            if not port:
-                continue
-            if dd.daemon_id == self.get_mgr_id():
-                continue
-            addr = self.inventory.get_addr(dd.hostname)
-            mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
-
-        # scrape node exporters
-        node_configs = ''
-        for dd in self.cache.get_daemons_by_service('node-exporter'):
-            deps.append(dd.name())
-            addr = self.inventory.get_addr(dd.hostname)
-            if not node_configs:
-                node_configs = """
-  - job_name: 'node'
-    static_configs:
-"""
-            node_configs += """    - targets: {}
-      labels:
-        instance: '{}'
-""".format([addr.split(':')[0] + ':9100'],
-           dd.hostname)
-
-        # scrape alert managers
-        alertmgr_configs = ""
-        alertmgr_targets = []
-        for dd in self.cache.get_daemons_by_service('alertmanager'):
-            deps.append(dd.name())
-            addr = self.inventory.get_addr(dd.hostname)
-            alertmgr_targets.append("'{}:9093'".format(addr.split(':')[0]))
-        if alertmgr_targets:
-            alertmgr_configs = """alerting:
-  alertmanagers:
-    - scheme: http
-      path_prefix: /alertmanager
-      static_configs:
-        - targets: [{}]
-""".format(", ".join(alertmgr_targets))
-
-        # generate the prometheus configuration
-        r = {
-            'files': {
-                'prometheus.yml': """# generated by cephadm
-global:
-  scrape_interval: 5s
-  evaluation_interval: 10s
-rule_files:
-  - /etc/prometheus/alerting/*
-{alertmgr_configs}
-scrape_configs:
-  - job_name: 'ceph'
-    static_configs:
-    - targets: {mgr_scrape_list}
-      labels:
-        instance: 'ceph_cluster'
-{node_configs}
-""".format(
-    mgr_scrape_list=str(mgr_scrape_list),
-    node_configs=str(node_configs),
-    alertmgr_configs=str(alertmgr_configs)
-    ),
-            },
-        }
-
-        # include alerts, if present in the container
-        if os.path.exists(self.prometheus_alerts_path):
-            with open(self.prometheus_alerts_path, "r") as f:
-                alerts = f.read()
-            r['files']['/etc/prometheus/alerting/ceph_alerts.yml'] = alerts
-
-        return r, sorted(deps)
-
-    def _generate_grafana_config(self):
-        # type: () -> Tuple[Dict[str, Any], List[str]]
-        deps = []  # type: List[str]
-        def generate_grafana_ds_config(hosts: List[str]) -> str:
-            config = '''# generated by cephadm
-deleteDatasources:
-{delete_data_sources}
-
-datasources:
-{data_sources}
-'''
-            delete_ds_template = '''
-  - name: '{name}'
-    orgId: 1\n'''.lstrip('\n')
-            ds_template = '''
-  - name: '{name}'
-    type: 'prometheus'
-    access: 'proxy'
-    orgId: 1
-    url: 'http://{host}:9095'
-    basicAuth: false
-    isDefault: {is_default}
-    editable: false\n'''.lstrip('\n')
-
-            delete_data_sources = ''
-            data_sources = ''
-            for i, host in enumerate(hosts):
-                name = "Dashboard %d" % (i + 1)
-                data_sources += ds_template.format(
-                    name=name,
-                    host=host,
-                    is_default=str(i == 0).lower()
-                )
-                delete_data_sources += delete_ds_template.format(
-                    name=name
-                )
-            return config.format(
-                delete_data_sources=delete_data_sources,
-                data_sources=data_sources,
-            )
-
-        prom_services = []  # type: List[str]
-        for dd in self.cache.get_daemons_by_service('prometheus'):
-            prom_services.append(dd.hostname)
-            deps.append(dd.name())
-
-        cert = self.get_store('grafana_crt')
-        pkey = self.get_store('grafana_key')
-        if cert and pkey:
-            try:
-                verify_tls(cert, pkey)
-            except ServerConfigException as e:
-                logger.warning('Provided grafana TLS certificates invalid: %s', str(e))
-                cert, pkey = None, None
-        if not (cert and pkey):
-            cert, pkey = create_self_signed_cert('Ceph', 'cephadm')
-            self.set_store('grafana_crt', cert)
-            self.set_store('grafana_key', pkey)
-            self.check_mon_command({
-                'prefix': 'dashboard set-grafana-api-ssl-verify',
-                'value': 'false',
-            })
-
-
-
-        config_file = {
-            'files': {
-                "grafana.ini": """# generated by cephadm
-[users]
-  default_theme = light
-[auth.anonymous]
-  enabled = true
-  org_name = 'Main Org.'
-  org_role = 'Viewer'
-[server]
-  domain = 'bootstrap.storage.lab'
-  protocol = https
-  cert_file = /etc/grafana/certs/cert_file
-  cert_key = /etc/grafana/certs/cert_key
-  http_port = 3000
-[security]
-  admin_user = admin
-  admin_password = admin
-  allow_embedding = true
-""",
-                'provisioning/datasources/ceph-dashboard.yml': generate_grafana_ds_config(prom_services),
-                'certs/cert_file': '# generated by cephadm\n%s' % cert,
-                'certs/cert_key': '# generated by cephadm\n%s' % pkey,
-            }
-        }
-        return config_file, sorted(deps)
-
     def _get_dashboard_url(self):
         # type: () -> str
         return self.get('mgr_map').get('services', {}).get('dashboard', '')
 
-    def _generate_alertmanager_config(self):
-        # type: () -> Tuple[Dict[str, Any], List[str]]
-        deps = [] # type: List[str]
-
-        # dashboard(s)
-        dashboard_urls = []
-        mgr_map = self.get('mgr_map')
-        port = None
-        proto = None  # http: or https:
-        url = mgr_map.get('services', {}).get('dashboard', None)
-        if url:
-            dashboard_urls.append(url)
-            proto = url.split('/')[0]
-            port = url.split('/')[2].split(':')[1]
-        # scan all mgrs to generate deps and to get standbys too.
-        # assume that they are all on the same port as the active mgr.
-        for dd in self.cache.get_daemons_by_service('mgr'):
-            # we consider mgr a dep even if the dashboard is disabled
-            # in order to be consistent with _calc_daemon_deps().
-            deps.append(dd.name())
-            if not port:
-                continue
-            if dd.daemon_id == self.get_mgr_id():
-                continue
-            addr = self.inventory.get_addr(dd.hostname)
-            dashboard_urls.append('%s//%s:%s/' % (proto, addr.split(':')[0],
-                                                 port))
-
-        yml = """# generated by cephadm
-# See https://prometheus.io/docs/alerting/configuration/ for documentation.
-
-global:
-  resolve_timeout: 5m
-
-route:
-  group_by: ['alertname']
-  group_wait: 10s
-  group_interval: 10s
-  repeat_interval: 1h
-  receiver: 'ceph-dashboard'
-receivers:
-- name: 'ceph-dashboard'
-  webhook_configs:
-{urls}
-""".format(
-    urls='\n'.join(
-        ["  - url: '{}api/prometheus_receiver'".format(u)
-         for u in dashboard_urls]
-    ))
-        peers = []
-        port = '9094'
-        for dd in self.cache.get_daemons_by_service('alertmanager'):
-            deps.append(dd.name())
-            addr = self.inventory.get_addr(dd.hostname)
-            peers.append(addr.split(':')[0] + ':' + port)
-        return {
-            "files": {
-                "alertmanager.yml": yml
-            },
-            "peers": peers
-        }, sorted(deps)
-
     def add_prometheus(self, spec):
-        return self._add_daemon('prometheus', spec, self._create_prometheus)
-
-    def _create_prometheus(self, daemon_id, host):
-        return self._create_daemon('prometheus', daemon_id, host)
+        return self._add_daemon('prometheus', spec, self.prometheus_service.create)
 
     @trivial_completion
     def apply_prometheus(self, spec):
@@ -2957,56 +2289,36 @@ receivers:
     def add_node_exporter(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('node-exporter', spec,
-                                self._create_node_exporter)
+                                self.node_exporter_service.create)
 
     @trivial_completion
     def apply_node_exporter(self, spec):
         return self._apply(spec)
 
-    def _create_node_exporter(self, daemon_id, host):
-        return self._create_daemon('node-exporter', daemon_id, host)
-
     def add_crash(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
         return self._add_daemon('crash', spec,
-                                self._create_crash)
+                                self.crash_service.create)
 
     @trivial_completion
     def apply_crash(self, spec):
         return self._apply(spec)
 
-    def _create_crash(self, daemon_id, host):
-        ret, keyring, err = self.check_mon_command({
-            'prefix': 'auth get-or-create',
-            'entity': 'client.crash.' + host,
-            'caps': ['mon', 'profile crash',
-                     'mgr', 'profile crash'],
-        })
-        return self._create_daemon('crash', daemon_id, host, keyring=keyring)
-
     def add_grafana(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
-        return self._add_daemon('grafana', spec, self._create_grafana)
+        return self._add_daemon('grafana', spec, self.grafana_service.create)
 
     @trivial_completion
     def apply_grafana(self, spec: ServiceSpec):
         return self._apply(spec)
 
-    def _create_grafana(self, daemon_id, host):
-        # type: (str, str) -> str
-        return self._create_daemon('grafana', daemon_id, host)
-
     def add_alertmanager(self, spec):
         # type: (ServiceSpec) -> AsyncCompletion
-        return self._add_daemon('alertmanager', spec, self._create_alertmanager)
+        return self._add_daemon('alertmanager', spec, self.alertmanager_service.create)
 
     @trivial_completion
     def apply_alertmanager(self, spec: ServiceSpec):
         return self._apply(spec)
-
-    def _create_alertmanager(self, daemon_id, host):
-        return self._create_daemon('alertmanager', daemon_id, host)
-
 
     def _get_container_image_id(self, image_name):
         # pick a random host...

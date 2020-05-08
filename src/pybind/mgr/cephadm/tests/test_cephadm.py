@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from cephadm.osd import OSDRemoval
+from cephadm.services.osd import OSDRemoval
 
 try:
     from typing import Any, List
@@ -242,14 +242,14 @@ class TestCephadm(object):
         }
         json_out = json.dumps(dict_out)
         _mon_cmd.return_value = (0, json_out, '')
-        out = cephadm_module.find_destroyed_osds()
+        out = cephadm_module.osd_service.find_destroyed_osds()
         assert out == {'host1': ['0']}
 
     @mock.patch("cephadm.module.CephadmOrchestrator.mon_command")
     def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
         _mon_cmd.return_value = (1, "", "fail_msg")
         with pytest.raises(OrchestratorError):
-            out = cephadm_module.find_destroyed_osds()
+            out = cephadm_module.osd_service.find_destroyed_osds()
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -285,7 +285,7 @@ class TestCephadm(object):
     def test_prepare_drivegroup(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=['']))
-            out = cephadm_module.prepare_drivegroup(dg)
+            out = cephadm_module.osd_service.prepare_drivegroup(dg)
             assert len(out) == 1
             f1 = out[0]
             assert f1[0] == 'test'
@@ -310,13 +310,13 @@ class TestCephadm(object):
             dg = DriveGroupSpec(service_id='test.spec', placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=devices))
             ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
             preview = preview
-            out = cephadm_module.driveselection_to_ceph_volume(dg, ds, [], preview)
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(dg, ds, [], preview)
             assert out in exp_command
 
     @mock.patch("cephadm.module.SpecStore.find")
-    @mock.patch("cephadm.module.CephadmOrchestrator.prepare_drivegroup")
-    @mock.patch("cephadm.module.CephadmOrchestrator.driveselection_to_ceph_volume")
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_ceph_volume_command")
+    @mock.patch("cephadm.services.osd.OSDService.prepare_drivegroup")
+    @mock.patch("cephadm.services.osd.OSDService.driveselection_to_ceph_volume")
+    @mock.patch("cephadm.services.osd.OSDService._run_ceph_volume_command")
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_preview_drivegroups_str(self, _run_c_v_command, _ds_to_cv, _prepare_dg, _find_store, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
@@ -324,7 +324,7 @@ class TestCephadm(object):
             _find_store.return_value = [dg]
             _prepare_dg.return_value = [('host1', 'ds_dummy')]
             _run_c_v_command.return_value = ("{}", '', 0)
-            cephadm_module.preview_drivegroups(drive_group_name='foo')
+            cephadm_module.osd_service.preview_drivegroups(drive_group_name='foo')
             _find_store.assert_called_once_with(service_name='foo')
             _prepare_dg.assert_called_once_with(dg)
             _run_c_v_command.assert_called_once()
@@ -341,7 +341,7 @@ class TestCephadm(object):
             )
         ])
     ))
-    @mock.patch("cephadm.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
+    @mock.patch("cephadm.services.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
     def test_remove_osds(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
