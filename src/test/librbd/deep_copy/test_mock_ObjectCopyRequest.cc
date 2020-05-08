@@ -10,9 +10,9 @@
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Io.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/ImageRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -94,7 +94,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size,
     bufferlist bl;
     bl.append(std::string(len, '1'));
 
-    int r = image_ctx->io_work_queue->write(off, len, std::move(bl), 0);
+    int r = api::Io<>::write(*image_ctx, off, len, std::move(bl), 0);
     ASSERT_EQ(static_cast<int>(len), r);
 
     interval_set<uint64_t> w;
@@ -376,13 +376,13 @@ public:
 
     bufferlist bl;
     bl.append(std::string(object_size, '1'));
-    r = m_src_image_ctx->io_work_queue->read(
-      0, object_size, librbd::io::ReadResult{&bl}, 0);
+    r = api::Io<>::read(*m_src_image_ctx, 0, object_size,
+                        librbd::io::ReadResult{&bl}, 0);
     if (r < 0) {
       return r;
     }
 
-    r = m_dst_image_ctx->io_work_queue->write(0, object_size, std::move(bl), 0);
+    r = api::Io<>::write(*m_dst_image_ctx, 0, object_size, std::move(bl), 0);
     if (r < 0) {
       return r;
     }
@@ -427,16 +427,16 @@ public:
 
       bufferlist src_bl;
       src_bl.append(std::string(object_size, '1'));
-      r = m_src_image_ctx->io_work_queue->read(
-        0, object_size, librbd::io::ReadResult{&src_bl}, 0);
+      r = api::Io<>::read(
+        *m_src_image_ctx, 0, object_size, librbd::io::ReadResult{&src_bl}, 0);
       if (r < 0) {
         return r;
       }
 
       bufferlist dst_bl;
       dst_bl.append(std::string(object_size, '1'));
-      r = m_dst_image_ctx->io_work_queue->read(
-        0, object_size, librbd::io::ReadResult{&dst_bl}, 0);
+      r = api::Io<>::read(
+        *m_dst_image_ctx, 0, object_size, librbd::io::ReadResult{&dst_bl}, 0);
       if (r < 0) {
         return r;
       }
@@ -793,8 +793,8 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
 
   // trim the object
   uint64_t trim_offset = rand() % one.range_end();
-  ASSERT_LE(0, m_src_image_ctx->io_work_queue->discard(
-    trim_offset, one.range_end() - trim_offset,
+  ASSERT_LE(0, api::Io<>::discard(
+    *m_src_image_ctx, trim_offset, one.range_end() - trim_offset,
     m_src_image_ctx->discard_granularity_bytes));
   ASSERT_EQ(0, create_snap("copy"));
 
@@ -849,8 +849,9 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
 
   // remove the object
   uint64_t object_size = 1 << m_src_image_ctx->order;
-  ASSERT_LE(0, m_src_image_ctx->io_work_queue->discard(
-    0, object_size, m_src_image_ctx->discard_granularity_bytes));
+  ASSERT_LE(0, api::Io<>::discard(
+    *m_src_image_ctx, 0, object_size,
+    m_src_image_ctx->discard_granularity_bytes));
   ASSERT_EQ(0, create_snap("copy"));
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
