@@ -1533,10 +1533,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: (str, str, Optional[str], Optional[str]) -> Dict[str, Any]
         # keyring
         if not keyring:
-            if daemon_type == 'mon':
-                ename = 'mon.'
-            else:
-                ename = utils.name_to_config_section(daemon_type + '.' + daemon_id)
+            ename = utils.name_to_auth_entity(daemon_type + '.' + daemon_id)
             ret, keyring, err = self.check_mon_command({
                 'prefix': 'auth get',
                 'entity': ename,
@@ -1580,6 +1577,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             extra_args.extend(['--config-json', '-'])
         elif daemon_type == 'alertmanager':
             cephadm_config, deps = self.alertmanager_service.generate_config()
+            extra_args.extend(['--config-json', '-'])
+        elif daemon_type == 'node-exporter':
+            cephadm_config, deps = self.node_exporter_service.generate_config()
             extra_args.extend(['--config-json', '-'])
         else:
             # Ceph.daemons (mon, mgr, mds, osd, etc)

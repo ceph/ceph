@@ -273,3 +273,6 @@ scrape_configs:
 class NodeExporterService(CephadmService):
     def create(self, daemon_id, host) -> str:
         return self.mgr._create_daemon('node-exporter', daemon_id, host)
+
+    def generate_config(self) -> Tuple[Dict[str, Any], List[str]]:
+        return {}, []
