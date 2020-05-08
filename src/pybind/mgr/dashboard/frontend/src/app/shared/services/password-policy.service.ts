@@ -35,11 +35,11 @@ export class PasswordPolicyService {
               'Cannot contain any sequential characters e.g. "abc"'
             ),
             pwdPolicyCheckComplexityEnabled: this.i18n(
-              'Must consist of characters from the following groups:\n' +
-                '  * Alphabetic a-z, A-Z\n' +
-                '  * Numbers 0-9\n' +
-                '  * Special chars: !"#$%& \'()*+,-./:;<=>?@[\\]^_`{{|}}~\n' +
-                '  * Any other characters (signs)'
+              `Must consist of characters from the following groups:
+  * Alphabetic a-z, A-Z
+  * Numbers 0-9
+  * Special chars: !"#$%& '()*+,-./:;<=>?@[\\]^_\`{{|}}~
+  * Any other characters (signs)`
             )
           };
           helpText = helpText.concat(
