@@ -6,13 +6,8 @@ from threading import Event
 from functools import wraps
 
 import string
-try:
-    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
-        Any, NamedTuple, Iterator, Set, Sequence
-    from typing import TYPE_CHECKING, cast
-except ImportError:
-    TYPE_CHECKING = False  # just for type checking
-
+from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
+    Any, NamedTuple, Iterator, Set, Sequence, TYPE_CHECKING, cast, Union
 
 import datetime
 import six
@@ -58,6 +53,8 @@ except ImportError:
     pass
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar('T')
 
 DEFAULT_SSH_CONFIG = """
 Host *
@@ -166,9 +163,9 @@ class AsyncCompletion(orchestrator.Completion):
         self._on_complete_ = inner
 
 
-def forall_hosts(f):
+def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
     @wraps(f)
-    def forall_hosts_wrapper(*args) -> list:
+    def forall_hosts_wrapper(*args) -> List[T]:
 
         # Some weired logic to make calling functions with multiple arguments work.
         if len(args) == 1:
@@ -1618,7 +1615,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def remove_daemons(self, names):
-        # type: (List[str]) -> orchestrator.Completion
+        # type: (List[str]) -> List[str]
         args = []
         for host, dm in self.cache.daemons.items():
             for name in names:
@@ -1849,10 +1846,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
     @forall_hosts
-    def _remove_daemons(self, name, host):
+    def _remove_daemons(self, name, host) -> str:
         return self._remove_daemon(name, host)
 
-    def _remove_daemon(self, name, host):
+    def _remove_daemon(self, name, host) -> str:
         """
         Remove a daemon
         """
@@ -2083,7 +2080,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                            e)
 
     def _add_daemon(self, daemon_type, spec,
-                    create_func, config_func=None):
+                    create_func: Callable[..., T], config_func=None) -> List[T]:
         """
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
@@ -2099,7 +2096,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _create_daemons(self, daemon_type, spec, daemons,
                         hosts, count,
-                        create_func, config_func=None):
+                        create_func: Callable[..., T], config_func=None) -> List[T]:
         if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
@@ -2141,12 +2138,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def add_mon(self, spec):
-        # type: (ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('mon', spec, self.mon_service.create)
 
     @trivial_completion
     def add_mgr(self, spec):
-        # type: (ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('mgr', spec, self.mgr_service.create)
 
     def _apply(self, spec: ServiceSpec) -> str:
@@ -2211,7 +2208,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def add_iscsi(self, spec):
-        # type: (ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('iscsi', spec, self.iscsi_servcie.create, self.iscsi_servcie.config)
 
     @trivial_completion
@@ -2248,7 +2245,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def add_node_exporter(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('node-exporter', spec,
                                 self.node_exporter_service.create)
 
@@ -2258,7 +2255,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def add_crash(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('crash', spec,
                                 self.crash_service.create)
 
@@ -2268,7 +2265,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def add_grafana(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('grafana', spec, self.grafana_service.create)
 
     @trivial_completion
@@ -2277,7 +2274,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     @trivial_completion
     def add_alertmanager(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('alertmanager', spec, self.alertmanager_service.create)
 
     @trivial_completion
