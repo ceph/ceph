@@ -120,7 +120,7 @@ def generate_iso(ctx, config):
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
         metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
 
-        with open(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_setup.yaml'), 'r') as f:
             test_setup = ''.join(f.readlines())
             # configuring the commands to setup the nfs mount
             mnt_dir = "/export/{client}".format(client=client)
@@ -128,7 +128,7 @@ def generate_iso(ctx, config):
                 mnt_dir=mnt_dir
             )
 
-        with open(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_teardown.yaml'), 'r') as f:
             test_teardown = ''.join(f.readlines())
 
         user_data = test_setup
@@ -172,7 +172,7 @@ def generate_iso(ctx, config):
             ceph_sha1=ctx.config.get('sha1'))
         teuthology.write_file(remote, userdata_path, user_data)
 
-        with open(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'metadata.yaml'), 'r') as f:
             teuthology.write_file(remote, metadata_path, f)
 
         test_file = '{tdir}/qemu/{client}.test.sh'.format(tdir=testdir, client=client)
