@@ -159,7 +159,8 @@ void global_pre_init(
   }
   else if (ret) {
     cct->_log->flush();
-    cerr << "global_init: error reading config file." << std::endl;
+    cerr << "global_init: error reading config file. "
+         << conf.get_parse_error() << std::endl;
     _exit(1);
   }
 
