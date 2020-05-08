@@ -29,7 +29,6 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatcher.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/QosImageDispatch.h"
 #include "librbd/journal/StandardPolicy.h"
@@ -123,7 +122,7 @@ public:
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
-      io_work_queue(nullptr), op_work_queue(nullptr),
+      op_work_queue(nullptr),
       external_callback_completions(32),
       event_socket_completions(32),
       asok_hook(nullptr),
@@ -139,10 +138,6 @@ public:
 
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
-    io_work_queue = new io::ImageRequestWQ<>(
-      this, "librbd::io_work_queue",
-      cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
-      thread_pool);
     io_image_dispatcher = new io::ImageDispatcher<ImageCtx>(this);
     io_object_dispatcher = new io::ObjectDispatcher<ImageCtx>(this);
 
@@ -176,14 +171,12 @@ public:
     if (data_ctx.is_valid()) {
       data_ctx.aio_flush();
     }
-    io_work_queue->drain();
 
     delete io_object_dispatcher;
     delete io_image_dispatcher;
 
     delete journal_policy;
     delete exclusive_lock_policy;
-    delete io_work_queue;
     delete operations;
     delete state;
   }

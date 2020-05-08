@@ -80,7 +80,6 @@ set(librbd_internal_srcs
   io/ImageDispatchSpec.cc
   io/ImageDispatcher.cc
   io/ImageRequest.cc
-  io/ImageRequestWQ.cc
   io/ObjectDispatch.cc
   io/ObjectDispatchSpec.cc
   io/ObjectDispatcher.cc

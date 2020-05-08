@@ -9,7 +9,6 @@
 #include "librbd/internal.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"

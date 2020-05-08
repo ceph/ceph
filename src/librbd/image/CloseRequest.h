@@ -33,10 +33,7 @@ private:
    * BLOCK_IMAGE_WATCHER (skip if R/O)
    *    |
    *    v
-   * SHUT_DOWN_UPDATE_WATCHERS
-   *    |
-   *    v
-   * SHUT_DOWN_AIO_WORK_QUEUE . . .
+   * SHUT_DOWN_UPDATE_WATCHERS  . .
    *    |                         . (exclusive lock disabled)
    *    v                         v
    * SHUT_DOWN_EXCLUSIVE_LOCK   FLUSH
@@ -50,10 +47,10 @@ private:
    * FLUSH_READAHEAD
    *    |
    *    v
-   * SHUT_DOWN_OBJECT_DISPATCHER
+   * SHUT_DOWN_IMAGE_DISPATCHER
    *    |
    *    v
-   * SHUT_DOWN_IMAGE_DISPATCHER
+   * SHUT_DOWN_OBJECT_DISPATCHER
    *    |
    *    v
    * FLUSH_OP_WORK_QUEUE
@@ -85,9 +82,6 @@ private:
   void send_shut_down_update_watchers();
   void handle_shut_down_update_watchers(int r);
 
-  void send_shut_down_io_queue();
-  void handle_shut_down_io_queue(int r);
-
   void send_shut_down_exclusive_lock();
   void handle_shut_down_exclusive_lock(int r);
 
@@ -100,11 +94,11 @@ private:
   void send_flush_readahead();
   void handle_flush_readahead(int r);
 
-  void send_shut_down_object_dispatcher();
-  void handle_shut_down_object_dispatcher(int r);
-
   void send_shut_down_image_dispatcher();
   void handle_shut_down_image_dispatcher(int r);
+
+  void send_shut_down_object_dispatcher();
+  void handle_shut_down_object_dispatcher(int r);
 
   void send_flush_op_work_queue();
   void handle_flush_op_work_queue(int r);
