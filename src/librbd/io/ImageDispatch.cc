@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -14,6 +15,17 @@
 
 namespace librbd {
 namespace io {
+
+namespace {
+
+void start_in_flight_io(AioCompletion* aio_comp) {
+  // TODO remove AsyncOperation from AioCompletion
+  if (!aio_comp->async_op.started()) {
+    aio_comp->start_op();
+  }
+}
+
+} // anonymous namespace
 
 template <typename I>
 void ImageDispatch<I>::shut_down(Context* on_finish) {
@@ -28,6 +40,8 @@ bool ImageDispatch<I>::read(
     DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
+
+  start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_read(
@@ -45,6 +59,8 @@ bool ImageDispatch<I>::write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
+  start_in_flight_io(aio_comp);
+
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_write(
     m_image_ctx, aio_comp, std::move(image_extents), std::move(bl), op_flags,
@@ -61,6 +77,8 @@ bool ImageDispatch<I>::discard(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
+  start_in_flight_io(aio_comp);
+
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_discard(
     m_image_ctx, aio_comp, std::move(image_extents), discard_granularity_bytes,
@@ -76,6 +94,8 @@ bool ImageDispatch<I>::write_same(
     DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
+
+  start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_writesame(
@@ -94,6 +114,8 @@ bool ImageDispatch<I>::compare_and_write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
+  start_in_flight_io(aio_comp);
+
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_compare_and_write(
     m_image_ctx, aio_comp, std::move(image_extents), std::move(cmp_bl),
@@ -109,6 +131,8 @@ bool ImageDispatch<I>::flush(
     DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
+
+  start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_flush(m_image_ctx, aio_comp, flush_source, parent_trace);
