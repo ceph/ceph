@@ -10,7 +10,6 @@
 #include "librbd/exclusive_lock/PostAcquireRequest.h"
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
 #include "librbd/io/ImageDispatcherInterface.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/Utils.h"
 #include "common/ceph_mutex.h"
 #include "common/dout.h"

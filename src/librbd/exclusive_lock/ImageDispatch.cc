@@ -14,7 +14,6 @@
 #include "librbd/io/FlushTracker.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageDispatcherInterface.h"
-#include "librbd/io/ImageRequestWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -97,9 +96,6 @@ bool ImageDispatch<I>::set_require_lock(io::Direction direction, bool enabled) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "direction=" << direction << ", enabled=" << enabled
                  << dendl;
-
-  // TODO remove when ImageRequestWQ is removed
-  m_image_ctx->io_work_queue->set_require_lock(direction, enabled);
 
   std::unique_lock locker{m_lock};
   auto prev_require_lock = (m_require_lock_on_read || m_require_lock_on_write);

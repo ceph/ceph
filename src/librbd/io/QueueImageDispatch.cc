@@ -4,11 +4,11 @@
 #include "librbd/io/QueueImageDispatch.h"
 #include "common/dout.h"
 #include "common/Cond.h"
+#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -49,10 +49,6 @@ void QueueImageDispatch<I>::block_writes(Context *on_blocked) {
   on_blocked = util::create_async_context_callback(
     *m_image_ctx, on_blocked);
 
-  // TODO temp
-  auto ctx = new C_Gather(cct, on_blocked);
-  m_image_ctx->io_work_queue->block_writes(ctx->new_sub());
-
   {
     std::unique_lock locker{m_lock};
     ++m_write_blockers;
@@ -61,15 +57,13 @@ void QueueImageDispatch<I>::block_writes(Context *on_blocked) {
     if (!m_write_blocker_contexts.empty() || !m_in_flight_write_tids.empty()) {
       ldout(cct, 5) << "waiting for in-flight writes to complete: "
                     << "write_tids=" << m_in_flight_write_tids << dendl;
-      m_write_blocker_contexts.push_back(ctx->new_sub());
-      ctx->activate();
+      m_write_blocker_contexts.push_back(on_blocked);
       return;
     }
   }
 
   // ensure that all in-flight IO is flushed
-  flush_image(ctx->new_sub());
-  ctx->activate();
+  flush_image(on_blocked);
 };
 
 template <typename I>
@@ -98,9 +92,6 @@ void QueueImageDispatch<I>::unblock_writes() {
   for (auto ctx : dispatch_contexts) {
     ctx->complete(0);
   }
-
-  // TODO temp
-  m_image_ctx->io_work_queue->unblock_writes();
 }
 
 template <typename I>
@@ -108,22 +99,17 @@ void QueueImageDispatch<I>::wait_on_writes_unblocked(Context *on_unblocked) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx->owner_lock));
   auto cct = m_image_ctx->cct;
 
-  // TODO temp
-  auto ctx = new C_Gather(cct, on_unblocked);
-  m_image_ctx->io_work_queue->wait_on_writes_unblocked(ctx->new_sub());
-
   {
     std::unique_lock locker{m_lock};
     ldout(cct, 20) << m_image_ctx << ", "
                    << "write_blockers=" << m_write_blockers << dendl;
     if (!m_unblocked_write_waiter_contexts.empty() || m_write_blockers > 0) {
-      m_unblocked_write_waiter_contexts.push_back(ctx->new_sub());
-      ctx->activate();
+      m_unblocked_write_waiter_contexts.push_back(on_unblocked);
       return;
     }
   }
 
-  ctx->activate();
+  on_unblocked->complete(0);
 }
 
 template <typename I>

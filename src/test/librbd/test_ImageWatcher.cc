@@ -16,7 +16,6 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/WatchNotifyTypes.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/assign/std/set.hpp>
