@@ -1846,6 +1846,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         elif daemon_type == 'alertmanager':
             cephadm_config, deps = self.alertmanager_service.generate_config()
             extra_args.extend(['--config-json', '-'])
+        elif daemon_type == 'node-exporter':
+            cephadm_config, deps = self.node_exporter_service.generate_config()
+            extra_args.extend(['--config-json', '-'])
         else:
             # Ceph.daemons (mon, mgr, mds, osd, etc)
             cephadm_config = self._get_config_and_keyring(
