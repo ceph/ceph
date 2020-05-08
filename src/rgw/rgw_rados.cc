@@ -4701,6 +4701,10 @@ void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_
 
 int RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag)
 {
+  if (chain.empty()) {
+    return 0;
+  }
+
   return gc->send_chain(chain, tag);
 }
 
