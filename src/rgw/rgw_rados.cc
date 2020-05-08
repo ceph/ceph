@@ -8353,7 +8353,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     // into results_trackers vector
     tracker_idx = candidates.begin()->second;
     auto& tracker = results_trackers.at(tracker_idx);
-    last_entry_visited = &tracker.dir_entry();
+
     const string& name = tracker.entry_name();
     rgw_bucket_dir_entry& dirent = tracker.dir_entry();
 
@@ -8386,10 +8386,12 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
       ldout(cct, 10) << "RGWRados::" << __func__ << ": got " <<
 	dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
       m[name] = std::move(dirent);
+      last_entry_visited = &(m[name]);
       ++count;
     } else {
       ldout(cct, 10) << "RGWRados::" << __func__ << ": skipping " <<
 	dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
+      last_entry_visited = &tracker.dir_entry();
     }
 
     // refresh the candidates map
@@ -8441,8 +8443,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   }
 
   if (last_entry_visited != nullptr && last_entry) {
-    // since we'll not need this any more, might as well move it...
-    *last_entry = std::move(last_entry_visited->key);
+    *last_entry = last_entry_visited->key;
     ldout(cct, 20) << "RGWRados::" << __func__ <<
       ": returning, last_entry=" << *last_entry << dendl;
   } else {
