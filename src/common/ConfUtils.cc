@@ -134,8 +134,13 @@ int ConfFile::parse_file(const std::string &fname,
     }
   }
   std::ifstream ifs{fname};
-  const std::string buffer{std::istreambuf_iterator<char>(ifs),
-			   std::istreambuf_iterator<char>()};
+  std::string buffer{std::istreambuf_iterator<char>(ifs),
+			               std::istreambuf_iterator<char>()};
+  #ifdef _WIN32
+    // We'll need to ensure that there's a new line at the end of the file,
+    // otherwise the config parsing will fail.
+    buffer.append("\n");
+  #endif
   if (parse_buffer(buffer, warnings)) {
     return 0;
   } else {
