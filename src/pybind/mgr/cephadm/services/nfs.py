@@ -1,16 +1,74 @@
 import logging
-import rados
 
-from typing import Dict, Optional
+import rados
+from typing import Dict, Optional, Tuple, Any, List, cast
 
 from ceph.deployment.service_spec import NFSServiceSpec
 
-import cephadm
+import orchestrator
 from orchestrator import OrchestratorError
 
-from . import utils
+import cephadm
+from .. import utils
 
+from .cephadmservice import CephadmService
 logger = logging.getLogger(__name__)
+
+
+class NFSService(CephadmService):
+    def _generate_nfs_config(self, daemon_type, daemon_id, host):
+        # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
+        deps = []  # type: List[str]
+
+        # find the matching NFSServiceSpec
+        # TODO: find the spec and pass via _create_daemon instead ??
+        dd = orchestrator.DaemonDescription()
+        dd.daemon_type = daemon_type
+        dd.daemon_id = daemon_id
+        dd.hostname = host
+
+        service_name = dd.service_name()
+        specs = self.mgr.spec_store.find(service_name)
+
+        if not specs:
+            raise OrchestratorError('Cannot find service spec %s' % (service_name))
+        elif len(specs) > 1:
+            raise OrchestratorError('Found multiple service specs for %s' % (service_name))
+        else:
+            # cast to keep mypy happy
+            spec = cast(NFSServiceSpec, specs[0])
+
+        nfs = NFSGanesha(self.mgr, daemon_id, spec)
+
+        # create the keyring
+        entity = nfs.get_keyring_entity()
+        keyring = nfs.get_or_create_keyring(entity=entity)
+
+        # update the caps after get-or-create, the keyring might already exist!
+        nfs.update_keyring_caps(entity=entity)
+
+        # create the rados config object
+        nfs.create_rados_config_obj()
+
+        # generate the cephadm config
+        cephadm_config = nfs.get_cephadm_config()
+        cephadm_config.update(
+                self.mgr._get_config_and_keyring(
+                    daemon_type, daemon_id,
+                    keyring=keyring))
+
+        return cephadm_config, deps
+
+    def config(self, spec):
+        self.mgr._check_pool_exists(spec.pool, spec.service_name())
+
+        logger.info('Saving service %s spec with placement %s' % (
+            spec.service_name(), spec.placement.pretty_str()))
+        self.mgr.spec_store.save(spec)
+
+    def create(self, daemon_id, host, spec):
+        return self.mgr._create_daemon('nfs', daemon_id, host)
+
 
 class NFSGanesha(object):
     def __init__(self,
