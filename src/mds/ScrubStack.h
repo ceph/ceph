@@ -224,7 +224,7 @@ private:
    * remaining to start scrubbing.
    * @param done set to true if we and all our children have finished scrubbing
    */
-  void scrub_dir_inode(CInode *in, bool *done);
+  void scrub_dir_inode(CInode *in);
   /**
    * Make progress on scrubbing a dirfrag. It may return after each of the
    * following steps, but will report making progress on each one.

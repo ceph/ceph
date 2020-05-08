@@ -2765,10 +2765,10 @@ void MDSRank::command_scrub_start(Formatter *f,
   std::lock_guard l(mds_lock);
   if (path == "~mdsdir") {
     filepath fp(MDS_INO_MDSDIR(get_nodeid()));
-    mdcache->enqueue_scrub(fp, tag, force, recursive, repair, false, frag_t(), f, on_finish);
+    mdcache->enqueue_scrub(fp, tag, false, frag_t(), force, recursive, repair, f, on_finish);
   } else {
     filepath fp(path);
-    mdcache->enqueue_scrub(fp, tag, force, recursive, repair, false, frag_t(), f, on_finish);
+    mdcache->enqueue_scrub(fp, tag, false, frag_t(), force, recursive, repair, f, on_finish);
   }
   
   // scrub_dentry() finishers will dump the data for us; we're done!
@@ -2780,7 +2780,7 @@ void MDSRank::command_tag_path(Formatter *f,
   C_SaferCond scond;
   {
     std::lock_guard l(mds_lock);
-    mdcache->enqueue_scrub(path, tag, true, true, false, false, frag_t(), f, &scond);
+    mdcache->enqueue_scrub(path, tag, false, frag_t(), true, true, false, f, &scond);
   }
   scond.wait();
 }

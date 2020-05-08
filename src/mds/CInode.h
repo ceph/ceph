@@ -41,6 +41,7 @@
 #include "Mutation.h"
 
 #include "messages/MClientCaps.h"
+#include "MDSContinuation.h"
 
 #define dout_context g_ceph_context
 
@@ -260,6 +261,42 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     sr_t *snapnode = UNDEF_SRNODE;
   };
 
+  class ValidationContinuation : public MDSContinuation {
+  public:
+    MDSContext *fin;
+    CInode *in;
+    CInode::validated_data *results;
+    bufferlist bl;
+    CInode *shadow_in;
+
+    enum {
+      START = 0,
+      BACKTRACE,
+      INODE,
+      DIRFRAGS,
+      CHKSNAPREALM,
+      SNAPREALM,
+    };
+
+    ValidationContinuation(CInode *i,
+                           CInode::validated_data *data_r,
+                           MDSContext *fin_);
+
+    ~ValidationContinuation() override;
+
+    void fetch_backtrace_and_tag(CInode *in,
+                                 std::string_view tag, bool is_internal,
+                                 Context *fin, int *bt_r, bufferlist *bt);
+    bool _start(int rval);
+    bool _backtrace(int rval);
+    bool validate_directory_data();
+    bool _inode_disk(int rval);
+    bool _dirfrags(int rval);
+    void dirfrags();
+    bool _check_inode_snaprealm(int rval);
+    bool _snaprealm(int rval);
+    void _done() override;
+  };
   // -- pins --
   static const int PIN_DIRFRAG =         -1; 
   static const int PIN_CAPS =             2;  // client caps

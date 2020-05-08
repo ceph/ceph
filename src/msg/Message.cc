@@ -742,7 +742,9 @@ Message *decode_message(CephContext *cct,
   case MSG_MDS_SNAPUPDATE:
     m = make_message<MMDSSnapUpdate>();
     break;
-
+  case MSG_MDS_SCRUB:
+    m = make_message<MMDSScrub>();
+    break;
   case MSG_MDS_FRAGMENTNOTIFY:
     m = make_message<MMDSFragmentNotify>();
     break;

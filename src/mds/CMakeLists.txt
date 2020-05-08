@@ -19,6 +19,7 @@ set(mds_srcs
   CDentry.cc
   CDir.cc
   CInode.cc
+  MDSContinuation.cc
   LogEvent.cc
   MDSTable.cc
   InoTable.cc

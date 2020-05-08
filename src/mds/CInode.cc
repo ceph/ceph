@@ -4369,386 +4369,6 @@ void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
 void CInode::validate_disk_state(CInode::validated_data *results,
                                  MDSContext *fin)
 {
-  class ValidationContinuation : public MDSContinuation {
-  public:
-    MDSContext *fin;
-    CInode *in;
-    CInode::validated_data *results;
-    bufferlist bl;
-    CInode *shadow_in;
-
-    enum {
-      START = 0,
-      BACKTRACE,
-      INODE,
-      DIRFRAGS,
-      SNAPREALM,
-    };
-
-    ValidationContinuation(CInode *i,
-                           CInode::validated_data *data_r,
-                           MDSContext *fin_) :
-                             MDSContinuation(i->mdcache->mds->server),
-                             fin(fin_),
-                             in(i),
-                             results(data_r),
-                             shadow_in(NULL) {
-      set_callback(START, static_cast<Continuation::stagePtr>(&ValidationContinuation::_start));
-      set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
-      set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
-      set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
-      set_callback(SNAPREALM, static_cast<Continuation::stagePtr>(&ValidationContinuation::_snaprealm));
-    }
-
-    ~ValidationContinuation() override {
-      if (shadow_in) {
-	delete shadow_in;
-	in->mdcache->num_shadow_inodes--;
-      }
-    }
-
-    /**
-     * Fetch backtrace and set tag if tag is non-empty
-     */
-    void fetch_backtrace_and_tag(CInode *in,
-                                 std::string_view tag, bool is_internal,
-                                 Context *fin, int *bt_r, bufferlist *bt)
-    {
-      const int64_t pool = in->get_backtrace_pool();
-      object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
-
-      ObjectOperation fetch;
-      fetch.getxattr("parent", bt, bt_r);
-      in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
-				       NULL, 0, fin);
-      using ceph::encode;
-      if (!is_internal) {
-        ObjectOperation scrub_tag;
-        bufferlist tag_bl;
-        encode(tag, tag_bl);
-        scrub_tag.setxattr("scrub_tag", tag_bl);
-        SnapContext snapc;
-        in->mdcache->mds->objecter->mutate(oid, object_locator_t(pool), scrub_tag, snapc,
-					   ceph::real_clock::now(),
-					   0, NULL);
-      }
-    }
-
-    bool _start(int rval) {
-      if (in->is_dirty()) {
-	MDCache *mdcache = in->mdcache;
-	mempool_inode& inode = in->inode;
-	dout(20) << "validating a dirty CInode; results will be inconclusive"
-		 << dendl;
-      }
-      if (in->is_symlink()) {
-	// there's nothing to do for symlinks!
-	return true;
-      }
-
-      // prefetch snaprealm's past parents
-      if (in->snaprealm && !in->snaprealm->have_past_parents_open())
-	in->snaprealm->open_parents(nullptr);
-
-      C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
-					    in->mdcache->mds->finisher);
-
-      std::string_view tag = in->scrub_infop->header->get_tag();
-      bool is_internal = in->scrub_infop->header->is_internal_tag();
-      // Rather than using the usual CInode::fetch_backtrace,
-      // use a special variant that optionally writes a tag in the same
-      // operation.
-      fetch_backtrace_and_tag(in, tag, is_internal, conf, &results->backtrace.ondisk_read_retval, &bl);
-      return false;
-    }
-
-    bool _backtrace(int rval) {
-      // set up basic result reporting and make sure we got the data
-      results->performed_validation = true; // at least, some of it!
-      results->backtrace.checked = true;
-
-      const int64_t pool = in->get_backtrace_pool();
-      inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
-      in->build_backtrace(pool, memory_backtrace);
-      bool equivalent, divergent;
-      int memory_newer;
-
-      MDCache *mdcache = in->mdcache;  // For the benefit of dout
-      const mempool_inode& inode = in->inode;  // For the benefit of dout
-
-      // Ignore rval because it's the result of a FAILOK operation
-      // from fetch_backtrace_and_tag: the real result is in
-      // backtrace.ondisk_read_retval
-      dout(20) << "ondisk_read_retval: " << results->backtrace.ondisk_read_retval << dendl;
-      if (results->backtrace.ondisk_read_retval != 0) {
-        results->backtrace.error_str << "failed to read off disk; see retval";
-	goto next;
-      }
-
-      // extract the backtrace, and compare it to a newly-constructed one
-      try {
-        auto p = bl.cbegin();
-	using ceph::decode;
-        decode(results->backtrace.ondisk_value, p);
-        dout(10) << "decoded " << bl.length() << " bytes of backtrace successfully" << dendl;
-      } catch (buffer::error&) {
-        if (results->backtrace.ondisk_read_retval == 0 && rval != 0) {
-          // Cases where something has clearly gone wrong with the overall
-          // fetch op, though we didn't get a nonzero rc from the getxattr
-          // operation.  e.g. object missing.
-          results->backtrace.ondisk_read_retval = rval;
-        }
-        results->backtrace.error_str << "failed to decode on-disk backtrace ("
-                                     << bl.length() << " bytes)!";
-	goto next;
-      }
-
-      memory_newer = memory_backtrace.compare(results->backtrace.ondisk_value,
-					      &equivalent, &divergent);
-
-      if (divergent || memory_newer < 0) {
-	// we're divergent, or on-disk version is newer
-	results->backtrace.error_str << "On-disk backtrace is divergent or newer";
-      } else {
-        results->backtrace.passed = true;
-      }
-next:
-
-      if (!results->backtrace.passed && in->scrub_infop->header->get_repair()) {
-        std::string path;
-        in->make_path_string(path);
-        in->mdcache->mds->clog->warn() << "bad backtrace on inode " << in->ino()
-                                       << "(" << path << "), rewriting it";
-        in->mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
-                           false);
-        // Flag that we repaired this BT so that it won't go into damagetable
-        results->backtrace.repaired = true;
-      }
-
-      // If the inode's number was free in the InoTable, fix that
-      // (#15619)
-      {
-        InoTable *inotable = mdcache->mds->inotable;
-
-        dout(10) << "scrub: inotable ino = " << inode.ino << dendl;
-        dout(10) << "scrub: inotable free says "
-          << inotable->is_marked_free(inode.ino) << dendl;
-
-        if (inotable->is_marked_free(inode.ino)) {
-          LogChannelRef clog = in->mdcache->mds->clog;
-          clog->error() << "scrub: inode wrongly marked free: " << inode.ino;
-
-          if (in->scrub_infop->header->get_repair()) {
-            bool repaired = inotable->repair(inode.ino);
-            if (repaired) {
-              clog->error() << "inode table repaired for inode: " << inode.ino;
-
-              inotable->save();
-            } else {
-              clog->error() << "Cannot repair inotable while other operations"
-                " are in progress";
-            }
-          }
-        }
-      }
-
-
-      if (in->is_dir()) {
-	return validate_directory_data();
-      } else {
-	// TODO: validate on-disk inode for normal files
-	return check_inode_snaprealm();
-      }
-    }
-
-    bool validate_directory_data() {
-      ceph_assert(in->is_dir());
-
-      if (in->is_base()) {
-	if (!shadow_in) {
-	  shadow_in = new CInode(in->mdcache);
-	  in->mdcache->create_unlinked_system_inode(shadow_in, in->inode.ino, in->inode.mode);
-	  in->mdcache->num_shadow_inodes++;
-	}
-        shadow_in->fetch(get_internal_callback(INODE));
-        return false;
-      } else {
-	// TODO: validate on-disk inode for non-base directories
-	results->inode.passed = true;
-	return check_dirfrag_rstats();
-      }
-    }
-
-    bool _inode_disk(int rval) {
-      results->inode.checked = true;
-      results->inode.ondisk_read_retval = rval;
-      results->inode.ondisk_value = shadow_in->inode;
-      results->inode.memory_value = in->inode;
-
-      mempool_inode& si = shadow_in->inode;
-      mempool_inode& i = in->inode;
-      if (si.version > i.version) {
-        // uh, what?
-        results->inode.error_str << "On-disk inode is newer than in-memory one; ";
-	goto next;
-      } else {
-        bool divergent = false;
-        int r = i.compare(si, &divergent);
-        results->inode.passed = !divergent && r >= 0;
-        if (!results->inode.passed) {
-          results->inode.error_str <<
-              "On-disk inode is divergent or newer than in-memory one; ";
-	  goto next;
-        }
-      }
-next:
-      return check_dirfrag_rstats();
-    }
-
-    bool check_dirfrag_rstats() {
-      MDSGatherBuilder gather(g_ceph_context);
-      frag_vec_t leaves;
-      in->dirfragtree.get_leaves(leaves);
-      // the frag may not be mine
-      MDRequestRef mdr = in->mdcache->request_start_internal(CEPH_MDS_OP_RDLOCK_FRAGSSTATS);
-      mdr->pin(in);
-      mdr->internal_op_private = in;
-      mdr->internal_op_finish = gather.new_sub();
-      
-      for (const auto& leaf : leaves) {
-        CDir *dir = in->get_or_open_dirfrag(in->mdcache, leaf);
-	dir->scrub_info();
-	if (!dir->scrub_infop->header)
-	  dir->scrub_infop->header = in->scrub_infop->header;
-        if (dir->is_complete()) {
-	  dir->scrub_local();
-	} else {
-	  dir->scrub_infop->need_scrub_local = true;
-	  dir->fetch(gather.new_sub(), false);
-	}
-      }
-      // get rdlock
-      in->mdcache->dispatch_request(mdr);
-
-      if (gather.has_subs()) {
-        gather.set_finisher(get_internal_callback(DIRFRAGS));
-        gather.activate();
-        return false;
-      } else {
-        return immediate(DIRFRAGS, 0);
-      }
-    }
-
-    bool _dirfrags(int rval) {
-      int frags_errors = 0;
-      // basic reporting setup
-      results->raw_stats.checked = true;
-      results->raw_stats.ondisk_read_retval = rval;
-
-      results->raw_stats.memory_value.dirstat = in->inode.dirstat;
-      results->raw_stats.memory_value.rstat = in->inode.rstat;
-      frag_info_t& dir_info = results->raw_stats.ondisk_value.dirstat;
-      nest_info_t& nest_info = results->raw_stats.ondisk_value.rstat;
-
-      if (rval != 0) {
-        results->raw_stats.error_str << "Failed to read dirfrags off disk";
-	goto next;
-      }
-
-      // check each dirfrag...
-      for (const auto &p : in->dirfrags) {
-	CDir *dir = p.second;
-	ceph_assert(dir->get_version() > 0);
-	nest_info.add(dir->fnode.accounted_rstat);
-	dir_info.add(dir->fnode.accounted_fragstat);
-	if (dir->scrub_infop->pending_scrub_error) {
-	  dir->scrub_infop->pending_scrub_error = false;
-	  if (dir->scrub_infop->header->get_repair()) {
-            results->raw_stats.repaired = true;
-	    results->raw_stats.error_str
-	      << "dirfrag(" << p.first << ") has bad stats (will be fixed); ";
-	  } else {
-	    results->raw_stats.error_str
-	      << "dirfrag(" << p.first << ") has bad stats; ";
-	  }
-	  frags_errors++;
-	}
-      }
-      nest_info.rsubdirs++; // it gets one to account for self
-      if (const sr_t *srnode = in->get_projected_srnode(); srnode)
-	nest_info.rsnaps += srnode->snaps.size();
-
-      // ...and that their sum matches our inode settings
-      if (!dir_info.same_sums(in->inode.dirstat) ||
-	  !nest_info.same_sums(in->inode.rstat)) {
-	if (in->scrub_infop->header->get_repair()) {
-	  results->raw_stats.error_str
-	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
-	  in->mdcache->repair_inode_stats(in);
-          results->raw_stats.repaired = true;
-	} else {
-	  results->raw_stats.error_str
-	    << "freshly-calculated rstats don't match existing ones";
-	}
-	goto next;
-      }
-      if (frags_errors > 0)
-	goto next;
-
-      results->raw_stats.passed = true;
-next:
-      // snaprealm
-      return check_inode_snaprealm();
-    }
-
-    bool check_inode_snaprealm() {
-      if (!in->snaprealm)
-	return true;
-
-      if (!in->snaprealm->have_past_parents_open()) {
-	in->snaprealm->open_parents(get_internal_callback(SNAPREALM));
-	return false;
-      } else {
-	return immediate(SNAPREALM, 0);
-      }
-    }
-
-    bool _snaprealm(int rval) {
-
-      if (in->snaprealm->past_parents_dirty ||
-	  !in->get_projected_srnode()->past_parents.empty()) {
-	// temporarily store error in field of on-disk inode validation temporarily
-	results->inode.checked = true;
-	results->inode.passed = false;
-	if (in->scrub_infop->header->get_repair()) {
-	  results->inode.error_str << "Inode has old format snaprealm (will upgrade)";
-	  results->inode.repaired = true;
-	  in->mdcache->upgrade_inode_snaprealm(in);
-	} else {
-	  results->inode.error_str << "Inode has old format snaprealm";
-	}
-      }
-      return true;
-    }
-
-    void _done() override {
-      if ((!results->raw_stats.checked || results->raw_stats.passed) &&
-	  (!results->backtrace.checked || results->backtrace.passed) &&
-	  (!results->inode.checked || results->inode.passed))
-	results->passed_validation = true;
-
-      // Flag that we did some repair work so that our repair operation
-      // can be flushed at end of scrub
-      if (results->backtrace.repaired ||
-	  results->inode.repaired ||
-	  results->raw_stats.repaired)
-	in->scrub_infop->header->set_repaired();
-      if (fin)
-	fin->complete(get_rval());
-    }
-  };
-
-
   dout(10) << "scrub starting validate_disk_state on " << *this << dendl;
   ValidationContinuation *vc = new ValidationContinuation(this,
                                                           results,
@@ -5245,6 +4865,329 @@ void CInode::get_subtree_dirfrags(std::vector<CDir*>& v) const
     if (dir->is_subtree_root())
       v.push_back(dir);
   }
+}
+
+//
+CInode::ValidationContinuation::ValidationContinuation(CInode *i,
+						       CInode::validated_data *data_r,
+						       MDSContext *fin_) :
+  MDSContinuation(i->mdcache->mds->server),
+  fin(fin_),
+  in(i),
+  results(data_r),
+  shadow_in(NULL) {
+  set_callback(START, static_cast<Continuation::stagePtr>(&ValidationContinuation::_start));
+  set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
+  set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
+  set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
+  set_callback(CHKSNAPREALM, static_cast<Continuation::stagePtr>(&ValidationContinuation::_check_inode_snaprealm));
+  set_callback(SNAPREALM, static_cast<Continuation::stagePtr>(&ValidationContinuation::_snaprealm));
+}
+
+CInode::ValidationContinuation::~ValidationContinuation() {
+  if (shadow_in) {
+    delete shadow_in;
+    in->mdcache->num_shadow_inodes--;
+  }
+}
+
+/**
+ * Fetch backtrace and set tag if tag is non-empty
+ */
+void CInode::ValidationContinuation::fetch_backtrace_and_tag(CInode *in,
+							     std::string_view tag, bool is_internal,
+							     Context *fin, int *bt_r, bufferlist *bt)
+{
+  const int64_t pool = in->get_backtrace_pool();
+  object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
+  
+  ObjectOperation fetch;
+  fetch.getxattr("parent", bt, bt_r);
+  in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
+				   NULL, 0, fin);
+  using ceph::encode;
+  if (!is_internal) {
+    ObjectOperation scrub_tag;
+    bufferlist tag_bl;
+    encode(tag, tag_bl);
+    scrub_tag.setxattr("scrub_tag", tag_bl);
+    SnapContext snapc;
+    in->mdcache->mds->objecter->mutate(oid, object_locator_t(pool), scrub_tag, snapc,
+				       ceph::real_clock::now(),
+				       0, NULL);
+  }
+}
+
+bool CInode::ValidationContinuation::_start(int rval) {
+  if (in->is_dirty()) {
+    MDCache *mdcache = in->mdcache;
+    mempool_inode& inode = in->inode;
+    dout(20) << "validating a dirty CInode; results will be inconclusive"
+	     << dendl;
+  }
+  if (in->is_symlink()) {
+    // there's nothing to do for symlinks!
+    return true;
+  }
+  
+  // prefetch snaprealm's past parents
+  if (in->snaprealm && !in->snaprealm->have_past_parents_open())
+    in->snaprealm->open_parents(nullptr);
+  
+  C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
+					in->mdcache->mds->finisher);
+  
+  std::string_view tag = in->scrub_infop->header->get_tag();
+  bool is_internal = in->scrub_infop->header->is_internal_tag();
+  // Rather than using the usual CInode::fetch_backtrace,
+  // use a special variant that optionally writes a tag in the same
+  // operation.
+  fetch_backtrace_and_tag(in, tag, is_internal, conf, &results->backtrace.ondisk_read_retval, &bl);
+  return false;
+}
+
+bool CInode::ValidationContinuation::_backtrace(int rval) {
+  // set up basic result reporting and make sure we got the data
+  results->performed_validation = true; // at least, some of it!
+  results->backtrace.checked = true;
+  
+  const int64_t pool = in->get_backtrace_pool();
+  inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
+  in->build_backtrace(pool, memory_backtrace);
+  bool equivalent, divergent;
+  int memory_newer;
+  
+  MDCache *mdcache = in->mdcache;  // For the benefit of dout
+  const mempool_inode& inode = in->inode;  // For the benefit of dout
+  
+  // Ignore rval because it's the result of a FAILOK operation
+  // from fetch_backtrace_and_tag: the real result is in
+  // backtrace.ondisk_read_retval
+  dout(20) << "ondisk_read_retval: " << results->backtrace.ondisk_read_retval << dendl;
+  if (results->backtrace.ondisk_read_retval != 0) {
+    results->backtrace.error_str << "failed to read off disk; see retval";
+    goto next;
+  }
+  
+  // extract the backtrace, and compare it to a newly-constructed one
+  try {
+    auto p = bl.cbegin();
+    using ceph::decode;
+    decode(results->backtrace.ondisk_value, p);
+    dout(10) << "decoded " << bl.length() << " bytes of backtrace successfully" << dendl;
+  } catch (buffer::error&) {
+    if (results->backtrace.ondisk_read_retval == 0 && rval != 0) {
+      // Cases where something has clearly gone wrong with the overall
+      // fetch op, though we didn't get a nonzero rc from the getxattr
+      // operation.  e.g. object missing.
+      results->backtrace.ondisk_read_retval = rval;
+    }
+    results->backtrace.error_str << "failed to decode on-disk backtrace ("
+				 << bl.length() << " bytes)!";
+    goto next;
+  }
+  
+  memory_newer = memory_backtrace.compare(results->backtrace.ondisk_value,
+					  &equivalent, &divergent);
+  
+  if (divergent || memory_newer < 0) {
+    // we're divergent, or on-disk version is newer
+    results->backtrace.error_str << "On-disk backtrace is divergent or newer";
+  } else {
+    results->backtrace.passed = true;
+  }
+ next:
+  
+  if (!results->backtrace.passed && in->scrub_infop->header->get_repair()) {
+    std::string path;
+    in->make_path_string(path);
+    in->mdcache->mds->clog->warn() << "bad backtrace on inode " << in->ino()
+				   << "(" << path << "), rewriting it";
+    in->mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
+			  false);
+    // Flag that we repaired this BT so that it won't go into damagetable
+    results->backtrace.repaired = true;
+  }
+  
+  // If the inode's number was free in the InoTable, fix that
+  // (#15619)
+  {
+    InoTable *inotable = mdcache->mds->inotable;
+    
+    dout(10) << "scrub: inotable ino = " << inode.ino << dendl;
+    dout(10) << "scrub: inotable free says "
+	     << inotable->is_marked_free(inode.ino) << dendl;
+    
+    if (inotable->is_marked_free(inode.ino)) {
+      LogChannelRef clog = in->mdcache->mds->clog;
+      clog->error() << "scrub: inode wrongly marked free: " << inode.ino;
+      
+      if (in->scrub_infop->header->get_repair()) {
+	bool repaired = inotable->repair(inode.ino);
+	if (repaired) {
+	  clog->error() << "inode table repaired for inode: " << inode.ino;
+	  
+	  inotable->save();
+	} else {
+	  clog->error() << "Cannot repair inotable while other operations"
+	    " are in progress";
+	}
+      }
+    }
+  }
+  
+  
+  if (in->is_dir()) {
+    return validate_directory_data();
+  } else {
+    // TODO: validate on-disk inode for normal files
+    return immediate(CHKSNAPREALM, 0);
+  }
+}
+
+bool CInode::ValidationContinuation::validate_directory_data() {
+  ceph_assert(in->is_dir());
+  
+  if (in->is_base()) {
+    if (!shadow_in) {
+      shadow_in = new CInode(in->mdcache);
+      in->mdcache->create_unlinked_system_inode(shadow_in, in->inode.ino, in->inode.mode);
+      in->mdcache->num_shadow_inodes++;
+    }
+    shadow_in->fetch(get_internal_callback(INODE));
+    return false;
+  } else {
+    // TODO: validate on-disk inode for non-base directories
+    results->inode.passed = true;
+    return immediate(DIRFRAGS, 0);
+  }
+}
+
+bool CInode::ValidationContinuation::_inode_disk(int rval) {
+  results->inode.checked = true;
+  results->inode.ondisk_read_retval = rval;
+  results->inode.ondisk_value = shadow_in->inode;
+  results->inode.memory_value = in->inode;
+  
+  mempool_inode& si = shadow_in->inode;
+  mempool_inode& i = in->inode;
+  if (si.version > i.version) {
+    // uh, what?
+    results->inode.error_str << "On-disk inode is newer than in-memory one; ";
+    goto next;
+  } else {
+    bool divergent = false;
+    int r = i.compare(si, &divergent);
+    results->inode.passed = !divergent && r >= 0;
+    if (!results->inode.passed) {
+      results->inode.error_str <<
+	"On-disk inode is divergent or newer than in-memory one; ";
+      goto next;
+    }
+  }
+ next:
+  return immediate(DIRFRAGS, 0);
+}
+
+bool CInode::ValidationContinuation::_dirfrags(int rval) {
+  // basic reporting setup
+  results->raw_stats.checked = true;
+  results->raw_stats.ondisk_read_retval = rval;
+  
+  results->raw_stats.memory_value.dirstat = in->inode.dirstat;
+  results->raw_stats.memory_value.rstat = in->inode.rstat;
+  
+  if (rval != 0) {
+    results->raw_stats.error_str << "Failed to read dirfrags off disk";
+    return immediate(CHKSNAPREALM, 0);
+  }
+  
+  MDRequestRef mdr = in->mdcache->request_start_internal(CEPH_MDS_OP_FRAGSSTATS);
+  mdr->pin(in);
+  mdr->internal_op_private = this;
+  mdr->internal_op_finish = get_internal_callback(CHKSNAPREALM);
+  in->mdcache->mds->queue_waiter(new C_MDS_RetryRequest(in->mdcache, mdr));
+  return false;
+}
+
+void CInode::ValidationContinuation::dirfrags() {
+  frag_info_t& dir_info = results->raw_stats.ondisk_value.dirstat;
+  nest_info_t& nest_info = results->raw_stats.ondisk_value.rstat;
+  // check each dirfrag...
+  for (const auto &p : in->dirfrags) {
+    CDir *dir = p.second;
+    ceph_assert(dir);
+    ceph_assert(dir->get_version() > 0);
+    nest_info.add(dir->fnode.accounted_rstat);
+    dir_info.add(dir->fnode.accounted_fragstat);
+  }
+  nest_info.rsubdirs++; // it gets one to account for self
+  if (const sr_t *srnode = in->get_projected_srnode(); srnode)
+    nest_info.rsnaps += srnode->snaps.size();
+  
+  // ...and that their sum matches our inode settings
+  if (!dir_info.same_sums(in->inode.dirstat) ||
+      !nest_info.same_sums(in->inode.rstat)) {
+    if (in->scrub_infop->header->get_repair()) {
+      results->raw_stats.error_str
+	<< "freshly-calculated rstats don't match existing ones (will be fixed)";
+      in->mdcache->repair_inode_stats(in);
+      results->raw_stats.repaired = true;
+    } else {
+      results->raw_stats.error_str
+	<< "freshly-calculated rstats don't match existing ones";
+    }
+    return;
+  }
+  
+  results->raw_stats.passed = true;
+  return;
+}
+
+bool CInode::ValidationContinuation::_check_inode_snaprealm(int rval) {
+  if (!in->snaprealm)
+    return true;
+  
+  if (!in->snaprealm->have_past_parents_open()) {
+    in->snaprealm->open_parents(get_internal_callback(SNAPREALM));
+    return false;
+  } else {
+    return immediate(SNAPREALM, 0);
+  }
+}
+
+bool CInode::ValidationContinuation::_snaprealm(int rval) {
+  
+  if (in->snaprealm->past_parents_dirty ||
+      !in->get_projected_srnode()->past_parents.empty()) {
+    // temporarily store error in field of on-disk inode validation temporarily
+    results->inode.checked = true;
+    results->inode.passed = false;
+    if (in->scrub_infop->header->get_repair()) {
+      results->inode.error_str << "Inode has old format snaprealm (will upgrade)";
+      results->inode.repaired = true;
+      in->mdcache->upgrade_inode_snaprealm(in);
+    } else {
+      results->inode.error_str << "Inode has old format snaprealm";
+    }
+  }
+  return true;
+}
+
+void CInode::ValidationContinuation::_done() {
+  if ((!results->raw_stats.checked || results->raw_stats.passed) &&
+      (!results->backtrace.checked || results->backtrace.passed) &&
+      (!results->inode.checked || results->inode.passed))
+    results->passed_validation = true;
+  
+  // Flag that we did some repair work so that our repair operation
+  // can be flushed at end of scrub
+  if (results->backtrace.repaired ||
+      results->inode.repaired ||
+      results->raw_stats.repaired)
+    in->scrub_infop->header->set_repaired();
+  if (fin)
+    fin->complete(get_rval());
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CInode, co_inode, mds_co);

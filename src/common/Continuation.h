@@ -11,7 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
-
+#ifndef CEPH_CONTINUATION_H
+#define CEPH_CONTINUATION_H
 #include "include/Context.h"
 
 /**
@@ -172,3 +173,4 @@ public:
    */
   void begin() { stages_in_flight.insert(0); continue_function(0, 0); }
 };
+#endif // CEPH_CONTINUATION_H

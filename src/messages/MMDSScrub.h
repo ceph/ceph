@@ -32,6 +32,7 @@ class MMDSScrub : public SafeMessage {
     bool repair = false;
     
  protected:
+ MMDSScrub() : SafeMessage{MSG_MDS_SCRUB} {}
  MMDSScrub(inodeno_t _ino, bool _scrub_frag, frag_t _frag,
            bool _force, bool _recursive, bool _repair)
      : SafeMessage{MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION},

@@ -11,23 +11,22 @@
  * Foundation.  See file COPYING.
  *
  */
- 
+#ifndef CEPH_MDSCONTINUATION_H
+#define CEPH_MDSCONTINUATION_H
+
 #include "common/Continuation.h"
 #include "mds/Mutation.h"
-#include "mds/Server.h"
-
 #include "MDSContext.h"
- 
+class Server;
 class MDSContinuation : public Continuation {
 protected:
   Server *server;
-  MDSContext *get_internal_callback(int stage) {
-    return new MDSInternalContextWrapper(server->mds, get_callback(stage));
-  }
-  MDSIOContextBase *get_io_callback(int stage) {
-    return new MDSIOContextWrapper(server->mds, get_callback(stage));
-  }
+  MDSContext *get_internal_callback(int stage);
+  MDSIOContextBase *get_io_callback(int stage);
+  
 public:
   MDSContinuation(Server *s) :
     Continuation(NULL), server(s) {}
 };
+
+#endif // CEPH_CONTINUATION_H

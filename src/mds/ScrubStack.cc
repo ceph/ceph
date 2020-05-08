@@ -187,18 +187,10 @@ void ScrubStack::kick_off_scrubs()
        scrub_file_inode(curi);
        can_continue = true;
       } else {
-       bool completed; // it's done, so pop it off the stack
-       // bool terminal; // not done, but we can start ops on other directories
-       // bool progress; // it added new dentries to the top of the stack
-       scrub_dir_inode(curi, &completed);
-       if (completed) {
+       scrub_dir_inode(curi);
          dout(20) << __func__ << " dir completed" << dendl;
          pop_inode(curi);
          it = scrub_stack.begin();
-       } else {
-         dout(20) << __func__ << " unknow error " << dendl;
-         can_continue = false;   // wait for fetching the cdir
-       }
       }
     } else if ((dir = dynamic_cast<CDir*>(*it))){
       ++it; // we have our reference, push iterator forward      
@@ -224,12 +216,9 @@ void ScrubStack::kick_off_scrubs()
   }
 }
 
-void ScrubStack::scrub_dir_inode(CInode *in,
-                                 bool *done)
+void ScrubStack::scrub_dir_inode(CInode *in)
 {
   dout(10) << __func__ << " " << *in << dendl;
-
-  bool all_frags_done = true;
 
   ScrubHeaderRef header = in->get_scrub_header();
   ceph_assert(header != nullptr);
@@ -271,15 +260,11 @@ void ScrubStack::scrub_dir_inode(CInode *in,
     dout(20) << "!scrub_recursive" << dendl;
   }
 
-  if (all_frags_done) {
+  // OK, so now I can... fire off a validate on the dir inode, and
+  // when it completes, come through here again, noticing that we've
+  // set a flag to indicate the validate happened, and 
+  scrub_dir_inode_final(in);
 
-    // OK, so now I can... fire off a validate on the dir inode, and
-    // when it completes, come through here again, noticing that we've
-    // set a flag to indicate the validate happened, and 
-    scrub_dir_inode_final(in);
-  }
-
-  *done = all_frags_done;
   return;
 }
 
@@ -375,7 +360,8 @@ void ScrubStack::scrub_dirfrag(CDir *dir,
       dir->fetch(&scrub_kick);
       return;
     }
-
+    
+    dir->scrub_local();
     dir->scrub_initialize();
   }
 

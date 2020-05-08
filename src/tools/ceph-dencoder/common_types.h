@@ -271,6 +271,9 @@ MESSAGE(MMDSSlaveRequest)
 #include "messages/MMDSSnapUpdate.h"
 MESSAGE(MMDSSnapUpdate)
 
+#include "messages/MMDSScrub.h"
+MESSAGE(MMDSScrub)
+
 #include "messages/MMDSTableRequest.h"
 MESSAGE(MMDSTableRequest)
 

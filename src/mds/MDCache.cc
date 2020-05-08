@@ -3317,7 +3317,14 @@ void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 
 void MDCache::handle_scrub(const cref_t<MMDSScrub> &m)
 {
-  enqueue_scrub(m->get_ino(), "", m->scrub_dir(), m->get_frag(), m->is_force(), m->is_recursive(), m->is_repair(), NULL, NULL);
+  enqueue_scrub(m->get_ino(), "",
+		m->scrub_dir(),
+		m->get_frag(),
+		m->is_force(),
+		m->is_recursive(),
+		m->is_repair(),
+		Formatter::create("json", "json-pretty", "json-pretty"),
+		NULL);
 }
 void MDCache::process_delayed_resolve()
 {
@@ -9611,7 +9618,7 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_UPGRADE_SNAPREALM:
       upgrade_inode_snaprealm_work(mdr);
       break;
-    case CEPH_MDS_OP_RDLOCK_FRAGSSTATS:
+    case CEPH_MDS_OP_FRAGSSTATS:
       rdlock_frags_stats_work(mdr);
       break;
     default:
@@ -12715,7 +12722,7 @@ void MDCache::enqueue_scrub(
     bool force, bool recursive, bool repair,
     Formatter *f, Context *fin)
 {
-  dout(10) << __func__ << " " << fp << dendl;
+  dout(10) << __func__ << " " << fp << "(" << scrub_frag << ":" << frag << ")"<< dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
   mdr->set_filepath(fp);
 
@@ -12740,13 +12747,13 @@ void MDCache::enqueue_scrub(
 
 void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 {
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
-  if (NULL == in)
+  dout(20) << __func__ << mdr << dendl;
+  CInode *in = get_inode(mdr->get_filepath().get_ino());
+  if (NULL == in){
+    dout(20) << __func__ << " " << mdr << " : failed to get CIndoe"<< dendl;
     return;
-
-  // TODO: Remove this restriction
-  ceph_assert(in->is_auth());
-
+  }
+ 
   C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
   ScrubHeaderRef header = cs->header;
 
@@ -12825,7 +12832,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     mds->mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, flush_finish));
   });
 
-  mds->scrubstack->enqueue_inode_top(it, header,
+  mds->scrubstack->enqueue_inode_bottom(it, header,
                                       new MDSInternalContextWrapper(mds, scrub_finish));
 
   mds->server->respond_to_request(mdr, 0);
@@ -13067,7 +13074,8 @@ do_rdlocks:
 }
 void MDCache::rdlock_frags_stats_work(MDRequestRef& mdr)
 {
-  CInode *diri = static_cast<CInode*>(mdr->internal_op_private);
+  CInode::ValidationContinuation *vc = static_cast<CInode::ValidationContinuation*>(mdr->internal_op_private);
+  CInode *diri = vc->in;
   dout(10) << __func__ << " " << *diri << dendl;
   if (!diri->is_auth()) {
     mds->server->respond_to_request(mdr, -ESTALE);
@@ -13084,6 +13092,9 @@ void MDCache::rdlock_frags_stats_work(MDRequestRef& mdr)
   lov.add_rdlock(&diri->filelock);
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
+  dout(10) << __func__ << " start dirfrags : " << *diri << dendl;
+  vc->dirfrags();
+  
   mds->server->respond_to_request(mdr, 0);
 }
 void MDCache::upgrade_inode_snaprealm(CInode *in)
