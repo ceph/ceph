@@ -3,7 +3,7 @@
 SCRIPT_NAME=$(basename ${BASH_SOURCE[0]})
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CEPHADM_SRC_DIR=${SCRIPT_DIR}/../../../src/cephadm
-CORPUS_COMMIT=50c5dd734638939facd1ed32295ce59c9a5986b4
+CORPUS_COMMIT=97996ce562731a7260ab9d90649af3ff4b5fff3f
 
 [ -z "$SUDO" ] && SUDO=sudo
 if [ -z "$CEPHADM" ]; then
