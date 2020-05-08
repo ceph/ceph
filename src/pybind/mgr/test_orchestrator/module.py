@@ -165,11 +165,10 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         types = ("mds", "osd", "mon", "rgw", "mgr")
         out = map(str, check_output(['ps', 'aux']).splitlines())
         processes = [p for p in out if any(
-            [('ceph-' + t in p) for t in types])]
+            [('ceph-{} '.format(t) in p) for t in types])]
 
         daemons = []
         for p in processes:
-            daemon = orchestrator.DaemonDescription()
             # parse daemon type
             m = re.search('ceph-([^ ]+)', p)
             if m:
@@ -179,7 +178,6 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             # parse daemon ID. Possible options: `-i <id>`, `--id=<id>`, `--id <id>`
             patterns = [r'-i\s(\w+)', r'--id[\s=](\w+)']
-            daemon_id = None
             for pattern in patterns:
                 m = re.search(pattern, p)
                 if m:
