@@ -3,6 +3,7 @@
 
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockSafeTimer.h"
+#include "librbd/io/AsyncOperation.h"
 
 static MockSafeTimer *s_timer;
 static ceph::mutex *s_timer_lock;
@@ -21,6 +22,17 @@ void MockImageCtx::get_timer_instance(CephContext *cct, MockSafeTimer **timer,
                                       ceph::mutex **timer_lock) {
   *timer = s_timer;
   *timer_lock = s_timer_lock;
+}
+
+void MockImageCtx::wait_for_async_ops() {
+  io::AsyncOperation async_op;
+  async_op.start_op(*image_ctx);
+
+  C_SaferCond ctx;
+  async_op.flush(&ctx);
+  ctx.wait();
+
+  async_op.finish_op();
 }
 
 } // namespace librbd
