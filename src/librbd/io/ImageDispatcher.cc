@@ -8,6 +8,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatch.h"
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -115,6 +116,25 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
 
   auto refresh_image_dispatch = new RefreshImageDispatch(image_ctx);
   this->register_dispatch(refresh_image_dispatch);
+}
+
+template <typename I>
+void ImageDispatcher<I>::shut_down(Context* on_finish) {
+  // TODO ensure all IOs are executed via a dispatcher
+  // ensure read-ahead / copy-on-read ops are finished since they are
+  // currently outside dispatcher tracking
+  auto async_op = new AsyncOperation();
+
+  on_finish = new LambdaContext([this, async_op, on_finish](int r) {
+      async_op->finish_op();
+      delete async_op;
+      on_finish->complete(0);
+    });
+  on_finish = new LambdaContext([this, async_op, on_finish](int r) {
+      async_op->start_op(*this->m_image_ctx);
+      async_op->flush(on_finish);
+    });
+  Dispatcher<I, ImageDispatcherInterface>::shut_down(on_finish);
 }
 
 template <typename I>

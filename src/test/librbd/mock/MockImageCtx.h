@@ -116,8 +116,9 @@ struct MockImageCtx {
     }
   }
 
-  ~MockImageCtx() {
+  virtual ~MockImageCtx() {
     wait_for_async_requests();
+    wait_for_async_ops();
     image_ctx->md_ctx.aio_flush();
     image_ctx->data_ctx.aio_flush();
     image_ctx->op_work_queue->drain();
@@ -129,6 +130,7 @@ struct MockImageCtx {
     delete io_object_dispatcher;
   }
 
+  void wait_for_async_ops();
   void wait_for_async_requests() {
     async_ops_lock.lock();
     if (async_requests.empty()) {

@@ -26,6 +26,10 @@ struct MockTestImageCtx : public MockImageCtx {
     : MockImageCtx(image_ctx) {
     parent = mock_parent_image_ctx;
   }
+  ~MockTestImageCtx() override {
+    // copyups need to complete prior to attempting to delete this object
+    wait_for_async_ops();
+  }
 
   std::map<uint64_t, librbd::io::CopyupRequest<librbd::MockTestImageCtx>*> copyup_list;
 };
