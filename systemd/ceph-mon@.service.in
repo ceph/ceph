@@ -7,32 +7,35 @@ Description=Ceph cluster monitor daemon
 # configuration.
 After=network-online.target local-fs.target time-sync.target
 Wants=network-online.target local-fs.target time-sync.target
-
 PartOf=ceph-mon.target
 
 [Service]
+Environment=CLUSTER=ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 LimitNOFILE=1048576
 LimitNPROC=1048576
-EnvironmentFile=-@SYSTEMD_ENV_FILE@
-Environment=CLUSTER=ceph
-ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
-ExecReload=/bin/kill -HUP $MAINPID
 LockPersonality=true
 MemoryDenyWriteExecute=true
 # Need NewPrivileges via `sudo smartctl`
 NoNewPrivileges=false
 PrivateDevices=yes
+PrivateTmp=true
+ProtectClock=true
 ProtectControlGroups=true
 ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
 ProtectKernelModules=true
 ProtectKernelTunables=true
 ProtectSystem=full
-PrivateTmp=true
-TasksMax=infinity
 Restart=on-failure
-StartLimitInterval=30min
-StartLimitBurst=5
 RestartSec=10
+RestrictSUIDSGID=true
+StartLimitBurst=5
+StartLimitInterval=30min
+TasksMax=infinity
 
 [Install]
 WantedBy=ceph-mon.target
