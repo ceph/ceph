@@ -7634,7 +7634,7 @@ int RGWHandler::error_handler(int err_no, string *error_content) {
 std::ostream& RGWOp::gen_prefix(std::ostream& out) const
 {
   // append <dialect>:<op name> to the prefix
-  return s->gen_prefix(out) << s->dialect << ':' << name() << ' ';
+  return s->gen_prefix(out) << s->dialect << ':' << name() << ":" << s->decoded_uri << ": ";
 }
 
 void RGWDefaultResponseOp::send_response() {
