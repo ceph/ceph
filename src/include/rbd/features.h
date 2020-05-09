@@ -12,6 +12,7 @@
 #define RBD_FEATURE_OPERATIONS          (1ULL<<8)
 #define RBD_FEATURE_MIGRATING           (1ULL<<9)
 #define RBD_FEATURE_NON_PRIMARY         (1ULL<<10)
+#define RBD_FEATURE_IMAGE_CACHE         (1ULL<<11)
 
 #define RBD_FEATURES_DEFAULT             (RBD_FEATURE_LAYERING | \
                                          RBD_FEATURE_EXCLUSIVE_LOCK | \
@@ -30,12 +31,14 @@
 #define RBD_FEATURE_NAME_OPERATIONS      "operations"
 #define RBD_FEATURE_NAME_MIGRATING       "migrating"
 #define RBD_FEATURE_NAME_NON_PRIMARY     "non-primary"
+#define RBD_FEATURE_NAME_IMAGE_CACHE     "image-cache"
 
 /// features that make an image inaccessible for read or write by
 /// clients that don't understand them
 #define RBD_FEATURES_INCOMPATIBLE 	(RBD_FEATURE_LAYERING       | \
 					 RBD_FEATURE_STRIPINGV2     | \
-                                         RBD_FEATURE_DATA_POOL)
+                                         RBD_FEATURE_DATA_POOL      | \
+                                         RBD_FEATURE_IMAGE_CACHE)
 
 /// features that make an image unwritable by clients that don't understand them
 #define RBD_FEATURES_RW_INCOMPATIBLE	(RBD_FEATURES_INCOMPATIBLE  | \
@@ -58,14 +61,17 @@
                                          RBD_FEATURE_DATA_POOL      | \
                                          RBD_FEATURE_OPERATIONS     | \
                                          RBD_FEATURE_MIGRATING      | \
-                                         RBD_FEATURE_NON_PRIMARY)
+                                         RBD_FEATURE_NON_PRIMARY    | \
+                                         RBD_FEATURE_IMAGE_CACHE)
 
 /// features that may be dynamically enabled or disabled
 #define RBD_FEATURES_MUTABLE            (RBD_FEATURE_EXCLUSIVE_LOCK | \
                                          RBD_FEATURE_OBJECT_MAP     | \
                                          RBD_FEATURE_FAST_DIFF      | \
                                          RBD_FEATURE_JOURNALING     | \
-                                         RBD_FEATURE_NON_PRIMARY)
+                                         RBD_FEATURE_NON_PRIMARY    | \
+                                         RBD_FEATURE_IMAGE_CACHE)
+
 #define RBD_FEATURES_MUTABLE_INTERNAL   (RBD_FEATURE_NON_PRIMARY)
 
 /// features that may be dynamically disabled
@@ -76,7 +82,8 @@
 #define RBD_FEATURES_SINGLE_CLIENT (RBD_FEATURE_EXCLUSIVE_LOCK | \
                                     RBD_FEATURE_OBJECT_MAP     | \
                                     RBD_FEATURE_FAST_DIFF      | \
-                                    RBD_FEATURE_JOURNALING)
+                                    RBD_FEATURE_JOURNALING     | \
+                                    RBD_FEATURE_IMAGE_CACHE)
 
 /// features that will be implicitly enabled
 #define RBD_FEATURES_IMPLICIT_ENABLE  (RBD_FEATURE_STRIPINGV2  | \
