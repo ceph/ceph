@@ -47,6 +47,10 @@ public:
   void clear_image_cache_state(Context *on_finish);
 
   void dump(ceph::Formatter *f) const;
+
+  static ImageCacheState<ImageCtxT>* get_image_cache_state(ImageCtxT* image_ctx);
+
+  bool is_valid();
 };
 
 } // namespace rwl
