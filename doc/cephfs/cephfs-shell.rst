@@ -441,3 +441,54 @@ Usage :
 
 Options:
   -h, --help   Shows the help message
+
+df
+--
+
+Display amount of available disk space
+
+Usage :
+
+    df [-h] [file [file ...]]
+
+* file - name of the file
+
+Options:
+  -h, --help   Shows the help message
+
+du
+--
+
+Show disk usage of a directory
+
+Usage :
+
+    du [-h] [-r] [paths [paths ...]]
+
+* paths - name of the directory
+
+Options:
+  -h, --help   Shows the help message
+
+  -r     Recursive Disk usage of all directories
+
+
+quota
+-----
+
+Quota management for a Directory
+
+Usage :
+
+    quota [-h] [--max_bytes [MAX_BYTES]] [--max_files [MAX_FILES]] {get,set} path
+
+* {get,set} - quota operation type.
+
+* path - name of the directory.
+
+Options :
+  -h, --help   Shows the help message
+
+  --max_bytes MAX_BYTES    Set max cumulative size of the data under this directory
+
+  --max_files MAX_FILES    Set total number of files under this directory tree
