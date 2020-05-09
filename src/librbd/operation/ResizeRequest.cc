@@ -97,7 +97,7 @@ void ResizeRequest<I>::send_pre_block_writes() {
   ldout(cct, 5) << dendl;
 
   image_ctx.io_image_dispatcher->block_writes(create_context_callback<
-    ResizeRequest<I>, &ResizeRequest<I>::handle_pre_block_writes>(this));
+    ResizeRequest<I>, &ResizeRequest<I>::handle_pre_block_writes>(this), io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>
@@ -366,7 +366,7 @@ void ResizeRequest<I>::send_post_block_writes() {
 
   std::shared_lock owner_locker{image_ctx.owner_lock};
   image_ctx.io_image_dispatcher->block_writes(create_context_callback<
-    ResizeRequest<I>, &ResizeRequest<I>::handle_post_block_writes>(this));
+    ResizeRequest<I>, &ResizeRequest<I>::handle_post_block_writes>(this), io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>

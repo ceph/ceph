@@ -36,12 +36,12 @@ void QueueImageDispatch<I>::shut_down(Context* on_finish) {
 template <typename I>
 int QueueImageDispatch<I>::block_writes() {
   C_SaferCond cond_ctx;
-  block_writes(&cond_ctx);
+  block_writes(&cond_ctx, FLUSH_SOURCE_INTERNAL);
   return cond_ctx.wait();
 }
 
 template <typename I>
-void QueueImageDispatch<I>::block_writes(Context *on_blocked) {
+void QueueImageDispatch<I>::block_writes(Context *on_blocked, FlushSource flush_source) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx->owner_lock));
   auto cct = m_image_ctx->cct;
 
@@ -63,7 +63,7 @@ void QueueImageDispatch<I>::block_writes(Context *on_blocked) {
   }
 
   // ensure that all in-flight IO is flushed
-  flush_image(on_blocked);
+  flush_image(flush_source, on_blocked);
 };
 
 template <typename I>
@@ -239,11 +239,12 @@ bool QueueImageDispatch<I>::enqueue(
 }
 
 template <typename I>
-void QueueImageDispatch<I>::flush_image(Context* on_finish) {
+void QueueImageDispatch<I>::flush_image(FlushSource flush_source, Context* on_finish) {
   auto aio_comp = AioCompletion::create_and_start(
     on_finish, util::get_image_ctx(m_image_ctx), librbd::io::AIO_TYPE_FLUSH);
   auto req = ImageDispatchSpec<I>::create_flush(
-    *m_image_ctx, IMAGE_DISPATCH_LAYER_QUEUE, aio_comp, FLUSH_SOURCE_INTERNAL,
+    // *m_image_ctx, IMAGE_DISPATCH_LAYER_QUEUE, aio_comp, FLUSH_SOURCE_INTERNAL,
+    *m_image_ctx, IMAGE_DISPATCH_LAYER_QUEUE, aio_comp, flush_source,
     {});
   req->send();
 }

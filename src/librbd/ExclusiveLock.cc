@@ -132,7 +132,7 @@ void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
   auto ctx = new LambdaContext([this, features, on_init](int r) {
       handle_init_complete(r, features, on_init);
     });
-  m_image_ctx.io_image_dispatcher->block_writes(ctx);
+  m_image_ctx.io_image_dispatcher->block_writes(ctx, io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>

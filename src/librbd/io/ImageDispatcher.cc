@@ -159,8 +159,8 @@ int ImageDispatcher<I>::block_writes() {
 }
 
 template <typename I>
-void ImageDispatcher<I>::block_writes(Context *on_blocked) {
-  m_queue_image_dispatch->block_writes(on_blocked);
+void ImageDispatcher<I>::block_writes(Context *on_blocked, FlushSource flush_source) {
+  m_queue_image_dispatch->block_writes(on_blocked, flush_source);
 }
 
 template <typename I>

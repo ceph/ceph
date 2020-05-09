@@ -37,7 +37,7 @@ public:
 
   bool writes_blocked() const override;
   int block_writes() override;
-  void block_writes(Context *on_blocked) override;
+  void block_writes(Context *on_blocked, FlushSource flush_source) override;
 
   void unblock_writes() override;
   void wait_on_writes_unblocked(Context *on_unblocked) override;

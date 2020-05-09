@@ -23,7 +23,7 @@ public:
 
   virtual bool writes_blocked() const = 0;
   virtual int block_writes() = 0;
-  virtual void block_writes(Context *on_blocked) = 0;
+  virtual void block_writes(Context *on_blocked, FlushSource flush_source) = 0;
 
   virtual void unblock_writes() = 0;
   virtual void wait_on_writes_unblocked(Context *on_unblocked) = 0;

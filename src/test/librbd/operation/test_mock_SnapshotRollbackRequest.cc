@@ -85,7 +85,7 @@ public:
   typedef ResizeRequest<MockOperationImageCtx> MockResizeRequest;
 
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_, _))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 

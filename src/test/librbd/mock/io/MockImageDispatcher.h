@@ -32,7 +32,7 @@ public:
 
   MOCK_CONST_METHOD0(writes_blocked, bool());
   MOCK_METHOD0(block_writes, int());
-  MOCK_METHOD1(block_writes, void(Context*));
+  MOCK_METHOD2(block_writes, void(Context*, FlushSource));
 
   MOCK_METHOD0(unblock_writes, void());
   MOCK_METHOD1(wait_on_writes_unblocked, void(Context*));

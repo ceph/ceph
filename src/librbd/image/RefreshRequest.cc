@@ -968,7 +968,7 @@ void RefreshRequest<I>::send_v2_block_writes() {
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_block_writes>(this);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  m_image_ctx.io_image_dispatcher->block_writes(ctx);
+  m_image_ctx.io_image_dispatcher->block_writes(ctx, io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>

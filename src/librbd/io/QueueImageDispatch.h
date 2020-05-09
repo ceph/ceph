@@ -37,7 +37,7 @@ public:
   void shut_down(Context* on_finish) override;
 
   int block_writes();
-  void block_writes(Context *on_blocked);
+  void block_writes(Context *on_blocked, FlushSource flush_source);
   void unblock_writes();
 
   inline bool writes_blocked() const {
@@ -99,7 +99,7 @@ private:
 
   bool enqueue(bool read_op, uint64_t tid, DispatchResult* dispatch_result,
                Context* on_dispatched);
-  void flush_image(Context* on_blocked);
+  void flush_image(FlushSource flush_source, Context* on_blocked);
 
 };
 

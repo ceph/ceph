@@ -93,7 +93,7 @@ void EnableFeaturesRequest<I>::send_block_writes() {
   std::unique_lock locker{image_ctx.owner_lock};
   image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     EnableFeaturesRequest<I>,
-    &EnableFeaturesRequest<I>::handle_block_writes>(this));
+    &EnableFeaturesRequest<I>::handle_block_writes>(this), io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>

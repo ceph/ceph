@@ -121,7 +121,7 @@ void SnapshotRollbackRequest<I>::send_block_writes() {
   m_blocking_writes = true;
   image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     SnapshotRollbackRequest<I>,
-    &SnapshotRollbackRequest<I>::handle_block_writes>(this));
+    &SnapshotRollbackRequest<I>::handle_block_writes>(this), io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>

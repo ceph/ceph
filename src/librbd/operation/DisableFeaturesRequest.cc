@@ -97,7 +97,7 @@ void DisableFeaturesRequest<I>::send_block_writes() {
   std::unique_lock locker{image_ctx.owner_lock};
   image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     DisableFeaturesRequest<I>,
-    &DisableFeaturesRequest<I>::handle_block_writes>(this));
+    &DisableFeaturesRequest<I>::handle_block_writes>(this), io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>

@@ -113,7 +113,7 @@ void SnapshotCreateRequest<I>::send_suspend_aio() {
 
   image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     SnapshotCreateRequest<I>,
-    &SnapshotCreateRequest<I>::handle_suspend_aio>(this));
+    &SnapshotCreateRequest<I>::handle_suspend_aio>(this), io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>

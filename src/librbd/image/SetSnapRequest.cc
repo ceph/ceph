@@ -108,7 +108,7 @@ void SetSnapRequest<I>::send_block_writes() {
     klass, &klass::handle_block_writes>(this);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  m_image_ctx.io_image_dispatcher->block_writes(ctx);
+  m_image_ctx.io_image_dispatcher->block_writes(ctx, io::FLUSH_SOURCE_INTERNAL);
 }
 
 template <typename I>
