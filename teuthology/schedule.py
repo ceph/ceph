@@ -1,4 +1,3 @@
-import pprint
 import yaml
 
 import teuthology.beanstalk
@@ -33,7 +32,7 @@ def main(args):
         raise ValueError("Please use a more descriptive value for --name")
     job_config = build_config(args)
     if args['--dry-run']:
-        pprint.pprint(job_config)
+        print('---\n' + yaml.safe_dump(job_config))
     else:
         schedule_job(job_config, args['--num'], report_status)
 
