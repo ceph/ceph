@@ -331,6 +331,8 @@ class Run(object):
             base_args.append('-v')
         if self.args.owner:
             base_args.extend(['--owner', self.args.owner])
+        if self.args.queue_backend:
+            base_args.extend(['--queue-backend', self.args.queue_backend])
         return base_args
 
 

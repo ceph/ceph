@@ -1,3 +1,4 @@
+import os
 import yaml
 
 import teuthology.beanstalk
@@ -31,10 +32,16 @@ def main(args):
     if not name or name.isdigit():
         raise ValueError("Please use a more descriptive value for --name")
     job_config = build_config(args)
+    backend = args['--queue-backend']
     if args['--dry-run']:
         print('---\n' + yaml.safe_dump(job_config))
-    else:
+    elif backend == 'beanstalk':
         schedule_job(job_config, args['--num'], report_status)
+    elif backend.startswith('@'):
+        dump_job_to_file(backend.lstrip('@'), job_config, args['--num'])
+    else:
+        raise ValueError("Provided schedule backend '%s' is not supported. "
+                         "Try 'beanstalk' or '@path-to-a-file" % backend)
 
 
 def build_config(args):
@@ -103,3 +110,33 @@ def schedule_job(job_config, num=1, report_status=True):
         if report_status:
             report.try_push_job_info(job_config, dict(status='queued'))
         num -= 1
+
+
+def dump_job_to_file(path, job_config, num=1):
+    """
+    Schedule a job.
+
+    :param job_config: The complete job dict
+    :param num:      The number of times to schedule the job
+    :param path:     The file path where the job config to append
+    """
+    num = int(num)
+    count_file_path = path + '.count'
+
+    jid = 0
+    if os.path.exists(count_file_path):
+        with open(count_file_path, 'r') as f:
+            jid=int(f.read() or '0')
+
+    with open(path, 'a') as f:
+        while num > 0:
+            jid += 1
+            job_config['job_id'] = str(jid)
+            job = yaml.safe_dump(job_config)
+            print('Job scheduled with name {name} and ID {jid}'.format(
+                name=job_config['name'], jid=jid))
+            f.write('---\n' + job)
+            num -= 1
+    with open(count_file_path, 'w') as f:
+        f.write(str(jid))
+

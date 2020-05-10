@@ -103,6 +103,8 @@ Standard arguments:
 
 Scheduler arguments:
   --owner <owner>             Job owner
+  -b <backend>, --queue-backend <backend>
+                              Scheduler queue backend name
   -e <email>, --email <email>
                               When tests finish or time out, send an email
                               here. May also be specified in ~/.teuthology.yaml
