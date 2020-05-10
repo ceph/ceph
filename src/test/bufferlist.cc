@@ -1412,7 +1412,8 @@ TEST(BufferList, operator_equal) {
   //
   // list& operator= (list&& other)
   //
-  bufferlist move = std::move(bl);
+  bufferlist move;
+  move = std::move(bl);
   {
     std::string dest;
     move.begin(1).copy(1, dest);
