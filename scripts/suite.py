@@ -96,6 +96,10 @@ Standard arguments:
                               of resources, however --non-interactive option
                               can be used to skip user input.
                               [default: 0]
+  --arch <arch>               Override architecture defaults, for example,
+                              aarch64, armv7l, x86_64. Normally this
+                              argument should not be provided and the arch
+                              is determined from --machine-type.
 
 Scheduler arguments:
   --owner <owner>             Job owner

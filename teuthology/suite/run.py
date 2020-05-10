@@ -498,7 +498,11 @@ class Run(object):
         Schedule the suite-run. Returns the number of jobs scheduled.
         """
         name = self.name
-        arch = util.get_arch(self.base_config.machine_type)
+        if self.args.arch:
+            arch = self.args.arch
+            log.debug("Using '%s' as an arch" % arch)
+        else:
+            arch = util.get_arch(self.base_config.machine_type)
         suite_name = self.base_config.suite
         suite_path = os.path.normpath(os.path.join(
             self.suite_repo_path,
