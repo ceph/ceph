@@ -250,6 +250,7 @@ class TestScheduleSuite(object):
         # schedule_jobs() is just neutered; check calls below
 
         self.args.newest = 0
+        self.args.num = 42
         runobj = self.klass(self.args)
         runobj.base_args = list()
         count = runobj.schedule_suite()
@@ -263,6 +264,8 @@ class TestScheduleSuite(object):
             yaml=yaml.safe_load('\n'.join(frags)),
             sha1='ceph_sha1',
             args=[
+                '--num',
+                '42',
                 '--description',
                 os.path.join(self.args.suite, build_matrix_desc),
                 '--',

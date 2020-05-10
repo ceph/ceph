@@ -294,7 +294,6 @@ class Run(object):
     def build_base_args(self):
         base_args = [
             '--name', self.name,
-            '--num', str(self.args.num),
             '--worker', util.get_worker(self.args.machine_type),
         ]
         if self.args.dry_run:
@@ -411,6 +410,7 @@ class Run(object):
 
             arg = copy.deepcopy(self.base_args)
             arg.extend([
+                '--num', str(self.args.num),
                 '--description', description,
                 '--',
             ])
