@@ -355,7 +355,7 @@ class CephFSVolumeClient(object):
                 continue
 
             (group_id, volume_id) = volume.split('/')
-            group_id = group_id if group_id is not 'None' else None
+            group_id = group_id if group_id != 'None' else None
             volume_path = VolumePath(group_id, volume_id)
             access_level = volume_data['access_level']
 
@@ -378,7 +378,7 @@ class CephFSVolumeClient(object):
                 if vol_meta['auths'][auth_id] == want_auth:
                     continue
 
-                readonly = True if access_level is 'r' else False
+                readonly = access_level == 'r'
                 self._authorize_volume(volume_path, auth_id, readonly)
 
             # Recovered from partial auth updates for the auth ID's access
@@ -1099,7 +1099,7 @@ class CephFSVolumeClient(object):
 
             # Construct auth caps that if present might conflict with the desired
             # auth caps.
-            unwanted_access_level = 'r' if want_access_level is 'rw' else 'rw'
+            unwanted_access_level = 'r' if want_access_level == 'rw' else 'rw'
             unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
             if namespace:
                 unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
