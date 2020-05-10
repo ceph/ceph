@@ -794,7 +794,7 @@ TEST(BufferListIterator, end) {
 static void bench_bufferlistiter_deref(const size_t step,
 				       const size_t bufsize,
 				       const size_t bufnum) {
-  const std::string buf('a', bufsize);
+  const std::string buf(bufsize, 'a');
   ceph::bufferlist bl;
 
   for (size_t i = 0; i < bufnum; i++) {
