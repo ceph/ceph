@@ -1,0 +1,65 @@
+meta:
+- desc: |
+   install ceph/octopus latest
+   run workload and upgrade-sequence in parallel
+   upgrade the client node
+tasks:
+- cephadm:
+    roleless: true
+- cephadm.shell:
+    host.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+- install:
+    exclude_packages:
+      #- ceph-mgr-cephadm
+      #- cephadm
+      #- libcephfs-dev
+    branch: octopus
+- print: "**** done installing octopus"
+- cephadm:
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+      - Not found or unloadable
+    conf:
+      global:
+        mon warn on pool no app: false
+        bluestore_warn_on_legacy_statfs: false
+        bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
+- exec:
+    osd.0:
+      - ceph osd set-require-min-compat-client octopus
+- print: "**** done cephadm"
+#- cephadm.upgrade:
+#    mon.a:
+#    mon.b:
+#    mon.c:
+#- print: "**** done cephadm.upgrade non-client hosts"
+- rgw:
+   - client.1
+- print: "**** done => started rgw client.1"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
+- cephadm.shell:
+    env: [sha1]
+    #client.0:
+    #  - ceph orch upgrade start --image quay.io/ceph-ci/ceph:$sha1
+- print: "**** done cephadm upgrade on client.0"
