@@ -1689,6 +1689,25 @@ def validate_config(ctx, config):
             last_role = role
 
 
+def stop_logging_health(remote, cluster, retry):
+    # try this several times, since tell to mons is lossy.
+    args = 'sudo ceph --cluster {cluster} {retry_opts} tell mon.* injectargs -- --no-mon-health-to-clog'
+    try:
+        retry_opts = '--mon-client-directed-command-retry {}'.format(retry)
+        remote.run(
+            args=args.format(cluster=cluster,
+                             retry_opts=retry_opts))
+    except run.CommandFailedError:
+        for i in range(retry):
+            try:
+                remote.run(
+                    args=args.format(cluster=cluster,
+                                     retry_opts=''))
+                return
+            except run.CommandFailedError:
+                pass
+
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -1895,17 +1914,4 @@ def task(ctx, config):
             # a bunch of scary messages unrelated to our actual run.
             firstmon = teuthology.get_first_mon(ctx, config, config['cluster'])
             (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-            # try this several times, since tell to mons is lossy.
-            mon0_remote.run(
-                args=[
-                    'sudo',
-                    'ceph',
-                    '--cluster', config['cluster'],
-                    '--mon-client-directed-command-retry', '5',
-                    'tell',
-                    'mon.*',
-                    'injectargs',
-                    '--',
-                    '--no-mon-health-to-clog',
-                ]
-            )
+            stop_logging_health(mon0_remote, config['cluster'], 5)
