@@ -417,7 +417,19 @@ void PGRecovery::request_replica_scan(
   const hobject_t& begin,
   const hobject_t& end)
 {
-  ceph_abort_msg("Not implemented");
+  logger().debug("{}: target.osd={}", __func__, target.osd);
+  auto msg = make_message<MOSDPGScan>(
+    MOSDPGScan::OP_SCAN_GET_DIGEST,
+    pg->get_pg_whoami(),
+    pg->get_osdmap_epoch(),
+    pg->get_last_peering_reset(),
+    spg_t(pg->get_pgid().pgid, target.shard),
+    begin,
+    end);
+  std::ignore = pg->get_shard_services().send_to_osd(
+    target.osd,
+    std::move(msg),
+    pg->get_osdmap_epoch());
 }
 
 void PGRecovery::request_primary_scan(
