@@ -472,7 +472,8 @@ void PGRecovery::update_peers_last_backfill(
 
 bool PGRecovery::budget_available() const
 {
-  ceph_abort_msg("Not implemented");
+  // TODO: the limits!
+  return true;
 }
 
 void PGRecovery::backfilled()
