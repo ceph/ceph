@@ -188,6 +188,8 @@ class RbdTest(DashboardTestCase):
             'block_name_prefix': JLeaf(str),
             'name': JLeaf(str),
             'id': JLeaf(str),
+            'unique_id': JLeaf(str),
+            'image_format': JLeaf(int),
             'pool_name': JLeaf(str),
             'features': JLeaf(int),
             'features_name': JList(JLeaf(str)),
