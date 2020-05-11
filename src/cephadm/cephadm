@@ -2790,9 +2790,7 @@ def command_shell():
         mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
     if args.mount:
         mount = pathify(args.mount)
-        filename = ''
-        if os.path.isfile(mount):
-            _, filename = os.path.split(mount)
+        filename = os.path.basename(mount)
         mounts[mount] = '/mnt/{}:z'.format(filename)
     if args.command:
         command = args.command
