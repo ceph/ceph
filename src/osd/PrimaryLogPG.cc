@@ -8132,30 +8132,31 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   ceph_assert(soid.snap == CEPH_NOSNAP);
   dout(20) << "make_writeable " << soid << " snapset=" << ctx->new_snapset
 	   << "  snapc=" << snapc << dendl;
-  
-  bool was_dirty = ctx->obc->obs.oi.is_dirty();
-  if (ctx->new_obs.exists) {
-    // we will mark the object dirty
-    if (ctx->undirty && was_dirty) {
-      dout(20) << " clearing DIRTY flag" << dendl;
-      ceph_assert(ctx->new_obs.oi.is_dirty());
-      ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
-      --ctx->delta_stats.num_objects_dirty;
-      osd->logger->inc(l_osd_tier_clean);
-    } else if (!was_dirty && !ctx->undirty) {
-      dout(20) << " setting DIRTY flag" << dendl;
-      ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
-      ++ctx->delta_stats.num_objects_dirty;
-      osd->logger->inc(l_osd_tier_dirty);
-    }
-  } else {
-    if (was_dirty) {
-      dout(20) << " deletion, decrementing num_dirty and clearing flag" << dendl;
-      ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
-      --ctx->delta_stats.num_objects_dirty;
+  bool cachemode_none = pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE;
+  if (!cachemode_none) {
+    bool was_dirty = ctx->obc->obs.oi.is_dirty();
+    if (ctx->new_obs.exists) {
+      // we will mark the object dirty
+      if (ctx->undirty && was_dirty) {
+	dout(20) << " clearing DIRTY flag" << dendl;
+	ceph_assert(ctx->new_obs.oi.is_dirty());
+	ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+	--ctx->delta_stats.num_objects_dirty;
+	osd->logger->inc(l_osd_tier_clean);
+      } else if (!was_dirty && !ctx->undirty) {
+	dout(20) << " setting DIRTY flag" << dendl;
+	ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+	++ctx->delta_stats.num_objects_dirty;
+	osd->logger->inc(l_osd_tier_dirty);
+      }
+    } else {
+      if (was_dirty) {
+	dout(20) << " deletion, decrementing num_dirty and clearing flag" << dendl;
+	ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+	--ctx->delta_stats.num_objects_dirty;
+      }
     }
   }
-
   if ((ctx->new_obs.exists &&
        ctx->new_obs.oi.is_omap()) &&
       (!ctx->obc->obs.exists ||
@@ -8220,7 +8221,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     _make_clone(ctx, ctx->op_t.get(), ctx->clone_obc, soid, coid, snap_oi);
     
     ctx->delta_stats.num_objects++;
-    if (snap_oi->is_dirty()) {
+    if (!cachemode_none && snap_oi->is_dirty()) {
       ctx->delta_stats.num_objects_dirty++;
       osd->logger->inc(l_osd_tier_dirty);
     }
