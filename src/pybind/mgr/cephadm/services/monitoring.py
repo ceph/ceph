@@ -263,7 +263,7 @@ scrape_configs:
 
         # include alerts, if present in the container
         if os.path.exists(self.mgr.prometheus_alerts_path):
-            with open(self.mgr.prometheus_alerts_path, "r") as f:
+            with open(self.mgr.prometheus_alerts_path, 'r', encoding='utf-8') as f:
                 alerts = f.read()
             r['files']['/etc/prometheus/alerting/ceph_alerts.yml'] = alerts
 
