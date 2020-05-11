@@ -1727,6 +1727,9 @@ struct req_state : DoutPrefixProvider {
   /// optional coroutine context
   optional_yield yield{null_yield};
 
+  //token claims from STS token for ops log (can be used for Keystone token also)
+  std::vector<string> token_claims;
+
   req_state(CephContext* _cct, RGWEnv* e, rgw::sal::RGWUser* u, uint64_t id);
   ~req_state();
 
