@@ -1151,9 +1151,12 @@ CtPtr ProtocolV2::read_frame_segment() {
   rx_segments_data.emplace_back();
 
   uint32_t onwire_len = rx_frame_asm.get_segment_onwire_len(seg_idx);
-  uint16_t align = rx_frame_asm.get_segment_align(seg_idx);
+  if (onwire_len == 0) {
+    return _handle_read_frame_segment();
+  }
 
   rx_buffer_t rx_buffer;
+  uint16_t align = rx_frame_asm.get_segment_align(seg_idx);
   try {
     rx_buffer = ceph::buffer::ptr_node::create(ceph::buffer::create_aligned(
         onwire_len, align));
@@ -1179,11 +1182,17 @@ CtPtr ProtocolV2::handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r) {
   }
 
   rx_segments_data.back().push_back(std::move(rx_buffer));
+  return _handle_read_frame_segment();
+}
 
+CtPtr ProtocolV2::_handle_read_frame_segment() {
   if (rx_segments_data.size() == rx_frame_asm.get_num_segments()) {
     // OK, all segments planned to read are read. Can go with epilogue.
-    return READ(rx_frame_asm.get_epilogue_onwire_len(),
-                handle_read_frame_epilogue_main);
+    uint32_t epilogue_onwire_len = rx_frame_asm.get_epilogue_onwire_len();
+    if (epilogue_onwire_len == 0) {
+      return _handle_read_frame_epilogue_main();
+    }
+    return READ(epilogue_onwire_len, handle_read_frame_epilogue_main);
   }
   // TODO: for makeshift only. This will be more generic and throttled
   return read_frame_segment();
@@ -1287,7 +1296,10 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r)
   }
 
   rx_epilogue.push_back(std::move(buffer));
+  return _handle_read_frame_epilogue_main();
+}
 
+CtPtr ProtocolV2::_handle_read_frame_epilogue_main() {
   bool aborted;
   try {
     rx_frame_asm.disassemble_first_segment(rx_preamble, rx_segments_data[0]);
