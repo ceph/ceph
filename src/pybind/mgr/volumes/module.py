@@ -101,6 +101,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolume info '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get the metadata of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolumegroup snapshot ls '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString ',
@@ -314,6 +323,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.subvolume_getpath(vol_name=cmd['vol_name'],
                                          sub_name=cmd['sub_name'],
                                          group_name=cmd.get('group_name', None))
+
+    def _cmd_fs_subvolume_info(self, inbuf, cmd):
+        return self.vc.subvolume_info(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
         return self.vc.create_subvolume_group_snapshot(vol_name=cmd['vol_name'],
