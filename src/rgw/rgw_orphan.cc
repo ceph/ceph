@@ -1512,8 +1512,8 @@ int RGWRadosList::do_incomplete_multipart(
       do {
 	map<uint32_t, RGWUploadPartInfo> parts;
 
-	for (const auto& upload : uploads) {
-	  const RGWMPObj& mp = upload.mp;
+	for (auto& upload : uploads) {
+	  RGWMPObj& mp = upload.mp;
 	  ret = list_multipart_parts(store, bucket_info, store->ctx(),
 				     mp.get_upload_id(), mp.get_meta(),
 				     max_parts,
