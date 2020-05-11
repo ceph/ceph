@@ -3,6 +3,19 @@
 Ceph Container Images
 =====================
 
+.. important::
+
+   Using the ``:latest`` tag is discouraged. If you use the ``:latest`` 
+   tag, there is no guarantee that the same image will be on each of 
+   your hosts.  Under these conditions, upgrades might not work 
+   properly. Remember that ``:latest`` is a relative tag, and a moving
+   target.
+
+   Instead of the ``:latest`` tag, use explicit tags or image IDs. For
+   example:
+
+   ``podman pull ceph/ceph:v15.2.0``
+
 Official Releases
 -----------------
 
