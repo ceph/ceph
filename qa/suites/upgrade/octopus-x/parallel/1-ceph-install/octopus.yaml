@@ -1,0 +1,54 @@
+meta:
+- desc: |
+   install ceph/octopus latest
+   run workload and upgrade-sequence in parallel
+   upgrade the client node
+tasks:
+- install:
+    branch: octopus
+- print: "**** done installing octopus"
+- cephadm:
+    roleless: true
+    cephadm_branch: octopus
+    #use image from for example dockerhub
+    #image: docker.io/ceph/daemon-base:latest-octopus-devel
+    #from  https://quay.io/repository/ceph-ci/ceph
+    branch: octopus
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+      - Not found or unloadable
+    conf:
+      global:
+        mon warn on pool no app: false
+        bluestore_warn_on_legacy_statfs: false
+        bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
+- print: "**** done cephadm: octopus, ceph and daemons in containers setup"
+- cephadm.shell:
+    host.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+- print: "**** done cephadm.shell"
+- exec:
+    osd.0:
+      - ceph osd set-require-min-compat-client octopus
+- print: "**** done exec: ceph osd set-require-min-compat-client octopus"
+### rgw is not supported by cephadm ATM
+#- rgw:
+#   - client.1
+#- print: "**** done => started rgw client.1"
