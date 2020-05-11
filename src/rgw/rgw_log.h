@@ -35,9 +35,10 @@ struct rgw_log_entry {
   string bucket_id;
   headers_map x_headers;
   string trans_id;
+  std::vector<string> token_claims;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(10, 5, bl);
+    ENCODE_START(11, 5, bl);
     encode(object_owner.id, bl);
     encode(bucket_owner.id, bl);
     encode(bucket, bl);
@@ -61,10 +62,11 @@ struct rgw_log_entry {
     encode(bucket_owner, bl);
     encode(x_headers, bl);
     encode(trans_id, bl);
+    encode(token_claims, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, p);
     decode(object_owner.id, p);
     if (struct_v > 3)
       decode(bucket_owner.id, p);
@@ -112,6 +114,9 @@ struct rgw_log_entry {
     }
     if (struct_v >= 10) {
       decode(trans_id, p);
+    }
+    if (struct_v >= 11) {
+      decode(token_claims, p);
     }
     DECODE_FINISH(p);
   }
