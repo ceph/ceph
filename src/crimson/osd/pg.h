@@ -592,7 +592,7 @@ public:
   const pg_missing_tracker_t& get_local_missing() const {
     return peering_state.get_pg_log().get_missing();
   }
-  epoch_t get_last_peering_reset() const {
+  epoch_t get_last_peering_reset() const final {
     return peering_state.get_last_peering_reset();
   }
   const set<pg_shard_t> &get_acting_recovery_backfill() const {

@@ -32,5 +32,6 @@ public:
   virtual bool is_unreadable_object(const hobject_t&, eversion_t* v = 0) const = 0;
   virtual bool has_reset_since(epoch_t) const = 0;
   virtual std::vector<pg_shard_t> get_replica_recovery_order() const = 0;
+  virtual epoch_t get_last_peering_reset() const = 0;
   virtual seastar::future<> stop() = 0;
 };

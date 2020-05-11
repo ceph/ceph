@@ -36,6 +36,10 @@ struct BackfillState {
   struct ReplicaScanned : sc::event<ReplicaScanned> {
     pg_shard_t from;
     BackfillInterval result;
+    ReplicaScanned(pg_shard_t from, BackfillInterval&& result)
+      : from(std::move(from)),
+        result(std::move(result)) {
+    }
   };
 
   struct ObjectPushed : sc::event<ObjectPushed> {

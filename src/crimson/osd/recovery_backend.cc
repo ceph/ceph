@@ -156,7 +156,23 @@ seastar::future<> RecoveryBackend::handle_scan_digest(
   MOSDPGScan& m)
 {
   logger().debug("{}", __func__);
-  ceph_assert("Not implemented" == nullptr);
+  // Check that from is in backfill_targets vector
+  ceph_assert(pg.get_peering_state().is_backfill_target(m.from));
+
+  BackfillInterval bi;
+  bi.begin = m.begin;
+  bi.end = m.end;
+  {
+    auto p = m.get_data().cbegin();
+    // take care to preserve ordering!
+    bi.clear_objects();
+    ::decode_noclear(bi.objects, p);
+  }
+  shard_services.start_operation<crimson::osd::BackfillRecovery>(
+    static_cast<crimson::osd::PG*>(&pg),
+    shard_services,
+    pg.get_osdmap_epoch(),
+    crimson::osd::BackfillState::ReplicaScanned{ m.from, std::move(bi) });
   return seastar::now();
 }
 
