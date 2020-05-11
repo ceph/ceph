@@ -353,7 +353,7 @@
 
 * Cephadm: ``ceph orch ls --export`` now returns all service specifications in
   yaml representation that is consumable by ``ceph orch apply``. In addition,
-  the commands ``orch ps`` and `orch ls`` now support ``--format yaml`` and
+  the commands ``orch ps`` and ``orch ls`` now support ``--format yaml`` and
   ``--format json-pretty``.
 
 * Cephadm: ``ceph orch apply osd`` supports a ``--preview`` flag that prints a preview of
