@@ -250,6 +250,15 @@ describe('OsdListComponent', () => {
       component.getOsdList();
       expect(component.osds[0].cdClusterFlags).toStrictEqual([]);
     });
+
+    it('should have custom attribute "cdExecuting"', () => {
+      osds[1].operational_status = 'unmanaged';
+      osds[2].operational_status = 'deleting';
+      component.getOsdList();
+      expect(component.osds[0].cdExecuting).toBeUndefined();
+      expect(component.osds[1].cdExecuting).toBeUndefined();
+      expect(component.osds[2].cdExecuting).toBe('deleting');
+    });
   });
 
   describe('show osd actions as defined', () => {
@@ -504,6 +513,123 @@ describe('OsdListComponent', () => {
       mockOrchestratorStatus();
       mockSafeToDelete();
       expectOsdServiceMethodCalled('Delete', 'delete');
+    });
+  });
+
+  describe('table actions', () => {
+    const fakeOsds = require('./fixtures/osd_list_response.json');
+
+    beforeEach(() => {
+      component.permissions = fakeAuthStorageService.getPermissions();
+      spyOn(osdService, 'getList').and.callFake(() => of(fakeOsds));
+      spyOn(osdService, 'getFlags').and.callFake(() => of([]));
+    });
+
+    const testTableActions = async (
+      orch: boolean,
+      features: OrchestratorFeature[],
+      tests: { selectRow?: number; expectResults: any }[]
+    ) => {
+      OrchestratorHelper.mockStatus(orch, features);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      for (const test of tests) {
+        if (test.selectRow) {
+          component.selection = new CdTableSelection();
+          component.selection.selected = [test.selectRow];
+        }
+        await TableActionHelper.verifyTableActions(
+          fixture,
+          component.tableActions,
+          test.expectResults
+        );
+      }
+    };
+
+    it('should have correct states when Orchestrator is enabled', async () => {
+      const tests = [
+        {
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[0],
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: false, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[1], // Select a row that is not managed.
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[2], // Select a row that is being deleted.
+          expectResults: {
+            Create: { disabled: false, disableDesc: '' },
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        }
+      ];
+
+      const features = [
+        OrchestratorFeature.OSD_CREATE,
+        OrchestratorFeature.OSD_DELETE,
+        OrchestratorFeature.OSD_GET_REMOVE_STATUS
+      ];
+      await testTableActions(true, features, tests);
+    });
+
+    it('should have correct states when Orchestrator is disabled', async () => {
+      const resultNoOrchestrator = {
+        disabled: true,
+        disableDesc: orchService.disableMessages.noOrchestrator
+      };
+      const tests = [
+        {
+          expectResults: {
+            Create: resultNoOrchestrator,
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[0],
+          expectResults: {
+            Create: resultNoOrchestrator,
+            Delete: resultNoOrchestrator
+          }
+        }
+      ];
+      await testTableActions(false, [], tests);
+    });
+
+    it('should have correct states when Orchestrator features are missing', async () => {
+      const resultMissingFeatures = {
+        disabled: true,
+        disableDesc: orchService.disableMessages.missingFeature
+      };
+      const tests = [
+        {
+          expectResults: {
+            Create: resultMissingFeatures,
+            Delete: { disabled: true, disableDesc: '' }
+          }
+        },
+        {
+          selectRow: fakeOsds[0],
+          expectResults: {
+            Create: resultMissingFeatures,
+            Delete: resultMissingFeatures
+          }
+        }
+      ];
+      await testTableActions(true, [], tests);
     });
   });
 });

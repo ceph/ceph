@@ -7,6 +7,7 @@ import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
+import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
@@ -21,6 +22,7 @@ import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { OrchestratorStatus } from '../../../../shared/models/orchestrator.interface';
 import { FinishedTask } from '../../../../shared/models/finished-task';
 import { Permissions } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
@@ -79,6 +81,12 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   ];
   indivFlagNames: string[] = ['noup', 'nodown', 'noin', 'noout'];
 
+  orchStatus: OrchestratorStatus;
+  actionOrchFeatures = {
+    create: [OrchestratorFeature.OSD_CREATE],
+    delete: [OrchestratorFeature.OSD_DELETE]
+  }; 
+
   protected static collectStates(osd: any) {
     const states = [osd['in'] ? 'in' : 'out'];
     if (osd['up']) {
@@ -101,6 +109,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     private router: Router,
     private depCheckerService: DepCheckerService,
     private taskWrapper: TaskWrapperService,
+    private orchService: OrchestratorService,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService
   ) {
@@ -270,8 +279,16 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       }
     ];
     this.columns = [
+      {
+        prop: 'id',
+        name: this.i18n('ID'),
+	flexGrow: 1,
+        cellTransformation: CellTemplate.executing,
+        customTemplateConfig: {
+          valueClass: 'bold'
+        }
+      },
       { prop: 'host.name', name: this.i18n('Host') },
-      { prop: 'id', name: this.i18n('ID'), flexGrow: 1, cellTransformation: CellTemplate.bold },
       {
         prop: 'collectedStates',
         name: this.i18n('Status'),
@@ -337,6 +354,29 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         cellTransformation: CellTemplate.perSecond
       }
     ];
+
+    this.orchService.status().subscribe((status: OrchestratorStatus) => (this.orchStatus = status));
+  }
+
+  getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
+    if (action === 'delete') {
+      if (!selection.hasSelection) {
+        return true;
+      } else {
+        // Disable delete action if any selected OSDs are under deleting or unmanaged.
+        const deletingOSDs = _.some(this.getSelectedOsds(), (osd) => {
+          const status = _.get(osd, 'operational_status');
+          return status === 'deleting' || status === 'unmanaged';
+        });
+        if (deletingOSDs) {
+          return true;
+        }
+      }
+    }
+    return this.orchService.getTableActionDisableDesc(
+      this.orchStatus,
+      this.actionOrchFeatures[action]
+    );
   }
 
   /**
@@ -394,6 +434,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         osd.cdIsBinary = true;
         osd.cdIndivFlags = osd.state.filter((f: string) => this.indivFlagNames.includes(f));
         osd.cdClusterFlags = resp[1].filter((f: string) => !this.disabledFlags.includes(f));
+        const deploy_state = _.get(osd, 'operational_status', 'unmanaged');
+        if (deploy_state !== 'unmanaged' && deploy_state !== 'working') {
+          osd.cdExecuting = deploy_state;
+        }
         return osd;
       });
     });

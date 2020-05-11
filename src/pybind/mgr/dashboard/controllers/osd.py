@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import json
 import logging
 import time
+from typing import Any, Dict, List, Optional, Union
 
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError
 from mgr_util import get_most_recent_rate
@@ -52,7 +53,9 @@ class Osd(RESTController):
                 if osd_id >= 0 and osd_id in osds:
                     osds[osd_id]['host'] = host
 
-        # Extending by osd histogram data
+        removing_osd_ids = self.get_removing_osds()
+
+        # Extending by osd histogram and orchestrator data
         for osd_id, osd in osds.items():
             osd['stats'] = {}
             osd['stats_history'] = {}
@@ -67,8 +70,22 @@ class Osd(RESTController):
             # Gauge stats
             for stat in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
-
+            osd['operational_status'] = self._get_operational_status(osd_id, removing_osd_ids)
         return list(osds.values())
+
+    def _get_operational_status(self, osd_id: int, removing_osd_ids: Optional[List[int]]):
+        if removing_osd_ids is None:
+            return 'unmanaged'
+        if osd_id in removing_osd_ids:
+            return 'deleting'
+        return 'working'
+
+    @staticmethod
+    def get_removing_osds() -> Optional[List[int]]:
+        orch = OrchClient.instance()
+        if orch.available(features=[OrchFeature.OSD_GET_REMOVE_STATUS]):
+            return [osd.osd_id for osd in orch.osds.removing_status()]
+        return None
 
     @staticmethod
     def get_osd_map(svc_id=None):
@@ -99,8 +116,21 @@ class Osd(RESTController):
         """
         Returns collected data about an OSD.
 
-        :return: Returns the requested data. The `histogram` key may contain a
-                 string with an error that occurred if the OSD is down.
+        :return: Returns the requested data.
+        """
+        return {
+            'osd_map': self.get_osd_map(svc_id),
+            'osd_metadata': mgr.get_metadata('osd', svc_id),
+            'operational_status': self._get_operational_status(int(svc_id),
+                                                               self.get_removing_osds())
+        }
+
+    @RESTController.Resource('GET')
+    @handle_send_command_error('osd')
+    def histogram(self, svc_id):
+        # type: (int) -> Dict[str, Any]
+        """
+        :return: Returns the histogram data.
         """
         try:
             histogram = CephService.send_command(
@@ -198,7 +228,7 @@ class Osd(RESTController):
         while True:
             removal_osds = orch.osds.removing_status()
             logger.info('Current removing OSDs %s', removal_osds)
-            pending = [osd for osd in removal_osds if osd.osd_id == svc_id]
+            pending = [osd for osd in removal_osds if osd.osd_id == int(svc_id)]
             if not pending:
                 break
             logger.info('Wait until osd.%s is removed...', svc_id)

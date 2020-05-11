@@ -234,7 +234,8 @@ class OsdTest(ControllerTestCase):
             with mock.patch.object(mgr, 'get', side_effect=mgr_get_replacement):
                 with mock.patch.object(mgr, 'get_counter', side_effect=mgr_get_counter_replacement):
                     with mock.patch.object(mgr, 'get_latest', return_value=1146609664):
-                        yield
+                        with mock.patch.object(Osd, 'get_removing_osds', return_value=[]):
+                            yield
 
     def test_osd_list_aggregation(self):
         """
