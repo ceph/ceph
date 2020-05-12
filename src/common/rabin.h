@@ -75,6 +75,12 @@ public:
     num_bits = bits;
   }
 
+  // most users should use this
+  void set_target_bits(int bits, int windowbits = 2) {
+    set_numbits(bits);
+    set_min_chunk(1 << (bits - windowbits));
+    set_max_chunk(1 << (bits + windowbits));
+  }
 
 private:
   bool end_of_chunk(const uint64_t fp , int numbits);
