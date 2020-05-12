@@ -38,7 +38,7 @@ bool RabinChunk::end_of_chunk(const uint64_t fp , int numbits) {
 
 int RabinChunk::do_rabin_chunks(ceph::buffer::list& inputdata,
 				std::vector<std::pair<uint64_t, uint64_t>>& chunks,
-				uint64_t min_val = 0, uint64_t max_val = 0)
+				uint64_t min_val, uint64_t max_val)
 {
   char *ptr = inputdata.c_str();
   uint64_t data_size = inputdata.length();

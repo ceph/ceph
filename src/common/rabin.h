@@ -34,8 +34,10 @@ public:
   }
 
   void default_init_rabin_options() {
-    std::vector<uint64_t> _rabin_mask = {0,1,3,7,15,31,63,127,255,511,1023,2047,
-					 4095,8191,16383,32767,65535};
+    std::vector<uint64_t> _rabin_mask;
+    for (size_t i = 0; i < 63; ++i) {
+      _rabin_mask.push_back((1ull << i) - 1);
+    }
     window_size = 48;
     rabin_prime = 3;
     mod_prime = 6148914691236517051;
@@ -48,9 +50,8 @@ public:
 
   int do_rabin_chunks(ceph::buffer::list& inputdata,
 		      std::vector<std::pair<uint64_t, uint64_t>>& chunks,
-		      uint64_t min, uint64_t max);
+		      uint64_t min=0, uint64_t max=0);
   uint64_t gen_rabin_hash(char* chunk_data, uint64_t off, uint64_t len = 0);
-  bool end_of_chunk(const uint64_t fp , int numbits);
   void set_window_size(uint32_t size) { window_size = size; }
   void set_rabin_prime(uint32_t r_prime) { rabin_prime = r_prime; }
   void set_mod_prime(uint64_t m_prime) { mod_prime = m_prime; }
@@ -58,6 +59,7 @@ public:
   void set_rabin_mask(std::vector<uint64_t> & mask) { rabin_mask = mask; }
   void set_min_chunk(uint32_t c_min) { min = c_min; }
   void set_max_chunk(uint32_t c_max) { max = c_max; }
+
   int add_rabin_mask(uint64_t mask) {
     rabin_mask.push_back(mask);
     for (int i = 0; rabin_mask.size(); i++) {
@@ -67,9 +69,15 @@ public:
     }
     return -1;
   }
-  void set_numbits(uint32_t bit) { num_bits = bit; }
+  void set_numbits(uint32_t bits) {
+    ceph_assert(bits > 0);
+    ceph_assert(bits < 63);
+    num_bits = bits;
+  }
+
 
 private:
+  bool end_of_chunk(const uint64_t fp , int numbits);
 
   uint32_t window_size;
   uint32_t rabin_prime;
