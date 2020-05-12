@@ -1852,6 +1852,9 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             install_path = find_program('install')
             f.write('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=fsid, uid=uid, gid=gid))
 
+        # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
+        f.write(' '.join(c.rm_cmd()) + '\n')
+
         # container run command
         f.write(' '.join(c.run_cmd()) + '\n')
         os.fchmod(f.fileno(), 0o600)
@@ -2175,6 +2178,14 @@ class CephContainer:
         ] + self.container_args + [
             self.cname,
         ] + cmd
+
+    def rm_cmd(self):
+        # type: () -> List[str]
+        return [
+            str(container_path),
+            'rm', '-f',
+            self.cname
+        ]
 
     def run(self, timeout=DEFAULT_TIMEOUT):
         # type: (Optional[int]) -> str
