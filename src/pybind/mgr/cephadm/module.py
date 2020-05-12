@@ -6,13 +6,8 @@ from threading import Event
 from functools import wraps
 
 import string
-try:
-    from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
-        Any, NamedTuple, Iterator, Set, Sequence
-    from typing import TYPE_CHECKING, cast
-except ImportError:
-    TYPE_CHECKING = False  # just for type checking
-
+from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
+    Any, NamedTuple, Iterator, Set, Sequence, TYPE_CHECKING, cast, Union
 
 import datetime
 import six
@@ -60,6 +55,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar('T')
+
 DEFAULT_SSH_CONFIG = """
 Host *
   User root
@@ -101,12 +98,10 @@ class AsyncCompletion(orchestrator.Completion):
                  value=orchestrator._Promise.NO_RESULT,  # type: Any
                  on_complete=None,  # type: Optional[Callable]
                  name=None,  # type: Optional[str]
-                 many=False, # type: bool
                  update_progress=False,  # type: bool
                  ):
 
         assert CephadmOrchestrator.instance is not None
-        self.many = many
         self.update_progress = update_progress
         if name is None and on_complete is not None:
             name = getattr(on_complete, '__name__', None)
@@ -148,33 +143,14 @@ class AsyncCompletion(orchestrator.Completion):
                 assert self._on_complete_ is not None
                 try:
                     res = self._on_complete_(*args, **kwargs)
-                    if self.update_progress and self.many:
-                        assert self.progress_reference
-                        self.progress_reference.progress += 1.0 / len(value)
                     return res
                 except Exception as e:
                     self.fail(e)
                     raise
 
             assert CephadmOrchestrator.instance
-            if self.many:
-                if not value:
-                    logger.info('calling map_async without values')
-                    callback([])
-                if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
-                                                                    callback=callback,
-                                                                    error_callback=error_callback)
-                else:
-                    CephadmOrchestrator.instance._worker_pool.map_async(do_work, value,
-                                                                    callback=callback)
-            else:
-                if six.PY3:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
-                                                                      callback=callback, error_callback=error_callback)
-                else:
-                    CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
-                                                                      callback=callback)
+            CephadmOrchestrator.instance._worker_pool.apply_async(do_work, (value,),
+                                                              callback=callback, error_callback=error_callback)
             return self.ASYNC_RESULT
 
         return run
@@ -185,66 +161,35 @@ class AsyncCompletion(orchestrator.Completion):
         self._on_complete_ = inner
 
 
-def ssh_completion(cls=AsyncCompletion, **c_kwargs):
-    # type: (Type[orchestrator.Completion], Any) -> Callable
-    """
-    See ./HACKING.rst for a how-to
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args):
+def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
+    @wraps(f)
+    def forall_hosts_wrapper(*args) -> List[T]:
 
-            name = f.__name__
-            many = c_kwargs.get('many', False)
+        # Some weired logic to make calling functions with multiple arguments work.
+        if len(args) == 1:
+            vals = args[0]
+            self = None
+        elif len(args) == 2:
+            self, vals = args
+        else:
+            assert 'either f([...]) or self.f([...])'
 
-            # Some weired logic to make calling functions with multiple arguments work.
-            if len(args) == 1:
-                [value] = args
-                if many and value and isinstance(value[0], tuple):
-                    return cls(on_complete=lambda x: f(*x), value=value, name=name, **c_kwargs)
-                else:
-                    return cls(on_complete=f, value=value, name=name, **c_kwargs)
-            else:
-                if many:
-                    self, value = args
+        def do_work(arg):
+            if not isinstance(arg, tuple):
+                arg = (arg, )
+            try:
+                if self:
+                    return f(self, *arg)
+                return f(*arg)
+            except Exception as e:
+                logger.exception(f'executing {f.__name__}({args}) failed.')
+                raise
 
-                    def call_self(inner_args):
-                        if not isinstance(inner_args, tuple):
-                            inner_args = (inner_args, )
-                        return f(self, *inner_args)
-
-                    return cls(on_complete=call_self, value=value, name=name, **c_kwargs)
-                else:
-                    return cls(on_complete=lambda x: f(*x), value=args, name=name, **c_kwargs)
-
-        return wrapper
-    return decorator
+        assert CephadmOrchestrator.instance is not None
+        return CephadmOrchestrator.instance._worker_pool.map(do_work, vals)
 
 
-def async_completion(f):
-    # type: (Callable) -> Callable[..., AsyncCompletion]
-    """
-    See ./HACKING.rst for a how-to
-
-    :param f: wrapped function
-    """
-    return ssh_completion()(f)
-
-
-def async_map_completion(f):
-    # type: (Callable) -> Callable[..., AsyncCompletion]
-    """
-    See ./HACKING.rst for a how-to
-
-    :param f: wrapped function
-
-    kind of similar to
-
-    >>> def sync_map(f):
-    ...     return lambda x: map(f, x)
-
-    """
-    return ssh_completion(many=True)(f)
+    return forall_hosts_wrapper
 
 
 def trivial_completion(f):
@@ -1076,7 +1021,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: (Optional[str]) -> List[str]
         return list(self.inventory.filter_by_label(label))
 
-    @async_completion
+    @trivial_completion
     def add_host(self, spec):
         # type: (HostSpec) -> str
         """
@@ -1100,7 +1045,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
 
-    @async_completion
+    @trivial_completion
     def remove_host(self, host):
         # type: (str) -> str
         """
@@ -1115,7 +1060,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('Removed host %s' % host)
         return "Removed host '{}'".format(host)
 
-    @async_completion
+    @trivial_completion
     def update_host_addr(self, host, addr):
         self.inventory.set_addr(host, addr)
         self._reset_con(host)
@@ -1134,13 +1079,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         return list(self.inventory.all_specs())
 
-    @async_completion
+    @trivial_completion
     def add_host_label(self, host, label):
         self.inventory.add_label(host, label)
         self.log.info('Added label %s to host %s' % (label, host))
         return 'Added label %s to host %s' % (label, host)
 
-    @async_completion
+    @trivial_completion
     def remove_host_label(self, host, label):
         self.inventory.rm_label(host, label)
         self.log.info('Removed label %s to host %s' % (label, host))
@@ -1349,6 +1294,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 result.append(dd)
         return result
 
+    @trivial_completion
     def service_action(self, action, service_name):
         args = []
         for host, dm in self.cache.daemons.items():
@@ -1359,7 +1305,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.log.info('%s service %s' % (action.capitalize(), service_name))
         return self._daemon_actions(args)
 
-    @async_map_completion
+    @forall_hosts
     def _daemon_actions(self, daemon_type, daemon_id, host, action):
         return self._daemon_action(daemon_type, daemon_id, host, action)
 
@@ -1385,6 +1331,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
+    @trivial_completion
     def daemon_action(self, action, daemon_type, daemon_id):
         args = []
         for host, dm in self.cache.daemons.items():
@@ -1401,8 +1348,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             ','.join(['%s.%s' % (a[0], a[1]) for a in args])))
         return self._daemon_actions(args)
 
+    @trivial_completion
     def remove_daemons(self, names):
-        # type: (List[str]) -> orchestrator.Completion
+        # type: (List[str]) -> List[str]
         args = []
         for host, dm in self.cache.daemons.items():
             for name in names:
@@ -1463,8 +1411,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
         return '\n'.join(out + err)
 
+    @trivial_completion
     def blink_device_light(self, ident_fault, on, locs):
-        @async_map_completion
+        @forall_hosts
         def blink(host, dev, path):
             cmd = [
                 'lsmcli',
@@ -1631,11 +1580,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return "{} {} on host '{}'".format(
             'Reconfigured' if reconfig else 'Deployed', name, host)
 
-    @async_map_completion
-    def _remove_daemons(self, name, host):
+    @forall_hosts
+    def _remove_daemons(self, name, host) -> str:
         return self._remove_daemon(name, host)
 
-    def _remove_daemon(self, name, host):
+    def _remove_daemon(self, name, host) -> str:
         """
         Remove a daemon
         """
@@ -1866,7 +1815,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                            e)
 
     def _add_daemon(self, daemon_type, spec,
-                    create_func, config_func=None):
+                    create_func: Callable[..., T], config_func=None) -> List[T]:
         """
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
@@ -1882,7 +1831,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     def _create_daemons(self, daemon_type, spec, daemons,
                         hosts, count,
-                        create_func, config_func=None):
+                        create_func: Callable[..., T], config_func=None) -> List[T]:
         if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
@@ -1912,7 +1861,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             )
             daemons.append(sd)
 
-        @async_map_completion
+        @forall_hosts
         def create_func_map(*args):
             return create_func(*args)
 
@@ -1922,12 +1871,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_mon(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_mon(self, spec):
-        # type: (ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('mon', spec, self.mon_service.create)
 
+    @trivial_completion
     def add_mgr(self, spec):
-        # type: (ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('mgr', spec, self.mgr_service.create)
 
     def _apply(self, spec: ServiceSpec) -> str:
@@ -1974,6 +1925,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_mgr(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_mds(self, spec: ServiceSpec):
         return self._add_daemon('mds', spec, self.mds_service.create, self.mds_service.config)
 
@@ -1981,6 +1933,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_mds(self, spec: ServiceSpec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_rgw(self, spec):
         return self._add_daemon('rgw', spec, self.rgw_service.create, self.rgw_service.config)
 
@@ -1988,14 +1941,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_rgw(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_iscsi(self, spec):
-        # type: (ServiceSpec) -> orchestrator.Completion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('iscsi', spec, self.iscsi_servcie.create, self.iscsi_servcie.config)
 
     @trivial_completion
     def apply_iscsi(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_rbd_mirror(self, spec):
         return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.create)
 
@@ -2003,6 +1958,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_rbd_mirror(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_nfs(self, spec):
         return self._add_daemon('nfs', spec, self.nfs_service.create, self.nfs_service.config)
 
@@ -2014,6 +1970,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         # type: () -> str
         return self.get('mgr_map').get('services', {}).get('dashboard', '')
 
+    @trivial_completion
     def add_prometheus(self, spec):
         return self._add_daemon('prometheus', spec, self.prometheus_service.create)
 
@@ -2021,8 +1978,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_prometheus(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_node_exporter(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('node-exporter', spec,
                                 self.node_exporter_service.create)
 
@@ -2030,8 +1988,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_node_exporter(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_crash(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('crash', spec,
                                 self.crash_service.create)
 
@@ -2039,16 +1998,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def apply_crash(self, spec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_grafana(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('grafana', spec, self.grafana_service.create)
 
     @trivial_completion
     def apply_grafana(self, spec: ServiceSpec):
         return self._apply(spec)
 
+    @trivial_completion
     def add_alertmanager(self, spec):
-        # type: (ServiceSpec) -> AsyncCompletion
+        # type: (ServiceSpec) -> List[str]
         return self._add_daemon('alertmanager', spec, self.alertmanager_service.create)
 
     @trivial_completion
