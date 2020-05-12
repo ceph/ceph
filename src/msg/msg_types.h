@@ -173,6 +173,34 @@ struct ceph_sockaddr_storage {
 WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 
 /*
+ * Return the expected socket length as indicated by the
+ * family.
+ */
+static inline size_t get_family_len(int family) {
+    switch (family) {
+    case AF_INET:
+      return sizeof(struct sockaddr_in);
+    case AF_INET6:
+      return sizeof(struct sockaddr_in6);
+    }
+    return 0;
+}
+
+/*
+ * Return the size of the socket, or the max size of what it
+ * could be in the family is unknown.
+ */
+static inline size_t get_sockaddr_size(int family) {
+    switch (family) {
+    case AF_INET:
+      return sizeof(struct sockaddr_in);
+    case AF_INET6:
+      return sizeof(struct sockaddr_in6);
+    }
+    return sizeof(struct ceph_sockaddr_storage);
+}
+
+/*
  * encode sockaddr.ss_family as network byte order
  */
 static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
@@ -256,6 +284,54 @@ struct entity_addr_t {
     sockaddr_in6 sin6;
   } u;
 
+  /*
+   * Glue functions to handle the difference in sockaddr with 
+   * short sa_family and (uchar sa_len, uint8 sa_family)
+   * This assumes that the data in the sockaddr is in host native structure
+   */ 
+  inline uint_8 get_sa_len() const {
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
+    return u.sa.sa_len;
+#else
+   return get_sockaddr_size(u.sa.family);
+#endif
+  }
+  inline void set_sa_len(uint_8 l) {
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
+    u.sa.sa_len = l;
+#else
+    /* Otherwise ignore the setting */
+#endif
+  }
+  inline int get_family() const {
+    return u.sa.sa_family;
+  }
+  inline void set_family(int f) {
+    u.sa.sa_family = f;
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
+    // Setting family also updates the length
+    set_sa_len(get_family_len(f));
+#endif
+  }
+  /*
+   * Convert between host native and network format
+   */
+  inline void ntohs_family_sa_len() {
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
+    // Correct the sockaddr from native to BSD
+    // So the byte in sa_len contains the family
+    set_family(get_sa_len());
+#endif
+  }
+  inline void hston_family_sa_len() {
+#if defined(HAVE_STRUCT_SOCKADDR_SA_LEN)
+    // Correct the sockaddr from FreeBSD to native
+    // So sa_len contains the family
+    // and family has the MSB == 0
+    set_family(0);
+#endif
+  }
+
   entity_addr_t() : type(0), nonce(0) {
     memset(&u, 0, sizeof(u));
   }
@@ -279,13 +355,6 @@ struct entity_addr_t {
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
-
-  int get_family() const {
-    return u.sa.sa_family;
-  }
-  void set_family(int f) {
-    u.sa.sa_family = f;
-  }
 
   bool is_ipv4() const {
     return u.sa.sa_family == AF_INET;
