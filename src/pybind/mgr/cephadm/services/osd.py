@@ -30,13 +30,13 @@ class OSDService(CephadmService):
             if not cmd:
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
                 continue
-            ret_msg = self.create(host, cmd,
-                                              replace_osd_ids=drive_group.osd_id_claims.get(host, []))
+            env_vars = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
+            ret_msg = self.create(host, cmd, replace_osd_ids=drive_group.osd_id_claims.get(host, []), env_vars=env_vars)
             ret.append(ret_msg)
         return ", ".join(ret)
         
-    def create(self, host: str, cmd: str, replace_osd_ids=None) -> str:
-        out, err, code = self._run_ceph_volume_command(host, cmd)
+    def create(self, host: str, cmd: str, replace_osd_ids=None, env_vars: Optional[List[str]] = None) -> str:
+        out, err, code = self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
 
         if code == 1 and ', it is already prepared' in '\n'.join(err):
             # HACK: when we create against an existing LV, ceph-volume
@@ -161,7 +161,7 @@ class OSDService(CephadmService):
                                     'host': host})
         return ret_all
 
-    def _run_ceph_volume_command(self, host: str, cmd: str) -> Tuple[List[str], List[str], int]:
+    def _run_ceph_volume_command(self, host: str, cmd: str, env_vars: Optional[List[str]] = None) -> Tuple[List[str], List[str], int]:
         self.mgr.inventory.assert_host(host)
 
         # get bootstrap key
@@ -186,6 +186,7 @@ class OSDService(CephadmService):
         out, err, code = self.mgr._run_cephadm(
             host, 'osd', 'ceph-volume',
             _cmd,
+            env_vars=env_vars,
             stdin=j,
             error_ok=True)
         return out, err, code
