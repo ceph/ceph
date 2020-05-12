@@ -1522,14 +1522,13 @@ you may want to run:
         if not osdspecs:
             self.log.debug("No OSDSpecs found")
             return []
-        # TODO: adapt this when we change patter_matches_hosts with https://github.com/ceph/ceph/pull/34860
-        return sum([spec.placement.pattern_matches_hosts(self.cache.get_hosts()) for spec in osdspecs], [])
+        return sum([spec.placement.filter_matching_hosts(self._get_hosts) for spec in osdspecs], [])
 
     def resolve_osdspecs_for_host(self, host):
         matching_specs = []
         self.log.debug(f"Finding OSDSpecs for host: <{host}>")
         for spec in self.spec_store.find('osd'):
-            if host in spec.placement.pattern_matches_hosts(self.cache.get_hosts()):
+            if host in spec.placement.filter_matching_hosts(self._get_hosts):
                 self.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
                 matching_specs.append(spec)
         return matching_specs
