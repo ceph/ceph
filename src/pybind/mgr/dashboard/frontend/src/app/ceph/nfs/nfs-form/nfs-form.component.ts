@@ -123,9 +123,10 @@ export class NfsFormComponent implements OnInit {
       this.getData(promises);
     }
 
-    const summary = this.summaryservice.getCurrentSummary();
-    const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-    this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/radosgw/nfs/`;
+    this.summaryservice.subscribeOnce((summary) => {
+      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
+      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/radosgw/nfs/`;
+    });
   }
 
   getData(promises: Observable<any>[]) {
