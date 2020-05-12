@@ -10,6 +10,8 @@
 
 #include "rgw_acl_s3.h"
 #include "rgw_user.h"
+#include "rgw_service.h"
+#include "rgw_role.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -474,7 +476,7 @@ int RGWAccessControlPolicy_S3::create_from_headers(RGWUserCtl *user_ctl, const R
 /*
   can only be called on object that was parsed
  */
-int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
+int RGWAccessControlPolicy_S3::rebuild(RGWCtl *ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
                                        std::string &err_msg)
 {
   if (!owner)
@@ -487,15 +489,28 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
       return -EPERM;
   }
 
-  RGWUserInfo owner_info;
-  if (user_ctl->get_info_by_uid(owner->get_id(), &owner_info, null_yield) < 0) {
-    ldout(cct, 10) << "owner info does not exist" << dendl;
-    err_msg = "Invalid id";
-    return -EINVAL;
+  string display_name;
+  if (owner->is_identity_role()) {
+    rgw_user user_id = owner->get_id();
+    RGWRole role(cct, ctl, user_id.id, user_id.tenant);
+    if (role.get() < 0) {
+      ldout(cct, 10) << "owner info does not exist" << dendl;
+      err_msg = "Invalid id";
+      return -EINVAL;
+    }
+    display_name = owner->get_display_name();
+  } else {
+    RGWUserInfo owner_info;
+    if (ctl->user->get_info_by_uid(owner->get_id(), &owner_info, null_yield) < 0) {
+      ldout(cct, 10) << "owner info does not exist" << dendl;
+      err_msg = "Invalid id";
+      return -EINVAL;
+    }
+    display_name = owner_info.display_name;
   }
   ACLOwner& dest_owner = dest.get_owner();
   dest_owner.set_id(owner->get_id());
-  dest_owner.set_name(owner_info.display_name);
+  dest_owner.set_name(display_name);
 
   ldout(cct, 20) << "owner id=" << owner->get_id() << dendl;
   ldout(cct, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
@@ -522,7 +537,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
         }
         email = u.id;
         ldout(cct, 10) << "grant user email=" << email << dendl;
-        if (user_ctl->get_info_by_email(email, &grant_user, null_yield) < 0) {
+        if (ctl->user->get_info_by_email(email, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user email not found or other error" << dendl;
           err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
@@ -539,7 +554,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
           }
         }
     
-        if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(uid, &grant_user, null_yield) < 0) {
+        if (grant_user.user_id.empty() && ctl->user->get_info_by_uid(uid, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           err_msg = "Invalid id";
           return -EINVAL;

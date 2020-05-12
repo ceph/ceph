@@ -10,6 +10,7 @@
 #include <include/types.h>
 
 #include "include/str_list.h"
+#include "rgw_service.h"
 #include "rgw_xml.h"
 #include "rgw_acl.h"
 
@@ -83,7 +84,7 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
-  int rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
+  int rebuild(RGWCtl *ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
               std::string &err_msg);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
