@@ -336,8 +336,7 @@ Journal::replay_segment(
 		    deltas,
 		    [this, &delta_handler, record_start](auto &info) {
 		      return delta_handler(
-			record_start.add_relative(
-			  make_relative_paddr(block_size)),
+			record_start.add_offset(block_size),
 			info);
 		    });
 		}).safe_then([] {

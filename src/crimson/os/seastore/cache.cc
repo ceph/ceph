@@ -182,7 +182,7 @@ Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
 {
   if (delta.type == extent_types_t::ROOT_LOCATION) {
     auto root_location = delta.paddr.is_relative()
-      ? record_base.add_relative(delta.paddr)
+      ? record_base.add_record_relative(delta.paddr)
       : delta.paddr;
     logger().debug("replay_delta: found root addr {}", root_location);
     return get_extent<RootBlock>(

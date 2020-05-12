@@ -61,7 +61,7 @@ class Transaction {
 
   void add_fresh_extent(CachedExtentRef ref) {
     fresh_block_list.push_back(ref);
-    ref->set_paddr(make_relative_paddr(offset));
+    ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
     write_set.insert(*ref);
   }

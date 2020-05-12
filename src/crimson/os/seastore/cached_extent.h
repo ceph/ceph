@@ -309,7 +309,8 @@ protected:
     } else if (is_mutation_pending()) {
       return addr;
     } else {
-      ceph_assert(get_paddr().is_relative());
+      ceph_assert(is_initial_pending());
+      ceph_assert(get_paddr().is_record_relative());
       return addr - get_paddr();
     }
   }
