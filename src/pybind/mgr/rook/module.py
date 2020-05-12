@@ -460,7 +460,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._service_add_decorate('RGW', spec,
                                           self.rook_cluster.apply_objectstore)
 
-
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> RookCompletion
         num = spec.placement.count
@@ -478,7 +477,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def create_osds(self, drive_group):
-        # type: (DriveGroupSpec) -> orchestrator.Completion
+        # type: (DriveGroupSpec) -> RookCompletion
         """ Creates OSDs from a drive group specification.
 
         $: ceph orch osd create -i <dg.file>
@@ -492,9 +491,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if drive_group.data_directories:
             targets += drive_group.data_directories
 
-        def execute():
-            # type: () -> orchestrator.Completion
-            matching_hosts = drive_group.placement.filter_matching_hosts(self.get_hosts)
+        def execute(all_hosts_):
+            # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
+            all_hosts = [h.hostname for h in all_hosts_]
+            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts)
 
             assert len(matching_hosts) == 1
 
@@ -549,7 +549,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return found is not None
 
-        c = execute()
+        c = self.get_hosts().then(execute)
         return c
 
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> RookCompletion:
