@@ -48,7 +48,7 @@ int RGWSI_DataLog_RADOS::get_log_shard_id(rgw_bucket& bucket, int shard_id)
   return log->get_log_shard_id(bucket, shard_id);
 }
 
-const std::string& RGWSI_DataLog_RADOS::get_oid(int shard_id) const
+std::string RGWSI_DataLog_RADOS::get_oid(int shard_id) const
 {
   return log->get_oid(shard_id);
 }
@@ -63,25 +63,23 @@ int RGWSI_DataLog_RADOS::add_entry(const RGWBucketInfo& bucket_info, int shard_i
   return log->add_entry(bucket_info, shard_id);
 }
 
-int RGWSI_DataLog_RADOS::list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
-                 list<rgw_data_change_log_entry>& entries,
-                 const string& marker,
-                 string *out_marker,
-                 bool *truncated)
+int RGWSI_DataLog_RADOS::list_entries(int shard, int max_entries,
+				      std::vector<rgw_data_change_log_entry>& entries,
+				      std::optional<std::string_view> marker,
+				      std::string* out_marker,
+				      bool* truncated)
 {
-  return log->list_entries(shard, start_time, end_time, max_entries,
+  return log->list_entries(shard, max_entries,
                            entries, marker, out_marker, truncated);
 }
 
-int RGWSI_DataLog_RADOS::list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
-				      list<rgw_data_change_log_entry>& entries, RGWDataChangesLogMarker& marker, bool *ptruncated)
+int RGWSI_DataLog_RADOS::list_entries(int max_entries,
+				      std::vector<rgw_data_change_log_entry>& entries, RGWDataChangesLogMarker& marker, bool *ptruncated)
 {
-  return log->list_entries(start_time, end_time, max_entries,
-			   entries, marker, ptruncated);
+  return log->list_entries(max_entries, entries, marker, ptruncated);
 }
 
-int RGWSI_DataLog_RADOS::trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
-                                      const string& start_marker, const string& end_marker)
+int RGWSI_DataLog_RADOS::trim_entries(int shard_id, std::string_view marker)
 {
-  return log->trim_entries(shard_id, start_time, end_time, start_marker, end_marker);
+  return log->trim_entries(shard_id, marker);
 }

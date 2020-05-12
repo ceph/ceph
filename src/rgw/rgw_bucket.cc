@@ -10,6 +10,10 @@
 #include <boost/utility/string_ref.hpp>
 #include <boost/format.hpp>
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include "fmt/format.h"
+
 #include "common/errno.h"
 #include "common/ceph_json.h"
 #include "include/scope_guard.h"
@@ -2147,9 +2151,7 @@ RGWDataChangesLog::RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc,
   }
 
   for (int i = 0; i < num_shards; i++) {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%s.%d", prefix.c_str(), i);
-    oids[i] = buf;
+    oids[i] = get_oid(i);
   }
 
   renew_thread = new ChangesRenewThread(cct, this);
@@ -2268,6 +2270,15 @@ bool RGWDataChangesLog::filter_bucket(const rgw_bucket& bucket, optional_yield y
   return bucket_filter(bucket, y);
 }
 
+std::string RGWDataChangesLog::get_oid(int i) const {
+  std::string_view prefix = cct->_conf->rgw_data_log_obj_prefix;
+  if (prefix.empty()) {
+    prefix = "data_log"sv;
+  }
+  return fmt::format("{}.{}", prefix, i);
+}
+
+
 int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
   auto& bucket = bucket_info.bucket;
 
@@ -2295,7 +2306,9 @@ int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id)
 
   status->lock.lock();
 
-  ldout(cct, 20) << "RGWDataChangesLog::add_entry() bucket.name=" << bucket.name << " shard_id=" << shard_id << " now=" << now << " cur_expiration=" << status->cur_expiration << dendl;
+  ldout(cct, 20) << "RGWDataChangesLog::add_entry() bucket.name=" << bucket.name
+		 << " shard_id=" << shard_id << " now=" << now
+		 << " cur_expiration=" << status->cur_expiration << dendl;
 
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
@@ -2338,7 +2351,7 @@ int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id)
     expiration += ceph::make_timespan(cct->_conf->rgw_data_log_window);
 
     status->lock.unlock();
-  
+
     bufferlist bl;
     rgw_data_change change;
     change.entity_type = ENTITY_TYPE_BUCKET;
@@ -2371,24 +2384,22 @@ int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id)
   return ret;
 }
 
-int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
-				    list<rgw_data_change_log_entry>& entries,
-				    const string& marker,
-				    string *out_marker,
-				    bool *truncated) {
-  if (shard >= num_shards)
-    return -EINVAL;
+int RGWDataChangesLog::list_entries(int shard, int max_entries,
+				    std::vector<rgw_data_change_log_entry>& entries,
+				    std::optional<std::string_view> marker,
+				    std::string* out_marker, bool* truncated)
+{
+  assert(shard < num_shards);
+  std::list<cls_log_entry> log_entries;
 
-  list<cls_log_entry> log_entries;
-
-  int ret = svc.cls->timelog.list(oids[shard], start_time, end_time,
-				 max_entries, log_entries, marker,
-				 out_marker, truncated, null_yield);
+  int ret = svc.cls->timelog.list(oids[shard], {}, {},
+				  max_entries, log_entries,
+				  std::string(marker.value_or("")),
+				  out_marker, truncated, null_yield);
   if (ret < 0)
     return ret;
 
-  list<cls_log_entry>::iterator iter;
-  for (iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
+  for (auto iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
     rgw_data_change_log_entry log_entry;
     log_entry.log_id = iter->id;
     real_time rt = iter->timestamp.to_real_time();
@@ -2406,15 +2417,17 @@ int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, cons
   return 0;
 }
 
-int RGWDataChangesLog::list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
-             list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated) {
+int RGWDataChangesLog::list_entries(int max_entries,
+				    std::vector<rgw_data_change_log_entry>& entries,
+				    LogMarker& marker, bool *ptruncated)
+{
   bool truncated;
   entries.clear();
 
   for (; marker.shard < num_shards && (int)entries.size() < max_entries;
-       marker.shard++, marker.marker.clear()) {
-    int ret = list_entries(marker.shard, start_time, end_time, max_entries - entries.size(), entries,
-			   marker.marker, NULL, &truncated);
+       marker.shard++, marker.marker.reset()) {
+    int ret = list_entries(marker.shard, max_entries - entries.size(),
+			   entries, marker.marker, NULL, &truncated);
     if (ret == -ENOENT) {
       continue;
     }
@@ -2434,9 +2447,7 @@ int RGWDataChangesLog::list_entries(const real_time& start_time, const real_time
 
 int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
 {
-  if (shard_id >= num_shards)
-    return -EINVAL;
-
+  assert(shard_id < num_shards);
   string oid = oids[shard_id];
 
   cls_log_header header;
@@ -2451,14 +2462,19 @@ int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
   return 0;
 }
 
-int RGWDataChangesLog::trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
-                                    const string& start_marker, const string& end_marker)
+int RGWDataChangesLog::trim_entries(int shard_id, std::string_view marker)
 {
-  if (shard_id > num_shards)
-    return -EINVAL;
+  assert(shard_id < num_shards);
+  return svc.cls->timelog.trim(oids[shard_id], {}, {},
+                               {}, std::string(marker), nullptr, null_yield);
+}
 
-  return svc.cls->timelog.trim(oids[shard_id], start_time, end_time,
-                               start_marker, end_marker, nullptr, null_yield);
+int RGWDataChangesLog::trim_entries(int shard_id, std::string_view marker,
+				    librados::AioCompletion* c)
+{
+  assert(shard_id < num_shards);
+  return svc.cls->timelog.trim(oids[shard_id], {}, {},
+			       {}, std::string(marker), c, null_yield);
 }
 
 bool RGWDataChangesLog::going_down()
@@ -2954,8 +2970,8 @@ public:
   RGWBucketInstanceMetadataHandler() {}
 
   void init(RGWSI_Zone *zone_svc,
-           RGWSI_Bucket *bucket_svc,
-           RGWSI_BucketIndex *bi_svc) {
+	    RGWSI_Bucket *bucket_svc,
+	    RGWSI_BucketIndex *bi_svc) override {
     base_init(bucket_svc->ctx(),
               bucket_svc->get_bi_be_handler().get());
     svc.zone = zone_svc;

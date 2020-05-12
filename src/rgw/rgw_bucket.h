@@ -490,7 +490,7 @@ struct BucketChangeObserver;
 
 struct RGWDataChangesLogMarker {
   int shard = 0;
-  std::string marker;
+  std::optional<std::string> marker;
 
   RGWDataChangesLogMarker() = default;
 };
@@ -558,23 +558,24 @@ public:
   ~RGWDataChangesLog();
 
   int choose_oid(const rgw_bucket_shard& bs);
-  const std::string& get_oid(int shard_id) const { return oids[shard_id]; }
+  std::string get_oid(int shard_id) const;
   int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int renew_entries();
-  int list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
-		   list<rgw_data_change_log_entry>& entries,
-		   const string& marker,
-		   string *out_marker,
-		   bool *truncated);
-  int trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
-                   const string& start_marker, const string& end_marker);
+  int list_entries(int shard, int max_entries,
+		   std::vector<rgw_data_change_log_entry>& entries,
+		   std::optional<std::string_view> marker,
+		   std::string* out_marker, bool* truncated);
+  int trim_entries(int shard_id, std::string_view marker);
+  int trim_entries(int shard_id, std::string_view marker,
+		   librados::AioCompletion* c); // :(
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
 
   using LogMarker = RGWDataChangesLogMarker;
 
-  int list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
-               list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
+  int list_entries(int max_entries,
+		   std::vector<rgw_data_change_log_entry>& entries,
+		   LogMarker& marker, bool* ptruncated);
 
   void mark_modified(int shard_id, const rgw_bucket_shard& bs);
   void read_clear_modified(map<int, set<string> > &modified);
