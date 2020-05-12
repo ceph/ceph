@@ -84,6 +84,8 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	      return seastar::make_ready_future<>();
 	    })
 	  );
+	} else {
+	  logger().debug("recover_object: already has obc!");
 	}
 	return seastar::now();
       }().then([this, soid, need, &pops, &shards] {
