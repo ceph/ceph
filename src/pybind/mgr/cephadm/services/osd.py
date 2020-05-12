@@ -97,8 +97,7 @@ class OSDService(CephadmService):
 
     def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
         # 1) use fn_filter to determine matching_hosts
-        matching_hosts = drive_group.placement.pattern_matches_hosts(
-            [x for x in self.mgr.cache.get_hosts()])
+        matching_hosts = drive_group.placement.filter_matching_hosts(self.mgr._get_hosts)
         # 2) Map the inventory to the InventoryHost object
         host_ds_map = []
 

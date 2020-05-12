@@ -58,7 +58,7 @@ class HostAssignment(object):
 
     def __init__(self,
                  spec,  # type: ServiceSpec
-                 get_hosts_func,  # type: Callable[[Optional[str]],List[str]]
+                 get_hosts_func,  # type: Callable
                  get_daemons_func, # type: Callable[[str],List[orchestrator.DaemonDescription]]
 
                  filter_new_host=None, # type: Optional[Callable[[str],bool]]
@@ -78,19 +78,19 @@ class HostAssignment(object):
 
         if self.spec.placement.hosts:
             explicit_hostnames = {h.hostname for h in self.spec.placement.hosts}
-            unknown_hosts = explicit_hostnames.difference(set(self.get_hosts_func(None)))
+            unknown_hosts = explicit_hostnames.difference(set(self.get_hosts_func()))
             if unknown_hosts:
                 raise OrchestratorValidationError(
                     f'Cannot place {self.spec.one_line_str()} on {unknown_hosts}: Unknown hosts')
 
         if self.spec.placement.host_pattern:
-            pattern_hostnames = self.spec.placement.pattern_matches_hosts(self.get_hosts_func(None))
+            pattern_hostnames = self.spec.placement.filter_matching_hosts(self.get_hosts_func)
             if not pattern_hostnames:
                 raise OrchestratorValidationError(
                     f'Cannot place {self.spec.one_line_str()}: No matching hosts')
 
         if self.spec.placement.label:
-            label_hostnames = self.get_hosts_func(self.spec.placement.label)
+            label_hostnames = self.get_hosts_func(label=self.spec.placement.label)
             if not label_hostnames:
                 raise OrchestratorValidationError(
                     f'Cannot place {self.spec.one_line_str()}: No matching '
@@ -117,7 +117,7 @@ class HostAssignment(object):
         if self.spec.placement.host_pattern:
             candidates = [
                 HostPlacementSpec(x, '', '')
-                for x in self.spec.placement.pattern_matches_hosts(self.get_hosts_func(None))
+                for x in self.spec.placement.filter_matching_hosts(self.get_hosts_func)
             ]
             logger.debug('All hosts: {}'.format(candidates))
             return candidates
@@ -133,7 +133,7 @@ class HostAssignment(object):
         elif self.spec.placement.label:
             hosts = [
                 HostPlacementSpec(x, '', '')
-                for x in self.get_hosts_func(self.spec.placement.label)
+                for x in self.get_hosts_func(label=self.spec.placement.label)
             ]
             if not self.spec.placement.count:
                 logger.debug('Labeled hosts: {}'.format(hosts))
@@ -144,7 +144,7 @@ class HostAssignment(object):
         else:
             hosts = [
                 HostPlacementSpec(x, '', '')
-                for x in self.get_hosts_func(None)
+                for x in self.get_hosts_func()
             ]
             if self.spec.placement.count:
                 count = self.spec.placement.count
