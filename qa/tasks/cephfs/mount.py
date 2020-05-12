@@ -107,29 +107,31 @@ class CephFSMount(object):
             _ip, _mask = brx[0].split()[1].split('/', 1)
             if _ip != "{}".format(ip) or _mask != mask:
                 raise RuntimeError("Conflict with existing ceph-brx {0}, new {1}/{2}".format(brx[0].split()[1], ip, mask))
-            return 
-
-        log.info("Setuping the 'ceph-brx' with {0}/{1}".format(ip, mask))
 
         # Setup the ceph-brx and always use the last valid IP
-        args = ["sudo", "bash", "-c", "ip link add name ceph-brx type bridge"]
-        self.client_remote.run(args=args, timeout=(5*60))
-        args = ["sudo", "bash", "-c", "ip link set ceph-brx up"]
-        self.client_remote.run(args=args, timeout=(5*60))
-        args = ["sudo", "bash", "-c",
-                "ip addr add {0}/{1} brd {2} dev ceph-brx".format(ip, mask, brd)]
-        self.client_remote.run(args=args, timeout=(5*60))
+        if not brx:
+            log.info("Setuping the 'ceph-brx' with {0}/{1}".format(ip, mask))
+
+            args = ["sudo", "bash", "-c", "ip link add name ceph-brx type bridge"]
+            self.client_remote.run(args=args, timeout=(5*60))
+            args = ["sudo", "bash", "-c", "ip link set ceph-brx up"]
+            self.client_remote.run(args=args, timeout=(5*60))
+            args = ["sudo", "bash", "-c",
+                    "ip addr add {0}/{1} brd {2} dev ceph-brx".format(ip, mask, brd)]
+            self.client_remote.run(args=args, timeout=(5*60))
         
-        # Save the ip_forward
-        self.client_remote.run(args=['touch', '/tmp/python-ceph-brx'],
-                               timeout=(5*60))
-        p = self.client_remote.run(args=['cat', '/proc/sys/net/ipv4/ip_forward'],
-                                   stderr=StringIO(), stdout=StringIO(),
-                                   timeout=(5*60))
-        val = p.stdout.getvalue().strip()
-        args = ["sudo", "bash", "-c",
-                "echo {} > /tmp/python-ceph-brx".format(val)]
-        self.client_remote.run(args=args, timeout=(5*60))
+        # Save the ip_forward's old value
+        save_path = "/tmp/python-ceph-brx"
+        if not os.path.exists(save_path):
+            self.client_remote.run(args=['touch', save_path], timeout=(5*60))
+            p = self.client_remote.run(args=['cat', '/proc/sys/net/ipv4/ip_forward'],
+                                       stderr=StringIO(), stdout=StringIO(),
+                                       timeout=(5*60))
+            val = p.stdout.getvalue().strip()
+            args = ["sudo", "bash", "-c",
+                    "echo {0} > {1}".format(val, save_path)]
+            self.client_remote.run(args=args, timeout=(5*60))
+
         args = ["sudo", "bash", "-c",
                 "echo 1 > /proc/sys/net/ipv4/ip_forward"]
         self.client_remote.run(args=args, timeout=(5*60))
@@ -303,14 +305,15 @@ class CephFSMount(object):
         self.client_remote.run(args=args, timeout=(5*60))
 
         # Restore the ip_forward
-        p = self.client_remote.run(args=['cat', '/tmp/python-ceph-brx'],
+        save_path = "/tmp/python-ceph-brx"
+        p = self.client_remote.run(args=['cat', save_path],
                                    stderr=StringIO(), stdout=StringIO(),
                                    timeout=(5*60))
         val = p.stdout.getvalue().strip()
         args = ["sudo", "bash", "-c",
                 "echo {} > /proc/sys/net/ipv4/ip_forward".format(val)]
         self.client_remote.run(args=args, timeout=(5*60))
-        self.client_remote.run(args=['rm', '-f', '/tmp/python-ceph-brx'],
+        self.client_remote.run(args=['rm', '-f', save_path],
                                timeout=(5*60))
 
     def setup_netns(self):
