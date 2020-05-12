@@ -10,6 +10,7 @@ import { OrchestratorService } from '../../../../shared/api/orchestrator.service
 import { SubmitButtonComponent } from '../../../../shared/components/submit-button/submit-button.component';
 import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { Icons } from '../../../../shared/enum/icons.enum';
+import { CdForm } from '../../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
@@ -26,7 +27,7 @@ import { OsdFeature } from './osd-feature.interface';
   templateUrl: './osd-form.component.html',
   styleUrls: ['./osd-form.component.scss']
 })
-export class OsdFormComponent implements OnInit {
+export class OsdFormComponent extends CdForm implements OnInit {
   @ViewChild('dataDeviceSelectionGroups', { static: false })
   dataDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
@@ -44,7 +45,6 @@ export class OsdFormComponent implements OnInit {
   form: CdFormGroup;
   columns: Array<CdTableColumn> = [];
 
-  loading = false;
   allDevices: InventoryDevice[] = [];
 
   availDevices: InventoryDevice[] = [];
@@ -60,7 +60,7 @@ export class OsdFormComponent implements OnInit {
   features: { [key: string]: OsdFeature };
   featureList: OsdFeature[] = [];
 
-  hasOrchestrator = false;
+  hasOrchestrator = true;
   docsUrl: string;
 
   constructor(
@@ -71,6 +71,7 @@ export class OsdFormComponent implements OnInit {
     private router: Router,
     private bsModalService: BsModalService
   ) {
+    super();
     this.resource = this.i18n('OSDs');
     this.action = this.actionLabels.CREATE;
     this.features = {
@@ -86,8 +87,10 @@ export class OsdFormComponent implements OnInit {
   ngOnInit() {
     this.orchService.status().subscribe((status) => {
       this.hasOrchestrator = status.available;
-      if (this.hasOrchestrator) {
+      if (status.available) {
         this.getDataDevices();
+      } else {
+        this.loadingNone();
       }
     });
 
@@ -122,20 +125,16 @@ export class OsdFormComponent implements OnInit {
   }
 
   getDataDevices() {
-    if (this.loading) {
-      return;
-    }
-    this.loading = true;
     this.orchService.inventoryDeviceList().subscribe(
       (devices: InventoryDevice[]) => {
         this.allDevices = _.filter(devices, 'available');
         this.availDevices = [...this.allDevices];
-        this.loading = false;
+        this.loadingReady();
       },
       () => {
         this.allDevices = [];
         this.availDevices = [];
-        this.loading = false;
+        this.loadingError();
       }
     );
   }

@@ -11,6 +11,7 @@ import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
@@ -31,11 +32,9 @@ import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-u
   templateUrl: './rgw-user-form.component.html',
   styleUrls: ['./rgw-user-form.component.scss']
 })
-export class RgwUserFormComponent implements OnInit {
+export class RgwUserFormComponent extends CdForm implements OnInit {
   userForm: CdFormGroup;
   editing = false;
-  error = false;
-  loading = false;
   submitObservables: Observable<Object>[] = [];
   icons = Icons;
   subusers: RgwUserSubuser[] = [];
@@ -59,6 +58,7 @@ export class RgwUserFormComponent implements OnInit {
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.resource = this.i18n('user');
     this.subuserLabel = this.i18n('subuser');
     this.s3keyLabel = this.i18n('S3 Key');
@@ -155,17 +155,16 @@ export class RgwUserFormComponent implements OnInit {
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
+        this.loadingReady();
         return;
       }
       const uid = decodeURIComponent(params.uid);
-      this.loading = true;
       // Load the user and quota information.
       const observables = [];
       observables.push(this.rgwUserService.get(uid));
       observables.push(this.rgwUserService.getQuota(uid));
       observableForkJoin(observables).subscribe(
         (resp: any[]) => {
-          this.loading = false;
           // Get the default values.
           const defaults = _.clone(this.userForm.value);
           // Extract the values displayed in the form.
@@ -223,9 +222,11 @@ export class RgwUserFormComponent implements OnInit {
             }
           });
           this.capabilities = resp[0].caps;
+
+          this.loadingReady();
         },
-        (error) => {
-          this.error = error;
+        () => {
+          this.loadingError();
         }
       );
     });

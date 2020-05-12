@@ -4,12 +4,12 @@ import { Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { MgrModuleService } from '../../../shared/api/mgr-module.service';
 import { TelemetryService } from '../../../shared/api/telemetry.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -21,14 +21,9 @@ import { TextToDownloadService } from '../../../shared/services/text-to-download
   templateUrl: './telemetry.component.html',
   styleUrls: ['./telemetry.component.scss']
 })
-export class TelemetryComponent implements OnInit {
-  @BlockUI()
-  blockUI: NgBlockUI;
-
-  error = false;
+export class TelemetryComponent extends CdForm implements OnInit {
   configForm: CdFormGroup;
   licenseAgrmt = false;
-  loading = false;
   moduleEnabled: boolean;
   options: Object = {};
   previewForm: CdFormGroup;
@@ -54,10 +49,11 @@ export class TelemetryComponent implements OnInit {
     private telemetryService: TelemetryService,
     private i18n: I18n,
     private textToDownloadService: TextToDownloadService
-  ) {}
+  ) {
+    super();
+  }
 
   ngOnInit() {
-    this.loading = true;
     const observables = [
       this.mgrModuleService.getOptions('telemetry'),
       this.mgrModuleService.getConfig('telemetry')
@@ -69,10 +65,10 @@ export class TelemetryComponent implements OnInit {
         const configs = _.pick(resp[1], this.requiredFields);
         this.createConfigForm();
         this.configForm.setValue(configs);
-        this.loading = false;
+        this.loadingReady();
       },
       (_error) => {
-        this.error = true;
+        this.loadingError();
       }
     );
   }
@@ -120,17 +116,18 @@ export class TelemetryComponent implements OnInit {
   }
 
   private getReport() {
-    this.loading = true;
+    this.loadingStart();
+
     this.telemetryService.getReport().subscribe(
       (resp: object) => {
         this.report = resp;
         this.reportId = resp['report']['report_id'];
         this.createPreviewForm();
-        this.loading = false;
+        this.loadingReady();
         this.step++;
       },
       (_error) => {
-        this.error = true;
+        this.loadingError();
       }
     );
   }

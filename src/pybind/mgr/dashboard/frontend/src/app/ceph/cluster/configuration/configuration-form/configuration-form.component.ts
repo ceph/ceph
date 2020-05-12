@@ -9,6 +9,7 @@ import { ConfigurationService } from '../../../../shared/api/configuration.servi
 import { ConfigFormModel } from '../../../../shared/components/config-option/config-option.model';
 import { ConfigOptionTypes } from '../../../../shared/components/config-option/config-option.types';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
+import { CdForm } from '../../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
@@ -18,7 +19,7 @@ import { ConfigFormCreateRequestModel } from './configuration-form-create-reques
   templateUrl: './configuration-form.component.html',
   styleUrls: ['./configuration-form.component.scss']
 })
-export class ConfigurationFormComponent implements OnInit {
+export class ConfigurationFormComponent extends CdForm implements OnInit {
   configForm: CdFormGroup;
   response: ConfigFormModel;
   type: string;
@@ -36,6 +37,7 @@ export class ConfigurationFormComponent implements OnInit {
     private notificationService: NotificationService,
     private i18n: I18n
   ) {
+    super();
     this.createForm();
   }
 
@@ -62,6 +64,7 @@ export class ConfigurationFormComponent implements OnInit {
       const configName = params.name;
       this.configService.get(configName).subscribe((resp: ConfigFormModel) => {
         this.setResponse(resp);
+        this.loadingReady();
       });
     });
   }
