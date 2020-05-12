@@ -152,6 +152,36 @@ namespace std {
   };
 } // namespace std
 
+/*
+ * Return the expected socket length as indicated by the
+ * family.
+ */
+static inline size_t get_family_len(int family) {
+    switch (family) {
+    case AF_INET:
+      return sizeof(struct sockaddr_in);
+    case AF_INET6:
+      return sizeof(struct sockaddr_in6);
+    }
+    return 0;
+}
+
+/*
+ * Return the size of the socket, or the max size of what it
+ * could be in the family is unknown.
+ */
+r
+static inline size_t get_sockaddr_size(int family) {
+    switch (family) {
+    case AF_INET:
+      return sizeof(struct sockaddr_in);
+    case AF_INET6:
+      return sizeof(struct sockaddr_in6);
+    }
+    return sizeof(struct ceph_sockaddr_storage);
+}
+
+
 // define a wire format for sockaddr that matches Linux's.
 struct ceph_sockaddr_storage {
   ceph_le16 ss_family;
@@ -171,34 +201,6 @@ struct ceph_sockaddr_storage {
   }
 } __attribute__ ((__packed__));
 WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
-
-/*
- * Return the expected socket length as indicated by the
- * family.
- */
-static inline size_t get_family_len(int family) {
-    switch (family) {
-    case AF_INET:
-      return sizeof(struct sockaddr_in);
-    case AF_INET6:
-      return sizeof(struct sockaddr_in6);
-    }
-    return 0;
-}
-
-/*
- * Return the size of the socket, or the max size of what it
- * could be in the family is unknown.
- */
-static inline size_t get_sockaddr_size(int family) {
-    switch (family) {
-    case AF_INET:
-      return sizeof(struct sockaddr_in);
-    case AF_INET6:
-      return sizeof(struct sockaddr_in6);
-    }
-    return sizeof(struct ceph_sockaddr_storage);
-}
 
 /*
  * encode sockaddr.ss_family as network byte order
