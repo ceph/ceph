@@ -1,8 +1,5 @@
-<cd-loading-panel *ngIf="editing && loading && !error"
-                  i18n>Loading bucket data...</cd-loading-panel>
-
 <div class="cd-col-form"
-     *ngIf="!loading && !error">
+     *cdFormLoading="loading">
   <form name="bucketForm"
         #frm="ngForm"
         [formGroup]="bucketForm"

@@ -1,11 +1,5 @@
-<cd-loading-panel *ngIf="loading && !error"
-                  i18n>Loading configuration...</cd-loading-panel>
-<cd-alert-panel type="error"
-                *ngIf="loading && error"
-                i18n>The configuration could not be loaded.</cd-alert-panel>
-
 <div class="cd-col-form"
-     *ngIf="!loading && !error">
+     *cdFormLoading="loading">
   <ng-container [ngSwitch]="step">
     <!-- Configuration step -->
     <div *ngSwitchCase="1">

@@ -11,6 +11,7 @@ import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -23,7 +24,7 @@ import { RoleFormModel } from './role-form.model';
   templateUrl: './role-form.component.html',
   styleUrls: ['./role-form.component.scss']
 })
-export class RoleFormComponent implements OnInit {
+export class RoleFormComponent extends CdForm implements OnInit {
   @ViewChild('headerPermissionCheckboxTpl', { static: true })
   headerPermissionCheckboxTpl: TemplateRef<any>;
   @ViewChild('cellScopeCheckboxTpl', { static: true })
@@ -55,6 +56,7 @@ export class RoleFormComponent implements OnInit {
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.resource = this.i18n('role');
     this.createForm();
     this.listenToChanges();
@@ -131,6 +133,8 @@ export class RoleFormComponent implements OnInit {
     this.scopeService.list().subscribe((scopes: Array<string>) => {
       this.scopes = scopes;
       this.roleForm.get('scopes_permissions').setValue({});
+
+      this.loadingReady();
     });
   }
 
@@ -147,6 +151,8 @@ export class RoleFormComponent implements OnInit {
         ['name', 'description', 'scopes_permissions'].forEach((key) =>
           this.roleForm.get(key).setValue(resp[1][key])
         );
+
+        this.loadingReady();
       });
     });
   }

@@ -1,11 +1,8 @@
-<cd-loading-panel *ngIf="!pwdExpirationSettings"
-                  i18n>Loading...</cd-loading-panel>
-
-<div class="cd-col-form">
+<div class="cd-col-form"
+     *cdFormLoading="loading">
   <form name="userForm"
         #formDir="ngForm"
         [formGroup]="userForm"
-        *ngIf="pwdExpirationSettings"
         novalidate>
     <div class="card">
       <div i18n="form title|Example: Create Pool@@formTitle"

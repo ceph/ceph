@@ -1,9 +1,9 @@
-<div class="cd-col-form">
+<div class="cd-col-form"
+     *cdFormLoading="loading">
   <form name="targetForm"
         #formDir="ngForm"
         [formGroup]="targetForm"
-        novalidate
-        *ngIf="targetForm">
+        novalidate>
     <div class="card">
       <div i18n="form title|Example: Create Pool@@formTitle"
            class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
