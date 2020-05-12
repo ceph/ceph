@@ -107,36 +107,15 @@ Example::
 Erase Devices (Zap Devices)
 ---------------------------
 
-Erase (zap) a device so it can be re-used.
+Erase (zap) a device so that it can be resued. ``zap`` calls ``ceph-volume zap`` on the remote host.
 
 ::
 
-     orch device zap
+     orch device zap <hostname> <path>
 
 Example command::
 
-     ceph orch device zap my_hostname my_path true
-
-Parameters::
-
-    hostname: (string)
-
-    path: (string)
-
-    force: CephBool
-
-Ceph Module::
-
-    mgr
-
-Required Permissions::
-
-    rw
-
-Command Flags::
-
-    mgr
-
+     ceph orch device zap my_hostname /dev/sdx
 
 
 Create OSDs
