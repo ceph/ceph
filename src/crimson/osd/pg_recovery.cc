@@ -488,7 +488,14 @@ bool PGRecovery::budget_available() const
 
 void PGRecovery::backfilled()
 {
-  ceph_abort_msg("Not implemented");
+  shard_services.start_operation<LocalPeeringEvent>(
+    this,
+    shard_services,
+    pg_whoami,
+    pgid,
+    get_osdmap_epoch(),
+    get_osdmap_epoch(),
+    PeeringState::Backfilled{});
 }
 
 void PGRecovery::dispatch_backfill_event(
