@@ -130,10 +130,10 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
   struct in6_addr a6;
   if (inet_pton(AF_INET, buf4, &a4)) {
     u.sin.sin_addr.s_addr = a4.s_addr;
-    u.sa.sa_family = AF_INET;
+    u.set_family(AF_INET);
     p = start + strlen(buf4);
   } else if (inet_pton(AF_INET6, buf6, &a6)) {
-    u.sa.sa_family = AF_INET6;
+    u.set_family(AF_INET6);
     memcpy(&u.sin6.sin6_addr, &a6, sizeof(a6));
     p = start + strlen(buf6);
   } else {
@@ -297,6 +297,7 @@ void entity_addrvec_t::decode(ceph::buffer::list::const_iterator& bl)
     // legacy!
     entity_addr_t addr;
     addr.decode_legacy_addr_after_marker(bl);
+    addr.ntohs_family_sa_len();
     v.clear();
     v.push_back(addr);
     return;
@@ -310,6 +311,7 @@ void entity_addrvec_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(elen, bl);
     if (elen) {
       bl.copy(elen, (char*)addr.get_sockaddr());
+      addr.ntohs_family_sa_len();
     }
     DECODE_FINISH(bl);
     v.clear();
