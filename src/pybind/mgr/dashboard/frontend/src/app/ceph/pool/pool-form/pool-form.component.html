@@ -251,6 +251,7 @@
                        heading="Profile"
                        class="ecp-info">
                     <cd-table-key-value [renderObjects]="true"
+                                        [hideKeys]="['name']"
                                         [data]="form.getValue('erasureProfile')"
                                         [autoReload]="false">
                     </cd-table-key-value>
