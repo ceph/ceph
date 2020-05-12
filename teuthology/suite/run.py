@@ -379,6 +379,10 @@ class Run(object):
                 if any(f in path for path in base_frag_paths):
                     return True
                 return False
+            filter_all = self.args.filter_all
+            if filter_all:
+                if not all(matches(f) for f in filter_all):
+                    continue
             filter_in = self.args.filter_in
             if filter_in:
                 if not any(matches(f) for f in filter_in):

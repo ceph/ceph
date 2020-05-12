@@ -118,6 +118,9 @@ Scheduler arguments:
   --filter-out KEYWORDS       Do not run jobs whose description contains any of
                               the keywords in the comma separated keyword
                               string specified.
+  --filter-all KEYWORDS       Only run jobs whose description contains each one
+                              of the keywords in the comma separated keyword
+                              string specified.
   --archive-upload RSYNC_DEST Rsync destination to upload archives.
   --archive-upload-url URL    Public facing URL where archives are uploaded.
   --throttle SLEEP            When scheduling, wait SLEEP seconds between jobs.
