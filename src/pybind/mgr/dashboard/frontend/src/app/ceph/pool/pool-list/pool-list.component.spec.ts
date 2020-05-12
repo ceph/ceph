@@ -199,7 +199,10 @@ describe('PoolListComponent', () => {
 
     beforeEach(() => {
       summaryService = TestBed.get(SummaryService);
-      summaryService['summaryDataSource'].next({ executing_tasks: [], finished_tasks: [] });
+      summaryService['summaryDataSource'].next({
+        executing_tasks: [],
+        finished_tasks: []
+      });
     });
 
     it('gets all pools without executing pools', () => {

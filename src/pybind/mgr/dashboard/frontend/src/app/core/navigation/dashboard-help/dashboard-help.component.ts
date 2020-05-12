@@ -28,17 +28,9 @@ export class DashboardHelpComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
+    this.summaryService.subscribeOnce((summary) => {
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
       this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
     });
   }
 

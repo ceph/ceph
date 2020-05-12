@@ -38,17 +38,9 @@ export class MonitoringListComponent implements OnInit {
       this.isPrometheusConfigured = true;
     });
 
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
+    this.summaryService.subscribeOnce((summary) => {
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
       this.docsUrl = `https://docs.ceph.com/docs/${releaseName}/mgr/dashboard/#enabling-prometheus-alerting`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
     });
 
     // Activate tab according to given fragment
