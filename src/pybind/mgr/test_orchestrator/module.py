@@ -261,7 +261,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             # type: (List[orchestrator.HostSpec]) -> None
             drive_group.validate()
             if drive_group.placement.host_pattern:
-                if not drive_group.placement.pattern_matches_hosts([h.hostname for h in all_hosts]):
+                if not drive_group.placement.filter_matching_hosts(self.get_hosts):
                     raise orchestrator.OrchestratorValidationError('failed to match')
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
@@ -273,11 +273,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def apply_drivegroups(self, specs):
         # type: (List[DriveGroupSpec]) -> TestCompletion
         drive_group = specs[0]
+
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
             drive_group.validate()
             if drive_group.placement.host_pattern:
-                if not drive_group.placement.pattern_matches_hosts([h.hostname for h in all_hosts]):
+                if not drive_group.placement.filter_matching_hosts(self.get_hosts):
                     raise orchestrator.OrchestratorValidationError('failed to match')
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
