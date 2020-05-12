@@ -285,7 +285,7 @@ class PhysicalConsole(RemoteConsole):
         """
         pexpect_templ = \
             "import pexpect; " \
-            "pexpect.run('{cmd}', logfile=file('{log}', 'w'), timeout=None)"
+            "pexpect.run('{cmd}', logfile=open('{log}', 'wb'), timeout=None)"
 
         def start():
             console_cmd = self._console_command()
