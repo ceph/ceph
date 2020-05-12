@@ -9,8 +9,10 @@ std::ostream &segment_to_stream(std::ostream &out, const segment_id_t &t)
 {
   if (t == NULL_SEG_ID)
     return out << "NULL_SEG";
-  else if (t == REL_SEG_ID)
-    return out << "REL_SEG";
+  else if (t == BLOCK_REL_SEG_ID)
+    return out << "BLOCK_REL_SEG";
+  else if (t == RECORD_REL_SEG_ID)
+    return out << "RECORD_REL_SEG";
   else
     return out << t;
 }
