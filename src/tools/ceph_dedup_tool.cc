@@ -310,19 +310,19 @@ void EstimateDedupRatio::estimate_dedup_ratio()
 	  return;
 	}
 
-	uint64_t next_offset;
+	uint64_t len;
 	if (chunk_algo == "fixed") {
-	  next_offset = fixed_chunk(oid, offset);
+	  len = fixed_chunk(oid, offset);
 	} else if (chunk_algo == "rabin") {
-	  next_offset = rabin_chunk(oid, offset);
+	  len = rabin_chunk(oid, offset);
 	} else {
 	  ceph_assert(0 == "no support chunk algorithm"); 
 	}
 	
-	if (!next_offset) {
+	if (!len) {
 	  break;
 	}
-	offset += next_offset;
+	offset += len;
 	m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
 	if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
 	  Formatter *formatter = Formatter::create("json-pretty");
