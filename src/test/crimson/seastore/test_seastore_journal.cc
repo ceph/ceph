@@ -27,7 +27,7 @@ struct record_validator_t {
   record_validator_t(T&&... record) : record(std::forward<T>(record)...) {}
 
   void validate(SegmentManager &manager) {
-    paddr_t addr = make_relative_paddr(0);
+    paddr_t addr = make_record_relative_paddr(0);
     for (auto &&block : record.extents) {
       auto test = manager.read(
 	record_final_offset.add_relative(addr),
