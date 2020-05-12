@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <cstring>
+#include <random>
 
 #include "include/types.h"
 #include "include/buffer.h"
@@ -67,3 +68,84 @@ TEST(Rabin, test_cdc) {
   ASSERT_EQ(chunks[4].second, cmp_chunks[4].second);
 }
 
+void generate_buffer(int size, bufferlist *outbl)
+{
+  outbl->clear();
+  outbl->append_zero(size);
+  char *b = outbl->c_str();
+  std::mt19937_64 engine;
+  for (size_t i = 0; i < size / sizeof(uint64_t); ++i) {
+    ((uint64_t*)b)[i] = engine();
+  }
+}
+
+#if 0
+this fails!
+TEST(Rabin, shifts)
+{
+  RabinChunk rabin;
+  rabin.set_target_bits(18, 2);
+
+  for (int frontlen = 1; frontlen < 5; frontlen++) {
+    bufferlist bl1, bl2;
+    generate_buffer(4*1024*1024, &bl1);
+    generate_buffer(frontlen, &bl2);
+    bl2.append(bl1);
+    bl2.rebuild();
+
+    vector<pair<uint64_t, uint64_t>> chunks1, chunks2;
+    rabin.do_rabin_chunks(bl1, chunks1);
+    rabin.do_rabin_chunks(bl2, chunks2);
+    cout << "1: " << chunks1 << std::endl;
+    cout << "2: " << chunks2 << std::endl;
+
+    ASSERT_GE(chunks2.size(), chunks1.size());
+    int match = 0;
+    for (unsigned i = 0; i < chunks1.size(); ++i) {
+      unsigned j = i + (chunks2.size() - chunks1.size());
+      if (chunks1[i].first + frontlen == chunks2[j].first &&
+	  chunks1[i].second == chunks2[j].second) {
+	match++;
+      }
+    }
+    ASSERT_GE(match, chunks1.size() - 1);
+  }
+}
+#endif
+
+void do_size_histogram(RabinChunk& rabin, bufferlist& bl,
+		       map<int,int> *h)
+{
+  vector<pair<uint64_t, uint64_t>> chunks;
+  rabin.do_rabin_chunks(bl, chunks);
+  for (auto& i : chunks) {
+    unsigned b = i.second & 0xfffff000;
+    //unsigned b = 1 << cbits(i.second);
+    (*h)[b]++;
+  }
+}
+
+void print_histogram(map<int,int>& h)
+{
+  cout << "size\tcount" << std::endl;
+  for (auto i : h) {
+    cout << i.first << "\t" << i.second << std::endl;
+  }
+}
+
+TEST(Rabin, chunk_random)
+{
+  RabinChunk rabin;
+  rabin.set_target_bits(18, 2);
+
+  map<int,int> h;
+  for (int i = 0; i < 8; ++i) {
+    cout << ".";
+    cout.flush();
+    bufferlist r;
+    generate_buffer(16*1024*1024, &r);
+    do_size_histogram(rabin, r, &h);
+  }
+  cout << std::endl;
+  print_histogram(h);
+}
