@@ -32,6 +32,7 @@ class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
+class RGWZone;
 
 namespace rgw { namespace sal {
   class RGWRadosStore;
@@ -492,9 +493,9 @@ struct RGWDataChangesLogMarker {
 class RGWDataChangesLog {
   CephContext *cct;
   rgw::BucketChangeObserver *observer = nullptr;
+  const RGWZone* zone;
 
   struct Svc {
-    RGWSI_Zone *zone{nullptr};
     RGWSI_Cls *cls{nullptr};
   } svc;
 
@@ -528,26 +529,21 @@ class RGWDataChangesLog {
   void register_renew(rgw_bucket_shard& bs);
   void update_renewed(rgw_bucket_shard& bs, ceph::real_time& expiration);
 
-  class ChangesRenewThread : public Thread {
-    CephContext *cct;
-    RGWDataChangesLog *log;
-    ceph::mutex lock = ceph::make_mutex("ChangesRenewThread::lock");
-    ceph::condition_variable cond;
-
-  public:
-    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log) {}
-    void *entry() override;
-    void stop();
-  };
-
-  ChangesRenewThread* renew_thread;
+  ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
+  ceph::condition_variable renew_cond;
+  void renew_run();
+  void renew_stop();
+  std::thread renew_thread;
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y)> bucket_filter;
 
 public:
 
-  RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc);
+  RGWDataChangesLog(CephContext* cct);
   ~RGWDataChangesLog();
+
+  void init(RGWSI_Cls *cls_svc);
+  int start(const RGWZone* _zone);
 
   int choose_oid(const rgw_bucket_shard& bs);
   std::string get_oid(int shard_id) const;

@@ -3,9 +3,9 @@
 
 #include "svc_bi_rados.h"
 #include "svc_bilog_rados.h"
-#include "svc_datalog_rados.h"
 #include "svc_zone.h"
 
+#include "rgw/rgw_bucket.h"
 #include "rgw/rgw_zone.h"
 
 #include "cls/rgw/cls_rgw_client.h"
@@ -21,7 +21,7 @@ RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_Bucke
 void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
                                    RGWSI_RADOS *rados_svc,
                                    RGWSI_BILog_RADOS *bilog_svc,
-                                   RGWSI_DataLog_RADOS *datalog_rados_svc)
+                                   RGWDataChangesLog *datalog_rados_svc)
 {
   svc.zone = zone_svc;
   svc.rados = rados_svc;
