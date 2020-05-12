@@ -197,6 +197,7 @@ if(WITH_RBD_RWL)
     cache/rwl/LogEntry.cc
     cache/rwl/LogMap.cc
     cache/rwl/LogOperation.cc
+    cache/rwl/ReadRequest.cc
     cache/rwl/Request.cc
     cache/rwl/SyncPoint.cc
     cache/rwl/Types.cc
