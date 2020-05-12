@@ -165,7 +165,7 @@ class Remote(object):
         if self.ssh.get_transport() is None:
             return False
         try:
-            self._runner(args="true", client=self.ssh, name=self.shortname)
+            self.run(args="true")
         except Exception:
             return False
         return self.ssh.get_transport().is_active()
@@ -199,7 +199,10 @@ class Remote(object):
 
         TODO refactor to move run.run here?
         """
-        self.ensure_online()
+        if not self.ssh or \
+           not self.ssh.get_transport() or \
+           not self.ssh.get_transport().is_active():
+            self.reconnect()
         r = self._runner(client=self.ssh, name=self.shortname, **kwargs)
         r.remote = self
         return r
