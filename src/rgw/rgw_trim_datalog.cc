@@ -12,7 +12,6 @@
 #include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_datalog_rados.h"
 
 #include <boost/asio/yield.hpp>
 

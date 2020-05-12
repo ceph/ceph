@@ -41,7 +41,6 @@
 #include "services/svc_user.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
-#include "services/svc_datalog_rados.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -2024,28 +2023,29 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
 }
 
 
-RGWDataChangesLog::RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc)
-  : cct(zone_svc->ctx()), changes(cct->_conf->rgw_data_log_changes_size)
-{
-  svc.zone = zone_svc;
-  svc.cls = cls_svc;
+RGWDataChangesLog::RGWDataChangesLog(CephContext* cct)
+  : cct(cct),
+    num_shards(cct->_conf->rgw_data_log_num_shards),
+    changes(cct->_conf->rgw_data_log_changes_size) {}
 
-  num_shards = cct->_conf->rgw_data_log_num_shards;
+void RGWDataChangesLog::init(RGWSI_Cls *cls_svc)
+{
+  svc.cls = cls_svc;
+  assert(svc.cls);
 
   oids = new string[num_shards];
-
-  string prefix = cct->_conf->rgw_data_log_obj_prefix;
-
-  if (prefix.empty()) {
-    prefix = "data_log";
-  }
-
   for (int i = 0; i < num_shards; i++) {
     oids[i] = get_oid(i);
   }
+}
 
-  renew_thread = new ChangesRenewThread(cct, this);
-  renew_thread->create("rgw_dt_lg_renew");
+int RGWDataChangesLog::start(const RGWZone* _zone)
+{
+  zone = _zone;
+  assert(zone);
+  renew_thread = make_named_thread("rgw_dt_lg_renew",
+				   &RGWDataChangesLog::renew_run, this);
+  return 0;
 }
 
 int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
@@ -2058,7 +2058,7 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 
 int RGWDataChangesLog::renew_entries()
 {
-  if (!svc.zone->need_to_log_data())
+  if (!zone->log_data)
     return 0;
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
@@ -2374,35 +2374,34 @@ bool RGWDataChangesLog::going_down()
 
 RGWDataChangesLog::~RGWDataChangesLog() {
   down_flag = true;
-  renew_thread->stop();
-  renew_thread->join();
-  delete renew_thread;
+  if (renew_thread.joinable()) {
+    renew_stop();
+    renew_thread.join();
+  }
   delete[] oids;
 }
 
-void *RGWDataChangesLog::ChangesRenewThread::entry() {
+void RGWDataChangesLog::renew_run() {
   for (;;) {
     dout(2) << "RGWDataChangesLog::ChangesRenewThread: start" << dendl;
-    int r = log->renew_entries();
+    int r = renew_entries();
     if (r < 0) {
       dout(0) << "ERROR: RGWDataChangesLog::renew_entries returned error r=" << r << dendl;
     }
 
-    if (log->going_down())
+    if (going_down())
       break;
 
     int interval = cct->_conf->rgw_data_log_window * 3 / 4;
-    std::unique_lock locker{lock};
-    cond.wait_for(locker, std::chrono::seconds(interval));
+    std::unique_lock locker{renew_lock};
+    renew_cond.wait_for(locker, std::chrono::seconds(interval));
   }
-
-  return NULL;
 }
 
-void RGWDataChangesLog::ChangesRenewThread::stop()
+void RGWDataChangesLog::renew_stop()
 {
-  std::lock_guard l{lock};
-  cond.notify_all();
+  std::lock_guard l{renew_lock};
+  renew_cond.notify_all();
 }
 
 void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
