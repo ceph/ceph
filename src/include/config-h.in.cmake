@@ -286,6 +286,9 @@
 /* Define if you have struct stat.st_mtim.tv_nsec */
 #cmakedefine HAVE_STAT_ST_MTIM_TV_NSEC
 
+/* Define if the sockaddr struct has a sa_len part */
+#cmakedefine HAVE_STRUCT_SOCKADDR_SA_LEN
+
 /* Define if compiler supports static_cast<> */
 #cmakedefine HAVE_STATIC_CAST
 

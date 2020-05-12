@@ -91,6 +91,8 @@ CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
 CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
+CHECK_STRUCT_HAS_MEMBER("struct sockaddr" sa_len sys/socket.h
+  HAVE_STRUCT_SOCKADDR_SA_LEN LANGUAGE C)
 
 if(NOT CMAKE_CROSSCOMPILING)
   include(CheckCXXSourceRuns)
