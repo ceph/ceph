@@ -389,9 +389,11 @@ void EstimateDedupRatio::add_chunk_fp_to_stat(bufferlist &chunk)
 
   auto p = local_chunk_statistics.find(fp);
   if (p != local_chunk_statistics.end()) {
-    uint64_t count = p->second.first;
-    count++;
-    local_chunk_statistics[fp] = make_pair(count, chunk.length());
+    p->second.first++;
+    if (p->second.second != chunk.length()) {
+      cerr << "warning: hash collision on " << fp << ": was " << p->second.second
+	   << " now " << chunk.length() << std::endl;
+    }
   } else {
     local_chunk_statistics[fp] = make_pair(1, chunk.length());
   }
