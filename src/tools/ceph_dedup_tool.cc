@@ -48,7 +48,7 @@
 #include "common/rabin.h"
 
 using namespace librados;
-unsigned default_op_size = 1 << 22;
+unsigned default_op_size = 1 << 26;
 unsigned default_max_thread = 2;
 int32_t default_report_period = 2;
 map< string, pair <uint64_t, uint64_t> > chunk_statistics; // < key, <count, chunk_size> >
