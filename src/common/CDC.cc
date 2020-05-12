@@ -4,6 +4,7 @@
 #include <random>
 
 #include "CDC.h"
+#include "FastCDC.h"
 #include "rabin.h"
 
 std::unique_ptr<CDC> CDC::create(
@@ -15,6 +16,9 @@ std::unique_ptr<CDC> CDC::create(
     auto p = new RabinChunk();
     p->set_target_bits(bits, windowbits);
     return std::unique_ptr<CDC>(p);
+  }
+  if (type == "fastcdc") {
+    return std::unique_ptr<CDC>(new FastCDC(bits, windowbits));
   }
   return nullptr;
 }
