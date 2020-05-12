@@ -6,6 +6,7 @@ import { of as observableOf, Subscriber, Subscription } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
+import { Summary } from '../models/summary.model';
 import { AuthStorageService } from './auth-storage.service';
 import { SummaryService } from './summary.service';
 
@@ -14,7 +15,7 @@ describe('SummaryService', () => {
   let authStorageService: AuthStorageService;
   let subs: Subscription;
 
-  const summary: Record<string, any> = {
+  const summary: Summary = {
     executing_tasks: [],
     health_status: 'HEALTH_OK',
     mgr_id: 'x',
@@ -28,6 +29,8 @@ describe('SummaryService', () => {
   const httpClientSpy = {
     get: () => observableOf(summary)
   };
+
+  const nextSummary = (newData: any) => summaryService['summaryDataSource'].next(newData);
 
   configureTestBed({
     imports: [RouterTestingModule],
@@ -66,23 +69,71 @@ describe('SummaryService', () => {
     subs.unsubscribe();
   }));
 
+  describe('Should test subscribe without initial value', () => {
+    let result: Summary;
+    let i: number;
+
+    const callback = (response: Summary) => {
+      i++;
+      result = response;
+    };
+
+    beforeEach(() => {
+      i = 0;
+      result = undefined;
+      nextSummary(undefined);
+    });
+
+    it('should call subscribeOnce', () => {
+      const subscriber = summaryService.subscribeOnce(callback);
+
+      expect(subscriber).toEqual(jasmine.any(Subscriber));
+      expect(i).toBe(0);
+      expect(result).toEqual(undefined);
+
+      nextSummary(undefined);
+      expect(i).toBe(0);
+      expect(result).toEqual(undefined);
+      expect(subscriber.closed).toBe(false);
+
+      nextSummary(summary);
+      expect(result).toEqual(summary);
+      expect(i).toBe(1);
+      expect(subscriber.closed).toBe(true);
+
+      nextSummary(summary);
+      expect(result).toEqual(summary);
+      expect(i).toBe(1);
+    });
+
+    it('should call subscribe', () => {
+      const subscriber = summaryService.subscribe(callback);
+
+      expect(subscriber).toEqual(jasmine.any(Subscriber));
+      expect(i).toBe(0);
+      expect(result).toEqual(undefined);
+
+      nextSummary(undefined);
+      expect(i).toBe(0);
+      expect(result).toEqual(undefined);
+      expect(subscriber.closed).toBe(false);
+
+      nextSummary(summary);
+      expect(result).toEqual(summary);
+      expect(i).toBe(1);
+      expect(subscriber.closed).toBe(false);
+
+      nextSummary(summary);
+      expect(result).toEqual(summary);
+      expect(i).toBe(2);
+      expect(subscriber.closed).toBe(false);
+    });
+  });
+
   describe('Should test methods after first refresh', () => {
     beforeEach(() => {
       authStorageService.set('foobar', undefined, undefined);
       summaryService.refresh();
-    });
-
-    it('should call getCurrentSummary', () => {
-      expect(summaryService.getCurrentSummary()).toEqual(summary);
-    });
-
-    it('should call subscribe', () => {
-      let result;
-      const subscriber = summaryService.subscribe((data) => {
-        result = data;
-      });
-      expect(subscriber).toEqual(jasmine.any(Subscriber));
-      expect(result).toEqual(summary);
     });
 
     it('should call addRunningTask', () => {
@@ -92,7 +143,11 @@ describe('SummaryService', () => {
           image_name: 'someImage'
         })
       );
-      const result = summaryService.getCurrentSummary();
+      let result: any;
+      summaryService.subscribeOnce((response) => {
+        result = response;
+      });
+
       expect(result.executing_tasks.length).toBe(1);
       expect(result.executing_tasks[0]).toEqual({
         metadata: { image_name: 'someImage', pool_name: 'somePool' },
@@ -101,19 +156,23 @@ describe('SummaryService', () => {
     });
 
     it('should call addRunningTask with duplicate task', () => {
-      let result = summaryService.getCurrentSummary();
+      let result: any;
+      summaryService.subscribe((response) => {
+        result = response;
+      });
+
       const exec_task = new ExecutingTask('rbd/delete', {
         pool_name: 'somePool',
         image_name: 'someImage'
       });
 
       result.executing_tasks = [exec_task];
-      summaryService['summaryDataSource'].next(result);
-      result = summaryService.getCurrentSummary();
+      nextSummary(result);
+
       expect(result.executing_tasks.length).toBe(1);
 
       summaryService.addRunningTask(exec_task);
-      result = summaryService.getCurrentSummary();
+
       expect(result.executing_tasks.length).toBe(1);
     });
   });
