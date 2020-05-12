@@ -113,7 +113,7 @@ void ReplicatedWriteLog<I>::perf_start(std::string name) {
     "Number of items",
     PerfHistogramCommon::SCALE_LINEAR, ///< Request size in linear scale
     0,                                 ///< Start at 0
-    1,                                 ///< Quantization unit is 512 bytes
+    1,                                 ///< Quantization unit is 1
     32,                                ///< Writes up to >32k
   };
 
