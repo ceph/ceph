@@ -911,10 +911,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                      stdin=None,
                      no_fsid=False,
                      error_ok=False,
-                     image=None):
-        # type: (str, Optional[str], str, List[str], Optional[str], Optional[str], bool, bool, Optional[str]) -> Tuple[List[str], List[str], int]
+                     image=None,
+                     env_vars=None):
+        # type: (str, Optional[str], str, List[str], Optional[str], Optional[str], bool, bool, Optional[str], Optional[List[str]]) -> Tuple[List[str], List[str], int]
         """
         Run cephadm on the remote host with the given command + args
+
+        :env_vars: in format -> [KEY=VALUE, ..]
         """
         if not addr and host in self.inventory:
             addr = self.inventory.get_addr(host)
@@ -946,6 +949,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.log.debug('%s container image %s' % (entity, image))
 
             final_args = []
+
+            if env_vars:
+                for env_var_pair in env_vars:
+                    final_args.extend(['--env', env_var_pair])
+
             if image:
                 final_args.extend(['--image', image])
             final_args.append(command)
