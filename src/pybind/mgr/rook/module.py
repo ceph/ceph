@@ -478,7 +478,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         )
 
     def create_osds(self, drive_group):
-        # type: (DriveGroupSpec) -> RookCompletion
+        # type: (DriveGroupSpec) -> orchestrator.Completion
         """ Creates OSDs from a drive group specification.
 
         $: ceph orch osd create -i <dg.file>
@@ -492,10 +492,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if drive_group.data_directories:
             targets += drive_group.data_directories
 
-        def execute(all_hosts_):
-            # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
-            all_hosts = [h.hostname for h in all_hosts_]
-            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+        def execute():
+            # type: () -> orchestrator.Completion
+            matching_hosts = drive_group.placement.filter_matching_hosts(self.get_hosts)
 
             assert len(matching_hosts) == 1
 
@@ -514,13 +513,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                         matching_hosts,
                         targets),
                 mgr=self,
-                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),
-                calc_percent=lambda: has_osds(all_hosts)
+                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, matching_hosts),
+                calc_percent=lambda: has_osds(matching_hosts)
             )
 
         @deferred_read
-        def has_osds(all_hosts):
-            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+        def has_osds(matching_hosts):
 
             # Find OSD pods on this host
             pod_osd_ids = set()
@@ -551,7 +549,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return found is not None
 
-        c = self.get_hosts().then(execute)
+        c = execute()
         return c
 
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> RookCompletion:
