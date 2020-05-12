@@ -200,11 +200,11 @@ def print_long(path, is_dir, human_readable):
         poutput('{}\t{:10s} {} {} {} {}'.format(
             mode_notation(info.st_mode),
             humansize(info.st_size), info.st_uid,
-            info.st_gid, info.st_mtime, pretty, sep='\t'))
+            info.st_gid, info.st_mtime, pretty))
     else:
         poutput('{} {:12d} {} {} {} {}'.format(
             mode_notation(info.st_mode), info.st_size, info.st_uid,
-            info.st_gid, info.st_mtime, pretty, sep='\t'))
+            info.st_gid, info.st_mtime, pretty))
 
 
 def word_len(word):
@@ -364,7 +364,7 @@ class CephFSShell(Cmd):
             return None
         doc_lines = getattr(
             self, 'do_' + command).__doc__.expandtabs().splitlines()
-        if ''in doc_lines:
+        if '' in doc_lines:
             blank_idx = doc_lines.index('')
             usage = doc_lines[:blank_idx]
             description = doc_lines[blank_idx + 1:]
@@ -701,7 +701,7 @@ class CephFSShell(Cmd):
         elif is_file_exists(args.remote_path):
             copy_to_local(root_src_dir,
                           root_dst_dir + b'/' + root_src_dir)
-        elif b'/'in root_src_dir and is_file_exists(fname[1], fname[0]):
+        elif b'/' in root_src_dir and is_file_exists(fname[1], fname[0]):
             copy_to_local(root_src_dir, root_dst_dir)
         else:
             files = list(reversed(sorted(dirwalk(root_src_dir))))
