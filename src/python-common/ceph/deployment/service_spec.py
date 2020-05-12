@@ -2,7 +2,7 @@ import fnmatch
 import re
 from collections import namedtuple
 from functools import wraps
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, Callable
 
 import six
 
@@ -173,11 +173,23 @@ class PlacementSpec(object):
         # in the orchestrator backend.
         self.hosts = hosts
 
-    def pattern_matches_hosts(self, all_hosts):
-        # type: (List[str]) -> List[str]
-        if not self.host_pattern:
+    def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
+        if self.hosts:
+            all_hosts = _get_hosts_func(label=None, as_hostspec=False)
+            return [h.hostname for h in self.hosts if h.hostname in all_hosts]
+        elif self.label:
+            return _get_hosts_func(label=self.label, as_hostspec=False)
+        elif self.host_pattern:
+            return fnmatch.filter(_get_hosts_func(label=None, as_hostspec=False), self.host_pattern)
+        else:
+            # This should be caught by the validation but needs to be here for
+            # get_host_selection_size
             return []
-        return fnmatch.filter(all_hosts, self.host_pattern)
+
+    def get_host_selection_size(self, _get_hosts_func):
+        if self.count:
+            return self.count
+        return len(self.filter_matching_hosts(_get_hosts_func))
 
     def pretty_str(self):
         kv = []
