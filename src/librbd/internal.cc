@@ -1345,7 +1345,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     uint64_t features = src->features;
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
-    uint64_t format = src->old_format ? 1 : 2;
+    uint64_t format = 2;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
       opts.set(RBD_IMAGE_OPTION_FORMAT, format);
     }
