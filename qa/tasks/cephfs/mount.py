@@ -45,17 +45,6 @@ class CephFSMount(object):
 
         self.background_procs = []
 
-        # On Centos/Redhat 8 the 'brctl' has been deprecated. But the
-        # 'nmcli' in ubuntu 18.04 is buggy to setup the network bridge
-        # and there is no workaround, will continue to use the 'brctl'
-        args = ["bash", "-c",
-                "cat /etc/os-release"]
-        p = self.client_remote.run(args=args, stderr=StringIO(),
-                                   stdout=StringIO(), timeout=(5*60))
-        distro = re.findall(r'NAME="Ubuntu"', p.stdout.getvalue())
-        version = re.findall(r'VERSION_ID="18.04"', p.stdout.getvalue())
-        self.use_brctl = len(distro) is not 0 and len(version) is not 0
-        
     def _parse_netns_name(self):
         self._netns_name = '-'.join(["ceph-ns",
                                      re.sub(r'/+', "-", self.mountpoint)])
@@ -123,24 +112,13 @@ class CephFSMount(object):
         log.info("Setuping the 'ceph-brx' with {0}/{1}".format(ip, mask))
 
         # Setup the ceph-brx and always use the last valid IP
-        if self.use_brctl == True:
-            args = ["sudo", "bash", "-c", "brctl addbr ceph-brx"]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c", "ip link set ceph-brx up"]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "ip addr add {0}/{1} brd {2} dev ceph-brx".format(ip, mask, brd)]
-            self.client_remote.run(args=args, timeout=(5*60))
-        else:
-            self._bringup_network_manager_service()
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection add type bridge con-name ceph-brx ifname ceph-brx stp no"]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection modify ceph-brx ipv4.addresses {0}/{1} ipv4.method manual".format(ip, mask)]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c", "nmcli connection up ceph-brx"]
-            self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c", "ip link add name ceph-brx type bridge"]
+        self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c", "ip link set ceph-brx up"]
+        self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c",
+                "ip addr add {0}/{1} brd {2} dev ceph-brx".format(ip, mask, brd)]
+        self.client_remote.run(args=args, timeout=(5*60))
         
         # Save the ip_forward
         self.client_remote.run(args=['touch', '/tmp/python-ceph-brx'],
@@ -254,21 +232,12 @@ class CephFSMount(object):
         self.client_remote.run(args=args, timeout=(5*60))
 
         # Bring up the brx interface and join it to 'ceph-brx'
-        if self.use_brctl == True:
-            args = ["sudo", "bash", "-c",
-                    "ip link set brx.{0} up".format(nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "brctl addif ceph-brx brx.{0}".format(nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
-        else:
-            self._bringup_network_manager_service()
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection add type bridge-slave con-name brx.{0} ifname brx.{0} master ceph-brx".format(nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection up brx.{0}".format(self.nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c",
+                "ip link set brx.{0} up".format(nsid)]
+        self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c",
+                "ip link set dev brx.{0} master ceph-brx".format(nsid)]
+        self.client_remote.run(args=args, timeout=(5*60))
 
     def _cleanup_netns(self):
         if self.nsid == -1:
@@ -276,24 +245,12 @@ class CephFSMount(object):
         log.info("Removing the netns '{0}'".format(self.netns_name))
 
         # Delete the netns and the peer veth interface
-        if self.use_brctl == True:
-            args = ["sudo", "bash", "-c",
-                    "ip link set brx.{0} down".format(self.nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "brctl delif ceph-brx brx.{0}".format(self.nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "ip link delete brx.{0}".format(self.nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
-        else:
-            self._bringup_network_manager_service()
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection down brx.{0}".format(self.nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection delete brx.{0}".format(self.nsid)]
-            self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c",
+                "ip link set brx.{0} down".format(self.nsid)]
+        self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c",
+                "ip link delete brx.{0}".format(self.nsid)]
+        self.client_remote.run(args=args, timeout=(5*60))
 
         args = ["sudo", "bash", "-c",
                 "ip netns delete {0}".format(self.netns_name)]
@@ -309,35 +266,21 @@ class CephFSMount(object):
             return
 
         # If we are the last netns, will delete the ceph-brx
-        if self.use_brctl == True:
-            p = self.client_remote.run(args=['brctl', 'show', 'ceph-brx'],
-                                       stderr=StringIO(), stdout=StringIO(),
-                                       timeout=(5*60))
-        else:
-            self._bringup_network_manager_service()
-            p = self.client_remote.run(args=['nmcli', 'connection', 'show'],
-                                       stderr=StringIO(), stdout=StringIO(),
-                                       timeout=(5*60))
+        args = ["sudo", "bash", "-c", "ip link show"]
+        p = self.client_remote.run(args=args, stdout=StringIO(),
+                                   timeout=(5*60))
         _list = re.findall(r'brx\.', p.stdout.getvalue().strip())
         if len(_list) != 0:
             return
 
         log.info("Removing the 'ceph-brx'")
 
-        if self.use_brctl == True:
-            args = ["sudo", "bash", "-c",
-                    "ip link set ceph-brx down"]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "brctl delbr ceph-brx"]
-            self.client_remote.run(args=args, timeout=(5*60))
-        else:
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection down ceph-brx"]
-            self.client_remote.run(args=args, timeout=(5*60))
-            args = ["sudo", "bash", "-c",
-                    "nmcli connection delete ceph-brx"]
-            self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c",
+                "ip link set ceph-brx down"]
+        self.client_remote.run(args=args, timeout=(5*60))
+        args = ["sudo", "bash", "-c",
+                "ip link delete ceph-brx"]
+        self.client_remote.run(args=args, timeout=(5*60))
 
         # Drop the iptables NAT rules
         ip = IP(self.ceph_brx_net)[-2]
