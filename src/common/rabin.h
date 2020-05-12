@@ -19,9 +19,10 @@
 #include <utility>
 #include <vector>
 
+#include "CDC.h"
 #include "include/buffer_fwd.h"
 
-class RabinChunk {
+class RabinChunk : public CDC {
 public:
   RabinChunk(uint32_t window_size, uint32_t rabin_prime,
 	     uint64_t mod_prime, uint64_t pow, std::vector<uint64_t> rabin_mask,
@@ -46,6 +47,12 @@ public:
     max = 16000;
     num_bits = 3;
     rabin_mask = _rabin_mask;
+  }
+
+  void calc_chunks(
+    ceph::buffer::list& inputdata,
+    std::vector<std::pair<uint64_t, uint64_t>> *chunks) override {
+    do_rabin_chunks(inputdata, *chunks);
   }
 
   int do_rabin_chunks(ceph::buffer::list& inputdata,
@@ -76,8 +83,11 @@ public:
   }
 
   // most users should use this
-  void set_target_bits(int bits, int windowbits = 2) {
+  void set_target_bits(int bits, int windowbits=0) override {
     set_numbits(bits);
+    if (!windowbits) {
+      windowbits = 2;
+    }
     set_min_chunk(1 << (bits - windowbits));
     set_max_chunk(1 << (bits + windowbits));
   }

@@ -16,6 +16,7 @@ set(common_srcs
   BackTrace.cc
   ConfUtils.cc
   Cycles.cc
+  CDC.cc
   DecayCounter.cc
   Finisher.cc
   Formatter.cc
