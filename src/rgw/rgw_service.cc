@@ -10,7 +10,6 @@
 #include "services/svc_bucket_sync_sobj.h"
 #include "services/svc_cls.h"
 #include "services/svc_config_key_rados.h"
-#include "services/svc_datalog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
@@ -57,7 +56,7 @@ int RGWServices_Def::init(CephContext *cct,
   bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
-  datalog_rados = std::make_unique<RGWSI_DataLog_RADOS>(cct);
+  datalog_rados = std::make_unique<RGWDataChangesLog>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
   meta = std::make_unique<RGWSI_Meta>(cct);
   meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
@@ -91,7 +90,7 @@ int RGWServices_Def::init(CephContext *cct,
                          bucket_sobj.get());
   cls->init(zone.get(), rados.get());
   config_key_rados->init(rados.get());
-  datalog_rados->init(zone.get(), cls.get(), neorados);
+  datalog_rados->init(&zone->get_zone(), cls.get(), neorados);
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
@@ -200,12 +199,6 @@ int RGWServices_Def::init(CephContext *cct,
   }
 
   if (!raw) {
-    r = datalog_rados->start();
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
     r = meta_be_sobj->start();
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to start meta_be_sobj service (" << cpp_strerror(-r) << dendl;
@@ -257,8 +250,6 @@ void RGWServices_Def::shutdown()
   if (has_shutdown) {
     return;
   }
-
-  datalog_rados->shutdown();
 
   sysobj->shutdown();
   sysobj_core->shutdown();
@@ -380,7 +371,7 @@ int RGWCtlDef::init(RGWServices& svc)
   bucket->init(user.get(),
                (RGWBucketMetadataHandler *)bucket_meta_handler,
                (RGWBucketInstanceMetadataHandler *)bi_meta_handler,
-	       svc.datalog_rados->get_log());
+	       svc.datalog_rados);
 
   otp->init((RGWOTPMetadataHandler *)meta.otp.get());
 

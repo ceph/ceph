@@ -41,7 +41,6 @@
 #include "services/svc_user.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
-#include "services/svc_datalog_rados.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -2132,24 +2131,19 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
 }
 
 
-RGWDataChangesLog::RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc,
-				     R::RADOS& rados)
-  : cct(zone_svc->ctx()), rados(rados),
-    changes(cct->_conf->rgw_data_log_changes_size)
+RGWDataChangesLog::RGWDataChangesLog(CephContext* cct)
+  : cct(cct),
+    num_shards(cct->_conf->rgw_data_log_num_shards),
+    changes(cct->_conf->rgw_data_log_changes_size) {}
+
+void RGWDataChangesLog::init(const RGWZone* _zone, RGWSI_Cls *cls_svc,
+			     R::RADOS* _rados)
 {
-  svc.zone = zone_svc;
+  rados = _rados;
+  zone = _zone;
   svc.cls = cls_svc;
 
-  num_shards = cct->_conf->rgw_data_log_num_shards;
-
   oids = new string[num_shards];
-
-  string prefix = cct->_conf->rgw_data_log_obj_prefix;
-
-  if (prefix.empty()) {
-    prefix = "data_log";
-  }
-
   for (int i = 0; i < num_shards; i++) {
     oids[i] = get_oid(i);
   }
@@ -2168,7 +2162,7 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 
 int RGWDataChangesLog::renew_entries()
 {
-  if (!svc.zone->need_to_log_data())
+  if (!zone->log_data)
     return 0;
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need

@@ -37,6 +37,7 @@ class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
+class RGWZone;
 
 namespace rgw { namespace sal {
   class RGWRadosStore;
@@ -499,10 +500,10 @@ struct RGWDataChangesLogMarker {
 class RGWDataChangesLog {
   CephContext *cct;
   rgw::BucketChangeObserver *observer = nullptr;
-  R::RADOS& rados;
+  R::RADOS* rados;
+  const RGWZone* zone;
 
   struct Svc {
-    RGWSI_Zone *zone{nullptr};
     RGWSI_Cls *cls{nullptr};
   } svc;
 
@@ -554,8 +555,10 @@ class RGWDataChangesLog {
 
 public:
 
-  RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc, R::RADOS& rados);
+  RGWDataChangesLog(CephContext* cct);
   ~RGWDataChangesLog();
+
+  void init(const RGWZone* _zone, RGWSI_Cls *cls_svc, R::RADOS* rados);
 
   int choose_oid(const rgw_bucket_shard& bs);
   std::string get_oid(int shard_id) const;

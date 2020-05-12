@@ -33,7 +33,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sync_modules.h"
-#include "services/svc_datalog_rados.h"
+#include "rgw_bucket.h"
 
 #include "include/common_fwd.h"
 #include "include/random.h"
