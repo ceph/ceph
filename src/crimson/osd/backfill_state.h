@@ -48,6 +48,9 @@ struct BackfillState {
     // for tracking replicas.
     hobject_t object;
     pg_stat_t stat;
+    ObjectPushed(hobject_t object)
+      : object(std::move(object)) {
+    }
   };
 
   struct Triggered : sc::event<Triggered> {
