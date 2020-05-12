@@ -232,7 +232,7 @@ class RGWSIPGen_Single : public RGWSIPGenerator
 public:
   RGWSIPGen_Single(SIProvider *_sip) : sip(_sip) {}
 
-  SIProviderRef get(std::optional<std::string> instance) {
+  SIProviderRef get(std::optional<std::string> instance) override {
     return sip;
   }
 };

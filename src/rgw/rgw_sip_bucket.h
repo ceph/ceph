@@ -37,6 +37,11 @@ class SIProvider_BucketFull : public SIProvider_SingleStage {
   std::string to_marker(const cls_rgw_obj_key& k) const;
   SIProvider::Entry create_entry(rgw_bucket_dir_entry& be) const;
 
+  int do_get_cur_state(int shard_id, std::string *marker) const {
+    marker->clear(); /* full data, no current incremental state */
+    return 0;
+  }
+
 protected:
   int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
@@ -58,5 +63,27 @@ public:
                                                        store(_store),
                                                        bucket_info(_bucket_info) {
   }
+};
+
+class RGWBucketCtl;
+
+class RGWSIPGen_BucketFull : public RGWSIPGenerator
+{
+  CephContext *cct;
+  rgw::sal::RGWRadosStore *store;
+
+  struct {
+    RGWBucketCtl *bucket;
+  } ctl;
+
+public:
+  RGWSIPGen_BucketFull(CephContext *_cct,
+                       rgw::sal::RGWRadosStore *_store,
+                       RGWBucketCtl *_bucket_ctl) : cct(_cct),
+                                                    store(_store) {
+    ctl.bucket = _bucket_ctl;
+  }
+
+  SIProviderRef get(std::optional<std::string> instance) override;
 };
 

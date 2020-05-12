@@ -91,3 +91,30 @@ int SIProvider_BucketFull::do_fetch(int shard_id, std::string marker, int max, f
   return 0;
 }
 
+SIProviderRef RGWSIPGen_BucketFull::get(std::optional<std::string> instance)
+{
+  if (!instance) {
+    return nullptr;
+  }
+
+  rgw_bucket bucket;
+
+  int r = rgw_bucket_parse_bucket_key(cct, *instance, &bucket, nullptr);
+  if (r < 0) {
+    ldout(cct, 20) << __func__ << ": failed to parse bucket key (instance=" << *instance << ") r=" << r << dendl;
+    return nullptr;
+  }
+
+  RGWBucketInfo bucket_info;
+  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield);
+  if (r < 0) {
+    ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
+    return nullptr;
+  }
+
+  SIProviderRef result;
+
+  result.reset(new SIProvider_BucketFull(cct, store, bucket_info));
+
+  return result;
+}
