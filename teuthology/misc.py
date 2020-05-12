@@ -1063,7 +1063,7 @@ def get_valgrind_args(testdir, name, preamble, v):
         'env', 'OPENSSL_ia32cap=~0x1000000000000000',
     ])
 
-    val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
+    val_path = '/var/log/ceph/valgrind'
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
             'valgrind',

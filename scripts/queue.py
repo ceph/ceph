@@ -28,7 +28,7 @@ optional arguments:
   -p, --pause SECONDS   Pause queues for a number of seconds. A value of 0
                         will unpause. If -m is passed, pause that queue,
                         otherwise pause all queues.
-""".format(archive_base=teuthology.config.config.archive_base)
+"""
 
 
 def main():
