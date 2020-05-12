@@ -657,6 +657,7 @@ private:
   friend class PGAdvanceMap;
   friend class PeeringEvent;
   friend class RepRequest;
+  friend class BackfillRecovery;
   friend struct BackfillState::PGFacade;
 private:
   seastar::future<bool> find_unfound() {
@@ -675,6 +676,9 @@ private:
   const set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();
   }
+
+private:
+  BackfillRecovery::BackfillRecoveryPipeline backfill_pipeline;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);

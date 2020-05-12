@@ -110,11 +110,23 @@ seastar::future<bool> PglogBasedRecovery::do_recovery()
 
 seastar::future<bool> BackfillRecovery::do_recovery()
 {
-  if (pg->has_reset_since(epoch_started))
+  logger().debug("{}", __func__);
+
+  if (pg->has_reset_since(epoch_started)) {
+    logger().debug("{}: pg got reset since epoch_started={}",
+                   __func__, epoch_started);
     return seastar::make_ready_future<bool>(false);
-  // FIXME: blocking future, limits
-  pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
-  return seastar::make_ready_future<bool>(false);
+  }
+  // TODO: limits
+  return with_blocking_future(
+    // process_event() of our boost::statechart machine is non-reentrant.
+    // with the backfill_pipeline we protect it from a second entry from
+    // the implementation of BackfillListener.
+    handle.enter(pg->backfill_pipeline.process)
+  ).then([this] {
+    pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
+    return seastar::make_ready_future<bool>(false);
+  });
 }
 
 } // namespace crimson::osd

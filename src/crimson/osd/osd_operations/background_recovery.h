@@ -74,9 +74,17 @@ public:
 
 class BackfillRecovery final : public BackgroundRecovery {
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
+  OrderedPipelinePhase::Handle handle;
   seastar::future<bool> do_recovery() override;
 
 public:
+  class BackfillRecoveryPipeline {
+    OrderedPipelinePhase process = {
+      "BackfillRecovery::PGPipeline::process"
+    };
+    friend class BackfillRecovery;
+  };
+
   template <class EventT>
   BackfillRecovery(
     Ref<PG> pg,
