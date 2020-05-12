@@ -99,6 +99,24 @@ void ReplicatedWriteLog<I>::perf_start(std::string name) {
     16,                              ///< Ranges into the mS
   };
 
+  // Syncpoint logentry number x-axis configuration for op histograms
+  PerfHistogramCommon::axis_config_d sp_logentry_number_config{
+    "logentry number",
+    PerfHistogramCommon::SCALE_LINEAR, // log entry number in linear scale
+    0,                                 // Start at 0
+    1,                                 // Quantization unit is 1
+    260,                               // Up to 260 > (MAX_WRITES_PER_SYNC_POINT)
+  };
+
+  // Syncpoint bytes number y-axis configuration for op histogram
+  PerfHistogramCommon::axis_config_d sp_bytes_number_config{
+    "Number of SyncPoint",
+    PerfHistogramCommon::SCALE_LOG2,   // Request size in logarithmic scale
+    0,                                 // Start at 0
+    512,                               // Quantization unit is 512
+    17,                                // Writes up to 8M >= MAX_BYTES_PER_SYNC_POINT
+  };
+
   // Op size axis configuration for op histogram y axis, values are in bytes
   PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
     "Request size (bytes)",
@@ -126,6 +144,11 @@ void ReplicatedWriteLog<I>::perf_start(std::string name) {
   plb.add_time_avg(l_librbd_rwl_rd_hit_latency, "hit_rd_latency", "Latency of read hits");
 
   plb.add_u64_counter(l_librbd_rwl_rd_part_hit_req, "part_hit_rd", "reads partially hitting RWL");
+
+  plb.add_u64_counter_histogram(
+    l_librbd_rwl_syncpoint_hist, "syncpoint_logentry_bytes_histogram",
+    sp_logentry_number_config, sp_bytes_number_config,
+    "Histogram of syncpoint's logentry numbers vs bytes number");
 
   plb.add_u64_counter(l_librbd_rwl_wr_req, "wr", "Writes");
   plb.add_u64_counter(l_librbd_rwl_wr_req_def, "wr_def", "Writes deferred for resources");
