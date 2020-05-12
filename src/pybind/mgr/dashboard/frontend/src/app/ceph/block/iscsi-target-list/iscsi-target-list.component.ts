@@ -146,10 +146,11 @@ export class IscsiTargetListComponent extends ListWithDetails implements OnInit,
           this.settings = settings;
         });
       } else {
-        const summary = this.summaryservice.getCurrentSummary();
-        const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-        this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/#enabling-iscsi-management`;
-        this.status = result.message;
+        this.summaryservice.subscribeOnce((summary) => {
+          const releaseName = this.cephReleaseNamePipe.transform(summary.version);
+          this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/#enabling-iscsi-management`;
+          this.status = result.message;
+        });
       }
     });
   }
