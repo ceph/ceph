@@ -97,8 +97,7 @@ if ! $use_existing; then
     fi
     if $classical; then
         MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
-           --without-dashboard --memstore \
-           -o "memstore_device_bytes=34359738368"
+           --without-dashboard
     else
         MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
            --without-dashboard --memstore \
