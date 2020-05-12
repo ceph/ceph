@@ -924,11 +924,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         try:
             try:
                 conn, connr = self._get_connection(addr)
-            except IOError as e:
+            except OSError as e:
                 if error_ok:
                     self.log.exception('failed to establish ssh connection')
                     return [], [str("Can't communicate with remote host, possibly because python3 is not installed there")], 1
-                raise
+                raise execnet.gateway_bootstrap.HostNotFound(str(e)) from e
 
             assert image or entity
             if not image:
@@ -1008,10 +1008,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             # do with "host not found" (e.g., ssh key permission denied).
             self.offline_hosts.add(host)
             user = 'root' if self.mode == 'root' else 'cephadm'
-            msg = f'Failed to connect to {host} ({addr}).  ' \
-                  f'Check that the host is reachable and accepts connections using the cephadm SSH key\n' \
-                  f'you may want to run: \n' \
-                  f'> ssh -F =(ceph cephadm get-ssh-config) -i =(ceph config-key get mgr/cephadm/ssh_identity_key) {user}@{host}'
+            msg = f'''Failed to connect to {host} ({addr}).
+Check that the host is reachable and accepts connections using the cephadm SSH key
+
+you may want to run:
+> ceph cephadm get-ssh-config > ssh_config
+> ceph config-key get mgr/cephadm/ssh_identity_key > key
+> ssh -F ssh_config -i key {user}@{host}'''
             raise OrchestratorError(msg) from e
         except Exception as ex:
             self.log.exception(ex)
