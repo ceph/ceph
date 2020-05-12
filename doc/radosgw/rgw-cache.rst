@@ -41,7 +41,8 @@ This API meant to allow changing signed Range headers using a privileged user, c
 Creating cache user
 
 ::
-$ radosgw-admin user create --uid=``uid for cache user`` --display-name=``cache user`` --caps="amz-cache=read"
+
+$ radosgw-admin user create --uid=<uid for cache user> --display-name="cache user" --caps="amz-cache=read"
 
 This user can send to the RGW the Cache api header ``X-Amz-Cache``, this header contains the headers from the original request(before changing the Range header).
 It means that ``X-Amz-Cache`` built from several headers.
@@ -57,22 +58,26 @@ Using Nginx with RGW
 Download the source of Openresty:
 
 ::
+
 $ wget https://openresty.org/download/openresty-1.15.8.3.tar.gz
 
 git clone the aws auth nginx module:
 
 ::
+
 $ git clone https://github.com/kaltura/nginx-aws-auth-module
 
 untar the openresty package:
 
 ::
+
 $ tar xvzf openresty-1.15.8.3.tar.gz
 $ cd openresty-1.15.8.3
 
 Compile openresty, Make sure that you have pcre lib and openssl lib:
 
 ::
+
 $ sudo yum install pcre-devel openssl-devel gcc curl zlib-devel nginx
 $ ./configure --add-module=<the nginx-aws-auth-module dir> --with-http_auth_request_module --with-http_slice_module
 $ gmake -j $(nproc)
@@ -96,3 +101,9 @@ https://docs.nginx.com/nginx/admin-guide/content-cache/content-caching/#byte-ran
 
 If you do not want to use the prefetch caching, It is possible to replace nginx-default.conf with nginx-noprefetch.conf
 Using noprefetch means that if the client is sending range request of 0-4095 and then 0-4096 Nginx will cache those requests separately, So it will need to fetch those requests twice.
+
+
+Run nginx(openresty):
+::
+
+$ nginx -c /etc/nginx/nginx.conf
