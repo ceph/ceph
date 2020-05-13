@@ -88,14 +88,14 @@ static int rados_sistrtoll(I &i, T *val) {
 
 class EstimateDedupRatio;
 class ChunkScrub;
-class EstimateThread : public Thread 
+class CrawlerThread : public Thread
 {
   IoCtx io_ctx;
   int n;
   int m;
   ObjectCursor begin;
   ObjectCursor end;
-  ceph::mutex m_lock = ceph::make_mutex("EstimateThread::Locker");
+  ceph::mutex m_lock = ceph::make_mutex("CrawlerThread::Locker");
   ceph::condition_variable m_cond;
   int32_t timeout;
   bool m_stop = false;
@@ -107,7 +107,7 @@ class EstimateThread : public Thread
 #define COND_WAIT_INTERVAL 10
 
 public:
-  EstimateThread(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, int32_t timeout,
+  CrawlerThread(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, int32_t timeout,
 		uint64_t num_objects, uint64_t max_read_size = default_op_size):
     io_ctx(io_ctx), n(n), m(m), begin(begin), end(end), 
     timeout(timeout), total_objects(num_objects), max_read_size(max_read_size)
@@ -125,7 +125,7 @@ public:
   friend class ChunkScrub;
 };
 
-class EstimateDedupRatio : public EstimateThread
+class EstimateDedupRatio : public CrawlerThread
 {
   string chunk_algo;
   string fp_algo;
@@ -137,7 +137,7 @@ public:
   EstimateDedupRatio(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
 		string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t timeout,
 		uint64_t num_objects, uint64_t max_read_size):
-    EstimateThread(io_ctx, n, m, begin, end, timeout, num_objects, max_read_size), 
+    CrawlerThread(io_ctx, n, m, begin, end, timeout, num_objects, max_read_size),
 		chunk_algo(chunk_algo), fp_algo(fp_algo), chunk_size(chunk_size) { }
 
   void* entry() {
@@ -152,7 +152,7 @@ public:
   void add_chunk_fp_to_stat(bufferlist &chunk);
 };
 
-class ChunkScrub: public EstimateThread
+class ChunkScrub: public CrawlerThread
 {
   IoCtx chunk_io_ctx;
   int fixed_objects = 0;
@@ -160,7 +160,7 @@ class ChunkScrub: public EstimateThread
 public:
   ChunkScrub(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
 	     IoCtx& chunk_io_ctx, int32_t timeout, uint64_t num_objects):
-    EstimateThread(io_ctx, n, m, begin, end, timeout, num_objects), chunk_io_ctx(chunk_io_ctx)
+    CrawlerThread(io_ctx, n, m, begin, end, timeout, num_objects), chunk_io_ctx(chunk_io_ctx)
     { }
   void* entry() {
     chunk_scrub_common();
@@ -171,7 +171,7 @@ public:
   void print_status(Formatter *f, ostream &out);
 };
 
-vector<std::unique_ptr<EstimateThread>> estimate_threads;
+vector<std::unique_ptr<CrawlerThread>> estimate_threads;
 
 static void print_dedup_estimate(bool debug = false)
 {
@@ -638,9 +638,10 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   s = stats[pool_name];
 
   for (unsigned i = 0; i < max_thread; i++) {
-    std::unique_ptr<EstimateThread> ptr (new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
-							    chunk_algo, fp_algo, chunk_size, 
-							    report_period, s.num_objects, max_read_size));
+    std::unique_ptr<CrawlerThread> ptr (
+      new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
+			     chunk_algo, fp_algo, chunk_size,
+			     report_period, s.num_objects, max_read_size));
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
@@ -826,8 +827,9 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   s = stats[chunk_pool_name];
 
   for (unsigned i = 0; i < max_thread; i++) {
-    std::unique_ptr<EstimateThread> ptr (new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
-							report_period, s.num_objects));
+    std::unique_ptr<CrawlerThread> ptr (
+      new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
+		     report_period, s.num_objects));
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
