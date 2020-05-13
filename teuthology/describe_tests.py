@@ -7,9 +7,13 @@ import os
 import sys
 import yaml
 
-from teuthology.exceptions import ParseError
-from teuthology.suite.build_matrix import build_matrix, combine_path
+import random
+from distutils.util import strtobool
 
+from teuthology.exceptions import ParseError
+from teuthology.suite.build_matrix import \
+        build_matrix, generate_combinations, _get_matrix
+from teuthology.suite import util
 
 def main(args):
     try:
@@ -20,27 +24,60 @@ def main(args):
 
 def describe_tests(args):
     suite_dir = os.path.abspath(args["<suite_dir>"])
-    fields = args["--fields"].split(',')
-    include_facet = args['--show-facet'] == 'yes'
     output_format = args['--format']
 
+    conf=dict()
+    rename_args = {
+        'filter': 'filter_in',
+    }
+    for (key, value) in args.items():
+        key = key.lstrip('--').replace('-', '_')
+        key = rename_args.get(key) or key
+        if key in ('filter_all', 'filter_in', 'filter_out', 'fields'):
+            if not value:
+                value = []
+            else:
+                value = [_ for _ in
+                            (x.strip() for x in value.split(',')) if _]
+        elif key in ('limit'):
+            value = int(value)
+        elif key in ('seed'):
+            value = int(value)
+            if value < 0:
+                value = None
+        elif key == 'subset' and value is not None:
+            # take input string '2/3' and turn into (2, 3)
+            value = tuple(map(int, value.split('/')))
+        elif key in ('show_facet'):
+            value = strtobool(value)
+        conf[key] = value
+
     if args['--combinations']:
-        limit = int(args['--limit'])
-        filter_in = None
-        if args['--filter']:
-            filter_in = [f.strip() for f in args['--filter'].split(',')]
-        filter_out = None
-        if args['--filter-out']:
-            filter_out = [f.strip() for f in args['--filter-out'].split(',')]
-        subset = None
-        if args['--subset']:
-            subset = map(int, args['--subset'].split('/'))
-        headers, rows = get_combinations(suite_dir, fields, subset,
-                                         limit, filter_in,
-                                         filter_out, include_facet)
+        headers, rows = get_combinations(suite_dir,
+                                         limit=conf['limit'],
+                                         seed=conf['seed'],
+                                         subset=conf['subset'],
+                                         fields=conf['fields'],
+                                         filter_in=conf['filter_in'],
+                                         filter_out=conf['filter_out'],
+                                         filter_all=conf['filter_all'],
+                                         filter_fragments=conf['filter_fragments'],
+                                         include_facet=conf['show_facet'])
         hrule = ALL
+    elif args['--summary']:
+        output_summary(suite_dir,
+                       limit=conf['limit'],
+                       seed=conf['seed'],
+                       subset=conf['subset'],
+                       show_desc=conf['print_description'],
+                       show_frag=conf['print_fragments'],
+                       filter_in=conf['filter_in'],
+                       filter_out=conf['filter_out'],
+                       filter_all=conf['filter_all'],
+                       filter_fragments=conf['filter_fragments'])
+        exit(0)
     else:
-        headers, rows = describe_suite(suite_dir, fields, include_facet,
+        headers, rows = describe_suite(suite_dir, conf['fields'], conf['show_facet'],
                                        output_format)
         hrule = FRAME
 
@@ -69,9 +106,60 @@ def output_results(headers, rows, output_format, hrule):
         print(table)
 
 
-def get_combinations(suite_dir, fields, subset,
-                     limit, filter_in, filter_out,
-                     include_facet):
+def output_summary(path, limit=0,
+                         seed=None,
+                         subset=None,
+                         show_desc=True,
+                         show_frag=False,
+                         show_matrix=False,
+                         filter_in=None,
+                         filter_out=None,
+                         filter_all=None,
+                         filter_fragments=True):
+    """
+    Prints number of all facets for a given suite for inspection,
+    taking into accout such options like --subset, --filter,
+    --filter-out and --filter-all. Optionally dumps matrix objects,
+    yaml files which is used for generating combinations.
+    """
+
+    random.seed(seed)
+    mat, first, matlimit = _get_matrix(path, subset)
+    configs = generate_combinations(path, mat, first, matlimit)
+    print("# {} (not filtered) {}".format(len(configs), path))
+    count = 0
+    suite = os.path.basename(path)
+    config_list = util.filter_configs(configs,
+                                      suite_name=suite,
+                                      filter_in=filter_in,
+                                      filter_out=filter_out,
+                                      filter_all=filter_all,
+                                      filter_fragments=filter_fragments)
+    if show_desc or show_frag:
+        for c in config_list:
+            if limit and count >= limit:
+                break
+            count += 1
+            print("  {}".format(c[0]))
+            if show_frag:
+                for path in c[1]:
+                    print("    {}".format(util.strip_fragment_path(path)))
+    else:
+        count=sum(1 for _ in config_list)
+    if show_matrix:
+       print(mat.tostr(1))
+    print("  {} (total filtered)".format(count))
+
+def get_combinations(suite_dir,
+                     limit=0,
+                     seed=None,
+                     subset=None,
+                     fields=[],
+                     filter_in=None,
+                     filter_out=None,
+                     filter_all=None,
+                     filter_fragments=False,
+                     include_facet=True):
     """
     Describes the combinations of a suite, optionally limiting
     or filtering output based on the given parameters. Includes
@@ -80,8 +168,8 @@ def get_combinations(suite_dir, fields, subset,
     Returns a tuple of (headers, rows) where both elements are lists
     of strings.
     """
-    configs = [(combine_path(suite_dir, item[0]), item[1]) for item in
-               build_matrix(suite_dir, subset)]
+    suite = os.path.basename(suite_dir)
+    configs = build_matrix(suite_dir, subset, seed)
 
     num_listed = 0
     rows = []
@@ -90,15 +178,15 @@ def get_combinations(suite_dir, fields, subset,
     dirs = {}
     max_dir_depth = 0
 
+    configs = util.filter_configs(configs,
+                                  suite_name=suite,
+                                  filter_in=filter_in,
+                                  filter_out=filter_out,
+                                  filter_all=filter_all,
+                                  filter_fragments=filter_fragments)
     for _, fragment_paths in configs:
         if limit > 0 and num_listed >= limit:
             break
-        if filter_in and not any([f in path for f in filter_in
-                                  for path in fragment_paths]):
-            continue
-        if filter_out and any([f in path for f in filter_out
-                               for path in fragment_paths]):
-            continue
 
         fragment_fields = [extract_info(path, fields)
                            for path in fragment_paths]

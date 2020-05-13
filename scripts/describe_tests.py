@@ -37,12 +37,23 @@ optional arguments:
 options only for describing combinations represented by a suite:
   -c, --combinations                 Describe test combinations rather than
                                      individual yaml fragments
-  --filter <keywords>                Only list jobs whose filenames contain at
-                                     least one of the keywords in the comma
-                                     separated keyword string specified.
-  --filter-out <keywords>            Do not list jobs whose filenames contain
+  -s, --summary                      Print summary
+  --filter <keywords>                Only list tests whose description contains
+                                     at least one of the keywords in the comma
+                                     separated keyword string specified
+  --filter-out <keywords>            Do not list tests whose description contains
                                      any of the keywords in the comma separated
-                                     keyword string specified.
+                                     keyword string specified
+  --filter-all <keywords>            Only list tests whose description contains
+                                     each of the keywords in the comma separated
+                                     keyword string specified
+  -F, --filter-fragments             Check fragments additionaly to descriptions
+                                     using keywords specified with 'filter',
+                                     'filter-out' and 'filter-all' options.
+  -D, --print-description            Print job descriptions for the suite,
+                                     used only in combination with 'summary'
+  -L, --print-fragments              Print file list inovolved for each facet,
+                                     used only in combination with 'summary'
   -l <jobs>, --limit <jobs>          List at most this many jobs
                                      [default: 0]
   --subset <index/outof>             Instead of listing the entire
@@ -54,6 +65,11 @@ options only for describing combinations represented by a suite:
                                      2/<outof> ... <outof>-1/<outof>
                                      will list all jobs in the
                                      suite (many more than once).
+  -S <seed>, --seed <seed>           Used for pseudo-random tests generation
+                                     involving facet whose path ends with '$'
+                                     operator, where negative value used for
+                                     a random seed
+                                     [default: -1]
 """
 
 

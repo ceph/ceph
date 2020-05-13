@@ -23,6 +23,21 @@ install:
 - desc: single node cluster
 roles:
 - [osd.0, osd.1, osd.2, mon.a, mon.b, mon.c, client.0]
+""",
+            'fixed-2.yaml':
+            """meta:
+- desc: couple node cluster
+roles:
+- [osd.0, osd.1, osd.2, mon.a, mon.b, mon.c]
+- [client.0]
+""",
+            'fixed-3.yaml':
+            """meta:
+- desc: triple node cluster
+roles:
+- [osd.0, osd.1, osd.2, mon.a, mon.b, mon.c]
+- [client.0]
+- [client.1]
 """
         },
         'workloads': {
@@ -62,7 +77,9 @@ expected_tree = """├── %
 ├── base
 │   └── install.yaml
 ├── clusters
-│   └── fixed-1.yaml
+│   ├── fixed-1.yaml
+│   ├── fixed-2.yaml
+│   └── fixed-3.yaml
 └── workloads
     ├── rbd_api_tests.yaml
     └── rbd_api_tests_old_format.yaml""".split('\n')
@@ -73,6 +90,8 @@ expected_facets = [
     '',
     'base',
     '',
+    'clusters',
+    'clusters',
     'clusters',
     '',
     'workloads',
@@ -86,6 +105,8 @@ expected_desc = [
     'install ceph',
     '',
     'single node cluster',
+    'couple node cluster',
+    'triple node cluster',
     '',
     'c/c++ librbd api tests with default settings',
     'c/c++ librbd api tests with format 1 images',
@@ -93,6 +114,8 @@ expected_desc = [
 
 
 expected_rbd_features = [
+    '',
+    '',
     '',
     '',
     '',
@@ -190,13 +213,18 @@ class TestDescribeTests(object):
                                      expected_desc)]
 
     def test_combinations_only_facets(self):
-        headers, rows = get_combinations('basic', [], None, 1, None, None, True)
+        headers, rows = get_combinations('basic',
+                fields=[], subset=None, limit=1,
+                filter_in=None, filter_out=None, filter_all=None,
+                include_facet=True)
         self.assert_expected_combo_headers(headers)
         assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
 
     def test_combinations_desc_features(self):
-        headers, rows = get_combinations('basic', ['desc', 'rbd_features'],
-                                         None, 1, None, None, False)
+        headers, rows = get_combinations('basic',
+                fields=['desc', 'rbd_features'], subset=None, limit=1,
+                filter_in=None, filter_out=None, filter_all=None,
+                include_facet=False)
         assert headers == ['desc', 'rbd_features']
         descriptions = '\n'.join([
             'install ceph',
@@ -206,17 +234,39 @@ class TestDescribeTests(object):
         assert rows == [[descriptions, 'default']]
 
     def test_combinations_filter_in(self):
-        headers, rows = get_combinations('basic', [], None, 0, ['old_format'],
-                                         None, True)
+        headers, rows = get_combinations('basic',
+                fields=[], subset=None, limit=0,
+                filter_in=['old_format'], filter_out=None, filter_all=None,
+                include_facet=True)
         self.assert_expected_combo_headers(headers)
-        assert rows == [['basic', 'install', 'fixed-1',
-                         'rbd_api_tests_old_format']]
+        assert rows == [
+            ['basic', 'install', 'fixed-1', 'rbd_api_tests_old_format'],
+            ['basic', 'install', 'fixed-2', 'rbd_api_tests_old_format'],
+            ['basic', 'install', 'fixed-3', 'rbd_api_tests_old_format'],
+        ]
 
     def test_combinations_filter_out(self):
-        headers, rows = get_combinations('basic', [], None, 0, None,
-                                         ['old_format'], True)
+        headers, rows = get_combinations('basic',
+                fields=[], subset=None, limit=0,
+                filter_in=None, filter_out=['old_format'], filter_all=None,
+                include_facet=True)
         self.assert_expected_combo_headers(headers)
-        assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
+        assert rows == [
+            ['basic', 'install', 'fixed-1', 'rbd_api_tests'],
+            ['basic', 'install', 'fixed-2', 'rbd_api_tests'],
+            ['basic', 'install', 'fixed-3', 'rbd_api_tests'],
+        ]
+
+    def test_combinations_filter_all(self):
+        headers, rows = get_combinations('basic',
+                fields=[], subset=None, limit=0,
+                filter_in=None, filter_out=None,
+                filter_all=['fixed-2', 'old_format'],
+                include_facet=True)
+        self.assert_expected_combo_headers(headers)
+        assert rows == [
+            ['basic', 'install', 'fixed-2', 'rbd_api_tests_old_format']
+        ]
 
 
 @patch('teuthology.describe_tests.open')
