@@ -95,7 +95,7 @@ class Module(MgrModule):
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
-            self.client.store_snap_schedule(use_fs, (abs_path, snap_schedule,
+            self.client.store_snap_schedule(use_fs, abs_path, (abs_path, snap_schedule,
                                                      retention_policy, start,
                                                      use_fs, subvol, path))
             suc_msg = f'Schedule set for path {path}'
@@ -131,3 +131,49 @@ class Module(MgrModule):
         except ValueError as e:
             return errno.ENOENT, '', str(e)
         return 0, 'Schedule removed for path {}'.format(path), ''
+
+    @CLIWriteCommand('fs snap-schedule activate',
+                     'name=path,type=CephString '
+                     'name=repeat,type=CephString,req=false '
+                     'name=start,type=CephString,req=false '
+                     'name=subvol,type=CephString,req=false '
+                     'name=fs,type=CephString,req=false',
+                     'Activate a snapshot schedule for <path>')
+    def snap_schedule_activate(self,
+                               path,
+                               repeat=None,
+                               start=None,
+                               subvol=None,
+                               fs=None):
+        try:
+            use_fs = fs if fs else self.default_fs
+            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            self.client.activate_snap_schedule(use_fs, abs_path, repeat, start)
+        except CephfsConnectionException as e:
+            return e.to_tuple()
+        except ValueError as e:
+            return errno.ENOENT, '', str(e)
+        return 0, 'Schedule activated for path {}'.format(path), ''
+
+    @CLIWriteCommand('fs snap-schedule deactivate',
+                     'name=path,type=CephString '
+                     'name=repeat,type=CephString,req=false '
+                     'name=start,type=CephString,req=false '
+                     'name=subvol,type=CephString,req=false '
+                     'name=fs,type=CephString,req=false',
+                     'Deactivate a snapshot schedule for <path>')
+    def snap_schedule_deactivate(self,
+                                 path,
+                                 repeat=None,
+                                 start=None,
+                                 subvol=None,
+                                 fs=None):
+        try:
+            use_fs = fs if fs else self.default_fs
+            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            self.client.deactivate_snap_schedule(use_fs, abs_path, repeat, start)
+        except CephfsConnectionException as e:
+            return e.to_tuple()
+        except ValueError as e:
+            return errno.ENOENT, '', str(e)
+        return 0, 'Schedule deactivated for path {}'.format(path), ''
