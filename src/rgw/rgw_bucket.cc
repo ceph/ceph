@@ -39,6 +39,10 @@
 
 #define BUCKET_TAG_TIMEOUT 30
 
+// default number of entries to list with each bucket listing call
+// (use marker to bridge between calls)
+static constexpr size_t listing_max_entries = 1000;
+
 
 static RGWMetadataHandler *bucket_meta_handler = NULL;
 static RGWMetadataHandler *bucket_instance_meta_handler = NULL;
@@ -1164,17 +1168,27 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
+  uint16_t expansion_factor = 1;
   while (is_truncated) {
     map<string, rgw_bucket_dir_entry> result;
 
     int r = store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD,
-					   marker, prefix, 1000, true,
+					   marker, prefix,
+					   listing_max_entries, true,
+					   expansion_factor,
 					   result, &is_truncated, &marker,
 					   bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
+    }
+
+    if (result.size() < listing_max_entries / 8) {
+      ++expansion_factor;
+    } else if (result.size() > listing_max_entries * 7 / 8 &&
+	       expansion_factor > 1) {
+      --expansion_factor;
     }
 
     dump_bucket_index(result, formatter);
