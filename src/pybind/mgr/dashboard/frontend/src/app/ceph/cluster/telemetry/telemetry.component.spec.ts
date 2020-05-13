@@ -47,20 +47,17 @@ describe('TelemetryComponent', () => {
     'url'
   ];
 
-  configureTestBed(
-    {
-      declarations: [TelemetryComponent],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot()
-      ],
-      providers: i18nProviders
-    },
-    true
-  );
+  configureTestBed({
+    declarations: [TelemetryComponent],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      ToastrModule.forRoot()
+    ],
+    providers: i18nProviders
+  });
 
   describe('configForm', () => {
     beforeEach(() => {

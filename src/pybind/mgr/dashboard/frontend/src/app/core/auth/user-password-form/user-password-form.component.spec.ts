@@ -22,21 +22,18 @@ describe('UserPasswordFormComponent', () => {
   let router: Router;
   let authStorageService: AuthStorageService;
 
-  configureTestBed(
-    {
-      imports: [
-        HttpClientTestingModule,
-        RouterTestingModule,
-        ReactiveFormsModule,
-        ComponentsModule,
-        ToastrModule.forRoot(),
-        SharedModule
-      ],
-      declarations: [UserPasswordFormComponent],
-      providers: i18nProviders
-    },
-    true
-  );
+  configureTestBed({
+    imports: [
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ReactiveFormsModule,
+      ComponentsModule,
+      ToastrModule.forRoot(),
+      SharedModule
+    ],
+    declarations: [UserPasswordFormComponent],
+    providers: i18nProviders
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(UserPasswordFormComponent);
