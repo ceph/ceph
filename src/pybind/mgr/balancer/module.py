@@ -429,7 +429,7 @@ class Module(MgrModule):
         self.event = Event()
 
     def handle_command(self, inbuf, command):
-        self.log.warn("Handling command: '%s'" % str(command))
+        self.log.warning("Handling command: '%s'" % str(command))
         if command['prefix'] == 'balancer status':
             s = {
                 'plans': list(self.plans.keys()),
@@ -1098,7 +1098,7 @@ class Module(MgrModule):
         metrics = self.get_module_option('crush_compat_metrics').split(',')
         key = metrics[0] # balancing using the first score metric
         if key not in ['pgs', 'bytes', 'objects']:
-            self.log.warn("Invalid crush_compat balancing key %s. Using 'pgs'." % key)
+            self.log.warning("Invalid crush_compat balancing key %s. Using 'pgs'." % key)
             key = 'pgs'
 
         # go

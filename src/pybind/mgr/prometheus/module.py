@@ -528,7 +528,7 @@ class Module(MgrModule):
                 try:
                     self.metrics["pg_{}".format(state)].set(num, (pool,))
                 except KeyError:
-                    self.log.warn("skipping pg in unknown state {}".format(state))
+                    self.log.warning("skipping pg in unknown state {}".format(state))
 
     def get_osd_stats(self):
         osd_stats = self.get('osd_stats')

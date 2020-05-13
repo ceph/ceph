@@ -464,10 +464,10 @@ class Module(MgrModule):
         # In the case that we ignored some PGs, log the reason why (we may
         # not end up creating a progress event)
         if len(unmoved_pgs):
-            self.log.warn("{0} PGs were on osd.{1}, but didn't get new locations".format(
+            self.log.warning("{0} PGs were on osd.{1}, but didn't get new locations".format(
                 len(unmoved_pgs), osd_id))
 
-        self.log.warn("{0} PGs affected by osd.{1} being marked {2}".format(
+        self.log.warning("{0} PGs affected by osd.{1} being marked {2}".format(
             len(affected_pgs), osd_id, marked))
 
 
@@ -507,13 +507,13 @@ class Module(MgrModule):
                 old_weight = old_osds[osd_id]['in']
 
                 if new_weight == 0.0 and old_weight > new_weight:
-                    self.log.warn("osd.{0} marked out".format(osd_id))
+                    self.log.warning("osd.{0} marked out".format(osd_id))
                     self._osd_in_out(old_osdmap, old_dump, new_osdmap, osd_id, "out")
                 elif new_weight >= 1.0 and old_weight == 0.0:
                     # Only consider weight>=1.0 as "in" to avoid spawning
                     # individual recovery events on every adjustment
                     # in a gradual weight-in
-                    self.log.warn("osd.{0} marked in".format(osd_id))
+                    self.log.warning("osd.{0} marked in".format(osd_id))
                     self._osd_in_out(old_osdmap, old_dump, new_osdmap, osd_id, "in")
 
     def notify(self, notify_type, notify_data):
@@ -666,7 +666,7 @@ class Module(MgrModule):
                                                                    ev.message))
             self._complete(ev)
         except KeyError:
-            self.log.warn("complete: ev {0} does not exist".format(ev_id))
+            self.log.warning("complete: ev {0} does not exist".format(ev_id))
             pass
 
     def fail(self, ev_id, message):
@@ -683,7 +683,7 @@ class Module(MgrModule):
                                                                     message))
             self._complete(ev)
         except KeyError:
-            self.log.warn("fail: ev {0} does not exist".format(ev_id))
+            self.log.warning("fail: ev {0} does not exist".format(ev_id))
 
     def _handle_ls(self):
         if len(self._events) or len(self._completed_events):
