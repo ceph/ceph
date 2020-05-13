@@ -252,7 +252,7 @@ class CephFSTestCase(CephTestCase):
                 timeout=30
             )
         except RuntimeError:
-            log.warn("Timeout waiting for daemons {0}, while we have {1}".format(
+            log.warning("Timeout waiting for daemons {0}, while we have {1}".format(
                 daemon_ids, get_daemon_names()
             ))
             raise

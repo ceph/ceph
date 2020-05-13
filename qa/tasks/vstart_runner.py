@@ -495,7 +495,7 @@ class LocalFuseMount(FuseMount):
                 check_status=False
             )
             if p.exitstatus != 0:
-                log.warn("ls conns failed with {0}, assuming none".format(p.exitstatus))
+                log.warning("ls conns failed with {0}, assuming none".format(p.exitstatus))
                 return []
 
             ls_str = six.ensure_str(p.stdout.getvalue().strip())
@@ -932,7 +932,7 @@ def exec_test():
     for line in lines:
         if 'ceph-fuse' in line or 'ceph-mds' in line:
             pid = int(line.split()[0])
-            log.warn("Killing stray process {0}".format(line))
+            log.warning("Killing stray process {0}".format(line))
             os.kill(pid, signal.SIGKILL)
 
     # Fire up the Ceph cluster if the user requested it
@@ -991,7 +991,7 @@ def exec_test():
         mount = LocalFuseMount(ctx, test_dir, client_id)
         mounts.append(mount)
         if mount.is_mounted():
-            log.warn("unmounting {0}".format(mount.mountpoint))
+            log.warning("unmounting {0}".format(mount.mountpoint))
             mount.umount_wait()
         else:
             if os.path.exists(mount.mountpoint):
@@ -1058,11 +1058,11 @@ def exec_test():
 
         if hasattr(fn, 'is_for_teuthology') and getattr(fn, 'is_for_teuthology') is True:
             drop_test = True
-            log.warn("Dropping test because long running: ".format(method.id()))
+            log.warning("Dropping test because long running: ".format(method.id()))
 
         if getattr(fn, "needs_trimming", False) is True:
             drop_test = (os.getuid() != 0)
-            log.warn("Dropping test because client trim unavailable: ".format(method.id()))
+            log.warning("Dropping test because client trim unavailable: ".format(method.id()))
 
         if drop_test:
             # Don't drop the test if it was explicitly requested in arguments
