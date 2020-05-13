@@ -220,11 +220,21 @@ def get_initial_tasks(lock, config, machine_type):
         ])
     init_tasks.append({'internal.timer': None})
 
+    # install_latest_rh_kernel is used for redhat config
+    if 'redhat' not in config:
+        if 'kernel' in config:
+            init_tasks.append({'kernel': config['kernel']})
+
     if 'roles' in config:
         init_tasks.extend([
             {'pcp': None},
             {'selinux': None},
         ])
+
+    if 'redhat' in config:
+        init_tasks.extend([
+            {'internal.setup_stage_cdn': None}])
+
     if config.get('ceph_cm_ansible', True):
         init_tasks.append({'ansible.cephlab': None})
 
@@ -234,6 +244,7 @@ def get_initial_tasks(lock, config, machine_type):
 
     if 'redhat' in config:
         init_tasks.extend([
+            {'internal.git_ignore_ssl': None},
             {'internal.setup_cdn_repo': None},
             {'internal.setup_base_repo': None},
             {'internal.setup_additional_repo': None},
