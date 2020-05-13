@@ -1511,6 +1511,12 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (!iter->is_delete_marker()) {
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
         s->formatter->dump_int("Size", iter->meta.accounted_size);
+        if((iter->meta.accounted_size) % 4096 != 0){
+          size_around = (((iter->meta.accounted_size)/4096)+1) * 4096;
+        }else{
+          size_around = iter->meta.accounted_size;
+        }
+        s->formatter->dump_int("Size_Around", size_around);
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
         s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
@@ -1600,6 +1606,12 @@ void RGWListBucket_ObjStore_S3::send_response()
         dump_time(s, "LastModified", &iter->meta.mtime);
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
         s->formatter->dump_int("Size", iter->meta.accounted_size);
+        if((iter->meta.accounted_size) % 4096 != 0){
+          size_around = (((iter->meta.accounted_size)/4096)+1) * 4096;
+        }else{
+          size_around = iter->meta.accounted_size;
+        }
+        s->formatter->dump_int("Size_Around", size_around);
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
         s->formatter->dump_string("StorageClass", storage_class.c_str());
         dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
@@ -1678,6 +1690,12 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
       if (!iter->is_delete_marker()) {
         s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
         s->formatter->dump_int("Size", iter->meta.accounted_size);
+        if((iter->meta.accounted_size) % 4096 != 0){
+          size_around = (((iter->meta.accounted_size)/4096)+1) * 4096;
+        }else{
+          size_around = iter->meta.accounted_size;
+        }
+        s->formatter->dump_int("Size_Around", size_around);
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
         s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
@@ -1758,6 +1776,12 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       dump_time(s, "LastModified", &iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
+      if((iter->meta.accounted_size) % 4096 != 0){
+          size_around = (((iter->meta.accounted_size)/4096)+1) * 4096;
+        }else{
+          size_around = iter->meta.accounted_size;
+        }
+        s->formatter->dump_int("Size_Around", size_around);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
       s->formatter->dump_string("StorageClass", storage_class.c_str());
       if (fetchOwner == true) {
