@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "common/ceph_crypto.h"
+#include "common/split.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -445,7 +446,7 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
     std::string key = "HTTP_";
     key.append(*k);
     boost::replace_all(key, "-", "_");
-    rgw_env->set(std::move(key), *v);
+    rgw_env->set(std::move(key), std::string(*v));
     ldpp_dout(this,2) << "after splitting cache kv key: " << key  << " " << rgw_env->get(key.c_str())  << dendl;
   }
   ret = RGWOp::verify_requester(auth_registry);
