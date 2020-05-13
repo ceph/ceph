@@ -168,13 +168,25 @@ public:
     , writer_thread(*this, &NBDServer::writer_entry)
     , quiesce_thread(*this, &NBDServer::quiesce_entry)
     , started(false)
-  {}
+  {
+    std::vector<librbd::config_option_t> options;
+    image.config_list(&options);
+    for (auto &option : options) {
+      if ((option.name == std::string("rbd_cache") ||
+           option.name == std::string("rbd_cache_writethrough_until_flush")) &&
+          option.value == "false") {
+        allow_internal_flush = true;
+        break;
+      }
+    }
+  }
 
 private:
   ceph::mutex disconnect_lock =
     ceph::make_mutex("NBDServer::DisconnectLocker");
   ceph::condition_variable disconnect_cond;
   std::atomic<bool> terminated = { false };
+  std::atomic<bool> allow_internal_flush = { false };
 
   void shutdown()
   {
@@ -346,6 +358,7 @@ private:
           break;
         case NBD_CMD_FLUSH:
           image.aio_flush(c);
+          allow_internal_flush = true;
           break;
         case NBD_CMD_TRIM:
           image.aio_discard(pctx->request.from, pctx->request.len, c);
@@ -418,6 +431,10 @@ signal:
   }
 
   void wait_inflight_io() {
+    if (!allow_internal_flush) {
+        return;
+    }
+
     uint64_t features = 0;
     image.features(&features);
     if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
