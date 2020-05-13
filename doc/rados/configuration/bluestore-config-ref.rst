@@ -141,7 +141,7 @@ automatically manage these within the space of ``block``.
 Automatic Cache Sizing
 ======================
 
-Bluestore can be configured to automatically resize it's caches when tc_malloc
+Bluestore can be configured to automatically resize it's caches when TCMalloc
 is configured as the memory allocator and the ``bluestore_cache_autotune``
 setting is enabled.  This option is currently enabled by default.  Bluestore
 will attempt to keep OSD heap memory usage under a designated target size via
