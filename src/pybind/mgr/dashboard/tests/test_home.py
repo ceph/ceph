@@ -31,7 +31,7 @@ class HomeTest(ControllerTestCase, FakeFsMixin):
             cls.fs.create_file(
                 os.path.join(lang.DEFAULT_LANGUAGE_PATH, 'index.html'),
                 contents='<!doctype html><html lang="en"><body></body></html>')
-        cls.setup_controllers([HomeController])
+            cls.setup_controllers([HomeController])
 
     @mock.patch(FakeFsMixin.builtins_open, new=FakeFsMixin.f_open)
     @mock.patch('os.stat', new=FakeFsMixin.f_os.stat)
