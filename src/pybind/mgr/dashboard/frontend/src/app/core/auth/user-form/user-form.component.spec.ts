@@ -44,23 +44,20 @@ describe('UserFormComponent', () => {
     { path: 'users', component: FakeComponent }
   ];
 
-  configureTestBed(
-    {
-      imports: [
-        RouterTestingModule.withRoutes(routes),
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        ComponentsModule,
-        ToastrModule.forRoot(),
-        SharedModule,
-        ButtonsModule.forRoot(),
-        BsDatepickerModule.forRoot()
-      ],
-      declarations: [UserFormComponent, FakeComponent],
-      providers: i18nProviders
-    },
-    true
-  );
+  configureTestBed({
+    imports: [
+      RouterTestingModule.withRoutes(routes),
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      ComponentsModule,
+      ToastrModule.forRoot(),
+      SharedModule,
+      ButtonsModule.forRoot(),
+      BsDatepickerModule.forRoot()
+    ],
+    declarations: [UserFormComponent, FakeComponent],
+    providers: i18nProviders
+  });
 
   beforeEach(() => {
     spyOn(TestBed.get(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));
