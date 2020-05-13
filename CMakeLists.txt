@@ -675,6 +675,4 @@ add_tags(ctags
   EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
 
-find_package(CppCheck)
-find_package(IWYU)
 set(VERSION 15.2.0)
