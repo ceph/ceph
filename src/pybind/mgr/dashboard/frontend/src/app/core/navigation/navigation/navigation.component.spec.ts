@@ -57,7 +57,8 @@ describe('NavigationComponent', () => {
         provide: AuthStorageService,
         useValue: {
           getPermissions: jest.fn(),
-          isPwdDisplayed$: { subscribe: jest.fn() }
+          isPwdDisplayed$: { subscribe: jest.fn() },
+          telemetryNotification$: { subscribe: jest.fn() }
         }
       },
       { provide: SummaryService, useValue: { subscribe: jest.fn() } },
