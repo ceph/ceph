@@ -57,7 +57,7 @@ class QuotaSetting {
   styleUrls: ['./cephfs-directories.component.scss']
 })
 export class CephfsDirectoriesComponent implements OnInit, OnChanges {
-  @ViewChild(TreeComponent, { static: false })
+  @ViewChild(TreeComponent)
   treeComponent: TreeComponent;
   @ViewChild('origin', { static: true })
   originTmpl: TemplateRef<any>;

@@ -50,9 +50,9 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   criticalConfirmationTpl: TemplateRef<any>;
   @ViewChild(TableComponent, { static: true })
   tableComponent: TableComponent;
-  @ViewChild('reweightBodyTpl', { static: false })
+  @ViewChild('reweightBodyTpl')
   reweightBodyTpl: TemplateRef<any>;
-  @ViewChild('safeToDestroyBodyTpl', { static: false })
+  @ViewChild('safeToDestroyBodyTpl')
   safeToDestroyBodyTpl: TemplateRef<any>;
 
   permissions: Permissions;
