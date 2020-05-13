@@ -595,7 +595,10 @@ def ceph_osds(ctx, config):
             devs = devs_by_remote[remote]
             assert devs   ## FIXME ##
             dev = devs.pop()
-            short_dev = dev.replace('/dev/', '')
+            if all(_ in dev for _ in ('lv', 'vg')):
+                short_dev = dev.replace('/dev/', '')
+            else:
+                short_dev = dev
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
             _shell(ctx, cluster_name, remote, [
