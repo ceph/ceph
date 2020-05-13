@@ -595,7 +595,7 @@ class Module(MgrModule):
         }), '')
         r, outb, outs = result.wait()
         if r != 0:
-            self.log.warn('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]' % (osd_ids, r, outb, outs))
+            self.log.warning('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]' % (osd_ids, r, outb, outs))
         for osd_id in osd_ids:
             result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
@@ -606,7 +606,7 @@ class Module(MgrModule):
             }), '')
             r, outb, outs = result.wait()
             if r != 0:
-                self.log.warn('Could not set osd.%s primary-affinity, r: [%s], outs: [%s]' % (osd_id, r, outb, outs))
+                self.log.warning('Could not set osd.%s primary-affinity, r: [%s], outs: [%s]' % (osd_id, r, outb, outs))
 
     def extract_smart_features(self, raw):
         # FIXME: extract and normalize raw smartctl --json output and
