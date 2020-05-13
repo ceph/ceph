@@ -724,7 +724,7 @@ class CephFSMount(object):
         p = self.run_shell(["df", "-B1", "."])
         lines = p.stdout.getvalue().strip().split("\n")
         fs, total, used, avail = lines[1].split()[:4]
-        log.warn(lines)
+        log.warning(lines)
 
         return {
             "total": int(total),

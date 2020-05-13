@@ -160,7 +160,7 @@ class FSStatus(object):
         if info:
             return info['addr']
         else:
-            log.warn(json.dumps(list(self.get_all()), indent=2))  # dump for debugging
+            log.warning(json.dumps(list(self.get_all()), indent=2))  # dump for debugging
             raise RuntimeError("MDS id '{0}' not found in map".format(name))
 
     def get_mds_gid(self, gid):
