@@ -265,6 +265,10 @@ class CephFSTestCase(CephTestCase):
         if core_dir:  # Non-default core_pattern with a directory in it
             # We have seen a core_pattern that looks like it's from teuthology's coredump
             # task, so proceed to clear out the core file
+            if core_dir[0] == '|':
+                log.info("Piped core dumps to program {0}, skip cleaning".format(core_dir[1:]))
+                return;
+
             log.info("Clearing core from directory: {0}".format(core_dir))
 
             # Verify that we see the expected single coredump
