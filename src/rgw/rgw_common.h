@@ -1139,6 +1139,7 @@ struct RGWBucketInfo {
 
   std::optional<rgw_sync_policy_info> sync_policy;
   bool is_owner_role;
+  string owner_display_name;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -1176,6 +1177,7 @@ struct RGWBucketEntryPoint
   ceph::real_time creation_time;
   bool linked;
   bool is_owner_role;
+  string owner_display_name;
 
   bool has_bucket_info;
   RGWBucketInfo old_bucket_info;
@@ -1192,6 +1194,7 @@ struct RGWBucketEntryPoint
     encode(owner, bl);
     encode(creation_time, bl);
     encode(is_owner_role, bl);
+    encode(owner_display_name, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
@@ -1220,6 +1223,7 @@ struct RGWBucketEntryPoint
     }
     if (struct_v >= 11) {
       decode(is_owner_role, bl);
+      decode(owner_display_name, bl);
     } else {
       is_owner_role = false;
     }

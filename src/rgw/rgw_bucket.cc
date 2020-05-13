@@ -762,6 +762,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
   if (is_role) {
     bucket_info.owner = user_id;
     bucket_info.is_owner_role = true;
+    bucket_info.owner_display_name = display_name;
   } else {
     bucket_info.owner = user_info.user_id;
     bucket_info.is_owner_role = false;
@@ -785,6 +786,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
   ep.owner = bucket_info.owner;
   ep.is_owner_role = bucket_info.is_owner_role;
   ep.creation_time = bucket_info.creation_time;
+  ep.owner_display_name = bucket_info.owner_display_name;
   ep.linked = true;
   map<string, bufferlist> ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
@@ -1465,6 +1467,9 @@ static int bucket_stats(rgw::sal::RGWRadosStore *store,
   formatter->dump_stream("index_type") << bucket_info.layout.current_index.layout.type;
   ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_bool("is_owner_role", bucket_info.is_owner_role);
+  if (bucket_info.is_owner_role) {
+    formatter->dump_string("federated_user_name", bucket_info.owner_display_name);
+  }
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
   ut.gmtime(formatter->dump_stream("mtime"));

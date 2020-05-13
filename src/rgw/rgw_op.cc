@@ -257,13 +257,16 @@ static int get_obj_policy_from_attr(CephContext *cct,
 				    RGWAccessControlPolicy *policy,
                                     string *storage_class,
 				    rgw_obj& obj,
-                                    optional_yield y)
+                                    optional_yield y,
+            bool is_role,
+            string role_display_name)
 {
   bufferlist bl;
   int ret = 0;
 
   RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
   RGWRados::Object::Read rop(&op_target);
+  string display_name;
 
   ret = rop.get_attr(RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
@@ -273,12 +276,23 @@ static int get_obj_policy_from_attr(CephContext *cct,
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
     ldout(cct, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
-    rgw::sal::RGWRadosUser user(store);
-    ret = user.get_by_id(bucket_info.owner, y);
-    if (ret < 0)
-      return ret;
+    if (is_role) {
+      RGWRole role(cct, store->getRados()->pctl, bucket_info.owner.id, bucket_info.owner.tenant);
+      int r = role.get();
+      if (r < 0) {
+        ldout(cct, 0) << "WARNING: couldn't find role" << dendl;
+        return r;
+      }
+      display_name = role_display_name;
+    } else {
+      rgw::sal::RGWRadosUser user(store);
+      ret = user.get_by_id(bucket_info.owner, y);
+      if (ret < 0)
+        return ret;
+      display_name = user.get_display_name();
+    }
 
-    policy->create_default(bucket_info.owner, user.get_display_name());
+    policy->create_default(bucket_info.owner, display_name, is_role);
   }
 
   if (storage_class) {
@@ -537,13 +551,13 @@ static int read_obj_policy(rgw::sal::RGWRadosStore *store,
   policy = get_iam_policy_from_attr(s->cct, store, bucket_attrs, bucket.tenant);
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
+  bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
   int ret = get_obj_policy_from_attr(s->cct, store, *obj_ctx,
-                                     bucket_info, bucket_attrs, acl, storage_class, obj, s->yield);
+                                     bucket_info, bucket_attrs, acl, storage_class, obj, s->yield, is_role, s->user->get_display_name());
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
-    bool is_role = (s->auth.identity.get()->get_identity_type() == TYPE_ROLE) ? true : false;
     ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy, is_role, s->user->get_display_name());
     if (ret < 0) {
       return ret;

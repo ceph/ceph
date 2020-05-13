@@ -3054,7 +3054,7 @@ int main(int argc, const char **argv)
   rgw_user user_id;
   string tenant;
   rgw_user new_user_id;
-  std::string access_key, secret_key, user_email, display_name;
+  std::string access_key, secret_key, user_email, display_name, federated_user_name;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
   std::string date, subuser, access, format;
@@ -3275,7 +3275,9 @@ int main(int argc, const char **argv)
       user_op.user_email_specified=true;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
       display_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-n", "--federated-user-name", (char*)NULL)) {
+      federated_user_name = val;
+    }else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
       bucket_name = val;
       opt_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
@@ -6135,7 +6137,7 @@ int main(int argc, const char **argv)
     bucket_op.set_bucket_id(bucket_id);
     bucket_op.set_new_bucket_name(new_bucket_name);
     bucket_op.set_identity_type(type);
-    bucket_op.set_identity_display_name(display_name);
+    bucket_op.set_identity_display_name(federated_user_name);
     string err;
     int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
@@ -6158,7 +6160,7 @@ int main(int argc, const char **argv)
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
     bucket_op.set_identity_type(type);
-    bucket_op.set_identity_display_name(display_name);
+    bucket_op.set_identity_display_name(federated_user_name);
     string err;
     string marker;
 

@@ -131,7 +131,12 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("etag", etag, f);
   encode_json("storage_class", storage_class, f);
   encode_json("owner", owner, f);
-  encode_json("owner_display_name", owner_display_name, f);
+  if (is_owner_role) {
+    encode_json("is_owner_role", is_owner_role, f);
+    encode_json("federated_user_name", owner_display_name, f);
+  } else {
+    encode_json("owner_display_name", owner_display_name, f);
+  }
   encode_json("content_type", content_type, f);
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);

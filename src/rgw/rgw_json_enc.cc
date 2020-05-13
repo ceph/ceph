@@ -663,6 +663,7 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
   encode_json("has_bucket_info", has_bucket_info, f);
   if (is_owner_role) {
     encode_json("owner_type", "role", f);
+    encode_json("federated_user_name", owner_display_name, f);
   }
   if (has_bucket_info) {
     encode_json("old_bucket_info", old_bucket_info, f);
@@ -801,6 +802,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   }
   if (is_owner_role) {
     encode_json("owner_type", "role", f);
+    encode_json("federated_user_name", owner_display_name, f);
   }
 }
 
