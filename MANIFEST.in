@@ -1,2 +1,3 @@
 include *.rst
-include requirements.txt
+include requirements2.txt
+include requirements3.txt
