@@ -1,12 +1,19 @@
 
 #include "common/debug.h"
+#include "common/Formatter.h"
 
 #include "rgw_sip_bucket.h"
 #include "rgw_bucket.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 
+
 #define dout_subsys ceph_subsys_rgw
+
+void siprovider_bucket_entry_info::dump(Formatter *f) const
+{
+  entry.dump(f);
+}
 
 static inline string escape_str(const string& s)
 {

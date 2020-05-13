@@ -15,10 +15,12 @@
 #include "global/global_init.h"
 #include "global/global_context.h"
 #include "common/ceph_argparse.h"
-// #include "rgw/rgw_common.h"
+#include "common/ceph_json.h"
+
 #include "rgw/rgw_sync_info.h"
 
 #include <gtest/gtest.h>
+
 
 using namespace std;
 
@@ -73,23 +75,32 @@ struct BasicMarker {
 };
 WRITE_CLASS_ENCODER(BasicMarker)
 
-struct BasicData {
+struct BasicData : public SIProvider::EntryInfoBase {
   string val;
-  void encode(bufferlist& bl) const {
+
+  BasicData() {}
+  BasicData(const string& _val) : val(_val) {}
+
+  void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     encode(val, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(1, bl);
     decode(val, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const override {
+    encode_json("val", val, f);
+  }
 };
 WRITE_CLASS_ENCODER(BasicData)
 
-class BasicProvider : public SIProvider_SingleStage
+class BasicProvider : public SIProvider_SingleStage,
+                      public SITypedProviderDefaultHandler<BasicData>
 {
   vector<uint32_t> max_entries;
 
@@ -137,7 +148,7 @@ public:
     for (int i = 0; i < max && val < max_entries[shard_id]; ++i, ++val) {
       SIProvider::Entry e;
 
-      BasicData d{gen_data(shard_id, val)};
+      BasicData d(gen_data(shard_id, val));
       d.encode(e.data);
       e.key = encode_marker(BasicMarker{val});
 
@@ -165,7 +176,8 @@ public:
   }
 };
 
-class LogProvider : public SIProvider_SingleStage
+class LogProvider : public SIProvider_SingleStage,
+                    public SITypedProviderDefaultHandler<BasicData>
 {
   vector<uint32_t> min_val;
   vector<uint32_t> max_val;

@@ -5,22 +5,21 @@
 
 #include <memory>
 #include <map>
+#include <functional>
 
 #include "include/buffer.h"
 
 class SIProvider_Container;
 
+namespace ceph {
+  class Formatter;
+}
+
 /*
  * non-stateful entity that is responsible for providing data
  */
-class SIProvider
-{
-  friend class SIProvider_Container;
 
-protected:
-  CephContext *cct;
-  std::string name;
-
+class SIProvider {
 public:
   enum StageType {
     UNKNOWN = -1,
@@ -36,9 +35,18 @@ public:
     int num_shards{0};
   };
 
+  struct EntryInfoBase {
+    virtual ~EntryInfoBase() {}
+
+    virtual void encode(bufferlist& bl) const = 0;
+    virtual void decode(bufferlist::const_iterator& bl) = 0;
+
+    virtual void dump(Formatter *f) const = 0;
+  };
+
   struct Entry {
     std::string key;
-    bufferlist data;
+    bufferlist data; /* encoded EntryInfoBase */
   };
 
   struct fetch_result {
@@ -47,8 +55,6 @@ public:
     bool done{false}; /* stage done */
   };
 
-  SIProvider(CephContext *_cct, const std::string& _name) : cct(_cct),
-                                                            name(_name) {}
   virtual ~SIProvider() {}
 
   virtual stage_id_t get_first_stage() const = 0;
@@ -61,12 +67,30 @@ public:
   virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
   virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const = 0;
 
-  const std::string& get_name() {
+  virtual const std::string& get_name() = 0;
+
+  virtual int handle_entry(const stage_id_t& sid,
+                           Entry& entry,
+                           std::function<int(EntryInfoBase&)> f) = 0;
+};
+
+class SIProviderCommon : public virtual SIProvider
+{
+protected:
+  CephContext *cct;
+  std::string name;
+
+public:
+  SIProviderCommon(CephContext *_cct, const std::string& _name) : cct(_cct),
+                                                                  name(_name) {}
+
+  const std::string& get_name() override {
     return name;
   }
 };
 
-class SIProvider_SingleStage : public SIProvider
+
+class SIProvider_SingleStage : public SIProviderCommon
 {
 protected:
   StageInfo stage_info;
@@ -78,7 +102,7 @@ public:
   SIProvider_SingleStage(CephContext *_cct,
                          const std::string& name,
                          StageType type,
-                         int num_shards) : SIProvider(_cct, name),
+                         int num_shards) : SIProviderCommon(_cct, name),
                                            stage_info({name, type, num_shards}) {}
   stage_id_t get_first_stage() const override {
     return stage_info.sid;
@@ -110,7 +134,7 @@ public:
 
 using SIProviderRef = std::shared_ptr<SIProvider>;
 
-class SIProvider_Container : public SIProvider
+class SIProvider_Container : public SIProviderCommon
 {
 protected:
   std::vector<SIProviderRef> providers;
@@ -140,9 +164,32 @@ public:
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const override;
   int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const override;
+
+  int handle_entry(const stage_id_t& sid,
+                   Entry& entry,
+                   std::function<int(EntryInfoBase&)> f) override;
 };
 
-using SIProviderRef = std::shared_ptr<SIProvider>;
+template <class T>
+class SITypedProviderDefaultHandler : public virtual SIProvider
+{
+public:
+  SITypedProviderDefaultHandler() {}
+
+  using value_type = T;
+
+  int handle_entry(const stage_id_t& sid,
+                   Entry& entry,
+                   std::function<int(EntryInfoBase&)> f) override {
+    T t;
+    try {
+      decode(t, entry.data);
+    } catch (buffer::error& err) {
+      return -EINVAL;
+    }
+    return f(t);
+  }
+};
 
 /*
  * stateful entity that is responsible for fetching data

@@ -31,17 +31,19 @@ int SIProvider_SingleStage::get_cur_state(const stage_id_t& sid, int shard_id, s
 
 SIProvider_Container::SIProvider_Container(CephContext *_cct,
                                            const std::string& _name,
-                                           std::vector<SIProviderRef>& _providers) : SIProvider(_cct, _name),
+                                           std::vector<SIProviderRef>& _providers) : SIProviderCommon(_cct, _name),
                                                                                      providers(_providers)
 {
   std::map<std::string, int> pcount;
   int i = 0;
 
   for (auto& p : providers) {
-    int count = pcount[p->name]++;
+    const auto& name = p->get_name();
 
-    char buf[p->name.size() + 32 ];
-    snprintf(buf, sizeof(buf), "%s/%d", p->name.c_str(), count);
+    int count = pcount[name]++;
+
+    char buf[name.size() + 32 ];
+    snprintf(buf, sizeof(buf), "%s/%d", name.c_str(), count);
 
     providers_index[buf] = i++;
     pids.push_back(buf);
@@ -208,6 +210,21 @@ int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std
   }
 
   return provider->get_cur_state(psid, shard_id, marker);
+}
+
+int SIProvider_Container::handle_entry(const stage_id_t& sid,
+                                       Entry& entry,
+                                       std::function<int(EntryInfoBase&)> f)
+{
+  SIProviderRef provider;
+  stage_id_t psid;
+
+  if (!decode_sid(sid,  &provider, &psid)) {
+    ldout(cct, 20) << __func__ << "() can't decode sid: " << dendl;
+    return -ENOENT;
+  }
+
+  return provider->handle_entry(psid, entry, f);
 }
 
 int SIProviderClient::init_markers()

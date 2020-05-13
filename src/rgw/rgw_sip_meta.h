@@ -5,30 +5,41 @@
 
 #include "rgw_sync_info.h"
 
+namespace ceph {
+  class Formatter;
+}
 
-struct siprovider_meta_info {
+struct siprovider_meta_info : public SIProvider::EntryInfoBase {
   std::string section;
   std::string id;
 
-  void encode(bufferlist& bl) const {
+  siprovider_meta_info() {}
+  siprovider_meta_info(const string& _section, const string& _id) : section(_section),
+                                                                    id(_id) {}
+
+  void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     encode(section, bl);
     encode(id, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) override {
      DECODE_START(1, bl);
      decode(section, bl);
      decode(id, bl);
      DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const override;
 };
 WRITE_CLASS_ENCODER(siprovider_meta_info)
 
 class RGWMetadataManager;
 
-class SIProvider_MetaFull : public SIProvider_SingleStage {
+class SIProvider_MetaFull : public SIProvider_SingleStage,
+                            public SITypedProviderDefaultHandler<siprovider_meta_info>
+{
   struct {
     RGWMetadataManager *mgr;
   } meta;
@@ -83,7 +94,9 @@ public:
 class RGWSI_MDLog;
 class RGWMetadataLog;
 
-class SIProvider_MetaInc : public SIProvider_SingleStage {
+class SIProvider_MetaInc : public SIProvider_SingleStage,
+                           public SITypedProviderDefaultHandler<siprovider_meta_info>
+{
   RGWSI_MDLog *mdlog;
   string period_id;
 

@@ -1,5 +1,7 @@
 
 #include "common/debug.h"
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
 
 #include "rgw_sip_meta.h"
 #include "rgw_metadata.h"
@@ -10,6 +12,11 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+void siprovider_meta_info::dump(Formatter *f) const
+{
+  encode_json("section", section, f);
+  encode_json("id", id, f);
+}
 
 int SIProvider_MetaFull::init()
 {
@@ -224,7 +231,7 @@ int SIProvider_MetaInc::do_fetch(int shard_id, std::string marker, int max, fetc
     max -= entries.size();
 
     for (auto& entry : entries) {
-      siprovider_meta_info meta_info = { entry.section, entry.name };
+      siprovider_meta_info meta_info(entry.section, entry.name);
 
       SIProvider::Entry e;
       e.key = entry.id;

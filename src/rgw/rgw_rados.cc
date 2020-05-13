@@ -74,6 +74,7 @@ using namespace librados;
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_reshard.h"
+#include "rgw_sip_bucket.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -1400,6 +1401,11 @@ int RGWRados::initialize(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 0) << "ERROR: failed to init ctls (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
+
+  /* this should have been part of the ctl initialization, however, we pass in RGWRadosStore that
+   * ctl should not know about. The correct way would be to avoid using store at all, however this
+   * requires creating svc for object listing */
+  ctl.si.mgr->register_sip("bucket.full", std::make_shared<RGWSIPGen_BucketFull>(cct, store, ctl.bucket));
 
   host_id = svc.zone_utils->gen_host_id();
 

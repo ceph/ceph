@@ -8,31 +8,37 @@
 
 #include "cls/rgw/cls_rgw_types.h"
 
+namespace ceph {
+  class Formatter;
+}
+
 namespace rgw { namespace sal {
   class RGWRadosStore;
 } }
 
 
-struct siprovider_bucket_entry_info {
+struct siprovider_bucket_entry_info : public SIProvider::EntryInfoBase {
   rgw_bi_log_entry entry;
 
-  void encode(bufferlist& bl) const {
+  void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) override {
      DECODE_START(1, bl);
      decode(entry, bl);
      DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
 };
 WRITE_CLASS_ENCODER(siprovider_bucket_entry_info)
 
-class SIProvider_BucketFull : public SIProvider_SingleStage {
+class SIProvider_BucketFull : public SIProvider_SingleStage,
+                              public SITypedProviderDefaultHandler<siprovider_bucket_entry_info>
+{
 
   std::string to_marker(const cls_rgw_obj_key& k) const;
   SIProvider::Entry create_entry(rgw_bucket_dir_entry& be) const;
