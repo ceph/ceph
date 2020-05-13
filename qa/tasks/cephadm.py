@@ -1000,20 +1000,20 @@ def initialize_config(ctx, config):
     # mon ips
     log.info('Choosing monitor IPs and ports...')
     remotes_and_roles = ctx.cluster.remotes.items()
-    roles = [role_list for (remote, role_list) in remotes_and_roles]
     ips = [host for (host, port) in
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
 
     if config.get('roleless', False):
         # mons will be named after hosts
-        roles = []
         first_mon = None
         for remote, _ in remotes_and_roles:
-            roles.append(['mon.' + remote.shortname])
+            ctx.cluster.remotes[remote].append('mon.' + remote.shortname)
             if not first_mon:
                 first_mon = remote.shortname
                 bootstrap_remote = remote
-        log.info('No roles; fabricating mons %s' % roles)
+        log.info('No mon roles; fabricating mons')
+
+    roles = [role_list for (remote, role_list) in ctx.cluster.remotes.items()]
 
     ctx.ceph[cluster_name].mons = get_mons(
         roles, ips, cluster_name,
