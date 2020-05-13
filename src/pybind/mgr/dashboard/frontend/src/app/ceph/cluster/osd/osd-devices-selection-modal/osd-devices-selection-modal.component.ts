@@ -18,7 +18,7 @@ import { InventoryDevicesComponent } from '../../inventory/inventory-devices/inv
   styleUrls: ['./osd-devices-selection-modal.component.scss']
 })
 export class OsdDevicesSelectionModalComponent implements AfterViewInit {
-  @ViewChild('inventoryDevices', { static: false })
+  @ViewChild('inventoryDevices')
   inventoryDevices: InventoryDevicesComponent;
 
   @Output()

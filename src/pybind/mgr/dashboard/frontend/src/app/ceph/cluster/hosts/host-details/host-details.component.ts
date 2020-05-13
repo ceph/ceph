@@ -16,7 +16,7 @@ export class HostDetailsComponent {
   @Input()
   selection: any;
 
-  @ViewChild(TabsetComponent, { static: false })
+  @ViewChild(TabsetComponent)
   tabsetChild: TabsetComponent;
 
   get selectedHostname(): string {

@@ -28,16 +28,16 @@ import { OsdFeature } from './osd-feature.interface';
   styleUrls: ['./osd-form.component.scss']
 })
 export class OsdFormComponent extends CdForm implements OnInit {
-  @ViewChild('dataDeviceSelectionGroups', { static: false })
+  @ViewChild('dataDeviceSelectionGroups')
   dataDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
-  @ViewChild('walDeviceSelectionGroups', { static: false })
+  @ViewChild('walDeviceSelectionGroups')
   walDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
-  @ViewChild('dbDeviceSelectionGroups', { static: false })
+  @ViewChild('dbDeviceSelectionGroups')
   dbDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
-  @ViewChild('previewButton', { static: false })
+  @ViewChild('previewButton')
   previewButton: SubmitButtonComponent;
 
   icons = Icons;
