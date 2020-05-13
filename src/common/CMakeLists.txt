@@ -20,6 +20,7 @@ set(common_srcs
   DecayCounter.cc
   FastCDC.cc
   Finisher.cc
+  FixedCDC.cc
   Formatter.cc
   Graylog.cc
   HTMLFormatter.cc
