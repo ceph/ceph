@@ -1998,16 +1998,6 @@ you may want to run:
     def apply_mon(self, spec):
         return self._apply(spec)
 
-    @trivial_completion
-    def add_mon(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mon', spec, self.mon_service.create)
-
-    @trivial_completion
-    def add_mgr(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mgr', spec, self.mgr_service.create)
-
     def _apply(self, spec: GenericSpec) -> str:
         self.migration.verify_no_migration()
 
@@ -2064,41 +2054,20 @@ you may want to run:
         return self._apply(spec)
 
     @trivial_completion
-    def add_mds(self, spec: ServiceSpec):
-        return self._add_daemon('mds', spec, self.mds_service.create, self.mds_service.config)
-
-    @trivial_completion
     def apply_mds(self, spec: ServiceSpec):
         return self._apply(spec)
-
-    @trivial_completion
-    def add_rgw(self, spec):
-        return self._add_daemon('rgw', spec, self.rgw_service.create, self.rgw_service.config)
 
     @trivial_completion
     def apply_rgw(self, spec):
         return self._apply(spec)
 
     @trivial_completion
-    def add_iscsi(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('iscsi', spec, self.iscsi_service.create, self.iscsi_service.config)
-
-    @trivial_completion
     def apply_iscsi(self, spec):
         return self._apply(spec)
 
     @trivial_completion
-    def add_rbd_mirror(self, spec):
-        return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.create)
-
-    @trivial_completion
     def apply_rbd_mirror(self, spec):
         return self._apply(spec)
-
-    @trivial_completion
-    def add_nfs(self, spec):
-        return self._add_daemon('nfs', spec, self.nfs_service.create, self.nfs_service.config)
 
     @trivial_completion
     def apply_nfs(self, spec):
@@ -2109,46 +2078,20 @@ you may want to run:
         return self.get('mgr_map').get('services', {}).get('dashboard', '')
 
     @trivial_completion
-    def add_prometheus(self, spec):
-        return self._add_daemon('prometheus', spec, self.prometheus_service.create)
-
-    @trivial_completion
     def apply_prometheus(self, spec):
         return self._apply(spec)
-
-    @trivial_completion
-    def add_node_exporter(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('node-exporter', spec,
-                                self.node_exporter_service.create)
 
     @trivial_completion
     def apply_node_exporter(self, spec):
         return self._apply(spec)
 
     @trivial_completion
-    def add_crash(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('crash', spec,
-                                self.crash_service.create)
-
-    @trivial_completion
     def apply_crash(self, spec):
         return self._apply(spec)
 
     @trivial_completion
-    def add_grafana(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('grafana', spec, self.grafana_service.create)
-
-    @trivial_completion
     def apply_grafana(self, spec: ServiceSpec):
         return self._apply(spec)
-
-    @trivial_completion
-    def add_alertmanager(self, spec):
-        # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('alertmanager', spec, self.alertmanager_service.create)
 
     @trivial_completion
     def apply_alertmanager(self, spec: ServiceSpec):

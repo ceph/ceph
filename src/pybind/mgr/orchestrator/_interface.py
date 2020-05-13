@@ -1030,19 +1030,9 @@ class Orchestrator(object):
         """Zap/Erase a device (DESTROYS DATA)"""
         raise NotImplementedError()
 
-    def add_mon(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create mon daemon(s)"""
-        raise NotImplementedError()
-
     def apply_mon(self, spec):
         # type: (ServiceSpec) -> Completion
         """Update mon cluster"""
-        raise NotImplementedError()
-
-    def add_mgr(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create mgr daemon(s)"""
         raise NotImplementedError()
 
     def apply_mgr(self, spec):
@@ -1050,19 +1040,9 @@ class Orchestrator(object):
         """Update mgr cluster"""
         raise NotImplementedError()
 
-    def add_mds(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create MDS daemon(s)"""
-        raise NotImplementedError()
-
     def apply_mds(self, spec):
         # type: (ServiceSpec) -> Completion
         """Update MDS cluster"""
-        raise NotImplementedError()
-
-    def add_rgw(self, spec):
-        # type: (RGWSpec) -> Completion
-        """Create RGW daemon(s)"""
         raise NotImplementedError()
 
     def apply_rgw(self, spec):
@@ -1070,19 +1050,9 @@ class Orchestrator(object):
         """Update RGW cluster"""
         raise NotImplementedError()
 
-    def add_rbd_mirror(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create rbd-mirror daemon(s)"""
-        raise NotImplementedError()
-
     def apply_rbd_mirror(self, spec):
         # type: (ServiceSpec) -> Completion
         """Update rbd-mirror cluster"""
-        raise NotImplementedError()
-
-    def add_nfs(self, spec):
-        # type: (NFSServiceSpec) -> Completion
-        """Create NFS daemon(s)"""
         raise NotImplementedError()
 
     def apply_nfs(self, spec):
@@ -1090,19 +1060,9 @@ class Orchestrator(object):
         """Update NFS cluster"""
         raise NotImplementedError()
 
-    def add_iscsi(self, spec):
-        # type: (IscsiServiceSpec) -> Completion
-        """Create iscsi daemon(s)"""
-        raise NotImplementedError()
-
     def apply_iscsi(self, spec):
         # type: (IscsiServiceSpec) -> Completion
         """Update iscsi cluster"""
-        raise NotImplementedError()
-
-    def add_prometheus(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create new prometheus daemon"""
         raise NotImplementedError()
 
     def apply_prometheus(self, spec):
@@ -1110,19 +1070,9 @@ class Orchestrator(object):
         """Update prometheus cluster"""
         raise NotImplementedError()
 
-    def add_node_exporter(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create a new Node-Exporter service"""
-        raise NotImplementedError()
-
     def apply_node_exporter(self, spec):
         # type: (ServiceSpec) -> Completion
         """Update existing a Node-Exporter daemon(s)"""
-        raise NotImplementedError()
-
-    def add_crash(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create a new crash service"""
         raise NotImplementedError()
 
     def apply_crash(self, spec):
@@ -1130,19 +1080,9 @@ class Orchestrator(object):
         """Update existing a crash daemon(s)"""
         raise NotImplementedError()
 
-    def add_grafana(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create a new Node-Exporter service"""
-        raise NotImplementedError()
-
     def apply_grafana(self, spec):
         # type: (ServiceSpec) -> Completion
         """Update existing a Node-Exporter daemon(s)"""
-        raise NotImplementedError()
-
-    def add_alertmanager(self, spec):
-        # type: (ServiceSpec) -> Completion
-        """Create a new AlertManager service"""
         raise NotImplementedError()
 
     def apply_alertmanager(self, spec):
