@@ -343,7 +343,7 @@ class VolumeClient(object):
                     target_subvolume.remove()
                     self.purge_queue.queue_job(volname)
                 except Exception as e:
-                    log.warn("failed to cleanup clone subvolume '{0}' ({1})".format(target_subvolname, e))
+                    log.warning("failed to cleanup clone subvolume '{0}' ({1})".format(target_subvolname, e))
                 raise ve
 
     def _clone_subvolume_snapshot(self, fs_handle, volname, subvolume, **kwargs):
