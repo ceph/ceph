@@ -21,9 +21,6 @@ ENCODING_VERSION = 2
 # keep a global reference to the module so we can use it from Event methods
 _module = None  # type: Optional["Module"]
 
-# if unit test we want MgrModule to be blank
-if 'UNITTEST' in os.environ:
-    MgrModule = object  # type: ignore
 
 class Event(object):
     """
