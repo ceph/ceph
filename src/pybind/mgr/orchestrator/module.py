@@ -710,7 +710,7 @@ Usage:
             msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-        completion = self.create_osds(drive_group)
+        completion = self.add_placement_to_service(drive_group)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -772,34 +772,7 @@ Usage:
             assert daemon_type
             spec = ServiceSpec(daemon_type, placement=spec)
 
-        daemon_type = spec.service_type
-
-        if daemon_type == 'mon':
-            completion = self.add_mon(spec)
-        elif daemon_type == 'mgr':
-            completion = self.add_mgr(spec)
-        elif daemon_type == 'rbd-mirror':
-            completion = self.add_rbd_mirror(spec)
-        elif daemon_type == 'crash':
-            completion = self.add_crash(spec)
-        elif daemon_type == 'alertmanager':
-            completion = self.add_alertmanager(spec)
-        elif daemon_type == 'grafana':
-            completion = self.add_grafana(spec)
-        elif daemon_type == 'node-exporter':
-            completion = self.add_node_exporter(spec)
-        elif daemon_type == 'prometheus':
-            completion = self.add_prometheus(spec)
-        elif daemon_type == 'mds':
-            completion = self.add_mds(spec)
-        elif daemon_type == 'rgw':
-            completion = self.add_rgw(spec)
-        elif daemon_type == 'nfs':
-            completion = self.add_nfs(spec)
-        elif daemon_type == 'iscsi':
-            completion = self.add_iscsi(spec)
-        else:
-            raise OrchestratorValidationError(f'unknown daemon type `{daemon_type}`')
+        completion = self.add_placement_to_service(spec)
 
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -823,7 +796,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
         )
 
-        completion = self.add_mds(spec)
+        completion = self.add_placement_to_service(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -857,7 +830,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
         )
 
-        completion = self.add_rgw(spec)
+        completion = self.add_placement_to_service(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -885,7 +858,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
         )
 
-        completion = self.add_nfs(spec)
+        completion = self.add_placement_to_service(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -917,7 +890,7 @@ Usage:
             placement=PlacementSpec.from_string(placement),
         )
 
-        completion = self.add_iscsi(spec)
+        completion = self.add_placement_to_service(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

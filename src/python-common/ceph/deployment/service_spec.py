@@ -2,12 +2,13 @@ import fnmatch
 import re
 from collections import namedtuple
 from functools import wraps
-from typing import Optional, Dict, Any, List, Union, Callable, Iterator
+from typing import Optional, Dict, Any, List, Union, Callable, Iterator, Callable, TypeVar, Iterable
 
 import six
 
 from ceph.deployment.hostspec import HostSpec
 
+T = TypeVar('T')
 
 class ServiceSpecValidationError(Exception):
     """
@@ -135,6 +136,20 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         assert_valid_host(self.hostname)
 
 
+    @staticmethod
+    def union(l: List["HostPlacementSpec"], r: List["HostPlacementSpec"]) -> Iterable[
+            "HostPlacementSpec"]:
+        """
+        Merge two lists of HostPlacementSpec by hostname. always returns `l` first.
+        >>> list(HostPlacementSpec.union([HostPlacementSpec(hostname='h', name='x', network='')],
+        ...                      [HostPlacementSpec(hostname='h', name='y', network='')]))
+        [HostPlacementSpec(hostname='h', network='', name='x')]
+        """
+        l_names = {h.hostname for h in l}
+        yield from l
+        yield from (h for h in r if h.hostname not in l_names)
+
+
 class PlacementSpec(object):
     """
     For APIs that need to specify a host subset
@@ -169,6 +184,23 @@ class PlacementSpec(object):
             not self.hosts and \
             not self.host_pattern and \
             self.count is None
+
+    def is_explicit(self):
+        """
+        >>> PlacementSpec(hosts=['h1']).is_explicit()
+        True
+
+        >>> PlacementSpec(host_pattern='any').is_explicit()
+        False
+
+        >>> PlacementSpec(hosts=['h1'], count=1).is_explicit()
+        False
+        """
+        if self.is_empty():
+            return True
+        if not self.hosts:
+            return False
+        return True
 
     def __eq__(self, other):
         if isinstance(other, PlacementSpec):
@@ -217,6 +249,9 @@ class PlacementSpec(object):
             kv.append(self.host_pattern)
         return ' '.join(kv)
 
+    def __str__(self):
+        return f'"{self.pretty_str()}"'
+
     def __repr__(self):
         kv = []
         if self.count:
@@ -228,6 +263,9 @@ class PlacementSpec(object):
         if self.host_pattern:
             kv.append('host_pattern={!r}'.format(self.host_pattern))
         return "PlacementSpec(%s)" % ', '.join(kv)
+
+    def copy(self) -> "PlacementSpec":
+        return PlacementSpec.from_json(self.to_json())
 
     @classmethod
     @handle_type_error
@@ -496,6 +534,9 @@ class ServiceSpec(object):
 
     def one_line_str(self):
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
+
+    def copy(self: T) -> T:
+        return ServiceSpec.from_json(self.to_json())
 
 
 class NFSServiceSpec(ServiceSpec):

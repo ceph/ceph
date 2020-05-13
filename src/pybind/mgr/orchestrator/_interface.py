@@ -19,7 +19,7 @@ from functools import wraps
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec
+    ServiceSpecValidationError, IscsiServiceSpec, PlacementSpec, HostPlacementSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 
@@ -892,6 +892,34 @@ class Orchestrator(object):
                 return fn(s).then(lambda r: merge(ls, r))
             completion = completion.then(next)
         return completion
+
+    def add_placement_to_service(self, new_spec: ServiceSpec) -> Completion:
+        def add_placement_to_placement(placement: PlacementSpec):
+            if not placement.is_explicit():
+                raise OrchestratorValidationError(f"service placement not explicit {placement}")
+            if not new_spec.placement.is_explicit():
+                raise OrchestratorValidationError(f"new placement not explicit {new_spec.placement}")
+            placement = placement.copy()
+            placement.hosts = list(HostPlacementSpec.union(new_spec.placement.hosts, placement.hosts))
+            if new_spec.placement.count is not None:
+                if placement.count:
+                    placement.count += new_spec.placement.count
+                else:
+                    placement.count = new_spec.placement.count
+
+            return placement
+
+        def add_host_to_service(services: List[ServiceDescription]):
+            if not services:
+                return self.apply([new_spec])
+            assert len(services) == 1
+            service = services[0]
+            spec = service.spec.copy()
+            spec.placement = add_placement_to_placement(spec.placement)
+            return self.apply([spec])
+
+        service_name = new_spec.service_name()
+        return self.describe_service(service_name=service_name).then(add_host_to_service)
 
     def remove_daemons(self, names):
         # type: (List[str]) -> Completion
