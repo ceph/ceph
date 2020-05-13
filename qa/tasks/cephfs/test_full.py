@@ -212,7 +212,7 @@ class FullnessTestCase(CephFSTestCase):
         # Configs for this test should bring this setting down in order to
         # run reasonably quickly
         if osd_mon_report_interval > 10:
-            log.warn("This test may run rather slowly unless you decrease"
+            log.warning("This test may run rather slowly unless you decrease"
                      "osd_mon_report_interval (5 is a good setting)!")
 
         self.mount_a.run_python(template.format(
