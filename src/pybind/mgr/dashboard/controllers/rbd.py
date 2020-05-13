@@ -13,7 +13,7 @@ import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
               DeletePermission, CreatePermission, ReadPermission
-from .. import mgr
+from .. import mgr, logger
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rbd import RbdConfiguration, format_bitmask, format_features
@@ -485,12 +485,14 @@ class RbdTrash(RESTController):
     @DeletePermission
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
-        now = "{}Z".format(datetime.now().isoformat())
+        now = "{}Z".format(datetime.utcnow().isoformat())
         pools = self._trash_list(pool_name)
 
         for pool in pools:
             for image in pool['value']:
                 if image['deferment_end_time'] < now:
+                    logger.info('Removing trash image %s (pool=%s, name=%s)',
+                                image['id'], pool['pool_name'], image['name'])
                     _rbd_call(pool['pool_name'], self.rbd_inst.trash_remove, image['id'], 0)
 
     @RbdTask('trash/restore', ['{pool_name}', '{image_id}', '{new_image_name}'], 2.0)
