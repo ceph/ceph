@@ -157,7 +157,8 @@ class Schedule(object):
             INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
         WHERE
             s.path = ? AND
-            strftime("%s", "now") - strftime("%s", sm.start) > 0
+            strftime("%s", "now") - strftime("%s", sm.start) > 0 AND
+            s.active = 1
         ORDER BY until;'''
 
     PROTO_GET_SCHEDULES = '''SELECT
@@ -172,6 +173,7 @@ class Schedule(object):
 
     GET_SCHEDULE = PROTO_GET_SCHEDULES + ' s.path = ? and sm.start = ? AND sm.repeat = ?'
 
+    # TODO merge these two methods
     @classmethod
     def get_db_schedules(cls, path, db, fs):
         with db:
@@ -308,6 +310,8 @@ class Schedule(object):
         self.created_count += 1
         self.last = time
 
+    # TODO add option to only change one snapshot in a path, i.e. pass repeat
+    # and start time as well
     UPDATE_INACTIVE = '''UPDATE schedules
     SET
       active = 0
@@ -316,8 +320,19 @@ class Schedule(object):
 
     def set_inactive(self, db):
         with db:
-            log.debug(f'Deactivating schedule on non-existing path {self.path}')
+            log.debug(f'Deactivating schedule on path {self.path}')
             db.execute(self.UPDATE_INACTIVE, (self.path,))
+
+    UPDATE_ACTIVE = '''UPDATE schedules
+    SET
+      active = 1
+    WHERE
+      path = ?;'''
+
+    def set_active(self, db):
+        with db:
+            log.debug(f'Activating schedule on path {self.path}')
+            db.execute(self.UPDATE_ACTIVE, (self.path,))
 
     UPDATE_PRUNED = '''UPDATE schedules_meta
     SET
@@ -517,7 +532,8 @@ class SnapSchedClient(CephfsClient):
         return Schedule.list_schedules(path, db, fs, recursive)
 
     @updates_schedule_db
-    def store_snap_schedule(self, fs, args):
+    # TODO improve interface
+    def store_snap_schedule(self, fs, path_, args):
         sched = Schedule(*args)
         log.debug(f'attempting to add schedule {sched}')
         db = self.get_schedule_db(fs)
@@ -528,3 +544,15 @@ class SnapSchedClient(CephfsClient):
     def rm_snap_schedule(self, fs, path, repeat, start):
         db = self.get_schedule_db(fs)
         Schedule.rm_schedule(db, path, repeat, start)
+
+    @updates_schedule_db
+    def activate_snap_schedule(self, fs, path, repeat, start):
+        db = self.get_schedule_db(fs)
+        schedules = Schedule.get_db_schedules(path, db, fs)
+        [s.set_active(db) for s in schedules]
+
+    @updates_schedule_db
+    def deactivate_snap_schedule(self, fs, path, repeat, start):
+        db = self.get_schedule_db(fs)
+        schedules = Schedule.get_db_schedules(path, db, fs)
+        [s.set_inactive(db) for s in schedules]
