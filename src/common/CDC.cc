@@ -5,6 +5,7 @@
 
 #include "CDC.h"
 #include "FastCDC.h"
+#include "FixedCDC.h"
 #include "rabin.h"
 
 std::unique_ptr<CDC> CDC::create(
@@ -19,6 +20,9 @@ std::unique_ptr<CDC> CDC::create(
   }
   if (type == "fastcdc") {
     return std::unique_ptr<CDC>(new FastCDC(bits, windowbits));
+  }
+  if (type == "fixed") {
+    return std::unique_ptr<CDC>(new FixedCDC(bits, windowbits));
   }
   return nullptr;
 }

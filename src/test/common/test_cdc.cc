@@ -35,6 +35,7 @@ public:
 
 TEST_P(CDCTest, insert_front)
 {
+  if (GetParam() == "fixed"s) return;
   for (int frontlen = 1; frontlen < 163840; frontlen *= 3) {
     bufferlist bl1, bl2;
     generate_buffer(4*1024*1024, &bl1);
@@ -63,6 +64,7 @@ TEST_P(CDCTest, insert_front)
 
 TEST_P(CDCTest, insert_middle)
 {
+  if (GetParam() == "fixed"s) return;
   for (int frontlen = 1; frontlen < 163840; frontlen *= 3) {
     bufferlist bl1, bl2;
     generate_buffer(4*1024*1024, &bl1);
@@ -141,5 +143,7 @@ INSTANTIATE_TEST_SUITE_P(
   CDC,
   CDCTest,
   ::testing::Values(
+    "fixed",   // note: we skip most tests bc this is not content-based
     "fastcdc"
+    //, "rabin" // rabin fails insert_{front,middle}
     ));
