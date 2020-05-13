@@ -11,6 +11,7 @@ import {
 } from '../../../shared/services/feature-toggles.service';
 import { PrometheusAlertService } from '../../../shared/services/prometheus-alert.service';
 import { SummaryService } from '../../../shared/services/summary.service';
+import { TelemetryNotificationService } from '../../../shared/services/telemetry-notification.service';
 
 @Component({
   selector: 'cd-navigation',
@@ -41,6 +42,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService,
+    private telemetryNotificationService: TelemetryNotificationService,
     public prometheusAlertService: PrometheusAlertService
   ) {
     this.permissions = this.authStorageService.getPermissions();
@@ -61,6 +63,11 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
         this.showTopNotification('isPwdDisplayed', isDisplayed);
+      })
+    );
+    this.subs.add(
+      this.telemetryNotificationService.update.subscribe((visible: boolean) => {
+        this.showTopNotification('telemetryNotificationEnabled', visible);
       })
     );
   }
