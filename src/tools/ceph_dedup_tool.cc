@@ -542,10 +542,12 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     chunk_algo = i->second.c_str();
     if (chunk_algo != "fixed" && chunk_algo != "rabin") {
-      usage_exit();
+      cerr << "unrecognized chunk-algorithm " << chunk_algo << std::endl;
+      exit(1);
     }
   } else {
-    usage_exit();
+    cerr << "must specify chunk-algorithm" << std::endl;
+    exit(1);
   }
 
   i = opts.find("fingerprint-algorithm");
@@ -553,10 +555,12 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     fp_algo = i->second.c_str();
     if (fp_algo != "sha1" && fp_algo != "rabin"
 	&& fp_algo != "sha256" && fp_algo != "sha512") {
-      usage_exit();
+      cerr << "unrecognized fingerprint-algorithm " << fp_algo << std::endl;
+      exit(1);
     }
   } else {
-    usage_exit();
+    cerr << "must specify fingerprint-algorithm" << std::endl;
+    exit(1);
   }
 
   i = opts.find("chunk-size");
@@ -566,7 +570,8 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     }
   } else {
     if (chunk_algo != "rabin") {
-      usage_exit();
+      cerr << "must be rabin?" << std::endl;
+      exit(1);
     }
   }
 
@@ -610,7 +615,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   }
   if (pool_name.empty()) {
     cerr << "--create-pool requested but pool_name was not specified!" << std::endl;
-    usage_exit();
+    exit(1);
   }
   ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
   if (ret < 0) {
@@ -698,14 +703,16 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     op_name= i->second.c_str();
   } else {
-    usage_exit();
+    cerr << "must specify op" << std::endl;
+    exit(1);
   }
 
   i = opts.find("chunk-pool");
   if (i != opts.end()) {
     chunk_pool_name = i->second.c_str();
   } else {
-    usage_exit();
+    cerr << "must specify pool" << std::endl;
+    exit(1);
   }
   i = opts.find("max-thread");
   if (i != opts.end()) {
@@ -748,13 +755,15 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     if (i != opts.end()) {
       object_name = i->second.c_str();
     } else {
-      usage_exit();
+      cerr << "must specify object" << std::endl;
+      exit(1);
     }
     i = opts.find("target-ref");
     if (i != opts.end()) {
       target_object_name = i->second.c_str();
     } else {
-      usage_exit();
+      cerr << "must specify target ref" << std::endl;
+      exit(1);
     }
     i = opts.find("target-ref-pool-id");
     if (i != opts.end()) {
@@ -762,7 +771,8 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
 	return -EINVAL;
       }
     } else {
-      usage_exit();
+      cerr << "must specify target-ref-pool-id" << std::endl;
+      exit(1);
     }
 
     set<hobject_t> refs;
@@ -797,7 +807,8 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     if (i != opts.end()) {
       object_name = i->second.c_str();
     } else {
-      usage_exit();
+      cerr << "must specify object" << std::endl;
+      exit(1);
     }
     set<hobject_t> refs;
     cout << " refs: " << std::endl;
@@ -901,8 +912,10 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
       opts["debug"] = "true";
     } else {
-      if (val[0] == '-')
-        usage_exit();
+      if (val[0] == '-') {
+	cerr << "unrecognized option " << val << std::endl;
+	exit(1);
+      }
       ++i;
     }
   }
