@@ -65,23 +65,6 @@ void usage()
   cout << "   --max-thread <threads> " << std::endl;
   cout << "   --report-perioid <seconds> " << std::endl;
   cout << "   --max-read-size <bytes> " << std::endl;
-  cout << std::endl;
-  cout << "   ***these options are for rabin chunk*** " << std::endl;
-  cout << "   **rabin_hash = (rabin_hash * rabin_prime + new_byte - old_byte * pow) % (mod_prime) ** " << std::endl;
-  cout << "   **default_chunk_mask = 7 ** " << std::endl;
-  cout << "   **default_mod_prime = 6148914691236517051 ** " << std::endl;
-  cout << "   **default_rabin_prime = 3 ** " << std::endl;
-  cout << "   **default_pow = 907234050803559263 ** " << std::endl;
-  cout << "   **default_window_size = 48** " << std::endl;
-  cout << "   **default_min_chunk = 16384** " << std::endl;
-  cout << "   **default_max_chunk = 4194304** " << std::endl;
-  cout << "   --mod-prime <uint64_t> " << std::endl;
-  cout << "   --rabin-prime <uint64_t> " << std::endl;
-  cout << "   --pow <uint64_t> " << std::endl;
-  cout << "   --chunk-mask-bit <uint32_t> " << std::endl;
-  cout << "   --window-size <uint32_t> " << std::endl;
-  cout << "   --min-chunk <uint32_t> " << std::endl;
-  cout << "   --max-chunk <uint64_t> " << std::endl;
   exit(1);
 }
 
@@ -167,9 +150,6 @@ public:
   uint64_t fixed_chunk(string oid, uint64_t offset);
   uint64_t rabin_chunk(string oid, uint64_t offset);
   void add_chunk_fp_to_stat(bufferlist &chunk);
-  void set_rabin_options(uint64_t mod_prime, uint32_t rabin_prime, uint64_t pow, 
-			 uint64_t chunk_mask_bit, uint32_t window_size, uint32_t min_chunk, 
-			 uint64_t max_chunk);
 };
 
 class ChunkScrub: public EstimateThread
@@ -428,34 +408,6 @@ uint64_t EstimateDedupRatio::rabin_chunk(string oid, uint64_t offset)
   return outdata.length();
 }
 
-void EstimateDedupRatio::set_rabin_options(uint64_t mod_prime, uint32_t rabin_prime, uint64_t pow, 
-					  uint64_t chunk_mask_bit, uint32_t window_size, 
-					  uint32_t min_chunk, uint64_t max_chunk) 
-{
-  if (mod_prime != 0) {
-    rabin.set_mod_prime(mod_prime);
-  }
-  if (rabin_prime != 0) {
-    rabin.set_rabin_prime(rabin_prime);
-  }
-  if (pow != 0) {
-    rabin.set_pow(pow);
-  }
-  if (chunk_mask_bit != 0) {
-    int index = rabin.add_rabin_mask(chunk_mask_bit);
-    rabin.set_numbits(index);
-  }
-  if (window_size != 0) {
-    rabin.set_window_size(window_size);
-  }
-  if (min_chunk != 0) {
-    rabin.set_min_chunk(min_chunk);
-  }
-  if (max_chunk != 0) {
-    rabin.set_max_chunk(max_chunk);
-  }
-}
-
 void ChunkScrub::chunk_scrub_common()
 {
   ObjectCursor shard_start;
@@ -573,8 +525,6 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   unsigned max_thread = default_max_thread;
   uint32_t report_period = default_report_period;
   uint64_t max_read_size = default_op_size;
-  uint64_t mod_prime = 0, pow = 0, max_chunk = default_op_size;
-  uint32_t rabin_prime = 0, window_size = 0, chunk_mask_bit = 0, min_chunk = 16384;
   int ret;
   std::map<std::string, std::string>::const_iterator i;
   bool debug = false;
@@ -639,48 +589,6 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
       return -EINVAL;
     }
   } 
-  i = opts.find("mod-prime");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &mod_prime)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("rabin-prime");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &rabin_prime)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("pow");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &pow)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("chunk-mask-bit");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &chunk_mask_bit)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("window-size");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &window_size)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("min-chunk");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &min_chunk)) {
-      return -EINVAL;
-    }
-  } 
-  i = opts.find("max-chunk");
-  if (i != opts.end()) {
-    if (rados_sistrtoll(i, &max_chunk)) {
-      return -EINVAL;
-    }
-  } 
   i = opts.find("debug");
   if (i != opts.end()) {
     debug = true;
@@ -733,12 +641,6 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     std::unique_ptr<EstimateThread> ptr (new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
 							    chunk_algo, fp_algo, chunk_size, 
 							    report_period, s.num_objects, max_read_size));
-    if (chunk_algo == "rabin") {
-      EstimateDedupRatio *ratio = NULL;
-      ratio = dynamic_cast<EstimateDedupRatio*>(ptr.get());
-      ratio->set_rabin_options(mod_prime, rabin_prime, pow, chunk_mask_bit, window_size,
-			      min_chunk, max_chunk);
-    }
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
@@ -994,20 +896,6 @@ int main(int argc, const char **argv)
       opts["report-period"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-read-size", (char*)NULL)) {
       opts["max-read-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--mod-prime", (char*)NULL)) {
-      opts["mod-prime"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--rabin-prime", (char*)NULL)) {
-      opts["rabin-prime"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--pow", (char*)NULL)) {
-      opts["pow"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--chunk-mask-bit", (char*)NULL)) {
-      opts["chunk-mask-bit"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--window-size", (char*)NULL)) {
-      opts["window-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-chunk", (char*)NULL)) {
-      opts["min-chunk"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-chunk", (char*)NULL)) {
-      opts["max-chunk"] = val;
     } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
       opts["debug"] = "true";
     } else {
