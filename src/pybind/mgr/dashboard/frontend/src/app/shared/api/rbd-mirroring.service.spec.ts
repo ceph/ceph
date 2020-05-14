@@ -59,7 +59,7 @@ describe('RbdMirroringService', () => {
     const subs = service.startPolling();
     tick();
     const calledWith: any[] = [];
-    service.subscribeSummary((data: any) => {
+    service.subscribeSummary((data) => {
       calledWith.push(data);
     });
     tick(service.REFRESH_INTERVAL * 2);
@@ -67,22 +67,10 @@ describe('RbdMirroringService', () => {
 
     expect(calls.length).toEqual(3);
     calls.forEach((call: TestRequest) => flushCalls(call));
-    expect(calledWith).toEqual([null, summary]);
+    expect(calledWith).toEqual([summary]);
 
     subs.unsubscribe();
   }));
-
-  it('should get current summary', () => {
-    service.refresh();
-    const calledWith: any[] = [];
-    service.subscribeSummary((data: any) => {
-      calledWith.push(data);
-    });
-    const calls = getMirroringSummaryCalls();
-    calls.forEach((call: TestRequest) => flushCalls(call));
-
-    expect(service.getCurrentSummary()).toEqual(summary);
-  });
 
   it('should get pool config', () => {
     service.getPool('poolName').subscribe();

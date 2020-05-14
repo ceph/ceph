@@ -67,10 +67,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.subs.add(this.rbdMirroringService.startPolling());
     this.subs.add(
-      this.rbdMirroringService.subscribeSummary((data: any) => {
-        if (!data) {
-          return;
-        }
+      this.rbdMirroringService.subscribeSummary((data) => {
         this.status = data.content_data.status;
         this.siteName = data.site_name;
 
