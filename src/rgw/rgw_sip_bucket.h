@@ -43,7 +43,7 @@ class SIProvider_BucketFull : public SIProvider_SingleStage,
   std::string to_marker(const cls_rgw_obj_key& k) const;
   SIProvider::Entry create_entry(rgw_bucket_dir_entry& be) const;
 
-  int do_get_cur_state(int shard_id, std::string *marker) const {
+  int do_get_cur_state(int shard_id, std::string *marker) const  override {
     marker->clear(); /* full data, no current incremental state */
     return 0;
   }
@@ -87,6 +87,58 @@ public:
                        rgw::sal::RGWRadosStore *_store,
                        RGWBucketCtl *_bucket_ctl) : cct(_cct),
                                                     store(_store) {
+    ctl.bucket = _bucket_ctl;
+  }
+
+  SIProviderRef get(std::optional<std::string> instance) override;
+};
+
+class SIProvider_BucketInc : public SIProvider_SingleStage,
+                              public SITypedProviderDefaultHandler<siprovider_bucket_entry_info>
+{
+
+  SIProvider::Entry create_entry(rgw_bi_log_entry& be) const;
+
+protected:
+  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
+
+  int do_get_start_marker(int shard_id, std::string *marker) const override {
+    marker->clear();
+    return 0;
+  }
+
+  int do_get_cur_state(int shard_id, std::string *marker) const override;
+
+  rgw::sal::RGWRadosStore *store;
+
+  RGWBucketInfo bucket_info;
+
+public:
+  SIProvider_BucketInc(CephContext *_cct,
+                       rgw::sal::RGWRadosStore *_store,
+                       RGWBucketInfo& _bucket_info) : SIProvider_SingleStage(_cct,
+									     "bucket.inc",
+									     SIProvider::StageType::FULL,
+									     _bucket_info.layout.current_index.layout.normal.num_shards),
+                                                       store(_store),
+                                                       bucket_info(_bucket_info) {
+  }
+};
+
+class RGWSIPGen_BucketInc : public RGWSIPGenerator
+{
+  CephContext *cct;
+  rgw::sal::RGWRadosStore *store;
+
+  struct {
+    RGWBucketCtl *bucket;
+  } ctl;
+
+public:
+  RGWSIPGen_BucketInc(CephContext *_cct,
+                      rgw::sal::RGWRadosStore *_store,
+                      RGWBucketCtl *_bucket_ctl) : cct(_cct),
+                                                   store(_store) {
     ctl.bucket = _bucket_ctl;
   }
 

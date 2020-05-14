@@ -2,6 +2,8 @@
 #include "common/debug.h"
 #include "common/Formatter.h"
 
+#include "services/svc_bilog_rados.h"
+
 #include "rgw_sip_bucket.h"
 #include "rgw_bucket.h"
 #include "rgw_sal.h"
@@ -125,3 +127,101 @@ SIProviderRef RGWSIPGen_BucketFull::get(std::optional<std::string> instance)
 
   return result;
 }
+
+SIProvider::Entry SIProvider_BucketInc::create_entry(rgw_bi_log_entry& be) const
+{
+  SIProvider::Entry e;
+  e.key = be.id;
+
+  siprovider_bucket_entry_info bei;
+  bei.entry = be;
+  bei.encode(e.data);
+  return e;
+}
+
+int SIProvider_BucketInc::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
+{
+  int num_shards = (bucket_info.layout.current_index.layout.normal.num_shards ? : 1);
+
+  if (shard_id >= num_shards) {
+    return -ERANGE;
+  }
+
+  int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
+
+  bool truncated = true;
+  int count = 0;
+
+#define DEFAULT_MAX_ENTRIES 1000
+  if (max < 0) {
+    max = DEFAULT_MAX_ENTRIES;
+  }
+
+  while (max > 0 && truncated) {
+    list<rgw_bi_log_entry> entries;
+
+    int ret = store->svc()->bilog_rados->log_list(bucket_info, sid, marker, max - count, entries, &truncated);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: list_bi_log_entries(): ret=" << ret << dendl;
+      return -ret;
+    }
+
+    count += entries.size();
+
+    for (auto& be : entries) {
+      auto e = create_entry(be);
+      result->entries.push_back(e);
+    }
+    if (!entries.empty()) {
+      marker = entries.back().id;
+    }
+  }
+
+  result->done = false;
+  result->more = !truncated;
+
+  return 0;
+}
+
+int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker) const
+{
+  int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
+
+  map<int, string> markers;
+  int ret = store->svc()->bilog_rados->get_log_status(bucket_info, sid, &markers);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << ": get_log_status() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " returned ret=" << ret << dendl;
+    return ret;
+  }
+  *marker = markers[shard_id];
+  return 0;
+}
+
+SIProviderRef RGWSIPGen_BucketInc::get(std::optional<std::string> instance)
+{
+  if (!instance) {
+    return nullptr;
+  }
+
+  rgw_bucket bucket;
+
+  int r = rgw_bucket_parse_bucket_key(cct, *instance, &bucket, nullptr);
+  if (r < 0) {
+    ldout(cct, 20) << __func__ << ": failed to parse bucket key (instance=" << *instance << ") r=" << r << dendl;
+    return nullptr;
+  }
+
+  RGWBucketInfo bucket_info;
+  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield);
+  if (r < 0) {
+    ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
+    return nullptr;
+  }
+
+  SIProviderRef result;
+
+  result.reset(new SIProvider_BucketInc(cct, store, bucket_info));
+
+  return result;
+}
+
