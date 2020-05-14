@@ -870,11 +870,12 @@ int RGWReshard::list(int logshard_num, string& marker, uint32_t max, std::list<c
   int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
 
   if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << " " 
+    << "marker=" << marker << " " << cpp_strerror(ret) << dendl;
     if (ret == -ENOENT) {
       *is_truncated = false;
       ret = 0;
     } else {
-      lderr(store->ctx()) << "ERROR: failed to list reshard log entries, oid=" << logshard_oid << dendl;
       if (ret == -EACCES) {
         lderr(store->ctx()) << "access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
                           << ". Fix the pool access permissions of your client" << dendl;
