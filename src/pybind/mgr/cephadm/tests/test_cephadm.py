@@ -515,8 +515,8 @@ class TestCephadm(object):
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
-            if not spec.placement:
-                spec.placement = PlacementSpec(hosts=['test'], count=1)
+            if spec.placement.is_empty():
+                spec.placement = PlacementSpec(hosts=['test'])
             c = meth(cephadm_module, spec)
             assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
             assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
@@ -528,7 +528,16 @@ class TestCephadm(object):
                 assert dd.service_name() == spec.service_name()
 
 
-            assert_rm_service(cephadm_module, spec.service_name())
+            with with_host(cephadm_module, 'other-host'):
+                altered_spec = ServiceSpec(
+                    service_type=spec.service_type,
+                    service_id=spec.service_id,
+                    placement=PlacementSpec(hosts=['other-host'])
+                )
+                c = cephadm_module.add_placement_to_service(altered_spec)
+                assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
+
+                assert_rm_service(cephadm_module, spec.service_name())
 
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
