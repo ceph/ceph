@@ -91,7 +91,7 @@ class CrawlerThread : public Thread
   ObjectCursor end;
   ceph::mutex m_lock = ceph::make_mutex("CrawlerThread::Locker");
   ceph::condition_variable m_cond;
-  int32_t timeout;
+  int32_t report_period;
   bool m_stop = false;
   uint64_t total_bytes = 0;
   uint64_t examined_objects = 0;
@@ -101,10 +101,11 @@ class CrawlerThread : public Thread
 #define COND_WAIT_INTERVAL 10
 
 public:
-  CrawlerThread(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, int32_t timeout,
+  CrawlerThread(IoCtx& io_ctx, int n, int m,
+		ObjectCursor begin, ObjectCursor end, int32_t report_period,
 		uint64_t num_objects, uint64_t max_read_size = default_op_size):
     io_ctx(io_ctx), n(n), m(m), begin(begin), end(end), 
-    timeout(timeout), total_objects(num_objects), max_read_size(max_read_size)
+    report_period(report_period), total_objects(num_objects), max_read_size(max_read_size)
   {}
   void signal(int signum) {
     std::lock_guard l{m_lock};
@@ -130,9 +131,9 @@ class EstimateDedupRatio : public CrawlerThread
 public:
   EstimateDedupRatio(
     IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end,
-    string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t timeout,
+    string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t report_period,
     uint64_t num_objects, uint64_t max_read_size):
-    CrawlerThread(io_ctx, n, m, begin, end, timeout, num_objects,
+    CrawlerThread(io_ctx, n, m, begin, end, report_period, num_objects,
 		  max_read_size),
     cdc(CDC::create(chunk_algo, cbits(chunk_size) - 1)),
     chunk_algo(chunk_algo),
@@ -157,8 +158,8 @@ class ChunkScrub: public CrawlerThread
 
 public:
   ChunkScrub(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
-	     IoCtx& chunk_io_ctx, int32_t timeout, uint64_t num_objects):
-    CrawlerThread(io_ctx, n, m, begin, end, timeout, num_objects), chunk_io_ctx(chunk_io_ctx)
+	     IoCtx& chunk_io_ctx, int32_t report_period, uint64_t num_objects):
+    CrawlerThread(io_ctx, n, m, begin, end, report_period, num_objects), chunk_io_ctx(chunk_io_ctx)
     { }
   void* entry() {
     chunk_scrub_common();
@@ -428,7 +429,7 @@ void ChunkScrub::chunk_scrub_common()
       }
       examined_objects++;
       m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
-      if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
+      if (cur_time + utime_t(report_period, 0) < ceph_clock_now()) {
 	Formatter *formatter = Formatter::create("json-pretty");
 	print_status(formatter, cout);
 	delete formatter;
