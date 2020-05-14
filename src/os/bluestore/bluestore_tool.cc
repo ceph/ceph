@@ -229,6 +229,7 @@ int main(int argc, char **argv)
   vector<string> allocs_name;
   string empty_sharding(1, '\0');
   string new_sharding = empty_sharding;
+  string resharding_ctrl;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -246,6 +247,7 @@ int main(int argc, char **argv)
     ("value,v", po::value<string>(&value), "label metadata value")
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'/'bluefs-slow'")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
+    ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -896,8 +898,37 @@ int main(int argc, char **argv)
     cout << std::string(out.c_str(), out.length()) << std::endl;
      bluestore.cold_close();
   } else if (action == "reshard") {
+    auto get_ctrl = [&](size_t& val) {
+      if (!resharding_ctrl.empty()) {
+	size_t pos;
+	std::string token;
+	pos = resharding_ctrl.find('/');
+	token = resharding_ctrl.substr(0, pos);
+	if (pos != std::string::npos)
+	  resharding_ctrl.erase(0, pos + 1);
+	else
+	  resharding_ctrl.erase();
+	char* endptr;
+	val = strtoll(token.c_str(), &endptr, 0);
+	if (*endptr != '\0') {
+	  cerr << "invalid --resharding-ctrl. '" << token << "' is not a number" << std::endl;
+	  exit(EXIT_FAILURE);
+	}
+      }
+    };
     BlueStore bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
+    RocksDBStore::resharding_ctrl ctrl;
+    if (!resharding_ctrl.empty()) {
+      get_ctrl(ctrl.bytes_per_iterator);
+      get_ctrl(ctrl.keys_per_iterator);
+      get_ctrl(ctrl.bytes_per_batch);
+      get_ctrl(ctrl.keys_per_batch);
+      if (!resharding_ctrl.empty()) {
+	cerr << "extra chars in --resharding-ctrl" << std::endl;
+	exit(EXIT_FAILURE);
+      }
+    }
     int r = bluestore.open_db_environment(&db_ptr);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
@@ -910,7 +941,7 @@ int main(int argc, char **argv)
     RocksDBStore* rocks_db = dynamic_cast<RocksDBStore*>(db_ptr);
     ceph_assert(db_ptr);
     ceph_assert(rocks_db);
-    r = rocks_db->reshard(new_sharding);
+    r = rocks_db->reshard(new_sharding, &ctrl);
     if (r < 0) {
       cerr << "error resharding: " << cpp_strerror(r) << std::endl;
     } else {
