@@ -344,10 +344,14 @@ class FSExport(object):
 
         return (0, json.dumps(result, indent=4), '')
 
-    def delete_export(self, pseudo_path, cluster_id):
+    def delete_export(self, pseudo_path, cluster_id, export_obj=None):
         try:
             self.rados_namespace = cluster_id
-            export = self._fetch_export(pseudo_path)
+            if export_obj:
+                export = export_obj
+            else:
+                export = self._fetch_export(pseudo_path)
+
             if export:
                 common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
                 self._delete_export_url(common_conf, export.export_id)
@@ -359,6 +363,12 @@ class FSExport(object):
             log.warn("Cluster does not exist")
 
         return 0, "", "Successfully deleted export"
+
+    def delete_all_exports(self, cluster_id):
+        export_list = list(self.exports[cluster_id])
+        for export in export_list:
+            self.delete_export(None, cluster_id, export)
+        log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
 
     def make_rados_url(self, obj):
         if self.rados_namespace:
@@ -452,6 +462,7 @@ class NFSCluster:
         self._set_cluster_id(cluster_id)
         if self.check_cluster_exists():
             try:
+                self.mgr.fs_export.delete_all_exports(cluster_id)
                 completion = self.mgr.remove_service('nfs.' + self.cluster_id)
                 self.mgr._orchestrator_wait([completion])
                 orchestrator.raise_if_exception(completion)
