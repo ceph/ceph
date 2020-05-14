@@ -68,6 +68,11 @@
   or use any other convenient way to restore the schedule after the
   upgrade.
 
+* Cephadm: ``ceph orch daemon add`` was renamed to
+  ``ceph cephadm remote daemon add`` to clarify that those commands work
+  entirely different than the other ``ceph orch`` commands: They directly
+  deploy daemons on the hosts and bypass most of the checks done ``ceph orch apply``
+
 
 >=16.0.0
 ---------
