@@ -122,7 +122,7 @@ map<uint64_t, EstimateResult> dedup_estimates;  // chunk size -> result
 using namespace librados;
 unsigned default_op_size = 1 << 26;
 unsigned default_max_thread = 2;
-int32_t default_report_period = 2;
+int32_t default_report_period = 10;
 ceph::mutex glock = ceph::make_mutex("glock");
 
 void usage()
@@ -134,7 +134,7 @@ void usage()
   cout << "   --fingerprint-algorithm <sha1|sha256|sha512> " << std::endl;
   cout << "   --chunk-pool <pool name> " << std::endl;
   cout << "   --max-thread <threads> " << std::endl;
-  cout << "   --report-perioid <seconds> " << std::endl;
+  cout << "   --report-period <seconds> " << std::endl;
   cout << "   --max-seconds <seconds>" << std::endl;
   cout << "   --max-read-size <bytes> " << std::endl;
   exit(1);
@@ -243,7 +243,7 @@ public:
 
 vector<std::unique_ptr<CrawlerThread>> estimate_threads;
 
-static void print_dedup_estimate(std::string chunk_algo, bool debug = false)
+static void print_dedup_estimate(std::ostream& out, std::string chunk_algo)
 {
   /*
   uint64_t total_bytes = 0;
@@ -276,7 +276,7 @@ static void print_dedup_estimate(std::string chunk_algo, bool debug = false)
   */
   f->close_section();
   f->close_section();
-  f->flush(cout);
+  f->flush(out);
 }
 
 static void handle_signal(int signum) 
@@ -300,10 +300,17 @@ void EstimateDedupRatio::estimate_dedup_ratio()
     &shard_start,
     &shard_end);
 
+  utime_t start = ceph_clock_now();
   utime_t end;
   if (max_seconds) {
-    end = ceph_clock_now();
+    end = start;
     end += max_seconds;
+  }
+
+  utime_t next_report;
+  if (report_period) {
+    next_report = start;
+    next_report += report_period;
   }
 
   ObjectCursor c(shard_start);
@@ -321,14 +328,22 @@ void EstimateDedupRatio::estimate_dedup_ratio()
     for (const auto & i : result) {
       const auto &oid = i.oid;
 
-      if (max_seconds) {
-	utime_t now = ceph_clock_now();
-	if (now > end) {
-	  m_stop = true;
-	}
+      utime_t now = ceph_clock_now();
+      if (max_seconds && now > end) {
+	m_stop = true;
       }
       if (m_stop) {
 	return;
+      }
+
+      if (n == 0 && // first thread only
+	  next_report != utime_t() && now > next_report) {
+	cerr << (int)(now - start) << "s : read "
+	     << dedup_estimates.begin()->second.total_bytes << " bytes so far..."
+	     << std::endl;
+	print_dedup_estimate(cerr, chunk_algo);
+	next_report = now;
+	next_report += report_period;
       }
 
       // read entire object
@@ -639,7 +654,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     p->join();
   }
 
-  print_dedup_estimate(chunk_algo, debug);
+  print_dedup_estimate(cout, chunk_algo);
 
  out:
   return (ret < 0) ? 1 : 0;
