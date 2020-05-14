@@ -294,7 +294,7 @@ class FSExport(object):
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
         self._update_common_conf(export.cluster_id, export.export_id)
 
-    def create_export(self, export_type, fs_name, pseudo_path, read_only, path, cluster_id):
+    def create_export(self, export_type, fs_name, cluster_id, pseudo_path, read_only, path):
         if export_type != 'cephfs':
             return -errno.EINVAL,"", f"Invalid export type: {export_type}"
 
@@ -344,7 +344,7 @@ class FSExport(object):
 
         return (0, json.dumps(result, indent=4), '')
 
-    def delete_export(self, pseudo_path, cluster_id, export_obj=None):
+    def delete_export(self, cluster_id, pseudo_path, export_obj=None):
         try:
             self.rados_namespace = cluster_id
             if export_obj:
@@ -368,7 +368,7 @@ class FSExport(object):
         try:
             export_list = list(self.exports[cluster_id])
             for export in export_list:
-                self.delete_export(None, cluster_id, export)
+                self.delete_export(cluster_id, None, export)
             log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
         except KeyError:
             log.info("No exports to delete")
