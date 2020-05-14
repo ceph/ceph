@@ -96,8 +96,7 @@ class Module(MgrModule):
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
             self.client.store_snap_schedule(use_fs, abs_path, (abs_path, snap_schedule,
-                                                     retention_policy, start,
-                                                     use_fs, subvol, path))
+                                                     retention_policy, use_fs, path, start, subvol))
             suc_msg = f'Schedule set for path {path}'
         except sqlite3.IntegrityError:
             existing_scheds = self.client.get_snap_schedules(use_fs, path)
