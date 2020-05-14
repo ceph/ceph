@@ -64,6 +64,7 @@ void usage()
   cout << "   --chunk-pool <pool name> " << std::endl;
   cout << "   --max-thread <threads> " << std::endl;
   cout << "   --report-perioid <seconds> " << std::endl;
+  cout << "   --max-seconds <seconds>" << std::endl;
   cout << "   --max-read-size <bytes> " << std::endl;
   exit(1);
 }
@@ -126,19 +127,22 @@ class EstimateDedupRatio : public CrawlerThread
   string chunk_algo;
   string fp_algo;
   uint64_t chunk_size;
+  uint64_t max_seconds;
   map< string, pair <uint64_t, uint64_t> > local_chunk_statistics; // < key, <count, chunk_size> >
 
 public:
   EstimateDedupRatio(
     IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end,
     string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t report_period,
-    uint64_t num_objects, uint64_t max_read_size):
+    uint64_t num_objects, uint64_t max_read_size,
+    uint64_t max_seconds):
     CrawlerThread(io_ctx, n, m, begin, end, report_period, num_objects,
 		  max_read_size),
     cdc(CDC::create(chunk_algo, cbits(chunk_size) - 1)),
     chunk_algo(chunk_algo),
     fp_algo(fp_algo),
-    chunk_size(chunk_size) {
+    chunk_size(chunk_size),
+    max_seconds(max_seconds) {
   }
 
   void* entry() {
@@ -266,6 +270,12 @@ void EstimateDedupRatio::estimate_dedup_ratio()
     &shard_start,
     &shard_end);
 
+  utime_t end;
+  if (max_seconds) {
+    end = ceph_clock_now();
+    end += max_seconds;
+  }
+
   ObjectCursor c(shard_start);
   while (c < shard_end)
   {
@@ -281,6 +291,12 @@ void EstimateDedupRatio::estimate_dedup_ratio()
     for (const auto & i : result) {
       const auto &oid = i.oid;
 
+      if (max_seconds) {
+	utime_t now = ceph_clock_now();
+	if (now > end) {
+	  m_stop = true;
+	}
+      }
       if (m_stop) {
 	Formatter *formatter = Formatter::create("json-pretty");
 	print_status(formatter, cout);
@@ -466,6 +482,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   unsigned max_thread = default_max_thread;
   uint32_t report_period = default_report_period;
   uint64_t max_read_size = default_op_size;
+  uint64_t max_seconds = 0;
   int ret;
   std::map<std::string, std::string>::const_iterator i;
   bool debug = false;
@@ -526,7 +543,13 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     if (rados_sistrtoll(i, &report_period)) {
       return -EINVAL;
     }
-  } 
+  }
+  i = opts.find("max-seconds");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &max_seconds)) {
+      return -EINVAL;
+    }
+  }
   i = opts.find("max-read-size");
   if (i != opts.end()) {
     if (rados_sistrtoll(i, &max_read_size)) {
@@ -585,7 +608,8 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
     std::unique_ptr<CrawlerThread> ptr (
       new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
 			     chunk_algo, fp_algo, chunk_size,
-			     report_period, s.num_objects, max_read_size));
+			     report_period, s.num_objects, max_read_size,
+			     max_seconds));
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
@@ -847,7 +871,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--report-period", (char*)NULL)) {
       opts["report-period"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-read-size", (char*)NULL)) {
-      opts["max-read-size"] = val;
+      opts["max-seconds"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-seconds", (char*)NULL)) {
+      opts["max-seconds"] = val;
     } else if (ceph_argparse_flag(args, i, "--debug", (char*)NULL)) {
       opts["debug"] = "true";
     } else {
