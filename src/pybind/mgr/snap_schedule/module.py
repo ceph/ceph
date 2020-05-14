@@ -6,7 +6,7 @@ LGPL2.1.  See file COPYING.
 import errno
 import json
 import sqlite3
-from .fs.schedule import SnapSchedClient
+from .fs.schedule_client import SnapSchedClient
 from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand
 from mgr_util import CephfsConnectionException
 from threading import Event
