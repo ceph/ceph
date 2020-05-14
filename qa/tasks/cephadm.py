@@ -18,6 +18,7 @@ from tarfile import ReadError
 from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
@@ -46,6 +47,23 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
             ] + args,
         **kwargs
     )
+
+
+def _shell_daemon_add(ctx, cluster_name, remote, daemon_type, arg) -> None:
+    # After 15.2.2 the old `orch daemon add`
+    # was renamed to `cephadm direct daemon add`
+
+    try:
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'cephadm', 'remote', 'daemon', 'add', daemon_type, arg
+        ])
+    except CommandFailedError as e:
+        if e.exitstatus != 22:
+            raise
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'daemon', 'add', daemon_type, arg
+        ])
+
 
 def build_initial_config(ctx, config):
     cluster_name = config['cluster']
@@ -497,10 +515,11 @@ def ceph_mons(ctx, config):
                     continue
                 log.info('Adding %s on %s' % (mon, remote.shortname))
                 num_mons += 1
-                _shell(ctx, cluster_name, remote, [
-                    'ceph', 'orch', 'daemon', 'add', 'mon',
-                    remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_,
-                ])
+                _shell_daemon_add(
+                    ctx, cluster_name, remote, 'mon',
+                    remote.shortname + ':' + ctx.ceph[cluster_name].mons[mon] + '=' + id_
+                )
+
                 ctx.daemons.register_daemon(
                     remote, 'mon', id_,
                     cluster=cluster_name,
@@ -622,10 +641,10 @@ def ceph_osds(ctx, config):
                 osd, remote.shortname, dev))
             _shell(ctx, cluster_name, remote, [
                 'ceph-volume', 'lvm', 'zap', dev])
-            _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'daemon', 'add', 'osd',
+            _shell_daemon_add(
+                ctx, cluster_name, remote, 'osd',
                 remote.shortname + ':' + short_dev
-            ])
+            )
             ctx.daemons.register_daemon(
                 remote, 'osd', id_,
                 cluster=cluster_name,
