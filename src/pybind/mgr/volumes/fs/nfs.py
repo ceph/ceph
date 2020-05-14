@@ -232,7 +232,7 @@ class FSExport(object):
             })
 
         if ret!= 0:
-            log.error(f"User could not be deleted: {err}")
+            log.warning(f"User could not be deleted: {err}")
 
     def format_path(self, path):
         if path is not None:
@@ -297,36 +297,42 @@ class FSExport(object):
     def create_export(self, export_type, fs_name, pseudo_path, read_only, path, cluster_id):
         if export_type != 'cephfs':
             return -errno.EINVAL,"", f"Invalid export type: {export_type}"
+
+        if not self.check_fs(fs_name):
+            return -errno.EINVAL,"", "Invalid CephFS name"
+
         #TODO Check if valid cluster
         if cluster_id not in self.exports:
             self.exports[cluster_id] = []
 
         self.rados_namespace = cluster_id
-        if not self.check_fs(fs_name) or self._fetch_export(pseudo_path):
-            return -errno.EINVAL,"", "Invalid CephFS name or export already exists"
-
-        ex_id = self._gen_export_id()
-        user_id = f"{cluster_id}{ex_id}"
-        user_out, key = self._create_user_key(user_id, path, fs_name)
-        if isinstance(user_out, int):
-            return user_out, "", key
-
         access_type = "RW"
         if read_only:
             access_type = "R"
 
-        ex_dict = {
-            'path': self.format_path(path),
-            'pseudo': self.format_path(pseudo_path),
-            'cluster_id': cluster_id,
-            'access_type': access_type,
-            'fsal': {"name": "CEPH", "user_id": user_id, "fs_name": fs_name, "sec_label_xattr": ""},
-            'clients': []
-            }
+        if not self._fetch_export(pseudo_path):
+            ex_id = self._gen_export_id()
+            user_id = f"{cluster_id}{ex_id}"
+            user_out, key = self._create_user_key(user_id, path, fs_name)
 
-        export = Export.from_dict(ex_id, ex_dict)
-        export.fsal.cephx_key = key
-        self._save_export(export)
+            if isinstance(user_out, int):
+                return user_out, "", key
+
+            ex_dict = {
+                    'path': self.format_path(path),
+                    'pseudo': self.format_path(pseudo_path),
+                    'cluster_id': cluster_id,
+                    'access_type': access_type,
+                    'fsal': {"name": "CEPH", "user_id": user_id,
+                             "fs_name": fs_name, "sec_label_xattr": ""},
+                    'clients': []
+                    }
+
+            export = Export.from_dict(ex_id, ex_dict)
+            export.fsal.cephx_key = key
+            self._save_export(export)
+        else:
+            log.error("Export already exists")
 
         result = {
             "bind": pseudo_path,
