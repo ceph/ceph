@@ -45,7 +45,7 @@
 #include "cls/cas/cls_cas_client.h"
 #include "include/stringify.h"
 #include "global/signal_handler.h"
-#include "common/rabin.h"
+#include "common/CDC.h"
 
 using namespace librados;
 unsigned default_op_size = 1 << 26;
@@ -59,18 +59,12 @@ void usage()
   cout << " usage: [--op <estimate|chunk_scrub|add_chunk_ref|get_chunk_ref>] [--pool <pool_name> ] " << std::endl;
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
-  cout << "   --chunk-algorithm <fixed|rabin> " << std::endl;
+  cout << "   --chunk-algorithm <fixed|rabin|fastcdc> " << std::endl;
   cout << "   --fingerprint-algorithm <sha1|sha256|sha512> " << std::endl;
   cout << "   --chunk-pool <pool name> " << std::endl;
   cout << "   --max-thread <threads> " << std::endl;
   cout << "   --report-perioid <seconds> " << std::endl;
   cout << "   --max-read-size <bytes> " << std::endl;
-  exit(1);
-}
-
-[[noreturn]] static void usage_exit()
-{
-  usage();
   exit(1);
 }
 
@@ -127,18 +121,24 @@ public:
 
 class EstimateDedupRatio : public CrawlerThread
 {
+  std::unique_ptr<CDC> cdc;
   string chunk_algo;
   string fp_algo;
   uint64_t chunk_size;
   map< string, pair <uint64_t, uint64_t> > local_chunk_statistics; // < key, <count, chunk_size> >
-  RabinChunk rabin;
 
 public:
-  EstimateDedupRatio(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
-		string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t timeout,
-		uint64_t num_objects, uint64_t max_read_size):
-    CrawlerThread(io_ctx, n, m, begin, end, timeout, num_objects, max_read_size),
-		chunk_algo(chunk_algo), fp_algo(fp_algo), chunk_size(chunk_size) { }
+  EstimateDedupRatio(
+    IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end,
+    string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t timeout,
+    uint64_t num_objects, uint64_t max_read_size):
+    CrawlerThread(io_ctx, n, m, begin, end, timeout, num_objects,
+		  max_read_size),
+    cdc(CDC::create(chunk_algo, cbits(chunk_size) - 1)),
+    chunk_algo(chunk_algo),
+    fp_algo(fp_algo),
+    chunk_size(chunk_size) {
+  }
 
   void* entry() {
     estimate_dedup_ratio();
@@ -147,8 +147,6 @@ public:
   void estimate_dedup_ratio();
   void print_status(Formatter *f, ostream &out);
   map< string, pair <uint64_t, uint64_t> > &get_chunk_statistics() { return local_chunk_statistics; }
-  uint64_t fixed_chunk(string oid, uint64_t offset);
-  uint64_t rabin_chunk(string oid, uint64_t offset);
   void add_chunk_fp_to_stat(bufferlist &chunk);
 };
 
@@ -258,7 +256,6 @@ void EstimateDedupRatio::estimate_dedup_ratio()
 {
   ObjectCursor shard_start;
   ObjectCursor shard_end;
-  utime_t cur_time = ceph_clock_now();
 
   io_ctx.object_list_slice(
     begin,
@@ -278,74 +275,48 @@ void EstimateDedupRatio::estimate_dedup_ratio()
       return;
     }
 
+    unsigned op_size = max_read_size;
+
     for (const auto & i : result) {
       const auto &oid = i.oid;
+
+      if (m_stop) {
+	Formatter *formatter = Formatter::create("json-pretty");
+	print_status(formatter, cout);
+	delete formatter;
+	return;
+      }
+
+      // read entire object
+      bufferlist bl;
       uint64_t offset = 0;
       while (true) {
-	std::unique_lock l{m_lock};
-	if (m_stop) {
-	  Formatter *formatter = Formatter::create("json-pretty");
-	  print_status(formatter, cout);
-	  delete formatter;
-	  return;
-	}
-
-	uint64_t len;
-	if (chunk_algo == "fixed") {
-	  len = fixed_chunk(oid, offset);
-	} else if (chunk_algo == "rabin") {
-	  len = rabin_chunk(oid, offset);
-	} else {
-	  ceph_assert(0 == "no support chunk algorithm"); 
-	}
-	
-	if (!len) {
+	bufferlist t;
+	int ret = io_ctx.read(oid, t, op_size, offset);
+	if (ret <= 0) {
 	  break;
 	}
-	offset += len;
-	m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
-	if (cur_time + utime_t(timeout, 0) < ceph_clock_now()) {
-	  Formatter *formatter = Formatter::create("json-pretty");
-	  print_status(formatter, cout);
-	  delete formatter;
-	  cur_time = ceph_clock_now();
+	offset += ret;
+	bl.claim_append(t);
+      }
+
+      // chunk
+      vector<pair<uint64_t, uint64_t>> chunks;
+      cdc->calc_chunks(bl, &chunks);
+      for (auto& p : chunks) {
+	bufferlist chunk;
+	chunk.substr_of(bl, p.first, p.second);
+	add_chunk_fp_to_stat(chunk);
+	if (debug) {
+	  cout << " " << oid <<  " " << p.first << "~" << p.second << std::endl;
 	}
       }
+
+      std::unique_lock l{m_lock};
+
       examined_objects++;
     }
   }
-}
-
-uint64_t EstimateDedupRatio::fixed_chunk(string oid, uint64_t offset)
-{
-  unsigned op_size = max_read_size;
-  int ret;
-  bufferlist outdata;
-  ret = io_ctx.read(oid, outdata, op_size, offset);
-  if (ret <= 0) {
-    return 0;
-  }
-
-  uint64_t c_offset = 0;
-  while (c_offset < outdata.length()) {
-    bufferlist chunk;
-    if (outdata.length() - c_offset > chunk_size) {
-      bufferptr bptr(chunk_size);
-      chunk.push_back(std::move(bptr));
-      chunk.begin().copy_in(chunk_size, outdata.c_str());
-    } else {
-      bufferptr bptr(outdata.length() - c_offset);
-      chunk.push_back(std::move(bptr));
-      chunk.begin().copy_in(outdata.length() - c_offset, outdata.c_str());
-    }
-    add_chunk_fp_to_stat(chunk);
-    c_offset = c_offset + chunk_size;
-  }
-
-  if (outdata.length() < op_size) {
-    return 0;
-  }
-  return outdata.length();
 }
 
 void EstimateDedupRatio::add_chunk_fp_to_stat(bufferlist &chunk) 
@@ -360,9 +331,6 @@ void EstimateDedupRatio::add_chunk_fp_to_stat(bufferlist &chunk)
   } else if (fp_algo == "sha512") {
     sha512_digest_t sha512_val = crypto::digest<crypto::SHA512>(chunk);
     fp = sha512_val.to_str();
-  } else if (chunk_algo == "rabin") {
-    uint64_t hash = rabin.gen_rabin_hash(chunk.c_str(), 0, chunk.length());
-    fp = to_string(hash);
   } else {
     ceph_assert(0 == "no support fingerperint algorithm"); 
   }
@@ -378,34 +346,6 @@ void EstimateDedupRatio::add_chunk_fp_to_stat(bufferlist &chunk)
     local_chunk_statistics[fp] = make_pair(1, chunk.length());
   }
   total_bytes += chunk.length();
-}
-
-uint64_t EstimateDedupRatio::rabin_chunk(string oid, uint64_t offset)
-{
-  unsigned op_size = max_read_size;
-  int ret;
-  bufferlist outdata;
-  ret = io_ctx.read(oid, outdata, op_size, offset);
-  if (ret <= 0) {
-    return 0;
-  }
-
-  vector<pair<uint64_t, uint64_t>> chunks;
-  rabin.do_rabin_chunks(outdata, chunks, 0, 0); // use default value
-  for (auto p : chunks) {
-    bufferlist chunk;
-    bufferptr c_data = buffer::create(p.second);
-    c_data.zero();
-    chunk.append(c_data);
-    chunk.begin().copy_in(p.second, outdata.c_str() + p.first);
-    add_chunk_fp_to_stat(chunk);
-    cout << " oid: " << oid <<  " offset: " << p.first + offset << " length: " << p.second << std::endl;
-  }
-
-  if (outdata.length() < op_size) {
-    return 0;
-  }
-  return outdata.length();
 }
 
 void ChunkScrub::chunk_scrub_common()
@@ -541,7 +481,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   i = opts.find("chunk-algorithm");
   if (i != opts.end()) {
     chunk_algo = i->second.c_str();
-    if (chunk_algo != "fixed" && chunk_algo != "rabin") {
+    if (!CDC::create(chunk_algo, 12)) {
       cerr << "unrecognized chunk-algorithm " << chunk_algo << std::endl;
       exit(1);
     }
@@ -553,7 +493,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   i = opts.find("fingerprint-algorithm");
   if (i != opts.end()) {
     fp_algo = i->second.c_str();
-    if (fp_algo != "sha1" && fp_algo != "rabin"
+    if (fp_algo != "sha1"
 	&& fp_algo != "sha256" && fp_algo != "sha512") {
       cerr << "unrecognized fingerprint-algorithm " << fp_algo << std::endl;
       exit(1);
@@ -569,10 +509,8 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
       return -EINVAL;
     }
   } else {
-    if (chunk_algo != "rabin") {
-      cerr << "must be rabin?" << std::endl;
-      exit(1);
-    }
+    cerr << "must specify chunk-size" << std::endl;
+    exit(1);
   }
 
   i = opts.find("max-thread");
