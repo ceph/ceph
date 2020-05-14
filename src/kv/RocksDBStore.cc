@@ -2887,13 +2887,14 @@ int RocksDBStore::reshard_cleanup(const std::vector<std::string>& current_column
   return 0;
 }
 
-int RocksDBStore::reshard(const std::string& new_sharding)
+int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::resharding_ctrl* ctrl_in)
 {
   rocksdb::Status status;
   int r;
   std::vector<std::string> to_process_columns;
   std::vector<rocksdb::ColumnFamilyHandle*> to_process_handles;
 
+  resharding_ctrl ctrl = ctrl_in ? *ctrl_in : resharding_ctrl();
   size_t bytes_in_batch = 0;
   size_t keys_in_batch = 0;
   size_t bytes_per_iterator = 0;
@@ -2902,10 +2903,6 @@ int RocksDBStore::reshard(const std::string& new_sharding)
   size_t keys_moved = 0;
 
   rocksdb::WriteBatch* bat = nullptr;
-
-  //check for injected unittest commands
-  const char* unittest_str = getenv("RocksDBStore::reshard::unittest");
-  size_t unittest_command = unittest_str ? atoi(unittest_str) : 0;
 
   auto flush_batch = [&]() {
     dout(10) << "flushing batch, " << keys_in_batch << " keys, for "
@@ -2936,8 +2933,8 @@ int RocksDBStore::reshard(const std::string& new_sharding)
       rocksdb::Slice raw_key = it->key();
       dout(30) << "key=" << pretty_binary_string(raw_key.ToString()) << dendl;
       //check if need to refresh iterator
-      if (bytes_per_iterator >= 10000000 ||
-	  keys_per_iterator >= 10000) {
+      if (bytes_per_iterator >= ctrl.bytes_per_iterator ||
+	  keys_per_iterator >= ctrl.keys_per_iterator) {
 	dout(8) << "refreshing iterator" << dendl;
 	bytes_per_iterator = 0;
 	keys_per_iterator = 0;
@@ -2986,10 +2983,10 @@ int RocksDBStore::reshard(const std::string& new_sharding)
       keys_per_iterator++;
 
       //check if need to write batch
-      if (bytes_in_batch >= 1000000 ||
-	  keys_in_batch >= 1000) {
+      if (bytes_in_batch >= ctrl.bytes_per_batch ||
+	  keys_in_batch >= ctrl.keys_per_batch) {
 	flush_batch();
-	if (unittest_command & 1) {
+	if (ctrl.unittest_fail_after_first_batch) {
 	  r = -1000;
 	  goto out;
 	}
@@ -3024,7 +3021,7 @@ int RocksDBStore::reshard(const std::string& new_sharding)
       derr << "Error processing column " << to_process_columns[idx] << dendl;
       goto cleanup;
     }
-    if (unittest_command & 2) {
+    if (ctrl.unittest_fail_after_processing_column) {
       r = -1001;
       goto cleanup;
     }
@@ -3036,7 +3033,7 @@ int RocksDBStore::reshard(const std::string& new_sharding)
     goto cleanup;
   }
 
-  if (unittest_command & 4) {
+  if (ctrl.unittest_fail_after_successful_processing) {
     r = -1002;
     goto cleanup;
   }

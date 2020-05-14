@@ -526,7 +526,16 @@ private:
   int reshard_cleanup(const std::vector<std::string>& current_columns,
 		      const std::vector<rocksdb::ColumnFamilyHandle*>& current_handles);
 public:
-  int reshard(const std::string& new_sharding);
+  struct resharding_ctrl {
+    size_t bytes_per_iterator = 10000000; /// amount of data to process before refreshing iterator
+    size_t keys_per_iterator =  10000;
+    size_t bytes_per_batch =    1000000;  /// amount of data before submitting batch
+    size_t keys_per_batch =     1000;
+    bool   unittest_fail_after_first_batch = false;
+    bool   unittest_fail_after_processing_column = false;
+    bool   unittest_fail_after_successful_processing = false;
+  };
+  int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
 };
 
 #endif
