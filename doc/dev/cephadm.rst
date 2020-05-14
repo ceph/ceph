@@ -85,3 +85,18 @@ When you're done, you can tear down the cluster with::
 
   sudo ../src/ckill.sh   # or,
   sudo ../src/cephadm/cephadm rm-cluster --force --fsid `cat fsid`
+
+Note regarding network calls from CLI handlers
+==============================================
+
+Executing any cephadm CLI commands like ``ceph orch ls`` will block
+the mon command handler thread within the MGR, thus preventing any
+concurrent CLI calls. Note that pressing ``^C`` will not resolve this
+situation, as *only* the client will be aborted, but not exceution
+itself. This means, cephadm will be completely unresonsive, until the
+execution of the CLI handler is fully completed. Note that even
+``ceph orch ps`` will not respond, while another handler is executed.
+
+This means, we should only do very few calls to remote hosts synchronously. 
+As a guideline, cephadm should do at most ``O(1)`` network calls in CLI handlers. 
+Everything else should be done asynchronously in other threads, like ``serve()``.
