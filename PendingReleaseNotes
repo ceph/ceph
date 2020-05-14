@@ -1,6 +1,8 @@
 >=15.0.0
 --------
 
+* CVE-2020-10736: Fixes an authorization bypass in monitor and manager daemons
+
 * The RGW "num_rados_handles" has been removed.
   * If you were using a value of "num_rados_handles" greater than 1
     multiply your current "objecter_inflight_ops" and 
