@@ -77,7 +77,7 @@ public:
 
 class SafeTimerSingleton : public SafeTimer {
 public:
-  ceph::mutex lock = ceph::make_mutex("librbd::Journal::SafeTimerSingleton::lock");
+  ceph::mutex lock = ceph::make_mutex("librbd::SafeTimerSingleton::lock");
 
   explicit SafeTimerSingleton(CephContext *cct)
       : SafeTimer(cct, lock, true) {
