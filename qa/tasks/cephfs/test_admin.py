@@ -68,6 +68,14 @@ class TestAdminCommands(CephFSTestCase):
         self.mount_a.run_shell(["mkdir", "subdir"])
         self.fs.set_dir_layout(self.mount_a, "subdir", FileLayout(pool=p))
 
+    def test_add_data_pool_non_alphamueric_name_as_subdir(self):
+        """
+        That a new data pool with non-alphanumeric name can be added and used for a sub-directory.
+        """
+        p = self.fs.add_data_pool("I-am-data_pool00.")
+        self.mount_a.run_shell("mkdir subdir")
+        self.fs.set_dir_layout(self.mount_a, "subdir", FileLayout(pool=p))
+
     def test_add_data_pool_ec(self):
         """
         That a new EC data pool can be added.
