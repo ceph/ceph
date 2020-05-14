@@ -4,22 +4,12 @@ Connection utilities
 import base64
 import paramiko
 import os
-import socket
 import logging
-
-from paramiko import AuthenticationException
-from paramiko.ssh_exception import NoValidConnectionsError
 
 from teuthology.config import config
 from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
-
-RECONNECT_EXCEPTIONS = (
-  socket.error,
-  AuthenticationException,
-  NoValidConnectionsError,
-)
 
 
 def split_user(user_at_host):
@@ -117,14 +107,8 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
                 try:
                     ssh.connect(**connect_args)
                     break
-                except RECONNECT_EXCEPTIONS as e:
-                    log.debug("Error connecting to {host}: {e}".format(host=host,e=e))
-                except Exception as e:
-                    # gevent.__hub_primitives returns a generic Exception, *sigh*
-                    if "timed out" in str(e):
-                        log.debug("Error connecting to {host}: {e}".format(host=host,e=e))
-                    else:
-                        raise
-
+                except paramiko.AuthenticationException:
+                    log.exception(
+                        "Error connecting to {host}".format(host=host))
     ssh.get_transport().set_keepalive(keep_alive)
     return ssh
