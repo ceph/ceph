@@ -528,12 +528,13 @@ seastar::future<> PGBackend::omap_get_keys(
       bool truncated = false;
       uint32_t num = 0;
       for (auto& [key, val] : std::get<1>(ret)) {
-        if (num++ >= max_return ||
+        if (num >= max_return ||
             result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
           truncated = true;
           break;
         }
         encode(key, result);
+        ++num;
       }
       encode(num, osd_op.outdata);
       osd_op.outdata.claim_append(result);
