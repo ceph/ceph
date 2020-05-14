@@ -28,6 +28,7 @@ class Schedule(object):
                  last_pruned=None,
                  created_count=0,
                  pruned_count=0,
+                 active=True,
                  ):
         self.fs = fs_name
         self.subvol = subvol
@@ -61,6 +62,7 @@ class Schedule(object):
             self.last_pruned = last_pruned
         self.created_count = created_count
         self.pruned_count = pruned_count
+        self.active = active
 
     @classmethod
     def _from_get_query(cls, table_row, fs):
@@ -76,7 +78,8 @@ class Schedule(object):
                    table_row['last'],
                    table_row['last_pruned'],
                    table_row['created_count'],
-                   table_row['pruned_count'])
+                   table_row['pruned_count'],
+                   table_row['active'])
 
     def __str__(self):
         return f'''{self.path} {self.schedule} {self.retention}'''
