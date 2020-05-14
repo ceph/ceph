@@ -131,7 +131,7 @@ describe('NfsListComponent', () => {
       addExport('b');
       addExport('c');
       component.exports = exports;
-      refresh(new Summary());
+      refresh({ executing_tasks: [] });
       spyOn(nfsService, 'list').and.callFake(() => of(exports));
       fixture.detectChanges();
 
