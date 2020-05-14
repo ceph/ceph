@@ -153,7 +153,8 @@ set(librgw_common_srcs
   rgw_object_lock.cc
   rgw_kms.cc
   rgw_url.cc
-  rgw_oidc_provider)
+  rgw_oidc_provider
+  cls_fifo_legacy.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
