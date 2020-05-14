@@ -281,7 +281,8 @@ void QosImageDispatch<I>::handle_throttle_ready(Tag&& tag, uint64_t flag) {
                  << "flag=" << flag << dendl;
 
   if (set_throttle_flag(tag.image_dispatch_flags, flag)) {
-    tag.on_dispatched->complete(0);
+    // timer_lock is held -- so dispatch from outside the timer thread
+    m_image_ctx->op_work_queue->queue(tag.on_dispatched, 0);
   }
 }
 
