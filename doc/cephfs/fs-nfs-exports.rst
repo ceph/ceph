@@ -50,7 +50,7 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create <type=cephfs> <fsname> <binding> <clusterid> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create <type=cephfs> <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
 
 It creates export rados objects containing the export block. Here binding is
 the pseudo root name and type is export type. Currently only CephFS is
@@ -61,7 +61,7 @@ Delete CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export delete <binding> <clusterid>
+    $ ceph nfs export delete <clusterid> <binding>
 
 It deletes an export in cluster based on pseudo root name (binding).
 
