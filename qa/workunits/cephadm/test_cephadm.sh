@@ -386,6 +386,7 @@ $CEPHADM shell --fsid $FSID -- true
 $CEPHADM shell --fsid $FSID -- test -d /var/log/ceph
 expect_false $CEPHADM --timeout 10 shell --fsid $FSID -- sleep 60
 $CEPHADM --timeout 60 shell --fsid $FSID -- sleep 10
+$CEPHADM shell --fsid $FSID --mount $TMPDIR -- stat /mnt/$(basename $TMPDIR)
 
 ## enter
 expect_false $CEPHADM enter
