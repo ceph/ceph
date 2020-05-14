@@ -1871,7 +1871,7 @@ struct keys_and_values
       query =  pair >> *(qi::lit(' ') >> pair);
       pair  =  key >> '=' >> value;
       key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
-      value = +qi::char_("a-zA-Z_0-9");
+      value = +qi::char_("a-zA-Z0-9-_.");
     }
   qi::rule<Iterator, std::map<std::string, std::string>()> query;
   qi::rule<Iterator, std::pair<std::string, std::string>()> pair;
