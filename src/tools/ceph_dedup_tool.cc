@@ -58,6 +58,7 @@ struct EstimateResult {
   // < key, <count, chunk_size> >
   map< string, pair <uint64_t, uint64_t> > chunk_statistics;
   uint64_t total_bytes = 0;
+  std::atomic<uint64_t> total_objects = {0};
 
   EstimateResult(std::string alg, int chunk_size)
     : cdc(CDC::create(alg, chunk_size)),
@@ -101,10 +102,12 @@ struct EstimateResult {
     for (auto& j : chunk_statistics) {
       dedup_bytes += j.second.second;
     }
-    double dedup_ratio = 1.0 - ((double)dedup_bytes / (double)total_bytes);
-    f->dump_unsigned("dedup_bytes", dedup_bytes);
+    //f->dump_unsigned("dedup_bytes", dedup_bytes);
     //f->dump_unsigned("original_bytes", total_bytes);
-    f->dump_float("dedup_ratio", dedup_ratio);
+    f->dump_float("dedup_bytes_ratio",
+		  (double)dedup_bytes / (double)total_bytes);
+    f->dump_float("dedup_objects_ratio",
+		  (double)dedup_objects / (double)total_objects);
 
     uint64_t avg = total_bytes / dedup_objects;
     uint64_t sqsum = 0;
@@ -373,6 +376,7 @@ void EstimateDedupRatio::estimate_dedup_ratio()
 	    cout << " " << oid <<  " " << p.first << "~" << p.second << std::endl;
 	  }
 	}
+	++i.second.total_objects;
       }
     }
   }
