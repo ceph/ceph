@@ -11,12 +11,13 @@
 #include "common/CDC.h"
 #include "gtest/gtest.h"
 
-void generate_buffer(int size, bufferlist *outbl)
+void generate_buffer(int size, bufferlist *outbl, int seed = 0)
 {
   outbl->clear();
   outbl->append_zero(size);
   char *b = outbl->c_str();
   std::mt19937_64 engine;
+  engine.seed(seed);
   for (size_t i = 0; i < size / sizeof(uint64_t); ++i) {
     ((uint64_t*)b)[i] = engine();
   }
@@ -109,18 +110,27 @@ void do_size_histogram(CDC& cdc, bufferlist& bl,
 {
   vector<pair<uint64_t, uint64_t>> chunks;
   cdc.calc_chunks(bl, &chunks);
+  uint64_t total = 0;
+  uint64_t num = 0;
   for (auto& i : chunks) {
     //unsigned b = i.second & 0xfffff000;
-    unsigned b = 1 << cbits(i.second);
+    unsigned b = 1 << (cbits(i.second - 1));
     (*h)[b]++;
+    ++num;
+    total += i.second;
   }
+  (*h)[0] = total / num;
 }
 
 void print_histogram(map<int,int>& h)
 {
   cout << "size\tcount" << std::endl;
   for (auto i : h) {
-    cout << i.first << "\t" << i.second << std::endl;
+    if (i.first) {
+      cout << i.first << "\t" << i.second << std::endl;
+    } else {
+      cout << "avg\t" << i.second << std::endl;
+    }
   }
 }
 
@@ -131,7 +141,7 @@ TEST_P(CDCTest, chunk_random)
     cout << ".";
     cout.flush();
     bufferlist r;
-    generate_buffer(16*1024*1024, &r);
+    generate_buffer(16*1024*1024, &r, i);
     do_size_histogram(*cdc, r, &h);
   }
   cout << std::endl;
