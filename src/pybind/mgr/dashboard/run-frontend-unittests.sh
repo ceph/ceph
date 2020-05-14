@@ -14,7 +14,7 @@ fi
 npm run build -- --prod --progress=false || failed=true
 
 # Unit Tests
-npm run test:ci || failed=true
+npm run test:ci-no-cache || failed=true
 
 # Linting
 npm run lint --silent

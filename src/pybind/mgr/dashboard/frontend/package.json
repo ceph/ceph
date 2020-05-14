@@ -20,6 +20,7 @@
     "i18n:token": "npx i18ntool config token",
     "test": "jest --watch",
     "test:ci": "JEST_SILENT_REPORTER_DOTS=true jest --coverage --reporters jest-silent-reporter",
+    "test:ci-no-cache": "npm run test:ci -- --no-cache",
     "e2e": "start-test 4200 'cypress open'",
     "e2e:ci": "start-test 4200 'cypress run -b chrome --headless'",
     "lint:tslint": "ng lint",
