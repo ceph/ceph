@@ -365,10 +365,13 @@ class FSExport(object):
         return 0, "", "Successfully deleted export"
 
     def delete_all_exports(self, cluster_id):
-        export_list = list(self.exports[cluster_id])
-        for export in export_list:
-            self.delete_export(None, cluster_id, export)
-        log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
+        try:
+            export_list = list(self.exports[cluster_id])
+            for export in export_list:
+                self.delete_export(None, cluster_id, export)
+            log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
+        except KeyError:
+            log.info("No exports to delete")
 
     def make_rados_url(self, obj):
         if self.rados_namespace:
@@ -382,7 +385,7 @@ class NFSCluster:
         self.mgr = mgr
 
     def create_empty_rados_obj(self):
-        common_conf = 'conf-nfs.{}'.format(self.cluster_id)
+        common_conf = self._get_common_conf_obj_name()
         result = ''
         with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
             if self.pool_ns:
@@ -392,21 +395,32 @@ class NFSCluster:
                     "write configuration into rados object %s/%s/%s\n",
                     self.pool_name, self.pool_ns, common_conf)
 
-    def check_cluster_exists(self):
+    def delete_common_config_obj(self):
+        common_conf = self._get_common_conf_obj_name()
+        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
+            if self.pool_ns:
+                ioctx.set_namespace(self.pool_ns)
+
+            ioctx.remove_object(common_conf)
+            log.info(f"Deleted object:{common_conf}")
+
+    def available_clusters(self):
         try:
             completion = self.mgr.describe_service(service_type='nfs')
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
-            return self.cluster_id in [cluster.spec.service_id for cluster in completion.result]
+            return [cluster.spec.service_id for cluster in completion.result]
         except Exception as e:
             log.exception(str(e))
-            return True
 
     def _set_cluster_id(self, cluster_id):
         self.cluster_id = "ganesha-%s" % cluster_id
 
     def _set_pool_namespace(self, cluster_id):
         self.pool_ns = cluster_id
+
+    def _get_common_conf_obj_name(self):
+        return 'conf-nfs.{}'.format(self.cluster_id)
 
     def _call_orch_apply_nfs(self, placement):
         spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
@@ -441,10 +455,11 @@ class NFSCluster:
         self._set_cluster_id(cluster_id)
         self.create_empty_rados_obj()
 
-        if self.check_cluster_exists():
-            log.info(f"{self.cluster_id} cluster already exists")
-        else:
+        cluster_list = self.available_clusters()
+        if isinstance(cluster_list, list) and self.cluster_id not in cluster_list:
             self._call_orch_apply_nfs(placement)
+        else:
+            log.error(f"{self.cluster_id} cluster already exists")
 
         return 0, "", "NFS Cluster Created Successfully"
 
@@ -452,24 +467,29 @@ class NFSCluster:
         self._set_pool_namespace(cluster_id)
         self._set_cluster_id(cluster_id)
 
-        if not self.check_cluster_exists():
-            return -errno.EINVAL, "", "Cluster does not exist"
+        cluster_list = self.available_clusters()
+        if isinstance(cluster_list, list) and self.cluster_id in cluster_list:
+            self._call_orch_apply_nfs(placement)
+            return 0, "", "NFS Cluster Updated Successfully"
 
-        self._call_orch_apply_nfs(placement)
-        return 0, "", "NFS Cluster Updated Successfully"
+        return -errno.EINVAL, "", "Cluster does not exist"
 
     def delete_nfs_cluster(self, cluster_id):
         self._set_cluster_id(cluster_id)
-        if self.check_cluster_exists():
+        cluster_list = self.available_clusters()
+
+        if isinstance(cluster_list, list) and self.cluster_id in cluster_list:
             try:
                 self.mgr.fs_export.delete_all_exports(cluster_id)
                 completion = self.mgr.remove_service('nfs.' + self.cluster_id)
                 self.mgr._orchestrator_wait([completion])
                 orchestrator.raise_if_exception(completion)
+                if len(cluster_list) == 1:
+                    self.delete_common_config_obj()
             except Exception as e:
                 log.exception("Failed to delete NFS Cluster")
                 return -errno.EINVAL, "", str(e)
         else:
-            log.warn("Cluster does not exist")
+            log.error("Cluster does not exist")
 
         return 0, "", "NFS Cluster Deleted Successfully"
