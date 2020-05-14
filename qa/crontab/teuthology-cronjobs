@@ -61,15 +61,17 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 25 10 * * 2   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=kcephfs; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 25 10 * * 4   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=kcephfs; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
+15 11 * * 2   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 2 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+15 11 * * 4   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 4 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+15 11 * * 6   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+15 11 * * 1   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 1 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+
 
 05 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
 20 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
 05 04 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 ###  The suite below must run on bare-metal because it's performance suite and run 3 times to produce more data points
 57 03 * * 2,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL -N 3
-09 03 * * 6   CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s powercycle -k distro -e $CEPH_QA_EMAIL
-
-
 
 
 ##########################
@@ -179,13 +181,14 @@ DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
 15 13 * * 5   CEPH_BRANCH=octopus; MACHINE_NAME=smithi; SUITE_NAME=multimds; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 15 13 * * 7   CEPH_BRANCH=octopus; MACHINE_NAME=smithi; SUITE_NAME=multimds; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
-
+15 12 * * 2   CEPH_BRANCH=octopus; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 2 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+15 12 * * 4   CEPH_BRANCH=octopus; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 4 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+15 12 * * 6   CEPH_BRANCH=octopus; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+15 12 * * 1   CEPH_BRANCH=octopus; MACHINE_NAME=smithi; SUITE_NAME=powercycle; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 1 $CEPH_BRANCH $MACHINE_NAME        $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
 05 05 * * 1,5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s rgw -k distro -t py2 -e $CEPH_QA_EMAIL
 15 05 * * 1,5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s krbd -k testing -t py2 -e $CEPH_QA_EMAIL
 15 05 * * 1,5  CEPH_BRANCH=octopus; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -t py2 -e $CEPH_QA_EMAIL
-07 05 * * 6    CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s powercycle -k distro -t py2 -e $CEPH_QA_EMAIL
-
 
 ## upgrades suites for on octopus
 30 02 * * 2,6  CEPH_BRANCH=octopus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -m $MACHINE_NAME -s upgrade/mimic-x -t py2 -e $CEPH_QA_EMAIL -p 50
