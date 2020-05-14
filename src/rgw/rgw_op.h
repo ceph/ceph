@@ -838,7 +838,6 @@ protected:
   vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
   int size_around;
-
   int default_max;
   bool is_truncated;
   bool allow_unordered;
