@@ -701,14 +701,7 @@ Usage:
 """
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
-        try:
-            host_name, block_device = svc_arg.split(":")
-            block_devices = block_device.split(',')
-            devs = DeviceSelection(paths=block_devices)
-            drive_group = DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name), data_devices=devs)
-        except (TypeError, KeyError, ValueError):
-            msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
-            return HandleCommandResult(-errno.EINVAL, stderr=msg)
+        drive_group = DriveGroupSpec.from_host_device_spec (svc_arg)
 
         completion = self.add_placement_to_service(drive_group)
         self._orchestrator_wait([completion])

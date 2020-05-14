@@ -19,10 +19,12 @@ import multiprocessing.pool
 import shutil
 import subprocess
 
+import yaml
+
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
-    NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
+    NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, RGWSpec, IscsiServiceSpec
 
 from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
@@ -1941,28 +1943,32 @@ you may want to run:
         for daemon_type, daemon_descs in daemons_post.items():
             self._get_cephadm_service(daemon_type).daemon_check_post(daemon_descs)
 
-    def _add_daemon(self, daemon_type, spec,
-                    create_func: Callable[..., T], config_func=None) -> List[T]:
+    def _add_daemon(self, spec) -> str:
         """
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
         """
+        daemon_type = spec.service_type
         self.log.debug('_add_daemon %s spec %s' % (daemon_type, spec.placement))
         if not spec.placement.hosts:
             raise OrchestratorError('must specify host(s) to deploy on')
         count = spec.placement.count or len(spec.placement.hosts)
         daemons = self.cache.get_daemons_by_service(spec.service_name())
-        return self._create_daemons(daemon_type, spec, daemons,
-                                    spec.placement.hosts, count,
-                                    create_func, config_func)
 
-    def _create_daemons(self, daemon_type, spec, daemons,
-                        hosts, count,
-                        create_func: Callable[..., T], config_func=None) -> List[T]:
+        ret = ', '.join(self._create_daemons(spec, daemons,
+                                             spec.placement.hosts, count))
+        return ret
+
+    def _create_daemons(self,
+                        spec: ServiceSpec, daemons,
+                        hosts, count) -> List[str]:
         if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
 
+        daemon_type = spec.service_type
+        create_func = self._create_fn(daemon_type)
+        config_func = self._config_fn(daemon_type)
         if config_func:
             config_func(spec)
 
@@ -2206,3 +2212,123 @@ you may want to run:
         The CLI call to retrieve an osd removal report
         """
         return self.rm_util.report
+
+    @orchestrator._cli_write_command(
+        'orch daemon add',
+        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=placement,type=CephString,req=false',
+        'Direct remote call to deploy the daemon. Ignores most checks.')
+    def _daemon_add_misc(self,
+                         daemon_type: Optional[str] = None,
+                         placement: Optional[str] = None,
+                         inbuf: Optional[str] = None) -> HandleCommandResult:
+        usage = f"""Usage:
+    ceph orch daemon add -i <json_file>
+    ceph orch daemon add {daemon_type or '<daemon_type>'} <placement>"""
+        if inbuf:
+            if daemon_type or placement:
+                raise OrchestratorValidationError(usage)
+            spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
+        else:
+            spec = PlacementSpec.from_string(placement)
+            assert daemon_type
+            spec = ServiceSpec(daemon_type, placement=spec)
+
+        return HandleCommandResult(stdout=self._add_daemon(spec))
+
+    @orchestrator._cli_write_command(
+        'cephadm remote daemon add osd',
+        "name=svc_arg,type=CephString",
+        'Direct remote call to deploy the daemon. Ignores most checks. ')
+    def _daemon_add_osd(self, svc_arg=None):
+        # type: (Optional[str]) -> HandleCommandResult
+
+        drive_group = DriveGroupSpec.from_host_device_spec(svc_arg)
+
+        return HandleCommandResult(stdout=self._add_daemon(drive_group))
+
+    @orchestrator._cli_write_command(
+        'orch daemon add mds',
+        'name=fs_name,type=CephString '
+        'name=placement,type=CephString,req=false',
+        'Direct remote call to deploy the daemon. Ignores most checks.')
+    def _mds_add(self,
+                 fs_name: str,
+                 placement: Optional[str] = None) -> HandleCommandResult:
+
+        spec = ServiceSpec(
+            'mds', fs_name,
+            placement=PlacementSpec.from_string(placement),
+        )
+
+        return HandleCommandResult(stdout=self._add_daemon(spec))
+
+    @orchestrator._cli_write_command(
+        'orch daemon add rgw',
+        'name=realm_name,type=CephString '
+        'name=zone_name,type=CephString '
+        'name=subcluster,type=CephString,req=false '
+        'name=port,type=CephInt,req=false '
+        'name=ssl,type=CephBool,req=false '
+        'name=placement,type=CephString,req=false',
+        'Direct remote call to deploy the daemon. Ignores most checks.')
+    def _rgw_add(self,
+                 realm_name: str,
+                 zone_name: str,
+                 subcluster: Optional[str] = None,
+                 port: Optional[int] = None,
+                 ssl: bool = False,
+                 placement: Optional[str] = None) -> HandleCommandResult:
+
+        spec = RGWSpec(
+            rgw_realm=realm_name,
+            rgw_zone=zone_name,
+            subcluster=subcluster,
+            rgw_frontend_port=port,
+            ssl=ssl,
+            placement=PlacementSpec.from_string(placement),
+        )
+
+        return HandleCommandResult(stdout=self._add_daemon(spec))
+
+    @orchestrator._cli_write_command(
+        'orch daemon add nfs',
+        "name=svc_id,type=CephString "
+        "name=pool,type=CephString "
+        "name=namespace,type=CephString,req=false "
+        'name=placement,type=CephString,req=false',
+        'Direct remote call to deploy the daemon. Ignores most checks.')
+    def _nfs_add(self,
+                 svc_id: str,
+                 pool: str,
+                 namespace: Optional[str] = None,
+                 placement: Optional[str] = None) -> HandleCommandResult:
+
+        spec = NFSServiceSpec(
+            svc_id,
+            pool=pool,
+            namespace=namespace,
+            placement=PlacementSpec.from_string(placement),
+        )
+
+        return HandleCommandResult(stdout=self._add_daemon(spec))
+
+    @orchestrator._cli_write_command(
+        'orch daemon add iscsi',
+        'name=pool,type=CephString '
+        'name=trusted_ip_list,type=CephString,req=false '
+        'name=placement,type=CephString,req=false',
+        'Direct remote call to deploy the daemon. Ignores most checks.')
+    def _iscsi_add(self,
+                   pool: str,
+                   trusted_ip_list: Optional[str] = None,
+                   placement: Optional[str] = None) -> HandleCommandResult:
+
+        spec = IscsiServiceSpec(
+            service_id='iscsi',
+            pool=pool,
+            trusted_ip_list=trusted_ip_list,
+            placement=PlacementSpec.from_string(placement),
+        )
+
+        return HandleCommandResult(stdout=self._add_daemon(spec))

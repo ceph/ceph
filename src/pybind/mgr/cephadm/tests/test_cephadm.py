@@ -86,8 +86,7 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == []
 
             ps = PlacementSpec(hosts=['test'], count=1)
-            c = cephadm_module.add_mds(ServiceSpec('mds', 'name', placement=ps))
-            [out] = wait(cephadm_module, c)
+            out = cephadm_module._add_daemon(ServiceSpec('mds', 'name', placement=ps))
             match_glob(out, "Deployed mds.name.* on host 'test'")
 
             c = cephadm_module.list_daemons()
@@ -176,13 +175,12 @@ class TestCephadm(object):
     def test_mon_add(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
-            assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
+            out = cephadm_module._add_daemon(ServiceSpec('mon', placement=ps))
+            assert out == "Deployed mon.a on host 'test'"
 
             with pytest.raises(OrchestratorError, match="Must set public_network config option or specify a CIDR network,"):
                 ps = PlacementSpec(hosts=['test'], count=1)
-                c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
-                wait(cephadm_module, c)
+                cephadm_module._add_daemon(ServiceSpec('mon', placement=ps))
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
     def test_mgr_update(self, cephadm_module):
@@ -369,8 +367,7 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'host1'):
             with with_host(cephadm_module, 'host2'):
                 ps = PlacementSpec(hosts=['host1'], count=1)
-                c = cephadm_module.add_rgw(RGWSpec(rgw_realm='realm', rgw_zone='zone1', placement=ps))
-                [out] = wait(cephadm_module, c)
+                out = cephadm_module._add_daemon(RGWSpec(rgw_realm='realm', rgw_zone='zone1', placement=ps))
                 match_glob(out, "Deployed rgw.realm.zone1.host1.* on host 'host1'")
 
                 ps = PlacementSpec(hosts=['host1', 'host2'], count=2)
@@ -401,25 +398,24 @@ class TestCephadm(object):
             assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
 
     @pytest.mark.parametrize(
-        "spec, meth",
+        "spec",
         [
-            (ServiceSpec('crash'), CephadmOrchestrator.add_crash),
-            (ServiceSpec('prometheus'), CephadmOrchestrator.add_prometheus),
-            (ServiceSpec('grafana'), CephadmOrchestrator.add_grafana),
-            (ServiceSpec('node-exporter'), CephadmOrchestrator.add_node_exporter),
-            (ServiceSpec('alertmanager'), CephadmOrchestrator.add_alertmanager),
-            (ServiceSpec('rbd-mirror'), CephadmOrchestrator.add_rbd_mirror),
-            (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.add_mds),
-            (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.add_rgw),
+            ServiceSpec('crash'),
+            ServiceSpec('prometheus'),
+            ServiceSpec('grafana'),
+            ServiceSpec('node-exporter'),
+            ServiceSpec('alertmanager'),
+            ServiceSpec('rbd-mirror'),
+            ServiceSpec('mds', service_id='fsname'),
+            RGWSpec(rgw_realm='realm', rgw_zone='zone'),
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_daemon_add(self, spec: ServiceSpec, meth, cephadm_module):
+    def test_daemon_add(self, spec: ServiceSpec, cephadm_module):
         with with_host(cephadm_module, 'test'):
             spec.placement = PlacementSpec(hosts=['test'], count=1)
 
-            c = meth(cephadm_module, spec)
-            [out] = wait(cephadm_module, c)
+            out = cephadm_module._add_daemon(spec)
             match_glob(out, f"Deployed {spec.service_name()}.* on host 'test'")
 
             assert_rm_daemon(cephadm_module, spec.service_name(), 'test')
@@ -434,8 +430,7 @@ class TestCephadm(object):
                     pool='pool',
                     namespace='namespace',
                     placement=ps)
-            c = cephadm_module.add_nfs(spec)
-            [out] = wait(cephadm_module, c)
+            out = cephadm_module._add_daemon(spec)
             match_glob(out, "Deployed nfs.name.* on host 'test'")
 
             assert_rm_daemon(cephadm_module, 'nfs.name.test', 'test')
@@ -456,8 +451,7 @@ class TestCephadm(object):
                     api_user='user',
                     api_password='password',
                     placement=ps)
-            c = cephadm_module.add_iscsi(spec)
-            [out] = wait(cephadm_module, c)
+            out = cephadm_module._add_daemon(spec)
             match_glob(out, "Deployed iscsi.name.* on host 'test'")
 
             assert_rm_daemon(cephadm_module, 'iscsi.name.test', 'test')

@@ -289,3 +289,17 @@ class DriveGroupSpec(ServiceSpec):
 
     def __eq__(self, other):
         return repr(self) == repr(other)
+
+    @classmethod
+    def from_host_device_spec(cls, input):
+        try:
+            host_name, block_device = input.split(":")
+            block_devices = block_device.split(',')
+            devs = DeviceSelection(paths=block_devices)
+            return DriveGroupSpec(placement=PlacementSpec(host_pattern=host_name),
+                                  data_devices=devs)
+        except (TypeError, KeyError, ValueError):
+            s = "Invalid spec: '{}'. Expected format: host:device,device,... ".format(input)
+            raise ServiceSpecValidationError(s)
+
+
