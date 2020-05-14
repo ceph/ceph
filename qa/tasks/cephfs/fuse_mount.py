@@ -9,6 +9,7 @@ from textwrap import dedent
 
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
+from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.mount import CephFSMount
@@ -439,12 +440,21 @@ print(find_socket("{client_name}"))
             timeout=(15*60)).strip()
         log.info("Found client admin socket at {0}".format(asok_path))
 
-        # Query client ID from admin socket
-        json_data = self.client_remote.sh(
-            ['sudo', self._prefix + 'ceph', '--admin-daemon', asok_path] + args,
-            stdout=StringIO(),
-            timeout=(15*60))
-        return json.loads(json_data)
+        # Query client ID from admin socket, wait 2 seconds
+        # and retry 10 times if it is not ready
+        with safe_while(sleep=2, tries=10) as proceed:
+            while proceed():
+                try:
+                    p = self.client_remote.run(args=
+                        ['sudo', self._prefix + 'ceph', '--admin-daemon', asok_path] + args,
+                        stdout=StringIO(), stderr=StringIO(),
+                        timeout=(15*60))
+                    break
+                except CommandFailedError:
+                    if "Connection refused" in stderr.getvalue():
+                        pass
+
+        return json.loads(p.stdout.getvalue().strip())
 
     def get_global_id(self):
         """
