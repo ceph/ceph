@@ -186,8 +186,8 @@ void Io<I>::aio_read(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (image_ctx.blkin_trace_all) {
-    trace.init("wq: read", &image_ctx.trace_endpoint);
-    trace.event("start");
+    trace.init("io: read", &image_ctx.trace_endpoint);
+    trace.event("init");
   }
 
   aio_comp->init_time(util::get_image_ctx(&image_ctx), io::AIO_TYPE_READ);
@@ -205,7 +205,7 @@ void Io<I>::aio_read(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
 
   auto req = io::ImageDispatchSpec<I>::create_read(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(read_result), op_flags, {});
+    std::move(read_result), op_flags, trace);
   req->send();
 }
 
@@ -217,7 +217,7 @@ void Io<I>::aio_write(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (image_ctx.blkin_trace_all) {
-    trace.init("wq: write", &image_ctx.trace_endpoint);
+    trace.init("io: write", &image_ctx.trace_endpoint);
     trace.event("init");
   }
 
@@ -236,7 +236,7 @@ void Io<I>::aio_write(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
 
   auto req = io::ImageDispatchSpec<I>::create_write(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(bl), op_flags, {}, 0);
+    std::move(bl), op_flags, trace, 0);
   req->send();
 }
 
@@ -248,7 +248,7 @@ void Io<I>::aio_discard(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
   FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (image_ctx.blkin_trace_all) {
-    trace.init("wq: discard", &image_ctx.trace_endpoint);
+    trace.init("io: discard", &image_ctx.trace_endpoint);
     trace.event("init");
   }
 
@@ -267,7 +267,7 @@ void Io<I>::aio_discard(I &image_ctx, io::AioCompletion *aio_comp, uint64_t off,
 
   auto req = io::ImageDispatchSpec<I>::create_discard(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
-    discard_granularity_bytes, {}, 0);
+    discard_granularity_bytes, trace, 0);
   req->send();
 }
 
@@ -279,7 +279,7 @@ void Io<I>::aio_write_same(I &image_ctx, io::AioCompletion *aio_comp,
   FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (image_ctx.blkin_trace_all) {
-    trace.init("wq: writesame", &image_ctx.trace_endpoint);
+    trace.init("io: writesame", &image_ctx.trace_endpoint);
     trace.event("init");
   }
 
@@ -299,7 +299,7 @@ void Io<I>::aio_write_same(I &image_ctx, io::AioCompletion *aio_comp,
 
   auto req = io::ImageDispatchSpec<I>::create_write_same(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, off, len,
-    std::move(bl), op_flags, {}, 0);
+    std::move(bl), op_flags, trace, 0);
   req->send();
 }
 
@@ -313,7 +313,7 @@ void Io<I>::aio_compare_and_write(I &image_ctx, io::AioCompletion *aio_comp,
   FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (image_ctx.blkin_trace_all) {
-    trace.init("wq: compare_and_write", &image_ctx.trace_endpoint);
+    trace.init("io: compare_and_write", &image_ctx.trace_endpoint);
     trace.event("init");
   }
 
@@ -333,7 +333,7 @@ void Io<I>::aio_compare_and_write(I &image_ctx, io::AioCompletion *aio_comp,
 
   auto req = io::ImageDispatchSpec<I>::create_compare_and_write(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp, {{off, len}},
-    std::move(cmp_bl), std::move(bl), mismatch_off, op_flags, {}, 0);
+    std::move(cmp_bl), std::move(bl), mismatch_off, op_flags, trace, 0);
   req->send();
 }
 
@@ -344,7 +344,7 @@ void Io<I>::aio_flush(I &image_ctx, io::AioCompletion *aio_comp,
   FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (image_ctx.blkin_trace_all) {
-    trace.init("wq: flush", &image_ctx.trace_endpoint);
+    trace.init("io: flush", &image_ctx.trace_endpoint);
     trace.event("init");
   }
 
@@ -362,7 +362,7 @@ void Io<I>::aio_flush(I &image_ctx, io::AioCompletion *aio_comp,
 
   auto req = io::ImageDispatchSpec<I>::create_flush(
     image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-    io::FLUSH_SOURCE_USER, {});
+    io::FLUSH_SOURCE_USER, trace);
   req->send();
 }
 
