@@ -70,7 +70,7 @@ EOF
 
 echo done.
 
-if [[ ! $ARGS =~ "-DCMAKE_BUILD_TYPE" ]]; then
+if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
   cat <<EOF
 
 ****
