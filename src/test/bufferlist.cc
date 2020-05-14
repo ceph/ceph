@@ -534,7 +534,7 @@ TEST(BufferPtr, copy_out_bench) {
     }
     utime_t end = ceph_clock_now();
     cout << count << " fills of buffer len " << buflen
-	 << " with " << s << " byte copy_out in"
+	 << " with " << s << " byte copy_out in "
 	 << (end - start) << std::endl;
   }
 }
@@ -794,7 +794,7 @@ TEST(BufferListIterator, end) {
 static void bench_bufferlistiter_deref(const size_t step,
 				       const size_t bufsize,
 				       const size_t bufnum) {
-  const std::string buf('a', bufsize);
+  const std::string buf(bufsize, 'a');
   ceph::bufferlist bl;
 
   for (size_t i = 0; i < bufnum; i++) {
@@ -1412,7 +1412,8 @@ TEST(BufferList, operator_equal) {
   //
   // list& operator= (list&& other)
   //
-  bufferlist move = std::move(bl);
+  bufferlist move;
+  move = std::move(bl);
   {
     std::string dest;
     move.begin(1).copy(1, dest);
