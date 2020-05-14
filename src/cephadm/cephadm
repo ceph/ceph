@@ -930,9 +930,8 @@ def read_config(fn):
 
 def pathify(p):
     # type: (str) -> str
-    if not p.startswith('/'):
-        return os.path.join(os.getcwd(), p)
-    return p
+    p = os.path.expanduser(p)
+    return os.path.abspath(p)
 
 def get_file_timestamp(fn):
     try:
@@ -2790,9 +2789,7 @@ def command_shell():
         mounts[pathify(args.keyring)] = '/etc/ceph/ceph.keyring:z'
     if args.mount:
         mount = pathify(args.mount)
-        filename = ''
-        if os.path.isfile(mount):
-            _, filename = os.path.split(mount)
+        filename = os.path.basename(mount)
         mounts[mount] = '/mnt/{}:z'.format(filename)
     if args.command:
         command = args.command
