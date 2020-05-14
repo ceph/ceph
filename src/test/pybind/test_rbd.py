@@ -190,7 +190,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
             feature_data_pool = 128
         image_name = get_temp_image_name()
         if exception is None:
-            RBD().create(ioctx, image_name, IMG_SIZE)
+            RBD().create(ioctx, image_name, IMG_SIZE, old_format=(format == 1))
             try:
                 with Image(ioctx, image_name) as image:
                     eq(format == 1, image.old_format())
