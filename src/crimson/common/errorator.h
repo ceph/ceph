@@ -45,6 +45,34 @@ inline auto do_for_each(Container& c, AsyncAction action) {
   return ::crimson::do_for_each(std::begin(c), std::end(c), std::move(action));
 }
 
+template<typename AsyncAction>
+inline auto do_until(AsyncAction action) {
+  using futurator = \
+    ::seastar::futurize<std::result_of_t<AsyncAction()>>;
+
+  while (true) {
+    auto f = futurator::invoke(action);
+    if (!seastar::need_preempt() && f.available() && std::get<0>(f.get())) {
+      return futurator::type::errorator_type::template make_ready_future<>();
+    }
+    if (!f.available() || seastar::need_preempt()) {
+      return std::move(f)._then(
+        [ action = std::move(action)] (auto &&done) mutable {
+	  if (done) {
+	    return futurator::type::errorator_type::template make_ready_future<>();
+	  }
+          return ::crimson::do_until(
+	    std::move(action));
+	});
+    }
+    if (f.failed()) {
+      return futurator::type::errorator_type::template make_exception_future2<>(
+	f.get_exception()
+      );
+    }
+  }
+}
+
 // define the interface between error types and errorator
 template <class ConcreteErrorT>
 class error_t {
@@ -536,6 +564,23 @@ private:
         });
     }
 
+    /**
+     * unsafe_thread_get
+     *
+     * Only valid within a seastar_thread.  Ignores errorator protections
+     * and throws any contained exceptions.
+     *
+     * Should really only be used within test code
+     * (see test/crimson/gtest_seastar.h).
+     */
+    auto &&unsafe_get() {
+      return seastar::future<ValuesT...>::get();
+    }
+    auto unsafe_get0() {
+      return seastar::future<ValuesT...>::get0();
+    }
+
+
     template <class FuncT>
     auto finally(FuncT &&func) {
       using func_result_t = std::invoke_result_t<FuncT>;
@@ -619,6 +664,9 @@ private:
     friend inline auto ::crimson::do_for_each(Iterator begin,
                                               Iterator end,
                                               AsyncAction action);
+
+    template<typename AsyncAction>
+    friend inline auto ::crimson::do_until(AsyncAction action);
 
     template <class...>
     friend class ::seastar::future;
@@ -880,7 +928,15 @@ namespace ct_error {
     ct_error_code<std::errc::operation_not_supported>;
   using not_connected = ct_error_code<std::errc::not_connected>;
   using timed_out = ct_error_code<std::errc::timed_out>;
+  using erange =
+    ct_error_code<std::errc::result_out_of_range>;
+  using ebadf =
+    ct_error_code<std::errc::bad_file_descriptor>;
+  using enospc =
+    ct_error_code<std::errc::no_space_on_device>;
   using value_too_large = ct_error_code<std::errc::value_too_large>;
+  using eagain =
+    ct_error_code<std::errc::resource_unavailable_try_again>;
 
   struct pass_further_all {
     template <class ErrorT>

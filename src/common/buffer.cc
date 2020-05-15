@@ -299,6 +299,11 @@ static ceph::spinlock debug_lock;
   ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len) {
     return buffer::create_aligned(len, sizeof(size_t));
   }
+  ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len, char c) {
+    auto ret = buffer::create_aligned(len, sizeof(size_t));
+    memset(ret->data, c, len);
+    return ret;
+  }
   ceph::unique_leakable_ptr<buffer::raw>
   buffer::create_in_mempool(unsigned len, int mempool) {
     return buffer::create_aligned_in_mempool(len, sizeof(size_t), mempool);

@@ -38,7 +38,6 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/optional.hpp>
 
-#include "include/ceph_assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
@@ -1536,6 +1535,29 @@ struct denc_traits<std::nullopt_t> {
     }									\
   };
 
+// ----------------------------------------------------------------------
+// encoded_sizeof_wrapper
+
+namespace ceph {
+
+template <typename T, typename traits=denc_traits<T>>
+constexpr std::enable_if_t<traits::supported && traits::bounded, size_t>
+encoded_sizeof_bounded() {
+  size_t p = 0;
+  traits::bound_encode(T(), p);
+  return p;
+}
+
+template <typename T, typename traits=denc_traits<T>>
+std::enable_if_t<traits::supported, size_t>
+encoded_sizeof(const T &t) {
+  size_t p = 0;
+  traits::bound_encode(t, p);
+  return p;
+}
+
+} // namespace ceph
+
 
 // ----------------------------------------------------------------------
 // encode/decode wrappers
@@ -1713,7 +1735,9 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 			   uint32_t *struct_len) {			\
     const char *pos = p.get_pos();					\
     char *end = *start_pos + *struct_len;				\
-    ceph_assert(pos <= end);							\
+    if (pos > end) {							\
+      throw ::ceph::buffer::malformed_input(__PRETTY_FUNCTION__);	\
+    }									\
     if (pos < end) {							\
       p += end - pos;							\
     }									\
