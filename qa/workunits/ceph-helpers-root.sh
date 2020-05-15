@@ -59,15 +59,6 @@ function install_cmake3_on_centos7 {
     sudo yum install -y cmake3
 }
 
-function install_cmake3_on_xenial {
-    install_pkg_on_ubuntu \
-	ceph-cmake \
-	d278b9d28de0f6b88f56dfe1e8bf684a41577210 \
-	xenial \
-	force \
-	cmake
-}
-
 function install_pkg_on_ubuntu {
     local project=$1
     shift
