@@ -1,13 +1,14 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import * as moment from 'moment';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { By } from '@angular/platform-browser';
 import {
   configureTestBed,
   expectItemTasks,
@@ -119,7 +120,7 @@ describe('RbdTrashListComponent', () => {
       images.push({
         id: id,
         pool_name: 'pl',
-        deferment_end_time: 'abc'
+        deferment_end_time: moment()
       });
     };
 
