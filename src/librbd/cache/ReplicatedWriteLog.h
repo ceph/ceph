@@ -262,6 +262,8 @@ private:
   ThreadPool m_thread_pool;
   ContextWQ m_work_queue;
 
+  uint32_t m_discard_granularity_bytes;
+
   void perf_start(const std::string name);
   void perf_stop();
   void log_perf();
@@ -270,6 +272,7 @@ private:
 
   void rwl_init(Context *on_finish, rwl::DeferredContexts &later);
   void update_image_cache_state(Context *on_finish);
+  void load_existing_entries(rwl::DeferredContexts &later);
   void wake_up();
   void process_work();
 
