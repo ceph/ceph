@@ -18,7 +18,10 @@ import { SummaryService } from '../../../shared/services/summary.service';
   styleUrls: ['./navigation.component.scss']
 })
 export class NavigationComponent implements OnInit, OnDestroy {
-  @HostBinding('class.isPwdDisplayed') isPwdDisplayed = false;
+  notifications: string[] = [];
+  @HostBinding('class') get class(): string {
+    return 'top-notification-' + this.notifications.length;
+  }
 
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
@@ -50,9 +53,14 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.summaryData = summary;
       })
     );
+    /*
+     Note: If you're going to add more top notifications please do not forget to increase
+     the number of generated css-classes in section topNotification settings in the scss
+     file.
+     */
     this.subs.add(
       this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
-        this.isPwdDisplayed = isDisplayed;
+        this.showTopNotification('isPwdDisplayed', isDisplayed);
       })
     );
   }
@@ -78,6 +86,19 @@ export class NavigationComponent implements OnInit, OnDestroy {
       this.displayedSubMenu = '';
     } else {
       this.displayedSubMenu = menu;
+    }
+  }
+
+  showTopNotification(name: string, isDisplayed: boolean) {
+    if (isDisplayed) {
+      if (!this.notifications.includes(name)) {
+        this.notifications.push(name);
+      }
+    } else {
+      const index = this.notifications.indexOf(name);
+      if (index >= 0) {
+        this.notifications.splice(index, 1);
+      }
     }
   }
 }
