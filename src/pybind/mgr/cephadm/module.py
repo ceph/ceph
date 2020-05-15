@@ -1046,8 +1046,21 @@ you may want to run:
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
 
+    def update_osdspec_previews(self, search_host: str = ''):
+        # Set global 'pending' flag for host
+        self.cache.loading_osdspec_preview.add(search_host)
+        previews = []
+        # query OSDSpecs for host <search host> and generate/get the preview
+        for preview in self.osd_service.get_previews(search_host):
+            # There can be multiple previews for one host due to multiple OSDSpecs.
+            previews.append(preview)
+        self.log.debug(f"Loading OSDSpec previews to HostCache")
+        self.cache.osdspec_previews[search_host] = previews
+        # Unset global 'pending' flag for host
+        self.cache.loading_osdspec_preview.remove(search_host)
+
     def _refresh_host_osdspec_previews(self, host) -> bool:
-        self.cache.update_osdspec_previews(host)
+        self.update_osdspec_previews(host)
         self.cache.save_host(host)
         self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
         return True
@@ -1133,7 +1146,7 @@ you may want to run:
             host, len(devices), len(networks)))
         devices = inventory.Devices.from_json(devices)
         self.cache.update_host_devices_networks(host, devices.devices, networks)
-        self.cache.update_osdspec_previews(host)
+        self.update_osdspec_previews(host)
         self.cache.save_host(host)
         return None
 
@@ -1422,7 +1435,6 @@ you may want to run:
         if service_name:
             self.log.debug(f"Looking for OSDSpec with service_name: {service_name}")
             osdspecs = self.spec_store.find(service_name=service_name)
-            osdspecs = [cast(DriveGroupSpec, spec) for spec in osdspecs]
             self.log.debug(f"Found OSDSpecs: {osdspecs}")
         if specs:
             osdspecs = [cast(DriveGroupSpec, spec) for spec in specs]
@@ -1433,6 +1445,7 @@ you may want to run:
         if not osdspecs:
             self.log.debug("No OSDSpecs found")
             return []
+        # TODO: adapt this when we change patter_matches_hosts with https://github.com/ceph/ceph/pull/34860
         return sum([spec.placement.pattern_matches_hosts(self.cache.get_hosts()) for spec in osdspecs], [])
 
     def resolve_osdspecs_for_host(self, host):
@@ -1461,17 +1474,18 @@ you may want to run:
     def create_osds(self, drive_group: DriveGroupSpec):
         return self.osd_service.create_from_spec(drive_group)
 
+    @trivial_completion
     def preview_osdspecs(self,
                          osdspec_name: Optional[str] = None,
                          osdspecs: Optional[List[DriveGroupSpec]] = None
-                         ) -> Dict[str, List[Dict[str, Any]]]:
+                         ):
         matching_hosts = self.resolve_hosts_for_osdspecs(specs=osdspecs, service_name=osdspec_name)
         if not matching_hosts:
             return {'n/a': [{'error': True,
                              'message': 'No OSDSpec or matching hosts found.'}]}
         # Is any host still loading previews
-        pending_flags = {f for (h, f) in self.cache.loading_osdspec_preview.items() if h in matching_hosts}
-        if any(pending_flags):
+        pending_hosts = {h for h in self.cache.loading_osdspec_preview if h in matching_hosts}
+        if pending_hosts:
             # Report 'pending' when any of the matching hosts is still loading previews (flag is True)
             return {'n/a': [{'error': True,
                              'message': 'Preview data is being generated.. '
