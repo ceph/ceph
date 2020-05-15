@@ -893,11 +893,15 @@ Usage:
     @_cli_write_command(
         'orch daemon add iscsi',
         'name=pool,type=CephString '
+        'name=api_user,type=CephString '
+        'name=api_password,type=CephString '
         'name=trusted_ip_list,type=CephString,req=false '
         'name=placement,type=CephString,req=false',
         'Start iscsi daemon(s)')
     def _iscsi_add(self,
                    pool: str,
+                   api_user: str,
+                   api_password: str,
                    trusted_ip_list: Optional[str] = None,
                    placement: Optional[str] = None,
                    inbuf: Optional[str] = None) -> HandleCommandResult:
@@ -907,6 +911,8 @@ Usage:
         spec = IscsiServiceSpec(
             service_id='iscsi',
             pool=pool,
+            api_user=api_user,
+            api_password=api_password,
             trusted_ip_list=trusted_ip_list,
             placement=PlacementSpec.from_string(placement),
         )
@@ -1096,12 +1102,16 @@ Usage:
     @_cli_write_command(
         'orch apply iscsi',
         'name=pool,type=CephString '
+        'name=api_user,type=CephString '
+        'name=api_password,type=CephString '
         'name=trusted_ip_list,type=CephString,req=false '
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an iSCSI service')
     def _apply_iscsi(self,
                      pool: str,
+                     api_user: str,
+                     api_password: str,
                      trusted_ip_list: Optional[str] = None,
                      placement: Optional[str] = None,
                      unmanaged: bool = False,
@@ -1112,6 +1122,8 @@ Usage:
         spec = IscsiServiceSpec(
             service_id='iscsi',
             pool=pool,
+            api_user=api_user,
+            api_password=api_password,
             trusted_ip_list=trusted_ip_list,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
