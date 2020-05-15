@@ -8383,6 +8383,8 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
     ASSERT_EQ(0, image.quiesce_watch(&watcher, &handle));
 
+    std::cerr << "test quiesce is not long enough to time out" << std::endl;
+
     thread quiesce1([&image, &watcher]() {
       watcher.wait_for_quiesce_count(1);
       sleep(8);
@@ -8395,13 +8397,20 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
     watcher.wait_for_unquiesce_count(1);
     ASSERT_EQ(1U, watcher.unquiesce_count);
 
-    thread quiesce2([&image, &watcher]() {
+    std::cerr << "test quiesce is timed out" << std::endl;
+
+    bool timed_out = false;
+    thread quiesce2([&image, &watcher, &timed_out]() {
       watcher.wait_for_quiesce_count(2);
-      sleep(13);
+      for (int i = 0; !timed_out && i < 60; i++) {
+        std::cerr << "waiting for timed out ... " << i << std::endl;
+        sleep(1);
+      }
       image.quiesce_complete();
     });
 
     ASSERT_EQ(-ETIMEDOUT, image.snap_create("snap2"));
+    timed_out = true;
     quiesce2.join();
     ASSERT_EQ(2U, watcher.quiesce_count);
     watcher.wait_for_unquiesce_count(2);
@@ -8411,6 +8420,8 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
       watcher.wait_for_quiesce_count(3);
       image.quiesce_complete();
     });
+
+    std::cerr << "test retry succeeds" << std::endl;
 
     ASSERT_EQ(0, image.snap_create("snap2"));
     quiesce3.join();
