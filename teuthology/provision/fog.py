@@ -6,6 +6,7 @@ import re
 
 from datetime import datetime
 from paramiko import SSHException
+from paramiko.ssh_exception import NoValidConnectionsError
 
 import teuthology.orchestra
 
@@ -263,10 +264,16 @@ class FOG(object):
                 except (
                     socket.error,
                     SSHException,
+                    NoValidConnectionsError,
                     MaxWhileTries,
                     EOFError,
                 ):
                     pass
+        sentinel_file = config.fog.get('sentinel_file', None)
+        if sentinel_file:
+            cmd = "while [ ! -e '%s' ]; do sleep 5; done" % sentinel_file
+            self.remote.run(args=cmd, timeout=600)
+        self.log.info("Node is ready")
 
     def _fix_hostname(self):
         """

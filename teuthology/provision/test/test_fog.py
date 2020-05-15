@@ -4,7 +4,7 @@ from mock import patch, DEFAULT, PropertyMock
 from pytest import raises, mark
 
 from teuthology.config import config
-from teuthology.exceptions import MaxWhileTries
+from teuthology.exceptions import MaxWhileTries, CommandFailedError
 from teuthology.provision import fog
 
 
@@ -287,7 +287,7 @@ class TestFOG(object):
         'tries',
         [1, 101],
     )
-    def test_wait_for_ready(self, tries):
+    def test_wait_for_ready_tries(self, tries):
         connect_results = [MaxWhileTries for i in range(tries)] + [True]
         obj = self.klass('name.fqdn', 'type', '1.0')
         self.mocks['m_Remote_connect'].side_effect = connect_results
@@ -297,3 +297,21 @@ class TestFOG(object):
             return
         obj._wait_for_ready()
         assert len(self.mocks['m_Remote_connect'].call_args_list) == tries + 1
+
+    @mark.parametrize(
+        'sentinel_present',
+        ([False, True]),
+    )
+    def test_wait_for_ready_sentinel(self, sentinel_present):
+        config.fog['sentinel_file'] = '/a_file'
+        obj = self.klass('name.fqdn', 'type', '1.0')
+        if not sentinel_present:
+            self.mocks['m_Remote_run'].side_effect = [
+                CommandFailedError(command='cmd', exitstatus=1)]
+            with raises(CommandFailedError):
+                obj._wait_for_ready()
+        else:
+            obj._wait_for_ready()
+        assert len(self.mocks['m_Remote_run'].call_args_list) == 1
+        assert "'/a_file'" in \
+            self.mocks['m_Remote_run'].call_args_list[0][1]['args']
