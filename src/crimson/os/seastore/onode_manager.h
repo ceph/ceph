@@ -9,24 +9,16 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <seastar/core/future.hh>
 
-#include "include/ceph_assert.h"
-#include "crimson/os/seastore/seastore_types.h"
 #include "include/buffer_fwd.h"
-#include "crimson/osd/exceptions.h"
+#include "include/ceph_assert.h"
+#include "common/hobject.h"
+
+#include "crimson/os/seastore/onode.h"
+#include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction_manager.h"
+#include "crimson/osd/exceptions.h"
 
 namespace crimson::os::seastore {
-
-class Onode: public boost::intrusive_ref_counter<
-  Onode,
-  boost::thread_unsafe_counter>{
-public:
-};
-using OnodeRef = boost::intrusive_ptr<Onode>;
-
-std::ostream &operator<<(std::ostream &out, const Onode &rhs) {
-  return out;
-}
 
 class OnodeManager {
 public:
