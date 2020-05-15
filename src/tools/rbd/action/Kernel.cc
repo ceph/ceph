@@ -434,11 +434,18 @@ int execute_map(const po::variables_map &vm,
     return r;
   }
 
+  if (vm["quiesce"].as<bool>()) {
+    std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
+  }
   if (vm["read-only"].as<bool>()) {
     put_map_option("rw", "ro");
   }
   if (vm["exclusive"].as<bool>()) {
     put_map_option("exclusive", "exclusive");
+  }
+
+  if (vm.count("quiesce-hook")) {
+    std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
   }
 
   // parse default options first so they can be overwritten by cli options
