@@ -31,7 +31,8 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 from . import remotes
 from . import utils
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, IscsiService
+    RbdMirrorService, CrashService
+from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -313,7 +314,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.prometheus_service = PrometheusService(self)
         self.node_exporter_service = NodeExporterService(self)
         self.crash_service = CrashService(self)
-        self.iscsi_servcie = IscsiService(self)
+        self.iscsi_service = IscsiService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1662,13 +1663,13 @@ you may want to run:
             'prometheus': self.prometheus_service.create,
             'node-exporter': self.node_exporter_service.create,
             'crash': self.crash_service.create,
-            'iscsi': self.iscsi_servcie.create,
+            'iscsi': self.iscsi_service.create,
         }
         config_fns = {
             'mds': self.mds_service.config,
             'rgw': self.rgw_service.config,
             'nfs': self.nfs_service.config,
-            'iscsi': self.iscsi_servcie.config,
+            'iscsi': self.iscsi_service.config,
         }
         create_func = create_fns.get(daemon_type, None)
         if not create_func:
@@ -1973,7 +1974,7 @@ you may want to run:
     @trivial_completion
     def add_iscsi(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('iscsi', spec, self.iscsi_servcie.create, self.iscsi_servcie.config)
+        return self._add_daemon('iscsi', spec, self.iscsi_service.create, self.iscsi_service.config)
 
     @trivial_completion
     def apply_iscsi(self, spec):
