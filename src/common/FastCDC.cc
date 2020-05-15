@@ -57,6 +57,22 @@ void FastCDC::_setup(int target, int size_window_bits)
   }
 }
 
+static inline bool _scan(
+  unsigned char *ptr, size_t& pos, size_t max, uint64_t mask, uint64_t& fp,
+  uint64_t *table)
+{
+  while (true) {
+    if ((fp & mask) == mask) {
+      return false;
+    }
+    if (pos >= max) {
+      return true;
+    }
+    fp = (fp << 1) ^ table[ptr[pos]];
+    ++pos;
+  }
+}
+
 void FastCDC::calc_chunks(
   bufferlist& bl,
   std::vector<std::pair<uint64_t, uint64_t>> *chunks)
@@ -85,29 +101,18 @@ void FastCDC::calc_chunks(
     }
 
     // find an end marker
-    // small
-    size_t max = std::min(len,
-			  cstart + (1 << (target_bits - TARGET_WINDOW_BITS)));
-    while ((fp & small_mask) != small_mask && pos < max) {
-      fp = (fp << 1) ^ table[ptr[pos]];
-      ++pos;
-    }
-    if (pos >= max) {
-      // target
-      max = std::min(len, cstart + (1 << (target_bits + TARGET_WINDOW_BITS)));
-      while ((fp & target_mask) != target_mask && pos < max) {
-	fp = (fp << 1) ^ table[ptr[pos]];
-	++pos;
-      }
-      if (pos >= max) {
-	// large
-	max = std::min(len, cstart + (1 << max_bits));
-	while ((fp & large_mask) != large_mask && pos < max) {
-	  fp = (fp << 1) ^ table[ptr[pos]];
-	  ++pos;
-	}
-      }
-    }
+    if (_scan(ptr, pos,
+	      std::min(len,
+		       cstart + (1 << (target_bits - TARGET_WINDOW_BITS))),
+	      small_mask, fp, table) &&
+	_scan(ptr, pos,
+	      std::min(len,
+		       cstart + (1 << (target_bits + TARGET_WINDOW_BITS))),
+	      target_mask, fp, table) &&
+	_scan(ptr, pos,
+	      std::min(len,
+		       cstart + (1 << max_bits)),
+	      large_mask, fp, table)) ;
 
     chunks->push_back(std::pair<uint64_t,uint64_t>(cstart, pos - cstart));
   }
