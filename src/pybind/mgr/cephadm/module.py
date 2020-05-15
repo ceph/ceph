@@ -1473,7 +1473,7 @@ you may want to run:
 
     @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
-        return self.osd_service.create_from_spec(drive_group)
+        return self.osd_service.create(drive_group)
 
     @trivial_completion
     def preview_osdspecs(self,
@@ -1639,7 +1639,37 @@ you may want to run:
         self.cache.invalidate_host_daemons(host)
         return "Removed {} from host '{}'".format(name, host)
 
-    def _apply_service(self, spec) -> bool:
+    def _create_fn(self, service_type: str) -> Callable[..., str]:
+        try:
+            d: Dict[str, function] = {
+                'mon': self.mon_service.create,
+                'mgr': self.mgr_service.create,
+                'osd': self.osd_service.create,
+                'mds': self.mds_service.create,
+                'rgw': self.rgw_service.create,
+                'rbd-mirror': self.rbd_mirror_service.create,
+                'nfs': self.nfs_service.create,
+                'grafana': self.grafana_service.create,
+                'alertmanager': self.alertmanager_service.create,
+                'prometheus': self.prometheus_service.create,
+                'node-exporter': self.node_exporter_service.create,
+                'crash': self.crash_service.create,
+                'iscsi': self.iscsi_service.create,
+            }
+            return d[service_type]  # type: ignore
+        except KeyError:
+            self.log.exception(f'unknown service type {service_type}')
+            raise OrchestratorError(f'unknown service type {service_type}') from e
+
+    def _config_fn(self, service_type) -> Optional[Callable[[ServiceSpec], None]]:
+        return {
+            'mds': self.mds_service.config,
+            'rgw': self.rgw_service.config,
+            'nfs': self.nfs_service.config,
+            'iscsi': self.iscsi_service.config,
+        }.get(service_type)
+
+    def _apply_service(self, spec: ServiceSpec) -> bool:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
         on the target label and count specified in the placement.
@@ -1650,32 +1680,14 @@ you may want to run:
             self.log.debug('Skipping unmanaged service %s spec' % service_name)
             return False
         self.log.debug('Applying service %s spec' % service_name)
-        create_fns = {
-            'mon': self.mon_service.create,
-            'mgr': self.mgr_service.create,
-            'osd': self.create_osds,  # osds work a bit different.
-            'mds': self.mds_service.create,
-            'rgw': self.rgw_service.create,
-            'rbd-mirror': self.rbd_mirror_service.create,
-            'nfs': self.nfs_service.create,
-            'grafana': self.grafana_service.create,
-            'alertmanager': self.alertmanager_service.create,
-            'prometheus': self.prometheus_service.create,
-            'node-exporter': self.node_exporter_service.create,
-            'crash': self.crash_service.create,
-            'iscsi': self.iscsi_service.create,
-        }
-        config_fns = {
-            'mds': self.mds_service.config,
-            'rgw': self.rgw_service.config,
-            'nfs': self.nfs_service.config,
-            'iscsi': self.iscsi_service.config,
-        }
-        create_func = create_fns.get(daemon_type, None)
-        if not create_func:
-            self.log.debug('unrecognized service type %s' % daemon_type)
+
+        create_func = self._create_fn(daemon_type)
+        config_func = self._config_fn(daemon_type)
+
+        if daemon_type == 'osd':
+            create_func(spec)
+            # TODO: return True would result in a busy loop
             return False
-        config_func = config_fns.get(daemon_type, None)
 
         daemons = self.cache.get_daemons_by_service(service_name)
 
@@ -1706,9 +1718,6 @@ you may want to run:
         ).place()
 
         r = False
-
-        if daemon_type == 'osd':
-            return False if create_func(spec) else True # type: ignore
 
         # sanity check
         if daemon_type in ['mon', 'mgr'] and len(hosts) < 1:
