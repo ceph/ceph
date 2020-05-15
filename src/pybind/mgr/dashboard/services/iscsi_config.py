@@ -3,15 +3,11 @@ from __future__ import absolute_import
 
 import json
 
-from orchestrator import OrchestratorError
-
 try:
     from urlparse import urlparse
 except ImportError:
     from urllib.parse import urlparse
 
-from mgr_util import merge_dicts
-from .orchestrator import OrchClient
 from .. import mgr
 
 
@@ -76,19 +72,6 @@ class IscsiGatewaysConfig(object):
                     # or we will try to update automatically next time
                     continue
 
-    @staticmethod
-    def _load_config_from_orchestrator():
-        config = {'gateways': {}}  # type: dict
-        try:
-            instances = OrchClient.instance().services.list("iscsi")
-            for instance in instances:
-                config['gateways'][instance.hostname] = {
-                    'service_url': instance.service_url
-                }
-        except (RuntimeError, OrchestratorError, ImportError):
-            pass
-        return config
-
     @classmethod
     def _save_config(cls, config):
         mgr.set_store(_ISCSI_STORE_KEY, json.dumps(config))
@@ -110,9 +93,6 @@ class IscsiGatewaysConfig(object):
 
     @classmethod
     def remove_gateway(cls, name):
-        if name in cls._load_config_from_orchestrator()['gateways']:
-            raise ManagedByOrchestratorException()
-
         config = cls._load_config_from_store()
         if name not in config['gateways']:
             raise IscsiGatewayDoesNotExist(name)
@@ -122,10 +102,7 @@ class IscsiGatewaysConfig(object):
 
     @classmethod
     def get_gateways_config(cls):
-        orch_config = cls._load_config_from_orchestrator()
-        local_config = cls._load_config_from_store()
-
-        return {'gateways': merge_dicts(orch_config['gateways'], local_config['gateways'])}
+        return cls._load_config_from_store()
 
     @classmethod
     def get_gateway_config(cls, name):
