@@ -19,6 +19,8 @@ from teuthology.config import config as teuth_config
 from teuthology.exceptions import VersionNotFoundError
 from teuthology.job_status import get_status, set_status
 from teuthology.orchestra import cluster, remote, run
+# the below import with noqa is to workaround run.py which does not support multilevel submodule import
+from teuthology.task.internal.redhat import setup_cdn_repo, setup_base_repo, setup_additional_repo, setup_stage_cdn  # noqa
 
 log = logging.getLogger(__name__)
 

@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 
 
 def get_task(name):
+    # todo: support of submodules
     if '.' in name:
         module_name, task_name = name.split('.')
     else:

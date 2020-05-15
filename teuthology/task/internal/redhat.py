@@ -24,7 +24,7 @@ def setup_stage_cdn(ctx, config):
         raise ConfigError("Provide rhbuild attribute")
     teuthconfig.rhbuild = str(rhbuild)
     with parallel() as p:
-        for remote in ctx.cluster.remotes.iterkeys():
+        for remote in ctx.cluster.remotes.keys():
             if remote.os.name == 'rhel':
                 log.info("subscribing stage cdn on : %s", remote.shortname)
                 p.spawn(_subscribe_stage_cdn, remote)
@@ -32,7 +32,7 @@ def setup_stage_cdn(ctx, config):
         yield
     finally:
         with parallel() as p:
-            for remote in ctx.cluster.remotes.iterkeys():
+            for remote in ctx.cluster.remotes.keys():
                 p.spawn(_unsubscribe_stage_cdn, remote)
 
 
@@ -187,7 +187,7 @@ def _setup_latest_repo(ctx, config):
                 # create base repo
                 if base_url.startswith('http'):
                     repo_to_use = _get_repos_to_use(base_url, repos)
-                    base_repo_file = NamedTemporaryFile(delete=False)
+                    base_repo_file = NamedTemporaryFile(mode='w', delete=False)
                     _create_temp_repo_file(repo_to_use, base_repo_file)
                     remote.put_file(base_repo_file.name, base_repo_file.name)
                     remote.run(args=['sudo', 'cp', base_repo_file.name,
