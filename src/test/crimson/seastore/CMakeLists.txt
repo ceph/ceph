@@ -33,3 +33,5 @@ target_link_libraries(
   unittest_seastore_cache
   ${CMAKE_DL_LIBS}
   crimson-seastore)
+
+add_subdirectory(onode_tree)
