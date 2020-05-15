@@ -132,14 +132,20 @@ class VolumeClient(object):
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
+        size       = kwargs['size']
+        pool       = kwargs['pool_layout']
+        uid        = kwargs['uid']
+        gid        = kwargs['gid']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     try:
-                        with open_subvol(fs_handle, self.volspec, group, subvolname):
-                            # idempotent creation -- valid.
-                            pass
+                        with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                            # idempotent creation -- valid. Attributes set is supported.
+                            uid = uid if uid else subvolume.uid
+                            gid = gid if gid else subvolume.gid
+                            subvolume.set_attrs(subvolume.path, size, False, pool, uid, gid)
                     except VolumeException as ve:
                         if ve.errno == -errno.ENOENT:
                             self._create_subvolume(fs_handle, volname, group, subvolname, **kwargs)
