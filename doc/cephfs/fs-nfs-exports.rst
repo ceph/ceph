@@ -50,11 +50,10 @@ Create CephFS Export
 
 .. code:: bash
 
-    $ ceph nfs export create <type=cephfs> <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
 
 It creates export rados objects containing the export block. Here binding is
-the pseudo root name and type is export type. Currently only CephFS is
-supported.
+the pseudo root name and type is export type.
 
 Delete CephFS Export
 ====================
