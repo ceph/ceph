@@ -294,10 +294,7 @@ class FSExport(object):
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
         self._update_common_conf(export.cluster_id, export.export_id)
 
-    def create_export(self, export_type, fs_name, cluster_id, pseudo_path, read_only, path):
-        if export_type != 'cephfs':
-            return -errno.EINVAL,"", f"Invalid export type: {export_type}"
-
+    def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
         if not self.check_fs(fs_name):
             return -errno.EINVAL,"", "Invalid CephFS name"
 
