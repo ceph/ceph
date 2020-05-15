@@ -2,7 +2,7 @@ import datetime
 from copy import copy
 import json
 import logging
-from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple
+from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set
 
 import six
 
@@ -171,7 +171,7 @@ class HostCache():
         self.osdspec_previews_refresh_queue = [] # type: List[str]
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
         self.last_host_check = {}      # type: Dict[str, datetime.datetime]
-        self.loading_osdspec_preview = {}  # type: Dict[str, bool]
+        self.loading_osdspec_preview = set()  # type: Set[str]
 
     def load(self):
         # type: () -> None
@@ -193,7 +193,6 @@ class HostCache():
                 self.daemon_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.osdspec_previews[host] = []
-                self.loading_osdspec_preview[host] = False
                 self.devices[host] = []
                 self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
@@ -203,7 +202,7 @@ class HostCache():
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
                 self.networks[host] = j.get('networks', {})
-                self.osdspec_previews[host] = j.get('osdspec_previews', [])
+                self.osdspec_previews[host] = j.get('osdspec_previews', {})
 
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
@@ -223,19 +222,6 @@ class HostCache():
                 self.mgr.log.warning('unable to load cached state for %s: %s' % (
                     host, e))
                 pass
-
-    def update_osdspec_previews(self, search_host: str = ''):
-        # Set global 'pending' flag for host
-        self.loading_osdspec_preview[search_host] = True
-        previews = []
-        # query OSDSpecs for host <search host> and generate/get the preview
-        for preview in self.mgr.osd_service.get_previews(search_host):
-            # There can be multiple previews for one host due to multiple OSDSpecs.
-            previews.append(preview)
-        self.mgr.log.debug(f"Loading OSDSpec previews to HostCache")
-        self.osdspec_previews[search_host] = previews
-        # Unset global 'pending' flag for host
-        self.loading_osdspec_preview[search_host] = False
 
     def update_host_daemons(self, host, dm):
         # type: (str, Dict[str, orchestrator.DaemonDescription]) -> None
@@ -324,7 +310,7 @@ class HostCache():
         if host in self.osdspec_previews:
             del self.osdspec_previews[host]
         if host in self.loading_osdspec_preview:
-            del self.loading_osdspec_preview[host]
+            self.loading_osdspec_preview.remove(host)
         if host in self.networks:
             del self.networks[host]
         if host in self.last_daemon_update:

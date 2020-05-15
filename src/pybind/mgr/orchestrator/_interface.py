@@ -949,11 +949,17 @@ class Orchestrator(object):
         """ Update OSD cluster """
         raise NotImplementedError()
 
-    def set_unmanaged_flag(self, service_name: str, unmanaged_flag: bool) -> HandleCommandResult:
+    def set_unmanaged_flag(self,
+                           unmanaged_flag: bool,
+                           service_type: str = 'osd',
+                           service_name=None
+                           ) -> HandleCommandResult:
         raise NotImplementedError()
 
-    def preview_drivegroups(self, drive_group_name: Optional[str] = 'osd',
-                            dg_specs: Optional[List[DriveGroupSpec]] = None) -> List[Dict[str, Dict[Any, Any]]]:
+    def preview_osdspecs(self,
+                         osdspec_name: Optional[str] = 'osd',
+                         osdspecs: Optional[List[DriveGroupSpec]] = None
+                         ) -> Completion:
         """ Get a preview for OSD deployments """
         raise NotImplementedError()
 
