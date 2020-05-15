@@ -505,7 +505,7 @@ TEST_F(TestCls2PCQueue, Cleanup)
       }
     });
   }
- 
+
   auto cleaned_reservations = 0U;
   auto committed_reservations = 0U;
   auto aborter = std::thread([this, &queue_name, &stale_time, &cleaned_reservations, &committed_reservations] {
@@ -544,7 +544,7 @@ TEST_F(TestCls2PCQueue, Cleanup)
   aborter.join();
 
   ASSERT_GT(cleaned_reservations, 0);
-  ASSERT_GT(committed_reservations, 0);
+  ASSERT_EQ(committed_reservations + cleaned_reservations, number_of_ops*max_workers);
   cls_2pc_reservations reservations;
   ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
   ASSERT_EQ(reservations.size(), 0);
