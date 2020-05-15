@@ -306,17 +306,9 @@ ostream& operator<<(ostream& out, const CInode& in)
   return out;
 }
 
-ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si)
-{
-  out << "{scrub_start_version: " << si.scrub_start_version
-      << ", scrub_start_stamp: " << si.scrub_start_stamp
-      << ", last_scrub_version: " << si.last_scrub_version
-      << ", last_scrub_stamp: " << si.last_scrub_stamp;
-  return out;
-}
-
 CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l) :
-    mdcache(c), first(f), last(l), item_dirty(this),
+    mdcache(c), first(f), last(l),
+    item_dirty(this),
     item_caps(this),
     item_open_file(this),
     item_dirty_parent(this),
@@ -4819,32 +4811,10 @@ next:
     }
 
     bool check_dirfrag_rstats() {
-      MDSGatherBuilder gather(g_ceph_context);
-      frag_vec_t leaves;
-      in->dirfragtree.get_leaves(leaves);
-      for (const auto& leaf : leaves) {
-        CDir *dir = in->get_or_open_dirfrag(in->mdcache, leaf);
-	dir->scrub_info();
-	if (!dir->scrub_infop->header)
-	  dir->scrub_infop->header = in->scrub_infop->header;
-        if (dir->is_complete()) {
-	  dir->scrub_local();
-	} else {
-	  dir->scrub_infop->need_scrub_local = true;
-	  dir->fetch(gather.new_sub(), false);
-	}
-      }
-      if (gather.has_subs()) {
-        gather.set_finisher(get_internal_callback(DIRFRAGS));
-        gather.activate();
-        return false;
-      } else {
-        return immediate(DIRFRAGS, 0);
-      }
+      return immediate(DIRFRAGS, 0);
     }
 
     bool _dirfrags(int rval) {
-      int frags_errors = 0;
       // basic reporting setup
       results->raw_stats.checked = true;
       results->raw_stats.ondisk_read_retval = rval;
@@ -4865,18 +4835,6 @@ next:
 	ceph_assert(dir->get_version() > 0);
 	nest_info.add(dir->get_fnode()->accounted_rstat);
 	dir_info.add(dir->get_fnode()->accounted_fragstat);
-	if (dir->scrub_infop->pending_scrub_error) {
-	  dir->scrub_infop->pending_scrub_error = false;
-	  if (dir->scrub_infop->header->get_repair()) {
-            results->raw_stats.repaired = true;
-	    results->raw_stats.error_str
-	      << "dirfrag(" << p.first << ") has bad stats (will be fixed); ";
-	  } else {
-	    results->raw_stats.error_str
-	      << "dirfrag(" << p.first << ") has bad stats; ";
-	  }
-	  frags_errors++;
-	}
       }
       nest_info.rsubdirs++; // it gets one to account for self
       if (const sr_t *srnode = in->get_projected_srnode(); srnode)
@@ -4896,8 +4854,6 @@ next:
 	}
 	goto next;
       }
-      if (frags_errors > 0)
-	goto next;
 
       results->raw_stats.passed = true;
 next:
@@ -5127,11 +5083,11 @@ void CInode::scrub_info_create() const
   CInode *me = const_cast<CInode*>(this);
   const auto& pi = me->get_projected_inode();
 
-  scrub_info_t *si = new scrub_info_t();
-  si->scrub_start_stamp = si->last_scrub_stamp = pi->last_scrub_stamp;
-  si->scrub_start_version = si->last_scrub_version = pi->last_scrub_version;
+  std::unique_ptr<scrub_info_t> si(new scrub_info_t());
+  si->last_scrub_stamp = pi->last_scrub_stamp;
+  si->last_scrub_version = pi->last_scrub_version;
 
-  me->scrub_infop = si;
+  me->scrub_infop.swap(si);
 }
 
 void CInode::scrub_maybe_delete_info()
@@ -5139,116 +5095,20 @@ void CInode::scrub_maybe_delete_info()
   if (scrub_infop &&
       !scrub_infop->scrub_in_progress &&
       !scrub_infop->last_scrub_dirty) {
-    delete scrub_infop;
-    scrub_infop = NULL;
+    scrub_infop.reset();
   }
 }
 
-void CInode::scrub_initialize(CDentry *scrub_parent,
-			      ScrubHeaderRef& header,
+void CInode::scrub_initialize(ScrubHeaderRef& header,
 			      MDSContext *f)
 {
   dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
-  if (scrub_is_in_progress()) {
-    dout(20) << __func__ << " inode moved during scrub, reinitializing "
-	     << dendl;
-    ceph_assert(scrub_infop->scrub_parent);
-    CDentry *dn = scrub_infop->scrub_parent;
-    CDir *dir = dn->dir;
-    dn->put(CDentry::PIN_SCRUBPARENT);
-    ceph_assert(dir->scrub_infop && dir->scrub_infop->directory_scrubbing);
-    dir->scrub_infop->directories_scrubbing.erase(dn->key());
-    dir->scrub_infop->others_scrubbing.erase(dn->key());
-  }
+
   scrub_info();
-  if (!scrub_infop)
-    scrub_infop = new scrub_info_t();
-
-  if (get_projected_inode()->is_dir()) {
-    // fill in dirfrag_stamps with initial state
-    frag_vec_t leaves;
-    dirfragtree.get_leaves(leaves);
-    for (const auto& leaf : leaves) {
-      if (header->get_force())
-	scrub_infop->dirfrag_stamps[leaf].reset();
-      else
-	scrub_infop->dirfrag_stamps[leaf];
-    }
-  }
-
-  if (scrub_parent)
-    scrub_parent->get(CDentry::PIN_SCRUBPARENT);
-  scrub_infop->scrub_parent = scrub_parent;
   scrub_infop->on_finish = f;
   scrub_infop->scrub_in_progress = true;
-  scrub_infop->children_scrubbed = false;
   scrub_infop->header = header;
-
-  scrub_infop->scrub_start_version = get_version();
-  scrub_infop->scrub_start_stamp = ceph_clock_now();
   // right now we don't handle remote inodes
-}
-
-int CInode::scrub_dirfrag_next(frag_t* out_dirfrag)
-{
-  dout(20) << __func__ << dendl;
-  ceph_assert(scrub_is_in_progress());
-
-  if (!is_dir()) {
-    return -ENOTDIR;
-  }
-
-  std::map<frag_t, scrub_stamp_info_t>::iterator i =
-      scrub_infop->dirfrag_stamps.begin();
-
-  while (i != scrub_infop->dirfrag_stamps.end()) {
-    if (i->second.scrub_start_version < scrub_infop->scrub_start_version) {
-      i->second.scrub_start_version = get_projected_version();
-      i->second.scrub_start_stamp = ceph_clock_now();
-      *out_dirfrag = i->first;
-      dout(20) << " return frag " << *out_dirfrag << dendl;
-      return 0;
-    }
-    ++i;
-  }
-
-  dout(20) << " no frags left, ENOENT " << dendl;
-  return ENOENT;
-}
-
-void CInode::scrub_dirfrags_scrubbing(frag_vec_t* out_dirfrags)
-{
-  ceph_assert(out_dirfrags != NULL);
-  ceph_assert(scrub_infop != NULL);
-
-  out_dirfrags->clear();
-  std::map<frag_t, scrub_stamp_info_t>::iterator i =
-      scrub_infop->dirfrag_stamps.begin();
-
-  while (i != scrub_infop->dirfrag_stamps.end()) {
-    if (i->second.scrub_start_version >= scrub_infop->scrub_start_version) {
-      if (i->second.last_scrub_version < scrub_infop->scrub_start_version)
-        out_dirfrags->push_back(i->first);
-    } else {
-      return;
-    }
-
-    ++i;
-  }
-}
-
-void CInode::scrub_dirfrag_finished(frag_t dirfrag)
-{
-  dout(20) << __func__ << " on frag " << dirfrag << dendl;
-  ceph_assert(scrub_is_in_progress());
-
-  std::map<frag_t, scrub_stamp_info_t>::iterator i =
-      scrub_infop->dirfrag_stamps.find(dirfrag);
-  ceph_assert(i != scrub_infop->dirfrag_stamps.end());
-
-  scrub_stamp_info_t &si = i->second;
-  si.last_scrub_stamp = si.scrub_start_stamp;
-  si.last_scrub_version = si.scrub_start_version;
 }
 
 void CInode::scrub_aborted(MDSContext **c) {
@@ -5258,42 +5118,18 @@ void CInode::scrub_aborted(MDSContext **c) {
   *c = nullptr;
   std::swap(*c, scrub_infop->on_finish);
 
-  if (scrub_infop->scrub_parent) {
-    CDentry *dn = scrub_infop->scrub_parent;
-    scrub_infop->scrub_parent = NULL;
-    dn->dir->scrub_dentry_finished(dn);
-    dn->put(CDentry::PIN_SCRUBPARENT);
-  }
-
-  delete scrub_infop;
-  scrub_infop = nullptr;
+  scrub_infop->scrub_in_progress = false;
+  scrub_maybe_delete_info();
 }
 
 void CInode::scrub_finished(MDSContext **c) {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
-  for (std::map<frag_t, scrub_stamp_info_t>::iterator i =
-      scrub_infop->dirfrag_stamps.begin();
-      i != scrub_infop->dirfrag_stamps.end();
-      ++i) {
-    if(i->second.last_scrub_version != i->second.scrub_start_version) {
-      derr << i->second.last_scrub_version << " != "
-        << i->second.scrub_start_version << dendl;
-    }
-    ceph_assert(i->second.last_scrub_version == i->second.scrub_start_version);
-  }
 
-  scrub_infop->last_scrub_version = scrub_infop->scrub_start_version;
-  scrub_infop->last_scrub_stamp = scrub_infop->scrub_start_stamp;
+  scrub_infop->last_scrub_version = get_version();
+  scrub_infop->last_scrub_stamp = ceph_clock_now();
   scrub_infop->last_scrub_dirty = true;
   scrub_infop->scrub_in_progress = false;
-
-  if (scrub_infop->scrub_parent) {
-    CDentry *dn = scrub_infop->scrub_parent;
-    scrub_infop->scrub_parent = NULL;
-    dn->dir->scrub_dentry_finished(dn);
-    dn->put(CDentry::PIN_SCRUBPARENT);
-  }
 
   *c = scrub_infop->on_finish;
   scrub_infop->on_finish = NULL;
