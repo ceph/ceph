@@ -446,6 +446,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     if r:
                         failures.append(r)
 
+                if self.cache.host_needs_osdspec_preview_refresh(host):
+                    self.log.debug(f"refreshing OSDSpec previews for {host}")
+                    r = self._refresh_host_osdspec_previews(host)
+                    if r:
+                        failures.append(r)
+
             health_changed = False
             if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
                 del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
@@ -471,8 +477,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 health_changed = True
             if health_changed:
                 self.set_health_checks(self.health_checks)
-
-
 
             self._check_for_strays()
 
@@ -1042,6 +1046,12 @@ you may want to run:
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
 
+    def _refresh_host_osdspec_previews(self, host) -> bool:
+        self.cache.update_osdspec_previews(host)
+        self.cache.save_host(host)
+        self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
+        return True
+
     def _refresh_host_daemons(self, host):
         try:
             out, err, code = self._run_cephadm(
@@ -1123,6 +1133,7 @@ you may want to run:
             host, len(devices), len(networks)))
         devices = inventory.Devices.from_json(devices)
         self.cache.update_host_devices_networks(host, devices.devices, networks)
+        self.cache.update_osdspec_previews(host)
         self.cache.save_host(host)
         return None
 
@@ -1315,6 +1326,7 @@ you may want to run:
     @trivial_completion
     def remove_service(self, service_name):
         self.log.info('Remove service %s' % service_name)
+        self._trigger_preview_refresh(service_name=service_name)
         found = self.spec_store.rm(service_name)
         if found:
             self._kick_serve_loop()
@@ -1402,18 +1414,70 @@ you may want to run:
                 r[str(osd_id)] = o.get('uuid', '')
         return r
 
+    def resolve_hosts_for_osdspecs(self,
+                                   specs: Optional[List[DriveGroupSpec]] = None,
+                                   service_name: Optional[str] = None
+                                   ) -> List[str]:
+        osdspecs = []
+        if service_name:
+            self.log.debug(f"Looking for OSDSpec with service_name: {service_name}")
+            osdspecs = self.spec_store.find(service_name=service_name)
+            osdspecs = [cast(DriveGroupSpec, spec) for spec in osdspecs]
+            self.log.debug(f"Found OSDSpecs: {osdspecs}")
+        if specs:
+            osdspecs = [cast(DriveGroupSpec, spec) for spec in specs]
+        if not service_name and not specs:
+            # if neither parameters are fulfilled, search for all available osdspecs
+            osdspecs = self.spec_store.find(service_name='osd')
+            self.log.debug(f"Found OSDSpecs: {osdspecs}")
+        if not osdspecs:
+            self.log.debug("No OSDSpecs found")
+            return []
+        return sum([spec.placement.pattern_matches_hosts(self.cache.get_hosts()) for spec in osdspecs], [])
+
+    def resolve_osdspecs_for_host(self, host):
+        matching_specs = []
+        self.log.debug(f"Finding OSDSpecs for host: <{host}>")
+        for spec in self.spec_store.find('osd'):
+            if host in spec.placement.pattern_matches_hosts(self.cache.get_hosts()):
+                self.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
+                matching_specs.append(spec)
+        return matching_specs
+
+    def _trigger_preview_refresh(self,
+                                 specs: Optional[List[DriveGroupSpec]] = None,
+                                 service_name: Optional[str] = None):
+        refresh_hosts = self.resolve_hosts_for_osdspecs(specs=specs, service_name=service_name)
+        for host in refresh_hosts:
+            self.log.info(f"Marking host: {host} for OSDSpec preview refresh.")
+            self.cache.osdspec_previews_refresh_queue.append(host)
+
     @trivial_completion
     def apply_drivegroups(self, specs: List[DriveGroupSpec]):
+        self._trigger_preview_refresh(specs=specs)
         return [self._apply(spec) for spec in specs]
 
     @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
         return self.osd_service.create_from_spec(drive_group)
 
-    # @trivial_completion
-    def preview_drivegroups(self, drive_group_name: Optional[str] = None,
-                            dg_specs: Optional[List[DriveGroupSpec]] = None) -> List[Dict[str, Dict[Any, Any]]]:
-        return self.osd_service.preview_drivegroups(drive_group_name, dg_specs)
+    def preview_osdspecs(self,
+                         osdspec_name: Optional[str] = None,
+                         osdspecs: Optional[List[DriveGroupSpec]] = None
+                         ) -> Dict[str, List[Dict[str, Any]]]:
+        matching_hosts = self.resolve_hosts_for_osdspecs(specs=osdspecs, service_name=osdspec_name)
+        if not matching_hosts:
+            return {'n/a': [{'error': True,
+                             'message': 'No OSDSpec or matching hosts found.'}]}
+        # Is any host still loading previews
+        pending_flags = {f for (h, f) in self.cache.loading_osdspec_preview.items() if h in matching_hosts}
+        if any(pending_flags):
+            # Report 'pending' when any of the matching hosts is still loading previews (flag is True)
+            return {'n/a': [{'error': True,
+                             'message': 'Preview data is being generated.. '
+                                        'Please try again in a bit.'}]}
+        # drop all keys that are not in search_hosts and return preview struct
+        return {k: v for (k, v) in self.cache.osdspec_previews.items() if k in matching_hosts}
 
     def _calc_daemon_deps(self, daemon_type, daemon_id):
         need = {
