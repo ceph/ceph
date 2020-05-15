@@ -1,8 +1,8 @@
 import logging
-from typing import  TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
 
 if TYPE_CHECKING:
@@ -17,6 +17,10 @@ class CephadmService:
     """
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
+
+    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+        """The post actions needed to be done after daemons are checked"""
+        raise NotImplementedError()
 
 
 class MonService(CephadmService):
