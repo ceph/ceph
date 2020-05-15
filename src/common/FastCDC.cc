@@ -83,22 +83,25 @@ void FastCDC::calc_chunks(
   size_t pos = 0;
   while (pos < len) {
     size_t cstart = pos;
-
     uint64_t fp = 0;
+
+    // are we left with a <= min chunk?
+    if (len - pos <= (1ul << min_bits)) {
+      chunks->push_back(std::pair<uint64_t,uint64_t>(pos, len - pos));
+      break;
+    }
 
     // skip forward to the min chunk size cut point (minus the window, so
     // we can initialize the rolling fingerprint).
-    pos = std::min(pos + (1 << min_bits) - window, len);
+    pos += (1 << min_bits) - window;
 
     // first fill the window
-    while (pos < std::min(window, len)) {
+    size_t max = pos + window;
+    while (pos < max) {
       fp = (fp << 1) ^ table[ptr[pos]];
       ++pos;
     }
-    if (pos >= len) {
-      chunks->push_back(std::pair<uint64_t,uint64_t>(cstart, pos - cstart));
-      break;
-    }
+    ceph_assert(pos < len);
 
     // find an end marker
     if (_scan(ptr, pos,
