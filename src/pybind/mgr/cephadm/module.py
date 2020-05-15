@@ -875,14 +875,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             executable_path))
         return executable_path
 
-    def _run_cephadm(self, host, entity, command, args,
-                     addr=None,
-                     stdin=None,
+    def _run_cephadm(self,
+                     host: str,
+                     entity: Optional[str],
+                     command: str,
+                     args: List[str],
+                     addr: Optional[str] = None,
+                     stdin: Optional[str] = None,
                      no_fsid=False,
                      error_ok=False,
-                     image=None,
-                     env_vars=None):
-        # type: (str, Optional[str], str, List[str], Optional[str], Optional[str], bool, bool, Optional[str], Optional[List[str]]) -> Tuple[List[str], List[str], int]
+                     image: Optional[str] = None,
+                     env_vars: Optional[List[str]] = None,
+                     ) -> Tuple[List[str], List[str], int]:
         """
         Run cephadm on the remote host with the given command + args
 
@@ -1563,11 +1567,18 @@ you may want to run:
             'keyring': keyring,
         }
 
-    def _create_daemon(self, daemon_type, daemon_id, host,
-                       keyring=None,
-                       extra_args=None, extra_config=None,
+    def _create_daemon(self,
+                       daemon_type: str,
+                       daemon_id: str,
+                       host: str,
+                       keyring: Optional[str] = None,
+                       extra_args: Optional[List[str]] = None,
+                       extra_config: Optional[Dict[str, Any]] = None,
                        reconfig=False,
-                       osd_uuid_map=None) -> str:
+                       osd_uuid_map: Optional[Dict[str, Any]] = None,
+                       redeploy=False,
+                       ) -> str:
+
         if not extra_args:
             extra_args = []
         if not extra_config:
@@ -1609,7 +1620,7 @@ you may want to run:
                     osd_uuid_map = self.get_osd_uuid_map()
                 osd_uuid = osd_uuid_map.get(daemon_id)
                 if not osd_uuid:
-                    raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
+                    raise OrchestratorError('osd.%s not in osdmap' % daemon_id)
                 extra_args.extend(['--osd-fsid', osd_uuid])
 
         if reconfig:
