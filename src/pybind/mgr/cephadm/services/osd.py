@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class OSDService(CephadmService):
-    def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
+    def create(self, drive_group: DriveGroupSpec) -> str:
         logger.debug(f"Processing DriveGroup {drive_group}")
         ret = []
         drive_group.osd_id_claims = self.find_destroyed_osds()
@@ -33,11 +33,13 @@ class OSDService(CephadmService):
             # env_vars = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             # disable this until https://github.com/ceph/ceph/pull/34835 is merged
             env_vars: List[str] = []
-            ret_msg = self.create(host, cmd, replace_osd_ids=drive_group.osd_id_claims.get(host, []), env_vars=env_vars)
+            ret_msg = self.create_single_host(
+                host, cmd, replace_osd_ids=drive_group.osd_id_claims.get(host, []), env_vars=env_vars
+            )
             ret.append(ret_msg)
         return ", ".join(ret)
         
-    def create(self, host: str, cmd: str, replace_osd_ids=None, env_vars: Optional[List[str]] = None) -> str:
+    def create_single_host(self, host: str, cmd: str, replace_osd_ids=None, env_vars: Optional[List[str]] = None) -> str:
         out, err, code = self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
 
         if code == 1 and ', it is already prepared' in '\n'.join(err):
