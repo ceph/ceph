@@ -75,7 +75,8 @@ Standard arguments:
                               assembling jobs from yaml fragments. This causes
                               <suite_branch> to be ignored for scheduling
                               purposes, but it will still be used for test
-                              running.
+                              running. The <suite_dir> must have `qa/suite`
+                              sub-directory.
   --validate-sha1 <bool>
                               Validate that git SHA1s passed to -S exist.
                               [default: true]
@@ -121,6 +122,11 @@ Scheduler arguments:
   --filter-all KEYWORDS       Only run jobs whose description contains each one
                               of the keywords in the comma separated keyword
                               string specified.
+  -F, --filter-fragments <bool>
+                              Check yaml fragments too if job description
+                              does not match the filters provided with
+                              options --filter, --filter-out, and --filter-all.
+                              [default: false]
   --archive-upload RSYNC_DEST Rsync destination to upload archives.
   --archive-upload-url URL    Public facing URL where archives are uploaded.
   --throttle SLEEP            When scheduling, wait SLEEP seconds between jobs.

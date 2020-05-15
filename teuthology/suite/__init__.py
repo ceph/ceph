@@ -78,7 +78,7 @@ def process_args(args):
             value = expand_short_repo_name(
                 value,
                 config.get_ceph_qa_suite_git_url())
-        elif key in ('validate_sha1'):
+        elif key in ('validate_sha1', 'filter_fragments'):
             value = strtobool(value)
         conf[key] = value
     return conf

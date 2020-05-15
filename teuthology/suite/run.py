@@ -21,7 +21,7 @@ from teuthology.orchestra.opsys import OS
 from teuthology.repo_utils import build_git_url
 
 from teuthology.suite import util
-from teuthology.suite.build_matrix import combine_path, build_matrix
+from teuthology.suite.build_matrix import build_matrix
 from teuthology.suite.placeholder import substitute_placeholders, dict_templ
 
 log = logging.getLogger(__name__)
@@ -363,34 +363,11 @@ class Run(object):
         jobs_to_schedule = []
         jobs_missing_packages = []
         for description, fragment_paths in configs:
-            base_frag_paths = [
-                util.strip_fragment_path(x) for x in fragment_paths
-            ]
             if limit > 0 and len(jobs_to_schedule) >= limit:
                 log.info(
                     'Stopped after {limit} jobs due to --limit={limit}'.format(
                         limit=limit))
                 break
-            # Break apart the filter parameter (one string) into comma
-            # separated components to be used in searches.
-            def matches(f):
-                if f in description:
-                    return True
-                if any(f in path for path in base_frag_paths):
-                    return True
-                return False
-            filter_all = self.args.filter_all
-            if filter_all:
-                if not all(matches(f) for f in filter_all):
-                    continue
-            filter_in = self.args.filter_in
-            if filter_in:
-                if not any(matches(f) for f in filter_in):
-                    continue
-            filter_out = self.args.filter_out
-            if filter_out:
-                if any(matches(f) for f in filter_out):
-                    continue
 
             raw_yaml = '\n'.join([open(a, 'r').read() for a in fragment_paths])
 
@@ -487,6 +464,7 @@ class Run(object):
                 log.info("pause between jobs : --throttle " + str(throttle))
                 time.sleep(int(throttle))
 
+
     def schedule_suite(self):
         """
         Schedule the suite-run. Returns the number of jobs scheduled.
@@ -501,10 +479,9 @@ class Run(object):
             self.base_config.suite.replace(':', '/'),
         ))
         log.debug('Suite %s in %s' % (suite_name, suite_path))
-        configs = [
-            (combine_path(suite_name, item[0]), item[1]) for item in
-            build_matrix(suite_path, subset=self.args.subset, seed=self.args.seed)
-        ]
+        configs = build_matrix(suite_path,
+                               subset=self.args.subset,
+                               seed=self.args.seed)
         log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
             suite_name, suite_path, len(configs)))
 
@@ -558,7 +535,14 @@ class Run(object):
         limit = self.args.newest
         while backtrack <= limit:
             jobs_missing_packages, jobs_to_schedule = \
-                self.collect_jobs(arch, configs, self.args.newest, job_limit)
+                self.collect_jobs(arch,
+                    util.filter_configs(configs,
+                        filter_in=self.args.filter_in,
+                        filter_out=self.args.filter_out,
+                        filter_all=self.args.filter_all,
+                        filter_fragments=self.args.filter_fragments,
+                        suite_name=suite_name),
+                                  self.args.newest, job_limit)
             if jobs_missing_packages and self.args.newest:
                 new_sha1 = \
                     util.find_git_parent('ceph', self.base_config.sha1)
