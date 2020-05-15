@@ -1344,7 +1344,8 @@ static ceph::spinlock debug_lock;
 	if (unlikely(raw && !raw->is_shareable())) {
 	  auto* clone = ptr_node::copy_hypercombined(*curbuf);
 	  curbuf = bl._buffers.erase_after_and_dispose(curbuf_prev);
-	  bl._buffers.insert_after(curbuf_prev++, *clone);
+	  bl._buffers.insert_after(curbuf_prev, *clone);
+	  ++curbuf_prev;
 	} else {
 	  curbuf_prev = curbuf++;
 	}
