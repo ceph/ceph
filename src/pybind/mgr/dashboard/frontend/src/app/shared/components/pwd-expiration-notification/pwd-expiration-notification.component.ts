@@ -13,6 +13,7 @@ export class PwdExpirationNotificationComponent implements OnInit {
   alertType: string;
   expirationDays: number;
   pwdExpirationSettings: CdPwdExpirationSettings;
+  displayNotification = false;
 
   constructor(
     private settingsService: SettingsService,
@@ -30,7 +31,7 @@ export class PwdExpirationNotificationComponent implements OnInit {
         } else {
           this.alertType = 'warning';
         }
-
+        this.displayNotification = true;
         this.authStorageService.isPwdDisplayedSource.next(true);
       }
     });
@@ -44,5 +45,6 @@ export class PwdExpirationNotificationComponent implements OnInit {
 
   close() {
     this.authStorageService.isPwdDisplayedSource.next(false);
+    this.displayNotification = false;
   }
 }

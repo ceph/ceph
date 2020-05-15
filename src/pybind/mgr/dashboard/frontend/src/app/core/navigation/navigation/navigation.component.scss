@@ -10,7 +10,7 @@
     border-top: 4px solid $color-nav-top-bar;
 
     &.isPwdDisplayed {
-      top: $pwd-exp-height;
+      top: $top-notification-height;
     }
 
     .navbar-brand,
@@ -255,22 +255,25 @@ $sidebar-width: 200px;
 }
 
 /* ---------------------------------------------------
-    isPwdDisplayed
+    topNotification settings
 --------------------------------------------------- */
-:host.isPwdDisplayed {
-  .cd-navbar-top .cd-navbar-brand {
-    top: $pwd-exp-height;
-  }
 
-  #sidebar {
-    top: $navbar-height + $pwd-exp-height;
-  }
+@for $i from 1 through 2 {
+  :host.top-notification-#{$i} {
+    .cd-navbar-top .cd-navbar-brand {
+      top: $top-notification-height * $i;
+    }
 
-  #content {
-    top: $navbar-height + $pwd-exp-height;
-  }
+    #sidebar {
+      top: $navbar-height + $top-notification-height * $i;
+    }
 
-  cd-notifications-sidebar {
-    top: $navbar-height + $pwd-exp-height + 10px;
+    #content {
+      top: $navbar-height + $top-notification-height * $i;
+    }
+
+    cd-notifications-sidebar {
+      top: $navbar-height + $top-notification-height * $i + 10px;
+    }
   }
 }

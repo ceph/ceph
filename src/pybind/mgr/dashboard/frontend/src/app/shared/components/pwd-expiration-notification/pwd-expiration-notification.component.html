@@ -1,6 +1,6 @@
 <alert class="no-margin-bottom"
        type="{{ alertType }}"
-       *ngIf="expirationDays != null && expirationDays <= pwdExpirationSettings.pwdExpirationWarning1"
+       *ngIf="displayNotification"
        [dismissible]="true"
        (onClose)="close($event)">
   <div *ngIf="expirationDays === 0"
