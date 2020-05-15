@@ -2,6 +2,7 @@ import logging
 import os
 from typing import List, Any, Tuple, Dict
 
+from orchestrator import DaemonDescription
 from cephadm.services.cephadmservice import CephadmService
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
 
@@ -103,6 +104,19 @@ datasources:
             }
         }
         return config_file, sorted(deps)
+
+    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+        # make sure the dashboard [does not] references grafana
+        try:
+            current_url = self.mgr.get_module_option_ex('dashboard', 'GRAFANA_API_URL')
+            host = daemon_descrs[0].hostname
+            url = f'https://{self.mgr.inventory.get_addr(host)}:3000'
+            if current_url != url:
+                logger.info('Setting dashboard grafana config to %s' % url)
+                self.mgr.set_module_option_ex('dashboard', 'GRAFANA_API_URL', url)
+                # FIXME: is it a signed cert??
+        except Exception as e:
+            logger.debug('got exception fetching dashboard grafana state: %s', e)
 
 
 class AlertmanagerService(CephadmService):

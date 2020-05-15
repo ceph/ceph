@@ -1,8 +1,11 @@
 import json
 import logging
+from typing import List, cast
 
+from mgr_module import MonCommandFailed
 from ceph.deployment.service_spec import IscsiServiceSpec
 
+from orchestrator import DaemonDescription
 from .cephadmservice import CephadmService
 from .. import utils
 
@@ -68,3 +71,40 @@ class IscsiService(CephadmService):
         extra_config = {'iscsi-gateway.cfg': igw_conf}
         return self.mgr._create_daemon('iscsi', igw_id, host, keyring=keyring,
                                    extra_config=extra_config)
+
+    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+        try:
+            _, out, _ = self.mgr.check_mon_command({
+                'prefix': 'dashboard iscsi-gateway-list'
+            })
+        except MonCommandFailed as e:
+            logger.warning('Failed to get existing iSCSI gateways from the Dashboard: %s', e)
+            return
+
+        gateways = json.loads(out)['gateways']
+        for dd in daemon_descrs:
+            spec = cast(IscsiServiceSpec,
+                        self.mgr.spec_store.specs.get(dd.service_name(), None))
+            if not spec:
+                logger.warning('No ServiceSpec found for %s', dd)
+                continue
+            if not all([spec.api_user, spec.api_password]):
+                reason = 'api_user or api_password is not specified in ServiceSpec'
+                logger.warning(
+                    'Unable to add iSCSI gateway to the Dashboard for %s: %s', dd, reason)
+                continue
+            host = self.mgr.inventory.get_addr(dd.hostname)
+            service_url = 'http://{}:{}@{}:{}'.format(
+                spec.api_user, spec.api_password, host, spec.api_port or '5000')
+            gw = gateways.get(dd.hostname)
+            if not gw or gw['service_url'] != service_url:
+                try:
+                    logger.info('Adding iSCSI gateway %s to Dashboard', service_url)
+                    _, out, _ = self.mgr.check_mon_command({
+                        'prefix': 'dashboard iscsi-gateway-add',
+                        'service_url': service_url,
+                        'name': dd.hostname
+                    })
+                except MonCommandFailed as e:
+                    logger.warning(
+                        'Failed to add iSCSI gateway %s to the Dashboard: %s', service_url, e)
