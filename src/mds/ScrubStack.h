@@ -141,7 +141,7 @@ private:
 
   friend class C_InodeValidated;
 
-  void _enqueue(MDSCacheObject *obj, CDentry *parent, ScrubHeaderRef& header,
+  void _enqueue(MDSCacheObject *obj, ScrubHeaderRef& header,
 		MDSContext *on_finish, bool top);
   /**
    * Remove the inode/dirfrag from the stack.
@@ -169,59 +169,28 @@ private:
 			    const CInode::validated_data &result);
 
   /**
-   * Make progress on scrubbing a directory-representing dirfrag and
-   * its children..
+   * Scrub a directory inode. It queues child dirfrags, then does
+   * final scrub of the inode.
    *
-   * 1) Select the next dirfrag which hasn't been scrubbed, and make progress
-   * on it if possible.
-   *
-   * 2) If not, move on to the next dirfrag and start it up, if any.
-   *
-   * 3) If waiting for results from dirfrag scrubs, do nothing.
-   *
-   * 4) If all dirfrags have been scrubbed, scrub my inode.
-   *
-   * @param in The CInode to scrub as a directory
+   * @param in The directory indoe to scrub
    * @param added_children set to true if we pushed some of our children
-   * onto the ScrubStack
-   * remaining to start scrubbing.
-   * @param done set to true if we and all our children have finished scrubbing
+   * @param done set to true if we started to do final scrub
    */
   void scrub_dir_inode(CInode *in, bool *added_children, bool *done);
   /**
-   * Make progress on scrubbing a dirfrag. It may return after each of the
-   * following steps, but will report making progress on each one.
+   * Scrub a dirfrag. It queues child dentries, then does final
+   * scrub of the dirfrag.
    *
-   * 1) enqueues the next unscrubbed child directory dentry at the
-   * top of the stack.
-   *
-   * 2) Initiates a scrub on the next unscrubbed file dentry
-   *
-   * If there are scrubs currently in progress on child dentries, no more child
-   * dentries to scrub, and this function is invoked, it will report no
-   * progress. Try again later.
-   *
+   * @param dir The dirfrag to scrub
+   * @param done set to true if we started to do final scrub
    */
-  void scrub_dirfrag(CDir *dir, bool *added_children, bool *done);
+  void scrub_dirfrag(CDir *dir, bool *done);
   /**
    * Scrub a directory-representing dentry.
    *
    * @param in The directory inode we're doing final scrub on.
    */
   void scrub_dir_inode_final(CInode *in);
-
-  /**
-   * Get a CDir into memory, and return it if it's already complete.
-   * Otherwise, fetch it and kick off scrubbing when done.
-   *
-   * @param in The Inode to get the next directory from
-   * @param new_dir The CDir we're returning to you. NULL if
-   * not ready yet or there aren't any.
-   * @returns false if you have to wait, true if there's no work
-   * left to do (we returned it, or there are none left in this inode).
-   */
-  bool get_next_cdir(CInode *in, CDir **new_dir);
-
   /**
    * Set scrub state
    * @param next_state State to move the scrub to.
