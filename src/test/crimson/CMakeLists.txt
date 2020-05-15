@@ -55,3 +55,4 @@ add_executable(unittest_seastar_lru
 add_ceph_unittest(unittest_seastar_lru --memory 256M --smp 1)
 target_link_libraries(unittest_seastar_lru crimson GTest::Main)
 
+add_subdirectory(seastore)
