@@ -234,6 +234,9 @@ class IscsiService(CephadmService):
         api_user = {spec.api_user or ''}
         api_password = {spec.api_password or ''}
         api_secure = {api_secure}
+        log_to_stderr = True
+        log_to_stderr_prefix = debug
+        log_to_file = False
         """
         extra_config = {'iscsi-gateway.cfg': igw_conf}
         return self.mgr._create_daemon('iscsi', igw_id, host, keyring=keyring,
