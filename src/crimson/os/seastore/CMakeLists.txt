@@ -10,6 +10,8 @@ add_library(crimson-seastore
   lba_manager/btree/btree_lba_manager.cc
   lba_manager/btree/lba_btree_node_impl.cc
   onode.cc
+  onode_manager/simple-fltree/onode_delta.cc
+  onode_manager/simple-fltree/onode_node.cc
   seastore.cc
   root_block.cc
 	)
