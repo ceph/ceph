@@ -13,7 +13,7 @@ public:
   virtual ~CDC() = default;
 
   virtual void calc_chunks(
-    ceph::buffer::list& inputdata,
+    const bufferlist& inputdata,
     std::vector<std::pair<uint64_t, uint64_t>> *chunks) = 0;
 
   virtual void set_target_bits(int bits, int windowbits = 2) = 0;

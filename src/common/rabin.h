@@ -50,9 +50,10 @@ public:
   }
 
   void calc_chunks(
-    ceph::buffer::list& inputdata,
+    const ceph::buffer::list& inputdata,
     std::vector<std::pair<uint64_t, uint64_t>> *chunks) override {
-    do_rabin_chunks(inputdata, *chunks);
+    bufferlist b = inputdata;
+    do_rabin_chunks(b, *chunks);
   }
 
   int do_rabin_chunks(ceph::buffer::list& inputdata,
