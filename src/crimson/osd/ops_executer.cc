@@ -564,11 +564,13 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
           // the sole purpose of this chaining is to pass `next` to 2nd
           // stage altogether with items
           logger().debug("do_pgnls_common: 1st done");
-          return seastar::make_ready_future<decltype(items), decltype(next)>(
-            std::move(items), std::move(next));
+          return seastar::make_ready_future<
+            std::tuple<std::vector<hobject_t>, hobject_t>>(
+              std::make_tuple(std::move(items), std::move(next)));
       });
   }).then(
-    [pg_end, filter] (const std::vector<hobject_t>& items, auto next) {
+    [pg_end, filter] (auto&& ret) {
+      auto& [items, next] = ret;
       auto is_matched = [] (const auto& obj) {
         return !obj.is_min();
       };
