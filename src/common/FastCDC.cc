@@ -87,7 +87,7 @@ static inline bool _scan(
 }
 
 void FastCDC::calc_chunks(
-  bufferlist& bl,
+  const bufferlist& bl,
   std::vector<std::pair<uint64_t, uint64_t>> *chunks)
 {
   if (bl.length() == 0) {
