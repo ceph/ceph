@@ -64,7 +64,7 @@ static inline bool _scan(
   size_t& pos,
   size_t max,   // how much to read
   uint64_t& fp, // fingerprint
-  uint64_t mask, uint64_t *table)
+  uint64_t mask, const uint64_t *table)
 {
   while (pos < max) {
     if (*pp == *pe) {
@@ -88,7 +88,7 @@ static inline bool _scan(
 
 void FastCDC::calc_chunks(
   const bufferlist& bl,
-  std::vector<std::pair<uint64_t, uint64_t>> *chunks)
+  std::vector<std::pair<uint64_t, uint64_t>> *chunks) const
 {
   if (bl.length() == 0) {
     return;
