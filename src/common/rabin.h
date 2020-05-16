@@ -51,15 +51,15 @@ public:
 
   void calc_chunks(
     const ceph::buffer::list& inputdata,
-    std::vector<std::pair<uint64_t, uint64_t>> *chunks) override {
+    std::vector<std::pair<uint64_t, uint64_t>> *chunks) const override {
     bufferlist b = inputdata;
     do_rabin_chunks(b, *chunks);
   }
 
   int do_rabin_chunks(ceph::buffer::list& inputdata,
 		      std::vector<std::pair<uint64_t, uint64_t>>& chunks,
-		      uint64_t min=0, uint64_t max=0);
-  uint64_t gen_rabin_hash(char* chunk_data, uint64_t off, uint64_t len = 0);
+		      uint64_t min=0, uint64_t max=0) const;
+  uint64_t gen_rabin_hash(char* chunk_data, uint64_t off, uint64_t len = 0) const;
   void set_window_size(uint32_t size) { window_size = size; }
   void set_rabin_prime(uint32_t r_prime) { rabin_prime = r_prime; }
   void set_mod_prime(uint64_t m_prime) { mod_prime = m_prime; }
@@ -94,7 +94,7 @@ public:
   }
 
 private:
-  bool end_of_chunk(const uint64_t fp , int numbits);
+  bool end_of_chunk(const uint64_t fp , int numbits) const;
 
   uint32_t window_size;
   uint32_t rabin_prime;

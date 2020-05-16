@@ -7,7 +7,7 @@
 
 void FixedCDC::calc_chunks(
   const bufferlist& bl,
-  std::vector<std::pair<uint64_t, uint64_t>> *chunks)
+  std::vector<std::pair<uint64_t, uint64_t>> *chunks) const
 {
   size_t len = bl.length();
   if (!len) {
