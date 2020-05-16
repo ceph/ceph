@@ -13,13 +13,23 @@
 
 void generate_buffer(int size, bufferlist *outbl, int seed = 0)
 {
-  outbl->clear();
-  outbl->append_zero(size);
-  char *b = outbl->c_str();
-  std::mt19937_64 engine;
+  std::mt19937_64 engine, engine2;
   engine.seed(seed);
-  for (size_t i = 0; i < size / sizeof(uint64_t); ++i) {
-    ((uint64_t*)b)[i] = engine();
+  engine2.seed(seed);
+
+  // assemble from randomly-sized segments!
+  outbl->clear();
+  auto left = size;
+  while (left) {
+    size_t l = std::min<size_t>((engine2() & 0xffff0) + 16, left);
+    left -= l;
+    bufferptr p(l);
+    p.set_length(l);
+    char *b = p.c_str();
+    for (size_t i = 0; i < l / sizeof(uint64_t); ++i) {
+      ((uint64_t*)b)[i] = engine();
+    }
+    outbl->append(p);
   }
 }
 
