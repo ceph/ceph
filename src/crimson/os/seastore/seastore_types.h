@@ -209,6 +209,7 @@ enum class extent_types_t : uint8_t {
   LADDR_INTERNAL = 2,
   LADDR_LEAF = 3,
   LBA_BLOCK = 4,
+  ONODE_BLOCK = 5,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
