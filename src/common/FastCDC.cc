@@ -58,34 +58,52 @@ void FastCDC::_setup(int target, int size_window_bits)
 }
 
 static inline bool _scan(
-  unsigned char *ptr, size_t& pos, size_t max, uint64_t mask, uint64_t& fp,
-  uint64_t *table)
+  // these are our cursor/postion...
+  bufferlist::buffers_t::const_iterator *p,
+  const char **pp, const char **pe,
+  size_t& pos,
+  size_t max,   // how much to read
+  uint64_t& fp, // fingerprint
+  uint64_t mask, uint64_t *table)
 {
-  while (true) {
-    if ((fp & mask) == mask) {
-      return false;
+  while (pos < max) {
+    if (*pp == *pe) {
+      ++(*p);
+      *pp = (*p)->c_str();
+      *pe = *pp + (*p)->length();
+    }
+    const char *te = std::min(*pe, *pp + max - pos);
+    for (; *pp < te; ++(*pp), ++pos) {
+      if ((fp & mask) == mask) {
+	return false;
+      }
+      fp = (fp << 1) ^ table[*(unsigned char*)*pp];
     }
     if (pos >= max) {
       return true;
     }
-    fp = (fp << 1) ^ table[ptr[pos]];
-    ++pos;
   }
+  return true;
 }
 
 void FastCDC::calc_chunks(
   bufferlist& bl,
   std::vector<std::pair<uint64_t, uint64_t>> *chunks)
 {
-  unsigned char *ptr = (unsigned char *)bl.c_str();
-  size_t len = bl.length();
+  if (bl.length() == 0) {
+    return;
+  }
+  auto p = bl.buffers().begin();
+  const char *pp = p->c_str();
+  const char *pe = pp + p->length();
 
   size_t pos = 0;
+  size_t len = bl.length();
   while (pos < len) {
     size_t cstart = pos;
     uint64_t fp = 0;
 
-    // are we left with a <= min chunk?
+    // are we left with a min-sized (or smaller) chunk?
     if (len - pos <= (1ul << min_bits)) {
       chunks->push_back(std::pair<uint64_t,uint64_t>(pos, len - pos));
       break;
@@ -93,29 +111,47 @@ void FastCDC::calc_chunks(
 
     // skip forward to the min chunk size cut point (minus the window, so
     // we can initialize the rolling fingerprint).
-    pos += (1 << min_bits) - window;
+    size_t skip = (1 << min_bits) - window;
+    pos += skip;
+    while (skip) {
+      size_t s = std::min<size_t>(pe - pp, skip);
+      skip -= s;
+      pp += s;
+      if (pp == pe) {
+	++p;
+	pp = p->c_str();
+	pe = pp + p->length();
+      }
+    }
 
     // first fill the window
     size_t max = pos + window;
     while (pos < max) {
-      fp = (fp << 1) ^ table[ptr[pos]];
-      ++pos;
+      if (pp == pe) {
+	++p;
+	pp = p->c_str();
+	pe = pp + p->length();
+      }
+      const char *te = std::min(pe, pp + (max - pos));
+      for (; pp < te; ++pp, ++pos) {
+	fp = (fp << 1) ^ table[*(unsigned char*)pp];
+      }
     }
     ceph_assert(pos < len);
 
     // find an end marker
-    if (_scan(ptr, pos,
+    if (_scan(&p, &pp, &pe, pos,  // for the first "small" region
 	      std::min(len,
 		       cstart + (1 << (target_bits - TARGET_WINDOW_BITS))),
-	      small_mask, fp, table) &&
-	_scan(ptr, pos,
+	      fp, small_mask, table) &&
+	_scan(&p, &pp, &pe, pos,  // for the middle range (close to our target)
 	      std::min(len,
 		       cstart + (1 << (target_bits + TARGET_WINDOW_BITS))),
-	      target_mask, fp, table) &&
-	_scan(ptr, pos,
+	      fp, target_mask, table) &&
+	_scan(&p, &pp, &pe, pos,  // we're past target, use large_mask!
 	      std::min(len,
 		       cstart + (1 << max_bits)),
-	      large_mask, fp, table)) ;
+	      fp, large_mask, table)) ;
 
     chunks->push_back(std::pair<uint64_t,uint64_t>(cstart, pos - cstart));
   }
