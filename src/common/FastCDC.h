@@ -41,6 +41,6 @@ public:
   }
 
   void calc_chunks(
-    bufferlist& bl,
+    const bufferlist& bl,
     std::vector<std::pair<uint64_t, uint64_t>> *chunks) override;
 };
