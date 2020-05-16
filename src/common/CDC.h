@@ -12,10 +12,12 @@ class CDC {
 public:
   virtual ~CDC() = default;
 
+  /// calculate chunk boundaries as vector of (offset, length) pairs
   virtual void calc_chunks(
     const bufferlist& inputdata,
-    std::vector<std::pair<uint64_t, uint64_t>> *chunks) = 0;
+    std::vector<std::pair<uint64_t, uint64_t>> *chunks) const = 0;
 
+  /// set target chunk size as a power of 2, and number of bits for hard min/max
   virtual void set_target_bits(int bits, int windowbits = 2) = 0;
 
   static std::unique_ptr<CDC> create(
