@@ -61,3 +61,8 @@ add_ceph_unittest(unittest_fixed_kv_node_layout)
 target_link_libraries(unittest_seastar_lru crimson GTest::Main)
 
 add_subdirectory(seastore)
+
+add_library(crimson-gtest STATIC
+  gtest_seastar.cc)
+target_link_libraries(crimson-gtest crimson-common GTest::GTest)
+add_library(crimson::gtest ALIAS crimson-gtest)
