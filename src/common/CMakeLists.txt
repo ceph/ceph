@@ -142,7 +142,8 @@ target_compile_definitions(common-common-objs PRIVATE
   "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
 set(common_mountcephfs_srcs
-  armor.c
+  armor.cc
+  base64/base64_plain.c
   safe_io.c
   module.c
   addr_parsing.c)
