@@ -30,6 +30,7 @@ extern "C"{
 #include "common/code_environment.h"
 #include "common/ceph_argparse.h"
 #include "common/Finisher.h"
+#include "common/armor.h"
 #include "global/global_init.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
@@ -47,8 +48,6 @@ static string uid = CEPH_UID;
 static string display_name = "CEPH";
 static string meta_caps = "metadata";
 
-extern "C" int ceph_armor(char *dst, const char *dst_end, 
-                          const char *src, const char *end);
 static void print_usage(char *exec){
   cout << "Usage: " << exec << " <Options>\n";
   cout << "Options:\n"
