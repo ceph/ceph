@@ -119,20 +119,7 @@ class CephFSMount(object):
                     "ip addr add {0}/{1} brd {2} dev ceph-brx".format(ip, mask, brd)]
             self.client_remote.run(args=args, timeout=(5*60))
         
-        # Save the ip_forward's old value
-        save_path = "/tmp/python-ceph-brx"
-        if not os.path.exists(save_path):
-            self.client_remote.run(args=['touch', save_path], timeout=(5*60))
-            p = self.client_remote.run(args=['cat', '/proc/sys/net/ipv4/ip_forward'],
-                                       stderr=StringIO(), stdout=StringIO(),
-                                       timeout=(5*60))
-            val = p.stdout.getvalue().strip()
-            args = ["sudo", "bash", "-c",
-                    "echo {0} > {1}".format(val, save_path)]
-            self.client_remote.run(args=args, timeout=(5*60))
-
-        args = ["sudo", "bash", "-c",
-                "echo 1 > /proc/sys/net/ipv4/ip_forward"]
+        args = "echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward"
         self.client_remote.run(args=args, timeout=(5*60))
         
         # Setup the NAT
@@ -302,18 +289,6 @@ class CephFSMount(object):
         args = ["sudo", "bash", "-c",
                 "iptables -t nat -D POSTROUTING -s {0}/{1} -o {2} -j MASQUERADE".format(ip, mask, gw)]
         self.client_remote.run(args=args, timeout=(5*60))
-
-        # Restore the ip_forward
-        save_path = "/tmp/python-ceph-brx"
-        p = self.client_remote.run(args=['cat', save_path],
-                                   stderr=StringIO(), stdout=StringIO(),
-                                   timeout=(5*60))
-        val = p.stdout.getvalue().strip()
-        args = ["sudo", "bash", "-c",
-                "echo {} > /proc/sys/net/ipv4/ip_forward".format(val)]
-        self.client_remote.run(args=args, timeout=(5*60))
-        self.client_remote.run(args=['rm', '-f', save_path],
-                               timeout=(5*60))
 
     def setup_netns(self):
         """
