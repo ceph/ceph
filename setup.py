@@ -127,7 +127,7 @@ setup(
             'teuthology-kill = scripts.kill:main',
             'teuthology-queue = scripts.queue:main',
             'teuthology-prune-logs = scripts.prune_logs:main',
-            'teuthology-describe-tests = scripts.describe_tests:main',
+            'teuthology-describe = scripts.describe:main',
             ],
         },
 
