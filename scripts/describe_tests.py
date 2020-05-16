@@ -50,9 +50,9 @@ options only for describing combinations represented by a suite:
   -F, --filter-fragments             Check fragments additionaly to descriptions
                                      using keywords specified with 'filter',
                                      'filter-out' and 'filter-all' options.
-  -D, --print-description            Print job descriptions for the suite,
+  -p, --print-description            Print job descriptions for the suite,
                                      used only in combination with 'summary'
-  -L, --print-fragments              Print file list inovolved for each facet,
+  -P, --print-fragments              Print file list inovolved for each facet,
                                      used only in combination with 'summary'
   -l <jobs>, --limit <jobs>          List at most this many jobs
                                      [default: 0]
