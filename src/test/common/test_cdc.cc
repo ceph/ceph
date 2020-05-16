@@ -105,6 +105,21 @@ TEST_P(CDCTest, insert_middle)
   }
 }
 
+TEST_P(CDCTest, specific_result)
+{
+  map<string,vector<pair<uint64_t,uint64_t>>> expected = {
+    {"fixed", { {0, 262144}, {262144, 262144}, {524288, 262144}, {786432, 262144}, {1048576, 262144}, {1310720, 262144}, {1572864, 262144}, {1835008, 262144}, {2097152, 262144}, {2359296, 262144}, {2621440, 262144}, {2883584, 262144}, {3145728, 262144}, {3407872, 262144}, {3670016, 262144}, {3932160, 262144} }},
+    {"fastcdc", { {0, 151460}, {151460, 441676}, {593136, 407491}, {1000627, 425767}, {1426394, 602875}, {2029269, 327307}, {2356576, 155515}, {2512091, 159392}, {2671483, 829416}, {3500899, 539667}, {4040566, 153738}}},
+  };
+
+  bufferlist bl;
+  generate_buffer(4*1024*1024, &bl);
+  vector<pair<uint64_t,uint64_t>> chunks;
+  cdc->calc_chunks(bl, &chunks);
+  ASSERT_EQ(chunks, expected[GetParam()]);
+}
+
+
 void do_size_histogram(CDC& cdc, bufferlist& bl,
 		       map<int,int> *h)
 {
