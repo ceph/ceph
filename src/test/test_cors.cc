@@ -19,6 +19,7 @@ extern "C"{
 #include "global/global_init.h"
 #include "rgw/rgw_cors.h"
 #include "rgw/rgw_cors_s3.h"
+#include "common/armor.h"
 
 using namespace std;
 
@@ -26,8 +27,6 @@ using namespace std;
 #define HTTP_RESPONSE_STR "RespCode"
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 
-extern "C" int ceph_armor(char *dst, const char *dst_end, 
-                          const char *src, const char *end);
 enum key_type {
   KEY_TYPE_UNDEFINED = 0,
   KEY_TYPE_SWIFT,
