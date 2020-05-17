@@ -6,10 +6,10 @@ RGW Data caching and CDN
 
 .. contents::
 
-This new feature adds to RGW the ability to securely cache objects and offload the workload from the cluster, using Nginx.
-After an object is accessed the first time it will be stored on top of Nginx dir.
-Every request the Nginx will not fetch data from the RGW or the cluster, It will only check for permissions for that user from the RGW.
-This feature is based on some Nginx modules, ngx_http_auth_request_module, https://github.com/kaltura/nginx-aws-auth-module, Openresty for lua capablities.     
+This feature adds to RGW the ability to securely cache objects and offload the workload from the cluster, using Nginx.
+After an object is accessed the first time it will be stored in Nginx directory.
+When data is already cached, it need not be fetched from RGW. A permission check will be made against RGW to ensure the requesting user has access.
+This feature is based on some Nginx modules, ngx_http_auth_request_module, https://github.com/kaltura/nginx-aws-auth-module, Openresty for lua capabilities.     
 Currently this feature only works for GET requests and it will cache only AWSv4 requests (only s3 requests).
 The feature introduces 2 new APIs: Auth and Cache.
 
@@ -18,20 +18,18 @@ New APIs
 
 There are 2 new apis for this feature:
 
-Auth API - Nginx using it to validate that an user can access the cached data
+Auth API - The cache uses this to validate that an user can access the cached data
 
-Cache API - Adding the ability to override securely Range header, that way Nginx can use it is own smart cache on top of S3:
+Cache API - Adds the ability to override securely Range header, that way Nginx can use it is own smart cache on top of S3:
 https://www.nginx.com/blog/smart-efficient-byte-range-caching-nginx/
-Using this API giving the ability to read ahead objects when clients asking a specific range from the object. 
-The second time the client will ask another range, the Nginx will have it and it will provide the other range from the cache.
-
+Using this API gives the ability to read ahead objects when clients asking a specific range from the object. 
+On subsequent accesses to the cached object, Nginx will satisfy requests for already-cached ranges from cache. Uncached ranges will be read from RGW (and cached).
 
 Auth API
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 
-This API meant to allow the RGW only check if a user is authorized to access an object or not.
-To use it the client should add ``Auth`` Header to his request, if the client does it then the RGW will return 200 or 206 for successfully authorized.
-If the client does not have permissions the RGW will return 403. 
+This APIValidates a specific authenticated access being made to the cache, using RGW's knowledge of the client credentials and stored access policy. 
+Returns success if the encapsulated request would be granted.
 
 Cache API
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -44,10 +42,10 @@ Creating cache user
 
 $ radosgw-admin user create --uid=<uid for cache user> --display-name="cache user" --caps="amz-cache=read"
 
-This user can send to the RGW the Cache api header ``X-Amz-Cache``, this header contains the headers from the original request(before changing the Range header).
+This user can send to the RGW the Cache API header ``X-Amz-Cache``, this header contains the headers from the original request(before changing the Range header).
 It means that ``X-Amz-Cache`` built from several headers.
 The headers that are building the ``X-Amz-Cache`` header are separated by char with ascii code 177 and the header name and value are separated by char ascii code 178.
-The RGW will check that the cache user is authorized user and it is a cache user, 
+The RGW will check that the cache user is an authorized user and if it is a cache user, 
 if yes it will use the ``X-Amz-Cache`` to revalidate that the user have permissions, using the headers from the X-Amz-Cache.
 During this flow the RGW will override the Range header.
 
