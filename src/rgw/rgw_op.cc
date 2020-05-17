@@ -919,8 +919,10 @@ void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 
 void rgw_bucket_object_pre_exec(struct req_state *s)
 {
-  if (s->expect_cont)
+  if (s->expect_cont) {
     dump_continue(s);
+    s->expect_cont = false;
+  }
 
   dump_bucket_from_state(s);
 }

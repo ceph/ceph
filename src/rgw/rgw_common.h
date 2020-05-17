@@ -248,6 +248,7 @@ using ceph::crypto::MD5;
 #define ERR_POSITION_NOT_EQUAL_TO_LENGTH                 2219
 #define ERR_OBJECT_NOT_APPENDABLE                        2220
 #define ERR_INVALID_BUCKET_STATE                         2221
+#define ERR_INCOMPLETE_100_CONTINUE 2222
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301

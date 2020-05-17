@@ -74,6 +74,9 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;
+    /* negative error code makes civetweb drop the rest of req */
+    if (ret == -ERR_INCOMPLETE_100_CONTINUE)
+      return ret;
   }
 
   if (http_ret <= 0) {

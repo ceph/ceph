@@ -319,5 +319,12 @@ done:
 	  << " ======"
 	  << dendl;
 
-  return (ret < 0 ? ret : s->err.ret);
+  if (ret < 0) {
+    if (s->expect_cont && s->content_length > 0) {
+      // notify frontends not to read further content
+      return -ERR_INCOMPLETE_100_CONTINUE;
+    }
+    return ret;
+  }
+  return s->err.ret;
 } /* process_request */

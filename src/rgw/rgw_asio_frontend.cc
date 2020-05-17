@@ -147,6 +147,7 @@ void handle_connection(boost::asio::io_context& context,
       return;
     }
 
+    int ret_code;
     {
       auto lock = pause_mutex.async_lock_shared(yield[ec]);
       if (ec == boost::asio::error::operation_aborted) {
@@ -177,14 +178,17 @@ void handle_connection(boost::asio::io_context& context,
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
       auto y = optional_yield{context, yield};
-      process_request(env.store, env.rest, &req, env.uri_prefix,
-                      *env.auth_registry, &client, env.olog, y, scheduler);
+      ret_code = process_request(env.store, env.rest, &req, env.uri_prefix,
+                                 *env.auth_registry, &client, env.olog, y, scheduler);
     }
 
     if (!parser.keep_alive()) {
       return;
     }
 
+    if (ret_code == -ERR_INCOMPLETE_100_CONTINUE) {
+      continue;
+    }
     // if we failed before reading the entire message, discard any remaining
     // bytes before reading the next
     while (!parser.is_done()) {
