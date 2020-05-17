@@ -145,7 +145,39 @@ class Watchers:
 
 
 class MirrorSnapshotScheduleHandler:
+    MODULE_COMMANDS = [
+        {
+            "cmd": "rbd mirror snapshot schedule add "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Add rbd mirror snapshot schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd mirror snapshot schedule remove "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString,req=false "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Remove rbd mirror snapshot schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd mirror snapshot schedule list "
+                   "name=level_spec,type=CephString,req=false ",
+            "desc": "List rbd mirror snapshot schedule",
+            "perm": "r"
+        },
+        {
+            "cmd": "rbd mirror snapshot schedule status "
+                   "name=level_spec,type=CephString,req=false ",
+            "desc": "Show rbd mirror snapshot schedule status",
+            "perm": "r"
+        },
+    ]
+
     MODULE_OPTION_NAME = "mirror_snapshot_schedule"
+    COMMAND_PREFIX = "rbd mirror snapshot schedule "
     SCHEDULE_OID = "rbd_mirror_snapshot_schedule"
 
     lock = Lock()

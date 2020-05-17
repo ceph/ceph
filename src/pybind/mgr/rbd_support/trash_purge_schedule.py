@@ -13,7 +13,38 @@ from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
 
 
 class TrashPurgeScheduleHandler:
+    MODULE_COMMANDS = [
+        {
+            "cmd": "rbd trash purge schedule add "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Add rbd trash purge schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd trash purge schedule remove "
+                   "name=level_spec,type=CephString "
+                   "name=interval,type=CephString,req=false "
+                   "name=start_time,type=CephString,req=false ",
+            "desc": "Remove rbd trash purge schedule",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd trash purge schedule list "
+                   "name=level_spec,type=CephString,req=false ",
+            "desc": "List rbd trash purge schedule",
+            "perm": "r"
+        },
+        {
+            "cmd": "rbd trash purge schedule status "
+                   "name=level_spec,type=CephString,req=false ",
+            "desc": "Show rbd trash purge schedule status",
+            "perm": "r"
+        }
+    ]
     MODULE_OPTION_NAME = "trash_purge_schedule"
+    COMMAND_PREFIX = "rbd trash purge schedule "
     SCHEDULE_OID = "rbd_trash_purge_schedule"
 
     lock = Lock()

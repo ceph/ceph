@@ -126,6 +126,58 @@ class Task:
 
 
 class TaskHandler:
+    MODULE_COMMANDS = [
+        {
+            "cmd": "rbd task add flatten "
+                   "name=image_spec,type=CephString",
+            "desc": "Flatten a cloned image asynchronously in the background",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd task add remove "
+                   "name=image_spec,type=CephString",
+            "desc": "Remove an image asynchronously in the background",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd task add trash remove "
+                   "name=image_id_spec,type=CephString",
+            "desc": "Remove an image from the trash asynchronously in the background",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd task add migration execute "
+                   "name=image_spec,type=CephString",
+            "desc": "Execute an image migration asynchronously in the background",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd task add migration commit "
+                   "name=image_spec,type=CephString",
+            "desc": "Commit an executed migration asynchronously in the background",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd task add migration abort "
+                   "name=image_spec,type=CephString",
+            "desc": "Abort a prepared migration asynchronously in the background",
+            "perm": "w"
+        },
+        {
+            "cmd": "rbd task cancel "
+                   "name=task_id,type=CephString ",
+            "desc": "Cancel a pending or running asynchronous task",
+            "perm": "r"
+        },
+        {
+            "cmd": "rbd task list "
+                   "name=task_id,type=CephString,req=false ",
+            "desc": "List pending or running asynchronous tasks",
+            "perm": "r"
+        },
+    ]
+    COMMAND_PREFIX = "rbd task "
+
     lock = Lock()
     condition = Condition(lock)
     thread = None

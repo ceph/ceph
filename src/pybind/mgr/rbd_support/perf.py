@@ -39,6 +39,30 @@ REPORT_MAX_RESULTS = 64
 
 
 class PerfHandler:
+    MODULE_COMMANDS = [
+        {
+            "cmd": "rbd perf image stats "
+                   "name=pool_spec,type=CephString,req=false "
+                   "name=sort_by,type=CephChoices,strings="
+                   "write_ops|write_bytes|write_latency|"
+                   "read_ops|read_bytes|read_latency,"
+                   "req=false ",
+            "desc": "Retrieve current RBD IO performance stats",
+            "perm": "r"
+        },
+        {
+            "cmd": "rbd perf image counters "
+                   "name=pool_spec,type=CephString,req=false "
+                   "name=sort_by,type=CephChoices,strings="
+                   "write_ops|write_bytes|write_latency|"
+                   "read_ops|read_bytes|read_latency,"
+                   "req=false ",
+            "desc": "Retrieve current RBD IO performance counters",
+            "perm": "r"
+        },
+    ]
+    COMMAND_PREFIX = "rbd perf "
+
     user_queries = {}
     image_cache = {}
 
