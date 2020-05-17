@@ -430,9 +430,9 @@ int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& a
 int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry)
 {
   int ret = -EINVAL;
-  ldpp_dout(this,2) << "cache override headers" << dendl;
+  ldpp_dout(this, 10) << "cache override headers" << dendl;
   RGWEnv* rgw_env = const_cast<RGWEnv *>(s->info.env);
-  const char *backup_range = rgw_env->get("HTTP_RANGE");
+  const char* backup_range = rgw_env->get("HTTP_RANGE");
   const char hdrs_split[2] = {(char)178,'\0'};
   const char kv_split[2] = {(char)177,'\0'};
   const char* cache_hdr = rgw_env->get("HTTP_X_AMZ_CACHE");
@@ -447,7 +447,7 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
     key.append(*k);
     boost::replace_all(key, "-", "_");
     rgw_env->set(std::move(key), std::string(*v));
-    ldpp_dout(this,2) << "after splitting cache kv key: " << key  << " " << rgw_env->get(key.c_str())  << dendl;
+    ldpp_dout(this, 10) << "after splitting cache kv key: " << key  << " " << rgw_env->get(key.c_str())  << dendl;
   }
   ret = RGWOp::verify_requester(auth_registry);
   if(!ret && backup_range) {
