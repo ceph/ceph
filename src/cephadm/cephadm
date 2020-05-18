@@ -2719,8 +2719,6 @@ def command_deploy():
 
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
-        monitoring_args = []  # type: List[str]
-
         # Default Checks
         if not args.reconfig and not redeploy:
             daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
