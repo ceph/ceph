@@ -3833,7 +3833,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     dout(7) << " xattrs v" << pi.inode.xattr_version << " -> " << m->head.xattr_version << dendl;
     pi.inode.xattr_version = m->head.xattr_version;
     auto p = m->xattrbl.cbegin();
-    decode(*pi.xattrs, p);
+    decode_noshare(*pi.xattrs, p);
     wrlock_force(&in->xattrlock, mut);
   }
   
