@@ -15,6 +15,34 @@
  */
 #include "RDMAStack.h"
 
+class C_handle_connection_established : public EventCallback {
+  RDMAConnectedSocketImpl *csi;
+  bool active = true;
+ public:
+  C_handle_connection_established(RDMAConnectedSocketImpl *w) : csi(w) {}
+  void do_request(uint64_t fd) final {
+    if (active)
+      csi->handle_connection_established();
+  }
+  void close() {
+    active = false;
+  }
+};
+
+class C_handle_connection_read : public EventCallback {
+  RDMAConnectedSocketImpl *csi;
+  bool active = true;
+ public:
+  explicit C_handle_connection_read(RDMAConnectedSocketImpl *w): csi(w) {}
+  void do_request(uint64_t fd) final {
+    if (active)
+      csi->handle_connection();
+  }
+  void close() {
+    active = false;
+  }
+};
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
@@ -23,7 +51,8 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
 						 RDMAWorker *w)
   : cct(cct), connected(0), error(0), infiniband(ib),
     dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
-    is_server(false), con_handler(new C_handle_connection(this)),
+    is_server(false), read_handler(new C_handle_connection_read(this)),
+    established_handler(new C_handle_connection_established(this)),
     active(false), pending(false)
 {
   if (!cct->_conf->ms_async_rdma_cm) {
@@ -173,7 +202,14 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   ldout(cct, 20) << __func__ << " nonblock:" << opts.nonblock << ", nodelay:"
                  << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << dendl;
   NetHandler net(cct);
-  tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
+
+  // we construct a socket to transport ib sync message
+  // but we shouldn't block in tcp connecting
+  if (opts.nonblock) {
+    tcp_fd = net.nonblock_connect(peer_addr, opts.connect_bind_addr);
+  } else {
+    tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
+  }
 
   if (tcp_fd < 0) {
     return -errno;
@@ -188,12 +224,38 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
   net.set_priority(tcp_fd, opts.priority, peer_addr.get_family());
-  my_msg.peer_qpn = 0;
-  r = infiniband->send_msg(cct, tcp_fd, my_msg);
-  if (r < 0)
-    return r;
+  r = 0;
+  if (opts.nonblock) {
+    worker->center.create_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE , established_handler);
+  } else {
+    r = handle_connection_established(false);
+  }
+  return r;
+}
 
-  worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+int RDMAConnectedSocketImpl::handle_connection_established(bool need_set_fault) {
+  ldout(cct, 20) << __func__ << " start " << dendl;
+  // delete read event
+  worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
+  if (1 == connected) {
+    ldout(cct, 1) << __func__ << " warnning: logic failed " << dendl;
+    if (need_set_fault) {
+      fault();
+    }
+    return -1;
+  }
+  // send handshake msg to server
+  my_msg.peer_qpn = 0;
+  int r = infiniband->send_msg(cct, tcp_fd, my_msg);
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " send handshake msg failed." << r << dendl;
+    if (need_set_fault) {
+      fault();
+    }
+    return r;
+  }
+  worker->center.create_file_event(tcp_fd, EVENT_READABLE, read_handler);
+  ldout(cct, 20) << __func__ << " finish " << dendl;
   return 0;
 }
 
@@ -608,13 +670,18 @@ void RDMAConnectedSocketImpl::fin() {
 }
 
 void RDMAConnectedSocketImpl::cleanup() {
-  if (con_handler && tcp_fd >= 0) {
-    (static_cast<C_handle_connection*>(con_handler))->close();
+  if (read_handler && tcp_fd >= 0) {
+    (static_cast<C_handle_connection_read*>(read_handler))->close();
     worker->center.submit_to(worker->center.get_id(), [this]() {
-      worker->center.delete_file_event(tcp_fd, EVENT_READABLE);
+      worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
     }, false);
-    delete con_handler;
-    con_handler = nullptr;
+    delete read_handler;
+    read_handler = nullptr;
+  }
+  if (established_handler) {
+    (static_cast<C_handle_connection_established*>(established_handler))->close();
+    delete established_handler;
+    established_handler = nullptr;
   }
 }
 
@@ -660,7 +727,7 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd)
   tcp_fd = sd;
   is_server = true;
   worker->center.submit_to(worker->center.get_id(), [this]() {
-			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, read_handler);
 			   }, true);
 }
 
