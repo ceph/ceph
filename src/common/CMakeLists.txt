@@ -147,9 +147,17 @@ set(common_mountcephfs_srcs
   safe_io.c
   module.c
   addr_parsing.c)
+list(APPEND common_mountcephfs_srcs $<TARGET_OBJECTS:arch>)
+if(HAVE_INTEL)
+  list(APPEND common_mountcephfs_srcs
+      base64/avx2/base64_intel_avx2.c)
+endif(HAVE_INTEL)
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_srcs})
-
+if(HAVE_INTEL)
+  set_target_properties(common_mountcephfs_objs PROPERTIES
+    COMPILE_FLAGS "${CMAKE_C_FLAGS} ${AVX2_COMPILE_FLAGS}")
+endif(HAVE_INTEL)
 
 set(crc32_srcs
   crc32c.cc
