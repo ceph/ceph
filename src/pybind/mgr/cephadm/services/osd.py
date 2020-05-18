@@ -93,8 +93,7 @@ class OSDService(CephadmService):
         else:
             return "Created no osd(s) on host %s; already created?" % host
 
-    def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[
-        Tuple[str, DriveSelection]]:
+    def prepare_drivegroup(self, drive_group: DriveGroupSpec) -> List[Tuple[str, DriveSelection]]:
         # 1) use fn_filter to determine matching_hosts
         matching_hosts = drive_group.placement.pattern_matches_hosts(
             [x for x in self.mgr.cache.get_hosts()])
@@ -130,40 +129,64 @@ class OSDService(CephadmService):
         logger.debug(f"Resulting ceph-volume cmd: {cmd}")
         return cmd
 
-    def preview_drivegroups(self, drive_group_name: Optional[str] = None,
-                            dg_specs: Optional[List[DriveGroupSpec]] = None) -> List[
-        Dict[str, Dict[Any, Any]]]:
-        # find drivegroups
-        if drive_group_name:
-            drive_groups = cast(List[DriveGroupSpec],
-                                self.mgr.spec_store.find(service_name=drive_group_name))
-        elif dg_specs:
-            drive_groups = dg_specs
-        else:
-            drive_groups = []
-        ret_all = []
-        for drive_group in drive_groups:
-            drive_group.osd_id_claims = self.find_destroyed_osds()
-            logger.info(
-                f"Found osd claims for drivegroup {drive_group.service_id} -> {drive_group.osd_id_claims}")
+    def get_previews(self, host) -> List[Dict[str, Any]]:
+        # Find OSDSpecs that match host.
+        osdspecs = self.mgr.resolve_osdspecs_for_host(host)
+        return self.generate_previews(osdspecs)
+
+    def generate_previews(self, osdspecs: List[DriveGroupSpec]) -> List[Dict[str, Any]]:
+        """
+
+        The return should look like this:
+
+        [
+          {'data': {<metadata>},
+           'osdspec': <name of osdspec>,
+           'host': <name of host>
+           },
+
+           {'data': ...,
+            'osdspec': ..,
+            'host': ..
+           }
+        ]
+
+        Note: One host can have multiple previews based on its assigned OSDSpecs.
+        """
+        self.mgr.log.debug(f"Generating OSDSpec previews for {osdspecs}")
+        ret_all: List[Dict[str, Any]] = []
+        if not osdspecs:
+            return ret_all
+        for osdspec in osdspecs:
+
+            # populate osd_id_claims
+            osdspec.osd_id_claims = self.find_destroyed_osds()
+
             # prepare driveselection
-            for host, ds in self.prepare_drivegroup(drive_group):
-                cmd = self.driveselection_to_ceph_volume(drive_group, ds,
-                                                         drive_group.osd_id_claims.get(host,
-                                                                                       []),
+            for host, ds in self.prepare_drivegroup(osdspec):
+
+                # driveselection for host
+                cmd = self.driveselection_to_ceph_volume(osdspec,
+                                                         ds,
+                                                         osdspec.osd_id_claims.get(host, []),
                                                          preview=True)
                 if not cmd:
                     logger.debug("No data_devices, skipping DriveGroup: {}".format(
-                        drive_group.service_name()))
+                        osdspec.service_name()))
                     continue
+
+                # get preview data from ceph-volume
                 out, err, code = self._run_ceph_volume_command(host, cmd)
                 if out:
-                    concat_out = json.loads(" ".join(out))
-                    ret_all.append({'data': concat_out, 'drivegroup': drive_group.service_id,
+                    concat_out: Dict[str, Any] = json.loads(" ".join(out))
+                    ret_all.append({'data': concat_out,
+                                    'osdspec': osdspec.service_id,
                                     'host': host})
         return ret_all
 
-    def _run_ceph_volume_command(self, host: str, cmd: str, env_vars: Optional[List[str]] = None) -> Tuple[List[str], List[str], int]:
+    def _run_ceph_volume_command(self, host: str,
+                                 cmd: str, env_vars: Optional[List[str]] = None
+                                 ) -> Tuple[List[str], List[str], int]:
         self.mgr.inventory.assert_host(host)
 
         # get bootstrap key
@@ -219,6 +242,8 @@ class OSDService(CephadmService):
                 osd_host_map.update(
                     {node.get('name'): [str(_id) for _id in node.get('children', list())]}
                 )
+        self.mgr.log.info(
+            f"Found osd claims -> {osd_host_map}")
         return osd_host_map
 
 

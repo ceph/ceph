@@ -2,7 +2,7 @@ import datetime
 from copy import copy
 import json
 import logging
-from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple
+from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set
 
 import six
 
@@ -163,12 +163,15 @@ class HostCache():
         self.daemons = {}   # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
+        self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = [] # type: List[str]
         self.device_refresh_queue = [] # type: List[str]
+        self.osdspec_previews_refresh_queue = [] # type: List[str]
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
         self.last_host_check = {}      # type: Dict[str, datetime.datetime]
+        self.loading_osdspec_preview = set()  # type: Set[str]
 
     def load(self):
         # type: () -> None
@@ -189,6 +192,7 @@ class HostCache():
                 # and always trigger a new scrape on mgr restart.
                 self.daemon_refresh_queue.append(host)
                 self.daemons[host] = {}
+                self.osdspec_previews[host] = []
                 self.devices[host] = []
                 self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
@@ -198,6 +202,8 @@ class HostCache():
                 for d in j.get('devices', []):
                     self.devices[host].append(inventory.Device.from_json(d))
                 self.networks[host] = j.get('networks', {})
+                self.osdspec_previews[host] = j.get('osdspec_previews', {})
+
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
                         'deps': d.get('deps', []),
@@ -246,9 +252,11 @@ class HostCache():
         self.daemons[host] = {}
         self.devices[host] = []
         self.networks[host] = {}
+        self.osdspec_previews[host] = []
         self.daemon_config_deps[host] = {}
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
+        self.osdspec_previews_refresh_queue.append(host)
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
@@ -269,6 +277,7 @@ class HostCache():
         j = {   # type: ignore
             'daemons': {},
             'devices': [],
+            'osdspec_previews': [],
             'daemon_config_deps': {},
         }
         if host in self.last_daemon_update:
@@ -285,8 +294,11 @@ class HostCache():
                 'deps': depi.get('deps', []),
                 'last_config': depi['last_config'].strftime(DATEFMT),
             }
+        if self.osdspec_previews[host]:
+            j['osdspec_previews'] = self.osdspec_previews[host]
+
         if host in self.last_host_check:
-            j['last_host_check']= self.last_host_check[host].strftime(DATEFMT)
+            j['last_host_check'] = self.last_host_check[host].strftime(DATEFMT)
         self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
 
     def rm_host(self, host):
@@ -295,6 +307,10 @@ class HostCache():
             del self.daemons[host]
         if host in self.devices:
             del self.devices[host]
+        if host in self.osdspec_previews:
+            del self.osdspec_previews[host]
+        if host in self.loading_osdspec_preview:
+            self.loading_osdspec_preview.remove(host)
         if host in self.networks:
             del self.networks[host]
         if host in self.last_daemon_update:
@@ -382,6 +398,17 @@ class HostCache():
             seconds=self.mgr.device_cache_timeout)
         if host not in self.last_device_update or self.last_device_update[host] < cutoff:
             return True
+        return False
+
+    def host_needs_osdspec_preview_refresh(self, host):
+        if host in self.mgr.offline_hosts:
+            logger.debug(f'Host "{host}" marked as offline. Skipping osdspec preview refresh')
+            return False
+        if host in self.osdspec_previews_refresh_queue:
+            self.osdspec_previews_refresh_queue.remove(host)
+            return True
+        #  Since this is dependent on other factors (device and spec) this does not  need
+        #  to be updated periodically.
         return False
 
     def host_needs_check(self, host):

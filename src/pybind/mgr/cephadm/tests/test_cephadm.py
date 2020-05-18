@@ -313,22 +313,6 @@ class TestCephadm(object):
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(dg, ds, [], preview)
             assert out in exp_command
 
-    @mock.patch("cephadm.module.SpecStore.find")
-    @mock.patch("cephadm.services.osd.OSDService.prepare_drivegroup")
-    @mock.patch("cephadm.services.osd.OSDService.driveselection_to_ceph_volume")
-    @mock.patch("cephadm.services.osd.OSDService._run_ceph_volume_command")
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_preview_drivegroups_str(self, _run_c_v_command, _ds_to_cv, _prepare_dg, _find_store, cephadm_module):
-        with self._with_host(cephadm_module, 'test'):
-            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'), data_devices=DeviceSelection(paths=['']))
-            _find_store.return_value = [dg]
-            _prepare_dg.return_value = [('host1', 'ds_dummy')]
-            _run_c_v_command.return_value = ("{}", '', 0)
-            cephadm_module.osd_service.preview_drivegroups(drive_group_name='foo')
-            _find_store.assert_called_once_with(service_name='foo')
-            _prepare_dg.assert_called_once_with(dg)
-            _run_c_v_command.assert_called_once()
-
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
         json.dumps([
             dict(
