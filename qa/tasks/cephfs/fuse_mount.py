@@ -40,7 +40,7 @@ class FuseMount(CephFSMount):
             # failures) and ensure the mount is not left half-up.
             # Otherwise we might leave a zombie mount point that causes
             # anyone traversing cephtest/ to get hung up on.
-            log.warn("Trying to clean up after failed mount")
+            log.warning("Trying to clean up after failed mount")
             self.umount_wait(force=True)
             raise
 
@@ -207,7 +207,7 @@ class FuseMount(CephFSMount):
             if ("endpoint is not connected" in error
             or "Software caused connection abort" in error):
                 # This happens is fuse is killed without unmount
-                log.warn("Found stale moutn point at {0}".format(self.mountpoint))
+                log.warning("Found stale moutn point at {0}".format(self.mountpoint))
                 return True
             else:
                 # This happens if the mount directory doesn't exist
