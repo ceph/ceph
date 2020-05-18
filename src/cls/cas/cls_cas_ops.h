@@ -6,13 +6,50 @@
 
 #include "include/types.h"
 #include "common/hobject.h"
+#include "common/Formatter.h"
 
-#define CHUNK_REFCOUNT_ATTR "chunk_refcount"
+struct cls_cas_chunk_create_or_get_ref_op {
+  enum {
+    FLAG_VERIFY = 1,  // verify content bit-for-bit if chunk already exists
+  };
 
-struct cls_chunk_refcount_get_op {
+  hobject_t source;
+  uint64_t flags = 0;
+  bufferlist data;
+
+  cls_cas_chunk_create_or_get_ref_op() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(source, bl);
+    encode(flags, bl);
+    encode(data, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(source, bl);
+    decode(flags, bl);
+    decode(data, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("source", source);
+    f->dump_unsigned("flags", flags);
+    f->dump_unsigned("data_len", data.length());
+  }
+  static void generate_test_instances(std::list<cls_cas_chunk_create_or_get_ref_op*>& ls) {
+    ls.push_back(new cls_cas_chunk_create_or_get_ref_op());
+  }
+};
+WRITE_CLASS_ENCODER(cls_cas_chunk_create_or_get_ref_op)
+
+
+struct cls_cas_chunk_get_ref_op {
   hobject_t source;
 
-  cls_chunk_refcount_get_op() {}
+  cls_cas_chunk_get_ref_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -25,15 +62,20 @@ struct cls_chunk_refcount_get_op {
     decode(source, bl);
     DECODE_FINISH(bl);
   }
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_chunk_refcount_get_op*>& ls);
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("source", source);
+  }
+  static void generate_test_instances(std::list<cls_cas_chunk_get_ref_op*>& ls) {
+    ls.push_back(new cls_cas_chunk_get_ref_op());
+  }
 };
-WRITE_CLASS_ENCODER(cls_chunk_refcount_get_op)
+WRITE_CLASS_ENCODER(cls_cas_chunk_get_ref_op)
 
-struct cls_chunk_refcount_put_op {
+
+struct cls_cas_chunk_put_ref_op {
   hobject_t source;
 
-  cls_chunk_refcount_put_op() {}
+  cls_cas_chunk_put_ref_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -47,15 +89,20 @@ struct cls_chunk_refcount_put_op {
     DECODE_FINISH(bl);
   }
 
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_chunk_refcount_put_op*>& ls);
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("source", source);
+  }
+  static void generate_test_instances(std::list<cls_cas_chunk_put_ref_op*>& ls) {
+    ls.push_back(new cls_cas_chunk_put_ref_op());
+  }
 };
-WRITE_CLASS_ENCODER(cls_chunk_refcount_put_op)
+WRITE_CLASS_ENCODER(cls_cas_chunk_put_ref_op)
 
-struct cls_chunk_refcount_set_op {
+
+struct cls_cas_chunk_set_refs_op {
   std::set<hobject_t> refs;
 
-  cls_chunk_refcount_set_op() {}
+  cls_cas_chunk_set_refs_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -69,15 +116,24 @@ struct cls_chunk_refcount_set_op {
     DECODE_FINISH(bl);
   }
 
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_chunk_refcount_set_op*>& ls);
+  void dump(ceph::Formatter *f) const {
+    f->open_array_section("refs");
+    for (auto& i : refs) {
+      f->dump_object("ref", i);
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(std::list<cls_cas_chunk_set_refs_op*>& ls) {
+    ls.push_back(new cls_cas_chunk_set_refs_op());
+  }
 };
-WRITE_CLASS_ENCODER(cls_chunk_refcount_set_op)
+WRITE_CLASS_ENCODER(cls_cas_chunk_set_refs_op)
 
-struct cls_chunk_refcount_read_ret {
+
+struct cls_cas_chunk_read_refs_ret {
   std::set<hobject_t> refs;
 
-  cls_chunk_refcount_read_ret() {}
+  cls_cas_chunk_read_refs_ret() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -91,28 +147,17 @@ struct cls_chunk_refcount_read_ret {
     DECODE_FINISH(bl);
   }
 
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_chunk_refcount_read_ret*>& ls);
-};
-WRITE_CLASS_ENCODER(cls_chunk_refcount_read_ret)
-
-struct chunk_obj_refcount {
-  std::set<hobject_t> refs;
-
-  chunk_obj_refcount() {}
-
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(refs, bl);
-    ENCODE_FINISH(bl);
+  void dump(ceph::Formatter *f) const {
+    f->open_array_section("refs");
+    for (auto& i : refs) {
+      f->dump_object("ref", i);
+    }
+    f->close_section();
   }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(refs, bl);
-    DECODE_FINISH(bl);
+  static void generate_test_instances(std::list<cls_cas_chunk_read_refs_ret*>& ls) {
+    ls.push_back(new cls_cas_chunk_read_refs_ret());
   }
 };
-WRITE_CLASS_ENCODER(chunk_obj_refcount)
+WRITE_CLASS_ENCODER(cls_cas_chunk_read_refs_ret)
 
 #endif

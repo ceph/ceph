@@ -61,6 +61,16 @@ TYPE_FEATUREFUL(entity_inst_t)
 #include "crush/CrushWrapper.h"
 TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
 
+#include "cls/cas/cls_cas_ops.h"
+TYPE(cls_cas_chunk_create_or_get_ref_op)
+TYPE(cls_cas_chunk_get_ref_op)
+TYPE(cls_cas_chunk_put_ref_op)
+TYPE(cls_cas_chunk_set_refs_op)
+TYPE(cls_cas_chunk_read_refs_ret)
+
+#include "cls/cas/cls_cas_internal.h"
+TYPE(chunk_obj_refcount)
+
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
 TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)

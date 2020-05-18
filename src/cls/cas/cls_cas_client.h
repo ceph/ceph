@@ -8,9 +8,47 @@
 #include "include/rados/librados_fwd.hpp"
 #include "common/hobject.h"
 
-void cls_chunk_refcount_get(librados::ObjectWriteOperation& op,const hobject_t& soid);
-void cls_chunk_refcount_put(librados::ObjectWriteOperation& op, const hobject_t& soid);
-void cls_chunk_refcount_set(librados::ObjectWriteOperation& op, std::set<hobject_t>& refs);
-int cls_chunk_refcount_read(librados::IoCtx& io_ctx, std::string& oid, std::set<hobject_t> *refs);
-int cls_chunk_has_chunk(librados::IoCtx& io_ctx, std::string& oid, std::string& fp_oid);
+//
+// basic methods
+//
+
+/// create a chunk, or get additional reference if it already exists
+void cls_cas_chunk_create_or_get_ref(
+  librados::ObjectWriteOperation& op,
+  const hobject_t& soid,
+  const bufferlist& data,
+  bool verify=false);
+
+/// get ref on existing chunk
+void cls_cas_chunk_get_ref(
+  librados::ObjectWriteOperation& op,
+  const hobject_t& soid);
+
+/// drop reference on existing chunk
+void cls_cas_chunk_put_ref(
+  librados::ObjectWriteOperation& op,
+  const hobject_t& soid);
+
+
+//
+// advanced (used for scrub, repair, etc.)
+//
+
+/// read list of all chunk references
+int cls_cas_chunk_read_refs(
+  librados::IoCtx& io_ctx,
+  std::string& oid,
+  std::set<hobject_t> *refs);
+
+/// force update on chunk references
+void cls_cas_chunk_set_refs(
+  librados::ObjectWriteOperation& op,
+  std::set<hobject_t>& refs);
+
+/// check if a tiered rados object links to a chunk
+int cls_cas_references_chunk(
+  librados::IoCtx& io_ctx,
+  const std::string& oid,
+  const std::string& chunk_oid);
+
 #endif

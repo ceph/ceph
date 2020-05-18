@@ -3214,8 +3214,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
   // redirect's refcount 
   {
     bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    cache_ioctx.exec("bar", "cas", "chunk_read_refs", in, out);
+    cls_cas_chunk_read_refs_ret read_ret;
     try {
       auto iter = out.cbegin();
       decode(read_ret, iter);
@@ -3227,8 +3227,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
   // chunk's refcount 
   {
     bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    cache_ioctx.exec("bar-chunk", "cas", "chunk_read_refs", in, out);
+    cls_cas_chunk_read_refs_ret read_ret;
     try {
       auto iter = out.cbegin();
       decode(read_ret, iter);
@@ -3304,8 +3304,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // redirect's refcount 
   {
     bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    cache_ioctx.exec("bar", "cas", "chunk_read_refs", in, out);
+    cls_cas_chunk_read_refs_ret read_ret;
     try {
       auto iter = out.cbegin();
       decode(read_ret, iter);
@@ -3317,8 +3317,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // chunk's refcount 
   {
     bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    cache_ioctx.exec("bar-chunk", "cas", "chunk_read_refs", in, out);
+    cls_cas_chunk_read_refs_ret read_ret;
     try {
       auto iter = out.cbegin();
       decode(read_ret, iter);
@@ -3352,7 +3352,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // redirect's refcount 
   {
     bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read", in, out);
+    cache_ioctx.exec("bar", "cas", "chunk_read_refs", in, out);
     if (out.length() != 0U) {
       ObjectWriteOperation op;
       op.unset_manifest();
@@ -3366,7 +3366,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // chunk's refcount 
   {
     bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read", in, out);
+    cache_ioctx.exec("bar-chunk", "cas", "chunk_read_refs", in, out);
     if (out.length() != 0U) {
       ObjectWriteOperation op;
       op.unset_manifest();
@@ -3497,8 +3497,8 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     sha1_gen.Update((const unsigned char *)"There hi", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.exec(p_str, "cas", "chunk_read", in, out);
-    cls_chunk_refcount_read_ret read_ret;
+    cache_ioctx.exec(p_str, "cas", "chunk_read_refs", in, out);
+    cls_cas_chunk_read_refs_ret read_ret;
     try {
       auto iter = out.cbegin();
       decode(read_ret, iter);
