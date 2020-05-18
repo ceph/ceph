@@ -116,7 +116,7 @@ public:
     return peering_state.get_min_last_complete_ondisk();
   }
 
-  const pg_info_t& get_info() const {
+  const pg_info_t& get_info() const final {
     return peering_state.get_info();
   }
 
