@@ -2698,7 +2698,12 @@ def command_deploy():
     if state == 'running':
         redeploy = True
 
-    logger.info('Deploying daemon %s.%s ...' % (daemon_type, daemon_id))
+    if args.reconfig:
+        logger.info('%s daemon %s ...' % ('Reconfig', args.name))
+    elif redeploy:
+        logger.info('%s daemon %s ...' % ('Redeploy', args.name))
+    else:
+        logger.info('%s daemon %s ...' % ('Deploy', args.name))
 
     if daemon_type in Ceph.daemons:
         (config, keyring) = get_config_and_keyring()
