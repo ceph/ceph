@@ -100,6 +100,12 @@ For example::
   radosgw-admin subuser create --uid=johndoe --subuser=johndoe:swift --access=full
 
 
+It is preferred to be explicit when creating subusers, specifying users with a ``--uid``.
+If a ``--uid`` is not supplied, we parse the uid until the last colon ::
+
+  radosgw-admin subuser create --subuser={user_uid}:{subuser_uid} --access=[ read | write | readwrite | full ]
+
+
 .. note:: ``full`` is not ``readwrite``, as it also includes the access control policy.
 
 .. code-block:: javascript
