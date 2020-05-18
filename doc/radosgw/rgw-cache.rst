@@ -28,7 +28,7 @@ On subsequent accesses to the cached object, Nginx will satisfy requests for alr
 Auth API
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                                 
-This APIValidates a specific authenticated access being made to the cache, using RGW's knowledge of the client credentials and stored access policy. 
+This API Validates a specific authenticated access being made to the cache, using RGW's knowledge of the client credentials and stored access policy. 
 Returns success if the encapsulated request would be granted.
 
 Cache API
@@ -83,6 +83,8 @@ $ sudo gmake install
 $ sudo ln -sf /usr/local/openresty/bin/openresty /usr/bin/nginx
 
 Put in-place your nginx configuration files and edit them according to your environment:
+
+All nginx conf files are under: https://github.com/ceph/ceph/tree/master/examples/rgw-cache 
 
 nginx.conf should go to /etc/nginx/nginx.conf
 nginx-lua-file.lua should go to /etc/nginx/nginx-lua-file.lua
