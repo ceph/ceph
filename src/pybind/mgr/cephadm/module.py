@@ -1,13 +1,12 @@
 import json
 import errno
 import logging
-import time
 from threading import Event
 from functools import wraps
 
 import string
-from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
-    Any, NamedTuple, Iterator, Set, Sequence, TYPE_CHECKING, cast, Union
+from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
+    Any, Set, TYPE_CHECKING, cast
 
 import datetime
 import six
