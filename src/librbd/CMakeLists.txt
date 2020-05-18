@@ -27,6 +27,7 @@ set(librbd_internal_srcs
   api/DiffIterate.cc
   api/Group.cc
   api/Image.cc
+  api/Io.cc
   api/Migration.cc
   api/Mirror.cc
   api/Namespace.cc
@@ -48,6 +49,7 @@ set(librbd_internal_srcs
   deep_copy/SnapshotCreateRequest.cc
   deep_copy/Utils.cc
   exclusive_lock/AutomaticPolicy.cc
+  exclusive_lock/ImageDispatch.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
   exclusive_lock/PreReleaseRequest.cc
@@ -73,14 +75,19 @@ set(librbd_internal_srcs
   io/AioCompletion.cc
   io/AsyncOperation.cc
   io/CopyupRequest.cc
+  io/FlushTracker.cc
+  io/ImageDispatch.cc
   io/ImageDispatchSpec.cc
+  io/ImageDispatcher.cc
   io/ImageRequest.cc
-  io/ImageRequestWQ.cc
   io/ObjectDispatch.cc
   io/ObjectDispatchSpec.cc
   io/ObjectDispatcher.cc
   io/ObjectRequest.cc
+  io/QosImageDispatch.cc
+  io/QueueImageDispatch.cc
   io/ReadResult.cc
+  io/RefreshImageDispatch.cc
   io/SimpleSchedulerObjectDispatch.cc
   io/Utils.cc
   journal/CreateRequest.cc

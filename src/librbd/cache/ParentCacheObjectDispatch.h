@@ -29,7 +29,7 @@ public:
   ParentCacheObjectDispatch(ImageCtxT* image_ctx);
   ~ParentCacheObjectDispatch() override;
 
-  io::ObjectDispatchLayer get_object_dispatch_layer() const override {
+  io::ObjectDispatchLayer get_dispatch_layer() const override {
     return io::OBJECT_DISPATCH_LAYER_PARENT_CACHE;
   }
 

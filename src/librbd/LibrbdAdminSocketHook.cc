@@ -6,7 +6,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/internal.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/api/Io.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -25,7 +25,7 @@ public:
   explicit FlushCacheCommand(ImageCtx *ictx) : ictx(ictx) {}
 
   int call(Formatter *f) override {
-    return ictx->io_work_queue->flush();
+    return api::Io<>::flush(*ictx);
   }
 
 private:

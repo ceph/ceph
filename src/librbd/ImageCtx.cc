@@ -28,8 +28,9 @@
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcher.h"
 #include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/QosImageDispatch.h"
 #include "librbd/journal/StandardPolicy.h"
 
 #include "osdc/Striper.h"
@@ -76,7 +77,7 @@ public:
 
 class SafeTimerSingleton : public SafeTimer {
 public:
-  ceph::mutex lock = ceph::make_mutex("librbd::Journal::SafeTimerSingleton::lock");
+  ceph::mutex lock = ceph::make_mutex("librbd::SafeTimerSingleton::lock");
 
   explicit SafeTimerSingleton(CephContext *cct)
       : SafeTimer(cct, lock, true) {
@@ -121,7 +122,7 @@ public:
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
-      io_work_queue(nullptr), op_work_queue(nullptr),
+      op_work_queue(nullptr),
       external_callback_completions(32),
       event_socket_completions(32),
       asok_hook(nullptr),
@@ -137,11 +138,8 @@ public:
 
     ThreadPool *thread_pool;
     get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
-    io_work_queue = new io::ImageRequestWQ<>(
-      this, "librbd::io_work_queue",
-      cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
-      thread_pool);
-    io_object_dispatcher = new io::ObjectDispatcher<>(this);
+    io_image_dispatcher = new io::ImageDispatcher<ImageCtx>(this);
+    io_object_dispatcher = new io::ObjectDispatcher<ImageCtx>(this);
 
     if (cct->_conf.get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
@@ -173,13 +171,12 @@ public:
     if (data_ctx.is_valid()) {
       data_ctx.aio_flush();
     }
-    io_work_queue->drain();
 
     delete io_object_dispatcher;
+    delete io_image_dispatcher;
 
     delete journal_policy;
     delete exclusive_lock_policy;
-    delete io_work_queue;
     delete operations;
     delete state;
   }
@@ -813,31 +810,31 @@ public:
       }
     }
 
-    io_work_queue->apply_qos_schedule_tick_min(
+    io_image_dispatcher->apply_qos_schedule_tick_min(
       config.get_val<uint64_t>("rbd_qos_schedule_tick_min"));
 
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_IOPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_iops_limit"),
       config.get_val<uint64_t>("rbd_qos_iops_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_BPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_bps_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_READ_IOPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_READ_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_iops_limit"),
       config.get_val<uint64_t>("rbd_qos_read_iops_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_WRITE_IOPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_WRITE_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_iops_limit"),
       config.get_val<uint64_t>("rbd_qos_write_iops_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_READ_BPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_READ_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_read_bps_burst"));
-    io_work_queue->apply_qos_limit(
-      RBD_QOS_WRITE_BPS_THROTTLE,
+    io_image_dispatcher->apply_qos_limit(
+      io::IMAGE_DISPATCH_FLAG_QOS_WRITE_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_write_bps_burst"));
 

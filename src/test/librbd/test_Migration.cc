@@ -8,6 +8,7 @@
 #include "librbd/Operations.h"
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Io.h"
 #include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Namespace.h"
@@ -15,13 +16,14 @@
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/internal.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "common/Cond.h"
 #include <boost/scope_exit.hpp>
 
 void register_test_migration() {
 }
+
+namespace librbd {
 
 struct TestMigration : public TestFixture {
   static void SetUpTestCase() {
@@ -126,15 +128,17 @@ struct TestMigration : public TestFixture {
       bufferlist src_bl;
       src_bl.push_back(src_ptr);
       librbd::io::ReadResult src_result{&src_bl};
-      EXPECT_EQ(read_size, src_ictx->io_work_queue->read(
-                  offset, read_size, librbd::io::ReadResult{src_result}, 0));
+      EXPECT_EQ(read_size, api::Io<>::read(
+                  *src_ictx, offset, read_size,
+                  librbd::io::ReadResult{src_result}, 0));
 
       bufferptr dst_ptr(read_size);
       bufferlist dst_bl;
       dst_bl.push_back(dst_ptr);
       librbd::io::ReadResult dst_result{&dst_bl};
-      EXPECT_EQ(read_size, dst_ictx->io_work_queue->read(
-                  offset, read_size, librbd::io::ReadResult{dst_result}, 0));
+      EXPECT_EQ(read_size, api::Io<>::read(
+                  *dst_ictx, offset, read_size,
+                  librbd::io::ReadResult{dst_result}, 0));
 
       if (!src_bl.contents_equal(dst_bl)) {
         std::cout << description
@@ -250,25 +254,25 @@ struct TestMigration : public TestFixture {
     bufferlist ref_bl;
     ref_bl.append(std::string(len, c));
     ASSERT_EQ(static_cast<ssize_t>(len),
-              m_ref_ictx->io_work_queue->write(off, len, std::move(ref_bl), 0));
+              api::Io<>::write(*m_ref_ictx, off, len, std::move(ref_bl), 0));
     bufferlist bl;
     bl.append(std::string(len, c));
     ASSERT_EQ(static_cast<ssize_t>(len),
-              m_ictx->io_work_queue->write(off, len, std::move(bl), 0));
+              api::Io<>::write(*m_ictx, off, len, std::move(bl), 0));
   }
 
   void discard(uint64_t off, uint64_t len) {
     std::cout << "discard: " << off << "~" << len << std::endl;
 
     ASSERT_EQ(static_cast<ssize_t>(len),
-              m_ref_ictx->io_work_queue->discard(off, len, false));
+              api::Io<>::discard(*m_ref_ictx, off, len, false));
     ASSERT_EQ(static_cast<ssize_t>(len),
-              m_ictx->io_work_queue->discard(off, len, false));
+              api::Io<>::discard(*m_ictx, off, len, false));
   }
 
   void flush() {
-    ASSERT_EQ(0, m_ref_ictx->io_work_queue->flush());
-    ASSERT_EQ(0, m_ictx->io_work_queue->flush());
+    ASSERT_EQ(0, api::Io<>::flush(*m_ref_ictx));
+    ASSERT_EQ(0, api::Io<>::flush(*m_ictx));
   }
 
   void snap_create(const std::string &snap_name) {
@@ -424,8 +428,8 @@ struct TestMigration : public TestFixture {
     bufferptr ptr(10);
     bl.push_back(ptr);
     librbd::io::ReadResult result{&bl};
-    ASSERT_EQ(10, child_ictx->io_work_queue->read(
-                0, 10, librbd::io::ReadResult{result}, 0));
+    ASSERT_EQ(10, api::Io<>::read(
+                *child_ictx, 0, 10, librbd::io::ReadResult{result}, 0));
     bufferlist ref_bl;
     ref_bl.append(std::string(10, 'A'));
     ASSERT_TRUE(ref_bl.contents_equal(bl));
@@ -1324,3 +1328,5 @@ TEST_F(TestMigration, StressLive)
 {
   test_stress2(true);
 }
+
+} // namespace librbd

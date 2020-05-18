@@ -58,8 +58,8 @@ namespace librbd {
   class AioCompletion;
   class AsyncOperation;
   template <typename> class CopyupRequest;
-  template <typename> class ImageRequestWQ;
-  template <typename> class ObjectDispatcher;
+  struct ImageDispatcherInterface;
+  struct ObjectDispatcherInterface;
   }
   namespace journal { struct Policy; }
 
@@ -180,8 +180,8 @@ namespace librbd {
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
-    io::ImageRequestWQ<ImageCtx> *io_work_queue;
-    io::ObjectDispatcher<ImageCtx> *io_object_dispatcher = nullptr;
+    io::ImageDispatcherInterface *io_image_dispatcher = nullptr;
+    io::ObjectDispatcherInterface *io_object_dispatcher = nullptr;
 
     ContextWQ *op_work_queue;
 

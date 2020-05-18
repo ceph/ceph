@@ -31,10 +31,10 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
+#include "librbd/api/Io.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
@@ -489,7 +489,7 @@ public:
     size_t written;
     bufferlist bl;
     bl.append(std::string(test_data, len));
-    written = ictx->io_work_queue->write(off, len, std::move(bl), 0);
+    written = librbd::api::Io<>::write(*ictx, off, len, std::move(bl), 0);
     printf("wrote: %d\n", (int)written);
     ASSERT_EQ(len, written);
   }
@@ -501,8 +501,8 @@ public:
     char *result = (char *)malloc(len + 1);
 
     ASSERT_NE(static_cast<char *>(NULL), result);
-    read = ictx->io_work_queue->read(
-      off, len, librbd::io::ReadResult{result, len}, 0);
+    read = librbd::api::Io<>::read(
+      *ictx, off, len, librbd::io::ReadResult{result, len}, 0);
     printf("read: %d\n", (int)read);
     ASSERT_EQ(len, static_cast<size_t>(read));
     result[len] = '\0';
@@ -525,7 +525,7 @@ public:
     C_SaferCond aio_flush_ctx;
     auto c = librbd::io::AioCompletion::create(&aio_flush_ctx);
     c->get();
-    ictx->io_work_queue->aio_flush(c);
+    librbd::api::Io<>::aio_flush(*ictx, c, true);
     ASSERT_EQ(0, c->wait_for_complete());
     c->put();
 

@@ -14,9 +14,8 @@
 #include "journal/Settings.h"
 #include "journal/Utils.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/DemoteRequest.h"
 #include "librbd/journal/ObjectDispatch.h"
@@ -572,7 +571,7 @@ void Journal<I>::open(Context *on_finish) {
   on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
   // inject our handler into the object dispatcher chain
-  m_image_ctx.io_object_dispatcher->register_object_dispatch(
+  m_image_ctx.io_object_dispatcher->register_dispatch(
     journal::ObjectDispatch<I>::create(&m_image_ctx, this));
 
   std::lock_guard locker{m_lock};
@@ -593,7 +592,7 @@ void Journal<I>::close(Context *on_finish) {
       auto ctx = new LambdaContext([on_finish, r](int _) {
           on_finish->complete(r);
         });
-      m_image_ctx.io_object_dispatcher->shut_down_object_dispatch(
+      m_image_ctx.io_object_dispatcher->shut_down_dispatch(
         io::OBJECT_DISPATCH_LAYER_JOURNAL, ctx);
     });
   on_finish = create_async_context_callback(m_image_ctx, on_finish);

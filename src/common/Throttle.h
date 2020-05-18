@@ -414,16 +414,17 @@ public:
     return m_name;
   }
 
-  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
-  void add_blocker(uint64_t c, T *handler, I *item, uint64_t flag) {
-    Context *ctx = new LambdaContext([handler, item, flag](int r) {
-      (handler->*MF)(r, item, flag);
+  template <typename T, typename MF, typename I>
+  void add_blocker(uint64_t c, T&& t, MF&& mf, I&& item, uint64_t flag) {
+    auto ctx = new LambdaContext(
+      [t, mf, item=std::forward<I>(item), flag](int) mutable {
+        (t->*mf)(std::forward<I>(item), flag);
       });
     m_blockers.emplace_back(c, ctx);
   }
 
-  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
-  bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
+  template <typename T, typename MF, typename I>
+  bool get(uint64_t c, T&& t, MF&& mf, I&& item, uint64_t flag) {
     bool wait = false;
     uint64_t got = 0;
     std::lock_guard lock(m_lock);
@@ -441,8 +442,10 @@ public:
       }
     }
 
-    if (wait)
-      add_blocker<T, I, MF>(c - got, handler, item, flag);
+    if (wait) {
+      add_blocker(c - got, std::forward<T>(t), std::forward<MF>(mf),
+                  std::forward<I>(item), flag);
+    }
 
     return wait;
   }

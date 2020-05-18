@@ -3,7 +3,7 @@
 
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "include/Context.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include <boost/variant.hpp>
 
 namespace librbd {
@@ -23,6 +23,7 @@ void ObjectDispatchSpec::C_Dispatcher::complete(int r) {
     finish(r);
     break;
   case DISPATCH_RESULT_INVALID:
+  case DISPATCH_RESULT_RESTART:
     ceph_abort();
     break;
   }

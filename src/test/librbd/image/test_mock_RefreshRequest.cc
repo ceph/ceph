@@ -110,9 +110,10 @@ struct ImageDispatchSpec<librbd::MockRefreshImageCtx> {
   static ImageDispatchSpec* s_instance;
   AioCompletion *aio_comp = nullptr;
 
-  static ImageDispatchSpec* create_flush_request(
-      librbd::MockRefreshImageCtx &image_ctx, AioCompletion *aio_comp,
-      FlushSource flush_source, const ZTracer::Trace &parent_trace) {
+  static ImageDispatchSpec* create_flush(
+      librbd::MockRefreshImageCtx &image_ctx, ImageDispatchLayer dispatch_layer,
+      AioCompletion *aio_comp, FlushSource flush_source,
+      const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_comp = aio_comp;
     return s_instance;
@@ -182,10 +183,15 @@ public:
     ASSERT_EQ(0, ictx->md_ctx.write(ictx->header_oid, hdr, hdr.length(), 0));
   }
 
-  void expect_set_require_lock(MockRefreshImageCtx &mock_image_ctx,
-                               librbd::io::Direction direction, bool enabled) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock(direction,
-                                                                enabled));
+  void expect_set_require_lock(MockExclusiveLock &mock_exclusive_lock,
+                               librbd::io::Direction direction) {
+    EXPECT_CALL(mock_exclusive_lock, set_require_lock(direction, _))
+      .WillOnce(WithArg<1>(Invoke([](Context* ctx) { ctx->complete(0); })));
+  }
+
+  void expect_unset_require_lock(MockExclusiveLock &mock_exclusive_lock,
+                                 librbd::io::Direction direction) {
+    EXPECT_CALL(mock_exclusive_lock, unset_require_lock(direction));
   }
 
   void expect_v1_read_header(MockRefreshImageCtx &mock_image_ctx, int r) {
@@ -502,12 +508,12 @@ public:
   }
 
   void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes())
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes())
                   .Times(1);
   }
 
@@ -1162,7 +1168,7 @@ TEST_F(TestMockImageRefreshRequest, EnableJournalWithoutExclusiveLock) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
-  expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_BOTH, true);
+  expect_set_require_lock(mock_exclusive_lock, librbd::io::DIRECTION_BOTH);
 
   C_SaferCond ctx;
   MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
@@ -1215,13 +1221,14 @@ TEST_F(TestMockImageRefreshRequest, DisableJournal) {
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   expect_block_writes(mock_image_ctx, 0);
   if (!mock_image_ctx.clone_copy_on_read) {
-    expect_set_require_lock(mock_image_ctx, librbd::io::DIRECTION_READ, false);
+    expect_unset_require_lock(mock_exclusive_lock, librbd::io::DIRECTION_READ);
   }
   expect_close_journal(mock_image_ctx, mock_journal, 0);
   expect_unblock_writes(mock_image_ctx);
 
   C_SaferCond ctx;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false,
+                                                   &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());

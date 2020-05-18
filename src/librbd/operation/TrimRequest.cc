@@ -9,7 +9,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
