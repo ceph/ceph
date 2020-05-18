@@ -31,7 +31,8 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 from . import remotes
 from . import utils
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, IscsiService
+    RbdMirrorService, CrashService
+from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -313,7 +314,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.prometheus_service = PrometheusService(self)
         self.node_exporter_service = NodeExporterService(self)
         self.crash_service = CrashService(self)
-        self.iscsi_servcie = IscsiService(self)
+        self.iscsi_service = IscsiService(self)
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1662,13 +1663,13 @@ you may want to run:
             'prometheus': self.prometheus_service.create,
             'node-exporter': self.node_exporter_service.create,
             'crash': self.crash_service.create,
-            'iscsi': self.iscsi_servcie.create,
+            'iscsi': self.iscsi_service.create,
         }
         config_fns = {
             'mds': self.mds_service.config,
             'rgw': self.rgw_service.config,
             'nfs': self.nfs_service.config,
-            'iscsi': self.iscsi_servcie.config,
+            'iscsi': self.iscsi_service.config,
         }
         create_func = create_fns.get(daemon_type, None)
         if not create_func:
@@ -1785,6 +1786,7 @@ you may want to run:
 
         daemons = self.cache.get_daemons()
         grafanas = []  # type: List[orchestrator.DaemonDescription]
+        iscsi_daemons = []
         for dd in daemons:
             # orphan?
             spec = self.spec_store.specs.get(dd.service_name(), None)
@@ -1802,6 +1804,8 @@ you may want to run:
             if dd.daemon_type == 'grafana':
                 # put running instances at the front of the list
                 grafanas.insert(0, dd)
+            elif dd.daemon_type == 'iscsi':
+                iscsi_daemons.append(dd)
             deps = self._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
             last_deps, last_config = self.cache.get_daemon_last_config_deps(
                 dd.hostname, dd.name())
@@ -1827,21 +1831,10 @@ you may want to run:
                 self._create_daemon(dd.daemon_type, dd.daemon_id,
                                     dd.hostname, reconfig=True)
 
-        # make sure the dashboard [does not] references grafana
-        try:
-            current_url = self.get_module_option_ex('dashboard',
-                                                    'GRAFANA_API_URL')
-            if grafanas:
-                host = grafanas[0].hostname
-                url = f'https://{self.inventory.get_addr(host)}:3000'
-                if current_url != url:
-                    self.log.info('Setting dashboard grafana config to %s' % url)
-                    self.set_module_option_ex('dashboard', 'GRAFANA_API_URL',
-                                              url)
-                    # FIXME: is it a signed cert??
-        except Exception as e:
-            self.log.debug('got exception fetching dashboard grafana state: %s',
-                           e)
+        if grafanas:
+            self.grafana_service.daemon_check_post(grafanas)
+        if iscsi_daemons:
+            self.iscsi_service.daemon_check_post(iscsi_daemons)
 
     def _add_daemon(self, daemon_type, spec,
                     create_func: Callable[..., T], config_func=None) -> List[T]:
@@ -1973,7 +1966,7 @@ you may want to run:
     @trivial_completion
     def add_iscsi(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('iscsi', spec, self.iscsi_servcie.create, self.iscsi_servcie.config)
+        return self._add_daemon('iscsi', spec, self.iscsi_service.create, self.iscsi_service.config)
 
     @trivial_completion
     def apply_iscsi(self, spec):
