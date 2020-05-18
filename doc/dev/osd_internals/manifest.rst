@@ -3,7 +3,6 @@ Manifest
 ========
 
 
-============
 Introduction
 ============
 
@@ -21,8 +20,72 @@ This document exists to detail:
 
 1. Manifest data structures
 2. Rados operations for manipulating manifests.
-3. How those operations interact with other features like snapshots.
+3. Status and Plans
 
+
+Intended Usage Model
+====================
+
+RBD
+---
+
+For RBD, the primary goal is for either an osd-internal agent or a
+cluster-external agent to be able to transparently shift portions
+of the consituent 4MB extents between a dedup pool and a hot base
+pool.
+
+As such, rbd operations (including class operations and snapshots)
+must have the same observable results regardless of the current
+status of the object.
+
+Moreover, tiering/dedup operations must interleave with rbd operations
+without changing the result.
+
+Thus, here is a sketch of how I'd expect a tiering agent to perform
+basic operations:
+
+* Demote cold rbd chunk to slow pool:
+
+  1. Read object, noting current user_version.
+  2. In memory, run CDC implemenation to fingerprint object.
+  3. Write out each resulting extent to an object in the cold pool
+     using the CAS class.
+  4. Submit operation to base pool:
+
+     * ASSERT_VER with the user verion from the read to fail if the
+       object has been mutated since the read.
+     * SET_CHUNK for each of the extents to the corresponding object
+       in the base pool.
+     * EVICT_CHUNK for each extent to free up space in the base pool.
+       Results in each chunk being marked MISSING.
+
+  RBD users should then either see the state prior to the demotion or
+  subsequent to it.
+
+  Note that between 3 and 4, we potentially leak references, so a
+  periodic scrub would be needed to validate refcounts.
+
+* Promote cold rbd chunk to fast pool.
+
+  1. Submit TIER_PROMOTE
+
+For clones, all of the above would be identical except that the
+initial read would need a LIST_SNAPS to determine which clones exist
+and the PROMOTE or SET_CHUNK/EVICT operations would need to include
+the cloneid.
+
+RadosGW
+-------
+
+For reads, RadosGW could operate as RBD above relying on the manifest
+machinery in the OSD to hide the distinction between the object being
+dedup'd or present in the base pool
+
+For writes, RadosGW could operate as RBD does above, but it could
+optionally have the freedom to fingerprint prior to doing the write.
+In that case, it could immediately write out the target objects to the
+CAS pool and then atomically write an object with the corresponding
+chunks set.
 
 Status and Future Work
 ======================
@@ -30,34 +93,45 @@ Status and Future Work
 At the moment, initial versions of a manifest data structure along
 with IO path support and rados control operations exist.  This section
 is meant to outline next steps.
-Future work will be proceeded as cleanups -> snapshot -> cache/tiering -> rbd support
-in order.
+
+At a high level, our future work plan is:
+
+- Cleanups: Address immediate inconsistencies and shortcomings outlined
+  in the next section.
+- Testing: Rados relies heavily on teuthology failure testing to validate
+  features like cache/tiering.  We'll need corresponding tests for
+  manifest operations.
+- Snapshots: We want to be able to deduplicate portions of clones
+  below the level of the rados snapshot system.  As such, the
+  rados operations below need to be extended to work correctly on
+  clones (e.g.: we should be able to call SET_CHUNK on a clone, clear the
+  corresponding extent in the base pool, and correctly maintain osd metadata).
+- Cache/tiering: Ultimately, we'd like to be able to deprecate the existing
+  cache/tiering implementation, but to do that we need to ensure that we
+  can address the same use cases.
+
 
 Cleanups
 --------
 
-There are some rough edges we may want to improve:
+The existing implementation has some things that need to be cleaned up:
 
-* object_manifest_t: appears to duplicate offset for chunks between the
-  map and the chunk_info_t with different widths (uint64_t in map vs
-  uint32_t in chunk_info_t).
-* SET_REDIRECT: Should perhaps create the object if it doesn't exist.
+* SET_REDIRECT: Should create the object if it doesn't exist, otherwise
+  one couldn't create an object atomically as a redirect.
 * SET_CHUNK:
 
   * Appears to trigger a new clone as user_modify gets set in
     do_osd_ops.  This probably isn't desirable, see Snapshots section
     below for some options on how generally to mix these operations
-    with snapshots.
-    TODO: Modify SET_CHUNK to set user_modify = false not to trigger a new clone.
+    with snapshots.  At a minimum, SET_CHUNK probably shouldn't set
+    user_modify.
   * Appears to assume that the corresponding section of the object
     does not exist (sets FLAG_MISSING) but does not check whether the
-    corresponding extent exists already in the object.
-    TODO: Set FLAG_DIRTY if the corresponding section of the object exists.
-
+    corresponding extent exists already in the object.  Should always
+    leave the extent clean.
   * Appears to clear the manifest unconditionally if not chunked,
     that's probably wrong.  We should return an error if it's a
-    REDIRECT.
-    TODO: add the following lines ::
+    REDIRECT ::
 
 	case CEPH_OSD_OP_SET_CHUNK:
 	  if (oi.manifest.is_redirect()) {
@@ -68,43 +142,82 @@ There are some rough edges we may want to improve:
 
 * TIER_PROMOTE:
 
-  * Document control flow in this file.  The CHUNKED case is
-    particularly unintuitive and could use some explanation.
-    - Control flow
-    Based on the chunk_map in a head object (each chunk's state can be 
-    dirty or missing), chunked objects for the head object 
-    can be retrieved when tier_promote is invoked.
-    After promotion is completed, all chunks in the object should be clean state.
-
-    One thing to note is snapshotted manifest object.
-    Suppose that there are 10(9), 5(4). If we want to read clone id 4,
-    need to read chunks according to the chunk_map for clone id 4.
-    But, because the base tier keeps object_info_t in the case of manifest object,
-    the read with snapshot can work.
-    If clone id 4 is dirty or clean, the chunks will be read directly from the base tier.
-    If clone id 4 is missing, the chunks will be copied from the lower tier 
-
   * SET_REDIRECT clears the contents of the object.  PROMOTE appears
     to copy them back in, but does not unset the redirect or clear the
-    reference. Does this not violate the invariant?  In particular, as
-    long as the redirect is set, it appears that all operations
-    will be proxied even after the promote defeating the purpose.
-    TODO: To prevent it, clear redirect as part of promote.
+    reference. This violates the invariant that a redirect object
+    should be empty in the base pool.  In particular, as long as the
+    redirect is set, it appears that all operations will be proxied
+    even after the promote defeating the purpose.  We do want PROMOTE
+    to be able to atomically replace a redirect with the actual
+    object, so the solution is to clear the redirect at the end of the
+    promote.
+  * For a chunked manifest, we appear to flush prior to promoting.
+    Promotion will often be used to prepare an object for low latency
+    reads and writes, accordingly, the only effect should be to read
+    any MISSING extents into the base pool.  No flushing should be done.
 
-  * For a chunked manifest, we appear to flush prior to promoting,
-    it that actually desirable?
-    TODO: The initial thought behind of this is that we don't know fingerprint 
-    oid before flushing the chunk. So, before promoting the chunk, 
-    we need to figure out the fingerprint oid.
-    But, to avoid unnecessary dedup work if the user specifically ask for 
-    the data to be resident in the base pool, TIER_DO_NOT_DEDUP_PIN can be used.
+* High Level:
 
-Plans
-  1. https://github.com/ceph/ceph/pull/29283 
-  (This PR adds basic snapshotted manifest object by using per clone's chunk_info_t)
-  2. Modify SET_CHUNK not to trigger a clone
-  3. Cleanups regarding existing manifest object as discussed here
-   
+  * It appears that FLAG_DIRTY should never be used for an extent pointing
+    at a dedup extent.  Writing the mutated extent back to the dedup pool
+    requires writing a new object since the previous one cannot be mutated,
+    just as it would if it hadn't been dedup'd yet.  Thus, we should always
+    drop the reference and remove the manifest pointer.
+
+  * There isn't currently a way to "evict" an object region.  With the above
+    change to SET_CHUNK to always retain the existing object region, we
+    need an EVICT_CHUNK operation to then remove the extent.
+
+
+Testing
+-------
+
+We rely really heavily on randomized failure testing.  As such, we need
+to extend that testing to include dedup/manifest support as well.  Here's
+a short list of the the touchpoints:
+
+* Thrasher tests like qa/suites/rados/thrash/workloads/cache-snaps.yaml
+
+  That test, of course, tests the existing cache/tiering machinery.  Add
+  additional files to that directory that instead setup a dedup pool.  Add
+  support to ceph_test_rados (src/test/osd/TestRados*).
+
+* RBD tests
+
+  Add a test that runs an rbd workload concurrently with blind
+  promote/evict operations.
+
+* RadosGW
+
+  Add a test that runs a rgw workload concurrently with blind
+  promote/evict operations.
+
+
+Snapshots
+---------
+
+Fundamentally, I think we need to be able to manipulate the manifest
+status of clones because we want to be able to dynamically promote,
+flush (if the state was dirty when the clone was created), and evict
+extents from clones.
+
+As such, the plan is to allow the object_manifest_t for each clone
+to be independent.  Here's an incomplete list of the high level
+tasks:
+
+* Modify the op processing pipeline to permit SET_CHUNK, EVICT_CHUNK
+  to operation directly on clones.
+* Ensure that recovery checks the object_manifest prior to trying to
+  use the overlaps in clone_range.  ReplicatedBackend::calc_*_subsets
+  are the two methods that would likely need to be modified.
+
+See snaps.rst for a rundown of the librados snapshot system and osd
+support details.  I'd like to call out one particular data structure
+we may want to exploit.
+
+The dedup-tool needs to be updated to use LIST_SNAPS to discover
+clones as part of leak detection.
+
 
 Cache/Tiering
 -------------
@@ -130,150 +243,14 @@ to be wired up to provide feature parity:
   would need to be modified to instead flush and evict using
   manifests.
 
-Plans
- 
-* Rework the tiering agent for manifest objects
-  - flush method (passive vs active)
-
-    Current flush operation for manifest objects uses a active flush model like
-    read the cotent - generating fingerprint - write and set.
-    But, exising tiering method uses copy-get and copy-from to flush the object.
-    I think the active flush model has two advantages compared to the existing method.
-    First, it can reduce the number of operations for a communication. Such as
-    Active: read -> generating fingerprint -> write and set
-    Passive: request copy_from -> copy_get -> read -> getnerating fingerprint -> write and set
-    Second, By managing I/O related to flush on the base tier, 
-    we can control overall I/Os on the cluster appropriately.
-
-  - tier agent
-
-    Because the active flush model is used, the tier agent does more jobs than before
-    (read - generating fingerprint - write and set vs sending copy_from). 
-    So, my concern is a parallism and performance.
-    since a single agent thread is probably hard to achieve high throughput.
-    To this end, the idea is to use N threads working on N pgs.
-    Existing agent threads (agent_work) can manages the list of dirty objects (pgbackend->list_partial)
-    , and flush the dirty objects in parallel. 
-
-* Use exiting existing features regarding the cache flush policy such as histset, age, ratio
+* Use exiting existing features regarding the cache flush policy such as
+  histset, age, ratio.
   - hitset
   - age, ratio, bytes
 
-* Add tiering-mode to manifest-tiering
+* Add tiering-mode to manifest-tiering.
   - Writeback
   - Read-only
-
-
-
-Snapshots
----------
-
-Fundamentally, I think we need to be able to manipulate the manifest
-status of clones because we want to be able to dynamically promote,
-flush (if the state was dirty when the clone was created), and evict
-clones.
-
-As such, I think we want to make a new op type which permits writes on
-clones.
-
-See snaps.rst for a rundown of the librados snapshot system and osd
-support details.  I'd like to call out one particular data structure
-we may want to exploit.
-
-We maintain a clone_overlap mapping which gives between two adjacent
-clones byte ranges which are identical.  It's used during recovery and
-cache/tiering promotion to ensure that the ObjectStore ends up with
-the right byte range sharing via clone.  We probably want to ensure
-that adjacent clones agree on chunk mappings for shared regions.
-
-* Implementation
-
-  My thought is that set_chunk and set_reredirect shouldn't set
-  user_modify to indicate not to trigger a new clone (probably also need a flag like cache_evict).
-  Also, to use manifest with snapshot, set_chunk should be set when the manifest object is created.
-  As a result, the overall procedure is:
-
-    1. Write the object A
-    2. SET_CHUNK (offset: 0 ~ 4)
-    3. SET_CHUNK (offset: 8 ~ 12)
-    4. SET_CHUNK (offset: 16 ~ 20)
-    5. Create a snapshot 
-    6. Write the object A
-    7. Create a snapshot
-
-  When a snapshot is created between 5 and 6, clones prior to head are dirty
-  if the head object is dirty (and the flush should start from old clones).
-  Also, there are two use cases.
-
-    Use case 1
-
-      1. Create object A
-      2. Write Full
-      3. SET_CHUNK
-      4. SET_CHUNK
-      5. Write the object A
-      6. Create a snapshot
-      7. Write the object A
-      8. Create a snapshot
-
-    Use case 2
-
-      1. Create object A
-      2. Write Full
-      3. SET_CHUNK
-      4. SET_CHUNK
-      5. Write the object A
-      6. Create a snapshot ABC
-      7. Write the object A
-      8. SET_CHUNK to the snapshot ABC
-
-  The state of the chunk_map in clone should be MISSING after eviction is done.
-  If we want to read clones, we have to look at the chunk_info_t according to given snap_id 
-  to find out which chunk is needed.
-  Therefore, clone needs to be mutable. To do that, we probably need a new op type.
-  If snap read occurs, the chunks can be read from snapshots without doing a rollback.
-  Such reads must return the contents of the object at the time the snapshot was taken.
-
-  - Clone_overlap
-
-  clone_overlap is an optimization that ensures that recovery preserves the underlying 
-  ObjectStore level byte range sharing inherent in clone.
-  Therefore, to support snapshot with manifest object, we should ensure interaction 
-  between clone_overlap and manifest object. To do so, here is the basic example describing how 
-  it works.
-  HEAD: [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
-  clone 10(9, 7): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
-  clone 6(6, 5): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
-  clone 4(2, 1): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
-  clone_overlap: {10: [1 ~ 10, 20 ~ 10], 6: [10 ~ 10], 4: [1 ~ 10, 10 ~ 20]}
-
-  At this point, if we SET_CHUNK clone 6 20 ~ 10 aaa, the object will become as below.
-
-  HEAD: [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
-  clone 10(9, 7): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 nochunk]
-  clone 6(6, 5): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 aaa]
-  clone 4(2, 1): [1 ~ 10 nochunk] [10 ~ 10 nochunk] [20 ~ 10 aaa]
-  clone_overlap: {10: [1 ~ 10, 20 ~ 10], 6: [10 ~ 10], 4:[1 ~ 10]}
-  
-
-  - Leak management
-
-  Fixing a reference leak by dedup-tool also need to be reconsidered because
-  dedup-tool finds out the leaks by using the head object. If the head object 
-  has snapshots, it should search chunk_info_t in clones as well.
-  
-
-* Plans
-
-  1. separate evict from flush (manifest tier uses flush+evict)
-  2. promote, flush and evict clones for snapshotted manifest object (with a new op)
-  3. scrub test for manifest object and dedup tool
-
-
-Interaction between RBD
------------------------
-
-ToDo
 
 
 Data Structures
@@ -320,6 +297,10 @@ The type enum reflects three possible states an object can be in:
           cflag_t flags;   // FLAG_*
 
 
+FLAG_DIRTY at this time can happen if an extent with a fingerprint
+is written.  This should be changed to drop the fingerprint instead.
+
+
 Request Handling
 ================
 
@@ -335,7 +316,6 @@ For redirect objects which haven't been promoted (apparently oi.size >
 For reads on TYPE_CHUNKED, if can_proxy_chunked_read (basically, all
 of the ops are reads of extents in the object_manifest_t chunk_map),
 we proxy requests to those objects.
-
 
 
 RADOS Interface
@@ -418,70 +398,51 @@ Operations:
 
   This operation is not a user mutation and does not trigger a clone to be created.
 
-  TODO: SET_CHUNK appears to clear the manifest unconditionally if it's not chunked.
-  That seems wrong. ::
+  TODO: SET_CHUNK appears to clear the manifest unconditionally if it's not chunked. ::
 
        if (!oi.manifest.is_chunked()) {
          oi.manifest.clear();
        }
 
+* evict-chunk
+
+  Clears an extent from an object leaving only the manifest link between
+  it and the target_object. ::
+
+        void evict_chunk(
+	  uint64_t offset, uint64_t length, int flag = 0);
+  
+        rados -p base_pool evict-chunk <offset> <length> <object>
+
+  Returns EINVAL if the extent is not present in the manifest.
+
+  Note: this does not exist yet.
+
+
 * tier-promote 
 
-  promote the object (including chunks). ::
+  promotes the object ensuring that subsequent reads and writes will be local ::
 
         void tier_promote();
 
         rados -p base_pool tier-promote <obj-name> 
 
   Returns ENOENT if the object does not exist
-  Returns EINVAL if the object already is a redirect.
-
-  For a chunked manifest, copies all chunks to head.
 
   For a redirect manifest, copies data to head.
 
-  TODO: To atomically replace a redirect or dedup'd chunk with a local copy atomically,
-  redirect will be clear after the promote.
+  TODO: Promote on a redirect object needs to clear the redirect.
 
-  Does not clear the manifest.
+  For a chunked manifest, reads all MISSING extents into the base pool,
+  subsequent reads and writes will be served from the base pool.
 
-  Note: For a chunked manifest, calls start_copy on itself and uses the
-  existing read proxy machinery to proxy the reads.
+  Implementation Note: For a chunked manifest, calls start_copy on itself.  The
+  resulting copy_get operation will issue reads which will then be redirected by
+  the normal manifest read machinery.
 
-  TODO: Use TIER_DO_NOT_DEDUP_PIN to avoid unnecessary dedup work.
-  - Two use cases.
+  Does not set the user_modify flag.
 
-    Case a: 
-
-      1. Create Object A and B
-      2. Setchunk A to B
-      3. Write A
-      4. TIER_DO_NOT_DEDUP_PIN
-      5. Flush does not occur
-
-    Case b:
-
-      1. Create Object A and B
-      2. Setchunk A to B
-      3. TIER_DO_NOT_DEDUP_PIN
-      4. Promote A
-      5. Write A
-      6. Flush does not occur
-
-  TODO: Free old fingerprint oid earlier.
-  There is a HEAD: [1-10 manifest: aaa, clean, size is 20]
-  Then, we write the region of 5 ~ 15.
-  HEAD:[size is 20] (1-10 is not in the manifest)
-  Then, we write the region of 6 ~ 15.
-  HEAD:[size is 20] (1-10 is not in the manifest)
-  Then, we write the region of 7 ~ 15.
-  If the tiering agent wants to dedup 1-10 because it is now cold, it can use a read and set-chunk to:
-  Read 1-10 and computation
-  HEAD:[1-10 manifest:ddd, clean, size is 20]
-  This way, we shorten the lifetime of the aaa dedup target object freeing space earlier.
-
-  At the top of do_osd_ops, does not set user_modify.
-
+  Future work will involve adding support for specifying a clone_id.
 
 * unset-manifest
 
@@ -496,7 +457,8 @@ Operations:
 
   do_osd_ops seems not to include it in the user_modify=false whitelist,
   and so will trigger a snapshot.  Note, this will be true even for a
-  redirect though SET_REDIRECT does not flip user_modify.
+  redirect though SET_REDIRECT does not flip user_modify.  This should
+  be fixed -- unset-manifest should not be a user_modify.
 
 * tier-flush
 
@@ -507,6 +469,8 @@ Operations:
         rados -p base_pool tier-flush <obj-name>
 
   Included in the user_modify=false whitelist, does not trigger a clone.
+
+  Does not evict the extents.
 
 
 Dedup tool
