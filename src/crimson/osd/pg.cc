@@ -372,7 +372,7 @@ void PG::init(
 
 seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 {
-  return seastar::do_with(PGMeta(store, pgid), [this, store] (auto& pg_meta) {
+  return seastar::do_with(PGMeta(store, pgid), [] (auto& pg_meta) {
     return pg_meta.load();
   }).then([this, store](pg_info_t pg_info, PastIntervals past_intervals) {
     return peering_state.init_from_disk_state(
@@ -617,7 +617,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
     reply->set_enoent_reply_versions(peering_state.get_info().last_update,
 				     peering_state.get_info().last_user_version);
     return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  })).handle_exception_type([=,&oid](const crimson::osd::error& e) {
+  })).handle_exception_type([=](const crimson::osd::error& e) {
     // we need this handler because throwing path which aren't errorated yet.
     logger().debug(
       "do_osd_ops: {} - object {} got unhandled exception {} ({})",

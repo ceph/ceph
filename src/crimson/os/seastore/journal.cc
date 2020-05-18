@@ -260,7 +260,7 @@ Journal::read_record_metadata_ret Journal::read_record_metadata(
 	return segment_manager.read(
 	  {start.segment, start.offset + (segment_off_t)block_size},
 	  header.mdlength - block_size).safe_then(
-	    [this, header=std::move(header), bl=std::move(bl)](
+	    [header=std::move(header), bl=std::move(bl)](
 	      auto &&bptail) mutable {
 	      bl.push_back(bptail);
 	      return read_record_metadata_ret(
