@@ -5,24 +5,47 @@
  *
  * Copyright (C) Jeff Layton <jlayton@redhat.com>
  *
- * Heavily borrowed from David Howells' draft statx patchset.
- *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- *
  */
 
-#ifndef CEPH_CEPH_STATX_H
-#define CEPH_CEPH_STATX_H
+#ifndef CEPH_CEPH_LL_CLIENT_H
+#define CEPH_CEPH_LL_CLIENT_H
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+
+class Fh;
+
+struct inodeno_t;
+struct vinodeno_t;
+typedef struct vinodeno_t vinodeno;
+
+#else /* __cplusplus */
+
+typedef struct Fh Fh;
+
+typedef struct inodeno_t {
+  uint64_t val;
+} inodeno_t;
+
+typedef struct _snapid_t {
+  uint64_t val;
+} snapid_t;
+
+typedef struct vinodeno_t {
+  inodeno_t ino;
+  snapid_t snapid;
+} vinodeno_t;
+
+#endif /* __cplusplus */
 
 /*
+ * Heavily borrowed from David Howells' draft statx patchset.
+ *
  * Since the xstat patches are still a work in progress, we borrow its data
  * structures and #defines to implement ceph_getattrx. Once the xstat stuff
  * has been merged we should drop this and switch over to using that instead.
@@ -74,6 +97,44 @@ struct ceph_statx {
  * others in the future, we disallow setting any that aren't recognized.
  */
 #define CEPH_REQ_FLAG_MASK		(AT_SYMLINK_NOFOLLOW|AT_NO_ATTR_SYNC)
+
+/* delegation recalls */
+typedef void (*ceph_deleg_cb_t)(Fh *fh, void *priv);
+
+/* inode data/metadata invalidation */
+typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino,
+	      int64_t off, int64_t len);
+
+/* dentry invalidation */
+typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
+					 vinodeno_t ino, const char *name,
+					 size_t len);
+
+/* remount entire fs */
+typedef int (*client_remount_callback_t)(void *handle);
+
+/* lock request interrupted */
+typedef void (*client_switch_interrupt_callback_t)(void *handle, void *data);
+
+/* fetch umask of actor */
+typedef mode_t (*client_umask_callback_t)(void *handle);
+
+/* request that application release Inode references */
+typedef void (*client_ino_release_t)(void *handle, vinodeno_t ino);
+
+/*
+ * The handle is an opaque value that gets passed to some callbacks. Any fields
+ * set to NULL will be left alone. There is no way to unregister callbacks.
+ */
+struct ceph_client_callback_args {
+  void *handle;
+  client_ino_callback_t ino_cb;
+  client_dentry_callback_t dentry_cb;
+  client_switch_interrupt_callback_t switch_intr_cb;
+  client_remount_callback_t remount_cb;
+  client_umask_callback_t umask_cb;
+  client_ino_release_t ino_release_cb;
+};
 
 #ifdef __cplusplus
 }

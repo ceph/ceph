@@ -17,3 +17,4 @@ tasks:
 - exec:
     client.0:
     - ceph_test_trim_caps
+    - ceph_test_ino_release_cb
