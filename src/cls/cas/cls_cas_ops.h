@@ -115,28 +115,4 @@ struct chunk_obj_refcount {
 };
 WRITE_CLASS_ENCODER(chunk_obj_refcount)
 
-struct obj_refcount {
-  std::map<std::string, bool> refs;
-  std::set<std::string> retired_refs;
-
-  obj_refcount() {}
-
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
-    encode(refs, bl);
-    encode(retired_refs, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
-    decode(refs, bl);
-    if (struct_v >= 2) {
-      decode(retired_refs, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(obj_refcount)
-
 #endif
