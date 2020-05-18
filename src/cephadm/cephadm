@@ -2735,7 +2735,8 @@ def command_deploy():
                       reconfig=args.reconfig)
 
     elif daemon_type == NFSGanesha.daemon_type:
-        NFSGanesha.port_in_use()
+        if not args.reconfig:
+            NFSGanesha.port_in_use()
         (config, keyring) = get_config_and_keyring()
         # TODO: extract ganesha uid/gid (997, 994) ?
         (uid, gid) = extract_uid_gid()
@@ -2743,6 +2744,7 @@ def command_deploy():
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       reconfig=args.reconfig)
+
     elif daemon_type == CephIscsi.daemon_type:
         (config, keyring) = get_config_and_keyring()
         (uid, gid) = extract_uid_gid()
