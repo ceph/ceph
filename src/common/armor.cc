@@ -17,13 +17,36 @@
 
 #include "armor.h"
 #include "base64/base64_plain.h"
+#include "base64/probe_arch.h"
+#include "base64/intel_simd.h"
+#include "base64/avx2/base64_intel_avx2.h"
 
 /* choose best implementation based on the CPU architecture.  */
 base64_encode_func_t choose_encode_base64(void) {
+    // probe cpu features
+    spec_arch_probe();
+
+    // use the fast version if the CPU support and being compiled.
+    #if defined(__i386__) || defined(__x86_64__)
+    if (spec_arch_intel_avx2 && base64_intel_avx2_exists()) {
+        return arch_intel_avx2_encode_base64;
+    }
+    #endif
+
     return plain_armor;
 }
 
 base64_decode_func_t choose_decode_base64(void) {
+    // probe cpu features
+    spec_arch_probe();
+
+    // use the fast version if the CPU support and being compiled.
+    #if defined(__i386__) || defined(__x86_64__)
+    if (spec_arch_intel_avx2 && base64_intel_avx2_exists()) {
+        return arch_intel_avx2_decode_base64;
+    }
+    #endif
+
     return plain_unarmor;
 }
 

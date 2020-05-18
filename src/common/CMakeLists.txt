@@ -144,12 +144,21 @@ target_compile_definitions(common-common-objs PRIVATE
 set(common_mountcephfs_srcs
   armor.cc
   base64/base64_plain.c
+  base64/probe_arch.cc
+  base64/intel_simd.c
   safe_io.c
   module.c
   addr_parsing.c)
+if(HAVE_INTEL)
+  list(APPEND common_mountcephfs_srcs
+      base64/avx2/base64_intel_avx2.c)
+endif(HAVE_INTEL)
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_srcs})
-
+if(HAVE_INTEL)
+  set_target_properties(common_mountcephfs_objs PROPERTIES
+    COMPILE_FLAGS "${CMAKE_C_FLAGS} ${AVX2_COMPILE_FLAGS}")
+endif(HAVE_INTEL)
 
 set(crc32_srcs
   crc32c.cc
