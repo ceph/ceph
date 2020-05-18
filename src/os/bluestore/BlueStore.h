@@ -2001,6 +2001,8 @@ private:
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
   ceph::mutex deferred_lock = ceph::make_mutex("BlueStore::deferred_lock");
+  ceph::mutex atomic_alloc_and_submit_lock =
+      ceph::make_mutex("BlueStore::atomic_alloc_and_submit_lock");
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
