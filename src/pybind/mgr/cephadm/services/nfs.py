@@ -164,7 +164,7 @@ NFS_CORE_PARAM {{
         Protocols = 4;
 }}
 
-CACHEINODE {{
+MDCACHE {{
         Dir_Chunk = 0;
         NParts = 1;
         Cache_Size = 1;
