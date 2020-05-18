@@ -38,3 +38,19 @@
   the cluster, which could fill a nearly-full cluster.  They have been
   replaced by a tool, currently considered experimental,
   ``rgw-orphan-list``.
+
+* RBD: The name of the rbd pool object that is used to store
+  rbd trash purge schedule is changed from "rbd_trash_trash_purge_schedule"
+  to "rbd_trash_purge_schedule". Users that have already started using
+  ``rbd trash purge schedule`` functionality and have per pool or namespace
+  schedules configured should copy "rbd_trash_trash_purge_schedule"
+  object to "rbd_trash_purge_schedule" before the upgrade and remove
+  "rbd_trash_purge_schedule" using the following commands in every RBD
+  pool and namespace where a trash purge schedule was previously
+  configured::
+
+    rados -p <pool-name> [-N namespace] cp rbd_trash_trash_purge_schedule rbd_trash_purge_schedule
+    rados -p <pool-name> [-N namespace] rm rbd_trash_trash_purge_schedule
+
+  or use any other convenient way to restore the schedule after the
+  upgrade.
