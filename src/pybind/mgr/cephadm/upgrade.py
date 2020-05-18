@@ -201,7 +201,7 @@ class CephadmUpgrade:
 
         # get all distinct container_image settings
         image_settings = {}
-        ret, out, err = self.mgr.mon_command({
+        ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config dump',
             'format': 'json',
         })
@@ -271,7 +271,7 @@ class CephadmUpgrade:
                     return
                 logger.info('Upgrade: Redeploying %s.%s' %
                               (d.daemon_type, d.daemon_id))
-                ret, out, err = self.mgr.mon_command({
+                ret, out, err = self.mgr.check_mon_command({
                     'prefix': 'config set',
                     'name': 'container_image',
                     'value': target_name,
@@ -306,7 +306,7 @@ class CephadmUpgrade:
                 self._update_upgrade_progress(done / len(daemons))
 
                 # fail over
-                ret, out, err = self.mgr.mon_command({
+                ret, out, err = self.mgr.check_mon_command({
                     'prefix': 'mgr fail',
                     'who': self.mgr.get_mgr_id(),
                 })
@@ -317,7 +317,7 @@ class CephadmUpgrade:
                     self.mgr.set_health_checks(self.mgr.health_checks)
 
             # make sure 'ceph versions' agrees
-            ret, out, err = self.mgr.mon_command({
+            ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'versions',
             })
             j = json.loads(out)
@@ -331,11 +331,11 @@ class CephadmUpgrade:
             if image_settings.get(daemon_type) != target_name:
                 logger.info('Upgrade: Setting container_image for all %s...' %
                               daemon_type)
-                ret, out, err = self.mgr.mon_command({
+                ret, out, err = self.mgr.check_mon_command({
                     'prefix': 'config set',
                     'name': 'container_image',
                     'value': target_name,
-                    'who': daemon_type,
+                    'who': name_to_config_section(daemon_type),
                 })
             to_clean = []
             for section in image_settings.keys():
@@ -345,7 +345,7 @@ class CephadmUpgrade:
                 logger.debug('Upgrade: Cleaning up container_image for %s...' %
                                to_clean)
                 for section in to_clean:
-                    ret, image, err = self.mgr.mon_command({
+                    ret, image, err = self.mgr.check_mon_command({
                         'prefix': 'config rm',
                         'name': 'container_image',
                         'who': section,
@@ -356,14 +356,14 @@ class CephadmUpgrade:
 
         # clean up
         logger.info('Upgrade: Finalizing container_image settings')
-        ret, out, err = self.mgr.mon_command({
+        ret, out, err = self.mgr.check_mon_command({
             'prefix': 'config set',
             'name': 'container_image',
             'value': target_name,
             'who': 'global',
         })
         for daemon_type in CEPH_UPGRADE_ORDER:
-            ret, image, err = self.mgr.mon_command({
+            ret, image, err = self.mgr.check_mon_command({
                 'prefix': 'config rm',
                 'name': 'container_image',
                 'who': name_to_config_section(daemon_type),
