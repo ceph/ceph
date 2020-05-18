@@ -480,6 +480,18 @@ class TestIoctx(object):
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("2", b"bbb")])
 
+    def test_set_omap2(self):
+        keys = ("1", "2", "3", "4", "5")
+        values = (b"a", b"bb", b"ccc", b"dddd")
+        with WriteOpCtx() as write_op:
+            self.ioctx.set_omap2(write_op, keys, values, 3)
+            self.ioctx.operate_write_op(write_op, "test_obj")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("1","2","3",))
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "test_obj")
+            eq(list(iter), [("1", b"a"), ("2", b"bb"), ("3", b"ccc")])
+
     def test_set_omap_aio(self):
         lock = threading.Condition()
         count = [0]

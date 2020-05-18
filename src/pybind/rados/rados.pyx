@@ -304,6 +304,7 @@ cdef extern from "rados/librados.h" nogil:
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num)
+    void rados_write_op_omap_set2(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * key_lens, const size_t * val_lens, size_t num)
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
     void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
@@ -3904,6 +3905,50 @@ returned %d, but should return zero on success." % (self.name, ret))
             free(_keys)
             free(_values)
             free(_lens)
+
+    @requires(('write_op', WriteOp), ('keys', tuple), ('values', tuple), ('key_val_num', int))
+    def set_omap2(self, write_op, keys, values, key_val_num):
+        """
+        set key/value pairs on a write_op object
+        
+        :para write_op: write_operation object
+        :type write_op: WriteOp
+        :para keys: a tuple of keys
+        :type keys: tuple
+        :para values: a tuple of values
+        :type values: tuple
+        :para key_val_num: number of key/value pairs to set
+        :type key_val_num: int
+        """
+        if len(keys) < key_val_num or len(values) < key_val_num:
+            raise Error("Rados(): keys and values must have the same number of items that must be \
+greater than or equal to key value number ")
+
+        keys = cstr_list(keys, 'keys')
+        values = cstr_list(values, 'values')
+        key_lens = [len(v) for v in keys]
+        val_lens = [len(v) for v in values]
+         
+        cdef: 
+            WriteOp _write_op = write_op
+            char **_keys = to_bytes_array(keys)
+            char **_values = to_bytes_array(values)
+            size_t *_key_lens = to_csize_t_array(key_lens) 
+            size_t *_val_lens = to_csize_t_array(val_lens)
+            size_t _key_val_num = key_val_num  
+         
+        try:
+            with nogil:
+                rados_write_op_omap_set2(_write_op.write_op,
+                                         <const char**>_keys,
+                                         <const char**>_values,
+                                         <const size_t*>_key_lens,
+                                         <const size_t*>_val_lens, _key_val_num)
+        finally:
+            free(_keys)
+            free(_values)
+            free(_key_lens)
+            free(_val_lens)
 
     @requires(('write_op', WriteOp), ('oid', str_type), ('mtime', opt(int)), ('flags', opt(int)))
     def operate_write_op(self, write_op, oid, mtime=0, flags=LIBRADOS_OPERATION_NOFLAG):
