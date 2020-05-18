@@ -126,7 +126,6 @@ def output_summary(path, limit=0,
     random.seed(seed)
     mat, first, matlimit = _get_matrix(path, subset)
     configs = generate_combinations(path, mat, first, matlimit)
-    print("# {} (not filtered) {}".format(len(configs), path))
     count = 0
     suite = os.path.basename(path)
     config_list = util.filter_configs(configs,
@@ -135,20 +134,18 @@ def output_summary(path, limit=0,
                                       filter_out=filter_out,
                                       filter_all=filter_all,
                                       filter_fragments=filter_fragments)
-    if show_desc or show_frag:
-        for c in config_list:
-            if limit and count >= limit:
-                break
-            count += 1
-            print("  {}".format(c[0]))
+    for c in config_list:
+        if limit and count >= limit:
+            break
+        count += 1
+        if show_desc or show_frag:
+            print("{}".format(c[0]))
             if show_frag:
                 for path in c[1]:
                     print("    {}".format(util.strip_fragment_path(path)))
-    else:
-        count=sum(1 for _ in config_list)
     if show_matrix:
        print(mat.tostr(1))
-    print("  {} (total filtered)".format(count))
+    print("# {}/{} {}".format(count, len(configs), path))
 
 def get_combinations(suite_dir,
                      limit=0,
