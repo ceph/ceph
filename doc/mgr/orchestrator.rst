@@ -581,6 +581,26 @@ Or with hosts:
         - host2
         - host3 
 
+Updating Service Specifications
+===============================
+
+The Ceph Orchestrator maintains a declarative state of each
+service in a ``ServiceSpec``. For certain operations, like updating
+the RGW HTTP port, we need to update the existing
+specification.
+
+1. List the current ``ServiceSpec``::
+
+    ceph orch ls --service_name=<service-name> --export > myservice.yaml
+
+2. Update the yaml file::
+
+    vi myservice.yaml
+
+3. Apply the new ``ServiceSpec``::
+
+    ceph orch apply -i myservice.yaml
+
 Configuring the Orchestrator CLI
 ================================
 
