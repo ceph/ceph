@@ -60,6 +60,78 @@ void RecoveryBackend::WaitForObjectRecovery::stop() {
   }
 }
 
+void RecoveryBackend::handle_backfill_finish(
+  MOSDPGBackfill& m)
+{
+  logger().debug("{}", __func__);
+  ceph_assert(!pg.is_primary());
+  ceph_assert(crimson::common::local_conf()->osd_kill_backfill_at != 1);
+  auto reply = make_message<MOSDPGBackfill>(
+    MOSDPGBackfill::OP_BACKFILL_FINISH_ACK,
+    pg.get_osdmap_epoch(),
+    m.query_epoch,
+    spg_t(pg.get_pgid().pgid, pg.get_primary().shard));
+  reply->set_priority(pg.get_recovery_op_priority());
+  std::ignore = m.get_connection()->send(std::move(reply));
+  shard_services.start_operation<crimson::osd::LocalPeeringEvent>(
+    static_cast<crimson::osd::PG*>(&pg),
+    shard_services,
+    pg.get_pg_whoami(),
+    pg.get_pgid(),
+    pg.get_osdmap_epoch(),
+    pg.get_osdmap_epoch(),
+    RecoveryDone{});
+}
+
+seastar::future<> RecoveryBackend::handle_backfill_progress(
+  MOSDPGBackfill& m)
+{
+  logger().debug("{}", __func__);
+  ceph_assert(!pg.is_primary());
+  ceph_assert(crimson::common::local_conf()->osd_kill_backfill_at != 2);
+
+  ObjectStore::Transaction t;
+  pg.get_peering_state().update_backfill_progress(
+    m.last_backfill,
+    m.stats,
+    m.op == MOSDPGBackfill::OP_BACKFILL_PROGRESS,
+    t);
+  return shard_services.get_store().do_transaction(
+    pg.get_collection_ref(), std::move(t)
+  ).handle_exception([] (auto) {
+    ceph_assert("this transaction shall not fail" == nullptr);
+  });
+}
+
+seastar::future<> RecoveryBackend::handle_backfill_finish_ack(
+  MOSDPGBackfill& m)
+{
+  logger().debug("{}", __func__);
+  ceph_assert(pg.is_primary());
+  ceph_assert(crimson::common::local_conf()->osd_kill_backfill_at != 3);
+  // TODO:
+  // finish_recovery_op(hobject_t::get_max());
+  return seastar::now();
+}
+
+seastar::future<> RecoveryBackend::handle_backfill(
+  MOSDPGBackfill& m)
+{
+  logger().debug("{}", __func__);
+  switch (m.op) {
+    case MOSDPGBackfill::OP_BACKFILL_FINISH:
+      handle_backfill_finish(m);
+      [[fallthrough]];
+    case MOSDPGBackfill::OP_BACKFILL_PROGRESS:
+      return handle_backfill_progress(m);
+    case MOSDPGBackfill::OP_BACKFILL_FINISH_ACK:
+      return handle_backfill_finish_ack(m);
+    default:
+      ceph_assert("unknown op type for pg backfill");
+      return seastar::now();
+  }
+}
+
 seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
   const hobject_t& start,
   [[maybe_unused]] const std::int64_t min,
@@ -196,6 +268,8 @@ seastar::future<> RecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m)
 {
   switch (m->get_header().type) {
+  case MSG_OSD_PG_BACKFILL:
+    return handle_backfill(*boost::static_pointer_cast<MOSDPGBackfill>(m));
   case MSG_OSD_PG_SCAN:
     return handle_scan(*boost::static_pointer_cast<MOSDPGScan>(m));
   default:

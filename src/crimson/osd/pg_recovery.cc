@@ -477,7 +477,35 @@ void PGRecovery::enqueue_drop(
 void PGRecovery::update_peers_last_backfill(
   const hobject_t& new_last_backfill)
 {
-  ceph_abort_msg("Not implemented");
+  logger().debug("{}: new_last_backfill={}",
+                 __func__, new_last_backfill);
+  // If new_last_backfill == MAX, then we will send OP_BACKFILL_FINISH to
+  // all the backfill targets.  Otherwise, we will move last_backfill up on
+  // those targets need it and send OP_BACKFILL_PROGRESS to them.
+  for (const auto& bt : pg->get_peering_state().get_backfill_targets()) {
+    if (const pg_info_t& pinfo = pg->get_peering_state().get_peer_info(bt);
+        new_last_backfill > pinfo.last_backfill) {
+      pg->get_peering_state().update_peer_last_backfill(bt, new_last_backfill);
+      auto m = make_message<MOSDPGBackfill>(
+        pinfo.last_backfill.is_max() ? MOSDPGBackfill::OP_BACKFILL_FINISH
+                                     : MOSDPGBackfill::OP_BACKFILL_PROGRESS,
+        pg->get_osdmap_epoch(),
+        pg->get_last_peering_reset(),
+        spg_t(pg->get_pgid().pgid, bt.shard));
+      // Use default priority here, must match sub_op priority
+      // TODO: if pinfo.last_backfill.is_max(), then
+      //       start_recovery_op(hobject_t::get_max());
+      m->last_backfill = pinfo.last_backfill;
+      m->stats = pinfo.stats;
+      std::ignore = pg->get_shard_services().send_to_osd(
+        bt.osd, std::move(m), pg->get_osdmap_epoch());
+      logger().info("{}: peer {} num_objects now {} / {}",
+                    __func__,
+                    bt,
+                    pinfo.stats.stats.sum.num_objects,
+                    pg->get_info().stats.stats.sum.num_objects);
+    }
+  }
 }
 
 bool PGRecovery::budget_available() const
@@ -488,13 +516,14 @@ bool PGRecovery::budget_available() const
 
 void PGRecovery::backfilled()
 {
-  shard_services.start_operation<LocalPeeringEvent>(
-    this,
-    shard_services,
-    pg_whoami,
-    pgid,
-    get_osdmap_epoch(),
-    get_osdmap_epoch(),
+  using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
+  std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
+    static_cast<crimson::osd::PG*>(pg),
+    pg->get_shard_services(),
+    pg->get_pg_whoami(),
+    pg->get_pgid(),
+    pg->get_osdmap_epoch(),
+    pg->get_osdmap_epoch(),
     PeeringState::Backfilled{});
 }
 

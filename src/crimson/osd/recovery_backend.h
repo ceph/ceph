@@ -11,6 +11,7 @@
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/shard_services.h"
 
+#include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGScan.h"
 #include "osd/recovery_types.h"
 #include "osd/osd_types.h"
@@ -22,6 +23,14 @@ namespace crimson::osd{
 class PGBackend;
 
 class RecoveryBackend {
+  void handle_backfill_finish(
+    MOSDPGBackfill& m);
+  seastar::future<> handle_backfill_progress(
+    MOSDPGBackfill& m);
+  seastar::future<> handle_backfill_finish_ack(
+    MOSDPGBackfill& m);
+  seastar::future<> handle_backfill(MOSDPGBackfill& m);
+
   seastar::future<> handle_scan_get_digest(
     MOSDPGScan& m);
   seastar::future<> handle_scan_digest(
