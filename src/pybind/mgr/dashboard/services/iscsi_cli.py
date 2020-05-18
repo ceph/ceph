@@ -18,12 +18,14 @@ def list_iscsi_gateways(_):
 
 
 @CLIWriteCommand('dashboard iscsi-gateway-add',
-                 'name=service_url,type=CephString',
+                 'name=service_url,type=CephString '
+                 'name=name,type=CephString,req=false',
                  'Add iSCSI gateway configuration')
-def add_iscsi_gateway(_, service_url):
+def add_iscsi_gateway(_, service_url, name=None):
     try:
         IscsiGatewaysConfig.validate_service_url(service_url)
-        name = IscsiClient.instance(service_url=service_url).get_hostname()['data']
+        if name is None:
+            name = IscsiClient.instance(service_url=service_url).get_hostname()['data']
         IscsiGatewaysConfig.add_gateway(name, service_url)
         return 0, 'Success', ''
     except IscsiGatewayAlreadyExists as ex:
