@@ -14,7 +14,7 @@ from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
 
 class TrashPurgeScheduleHandler:
     MODULE_OPTION_NAME = "trash_purge_schedule"
-    SCHEDULE_OID = "rbd_trash_trash_purge_schedule"
+    SCHEDULE_OID = "rbd_trash_purge_schedule"
 
     lock = Lock()
     condition = Condition(lock)
