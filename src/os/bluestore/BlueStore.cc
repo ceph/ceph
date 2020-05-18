@@ -5070,9 +5070,52 @@ int BlueStore::_open_alloc()
 	     << dendl;
   }
 
+  if (bdev->is_smr()) {
+    if (cct->_conf->bluestore_allocator != "zoned") {
+      dout(1) << __func__ << " The drive is HM-SMR but "
+	      << cct->_conf->bluestore_allocator << " allocator is specified. "
+	      << "Only zoned allocator can be used with HM-SMR drive." << dendl;
+      return -EINVAL;
+    }
+
+    // At least for now we want to use large min_alloc_size with HM-SMR drives.
+    // Populating used_blocks bitset on a debug build of ceph-osd takes about 5
+    // minutes with a 14 TB HM-SMR drive and 4 KiB min_alloc_size.
+    if (min_alloc_size < 64 * 1024) {
+      dout(1) << __func__ << " The drive is HM-SMR but min_alloc_size is "
+	      << min_alloc_size << ". "
+	      << "Please set to at least 64 KiB." << dendl;
+      return -EINVAL;
+    }
+
+    // We don't want to defer writes with HM-SMR because it violates sequential
+    // write requirement.
+    if (prefer_deferred_size) {
+      dout(1) << __func__ << " The drive is HM-SMR but prefer_deferred_size is "
+	      << prefer_deferred_size << ". "
+	      << "Please set to 0." << dendl;
+      return -EINVAL;
+    }
+
+    // For now, to avoid interface changes we piggyback zone_size (in MiB) and
+    // the first sequential zone number onto min_alloc_size and pass it to
+    // Allocator::create.
+    uint64_t zone_size = bdev->get_zone_size();
+    uint64_t zone_size_mb = zone_size / (1024 * 1024);
+    uint64_t first_seq_zone = bdev->get_conventional_region_size() / zone_size;
+
+    min_alloc_size |= (zone_size_mb << 32);
+    min_alloc_size |= (first_seq_zone << 48);
+  }
+
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
                             min_alloc_size, "block");
+
+  if (bdev->is_smr()) {
+    min_alloc_size &= 0x00000000ffffffff;
+  }
+
   if (!alloc) {
     lderr(cct) << __func__ << " Allocator::unknown alloc type "
                << cct->_conf->bluestore_allocator
@@ -5337,25 +5380,32 @@ int BlueStore::_minimal_open_bluefs(bool create)
   }
   if (create) {
     // note: we always leave the first SUPER_RESERVED (8k) of the device unused
-    uint64_t initial =
-      bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
-			  cct->_conf->bluestore_bluefs_gift_ratio);
-    initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
-    uint64_t alloc_size = cct->_conf->bluefs_shared_alloc_size;
-    if (alloc_size % min_alloc_size) {
-      derr << __func__ << " bluefs_shared_alloc_size 0x" << std::hex
-	    << alloc_size << " is not a multiple of "
-	    << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-      r = -EINVAL;
-      goto free_bluefs;
+    uint64_t start, initial;
+    if (bdev->is_smr()) {
+      // For now, we allocate all of the conventional region on HM-SMR drive to
+      // bluefs and assume that it never outgrows that region.
+      start = _get_ondisk_reserved();
+      initial = bdev->get_conventional_region_size() - start;
+    } else {
+      initial = bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
+				    cct->_conf->bluestore_bluefs_gift_ratio);
+      initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
+      uint64_t alloc_size = cct->_conf->bluefs_shared_alloc_size;
+      if (alloc_size % min_alloc_size) {
+	derr << __func__ << " bluefs_shared_alloc_size 0x" << std::hex
+	     << alloc_size << " is not a multiple of "
+	     << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+	r = -EINVAL;
+	goto free_bluefs;
+      }
+      // align to bluefs's alloc_size
+      initial = p2roundup(initial, alloc_size);
+      // put bluefs in the middle of the device in case it is an HDD
+      start = p2align((bdev->get_size() - initial) / 2, alloc_size);
+      //avoiding superblock overwrite
+      start = std::max(alloc_size, start);
+      ceph_assert(start >=_get_ondisk_reserved());
     }
-    // align to bluefs's alloc_size
-    initial = p2roundup(initial, alloc_size);
-    // put bluefs in the middle of the device in case it is an HDD
-    uint64_t start = p2align((bdev->get_size() - initial) / 2, alloc_size);
-    //avoiding superblock overwrite
-    start = std::max(alloc_size, start);
-    ceph_assert(start >=_get_ondisk_reserved());
 
     bluefs->add_block_extent(bluefs_layout.shared_bdev, start, initial);
     bluefs_extents.insert(start, initial);
@@ -12428,6 +12478,15 @@ int BlueStore::queue_transactions(
   TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr,
 				  &on_commit);
 
+  // With HM-SMR drives (and ZNS SSDs) we want the I/O allocation and I/O
+  // submission to happen atomically because if I/O submission happens in a
+  // different order than I/O allocation, we end up issuing non-sequential
+  // writes to the drive.  This is a temporary solution until ZONE APPEND
+  // support matures in the kernel.  For more information please see:
+  // https://www.usenix.org/conference/vault20/presentation/bjorling
+  if (bdev->is_smr()) {
+    atomic_alloc_and_submit_lock.lock();
+  }
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
@@ -12481,6 +12540,10 @@ int BlueStore::queue_transactions(
 
   // execute (start)
   _txc_state_proc(txc);
+
+  if (bdev->is_smr()) {
+    atomic_alloc_and_submit_lock.unlock();
+  }
 
   // we're immediately readable (unlike FileStore)
   for (auto c : on_applied_sync) {
@@ -12971,6 +13034,23 @@ void BlueStore::_do_write_small(
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   ceph_assert(length < min_alloc_size);
+
+  // On zoned devices, the first goal is to support non-overwrite workloads,
+  // such as RGW, with large, aligned objects.  Therefore, for user writes
+  // _do_write_small should not trigger.  OSDs, however, write and update a tiny
+  // amount of metadata, such as OSD maps, to disk.  For those cases, we
+  // temporarily just pad them to min_alloc_size and write them to a new place
+  // on every update.
+  if (bdev->is_smr()) {
+    BlobRef b = c->new_blob();
+    uint64_t b_off = 0, b_off0 = 0;
+    bufferlist l;
+    blp.copy(length, l);
+    _pad_zeros(&l, &b_off0, min_alloc_size);
+    wctx->write(offset, b, min_alloc_size, b_off0, l, b_off, length, false, true);
+    return;
+  }
+
   uint64_t end_offs = offset + length;
 
   logger->inc(l_bluestore_write_small);

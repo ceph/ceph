@@ -162,6 +162,7 @@ rgw_frontend="beast"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 #disable SPDK by default
+zoned_enabled=0
 pci_id=""
 
 with_mgr_dashboard=true
@@ -228,6 +229,7 @@ usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
+usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)\n"
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
@@ -438,6 +440,9 @@ case $1 in
             fi
         done
         shift
+        ;;
+    --bluestore-zoned )
+        zoned_enabled=1
         ;;
     * )
         usage_exit
@@ -654,6 +659,14 @@ EOF
         bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true"
+        fi
+        if [ "$zoned_enabled" -eq 1 ]; then
+            BLUESTORE_OPTS="${BLUESTORE_OPTS}
+        bluestore min alloc size = 65536
+        bluestore prefer deferred size = 0
+        bluestore prefer deferred size hdd = 0
+        bluestore prefer deferred size ssd = 0
+        bluestore allocator = zoned"
         fi
     fi
     wconf <<EOF

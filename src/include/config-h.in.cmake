@@ -75,6 +75,9 @@
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
+/* Defined if you have libzbc */
+#cmakedefine HAVE_LIBZBC
+
 /* Defined if you have liburing */
 #cmakedefine HAVE_LIBURING
 
