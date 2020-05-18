@@ -714,7 +714,7 @@ class CephFSShell(Cmd):
                     else:
                         perror('{}: already exists! use --force to overwrite'.format(
                                root_src_dir.decode('utf-8')))
-                        self.exit_code = e.get_error_code()
+                        self.exit_code = e.errno
                         return
 
             for file_ in files:
@@ -1065,7 +1065,7 @@ class CephFSShell(Cmd):
             os.chdir(os.path.expanduser(args.path))
         except OSError as e:
             perror("Cannot change to {}: {}".format(e.filename, e.strerror))
-            self.exit_code = e.get_error_code()
+            self.exit_code = e.errno
 
     def complete_lls(self, text, line, begidx, endidx):
         """
@@ -1094,7 +1094,7 @@ class CephFSShell(Cmd):
                     print_list(items)
                 except OSError as e:
                     perror("'{}': {}".format(e.filename, e.strerror))
-                    self.exit_code = e.get_error_code()
+                    self.exit_code = e.errno
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
@@ -1530,7 +1530,10 @@ def read_ceph_conf(shell, config_file):
         shell.prompt = get_bool_vals_for_boolopts(cephfs.conf_get('prompt'))
         shell.quiet = get_bool_vals_for_boolopts(cephfs.conf_get('quiet'))
         shell.timing = get_bool_vals_for_boolopts(cephfs.conf_get('timing'))
-    except (OSError, libcephfs.Error) as e:
+    except OSError as e:
+        perror(e)
+        shell.exit_code = e.errno
+    except libcephfs.Error as e:
         perror(e)
         shell.exit_code = e.get_error_code()
 
