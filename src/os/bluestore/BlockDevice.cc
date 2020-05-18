@@ -32,6 +32,13 @@
 #include "libpmem.h"
 #endif
 
+#if defined(HAVE_LIBZBC)
+#include "HMSMRDevice.h"
+extern "C" {
+#include <libzbc/zbc.h>
+}
+#endif
+
 #include "common/debug.h"
 #include "common/EventTrace.h"
 #include "common/errno.h"
@@ -123,6 +130,11 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
   }
 #endif
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+#if defined(HAVE_LIBZBC)
+  if (zbc_device_is_zoned(path.c_str(), false, nullptr)) {
+    return new HMSMRDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
+  }
+#endif
   if (type == "kernel") {
     return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
   }
