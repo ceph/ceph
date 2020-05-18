@@ -484,7 +484,7 @@ def attempt_bind(s, address, port):
 def port_in_use(port_num):
     # type (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
-    logger.info('Verifying port %d ...' % (port_num))
+    logger.info('Verifying port %d ...' % port_num)
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         attempt_bind(s, '0.0.0.0', port_num)
@@ -2685,7 +2685,7 @@ def extract_uid_gid_monitoring(daemon_type):
 @default_image
 def command_deploy():
     # type: () -> None
-    (daemon_type, daemon_id) = args.name.split('.', 1)
+    daemon_type, daemon_id = args.name.split('.', 1)
 
     l = FileLock(args.fsid)
     l.acquire()
@@ -2707,8 +2707,8 @@ def command_deploy():
         logger.info('%s daemon %s ...' % ('Deploy', args.name))
 
     if daemon_type in Ceph.daemons:
-        (config, keyring) = get_config_and_keyring()
-        (uid, gid) = extract_uid_gid()
+        config, keyring = get_config_and_keyring()
+        uid, gid = extract_uid_gid()
         make_var_run(args.fsid, uid, gid)
         c = get_container(args.fsid, daemon_type, daemon_id,
                           ptrace=args.allow_ptrace)
@@ -2738,7 +2738,6 @@ def command_deploy():
                 raise Error("{} deployment requires config-json which must "
                             "contain arg for {}".format(daemon_type.capitalize(), ', '.join(required_args)))
 
-
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
@@ -2747,17 +2746,17 @@ def command_deploy():
     elif daemon_type == NFSGanesha.daemon_type:
         if not args.reconfig and not redeploy:
             NFSGanesha.port_in_use()
-        (config, keyring) = get_config_and_keyring()
+        config, keyring = get_config_and_keyring()
         # TODO: extract ganesha uid/gid (997, 994) ?
-        (uid, gid) = extract_uid_gid()
+        uid, gid = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       reconfig=args.reconfig)
 
     elif daemon_type == CephIscsi.daemon_type:
-        (config, keyring) = get_config_and_keyring()
-        (uid, gid) = extract_uid_gid()
+        config, keyring = get_config_and_keyring()
+        uid, gid = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
