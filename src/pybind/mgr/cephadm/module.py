@@ -908,7 +908,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
             assert image or entity
             if not image:
-                daemon_type = entity.split('.', 1)[0] # type: ignore
+                daemon_type = entity.split('.', 1)[0]  # type: ignore
                 if daemon_type in CEPH_TYPES or \
                         daemon_type == 'nfs' or \
                         daemon_type == 'iscsi':
@@ -918,7 +918,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         'who': utils.name_to_config_section(entity),
                         'key': 'container_image',
                     })
-                    image = image.strip() # type: ignore
+                    image = image.strip()  # type: ignore
                 elif daemon_type == 'prometheus':
                     image = self.container_image_prometheus
                 elif daemon_type == 'grafana':
@@ -1587,7 +1587,7 @@ you may want to run:
 
         start_time = datetime.datetime.utcnow()
         deps = []  # type: List[str]
-        cephadm_config = {} # type: Dict[str, Any]
+        cephadm_config = {}  # type: Dict[str, Any]
         if daemon_type == 'prometheus':
             cephadm_config, deps = self.prometheus_service.generate_config()
             extra_args.extend(['--config-json', '-'])
