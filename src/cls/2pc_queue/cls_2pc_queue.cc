@@ -324,6 +324,7 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
  
   auto total_entries = urgent_data.reservations.size();
   auto it = urgent_data.reservations.find(abort_op.id);
+  uint64_t reservation_size;
   if (it == urgent_data.reservations.end()) {
     if (!urgent_data.has_xattrs) {
       CLS_LOG(20, "INFO: cls_2pc_queue_abort: reservation does not exist: %u", abort_op.id);
@@ -355,6 +356,7 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
       return 0;
     }
     total_entries += xattr_reservations.size();
+    reservation_size = it->second.size;
     xattr_reservations.erase(it);
     bl_xattrs.clear();
     encode(xattr_reservations, bl_xattrs);
@@ -364,11 +366,12 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
       return ret;
     }
   } else {
+    reservation_size = it->second.size;
     urgent_data.reservations.erase(it);
   }
 
   // remove the reservation
-  urgent_data.reserved_size -= it->second.size;
+  urgent_data.reserved_size -= reservation_size;
 
   CLS_LOG(20, "INFO: cls_2pc_queue_abort: current reservations: %lu (bytes)", urgent_data.reserved_size);
   CLS_LOG(20, "INFO: cls_2pc_queue_abort: current reservation entries: %lu", total_entries-1); 
