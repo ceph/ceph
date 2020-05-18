@@ -23,6 +23,7 @@
    man/8/ceph-run
    man/8/ceph-syn
    man/8/ceph
+   man/8/cephadm
    man/8/crushtool
    man/8/librados-config
    man/8/monmaptool
