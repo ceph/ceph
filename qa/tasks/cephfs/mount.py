@@ -369,7 +369,6 @@ class CephFSMount(object):
         """
         log.info('Cleaning up killed connection on {0}'.format(self.client_remote.name))
         self.umount_wait(force=True)
-        self.cleanup()
 
     def cleanup(self):
         """
@@ -395,6 +394,8 @@ class CephFSMount(object):
                 pass
             else:
                 raise
+
+        self.cleanup_netns()
 
     def wait_until_mounted(self):
         raise NotImplementedError()
