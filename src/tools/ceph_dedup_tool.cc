@@ -430,7 +430,7 @@ void ChunkScrub::chunk_scrub_common()
       auto oid = i.oid;
       set<hobject_t> refs;
       set<hobject_t> real_refs;
-      ret = cls_chunk_refcount_read(chunk_io_ctx, oid, &refs);
+      ret = cls_cas_chunk_read_refs(chunk_io_ctx, oid, &refs);
       if (ret < 0) {
 	continue;
       }
@@ -445,7 +445,7 @@ void ChunkScrub::chunk_scrub_common()
 	  continue;
 	}
 
-	ret = cls_chunk_has_chunk(target_io_ctx, pp.oid.name, oid);
+	ret = cls_cas_references_chunk(target_io_ctx, pp.oid.name, oid);
 	if (ret != -ENOENT) {
 	  real_refs.insert(pp);
 	} 
@@ -453,7 +453,7 @@ void ChunkScrub::chunk_scrub_common()
 
       if (refs.size() != real_refs.size()) {
 	ObjectWriteOperation op;
-	cls_chunk_refcount_set(op, real_refs);
+	cls_cas_chunk_set_refs(op, real_refs);
 	ret = chunk_io_ctx.operate(oid, &op);
 	if (ret < 0) {
 	  continue;
@@ -778,9 +778,9 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     }
 
     set<hobject_t> refs;
-    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
+    ret = cls_cas_chunk_read_refs(chunk_io_ctx, object_name, &refs);
     if (ret < 0) {
-      cerr << " cls_chunk_refcount_read fail : " << cpp_strerror(ret) << std::endl;
+      cerr << " cls_cas_chunk_read fail : " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     for (auto p : refs) {
@@ -796,7 +796,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     refs.insert(oid);
 
     ObjectWriteOperation op;
-    cls_chunk_refcount_set(op, refs);
+    cls_cas_chunk_set_refs(op, refs);
     ret = chunk_io_ctx.operate(object_name, &op);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
@@ -814,7 +814,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     }
     set<hobject_t> refs;
     cout << " refs: " << std::endl;
-    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
+    ret = cls_cas_chunk_read_refs(chunk_io_ctx, object_name, &refs);
     for (auto p : refs) {
       cout << " " << p.oid.name << " ";
     }

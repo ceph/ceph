@@ -5,6 +5,7 @@
 
 #include "objclass/objclass.h"
 #include "cls_cas_ops.h"
+#include "cls_cas_internal.h"
 
 #include "include/compat.h"
 #include "osd/osd_types.h"
@@ -15,9 +16,14 @@ using ceph::decode;
 CLS_VER(1,0)
 CLS_NAME(cas)
 
-struct chunk_obj_refcount;
 
-static int chunk_read_refcount(cls_method_context_t hctx, chunk_obj_refcount *objr)
+//
+// helpers
+//
+
+static int chunk_read_refcount(
+  cls_method_context_t hctx,
+  chunk_obj_refcount *objr)
 {
   bufferlist bl;
   objr->refs.clear();
@@ -39,7 +45,9 @@ static int chunk_read_refcount(cls_method_context_t hctx, chunk_obj_refcount *ob
   return 0;
 }
 
-static int chunk_set_refcount(cls_method_context_t hctx, const struct chunk_obj_refcount& objr)
+static int chunk_set_refcount(
+  cls_method_context_t hctx,
+  const struct chunk_obj_refcount& objr)
 {
   bufferlist bl;
 
@@ -52,43 +60,111 @@ static int chunk_set_refcount(cls_method_context_t hctx, const struct chunk_obj_
   return 0;
 }
 
-static int cls_rc_chunk_refcount_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+
+//
+// methods
+//
+
+static int chunk_create_or_get_ref(cls_method_context_t hctx,
+				   bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
 
-  cls_chunk_refcount_get_op op;
+  cls_cas_chunk_create_or_get_ref_op op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_rc_refcount_get(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: failed to decode entry\n");
     return -EINVAL;
   }
 
   chunk_obj_refcount objr;
   int ret = chunk_read_refcount(hctx, &objr);
-  if (ret < 0)
+  if (ret == -ENOENT) {
+    // new chunk; init refs
+    CLS_LOG(10, "create oid=%s\n",
+	    op.source.oid.name.c_str());
+    ret = cls_cxx_write_full(hctx, &op.data);
+    if (ret < 0) {
+      return ret;
+    }
+    objr.refs.insert(op.source);
+    ret = chunk_set_refcount(hctx, objr);
+    if (ret < 0) {
+      return ret;
+    }
+  } else if (ret < 0) {
     return ret;
+  } else {
+    // existing chunk; inc ref
+    if (op.flags & cls_cas_chunk_create_or_get_ref_op::FLAG_VERIFY) {
+      bufferlist old;
+      cls_cxx_read(hctx, 0, 0, &old);
+      if (!old.contents_equal(op.data)) {
+	return -ENOMSG;
+      }
+    }
+    CLS_LOG(10, "inc ref oid=%s\n",
+	    op.source.oid.name.c_str());
 
-  CLS_LOG(10, "cls_rc_chunk_refcount_get() oid=%s\n", op.source.oid.name.c_str());
+    if (objr.refs.count(op.source)) {
+      return -EEXIST;
+    }
+    objr.refs.insert(op.source);
 
-  objr.refs.insert(op.source);
-
-  ret = chunk_set_refcount(hctx, objr);
-  if (ret < 0)
-    return ret;
-
+    ret = chunk_set_refcount(hctx, objr);
+    if (ret < 0) {
+      return ret;
+    }
+  }
   return 0;
 }
 
-static int cls_rc_chunk_refcount_put(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int chunk_get_ref(cls_method_context_t hctx,
+			 bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
 
-  cls_chunk_refcount_put_op op;
+  cls_cas_chunk_get_ref_op op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_rc_chunk_refcount_put(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  chunk_obj_refcount objr;
+  int ret = chunk_read_refcount(hctx, &objr);
+  if (ret < 0) {
+    CLS_LOG(1, "ERROR: failed to read attr\n");
+    return ret;
+  }
+
+  // existing chunk; inc ref
+  CLS_LOG(10, "oid=%s\n", op.source.oid.name.c_str());
+  
+  if (objr.refs.count(op.source)) {
+    return -EEXIST;
+  }
+  objr.refs.insert(op.source);
+
+  ret = chunk_set_refcount(hctx, objr);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+static int chunk_put_ref(cls_method_context_t hctx,
+			 bufferlist *in, bufferlist *out)
+{
+  auto in_iter = in->cbegin();
+
+  cls_cas_chunk_put_ref_op op;
+  try {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: failed to decode entry\n");
     return -EINVAL;
   }
 
@@ -98,31 +174,23 @@ static int cls_rc_chunk_refcount_put(cls_method_context_t hctx, bufferlist *in, 
     return ret;
 
   if (objr.refs.empty()) {// shouldn't happen!
-    CLS_LOG(0, "ERROR: cls_rc_chunk_refcount_put() was called without any references!\n");
-    return -EINVAL;
-  }
-
-  CLS_LOG(10, "cls_rc_chunk_refcount_put() oid=%s\n", op.source.oid.name.c_str());
-
-  bool found = false;
-  for (auto &p : objr.refs) {
-    if (p == op.source) {
-      found = true;
-      break;
-    }
-  }
-
-  if (!found) {
-    return 0;
+    CLS_LOG(0, "ERROR was called without any references!\n");
+    return -ENOLINK;
   }
 
   auto p = objr.refs.find(op.source);
+  if (p == objr.refs.end()) {
+    CLS_LOG(10, "oid=%s (no ref)\n", op.source.oid.name.c_str());
+    return -ENOLINK;
+  }
   objr.refs.erase(p);
 
   if (objr.refs.empty()) {
+    CLS_LOG(10, "oid=%s (last ref)\n", op.source.oid.name.c_str());
     return cls_cxx_remove(hctx);
   }
 
+  CLS_LOG(10, "oid=%s (dec)\n", op.source.oid.name.c_str());
   ret = chunk_set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
@@ -130,15 +198,16 @@ static int cls_rc_chunk_refcount_put(cls_method_context_t hctx, bufferlist *in, 
   return 0;
 }
 
-static int cls_rc_chunk_refcount_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int chunk_set_refs(cls_method_context_t hctx,
+			  bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
 
-  cls_chunk_refcount_set_op op;
+  cls_cas_chunk_set_refs_op op;
   try {
     decode(op, in_iter);
   } catch (ceph::buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_chunk_refcount_set(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: cls_cas_chunk_set(): failed to decode entry\n");
     return -EINVAL;
   }
 
@@ -156,11 +225,12 @@ static int cls_rc_chunk_refcount_set(cls_method_context_t hctx, bufferlist *in, 
   return 0;
 }
 
-static int cls_rc_chunk_refcount_read(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int chunk_read_refs(cls_method_context_t hctx,
+			   bufferlist *in, bufferlist *out)
 {
   chunk_obj_refcount objr;
 
-  cls_chunk_refcount_read_ret read_ret;
+  cls_cas_chunk_read_refs_ret read_ret;
   int ret = chunk_read_refcount(hctx, &objr);
   if (ret < 0)
     return ret;
@@ -174,48 +244,8 @@ static int cls_rc_chunk_refcount_read(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
-static int cls_rc_write_or_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  auto in_iter = in->cbegin();
-  hobject_t src_obj; 
-  bufferlist indata, outdata;
-  ceph_osd_op op;
-  try {
-    decode (op, in_iter);
-    decode(src_obj, in_iter);
-    in_iter.copy(op.extent.length, indata);
-  }
-  catch (ceph::buffer::error& e) {
-    return -EINVAL;
-  }
-
-  CLS_LOG(10, " offset: %llu length: %llu \n",
-	  static_cast<long long unsigned>(op.extent.offset),
-	  static_cast<long long unsigned>(op.extent.length));
-  chunk_obj_refcount objr;
-  int ret = chunk_read_refcount(hctx, &objr);
-  if (ret == -ENOENT) {
-    objr.refs.insert(src_obj);
-    bufferlist set_bl;
-    encode(objr, set_bl);
-    ret = cls_cxx_chunk_write_and_set(hctx, op.extent.offset, op.extent.length, &indata, op.flags,
-				      &set_bl, set_bl.length());
-    if (ret < 0)
-      return ret;
-
-    return 0;
-  }
-
-  objr.refs.insert(src_obj);
-  ret = chunk_set_refcount(hctx, objr);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-
-static int cls_rc_has_chunk(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int references_chunk(cls_method_context_t hctx,
+			    bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
   std::string fp_oid;
@@ -226,7 +256,7 @@ static int cls_rc_has_chunk(cls_method_context_t hctx, bufferlist *in, bufferlis
   catch (ceph::buffer::error& e) {
     return -EINVAL;
   }
-  CLS_LOG(10, " fp_oid: %s \n", fp_oid.c_str());
+  CLS_LOG(10, "fp_oid: %s \n", fp_oid.c_str());
 
   bool ret = cls_has_chunk(hctx, fp_oid);
   if (ret) {
@@ -240,28 +270,37 @@ CLS_INIT(cas)
   CLS_LOG(1, "Loaded cas class!");
 
   cls_handle_t h_class;
-  cls_method_handle_t h_cas_write_or_get;
-  cls_method_handle_t h_chunk_refcount_get;
-  cls_method_handle_t h_chunk_refcount_put;
-  cls_method_handle_t h_chunk_refcount_set;
-  cls_method_handle_t h_chunk_refcount_read;
-  cls_method_handle_t h_chunk_has_chunk;
+  cls_method_handle_t h_chunk_create_or_get_ref;
+  cls_method_handle_t h_chunk_get_ref;
+  cls_method_handle_t h_chunk_put_ref;
+  cls_method_handle_t h_chunk_set_refs;
+  cls_method_handle_t h_chunk_read_refs;
+  cls_method_handle_t h_references_chunk;
 
   cls_register("cas", &h_class);
 
-  /* chunk refcount */
-  cls_register_cxx_method(h_class, "chunk_get", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_chunk_refcount_get, 
-			  &h_chunk_refcount_get);
-  cls_register_cxx_method(h_class, "chunk_put", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_chunk_refcount_put, 
-			  &h_chunk_refcount_put);
-  cls_register_cxx_method(h_class, "chunk_set", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_chunk_refcount_set, 
-			  &h_chunk_refcount_set);
-  cls_register_cxx_method(h_class, "chunk_read", CLS_METHOD_RD, cls_rc_chunk_refcount_read, 
-			  &h_chunk_refcount_read);
-  cls_register_cxx_method(h_class, "cas_write_or_get", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_write_or_get, 
-			  &h_cas_write_or_get);
-  cls_register_cxx_method(h_class, "has_chunk", CLS_METHOD_RD, cls_rc_has_chunk, 
-	      &h_chunk_has_chunk);
+  cls_register_cxx_method(h_class, "chunk_create_or_get_ref",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  chunk_create_or_get_ref,
+			  &h_chunk_create_or_get_ref);
+  cls_register_cxx_method(h_class, "chunk_get_ref",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  chunk_get_ref,
+			  &h_chunk_get_ref);
+  cls_register_cxx_method(h_class, "chunk_put_ref",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  chunk_put_ref,
+			  &h_chunk_put_ref);
+  cls_register_cxx_method(h_class, "chunk_set_refs",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  chunk_set_refs,
+			  &h_chunk_set_refs);
+  cls_register_cxx_method(h_class, "chunk_read_refs", CLS_METHOD_RD,
+			  chunk_read_refs,
+			  &h_chunk_read_refs);
+  cls_register_cxx_method(h_class, "references_chunk", CLS_METHOD_RD,
+			  references_chunk,
+			  &h_references_chunk);
 
   return;
 }
