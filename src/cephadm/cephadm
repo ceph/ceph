@@ -2692,6 +2692,12 @@ def command_deploy():
     if daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % daemon_type)
 
+    redeploy = False
+    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+    (_, state, _) = check_unit(unit_name)
+    if state == 'running':
+        redeploy = True
+
     logger.info('Deploying daemon %s.%s ...' % (daemon_type, daemon_id))
 
     if daemon_type in Ceph.daemons:
@@ -2710,7 +2716,7 @@ def command_deploy():
         monitoring_args = []  # type: List[str]
 
         # Default Checks
-        if not args.reconfig:
+        if not args.reconfig and not redeploy:
             daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
             if any([port_in_use(port) for port in daemon_ports]):
                 raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
@@ -2735,7 +2741,7 @@ def command_deploy():
                       reconfig=args.reconfig)
 
     elif daemon_type == NFSGanesha.daemon_type:
-        if not args.reconfig:
+        if not args.reconfig and not redeploy:
             NFSGanesha.port_in_use()
         (config, keyring) = get_config_and_keyring()
         # TODO: extract ganesha uid/gid (997, 994) ?
