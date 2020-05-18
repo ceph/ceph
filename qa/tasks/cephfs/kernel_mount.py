@@ -71,6 +71,7 @@ class KernelMount(CephFSMount):
 
     def umount(self, force=False):
         if not self.is_mounted():
+            self.cleanup()
             return
 
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
@@ -92,7 +93,6 @@ class KernelMount(CephFSMount):
             raise e
 
         self.mounted = False
-        self.cleanup_netns()
         self.cleanup()
 
     def umount_wait(self, force=False, require_clean=False, timeout=900):
@@ -100,6 +100,7 @@ class KernelMount(CephFSMount):
         Unlike the fuse client, the kernel client's umount is immediate
         """
         if not self.is_mounted():
+            self.cleanup()
             return
 
         try:
@@ -109,7 +110,6 @@ class KernelMount(CephFSMount):
                 raise
 
             # force delete the netns and umount
-            self.cleanup_netns()
             self.client_remote.run(
                 args=['sudo',
                       'umount',
@@ -120,7 +120,6 @@ class KernelMount(CephFSMount):
                 timeout=(15*60))
 
             self.mounted = False
-            self.cleanup_netns()
             self.cleanup()
 
     def wait_until_mounted(self):
