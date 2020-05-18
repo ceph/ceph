@@ -944,8 +944,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
 
+            self.log.debug('args: %s' % (' '.join(final_args)))
             if self.mode == 'root':
-                self.log.debug('args: %s' % (' '.join(final_args)))
                 if stdin:
                     self.log.debug('stdin: %s' % stdin)
                 script = 'injected_argv = ' + json.dumps(final_args) + '\n'
