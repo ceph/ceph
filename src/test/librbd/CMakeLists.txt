@@ -73,7 +73,6 @@ set(unittest_librbd_srcs
   image/test_mock_ValidatePoolRequest.cc
   io/test_mock_CopyupRequest.cc
   io/test_mock_ImageRequest.cc
-  io/test_mock_ImageRequestWQ.cc
   io/test_mock_ObjectRequest.cc
   io/test_mock_SimpleSchedulerObjectDispatch.cc
   journal/test_mock_OpenRequest.cc

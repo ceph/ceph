@@ -5,58 +5,43 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include <boost/variant.hpp>
 
 namespace librbd {
 namespace io {
 
 template <typename I>
-struct ImageDispatchSpec<I>::SendVisitor
-  : public boost::static_visitor<void> {
-  ImageDispatchSpec* spec;
+void ImageDispatchSpec<I>::C_Dispatcher::complete(int r) {
+  switch (image_dispatch_spec->dispatch_result) {
+  case DISPATCH_RESULT_RESTART:
+    ceph_assert(image_dispatch_spec->dispatch_layer != 0);
+    image_dispatch_spec->dispatch_layer = static_cast<ImageDispatchLayer>(
+      image_dispatch_spec->dispatch_layer - 1);
+    [[fallthrough]];
+  case DISPATCH_RESULT_CONTINUE:
+    if (r < 0) {
+      // bubble dispatch failure through AioCompletion
+      image_dispatch_spec->dispatch_result = DISPATCH_RESULT_COMPLETE;
+      image_dispatch_spec->fail(r);
+      return;
+    }
 
-  explicit SendVisitor(ImageDispatchSpec* spec)
-    : spec(spec) {
+    image_dispatch_spec->send();
+    break;
+  case DISPATCH_RESULT_COMPLETE:
+    finish(r);
+    break;
+  case DISPATCH_RESULT_INVALID:
+    ceph_abort();
+    break;
   }
+}
 
-  void operator()(Read& read) const {
-    ImageRequest<I>::aio_read(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      std::move(read.read_result), spec->m_op_flags, spec->m_parent_trace);
-  }
-
-  void operator()(Discard& discard) const {
-    ImageRequest<I>::aio_discard(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      discard.discard_granularity_bytes, spec->m_parent_trace);
-  }
-
-  void operator()(Write& write) const {
-    ImageRequest<I>::aio_write(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      std::move(write.bl), spec->m_op_flags, spec->m_parent_trace);
-  }
-
-  void operator()(WriteSame& write_same) const {
-    ImageRequest<I>::aio_writesame(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      std::move(write_same.bl), spec->m_op_flags, spec->m_parent_trace);
-  }
-
-  void operator()(CompareAndWrite& compare_and_write) const {
-    ImageRequest<I>::aio_compare_and_write(
-      &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      std::move(compare_and_write.cmp_bl), std::move(compare_and_write.bl),
-      compare_and_write.mismatch_offset, spec->m_op_flags,
-      spec->m_parent_trace);
-  }
-
-  void operator()(Flush& flush) const {
-    ImageRequest<I>::aio_flush(
-      &spec->m_image_ctx, spec->m_aio_comp, flush.flush_source,
-      spec->m_parent_trace);
-  }
-};
+template <typename I>
+void ImageDispatchSpec<I>::C_Dispatcher::finish(int r) {
+  image_dispatch_spec->finish(r);
+}
 
 template <typename I>
 struct ImageDispatchSpec<I>::IsWriteOpVisitor
@@ -72,58 +57,26 @@ struct ImageDispatchSpec<I>::IsWriteOpVisitor
 };
 
 template <typename I>
-struct ImageDispatchSpec<I>::TokenRequestedVisitor
-  : public boost::static_visitor<uint64_t> {
-  ImageDispatchSpec* spec;
-  uint64_t flag;
-  uint64_t *tokens;
-
-  TokenRequestedVisitor(ImageDispatchSpec* spec, uint64_t _flag,
-                        uint64_t *tokens)
-    : spec(spec), flag(_flag), tokens(tokens) {
-  }
-
-  uint64_t operator()(const Read&) const {
-    if (flag & RBD_QOS_WRITE_MASK) {
-      *tokens = 0;
-      return false;
-    }
-
-    *tokens = (flag & RBD_QOS_BPS_MASK) ? spec->extents_length() : 1;
-    return true;
-  }
-
-  uint64_t operator()(const Flush&) const {
-    *tokens = 0;
-    return true;
-  }
-
-  template <typename T>
-  uint64_t operator()(const T&) const {
-    if (flag & RBD_QOS_READ_MASK) {
-      *tokens = 0;
-      return false;
-    }
-
-    *tokens = (flag & RBD_QOS_BPS_MASK) ? spec->extents_length() : 1;
-    return true;
-  }
-};
+void ImageDispatchSpec<I>::send() {
+  image_dispatcher->send(this);
+}
 
 template <typename I>
-void ImageDispatchSpec<I>::send() {
-  boost::apply_visitor(SendVisitor{this}, m_request);
+void ImageDispatchSpec<I>::finish(int r) {
+  image_dispatcher->finish(r, dispatch_layer, tid);
+  delete this;
 }
 
 template <typename I>
 void ImageDispatchSpec<I>::fail(int r) {
-  m_aio_comp->fail(r);
+  dispatch_result = DISPATCH_RESULT_COMPLETE;
+  aio_comp->fail(r);
 }
 
 template <typename I>
 uint64_t ImageDispatchSpec<I>::extents_length() {
   uint64_t length = 0;
-  auto &extents = this->m_image_extents;
+  auto &extents = this->image_extents;
 
   for (auto &extent : extents) {
     length += extent.second;
@@ -133,28 +86,23 @@ uint64_t ImageDispatchSpec<I>::extents_length() {
 
 template <typename I>
 const Extents& ImageDispatchSpec<I>::get_image_extents() const {
-   return this->m_image_extents;
+   return this->image_extents;
 }
 
 template <typename I>
 uint64_t ImageDispatchSpec<I>::get_tid() {
-  return this->m_tid;
+  return this->tid;
 }
 
 template <typename I>
 bool ImageDispatchSpec<I>::is_write_op() const {
-  return boost::apply_visitor(IsWriteOpVisitor(), m_request);
-}
-
-template <typename I>
-bool ImageDispatchSpec<I>::tokens_requested(uint64_t flag, uint64_t *tokens) {
-  return boost::apply_visitor(TokenRequestedVisitor{this, flag, tokens},
-                              m_request);
+  return boost::apply_visitor(IsWriteOpVisitor(), request);
 }
 
 template <typename I>
 void ImageDispatchSpec<I>::start_op() {
-  m_aio_comp->start_op();
+  tid = 0;
+  aio_comp->start_op();
 }
 
 } // namespace io

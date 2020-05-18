@@ -19,7 +19,7 @@
 #include "librbd/image/RefreshParentRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/journal/Policy.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -902,9 +902,14 @@ void RefreshRequest<I>::send_v2_open_journal() {
         !journal_disabled_by_policy &&
         m_image_ctx.exclusive_lock != nullptr &&
         m_image_ctx.journal == nullptr) {
-      m_image_ctx.io_work_queue->set_require_lock(librbd::io::DIRECTION_BOTH,
-                                                  true);
+      auto ctx = new LambdaContext([this](int) {
+          send_v2_block_writes();
+        });
+      m_image_ctx.exclusive_lock->set_require_lock(
+        librbd::io::DIRECTION_BOTH, ctx);
+      return;
     }
+
     send_v2_block_writes();
     return;
   }
@@ -963,7 +968,7 @@ void RefreshRequest<I>::send_v2_block_writes() {
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_block_writes>(this);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  m_image_ctx.io_work_queue->block_writes(ctx);
+  m_image_ctx.io_image_dispatcher->block_writes(ctx);
 }
 
 template <typename I>
@@ -1169,7 +1174,7 @@ Context *RefreshRequest<I>::handle_v2_close_journal(int *result) {
   ceph_assert(m_blocked_writes);
   m_blocked_writes = false;
 
-  m_image_ctx.io_work_queue->unblock_writes();
+  m_image_ctx.io_image_dispatcher->unblock_writes();
   return send_v2_close_object_map();
 }
 
@@ -1224,10 +1229,10 @@ Context *RefreshRequest<I>::send_flush_aio() {
       RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
     auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
-    auto req = io::ImageDispatchSpec<I>::create_flush_request(
-      m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    auto req = io::ImageDispatchSpec<I>::create_flush(
+      m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+      io::FLUSH_SOURCE_INTERNAL, {});
     req->send();
-    delete req;
     return nullptr;
   } else if (m_error_result < 0) {
     // propagate saved error back to caller
@@ -1398,8 +1403,7 @@ void RefreshRequest<I>::apply() {
     if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
                                    m_image_ctx.image_lock)) {
       if (!m_image_ctx.clone_copy_on_read && m_image_ctx.journal != nullptr) {
-        m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_READ,
-                                                    false);
+        m_image_ctx.exclusive_lock->unset_require_lock(io::DIRECTION_READ);
       }
       std::swap(m_journal, m_image_ctx.journal);
     } else if (m_journal != nullptr) {

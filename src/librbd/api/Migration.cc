@@ -31,7 +31,6 @@
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/image/Types.h"
 #include "librbd/internal.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 

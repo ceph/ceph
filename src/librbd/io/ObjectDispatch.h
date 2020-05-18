@@ -27,7 +27,7 @@ class ObjectDispatch : public ObjectDispatchInterface {
 public:
   ObjectDispatch(ImageCtxT* image_ctx);
 
-  ObjectDispatchLayer get_object_dispatch_layer() const override {
+  ObjectDispatchLayer get_dispatch_layer() const override {
     return OBJECT_DISPATCH_LAYER_CORE;
   }
 

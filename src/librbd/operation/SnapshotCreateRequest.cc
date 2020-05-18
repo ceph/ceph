@@ -10,7 +10,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/mirror/snapshot/SetImageStateRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -111,7 +111,7 @@ void SnapshotCreateRequest<I>::send_suspend_aio() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  image_ctx.io_work_queue->block_writes(create_context_callback<
+  image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_suspend_aio>(this));
 }
@@ -360,7 +360,7 @@ void SnapshotCreateRequest<I>::send_notify_unquiesce() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  image_ctx.io_work_queue->unblock_writes();
+  image_ctx.io_image_dispatcher->unblock_writes();
 
   image_ctx.image_watcher->notify_unquiesce(
     m_request_id, create_context_callback<

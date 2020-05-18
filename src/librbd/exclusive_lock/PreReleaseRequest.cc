@@ -11,8 +11,9 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
-#include "librbd/io/ImageRequestWQ.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/exclusive_lock/ImageDispatch.h"
+#include "librbd/io/ImageDispatcherInterface.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -27,18 +28,20 @@ using util::create_context_callback;
 
 template <typename I>
 PreReleaseRequest<I>* PreReleaseRequest<I>::create(
-    I &image_ctx, bool shutting_down, AsyncOpTracker &async_op_tracker,
-    Context *on_finish) {
-  return new PreReleaseRequest(image_ctx, shutting_down, async_op_tracker,
-                               on_finish);
+    I &image_ctx, ImageDispatch<I>* image_dispatch, bool shutting_down,
+    AsyncOpTracker &async_op_tracker, Context *on_finish) {
+  return new PreReleaseRequest(image_ctx, image_dispatch, shutting_down,
+                               async_op_tracker, on_finish);
 }
 
 template <typename I>
-PreReleaseRequest<I>::PreReleaseRequest(I &image_ctx, bool shutting_down,
+PreReleaseRequest<I>::PreReleaseRequest(I &image_ctx,
+                                        ImageDispatch<I>* image_dispatch,
+                                        bool shutting_down,
                                         AsyncOpTracker &async_op_tracker,
                                         Context *on_finish)
-  : m_image_ctx(image_ctx), m_shutting_down(shutting_down),
-    m_async_op_tracker(async_op_tracker),
+  : m_image_ctx(image_ctx), m_image_dispatch(image_dispatch),
+    m_shutting_down(shutting_down), m_async_op_tracker(async_op_tracker),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)) {
 }
 
@@ -108,17 +111,13 @@ void PreReleaseRequest<I>::send_block_writes() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_block_writes>(this);
 
-  {
-    std::shared_lock owner_locker{m_image_ctx.owner_lock};
-    // setting the lock as required will automatically cause the IO
-    // queue to re-request the lock if any IO is queued
-    if (m_image_ctx.clone_copy_on_read ||
-        m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-      m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_BOTH, true);
-    } else {
-      m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_WRITE, true);
-    }
-    m_image_ctx.io_work_queue->block_writes(ctx);
+  // setting the lock as required will automatically cause the IO
+  // queue to re-request the lock if any IO is queued
+  if (m_image_ctx.clone_copy_on_read ||
+      m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
+    m_image_dispatch->set_require_lock(io::DIRECTION_BOTH, ctx);
+  } else {
+    m_image_dispatch->set_require_lock(io::DIRECTION_WRITE, ctx);
   }
 }
 
@@ -133,7 +132,7 @@ void PreReleaseRequest<I>::handle_block_writes(int r) {
                << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(r) << dendl;
-    m_image_ctx.io_work_queue->unblock_writes();
+    m_image_dispatch->unset_require_lock(io::DIRECTION_BOTH);
     save_result(r);
     finish();
     return;
@@ -180,7 +179,7 @@ void PreReleaseRequest<I>::handle_invalidate_cache(int r) {
   if (r < 0 && r != -EBLACKLISTED && r != -EBUSY) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(r)
                << dendl;
-    m_image_ctx.io_work_queue->unblock_writes();
+    m_image_dispatch->unset_require_lock(io::DIRECTION_BOTH);
     save_result(r);
     finish();
     return;

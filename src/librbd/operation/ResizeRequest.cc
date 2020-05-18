@@ -9,8 +9,8 @@
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ImageDispatcherInterface.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/operation/TrimRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -96,7 +96,7 @@ void ResizeRequest<I>::send_pre_block_writes() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << dendl;
 
-  image_ctx.io_work_queue->block_writes(create_context_callback<
+  image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_pre_block_writes>(this));
 }
 
@@ -108,7 +108,7 @@ Context *ResizeRequest<I>::handle_pre_block_writes(int *result) {
 
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     return this->create_context_finisher(*result);
   }
 
@@ -122,7 +122,7 @@ Context *ResizeRequest<I>::send_append_op_event() {
 
   if (m_new_size < m_original_size && !m_allow_shrink) {
     ldout(cct, 1) << "shrinking the image is not permitted" << dendl;
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     this->async_complete(-EINVAL);
     return nullptr;
   }
@@ -145,7 +145,7 @@ Context *ResizeRequest<I>::handle_append_op_event(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to commit journal entry: " << cpp_strerror(*result)
                << dendl;
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     return this->create_context_finisher(*result);
   }
 
@@ -196,10 +196,10 @@ void ResizeRequest<I>::send_flush_cache() {
     ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this);
   auto aio_comp = io::AioCompletion::create_and_start(
     ctx, util::get_image_ctx(&image_ctx), io::AIO_TYPE_FLUSH);
-  auto req = io::ImageDispatchSpec<I>::create_flush_request(
-    image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+  auto req = io::ImageDispatchSpec<I>::create_flush(
+    image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
+    io::FLUSH_SOURCE_INTERNAL, {});
   req->send();
-  delete req;
 }
 
 template <typename I>
@@ -259,10 +259,10 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   }
 
   if (m_original_size == m_new_size) {
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     return this->create_context_finisher(0);
   } else if (m_new_size < m_original_size) {
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     send_flush_cache();
     return nullptr;
   }
@@ -302,7 +302,7 @@ Context *ResizeRequest<I>::handle_grow_object_map(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to resize object map: "
                << cpp_strerror(*result) << dendl;
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     return this->create_context_finisher(*result);
   }
 
@@ -350,7 +350,7 @@ Context *ResizeRequest<I>::handle_shrink_object_map(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to resize object map: "
                << cpp_strerror(*result) << dendl;
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     return this->create_context_finisher(*result);
   }
 
@@ -365,7 +365,7 @@ void ResizeRequest<I>::send_post_block_writes() {
   ldout(cct, 5) << dendl;
 
   std::shared_lock owner_locker{image_ctx.owner_lock};
-  image_ctx.io_work_queue->block_writes(create_context_callback<
+  image_ctx.io_image_dispatcher->block_writes(create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_post_block_writes>(this));
 }
 
@@ -376,7 +376,7 @@ Context *ResizeRequest<I>::handle_post_block_writes(int *result) {
   ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     lderr(cct) << "failed to block writes prior to header update: "
                << cpp_strerror(*result) << dendl;
     return this->create_context_finisher(*result);
@@ -426,7 +426,7 @@ Context *ResizeRequest<I>::handle_update_header(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to update image header: " << cpp_strerror(*result)
                << dendl;
-    image_ctx.io_work_queue->unblock_writes();
+    image_ctx.io_image_dispatcher->unblock_writes();
     return this->create_context_finisher(*result);
   }
 
@@ -458,7 +458,7 @@ void ResizeRequest<I>::update_size_and_overlap() {
   }
 
   // blocked by PRE_BLOCK_WRITES (grow) or POST_BLOCK_WRITES (shrink) state
-  image_ctx.io_work_queue->unblock_writes();
+  image_ctx.io_image_dispatcher->unblock_writes();
 }
 
 } // namespace operation

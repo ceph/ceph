@@ -34,6 +34,7 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Io.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
@@ -43,8 +44,7 @@
 #include "librbd/image/Types.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
-#include "librbd/io/ImageRequestWQ.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
@@ -1238,11 +1238,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	  auto comp = io::AioCompletion::create(ctx);
 
 	  // coordinate through AIO WQ to ensure lock is acquired if needed
-	  m_dest->io_work_queue->aio_write(comp, m_offset + write_offset,
-					   write_length,
-					   std::move(*write_bl),
-					   LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
-					   std::move(read_trace));
+	  api::Io<>::aio_write(*m_dest, comp, m_offset + write_offset,
+                               write_length, std::move(*write_bl),
+                               LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
+                               std::move(read_trace));
 	  write_offset = offset;
 	  write_length = 0;
 	}

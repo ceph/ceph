@@ -9,7 +9,6 @@
 #include "librbd/internal.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/object_map/DiffRequest.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
@@ -250,10 +249,10 @@ int DiffIterate<I>::diff_iterate(I *ictx,
     std::shared_lock owner_locker{ictx->owner_lock};
     auto aio_comp = io::AioCompletion::create_and_start(&flush_ctx, ictx,
                                                         io::AIO_TYPE_FLUSH);
-    auto req = io::ImageDispatchSpec<I>::create_flush_request(
-      *ictx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    auto req = io::ImageDispatchSpec<I>::create_flush(
+      *ictx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
+      aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
     req->send();
-    delete req;
   }
   int r = flush_ctx.wait();
   if (r < 0) {
