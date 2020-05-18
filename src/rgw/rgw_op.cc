@@ -7431,6 +7431,8 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
 		      << " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
+    if (s->auth.identity->is_anonymous() && ret == -EACCES)
+      ret = -EPERM;
   }
 
   return ret;
