@@ -1461,8 +1461,8 @@ def get_daemon_args(fsid, daemon_type, daemon_id):
     return r
 
 def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
-                       config=None, keyring=None, reconfig=False):
-    # type: (str, str, Union[int, str], int, int, Optional[str], Optional[str], Optional[bool]) ->  None
+                       config=None, keyring=None):
+    # type: (str, str, Union[int, str], int, int, Optional[str], Optional[str]) ->  None
     data_dir = make_data_dir(fsid, daemon_type, daemon_id, uid=uid, gid=gid)
     make_log_dir(fsid, uid=uid, gid=gid)
 
