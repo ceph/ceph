@@ -203,9 +203,17 @@ public:
     EXPECT_CALL(*mock_image_ctx.state, handle_prepare_lock_complete());
   }
 
+  void expect_shut_down_image_cache(MockOperationImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.state, shut_down_image_cache(_))
+      .WillOnce(Invoke([&mock_image_ctx](Context *on_finish) {
+	    mock_image_ctx.image_ctx->op_work_queue->queue(on_finish, 0);
+	  }));
+  }
+
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx) {
     EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_, _))
       .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+    expect_op_work_queue(mock_image_ctx);
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {
@@ -312,6 +320,9 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
     expect_is_journal_replaying(*mock_image_ctx.journal);
   }
   expect_block_requests(mock_image_ctx);
+  if (features_to_disable & RBD_FEATURE_IMAGE_CACHE) {
+    expect_shut_down_image_cache(mock_image_ctx);
+  }
   if (features_to_disable & RBD_FEATURE_JOURNALING) {
     expect_disable_mirror_request_send(mock_image_ctx,
                                        mock_disable_mirror_request, 0);

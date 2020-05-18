@@ -5693,7 +5693,8 @@ TEST_F(TestLibRBD, UpdateFeatures)
   disable_features = features & (RBD_FEATURE_EXCLUSIVE_LOCK |
                                  RBD_FEATURE_OBJECT_MAP |
                                  RBD_FEATURE_FAST_DIFF |
-                                 RBD_FEATURE_JOURNALING);
+                                 RBD_FEATURE_JOURNALING |
+                                 RBD_FEATURE_IMAGE_CACHE);
   if (disable_features != 0) {
     ASSERT_EQ(0, image.update_features(disable_features, false));
   }

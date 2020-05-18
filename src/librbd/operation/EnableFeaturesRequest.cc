@@ -210,6 +210,15 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
       m_features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
       create_journal = true;
     }
+    if ((m_features & RBD_FEATURE_IMAGE_CACHE) != 0) {
+      if ((m_new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+        lderr(cct) << "cannot enable image-cache. exclusive-lock must be "
+                      "enabled before enabling image-cache." << dendl;
+        *result = -EINVAL;
+        break;
+      }
+      m_features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+    }
   } while (false);
 
   if (*result < 0) {

@@ -940,6 +940,11 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLock) {
     mock_image_ctx.journal = &mock_journal;
   }
 
+  if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_IMAGE_CACHE,
+                                                   false));
+  }
+
   if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
     ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
                                                    false));
@@ -996,6 +1001,11 @@ TEST_F(TestMockImageRefreshRequest, DisableExclusiveLockWhileAcquiringLock) {
 
   if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
     ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_JOURNALING,
+                                                   false));
+  }
+
+  if (ictx->test_features(RBD_FEATURE_IMAGE_CACHE)) {
+    ASSERT_EQ(0, ictx->operations->update_features(RBD_FEATURE_IMAGE_CACHE,
                                                    false));
   }
 
