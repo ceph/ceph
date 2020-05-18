@@ -246,7 +246,7 @@ class MDSThrasher(Thrasher, Greenlet):
 
             if random.random() <= self.thrash_max_mds:
                 max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
-                options = range(1, max_mds)+range(max_mds+1, self.max_mds+1)
+                options = list(range(1, max_mds))+list(range(max_mds+1, self.max_mds+1))
                 if len(options) > 0:
                     sample = random.sample(options, 1)
                     new_max_mds = sample[0]
