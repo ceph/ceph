@@ -131,7 +131,7 @@ seastar::future<> AdminSocket::handle_command(crimson::net::Connection* conn,
 					      boost::intrusive_ptr<MCommand> m)
 {
   return execute_command(m->cmd, std::move(m->get_data())).then(
-    [conn, tid=m->get_tid(), this](auto result) {
+    [conn, tid=m->get_tid()](auto result) {
     auto [ret, err, out] = std::move(result);
     auto reply = make_message<MCommandReply>(ret, err);
     reply->set_tid(tid);
