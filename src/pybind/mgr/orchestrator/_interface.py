@@ -1314,6 +1314,11 @@ class DaemonDescription(object):
                 if m:
                     return m.group(1)
 
+            if self.daemon_type == 'rgw':
+                v = self.daemon_id.split('.')
+                if len(v) in [3, 4]:
+                    return '.'.join(v[0:2])
+
             raise OrchestratorError("DaemonDescription: Cannot calculate service_id: " \
                     f"daemon_id='{self.daemon_id}' hostname='{self.hostname}'")
 
