@@ -845,7 +845,7 @@ def test_ps_s3_topic_on_master():
     delete_all_s3_topics(zones[0], zonegroup.name)
    
     # create s3 topics
-    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
     topic_conf1 = PSTopicS3(zones[0].conn, topic_name+'_1', zonegroup.name, endpoint_args=endpoint_args)
     topic_arn = topic_conf1.set_config()
