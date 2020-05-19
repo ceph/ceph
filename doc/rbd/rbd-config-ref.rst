@@ -375,6 +375,54 @@ settings.
 :Default: ``0``
 
 
+``rbd qos iops burst seconds``
+
+:Description: The desired burst duration in seconds of IO operations.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``1``
+
+
+``rbd qos bps burst seconds``
+
+:Description: The desired burst duration in seconds of IO bytes.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``1``
+
+
+``rbd qos read iops burst seconds``
+
+:Description: The desired burst duration in seconds of read operations.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``1``
+
+
+``rbd qos write iops burst seconds``
+
+:Description: The desired burst duration in seconds of write operations.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``1``
+
+
+``rbd qos read bps burst seconds``
+
+:Description: The desired burst duration in seconds of read bytes.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``1``
+
+
+``rbd qos write bps burst seconds``
+
+:Description: The desired burst duration in seconds of write bytes.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``1``
+
+
 ``rbd qos schedule tick min``
 
 :Description: The minimum schedule tick (in milliseconds) for QoS.

@@ -86,7 +86,7 @@ void QosImageDispatch<I>::apply_qos_schedule_tick_min(uint64_t tick) {
 
 template <typename I>
 void QosImageDispatch<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
-                                          uint64_t burst) {
+                                          uint64_t burst, uint64_t burst_seconds) {
   auto cct = m_image_ctx->cct;
   TokenBucketThrottle *throttle = nullptr;
   for (auto pair : m_throttles) {
@@ -97,13 +97,13 @@ void QosImageDispatch<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
   }
   ceph_assert(throttle != nullptr);
 
-  int r = throttle->set_limit(limit, burst);
+  int r = throttle->set_limit(limit, burst, burst_seconds);
   if (r < 0) {
     lderr(cct) << throttle->get_name() << ": invalid qos parameter: "
                << "burst(" << burst << ") is less than "
                << "limit(" << limit << ")" << dendl;
     // if apply failed, we should at least make sure the limit works.
-    throttle->set_limit(limit, 0);
+    throttle->set_limit(limit, 0, 1);
   }
 
   if (limit) {
