@@ -103,7 +103,7 @@ class Module(MgrModule):
             report = [s.report() for s in existing_scheds]
             error_msg = f'Found existing schedule {report}'
             self.log.error(error_msg)
-            return errno.EEXISTS, '', error_msg
+            return -errno.EEXIST, '', error_msg
         except CephfsConnectionException as e:
             return e.to_tuple()
         return 0, suc_msg, ''
@@ -128,7 +128,7 @@ class Module(MgrModule):
         except CephfsConnectionException as e:
             return e.to_tuple()
         except ValueError as e:
-            return errno.ENOENT, '', str(e)
+            return -errno.ENOENT, '', str(e)
         return 0, 'Schedule removed for path {}'.format(path), ''
 
     @CLIWriteCommand('fs snap-schedule activate',
@@ -151,7 +151,7 @@ class Module(MgrModule):
         except CephfsConnectionException as e:
             return e.to_tuple()
         except ValueError as e:
-            return errno.ENOENT, '', str(e)
+            return -errno.ENOENT, '', str(e)
         return 0, 'Schedule activated for path {}'.format(path), ''
 
     @CLIWriteCommand('fs snap-schedule deactivate',
@@ -174,5 +174,5 @@ class Module(MgrModule):
         except CephfsConnectionException as e:
             return e.to_tuple()
         except ValueError as e:
-            return errno.ENOENT, '', str(e)
+            return -errno.ENOENT, '', str(e)
         return 0, 'Schedule deactivated for path {}'.format(path), ''
