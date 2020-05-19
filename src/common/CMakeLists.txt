@@ -144,12 +144,13 @@ target_compile_definitions(common-common-objs PRIVATE
 set(common_mountcephfs_srcs
   armor.cc
   base64/base64_plain.c
+  base64/probe.cc
   safe_io.c
   module.c
   addr_parsing.c)
-list(APPEND common_mountcephfs_srcs $<TARGET_OBJECTS:arch>)
 if(HAVE_INTEL)
   list(APPEND common_mountcephfs_srcs
+      base64/intel.c
       base64/avx2/base64_intel_avx2.c)
 endif(HAVE_INTEL)
 add_library(common_mountcephfs_objs OBJECT
