@@ -188,7 +188,7 @@ public:
 
     EXPECT_CALL(mock_get_info_request, send())
       .WillOnce(
-        Invoke([this, &mock_image_ctx, &mock_get_info_request, mirror_image,
+        Invoke([&mock_image_ctx, &mock_get_info_request, mirror_image,
                 promotion_state, r]() {
                  if (r == 0) {
                    *mock_get_info_request.mirror_image = mirror_image;
@@ -204,7 +204,7 @@ public:
       MockImageStateUpdateRequest& mock_request, int r) {
     EXPECT_CALL(mock_request, send())
       .WillOnce(
-        Invoke([this, &mock_image_ctx, &mock_request, r]() {
+        Invoke([&mock_image_ctx, &mock_request, r]() {
           mock_image_ctx.op_work_queue->queue(mock_request.on_finish, r);
         }));
   }
@@ -214,7 +214,7 @@ public:
       MockImageRemoveRequest& mock_request, int r) {
     EXPECT_CALL(mock_request, send())
       .WillOnce(
-        Invoke([this, &mock_image_ctx, &mock_request, r]() {
+        Invoke([&mock_image_ctx, &mock_request, r]() {
           mock_image_ctx.op_work_queue->queue(mock_request.on_finish, r);
         }));
   }

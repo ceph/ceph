@@ -62,7 +62,7 @@ class TestMockParentImageCache : public TestMockFixture {
   void expect_cache_run(MockParentImageCache& mparent_image_cache, bool ret_val) {
     auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), run());
 
-    expect.WillOnce((Invoke([ret_val]() {
+    expect.WillOnce((Invoke([]() {
     })));
   }
 
@@ -105,14 +105,14 @@ class TestMockParentImageCache : public TestMockFixture {
   void expect_cache_close(MockParentImageCache& mparent_image_cache, int ret_val) {
     auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), close());
 
-    expect.WillOnce((Invoke([ret_val]() {
+    expect.WillOnce((Invoke([]() {
     })));
   }
 
   void expect_cache_stop(MockParentImageCache& mparent_image_cache, int ret_val) {
     auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), stop());
 
-    expect.WillOnce((Invoke([ret_val]() {
+    expect.WillOnce((Invoke([]() {
     })));
   }
 
@@ -135,7 +135,7 @@ class TestMockParentImageCache : public TestMockFixture {
     auto& expect = EXPECT_CALL((*(mparent_image_cache.get_image_ctx()->io_object_dispatcher)),
                                register_object_dispatch(_));
 
-        expect.WillOnce(WithArg<0>(Invoke([ret_val, &mparent_image_cache]
+        expect.WillOnce(WithArg<0>(Invoke([&mparent_image_cache]
                 (io::ObjectDispatchInterface* object_dispatch) {
           ASSERT_EQ(object_dispatch, &mparent_image_cache);
         })));
