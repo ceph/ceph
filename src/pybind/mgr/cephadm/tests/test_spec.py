@@ -268,6 +268,19 @@ def test_spec_octopus():
         True
     ),
     (
+        # explicit naming
+        RGWSpec(
+            rgw_realm="realm",
+            rgw_zone="zone",
+        ),
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id="realm.zone.a",
+            hostname="smithi028",
+        ),
+        True
+    ),
+    (
         # without host
         RGWSpec(
             service_type='rgw',
