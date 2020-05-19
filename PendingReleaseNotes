@@ -3,15 +3,6 @@
 
 * CVE-2020-10736: Fixes an authorization bypass in monitor and manager daemons
 
-* RGW: The default number of bucket index shards for new buckets was raised
-  from 1 to 11 to increase the amount of write throughput for small buckets
-  and delay the onset of dynamic resharding. This change only affects new
-  deployments/zones. To change this default value on existing deployments,
-  use 'radosgw-admin zonegroup modify --bucket-index-max-shards=11'.
-  If the zonegroup is part of a realm, the change must be committed with
-  'radosgw-admin period update --commit' - otherwise the change will take
-  effect after radosgws are restarted.
-
 * Monitors now have config option ``mon_allow_pool_size_one``, which is disabled
   by default. However, if enabled, user now have to pass the
   ``--yes-i-really-mean-it`` flag to ``osd pool set size 1``, if they are really

@@ -726,6 +726,14 @@ Upgrade compatibility notes
   level, currently blocking/ignoring public acls & policies are supported.
   User/Account level APIs are planned to be added in the future
 
+* RGW: The default number of bucket index shards for new buckets was raised
+  from 1 to 11 to increase the amount of write throughput for small buckets
+  and delay the onset of dynamic resharding. This change only affects new
+  deployments/zones. To change this default value on existing deployments,
+  use ``radosgw-admin zonegroup modify --bucket-index-max-shards=11``.
+  If the zonegroup is part of a realm, the change must be committed with
+  ``radosgw-admin period update --commit`` - otherwise the change will take
+  effect after radosgws are restarted.
 
 
 Changelog
