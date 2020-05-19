@@ -192,7 +192,7 @@ Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
       logger().debug("replay_delta: finished reading root at {}", root_location);
       root = ref;
       return root->complete_load();
-    }).safe_then([this, root_location] {
+    }).safe_then([root_location] {
       logger().debug("replay_delta: finished loading root at {}", root_location);
       return replay_delta_ret(replay_delta_ertr::ready_future_marker{});
     });
@@ -209,7 +209,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
       t.root);
   } else {
     auto ret = root;
-    return ret->wait_io().then([this, &t, ret] {
+    return ret->wait_io().then([ret] {
       return get_root_ret(
 	get_root_ertr::ready_future_marker{},
 	ret);
