@@ -28,6 +28,7 @@ class Devices(object):
         return cls([Device.from_json(i) for i in input])
 
     def copy(self):
+        # type: () -> Devices
         return Devices(devices=list(self.devices))
 
 

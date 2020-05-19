@@ -318,3 +318,30 @@
   If the zonegroup is part of a realm, the change must be committed with
   'radosgw-admin period update --commit' - otherwise the change will take
   effect after radosgws are restarted.
+
+* Cephadm: There were a lot of small usability improvements and bug fixes:
+
+  * Grafana when deployed by Cephadm now binds to all network interfaces.
+  * ``cephadm check-host`` now prints all detected problems at once.
+  * Cephadm now calls ``ceph dashboard set-grafana-api-ssl-verify false``
+    when generating an SSL certificate for Grafana.
+  * The Alertmanager is now correctly pointed to the Ceph Dashboard
+  * ``cephadm adopt`` now supports adopting an Alertmanager
+  * ``ceph orch ps`` now supports filtering by service name
+  * ``ceph orch host ls`` now marks hosts as offline, if they are not
+    accessible.
+
+* Cephadm can now deploy NFS Ganesha services. For example, to deploy NFS with
+  a service id of mynfs, that will use the RADOS pool nfs-ganesha and namespace
+  nfs-ns::
+
+    ceph orch apply nfs mynfs nfs-ganesha nfs-ns
+
+* Cephadm: ``ceph orch ls --export`` now returns all service specifications in
+  yaml representation that is consumable by ``ceph orch apply``. In addition,
+  the commands ``orch ps`` and `orch ls`` now support ``--format yaml`` and
+  ``--format json-pretty``.
+
+* Cephadm: ``ceph orch apply osd`` supports a ``--preview`` flag that prints a preview of
+  the OSD specification before deploying OSDs. This makes it possible to
+  verify that the specification is correct, before applying it.

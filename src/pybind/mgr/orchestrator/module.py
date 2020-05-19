@@ -491,7 +491,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         usage = """
 Usage:
   ceph orch apply osd -i <json_file/yaml_file>
-  ceph orch apply osd --use-all-devices
+  ceph orch apply osd --all-available-devices
   ceph orch apply osd --service-name <service_name> --preview
   ceph orch apply osd --service-name <service_name> --unmanaged=True|False
 """
@@ -728,11 +728,10 @@ Usage:
     @_cli_write_command(
         'orch daemon add iscsi',
         'name=pool,type=CephString '
-        'name=fqdn_enabled,type=CephString,req=false '
         'name=trusted_ip_list,type=CephString,req=false '
         'name=placement,type=CephString,req=false',
         'Start iscsi daemon(s)')
-    def _iscsi_add(self, pool, fqdn_enabled=None, trusted_ip_list=None, placement=None, inbuf=None):
+    def _iscsi_add(self, pool, trusted_ip_list=None, placement=None, inbuf=None):
         usage = """
         Usage:
           ceph orch daemon add iscsi -i <json_file>
@@ -748,7 +747,6 @@ Usage:
             iscsi_spec = IscsiServiceSpec(
                 service_id='iscsi',
                 pool=pool,
-                fqdn_enabled=fqdn_enabled,
                 trusted_ip_list=trusted_ip_list,
                 placement=PlacementSpec.from_string(placement),
             )

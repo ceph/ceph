@@ -892,6 +892,8 @@ def is_available(what, func):
     num = 1
     while True:
         if func():
+            logger.info('%s is available'
+                    % (what))
             break
         elif num > retry:
             raise Error('%s not available after %s tries'
@@ -1077,6 +1079,36 @@ def infer_fsid(func):
         return func()
 
     return _infer_fsid
+
+def infer_config(func):
+    """
+    If we find a MON daemon, use the config from that container
+    """
+    @wraps(func)
+    def _infer_config():
+        if args.config:
+            logger.debug('Using specified config: %s' % args.config)
+            return func()
+        config = None
+        if args.fsid:
+            name = args.name
+            if not name:
+                daemon_list = list_daemons(detail=False)
+                for daemon in daemon_list:
+                    if daemon['name'].startswith('mon.'):
+                        name = daemon['name']
+                        break
+            if name:
+                config = '/var/lib/ceph/{}/{}/config'.format(args.fsid, name)
+        if config:
+            logger.info('Inferring config %s' % config)
+            args.config = config
+        elif os.path.exists(SHELL_DEFAULT_CONF):
+            logger.debug('Using default config: %s' % SHELL_DEFAULT_CONF)
+            args.config = SHELL_DEFAULT_CONF
+        return func()
+
+    return _infer_config
 
 def _get_default_image():
     if DEFAULT_IMAGE_IS_MASTER:
@@ -2484,9 +2516,13 @@ def command_bootstrap():
     def is_mgr_available():
         # type: () -> bool
         timeout=args.timeout if args.timeout else 30 # seconds
-        out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
-        j = json.loads(out)
-        return j.get('mgrmap', {}).get('available', False)
+        try:
+            out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
+            j = json.loads(out)
+            return j.get('mgrmap', {}).get('available', False)
+        except Exception as e:
+            logger.debug('status failed: %s' % e)
+            return False
     is_available('mgr', is_mgr_available)
 
     # wait for mgr to restart (after enabling a module)
@@ -2710,6 +2746,7 @@ def command_run():
 ##################################
 
 @infer_fsid
+@infer_config
 @infer_image
 def command_shell():
     # type: () -> int
@@ -2731,8 +2768,6 @@ def command_shell():
     # use /etc/ceph files by default, if present.  we do this instead of
     # making these defaults in the arg parser because we don't want an error
     # if they don't exist.
-    if not args.config and os.path.exists(SHELL_DEFAULT_CONF):
-        args.config = SHELL_DEFAULT_CONF
     if not args.keyring and os.path.exists(SHELL_DEFAULT_KEYRING):
         args.keyring = SHELL_DEFAULT_KEYRING
 
