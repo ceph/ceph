@@ -3,11 +3,6 @@
 
 * CVE-2020-10736: Fixes an authorization bypass in monitor and manager daemons
 
-* The behaviour of the ``-o`` argument to the rados tool has been reverted to
-  its orignal behaviour of indicating an output file. This reverts it to a more
-  consisten behaviour when compared to other tools. Specifying obect size is now
-  accomplished by using an upper case O ``-O``.
-
 * In certain rare cases, OSDs would self-classify themselves as type
   'nvme' instead of 'hdd' or 'ssd'.  This appears to be limited to
   cases where BlueStore was deployed with older versions of ceph-disk,
