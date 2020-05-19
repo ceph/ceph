@@ -689,17 +689,26 @@ Upgrade compatibility notes
   'nvme' instead of 'hdd' or 'ssd'.  This appears to be limited to
   cases where BlueStore was deployed with older versions of ceph-disk,
   or manually without ceph-volume and LVM.  Going forward, the OSD
-  will limit itself to only 'hdd' and 'ssd' (or whatever device class o
+  will limit itself to only 'hdd' and 'ssd' (or whatever device class
   the user manually specifies).
 
-* RGW: a mismatch between the bucket notification documentation and the actual
-  message format was fixed. This means that any endpoints receiving bucket 
-  notification, will now receive the same notifications inside an JSON array
-  named 'Records'. Note that this does not affect pulling bucket notification
-  from a subscription in a 'pubsub' zone, as these are already wrapped inside
-  that array.
+* RGW: a mismatch between the bucket notification documentation and 
+  the actual message format was fixed. This means that any endpoints 
+  receiving bucket notification, will now receive the same notifications 
+  inside an JSON array named 'Records'. Note that this does not affect 
+  pulling bucket notification from a subscription in a 'pubsub' zone, 
+  as these are already wrapped inside that array.
 
-
+* The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for 
+  upmap balancing has been removed. Instead use the mgr balancer config
+  ``upmap_max_deviation`` which now is an integer number of PGs of 
+  deviation from the target PGs per OSD.  This can be set with a command 
+  like ``ceph config set mgr mgr/balancer/upmap_max_deviation 2``. The 
+  default ``upmap_max_deviation`` is 1.  There are situations where 
+  crush rules would not allow a pool to ever have completely balanced 
+  PGs. For example, if crush requires 1 replica on each of 3 racks, but
+  there are fewer OSDs in one of the racks. In those cases, the 
+  configuration value can be increased.
 
 
 Changelog
