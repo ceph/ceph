@@ -14,11 +14,11 @@ namespace {
   const std::string schema_re = "([[:alpha:]]+:\\/\\/)";
   const std::string user_pass_re = "(([^:\\s]+):([^@\\s]+)@)?";
   const std::string host_port_re = "([[:alnum:].:-]+)";
-  const std::string vhost_re = "(/[[:print:]]+)?";
+  const std::string path_re = "(/[[:print:]]+)?";
 }
 
 bool parse_url_authority(const std::string& url, std::string& host, std::string& user, std::string& password) {
-  const std::string re = schema_re + user_pass_re + host_port_re + vhost_re;
+  const std::string re = schema_re + user_pass_re + host_port_re + path_re;
   const std::regex url_regex(re, std::regex::icase);
   std::smatch url_match_result;
 
@@ -33,7 +33,7 @@ bool parse_url_authority(const std::string& url, std::string& host, std::string&
 }
 
 bool parse_url_userinfo(const std::string& url, std::string& user, std::string& password) {
-  const std::string re = schema_re + user_pass_re + host_port_re + vhost_re;
+  const std::string re = schema_re + user_pass_re + host_port_re + path_re;
   const std::regex url_regex(re);
   std::smatch url_match_result;
 
