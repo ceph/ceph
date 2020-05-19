@@ -267,7 +267,7 @@ exit code zero).
 
 This test can be run with::
 
-    $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
+    $ teuthology-suite --machine-type smithi --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
 
 Test descriptions
 -----------------
@@ -361,12 +361,13 @@ suites. This eases the maintenance of the test framework as a whole.
 All the tests generated from the ``suites/ceph-deploy/`` directory tree
 (also known as the "ceph-deploy suite") can be run with::
 
-  $ teuthology-suite --suite ceph-deploy
+  $ teuthology-suite --machine-type smithi --suite ceph-deploy
 
 An individual test from the `ceph-deploy suite`_ can be run by adding the
 ``--filter`` option::
 
   $ teuthology-suite \
+      --machine-type smithi \
       --suite ceph-deploy/basic \
       --filter 'ceph-deploy/basic/{distros/ubuntu_16.04.yaml tasks/ceph-deploy.yaml}'
 
@@ -422,12 +423,13 @@ define the following ``roles``::
 The ``rbd/thrash`` suite as defined above, consisting of two tests,
 can be run with::
 
-  $ teuthology-suite --suite rbd/thrash
+  $ teuthology-suite --machine-type smithi --suite rbd/thrash
 
 A single test from the rbd/thrash suite can be run by adding the
 ``--filter`` option::
 
   $ teuthology-suite \
+      --machine-type smithi \
       --suite rbd/thrash \
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
 
@@ -439,7 +441,7 @@ can be used to select tests with a matching description. For instance, if the
 ``rados`` suite fails the `all/peer.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/peer.yaml>`_ test, the following will only
 run the tests that contain this file::
 
-  teuthology-suite --suite rados --filter all/peer.yaml
+  teuthology-suite --machine-type smithi --suite rados --filter all/peer.yaml
 
 The ``--filter-out`` option does the opposite (it matches tests that do `not`
 contain a given string), and can be combined with the ``--filter`` option.
@@ -448,7 +450,7 @@ Both ``--filter`` and ``--filter-out`` take a comma-separated list of strings
 (which means the comma character is implicitly forbidden in filenames found in
 the `ceph/qa sub-directory`_). For instance::
 
-  teuthology-suite --suite rados --filter all/peer.yaml,all/rest-api.yaml
+  teuthology-suite --machine-type smithi --suite rados --filter all/peer.yaml,all/rest-api.yaml
 
 will run tests that contain either
 `all/peer.yaml <https://github.com/ceph/ceph/blob/master/qa/suites/rados/singleton/all/peer.yaml>`_
@@ -476,7 +478,7 @@ risking a trivial regression, it is enough to run a subset. The ``--subset``
 option can be used to reduce the number of tests that are triggered. For
 instance::
 
-  teuthology-suite --suite rados --subset 0/4000
+  teuthology-suite --machine-type smithi --suite rados --subset 0/4000
 
 will run as few tests as possible. The tradeoff in this case is that
 not all combinations of test variations will together,
