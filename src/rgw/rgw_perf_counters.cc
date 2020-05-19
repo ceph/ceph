@@ -35,6 +35,7 @@ int rgw_perf_start(CephContext *cct)
   plb.add_u64_counter(l_rgw_keystone_token_cache_miss, "keystone_token_cache_miss", "Keystone token cache miss");
 
   plb.add_u64_counter(l_rgw_gc_retire, "gc_retire_object", "GC object retires");
+  plb.add_u64_counter(l_rgw_lc_remove_expired, "lc_remove_expired", "LC removed objects");
 
   plb.add_u64_counter(l_rgw_pubsub_event_triggered, "pubsub_event_triggered", "Pubsub events with at least one topic");
   plb.add_u64_counter(l_rgw_pubsub_event_lost, "pubsub_event_lost", "Pubsub events lost");
