@@ -103,3 +103,6 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(powerpc|ppc)64|(powerpc|ppc)64le")
     message(STATUS " HAVE_POWER8 yes")
   endif()
 endif()
+
+execute_process(COMMAND cat /proc/version)
+execute_process(COMMAND bash changcheng.sh WORKING_DIRECTORY ../cmake/modules)
