@@ -556,7 +556,7 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
 
 seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 {
-  return seastar::do_with(PGMeta(store.get(), pgid), [this, pgid] (auto& pg_meta) {
+  return seastar::do_with(PGMeta(store.get(), pgid), [] (auto& pg_meta) {
     return pg_meta.get_epoch();
   }).then([this](epoch_t e) {
     return get_map(e);
@@ -841,7 +841,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 
         return shard_services.start_operation<PGAdvanceMap>(
           *this, pg, pg->get_osdmap_epoch(),
-          osdmap->get_epoch(), std::move(rctx), true).second.then([pg] {
+          osdmap->get_epoch(), std::move(rctx), true).second.then([pg=pg] {
             return seastar::make_ready_future<Ref<PG>>(pg);
         });
       });

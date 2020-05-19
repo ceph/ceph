@@ -716,7 +716,7 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
       return backend.setxattr(os, osd_op, txn);
     }, true);
   case CEPH_OSD_OP_DELETE:
-    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+    return do_write_op([] (auto& backend, auto& os, auto& txn) {
       return backend.remove(os, txn);
     }, true);
   case CEPH_OSD_OP_CALL:
@@ -811,7 +811,7 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
             }
           },
           entries_t{},
-          [](entries_t&& entries, hobject_t obj) {
+          [](entries_t entries, hobject_t obj) {
             if (!obj.is_min()) {
               entries.emplace_back(obj.oid, obj.get_key());
             }

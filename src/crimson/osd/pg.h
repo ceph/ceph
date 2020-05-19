@@ -506,7 +506,7 @@ public:
     F &&f) {
     auto [oid, type] = get_oid_and_lock(*m, op_info);
     return get_locked_obc(op, oid, type)
-      .safe_then([this, f=std::forward<F>(f), type=type](auto obc) {
+      .safe_then([f=std::forward<F>(f), type=type](auto obc) {
 	return f(obc).finally([obc, type=type] {
 	  obc->put_lock_type(type);
 	  return load_obc_ertr::now();
