@@ -1,4 +1,4 @@
->=15.2.1
+>=16.0.0
 --------
 
 * CVE-2020-10736: Fixes an authorization bypass in monitor and manager daemons
