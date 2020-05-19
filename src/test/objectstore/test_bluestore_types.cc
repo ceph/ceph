@@ -1542,6 +1542,98 @@ TEST(BlueStoreRepairer, StoreSpaceTracker)
   ASSERT_TRUE(bmap2.is_used(hoid, 0x3223b19ffff));
 }
 
+TEST(bluestore_blob_t, unused)
+{
+  {
+    bluestore_blob_t b;
+    uint64_t min_alloc_size = 64 << 10; // 64 kB
+
+    // _do_write_small 0x0~1000
+    uint64_t offset = 0x0;
+    uint64_t length = 0x1000; // 4kB
+    uint64_t suggested_boff = 0;
+    PExtentVector extents;
+    extents.emplace_back(0x1a560000, min_alloc_size);
+    b.allocated(p2align(suggested_boff, min_alloc_size), 0 /*no matter*/, extents);
+    b.mark_used(offset, length);
+    ASSERT_FALSE(b.is_unused(offset, length));
+
+    // _do_write_small 0x2000~1000
+    offset = 0x2000;
+    length = 0x1000;
+    b.add_unused(0, 0x10000);
+    ASSERT_TRUE(b.is_unused(offset, length));
+    b.mark_used(offset, length);
+    ASSERT_FALSE(b.is_unused(offset, length));
+
+    // _do_write_small 0xc000~2000
+    offset = 0xc000;
+    length = 0x2000;
+    ASSERT_TRUE(b.is_unused(offset, length));
+    b.mark_used(offset, length);
+    ASSERT_FALSE(b.is_unused(offset, length));
+  }
+
+  {
+    bluestore_blob_t b;
+    uint64_t min_alloc_size = 64 << 10; // 64 kB
+
+    // _do_write_small 0x11000~1000
+    uint64_t offset = 0x11000;
+    uint64_t length = 0x1000; // 4kB
+    uint64_t suggested_boff = 0x11000;
+    PExtentVector extents;
+    extents.emplace_back(0x1a560000, min_alloc_size);
+    b.allocated(p2align(suggested_boff, min_alloc_size), 0 /*no matter*/, extents);
+    b.add_unused(0, offset);
+    b.add_unused(offset + length, min_alloc_size * 2 - offset - length);
+    b.mark_used(offset, length);
+    ASSERT_FALSE(b.is_unused(offset, length));
+
+    // _do_write_small 0x15000~3000
+    offset = 0x15000;
+    length = 0x3000;
+    ASSERT_TRUE(b.is_unused(offset, length));
+    b.mark_used(offset, length);
+    ASSERT_FALSE(b.is_unused(offset, length));
+  }
+
+  {
+    // reuse blob
+    bluestore_blob_t b;
+    uint64_t min_alloc_size = 64 << 10; // 64 kB
+
+    // _do_write_small 0x2a000~1000
+    // and 0x1d000~1000
+    uint64_t unused_granularity = 0x3000;
+    // offsets and lenght below are selected to
+    // be aligned with unused_granularity
+    uint64_t offset0 = 0x2a000;
+    uint64_t offset = 0x1d000;
+    uint64_t length = 0x1000; // 4kB
+    PExtentVector extents;
+    extents.emplace_back(0x410000, min_alloc_size);
+    b.allocated(p2align(offset0, min_alloc_size), min_alloc_size, extents);
+    b.add_unused(0, min_alloc_size * 3);
+    b.mark_used(offset0, length);
+    ASSERT_FALSE(b.is_unused(offset0, length));
+    ASSERT_TRUE(b.is_unused(offset, length));
+
+    extents.clear();
+    extents.emplace_back(0x430000, min_alloc_size);
+    b.allocated(p2align(offset, min_alloc_size), min_alloc_size, extents);
+    b.mark_used(offset, length);
+    ASSERT_FALSE(b.is_unused(offset0, length));
+    ASSERT_FALSE(b.is_unused(offset, length));
+    ASSERT_FALSE(b.is_unused(offset, unused_granularity));
+
+    ASSERT_TRUE(b.is_unused(0, offset / unused_granularity * unused_granularity));
+    ASSERT_TRUE(b.is_unused(offset + length, offset0 - offset - length));
+    auto end0_aligned = round_up_to(offset0 + length, unused_granularity);
+    ASSERT_TRUE(b.is_unused(end0_aligned, min_alloc_size * 3 - end0_aligned));
+  }
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
