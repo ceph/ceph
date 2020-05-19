@@ -4,8 +4,6 @@
 #ifndef CEPH_OBJCLASS_H
 #define CEPH_OBJCLASS_H
 
-#ifdef __cplusplus
-
 #include "../include/types.h"
 #include "msg/msg_types.h"
 #include "common/hobject.h"
@@ -16,6 +14,7 @@
 struct obj_list_watch_response_t;
 class PGLSFilter;
 
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -75,6 +74,7 @@ extern void class_fini(void);
 
 #ifdef __cplusplus
 }
+#endif
 // Classes expose a filter constructor that returns a subclass of PGLSFilter
 typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
 
@@ -162,6 +162,4 @@ bool cls_has_chunk(cls_method_context_t hctx, std::string fp_oid);
 extern uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx);
 extern uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx);
 
-#endif
-
-#endif
+#endif // CEPH_OBJCLASS_H
