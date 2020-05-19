@@ -75,7 +75,7 @@ def get_python_flags(libs):
         libraries=libs + py_libs,
         extra_compile_args=filter_unsupported_flags(
             compiler.compiler[0],
-            distutils.sysconfig.get_config_var('CFLAGS').split()),
+            compiler.compiler[1:] + distutils.sysconfig.get_config_var('CFLAGS').split()),
         extra_link_args=(distutils.sysconfig.get_config_var('LDFLAGS').split() +
                          ldflags))
 
