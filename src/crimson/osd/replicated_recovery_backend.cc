@@ -65,7 +65,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
 	    }
 	    bool got = recovery_waiter.obc->get_recovery_read().get0();
-	    assert(pulled ? got : 1);
+	    ceph_assert_always(pulled ? got : 1);
 	    if (!got) {
 	      return recovery_waiter.obc->get_recovery_read(true)
 	      .then([](bool) { return seastar::now(); });
@@ -80,7 +80,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	      recovery_waiter.obc = obc;
 	      // obc is loaded with excl lock
 	      recovery_waiter.obc->put_lock_type(RWState::RWEXCL);
-	      assert(recovery_waiter.obc->get_recovery_read().get0());
+	      ceph_assert_always(recovery_waiter.obc->get_recovery_read().get0());
 	      return seastar::make_ready_future<>();
 	    })
 	  );
