@@ -54,7 +54,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
       return [this, &recovery_waiter, soid] {
 	if (!recovery_waiter.obc) {
 	  return pg.get_or_load_head_obc(soid).safe_then(
-	    [this, &recovery_waiter](auto p) {
+	    [&recovery_waiter](auto p) {
 	    auto& [obc, existed] = p;
 	    logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
 	    recovery_waiter.obc = obc;
@@ -82,7 +82,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
       }().then([this, soid, need, &pops, &shards] {
 	return prep_push(soid, need, &pops, shards);
       });
-    }).handle_exception([this, soid, &recovery_waiter](auto e) {
+    }).handle_exception([this, soid](auto e) {
       auto& recovery_waiter = recovering[soid];
       if (recovery_waiter.obc)
 	recovery_waiter.obc->drop_recovery_read();
@@ -104,7 +104,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
 	  return recovering[soid].wait_for_pushes(shard->first);
 	});
       });
-    }).then([this, soid, &recovery_waiter] {
+    }).then([this, soid] {
       bool error = recovering[soid].pi.recovery_progress.error;
       if (!error) {
 	auto push_info = recovering[soid].pushing.begin();
@@ -171,7 +171,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_recovery_delete(
 
   auto& p = m->objects.front(); //TODO: only one delete per message for now.
   return local_recover_delete(p.first, p.second, pg.get_osdmap_epoch()).then(
-    [this, m, &p] {
+    [this, m] {
     auto reply = make_message<MOSDPGRecoveryDeleteReply>();
     reply->from = pg.get_pg_whoami();
     reply->set_priority(m->get_priority());
@@ -193,8 +193,7 @@ seastar::future<> ReplicatedRecoveryBackend::on_local_recover_persist(
   ceph::os::Transaction t;
   pg.get_recovery_handler()->on_local_recover(soid, _recovery_info, is_delete, t);
   return shard_services.get_store().do_transaction(coll, std::move(t)).then(
-    [this, &soid, &_recovery_info, epoch_frozen,
-    last_complete = pg.get_info().last_complete] {
+    [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
     pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
     return seastar::make_ready_future<>();
   });
@@ -286,9 +285,9 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
   logger().debug("{}: {}, {}", __func__, soid, need);
 
   return seastar::do_with(std::map<pg_shard_t, interval_set<uint64_t>>(),
-    [this, soid, need, pops, &shards](auto& data_subsets) {
+    [this, soid, pops, &shards](auto& data_subsets) {
     return seastar::parallel_for_each(shards,
-      [this, soid, need, pops, &data_subsets](auto pg_shard) mutable {
+      [this, soid, pops, &data_subsets](auto pg_shard) mutable {
       pops->emplace(pg_shard->first, PushOp());
       auto& recovery_waiter = recovering[soid];
       auto& obc = recovery_waiter.obc;
@@ -390,7 +389,7 @@ seastar::future<ObjectRecoveryProgress> ReplicatedRecoveryBackend::build_push_op
 	  .then([this, &recovery_info, pop](auto bl) {
 	  pop->omap_header.claim_append(bl);
 	  return store->get_attrs(coll, ghobject_t(recovery_info.soid));
-	}).safe_then([this, &oi, pop, &new_progress, &v](auto attrs) mutable {
+	}).safe_then([&oi, pop, &new_progress, &v](auto attrs) mutable {
 	  //pop->attrset = attrs;
 	  for (auto p : attrs) {
 	    pop->attrset[p.first].push_back(p.second);
@@ -412,11 +411,11 @@ seastar::future<ObjectRecoveryProgress> ReplicatedRecoveryBackend::build_push_op
     }().then([this, &recovery_info] {
       return shard_services.get_store().get_omap_iterator(coll,
 		ghobject_t(recovery_info.soid));
-    }).then([this, &progress, &available, &new_progress, pop](auto iter) {
+    }).then([&progress, &available, &new_progress, pop](auto iter) {
       if (!progress.omap_complete) {
 	return iter->lower_bound(progress.omap_recovered_to).then(
-	  [this, iter, &new_progress, pop, &available](int ret) {
-	  return seastar::repeat([this, iter, &new_progress, pop, &available] {
+	  [iter, &new_progress, pop, &available](int ret) {
+	  return seastar::repeat([iter, &new_progress, pop, &available] {
 	    if (!iter->valid()) {
 	      new_progress.omap_complete = true;
 	      return seastar::make_ready_future<seastar::stop_iteration>(
@@ -457,7 +456,7 @@ seastar::future<ObjectRecoveryProgress> ReplicatedRecoveryBackend::build_push_op
 	      interval_set<uint64_t> fiemap_included(std::move(m));
 	      copy_subset.intersection_of(fiemap_included);
 	      return seastar::make_ready_future<>();
-	    }).then([this, &recovery_info, &progress,
+	    }).then([&recovery_info, &progress,
 	      &copy_subset, &available, pop, &new_progress] {
 	      pop->data_included.span_of(copy_subset, progress.data_recovered_to,
 					 available);
@@ -479,11 +478,11 @@ seastar::future<ObjectRecoveryProgress> ReplicatedRecoveryBackend::build_push_op
 	pop->data_included.clear();
 	return seastar::make_ready_future<>();
       }
-    }).then([this, &recovery_info, &progress, &oi, pop] {
+    }).then([this, &oi, pop] {
       //TODO: there's no readv in cyan_store yet, use read temporarily.
       return store->readv(coll, ghobject_t{oi.soid}, pop->data_included, 0);
-    }).safe_then([this, &recovery_info, &progress,
-      &new_progress, &oi, stat, pop, &v]
+    }).safe_then([&recovery_info, &progress,
+      &new_progress, stat, pop, &v]
       (auto bl) {
       pop->data.claim_append(bl);
       if (new_progress.is_complete(recovery_info)) {
@@ -572,7 +571,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 	  pop.version = eversion_t();
 	  pop.soid = soid;
 	  return seastar::make_ready_future<ObjectRecoveryProgress>();
-	}).then([this, &pop, &pull_op, from](auto new_progress) {
+	}).then([this, &pop, from](auto new_progress) {
 	  auto msg = make_message<MOSDPGPush>();
 	  msg->from = pg.get_pg_whoami();
 	  msg->pgid = pg.get_pgid();
@@ -615,7 +614,7 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
   return [this, &pi, first, &recovery_waiter, &pop] {
     if (first) {
       return pg.get_or_load_head_obc(pi.recovery_info.soid).safe_then(
-	[this, &pi, &recovery_waiter, &pop](auto p) {
+	[&pi, &recovery_waiter, &pop](auto p) {
 	auto& [obc, existed] = p;
 	pi.obc = obc;
 	recovery_waiter.obc = obc;
@@ -752,7 +751,7 @@ seastar::future<> ReplicatedRecoveryBackend::_handle_push(
 
     return submit_push_data(pop.recovery_info, first, complete, clear_omap,
 	data_zeros, pop.data_included, data, pop.omap_header, pop.attrset,
-	pop.omap_entries, t).then([this, complete, &data_zeros, &pop, t] {
+	pop.omap_entries, t).then([this, complete, &pop, t] {
       if (complete) {
 	pg.get_recovery_handler()->on_local_recover(pop.recovery_info.soid,
 			    pop.recovery_info, false, *t);
@@ -782,7 +781,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_push(
 	  pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
 	});
       });
-    }).then([this, m, &pop, &response]() mutable {
+    }).then([this, m, &response]() mutable {
       auto reply = make_message<MOSDPGPushReply>();
       reply->from = pg.get_pg_whoami();
       reply->set_priority(m->get_priority());
@@ -824,7 +823,7 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_push_reply(
 	pg.get_recovery_handler()->on_peer_recover(peer, soid, pi.recovery_info);
       recovering_iter->second.set_pushed(peer);
       return seastar::make_ready_future<bool>(true);
-    }().handle_exception([this, recovering_iter, &pi, &soid, peer] (auto e) {
+    }().handle_exception([recovering_iter, &pi, peer] (auto e) {
       pi.recovery_progress.error = true;
       recovering_iter->second.set_pushed(peer);
       return seastar::make_ready_future<bool>(true);
@@ -841,7 +840,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_push_reply(
 
   return seastar::do_with(PushOp(), [this, &push_reply, from](auto& pop) {
     return _handle_push_reply(from, push_reply, &pop).then(
-      [this, &push_reply, &pop, from](bool finished) {
+      [this, &pop, from](bool finished) {
       if (!finished) {
 	auto msg = make_message<MOSDPGPush>();
 	msg->from = pg.get_pg_whoami();
@@ -918,7 +917,7 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
   }
 
   return [this, &recovery_info, first, complete, t,
-    &omap_header, &attrs, &omap_entries, target_oid, clear_omap] {
+    &omap_header, &attrs, target_oid, clear_omap] {
     if (first) {
       if (!complete) {
 	t->remove(coll->get_cid(), ghobject_t(target_oid));
@@ -951,9 +950,9 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
       if (omap_header.length())
 	t->omap_setheader(coll->get_cid(), ghobject_t(target_oid), omap_header);
 
-      return store->stat(coll, ghobject_t(recovery_info.soid)).then (
+      return store->stat(coll, ghobject_t(recovery_info.soid)).then(
 	[this, &recovery_info, complete, t, target_oid,
-	omap_header = std::move(omap_header), &attrs, &omap_entries] (auto st) {
+	omap_header = std::move(omap_header)] (auto st) {
 	//TODO: pg num bytes counting
 	if (!complete) {
 	  //clone overlap content in local object
