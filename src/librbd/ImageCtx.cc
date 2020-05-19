@@ -820,27 +820,33 @@ public:
     io_image_dispatcher->apply_qos_limit(
       io::IMAGE_DISPATCH_FLAG_QOS_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_iops_limit"),
-      config.get_val<uint64_t>("rbd_qos_iops_burst"));
+      config.get_val<uint64_t>("rbd_qos_iops_burst"),
+      config.get_val<uint64_t>("rbd_qos_iops_burst_seconds"));
     io_image_dispatcher->apply_qos_limit(
       io::IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_bps_limit"),
-      config.get_val<uint64_t>("rbd_qos_bps_burst"));
+      config.get_val<uint64_t>("rbd_qos_bps_burst"),
+      config.get_val<uint64_t>("rbd_qos_bps_burst_seconds"));
     io_image_dispatcher->apply_qos_limit(
       io::IMAGE_DISPATCH_FLAG_QOS_READ_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_iops_limit"),
-      config.get_val<uint64_t>("rbd_qos_read_iops_burst"));
+      config.get_val<uint64_t>("rbd_qos_read_iops_burst"),
+      config.get_val<uint64_t>("rbd_qos_read_iops_burst_seconds"));
     io_image_dispatcher->apply_qos_limit(
       io::IMAGE_DISPATCH_FLAG_QOS_WRITE_IOPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_iops_limit"),
-      config.get_val<uint64_t>("rbd_qos_write_iops_burst"));
+      config.get_val<uint64_t>("rbd_qos_write_iops_burst"),
+      config.get_val<uint64_t>("rbd_qos_write_iops_burst_seconds"));
     io_image_dispatcher->apply_qos_limit(
       io::IMAGE_DISPATCH_FLAG_QOS_READ_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_read_bps_limit"),
-      config.get_val<uint64_t>("rbd_qos_read_bps_burst"));
+      config.get_val<uint64_t>("rbd_qos_read_bps_burst"),
+      config.get_val<uint64_t>("rbd_qos_read_bps_burst_seconds"));
     io_image_dispatcher->apply_qos_limit(
       io::IMAGE_DISPATCH_FLAG_QOS_WRITE_BPS_THROTTLE,
       config.get_val<uint64_t>("rbd_qos_write_bps_limit"),
-      config.get_val<uint64_t>("rbd_qos_write_bps_burst"));
+      config.get_val<uint64_t>("rbd_qos_write_bps_burst"),
+      config.get_val<uint64_t>("rbd_qos_write_bps_burst_seconds"));
 
     if (!disable_zero_copy &&
         config.get_val<bool>("rbd_disable_zero_copy_writes")) {

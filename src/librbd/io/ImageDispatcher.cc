@@ -148,8 +148,8 @@ void ImageDispatcher<I>::apply_qos_schedule_tick_min(uint64_t tick) {
 
 template <typename I>
 void ImageDispatcher<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
-                                         uint64_t burst) {
-  m_qos_image_dispatch->apply_qos_limit(flag, limit, burst);
+                                         uint64_t burst, uint64_t burst_seconds) {
+  m_qos_image_dispatch->apply_qos_limit(flag, limit, burst, burst_seconds);
 }
 
 template <typename I>

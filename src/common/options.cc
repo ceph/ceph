@@ -7498,6 +7498,36 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("the desired burst limit of write bytes"),
 
+    Option("rbd_qos_iops_burst_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of IO operations"),
+
+    Option("rbd_qos_bps_burst_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of IO bytes"),
+
+    Option("rbd_qos_read_iops_burst_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of read operations"),
+
+    Option("rbd_qos_write_iops_burst_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of write operations"),
+
+    Option("rbd_qos_read_bps_burst_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of read bytes"),
+
+    Option("rbd_qos_write_bps_burst_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("the desired burst duration in seconds of write bytes"),
+
     Option("rbd_qos_schedule_tick_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
     .set_min(1)

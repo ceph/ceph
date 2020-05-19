@@ -26,7 +26,7 @@ TEST_F(TestMockIoImageRequestWQ, QosNoLimit) {
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
 
   mock_image_request_wq.apply_qos_limit(IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE, 0,
-                                        0);
+                                        0, 1);
 
   expect_front(mock_image_request_wq, &mock_queued_image_request);
   expect_is_refresh_request(mock_image_ctx, false);
@@ -49,7 +49,7 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosNoBurst) {
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
 
   mock_image_request_wq.apply_qos_limit(IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE, 1,
-                                        0);
+                                        0, 1);
 
   expect_front(mock_image_request_wq, &mock_queued_image_request);
   expect_tokens_requested(mock_queued_image_request, 2, true);
@@ -74,7 +74,7 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosWithBurst) {
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
 
   mock_image_request_wq.apply_qos_limit(IMAGE_DISPATCH_FLAG_QOS_BPS_THROTTLE, 1,
-                                        1);
+                                        1, 1);
 
   expect_front(mock_image_request_wq, &mock_queued_image_request);
   expect_tokens_requested(mock_queued_image_request, 2, true);
