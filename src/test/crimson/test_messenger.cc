@@ -405,7 +405,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
         // forwarded to stopped_send_promise
         (void) seastar::do_until(
           [this] { return stop_send; },
-          [this, conn] {
+          [conn] {
             return conn->send(make_message<MPing>()).then([] {
               return seastar::sleep(0ms);
             });
@@ -641,7 +641,7 @@ struct TestInterceptor : public Interceptor {
   seastar::future<> wait() {
     assert(!signal);
     signal = seastar::abort_source();
-    return seastar::sleep_abortable(10s, *signal).then([this] {
+    return seastar::sleep_abortable(10s, *signal).then([] {
       throw std::runtime_error("Timeout (10s) in TestInterceptor::wait()");
     }).handle_exception_type([] (const seastar::sleep_aborted& e) {
       // wait done!
@@ -1230,7 +1230,7 @@ class FailoverTest : public Dispatcher {
     recv_pong = seastar::promise<>();
     auto fut = recv_pong->get_future();
     return cmd_conn->send(make_message<MPing>()
-    ).then([this, fut = std::move(fut)] () mutable {
+    ).then([fut = std::move(fut)] () mutable {
       return std::move(fut);
     });
   }
@@ -1259,7 +1259,7 @@ class FailoverTest : public Dispatcher {
     assert(!recv_cmdreply);
     auto m = make_message<MCommand>();
     m->cmd.emplace_back(1, static_cast<char>(cmd_t::shutdown));
-    return cmd_conn->send(m).then([this] {
+    return cmd_conn->send(m).then([] {
       return seastar::sleep(200ms);
     }).finally([this] {
       return cmd_msgr->shutdown();
@@ -1625,7 +1625,7 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
           interceptor,
           policy_t::lossy_client,
           policy_t::stateless_server,
-          [&test] (FailoverSuite& suite) {
+          [] (FailoverSuite& suite) {
         return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
@@ -1657,7 +1657,7 @@ test_v2_lossy_connect_fault(FailoverTest& test) {
           interceptor,
           policy_t::lossy_client,
           policy_t::stateless_server,
-          [&test] (FailoverSuite& suite) {
+          [] (FailoverSuite& suite) {
         return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
@@ -2160,7 +2160,7 @@ test_v2_peer_connect_fault(FailoverTest& test) {
           interceptor,
           policy_t::lossless_peer,
           policy_t::lossless_peer,
-          [&test] (FailoverSuite& suite) {
+          [] (FailoverSuite& suite) {
         return seastar::futurize_invoke([&suite] {
           return suite.send_peer();
         }).then([&suite] {
@@ -2248,7 +2248,7 @@ test_v2_peer_connected_fault_reconnect(FailoverTest& test) {
       interceptor,
       policy_t::lossless_peer,
       policy_t::lossless_peer,
-      [&test] (FailoverSuite& suite) {
+      [] (FailoverSuite& suite) {
     return seastar::futurize_invoke([&suite] {
       return suite.send_peer();
     }).then([&suite] {
@@ -2301,7 +2301,7 @@ peer_wins(FailoverTest& test) {
                           TestInterceptor(),
                           policy_t::lossy_client,
                           policy_t::stateless_server,
-                          [&test, &ret] (FailoverSuite& suite) {
+                          [&ret] (FailoverSuite& suite) {
       return suite.connect_peer().then([&suite] {
         return suite.wait_results(1);
       }).then([&ret] (ConnResults& results) {
@@ -2760,7 +2760,7 @@ test_v2_stale_reaccept(FailoverTest& test) {
       return test.peer_connect_me();
     }).then([&suite] {
       return suite.wait_blocked();
-    }).then([&suite] {
+    }).then([] {
       logger().info("[Test] block the broken REPLACING for 210ms...");
       return seastar::sleep(210ms);
     }).then([&suite] {
