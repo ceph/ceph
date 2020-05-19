@@ -722,6 +722,10 @@ Upgrade compatibility notes
   in the zonegroup configuration. New configuration should only be configured
   after all relevant zones in the zonegroup have been upgraded.
 
+* RGW S3: Support has been added for BlockPublicAccess set of APIs at a bucket
+  level, currently blocking/ignoring public acls & policies are supported.
+  User/Account level APIs are planned to be added in the future
+
 
 
 Changelog
