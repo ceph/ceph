@@ -260,7 +260,7 @@ Journal::read_record_metadata_ret Journal::read_record_metadata(
 	return segment_manager.read(
 	  {start.segment, start.offset + (segment_off_t)block_size},
 	  header.mdlength - block_size).safe_then(
-	    [this, header=std::move(header), bl=std::move(bl)](
+	    [header=std::move(header), bl=std::move(bl)](
 	      auto &&bptail) mutable {
 	      bl.push_back(bptail);
 	      return read_record_metadata_ret(
@@ -351,19 +351,16 @@ Journal::replay_segment(
 Journal::replay_ret Journal::replay(delta_handler_t &&delta_handler)
 {
   return seastar::do_with(
-    std::make_pair(std::move(delta_handler), std::vector<paddr_t>()),
-    [this](auto &&item) mutable -> replay_ret {
-      auto &[handler, segments] = item;
-      return find_replay_segments(
-      ).safe_then([this, &handler, &segments](auto osegments) {
-	logger().debug("replay: found {} segments", segments.size());
-	segments.swap(osegments);
-	return crimson::do_for_each(
-	  segments,
-	  [this, &handler](auto i) {
-	    return replay_segment(i, handler);
-	  });
-      });
+    std::move(delta_handler), std::vector<paddr_t>(),
+    [this](auto&& handler, auto&& segments) mutable -> replay_ret {
+      return find_replay_segments().safe_then(
+        [this, &handler, &segments](auto replay_segs) {
+          logger().debug("replay: found {} segments", replay_segs.size());
+          segments = std::move(replay_segs);
+          return crimson::do_for_each(segments, [this, &handler](auto i) {
+            return replay_segment(i, handler);
+          });
+        });
     });
 }
 

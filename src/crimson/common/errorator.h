@@ -299,7 +299,9 @@ static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
                          std::forward<decltype(args)>(args)...);
     } else {
       static_assert(
-        _impl::always_false<FuncHead>::value, "composition is not exhaustive");
+	std::is_invocable_v<FuncHead, decltype(args)...> ||
+	(sizeof...(FuncTail) > 0),
+      "composition is not exhaustive");
     }
   };
 }

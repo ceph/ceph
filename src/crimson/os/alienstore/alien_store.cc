@@ -256,7 +256,7 @@ AlienStore::get_attr(CollectionRef ch,
       auto c =static_cast<AlienCollection*>(ch.get());
       return store->getattr(c->collection, oid,
 		            static_cast<std::string>(name).c_str(), value);
-    }).then([oid, name, &value] (int r) -> get_attr_errorator::future<ceph::bufferptr> {
+    }).then([oid, &value] (int r) -> get_attr_errorator::future<ceph::bufferptr> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
       } else if (r == -ENODATA) {
