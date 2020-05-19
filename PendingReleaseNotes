@@ -3,16 +3,6 @@
 
 * CVE-2020-10736: Fixes an authorization bypass in monitor and manager daemons
 
-* The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for upmap
-  balancing has been removed. Instead use the mgr balancer config
-  ``upmap_max_deviation`` which now is an integer number of PGs of deviation
-  from the target PGs per OSD.  This can be set with a command like
-  ``ceph config set mgr mgr/balancer/upmap_max_deviation 2``.  The default
-  ``upmap_max_deviation`` is 1.  There are situations where crush rules
-  would not allow a pool to ever have completely balanced PGs.  For example, if
-  crush requires 1 replica on each of 3 racks, but there are fewer OSDs in 1 of
-  the racks.  In those cases, the configuration value can be increased.
-
 * MDS daemons can now be assigned to manage a particular file system via the
   new ``mds_join_fs`` option. The monitors will try to use only MDS for a file
   system with mds_join_fs equal to the file system name (strong affinity).
