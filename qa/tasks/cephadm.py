@@ -250,8 +250,11 @@ def ceph_log(ctx, config):
                     os.makedirs(sub)
                 except OSError:
                     pass
-                teuthology.pull_directory(remote, '/var/log/ceph',  # everything
-                                          os.path.join(sub, 'log'))
+                try:
+                    teuthology.pull_directory(remote, '/var/log/ceph',  # everything
+                                              os.path.join(sub, 'log'))
+                except ReadError:
+                    pass
 
 @contextlib.contextmanager
 def ceph_crash(ctx, config):
