@@ -569,7 +569,7 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
               std::make_tuple(std::move(items), std::move(next)));
       });
   }).then(
-    [pg_end, filter] (auto&& ret) {
+    [pg_end] (auto&& ret) {
       auto& [items, next] = ret;
       auto is_matched = [] (const auto& obj) {
         return !obj.is_min();
@@ -815,7 +815,7 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
             if (!obj.is_min()) {
               entries.emplace_back(obj.oid, obj.get_key());
             }
-            return entries;
+            return std::move(entries);
           }),
         seastar::make_ready_future<hobject_t>(next));
     }).then([pg_end](entries_t entries, hobject_t next) {

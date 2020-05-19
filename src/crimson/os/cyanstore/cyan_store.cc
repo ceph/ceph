@@ -210,7 +210,7 @@ CyanStore::read_errorator::future<ceph::bufferlist> CyanStore::readv(
     return crimson::do_for_each(m,
       [this, ch, oid, op_flags, &bl](auto& p) {
       return read(ch, oid, p.first, p.second, op_flags)
-      .safe_then([this, &bl](auto ret) {
+      .safe_then([&bl](auto ret) {
 	bl.claim_append(ret);
       });
     }).safe_then([&bl] {

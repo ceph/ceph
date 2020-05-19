@@ -129,9 +129,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     };
     advance();
     replay(
-      [this,
-       &advance,
-       &record_iter,
+      [&advance,
        &delta_checker]
       (auto base, const auto &di) mutable {
 	if (!delta_checker) {
