@@ -685,6 +685,13 @@ Upgrade compatibility notes
   tools. Specifying obect size is now accomplished by using an 
   upper-case O ``-O``.
 
+* In certain rare cases, OSDs would self-classify themselves as type
+  'nvme' instead of 'hdd' or 'ssd'.  This appears to be limited to
+  cases where BlueStore was deployed with older versions of ceph-disk,
+  or manually without ceph-volume and LVM.  Going forward, the OSD
+  will limit itself to only 'hdd' and 'ssd' (or whatever device class o
+  the user manually specifies).
+
 
 Changelog
 ---------
