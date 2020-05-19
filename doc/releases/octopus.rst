@@ -716,6 +716,13 @@ Upgrade compatibility notes
   Monitors may also deliberately failover an active MDS to a standby when the
   cluster is otherwise healthy if the standby has stronger affinity.
 
+* RGW Multisite: A new fine grained bucket-granularity policy configuration
+  system has been introduced and it supersedes the previous coarse zone sync
+  configuration (specifically the ``sync_from`` and ``sync_from_all`` fields
+  in the zonegroup configuration. New configuration should only be configured
+  after all relevant zones in the zonegroup have been upgraded.
+
+
 
 Changelog
 ---------

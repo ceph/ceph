@@ -3,12 +3,6 @@
 
 * CVE-2020-10736: Fixes an authorization bypass in monitor and manager daemons
 
-* RGW Multisite: A new fine grained bucket-granularity policy configuration
-  system has been introduced and it supersedes the previous coarse zone sync
-  configuration (specifically the ``sync_from`` and ``sync_from_all`` fields
-  in the zonegroup configuration. New configuration should only be configured
-  after all relevant zones in the zonegroup have been upgraded.
-
 * RGW S3: Support has been added for BlockPublicAccess set of APIs at a bucket
   level, currently blocking/ignoring public acls & policies are supported.
   User/Account level APIs are planned to be added in the future
