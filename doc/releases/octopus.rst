@@ -677,6 +677,8 @@ Upgrade compatibility notes
   This change may affect the configuration for clients that include a
   ``.`` in their name.
 
+* MDS default cache memory limit is now 4GB.
+
 
 Changelog
 ---------
