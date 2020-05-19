@@ -679,6 +679,12 @@ Upgrade compatibility notes
 
 * MDS default cache memory limit is now 4GB.
 
+* The behaviour of the ``-o`` argument to the rados tool has been 
+  reverted to its original behaviour of indicating an output file. This 
+  reverts it to a more consistent behaviour when compared to other 
+  tools. Specifying obect size is now accomplished by using an 
+  upper-case O ``-O``.
+
 
 Changelog
 ---------
