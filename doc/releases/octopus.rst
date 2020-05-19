@@ -710,6 +710,12 @@ Upgrade compatibility notes
   there are fewer OSDs in one of the racks. In those cases, the 
   configuration value can be increased.
 
+* MDS daemons can now be assigned to manage a particular file system via the
+  new ``mds_join_fs`` option. The monitors will try to use only MDS for a file
+  system with mds_join_fs equal to the file system name (strong affinity).
+  Monitors may also deliberately failover an active MDS to a standby when the
+  cluster is otherwise healthy if the standby has stronger affinity.
+
 
 Changelog
 ---------
