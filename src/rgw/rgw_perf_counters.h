@@ -32,6 +32,7 @@ enum {
   l_rgw_keystone_token_cache_miss,
 
   l_rgw_gc_retire,
+  l_rgw_lc_remove_expired,
 
   l_rgw_pubsub_event_triggered,
   l_rgw_pubsub_event_lost,

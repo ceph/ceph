@@ -8040,14 +8040,21 @@ int RGWRados::process_gc(bool expired_only)
   return gc->process(expired_only);
 }
 
-int RGWRados::list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)
+int RGWRados::list_lc_progress(string& marker, uint32_t max_entries,
+			       vector<cls_rgw_lc_entry>& progress_map,
+			       int& index)
 {
-  return lc->list_lc_progress(marker, max_entries, progress_map);
+  return lc->list_lc_progress(marker, max_entries, progress_map, index);
 }
 
 int RGWRados::process_lc()
 {
-  return lc->process();
+  RGWLC lc;
+  lc.initialize(cct, this->store);
+  RGWLC::LCWorker worker(&lc, cct, &lc, 0);
+  auto ret = lc.process(&worker, true /* once */);
+  lc.stop_processor(); // sets down_flag, but returns immediately
+  return ret;
 }
 
 bool RGWRados::process_expire_objects()
