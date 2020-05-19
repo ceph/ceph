@@ -45,7 +45,7 @@ void OSDMeta::store_superblock(ceph::os::Transaction& t,
 seastar::future<OSDSuperblock> OSDMeta::load_superblock()
 {
   return store->read(coll, superblock_oid(), 0, 0).safe_then(
-    [this] (bufferlist&& bl) {
+    [] (bufferlist&& bl) {
       auto p = bl.cbegin();
       OSDSuperblock superblock;
       decode(superblock, p);
@@ -61,7 +61,7 @@ seastar::future<std::tuple<pg_pool_t,
 			   OSDMeta::ec_profile_t>>
 OSDMeta::load_final_pool_info(int64_t pool) {
   return store->read(coll, final_pool_info_oid(pool),
-                     0, 0).safe_then([this] (bufferlist&& bl) {
+                     0, 0).safe_then([] (bufferlist&& bl) {
     auto p = bl.cbegin();
     pg_pool_t pi;
     string name;

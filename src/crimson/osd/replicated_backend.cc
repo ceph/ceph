@@ -75,7 +75,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
         peers.all_committed.set_value();
       }
       return peers.all_committed.get_future();
-    }).then([tid, pending_txn, this] {
+    }).then([pending_txn, this] {
       pending_txn->second.all_committed = {};
       auto acked_peers = std::move(pending_txn->second.acked_peers);
       pending_trans.erase(pending_txn);
