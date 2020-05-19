@@ -4,6 +4,7 @@ Copyright (C) 2020 SUSE
 LGPL2.1.  See file COPYING.
 """
 from datetime import datetime, timezone
+import json
 import logging
 import sqlite3
 
@@ -84,12 +85,15 @@ class Schedule(object):
     def __str__(self):
         return f'''{self.path} {self.schedule} {self.retention}'''
 
+    def json_list(self):
+        return json.dumps({'path': self.path, 'schedule': self.schedule,
+                           'retention': self.retention})
+
     CREATE_TABLES = '''CREATE TABLE schedules(
-        id integer PRIMARY KEY ASC,
-        path text NOT NULL UNIQUE,
-        subvol text,
-        rel_path text NOT NULL,
-        active int NOT NULL
+        id INTEGER PRIMARY KEY ASC,
+        path TEXT NOT NULL UNIQUE,
+        subvol TEXT,
+        rel_path TEXT NOT NULL
     );
     CREATE TABLE schedules_meta(
         id INTEGER PRIMARY KEY ASC,
@@ -98,12 +102,13 @@ class Schedule(object):
         first TEXT,
         last TEXT,
         last_pruned TEXT,
-        created TEXT,
-        repeat BIGINT NOT NULL,
+        created TEXT NOT NULL,
+        repeat INT NOT NULL,
         schedule TEXT NOT NULL,
         created_count INT DEFAULT 0,
         pruned_count INT DEFAULT 0,
         retention TEXT,
+        active INT NOT NULL,
         FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON DELETE CASCADE,
         UNIQUE (start, repeat)
     );'''
@@ -118,37 +123,32 @@ class Schedule(object):
         WHERE
             s.path = ? AND
             strftime("%s", "now") - strftime("%s", sm.start) > 0 AND
-            s.active = 1
+            sm.active = 1
         ORDER BY until;'''
 
     PROTO_GET_SCHEDULES = '''SELECT
-          s.path, s.subvol, s.rel_path, s.active,
+          s.path, s.subvol, s.rel_path, sm.active,
           sm.schedule, sm.retention, sm.start, sm.first, sm.last,
           sm.last_pruned, sm.created, sm.created_count, sm.pruned_count
           FROM schedules s
               INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
           WHERE'''
 
-    GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'
+    GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'''
 
-    GET_SCHEDULE = PROTO_GET_SCHEDULES + ' s.path = ? and sm.start = ? AND sm.repeat = ?'
-
-    # TODO merge these two methods
     @classmethod
-    def get_db_schedules(cls, path, db, fs):
+    def get_db_schedules(cls, path, db, fs, repeat=None, start=None):
+        query = cls.GET_SCHEDULES
+        data = (path,)
+        if repeat:
+            query += ' AND sm.repeat = ?'
+            data += (repeat,)
+        if start:
+            query += ' AND sm.start = ?'
+            data += (start,)
         with db:
-            c = db.execute(cls.GET_SCHEDULES, (path,))
+            c = db.execute(query, data)
         return [cls._from_get_query(row, fs) for row in c.fetchall()]
-
-    @classmethod
-    def get_db_schedule(cls, db, fs, path, start, repeat):
-        with db:
-            c = db.execute(cls.GET_SCHEDULE, (path, start, repeat))
-        r = c.fetchone()
-        if r:
-            return cls._from_get_query(r, fs)
-        else:
-            return None
 
     @classmethod
     def list_schedules(cls, path, db, fs, recursive):
@@ -162,11 +162,12 @@ class Schedule(object):
         return [cls._from_get_query(row, fs) for row in c.fetchall()]
 
     INSERT_SCHEDULE = '''INSERT INTO
-        schedules(path, subvol, rel_path, active)
-        Values(?, ?, ?, ?);'''
+        schedules(path, subvol, rel_path)
+        Values(?, ?, ?);'''
     INSERT_SCHEDULE_META = '''INSERT INTO
-        schedules_meta(schedule_id, start, created, repeat, schedule, retention)
-        SELECT ?, ?, ?, ?, ?, ?'''
+        schedules_meta(schedule_id, start, created, repeat, schedule,
+        retention, active)
+        SELECT ?, ?, ?, ?, ?, ?, ?'''
 
     def store_schedule(self, db):
         sched_id = None
@@ -175,8 +176,7 @@ class Schedule(object):
                 c = db.execute(self.INSERT_SCHEDULE,
                                (self.path,
                                 self.subvol,
-                                self.rel_path,
-                                1))
+                                self.rel_path,))
                 sched_id = c.lastrowid
             except sqlite3.IntegrityError:
                 # might be adding another schedule, retrieve sched id
@@ -191,7 +191,8 @@ class Schedule(object):
                         self.created.isoformat(),
                         self.repeat,
                         self.schedule,
-                        self.retention))
+                        self.retention,
+                        1))
 
     @classmethod
     def rm_schedule(cls, db, path, repeat, start):
@@ -236,8 +237,10 @@ class Schedule(object):
                 db.execute('DELETE FROM schedules WHERE id = ?;', id_)
 
     def report(self):
-        import pprint
-        return pprint.pformat(self.__dict__)
+        return self.report_json()
+
+    def report_json(self):
+        return json.dumps(dict(self.__dict__), default=lambda o: o.isoformat())
 
     @property
     def repeat(self):
@@ -254,57 +257,81 @@ class Schedule(object):
         else:
             raise Exception('schedule multiplier not recognized')
 
-    UPDATE_LAST = '''UPDATE schedules_meta
+    UPDATE_LAST = '''UPDATE schedules_meta AS sm
     SET
       last = ?,
       created_count = created_count + 1,
       first = CASE WHEN first IS NULL THEN ? ELSE first END
-    WHERE
-      start = ? AND
-      repeat = ?;'''
+    WHERE EXISTS(
+      SELECT id
+      FROM schedules s
+      WHERE s.id = sm.schedule_id
+      AND s.path = ?
+      AND sm.start = ?
+      AND sm.repeat = ?);'''
 
     def update_last(self, time, db):
         with db:
-            db.execute(self.UPDATE_LAST, (time.isoformat(), time.isoformat(),
-                                          self.start.isoformat(), self.repeat))
+            db.execute(self.UPDATE_LAST, (time.isoformat(),
+                                          time.isoformat(),
+                                          self.path,
+                                          self.start.isoformat(),
+                                          self.repeat))
         self.created_count += 1
         self.last = time
 
-    # TODO add option to only change one snapshot in a path, i.e. pass repeat
-    # and start time as well
-    UPDATE_INACTIVE = '''UPDATE schedules
+    UPDATE_INACTIVE = '''UPDATE schedules_meta AS sm
     SET
       active = 0
-    WHERE
-      path = ?;'''
+    WHERE EXISTS(
+      SELECT id
+      FROM schedules s
+      WHERE s.id = sm.schedule_id
+      AND s.path = ?
+      AND sm.start = ?
+      AND sm.repeat = ?);'''
 
     def set_inactive(self, db):
         with db:
-            log.debug(f'Deactivating schedule on path {self.path}')
-            db.execute(self.UPDATE_INACTIVE, (self.path,))
+            log.debug(f'Deactivating schedule ({self.repeat}, {self.start}) on path {self.path}')
+            db.execute(self.UPDATE_INACTIVE, (self.path,
+                                              self.start.isoformat(),
+                                              self.repeat))
 
-    UPDATE_ACTIVE = '''UPDATE schedules
+    UPDATE_ACTIVE = '''UPDATE schedules_meta AS sm
     SET
       active = 1
-    WHERE
-      path = ?;'''
+    WHERE EXISTS(
+      SELECT id
+      FROM schedules s
+      WHERE s.id = sm.schedule_id
+      AND s.path = ?
+      AND sm.start = ?
+      AND sm.repeat = ?);'''
 
     def set_active(self, db):
         with db:
-            log.debug(f'Activating schedule on path {self.path}')
-            db.execute(self.UPDATE_ACTIVE, (self.path,))
+            log.debug(f'Activating schedule ({self.repeat}, {self.start}) on path {self.path}')
+            db.execute(self.UPDATE_ACTIVE, (self.path,
+                                            self.start.isoformat(),
+                                            self.repeat))
 
-    UPDATE_PRUNED = '''UPDATE schedules_meta
+    UPDATE_PRUNED = '''UPDATE schedules_meta AS sm
     SET
       last_pruned = ?,
       pruned_count = pruned_count + ?
-    WHERE
-      start = ? AND
-      repeat = ?;'''
+    WHERE EXISTS(
+      SELECT id
+      FROM schedules s
+      WHERE s.id = sm.schedule_id
+      AND s.path = ?
+      AND sm.start = ?
+      AND sm.repeat = ?);'''
 
     def update_pruned(self, time, db, pruned):
         with db:
             db.execute(self.UPDATE_PRUNED, (time.isoformat(), pruned,
+                                            self.path,
                                             self.start.isoformat(),
                                             self.repeat))
         self.pruned_count += pruned

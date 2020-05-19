@@ -4,7 +4,6 @@ Copyright (C) 2019 SUSE
 LGPL2.1.  See file COPYING.
 """
 import errno
-import json
 import sqlite3
 from .fs.schedule_client import SnapSchedClient
 from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand
@@ -50,23 +49,29 @@ class Module(MgrModule):
     @CLIReadCommand('fs snap-schedule status',
                     'name=path,type=CephString,req=false '
                     'name=subvol,type=CephString,req=false '
-                    'name=fs,type=CephString,req=false',
+                    'name=fs,type=CephString,req=false '
+                    'name=format,type=CephString,req=false',
                     'List current snapshot schedules')
-    def snap_schedule_get(self, path='/', subvol=None, fs=None):
+    def snap_schedule_get(self, path='/', subvol=None, fs=None, format='plain'):
         use_fs = fs if fs else self.default_fs
         try:
             ret_scheds = self.client.get_snap_schedules(use_fs, path)
         except CephfsConnectionException as e:
             return e.to_tuple()
+        if format == 'json':
+            json_report = ','.join([ret_sched.report_json() for ret_sched in ret_scheds])
+            return 0, f'{json_report}', ''
         return 0, '\n===\n'.join([ret_sched.report() for ret_sched in ret_scheds]), ''
 
     @CLIReadCommand('fs snap-schedule list',
                     'name=path,type=CephString '
                     'name=recursive,type=CephString,req=false '
                     'name=subvol,type=CephString,req=false '
-                    'name=fs,type=CephString,req=false',
+                    'name=fs,type=CephString,req=false '
+                    'name=format,type=CephString,req=false',
                     'Get current snapshot schedule for <path>')
-    def snap_schedule_list(self, path, subvol=None, recursive=False, fs=None):
+    def snap_schedule_list(self, path, subvol=None, recursive=False, fs=None,
+                           format='plain'):
         try:
             use_fs = fs if fs else self.default_fs
             scheds = self.client.list_snap_schedules(use_fs, path, recursive)
@@ -75,6 +80,9 @@ class Module(MgrModule):
             return e.to_tuple()
         if not scheds:
             return errno.ENOENT, '', f'SnapSchedule for {path} not found'
+        if format == 'json':
+            json_list = ','.join([sched.json_list() for sched in scheds])
+            return 0, f'[{json_list}]', ''
         return 0, '\n'.join([str(sched) for sched in scheds]), ''
 
     @CLIWriteCommand('fs snap-schedule add',
