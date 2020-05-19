@@ -46,6 +46,8 @@ Synopsis
                               [--config CONFIG] [--keyring KEYRING]
                               command [command ...]
 
+| **cephadm** **unit**  [-h] [--fsid FSID] --name NAME command
+
 | **cephadm** **logs** [-h] [--fsid FSID] --name NAME [command [command ...]]
 
 | **cephadm** **bootstrap** [-h] [--config CONFIG] [--mon-id MON_ID]
