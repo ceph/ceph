@@ -3,13 +3,6 @@
 
 * CVE-2020-10736: Fixes an authorization bypass in monitor and manager daemons
 
-* RGW: a mismatch between the bucket notification documentation and the actual
-  message format was fixed. This means that any endpoints receiving bucket 
-  notification, will now receive the same notifications inside an JSON array
-  named 'Records'. Note that this does not affect pulling bucket notification
-  from a subscription in a 'pubsub' zone, as these are already wrapped inside
-  that array.
-
 * The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for upmap
   balancing has been removed. Instead use the mgr balancer config
   ``upmap_max_deviation`` which now is an integer number of PGs of deviation
