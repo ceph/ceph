@@ -2993,14 +2993,15 @@ def list_daemons(detail=True, legacy_dir=None):
                     fsid = get_legacy_daemon_fsid(
                             cluster, daemon_type, daemon_id,
                             legacy_dir=legacy_dir)
+                    legacy_unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
                     i = {
                         'style': 'legacy',
                         'name': '%s.%s' % (daemon_type, daemon_id),
                         'fsid': fsid if fsid is not None else 'unknown',
+                        'systemd_unit': legacy_unit_name,
                     }
                     if detail:
-                        (i['enabled'], i['state'], _) = check_unit(
-                            'ceph-%s@%s' % (daemon_type, daemon_id))
+                        (i['enabled'], i['state'], _) = check_unit(legacy_unit_name)
                         if not host_version:
                             try:
                                 out, err, code = call(['ceph', '-v'])
@@ -3108,6 +3109,7 @@ def list_daemons(detail=True, legacy_dir=None):
                             os.path.join(data_dir, fsid, j, 'unit.image'))
                         i['configured'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.configured'))
+                        i['systemd_unit'] = unit_name
 
                     ls.append(i)
 
