@@ -16,14 +16,17 @@ import logging
 from threading import Timer
 import sqlite3
 from .schedule import Schedule
+import traceback
 
 
+MAX_SNAPS_PER_PATH = 50
 SNAP_SCHEDULE_NAMESPACE = 'cephfs-snap-schedule'
 SNAP_DB_PREFIX = 'snap_db'
 # increment this every time the db schema changes and provide upgrade code
 SNAP_DB_VERSION = '0'
 SNAP_DB_OBJECT_NAME = f'{SNAP_DB_PREFIX}_v{SNAP_DB_VERSION}'
 SNAPSHOT_TS_FORMAT = '%Y-%m-%d-%H_%M_%S'
+SNAPSHOT_PREFIX = 'scheduled'
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +92,7 @@ class SnapSchedClient(CephfsClient):
                                         size).decode('utf-8')
                         con.executescript(db)
                     except rados.ObjectNotFound:
-                        log.info(f'No schedule DB found in {fs}')
+                        log.debug(f'No schedule DB found in {fs}, creating one.')
                         con.executescript(Schedule.CREATE_TABLES)
         return self.sqlite_connections[fs]
 
@@ -122,37 +125,44 @@ class SnapSchedClient(CephfsClient):
                 timer.cancel()
             timers = []
             for row in rows:
-                log.debug(f'adding timer for {row}')
-                log.debug(f'Creating new snapshot timer')
+                log.debug(f'Creating new snapshot timer for {path}')
                 t = Timer(row[1],
                           self.create_scheduled_snapshot,
                           args=[fs, path, row[0], row[2], row[3]])
                 t.start()
                 timers.append(t)
-                log.debug(f'Will snapshot {row[0]} in fs {fs} in {row[1]}s')
+                log.debug(f'Will snapshot {path} in fs {fs} in {row[1]}s')
             self.active_timers[(fs, path)] = timers
-        except Exception as e:
-            log.error(f'refresh raised {e}')
+        except Exception:
+            self._log_exception('refresh_snap_timers')
+
+    def _log_exception(self, fct):
+        log.error(f'{fct} raised an exception:')
+        log.error(traceback.format_exc())
 
     def create_scheduled_snapshot(self, fs_name, path, retention, start, repeat):
         log.debug(f'Scheduled snapshot of {path} triggered')
         try:
             db = self.get_schedule_db(fs_name)
-            sched = Schedule.get_db_schedule(db, fs_name, path, start, repeat)
+            sched = Schedule.get_db_schedules(path,
+                                              db,
+                                              fs_name,
+                                              repeat,
+                                              start)[0]
             time = datetime.now(timezone.utc)
             with open_filesystem(self, fs_name) as fs_handle:
-                fs_handle.mkdir(f'{path}/.snap/scheduled-{time.strftime(SNAPSHOT_TS_FORMAT)}', 0o755)
+                snap_ts = time.strftime(SNAPSHOT_TS_FORMAT)
+                snap_name = f'{path}/.snap/{SNAPSHOT_PREFIX}-{snap_ts}'
+                fs_handle.mkdir(snap_name, 0o755)
             log.info(f'created scheduled snapshot of {path}')
-            # TODO change last snap timestamp in db, maybe first
             sched.update_last(time, db)
-        except cephfs.Error as e:
-            log.info(f'scheduled snapshot creating of {path} failed: {e}')
-            # TODO set inactive if path doesn't exist
+        except cephfs.Error:
+            self._log_exception('create_scheduled_snapshot')
             sched.set_inactive(db)
-        except Exception as e:
+        except Exception:
             # catch all exceptions cause otherwise we'll never know since this
             # is running in a thread
-            log.error(f'ERROR create_scheduled_snapshot raised{e}')
+            self._log_exception('create_scheduled_snapshot')
         finally:
             self.refresh_snap_timers(fs_name, path)
             self.prune_snapshots(sched)
@@ -162,20 +172,19 @@ class SnapSchedClient(CephfsClient):
             log.debug('Pruning snapshots')
             ret = parse_retention(sched.retention)
             path = sched.path
-            if not ret:
-                # TODO prune if too many (300?)
-                log.debug(f'schedule on {path} has no retention specified')
-                return
+            if not ret or "n" not in ret or ret["n"] > MAX_SNAPS_PER_PATH:
+                log.debug(f'Adding n: { MAX_SNAPS_PER_PATH} limit to {path}')
+                ret["n"] = MAX_SNAPS_PER_PATH
             prune_candidates = set()
             time = datetime.now(timezone.utc)
             with open_filesystem(self, sched.fs) as fs_handle:
                 with fs_handle.opendir(f'{path}/.snap') as d_handle:
                     dir_ = fs_handle.readdir(d_handle)
                     while dir_:
-                        if dir_.d_name.startswith(b'scheduled-'):
+                        if dir_.d_name.startswith(b'{SNAPSHOT_PREFIX}-'):
                             log.debug(f'add {dir_.d_name} to pruning')
                             ts = datetime.strptime(
-                                dir_.d_name.lstrip(b'scheduled-').decode('utf-8'),
+                                dir_.d_name.lstrip(b'{SNAPSHOT_PREFIX}-').decode('utf-8'),
                                 SNAPSHOT_TS_FORMAT)
                             prune_candidates.add((dir_, ts))
                         else:
@@ -189,12 +198,15 @@ class SnapSchedClient(CephfsClient):
                 if to_prune:
                     sched.update_pruned(time, self.get_schedule_db(sched.fs),
                                         len(to_prune))
-        except Exception as e:
-            log.debug(f'prune_snapshots threw {e}')
+        except Exception:
+            self._log_exception('prune_snapshots')
 
     def get_prune_set(self, candidates, retention):
         PRUNING_PATTERNS = OrderedDict([
-            #TODO remove M for release
+            # n is for keep last n snapshots, uses the snapshot name timestamp
+            # format for lowest granularity
+            ("n", SNAPSHOT_TS_FORMAT)
+            # TODO remove M for release
             ("M", '%Y-%m-%d-%H_%M'),
             ("h", '%Y-%m-%d-%H'),
             ("d", '%Y-%m-%d'),
@@ -203,17 +215,14 @@ class SnapSchedClient(CephfsClient):
             ("y", '%Y'),
         ])
         keep = set()
-        log.debug(retention)
         for period, date_pattern in PRUNING_PATTERNS.items():
             period_count = retention.get(period, 0)
             if not period_count:
-                log.debug(f'skipping period {period}')
                 continue
             last = None
             for snap in sorted(candidates, key=lambda x: x[0].d_name,
                                reverse=True):
                 snap_ts = snap[1].strftime(date_pattern)
-                log.debug(f'{snap_ts} : {last}')
                 if snap_ts != last:
                     last = snap_ts
                     if snap not in keep:
@@ -222,8 +231,6 @@ class SnapSchedClient(CephfsClient):
                         if len(keep) == period_count:
                             log.debug(f'found enough snapshots for {period_count}{period}')
                             break
-            # TODO maybe do candidates - keep here? we want snaps counting it
-            # hours not be considered for days and it cuts down on iterations
         return candidates - keep
 
     def get_snap_schedules(self, fs, path):
@@ -251,11 +258,11 @@ class SnapSchedClient(CephfsClient):
     @updates_schedule_db
     def activate_snap_schedule(self, fs, path, repeat, start):
         db = self.get_schedule_db(fs)
-        schedules = Schedule.get_db_schedules(path, db, fs)
+        schedules = Schedule.get_db_schedules(path, db, fs, repeat, start)
         [s.set_active(db) for s in schedules]
 
     @updates_schedule_db
     def deactivate_snap_schedule(self, fs, path, repeat, start):
         db = self.get_schedule_db(fs)
-        schedules = Schedule.get_db_schedules(path, db, fs)
+        schedules = Schedule.get_db_schedules(path, db, fs, repeat, start)
         [s.set_inactive(db) for s in schedules]
