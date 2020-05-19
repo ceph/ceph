@@ -33,7 +33,8 @@ public:
   void shut_down(Context* on_finish) override;
 
   void apply_qos_schedule_tick_min(uint64_t tick) override;
-  void apply_qos_limit(uint64_t flag, uint64_t limit, uint64_t burst) override;
+  void apply_qos_limit(uint64_t flag, uint64_t limit, uint64_t burst,
+                       uint64_t burst_seconds) override;
 
   bool writes_blocked() const override;
   int block_writes() override;
