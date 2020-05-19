@@ -37,3 +37,4 @@ versions of Ceph.
     Client Setup <client-setup>
     DriveGroups <drivegroups>
     troubleshooting
+    concepts
