@@ -692,6 +692,15 @@ Upgrade compatibility notes
   will limit itself to only 'hdd' and 'ssd' (or whatever device class o
   the user manually specifies).
 
+* RGW: a mismatch between the bucket notification documentation and the actual
+  message format was fixed. This means that any endpoints receiving bucket 
+  notification, will now receive the same notifications inside an JSON array
+  named 'Records'. Note that this does not affect pulling bucket notification
+  from a subscription in a 'pubsub' zone, as these are already wrapped inside
+  that array.
+
+
+
 
 Changelog
 ---------
