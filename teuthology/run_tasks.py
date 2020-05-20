@@ -188,7 +188,6 @@ def run_tasks(tasks, ctx):
                         interactive.task(ctx=ctx, config=None)
                 else:
                     if suppress:
-                        sys.exc_clear()
                         exc_info = (None, None, None)
 
             if exc_info != (None, None, None):
