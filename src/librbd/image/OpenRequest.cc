@@ -10,7 +10,6 @@
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
-#include "librbd/cache/ParentCacheObjectDispatch.cc"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -545,41 +544,6 @@ Context* OpenRequest<I>::handle_init_plugin_registry(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to initialize plugin registry: "
                << cpp_strerror(*result) << dendl;
-    send_close_image(*result);
-    return nullptr;
-  }
-
-  return send_parent_cache(result);
-}
-
-template <typename I>
-Context* OpenRequest<I>::send_parent_cache(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
-
-  bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
-    "rbd_parent_cache_enabled");
-
-  if (m_image_ctx->child == nullptr || !parent_cache_enabled) {
-    return send_init_cache(result);
-  }
-
-  auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
-  using klass = OpenRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_parent_cache>(this);
-
-  parent_cache->init(ctx);
-  return nullptr;
-}
-
-template <typename I>
-Context* OpenRequest<I>::handle_parent_cache(int* result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
-
-  if (*result < 0) {
-    lderr(cct) << "failed to parent cache " << dendl;
     send_close_image(*result);
     return nullptr;
   }

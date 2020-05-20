@@ -38,7 +38,6 @@ set(librbd_internal_srcs
   api/Trash.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
-  cache/ParentCacheObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
   cache/PassthroughImageCache.cc
   cache/WriteAroundObjectDispatch.cc
@@ -170,6 +169,19 @@ set(librbd_internal_srcs
 add_custom_target(librbd_plugins)
 set(librbd_plugins_dir ${CEPH_INSTALL_PKGLIBDIR}/librbd)
 
+set(rbd_plugin_parent_cache_srcs
+  cache/ParentCacheObjectDispatch.cc
+  plugin/ParentCache.cc)
+add_library(librbd_plugin_parent_cache SHARED ${rbd_plugin_parent_cache_srcs})
+target_link_libraries(librbd_plugin_parent_cache PRIVATE
+  ceph_immutable_object_cache_lib)
+set_target_properties(librbd_plugin_parent_cache PROPERTIES
+  OUTPUT_NAME ceph_librbd_parent_cache
+  VERSION 1.0.0
+  SOVERSION 1)
+install(TARGETS librbd_plugin_parent_cache DESTINATION ${librbd_plugins_dir})
+add_dependencies(librbd_plugins librbd_plugin_parent_cache)
+
 if(WITH_EVENTTRACE)
   list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
 endif()
@@ -201,7 +213,6 @@ if(WITH_EVENTTRACE)
   add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE
-  ceph_immutable_object_cache_lib
   osdc)
 
 if(WITH_RBD_RWL)

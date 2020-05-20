@@ -67,3 +67,13 @@
 
   or use any other convenient way to restore the schedule after the
   upgrade.
+
+
+>=16.0.0
+---------
+
+* librbd: The shared, read-only parent cache has been moved to a separate librbd
+  plugin. If the parent cache was previously in-use, you must also instruct
+  librbd to load the plugin by adding the following to your configuration::
+
+    rbd_plugins = parent_cache
