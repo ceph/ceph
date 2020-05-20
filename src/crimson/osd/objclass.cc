@@ -380,7 +380,11 @@ uint64_t cls_current_version(cls_method_context_t hctx)
 
 int cls_current_subop_num(cls_method_context_t hctx)
 {
-  return 0;
+  auto* ox = reinterpret_cast<crimson::osd::OpsExecuter*>(hctx);
+  // in contrast to classical OSD, crimson doesn't count OP_CALL and
+  // OP_STAT which seems fine regarding how the plugins we take care
+  // about use this part of API.
+  return ox->get_processed_rw_ops_num();
 }
 
 uint64_t cls_get_features(cls_method_context_t hctx)
