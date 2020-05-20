@@ -127,6 +127,8 @@ public:
   void report(const pg_t& pg, epoch_t last_epoch_clean);
   void remove_pool(uint64_t pool);
   epoch_t get_lower_bound(const OSDMap& latest) const;
+
+  void dump(Formatter *f) const;
 };
 
 
