@@ -256,6 +256,8 @@ seastar::future<> AdminSocket::start(const std::string& path)
           }
         });
       });
+    }).finally([path] {
+      return seastar::remove_file(path);
     });
   return seastar::make_ready_future<>();
 }
