@@ -8426,6 +8426,47 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
   ioctx.close();
 }
 
+#if defined(WITH_RBD_RWL)
+TEST_F(TestLibRBD, RWLCacheFull)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_IMAGE_CACHE);
+  int order = 21;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 30;
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  librbd::RBD rbd;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  librbd::Image image;
+
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+  uint32_t count = 100;
+  ceph::bufferlist bl;
+  bl.append(std::string(1 << order, '1'));
+  std::list<librbd::RBD::AioCompletion *> comps;
+  for (uint32_t i = 0; i < count; i++) {
+    uint64_t offset = rand() % (size - (1 << order));
+    librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL,
+                                                                      NULL);
+    comps.push_back(comp);
+    ASSERT_EQ(0, image.aio_write(offset, bl.length(), bl, comp));
+  }
+
+  while (!comps.empty()) {
+    librbd::RBD::AioCompletion *comp = comps.front();
+    comps.pop_front();
+    ASSERT_EQ(0, comp->wait_for_complete());
+    ASSERT_EQ(1, comp->is_complete());
+    ASSERT_EQ(0, comp->get_return_value());
+    comp->release();
+  }
+
+  ASSERT_EQ(0, image.close());
+}
+#endif //defined(WITH_RBD_RWL)
+
 // poorman's ceph_assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,

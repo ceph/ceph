@@ -203,7 +203,7 @@ void ExclusiveLock<I>::handle_init_complete(int r, uint64_t features,
     });
 
   if (m_image_ctx.clone_copy_on_read ||
-      (features & RBD_FEATURE_JOURNALING) != 0) {
+      (features_require_lock_both(features))) {
     m_image_dispatch->set_require_lock(io::DIRECTION_BOTH, on_finish);
   } else {
     m_image_dispatch->set_require_lock(io::DIRECTION_WRITE, on_finish);

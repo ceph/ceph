@@ -16,6 +16,9 @@ namespace librbd {
 
 namespace exclusive_lock { template <typename> struct ImageDispatch; }
 
+static const uint64_t RBD_FEATURES_REQUIRE_LOCK_BOTH = (RBD_FEATURE_JOURNALING |
+                                                        RBD_FEATURE_IMAGE_CACHE);
+
 template <typename ImageCtxT = ImageCtx>
 class ExclusiveLock : public RefCountedObject,
                       public ManagedLock<ImageCtxT> {
@@ -110,6 +113,9 @@ private:
   void handle_init_complete(int r, uint64_t features, Context* on_finish);
   void handle_post_acquiring_lock(int r);
   void handle_post_acquired_lock(int r);
+  bool features_require_lock_both(uint64_t features) {
+    return (0 != (features & RBD_FEATURES_REQUIRE_LOCK_BOTH));
+  }
 };
 
 } // namespace librbd

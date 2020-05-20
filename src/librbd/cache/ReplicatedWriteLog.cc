@@ -2736,3 +2736,4 @@ bool ReplicatedWriteLog<I>::retire_entries(const unsigned long int frees_per_tx)
 
 template class librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>;
 template class librbd::cache::ImageCache<librbd::ImageCtx>;
+template void librbd::cache::ReplicatedWriteLog<librbd::ImageCtx>::flush_pmem_buffer(std::vector<std::shared_ptr<librbd::cache::rwl::GenericLogOperation>>&);

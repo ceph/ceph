@@ -52,6 +52,8 @@ public:
   int unregister_update_watcher(uint64_t handle);
   void flush_update_watchers(Context *on_finish);
   void shut_down_update_watchers(Context *on_finish);
+  void init_image_cache(Context *on_finish);
+  void shut_down_image_cache(Context *on_finish);
 
   int register_quiesce_watcher(QuiesceWatchCtx *watcher, uint64_t *handle);
   int unregister_quiesce_watcher(uint64_t handle);

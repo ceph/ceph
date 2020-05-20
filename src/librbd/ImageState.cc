@@ -14,6 +14,11 @@
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
 
+#if defined(WITH_RBD_RWL)
+#include "librbd/cache/rwl/ImageCacheState.h"
+#include "librbd/cache/ReplicatedWriteLog.h"
+#endif
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::ImageState: " << this << " "
@@ -982,6 +987,81 @@ void ImageState<I>::notify_unquiesce(Context *on_finish) {
 template <typename I>
 void ImageState<I>::quiesce_complete() {
   m_quiesce_watchers->quiesce_complete();
+}
+
+template <typename I>
+void ImageState<I>::init_image_cache(Context *on_finish) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+  m_image_ctx->image_cache = nullptr;
+#if defined(WITH_RBD_RWL)
+  auto cache_state = cache::rwl::ImageCacheState<I>::get_image_cache_state(m_image_ctx);
+
+  // The config data is not valid.
+  if (!cache_state) {
+    on_finish->complete(0);
+    return;
+  }
+  else if (!cache_state->is_valid()) {
+    delete cache_state;
+    on_finish->complete(-ENOENT);
+    return;
+  }
+  auto cache_type = cache_state->get_image_cache_type();
+  switch(cache_type) {
+    case cache::IMAGE_CACHE_TYPE_RWL:
+      m_image_ctx->image_cache = new cache::ReplicatedWriteLog<I>(*m_image_ctx, cache_state);
+      break;
+    default:
+      m_image_ctx->image_cache = nullptr;
+  }
+
+  if (m_image_ctx->image_cache) {
+    m_image_ctx->image_cache->init(on_finish);
+  }
+  else {
+    delete cache_state;
+    on_finish->complete(0);
+  }
+#else
+  on_finish->complete(0);
+#endif
+}
+
+template <typename I>
+void ImageState<I>::shut_down_image_cache(Context *on_finish) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 20) << __func__ << dendl;
+
+#if defined(WITH_RBD_RWL)
+  if (m_image_ctx->image_cache == nullptr) {
+    on_finish->complete(0);
+    return;
+  }
+
+  Context *ctx = on_finish;
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      if (r < 0) {
+        ctx->complete(r);
+      } else {
+        delete m_image_ctx->image_cache;
+        m_image_ctx->image_cache = nullptr;
+        ctx->complete(0);
+      }
+    });
+
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      m_image_ctx->op_work_queue->queue(ctx, r);
+    });
+
+  m_image_ctx->image_cache->shut_down(ctx);
+#else
+  ceph_assert(m_image_ctx->image_cache == nullptr);
+  on_finish->complete(0);
+#endif
 }
 
 } // namespace librbd

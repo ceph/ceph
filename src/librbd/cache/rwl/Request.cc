@@ -4,6 +4,7 @@
 #include "Request.h"
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/rwl/LogEntry.h"
+#include "librbd/cache/ReplicatedWriteLog.h"
 
 #define dout_subsys ceph_subsys_rbd_rwl
 #undef dout_prefix
@@ -623,3 +624,10 @@ std::ostream &operator<<(std::ostream &os,
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
+
+template class librbd::cache::rwl::C_BlockIORequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_WriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_FlushRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_DiscardRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_WriteSameRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;
+template class librbd::cache::rwl::C_CompAndWriteRequest<librbd::cache::ReplicatedWriteLog<librbd::ImageCtx> >;

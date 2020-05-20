@@ -30,6 +30,9 @@ struct MockImageState {
 
   MOCK_METHOD2(register_update_watcher, int(UpdateWatchCtx *, uint64_t *));
   MOCK_METHOD2(unregister_update_watcher, void(uint64_t, Context *));
+
+  MOCK_METHOD1(init_image_cache, void(Context*));
+  MOCK_METHOD1(shut_down_image_cache, void(Context*));
 };
 
 } // namespace librbd

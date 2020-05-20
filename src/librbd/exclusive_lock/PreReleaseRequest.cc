@@ -156,6 +156,41 @@ void PreReleaseRequest<I>::handle_wait_for_ops(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
+  send_shut_down_image_cache();
+}
+
+template <typename I>
+void PreReleaseRequest<I>::send_shut_down_image_cache() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
+
+  /* Shut down existing image cache whether the feature bit is on or not */
+  if (!m_image_ctx.image_cache) {
+     send_invalidate_cache();
+    return;
+  }
+
+  std::shared_lock owner_lock{m_image_ctx.owner_lock};
+  Context *ctx = create_async_context_callback(m_image_ctx, create_context_callback<
+      PreReleaseRequest<I>,
+      &PreReleaseRequest<I>::handle_shut_down_image_cache>(this));
+  m_image_ctx.state->shut_down_image_cache(ctx);
+}
+
+template <typename I>
+void PreReleaseRequest<I>::handle_shut_down_image_cache(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to shut down image cache: " << cpp_strerror(r)
+               << dendl;
+    m_image_dispatch->unset_require_lock(io::DIRECTION_BOTH);
+    save_result(r);
+    finish();
+    return;
+  }
+
   send_invalidate_cache();
 }
 
