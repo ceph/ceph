@@ -85,24 +85,41 @@
         </div>
 
         <!-- Max. buckets -->
-        <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('max_buckets', frm)}">
+        <div class="form-group">
           <label class="control-label col-sm-3"
-                 for="max_buckets">
-            <ng-container i18n>Max. buckets</ng-container>
-            <span class="required"></span>
-          </label>
+                 for="max_buckets_mode"
+                 i18n>Max. buckets</label>
+          <div class="col-sm-9">
+            <select class="form-control"
+                    formControlName="max_buckets_mode"
+                    name="max_buckets_mode"
+                    id="max_buckets_mode"
+                    (change)="onMaxBucketsModeChange($event.target.value)">
+              <option i18n
+                      value="-1">Disabled</option>
+              <option i18n
+                      value="0">Unlimited</option>
+              <option i18n
+                      value="1">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div *ngIf="1 == userForm.get('max_buckets_mode').value"
+             class="form-group"
+             [ngClass]="{'has-error': userForm.showError('max_buckets', frm)}">
+          <label class="control-label col-sm-3"></label>
           <div class="col-sm-9">
             <input id="max_buckets"
                    class="form-control"
                    type="number"
-                   formControlName="max_buckets">
+                   formControlName="max_buckets"
+                   min="1">
             <span class="help-block"
                   *ngIf="userForm.showError('max_buckets', frm, 'required')"
                   i18n>This field is required.</span>
             <span class="help-block"
                   *ngIf="userForm.showError('max_buckets', frm, 'min')"
-                  i18n>The entered value must be >= 0.</span>
+                  i18n>The entered value must be >= 1.</span>
           </div>
         </div>
 

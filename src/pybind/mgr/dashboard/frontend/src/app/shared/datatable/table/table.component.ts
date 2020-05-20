@@ -52,6 +52,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   executingTpl: TemplateRef<any>;
   @ViewChild('classAddingTpl')
   classAddingTpl: TemplateRef<any>;
+  @ViewChild('mapTpl')
+  mapTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -342,6 +344,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.perSecond = this.perSecondTpl;
     this.cellTemplates.executing = this.executingTpl;
     this.cellTemplates.classAdding = this.classAddingTpl;
+    this.cellTemplates.map = this.mapTpl;
   }
 
   useCustomClass(value: any): string {

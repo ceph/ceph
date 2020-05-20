@@ -28,6 +28,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   // Details tab
   user: any;
+  maxBucketsMap: {};
 
   // Keys tab
   keys: any = [];
@@ -53,6 +54,10 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         flexGrow: 1
       }
     ];
+    this.maxBucketsMap = {
+      '-1': this.i18n('Disabled'),
+      0: this.i18n('Unlimited')
+    };
   }
 
   ngOnChanges() {

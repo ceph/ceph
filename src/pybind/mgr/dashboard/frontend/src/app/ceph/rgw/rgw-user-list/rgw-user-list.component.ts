@@ -70,7 +70,12 @@ export class RgwUserListComponent {
       {
         name: this.i18n('Max. buckets'),
         prop: 'max_buckets',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.map,
+        customTemplateConfig: {
+          '-1': this.i18n('Disabled'),
+          0: this.i18n('Unlimited')
+        }
       }
     ];
     const getUserUri = () =>
