@@ -49,6 +49,7 @@ namespace librbd {
   class LibrbdAdminSocketHook;
   template <typename> class ObjectMap;
   template <typename> class Operations;
+  template <typename> class PluginRegistry;
 
   namespace cache {
   template <typename> class ImageCache;
@@ -184,6 +185,8 @@ namespace librbd {
     io::ObjectDispatcherInterface *io_object_dispatcher = nullptr;
 
     ContextWQ *op_work_queue;
+
+    PluginRegistry<ImageCtx>* plugin_registry;
 
     typedef boost::lockfree::queue<
       io::AioCompletion*,

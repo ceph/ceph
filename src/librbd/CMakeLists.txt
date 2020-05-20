@@ -20,6 +20,7 @@ set(librbd_internal_srcs
   MirroringWatcher.cc
   ObjectMap.cc
   Operations.cc
+  PluginRegistry.cc
   TrashWatcher.cc
   Utils.cc
   Watcher.cc
@@ -166,6 +167,9 @@ set(librbd_internal_srcs
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
+add_custom_target(librbd_plugins)
+set(librbd_plugins_dir ${CEPH_INSTALL_PKGLIBDIR}/librbd)
+
 if(WITH_EVENTTRACE)
   list(APPEND librbd_internal_srcs ../common/EventTrace.cc)
 endif()
@@ -211,6 +215,7 @@ add_library(librbd ${CEPH_SHARED}
 if(WITH_LTTNG)
   add_dependencies(librbd librbd-tp)
 endif()
+add_dependencies(librbd librbd_plugins)
 
 target_link_libraries(librbd PRIVATE
   rbd_internal

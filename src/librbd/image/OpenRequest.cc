@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/PluginRegistry.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
@@ -515,6 +516,35 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(*result)
                << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
+  send_init_plugin_registry();
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_init_plugin_registry() {
+  CephContext *cct = m_image_ctx->cct;
+
+  auto plugins = m_image_ctx->config.template get_val<std::string>(
+    "rbd_plugins");
+  ldout(cct, 10) << __func__ << ": plugins=" << plugins << dendl;
+
+  auto ctx = create_context_callback<
+    OpenRequest<I>, &OpenRequest<I>::handle_init_plugin_registry>(this);
+  m_image_ctx->plugin_registry->init(plugins, ctx);
+}
+
+template <typename I>
+Context* OpenRequest<I>::handle_init_plugin_registry(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to initialize plugin registry: "
+               << cpp_strerror(*result) << dendl;
     send_close_image(*result);
     return nullptr;
   }
