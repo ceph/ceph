@@ -55,10 +55,10 @@ using ::testing::WithArg;
 using ::testing::WithArgs;
 
 class TestMockParentImageCache : public TestMockFixture {
-  public : 
+public :
   typedef cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx> MockParentImageCache;
 
-  // ====== mock cache client ==== 
+  // ====== mock cache client ====
   void expect_cache_run(MockParentImageCache& mparent_image_cache, bool ret_val) {
     auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), run());
 
@@ -119,7 +119,7 @@ class TestMockParentImageCache : public TestMockFixture {
   void expect_cache_register(MockParentImageCache& mparent_image_cache, Context* mock_handle_register, int ret_val) {
     auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), register_client(_));
 
-    expect.WillOnce(WithArg<0>(Invoke([mock_handle_register, ret_val](Context* ctx) { 
+    expect.WillOnce(WithArg<0>(Invoke([mock_handle_register, ret_val](Context* ctx) {
       if(ret_val == 0) {
         mock_handle_register->complete(true);
       } else {
@@ -130,7 +130,7 @@ class TestMockParentImageCache : public TestMockFixture {
     })));
   }
 
-  void expect_io_object_dispatcher_register_state(MockParentImageCache& mparent_image_cache, 
+  void expect_io_object_dispatcher_register_state(MockParentImageCache& mparent_image_cache,
                                                   int ret_val) {
     auto& expect = EXPECT_CALL((*(mparent_image_cache.get_image_ctx()->io_object_dispatcher)),
                                register_dispatch(_));
@@ -145,7 +145,8 @@ class TestMockParentImageCache : public TestMockFixture {
 TEST_F(TestMockParentImageCache, test_initialization_success) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  MockParentImageCacheImageCtx mock_image_ctx(*ictx); 
+  MockParentImageCacheImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.child = &mock_image_ctx;
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
 
@@ -183,7 +184,8 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
 TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  MockParentImageCacheImageCtx mock_image_ctx(*ictx); 
+  MockParentImageCacheImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.child = &mock_image_ctx;
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
 
@@ -217,7 +219,8 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
 TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  MockParentImageCacheImageCtx mock_image_ctx(*ictx); 
+  MockParentImageCacheImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.child = &mock_image_ctx;
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
 
@@ -245,7 +248,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   expect_cache_session_state(*mock_parent_image_cache, true);
   ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), true);
- 
+
   mock_parent_image_cache->get_cache_client()->close();
   mock_parent_image_cache->get_cache_client()->stop();
 
@@ -255,7 +258,8 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
 TEST_F(TestMockParentImageCache, test_disble_interface) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  MockParentImageCacheImageCtx mock_image_ctx(*ictx); 
+  MockParentImageCacheImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.child = &mock_image_ctx;
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
 
@@ -270,7 +274,7 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
   Context* temp_on_dispatched = nullptr;
   ZTracer::Trace* temp_trace = nullptr;
   io::LightweightBufferExtents buffer_extents;
-  
+
   ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, *temp_snapc, 0, *temp_trace, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl), *temp_snapc, 0,
@@ -294,7 +298,8 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
 TEST_F(TestMockParentImageCache, test_read) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  MockParentImageCacheImageCtx mock_image_ctx(*ictx); 
+  MockParentImageCacheImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.child = &mock_image_ctx;
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
 
@@ -329,7 +334,7 @@ TEST_F(TestMockParentImageCache, test_read) {
   auto& expect = EXPECT_CALL(*(mock_parent_image_cache->get_cache_client()), is_session_work());
   expect.WillOnce(Return(true)).WillOnce(Return(true));
 
-  expect_cache_lookup_object(*mock_parent_image_cache, on_finish); 
+  expect_cache_lookup_object(*mock_parent_image_cache, on_finish);
 
   mock_parent_image_cache->read(0, 0, 4096, CEPH_NOSNAP, 0, {},
                         nullptr, nullptr, nullptr, nullptr, &on_finish, nullptr);

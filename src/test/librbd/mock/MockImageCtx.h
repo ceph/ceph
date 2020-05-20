@@ -294,6 +294,7 @@ struct MockImageCtx {
 
   EventSocket &event_socket;
 
+  MockImageCtx *child = nullptr;
   MockImageCtx *parent;
   MockOperations *operations;
   MockImageState *state;
