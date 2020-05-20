@@ -777,26 +777,15 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
       exit(1);
     }
 
-    set<hobject_t> refs;
-    ret = cls_cas_chunk_read_refs(chunk_io_ctx, object_name, &refs);
-    if (ret < 0) {
-      cerr << " cls_cas_chunk_read fail : " << cpp_strerror(ret) << std::endl;
-      return ret;
-    }
-    for (auto p : refs) {
-      cout << " " << p.oid.name << " ";
-    }
-
     uint32_t hash;
     ret = chunk_io_ctx.get_object_hash_position2(object_name, &hash);
     if (ret < 0) {
       return ret;
     }
     hobject_t oid(sobject_t(target_object_name, CEPH_NOSNAP), "", hash, pool_id, "");
-    refs.insert(oid);
 
     ObjectWriteOperation op;
-    cls_cas_chunk_set_refs(op, refs);
+    cls_cas_chunk_get_ref(op, oid);
     ret = chunk_io_ctx.operate(object_name, &op);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
