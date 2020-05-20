@@ -7545,6 +7545,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(10)
     .set_min(1)
     .set_description("the number of quiesce notification attempts"),
+
+    Option("rbd_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("comma-delimited list of librbd plugins to enable"),
+
   });
 }
 
