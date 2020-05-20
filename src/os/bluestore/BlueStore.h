@@ -145,7 +145,8 @@ enum {
 
 class BlueStore : public ObjectStore,
 		  public BlueFSDeviceExpander,
-		  public md_config_obs_t {
+		  public md_config_obs_t,
+                  public AdminSocketHook {
   // -----------------------------------------------------
   // types
 public:
@@ -1054,6 +1055,11 @@ public:
   struct OnodeSpace;
   struct OnodeCacheShard;
   /// an in-memory object
+
+  static void onode_register(Onode*);
+  static void onode_unregister(Onode*);
+  static void onode_dump(ceph::Formatter* f);
+
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
     // Not persisted and updated on cache insertion/removal
@@ -1091,6 +1097,7 @@ public:
 	key(k),
 	exists(false),
 	extent_map(this) {
+      onode_register(this);
     }
     Onode(Collection* c, const ghobject_t& o,
       const std::string& k)
@@ -1101,6 +1108,7 @@ public:
       key(k),
       exists(false),
       extent_map(this) {
+      onode_register(this);
     }
     Onode(Collection* c, const ghobject_t& o,
       const char* k)
@@ -1111,8 +1119,11 @@ public:
       key(k),
       exists(false),
       extent_map(this) {
+      onode_register(this);
     }
-
+    ~Onode() {
+      onode_unregister(this);
+    }
     static Onode* decode(
       CollectionRef c,
       const ghobject_t& oid,
@@ -2472,6 +2483,8 @@ public:
   BlueStore(CephContext *cct, const std::string& path);
   BlueStore(CephContext *cct, const std::string& path, uint64_t min_alloc_size); // Ctor for UT only
   ~BlueStore() override;
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   ceph::Formatter *f, std::ostream& errss, ceph::buffer::list& out) override;
 
   std::string get_type() override {
     return "bluestore";

@@ -4155,10 +4155,17 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  int r = cct->get_admin_socket()->register_command(
+     "bluestore onode dump",
+     this,
+     "dump all onodes");
+  ceph_assert(r == 0);
+
 }
 
 BlueStore::~BlueStore()
 {
+  cct->get_admin_socket()->unregister_commands(this);
   cct->_conf.remove_observer(this);
   _shutdown_logger();
   ceph_assert(!mounted);
@@ -4174,6 +4181,35 @@ BlueStore::~BlueStore()
   }
   onode_cache_shards.clear();
   buffer_cache_shards.clear();
+}
+
+std::mutex onode_track_lock;
+std::set<BlueStore::Onode*> onode_track_set;
+void BlueStore::onode_register(BlueStore::Onode* o) {
+  std::lock_guard<std::mutex> lock(onode_track_lock);
+  onode_track_set.insert(o);
+}
+void BlueStore::onode_unregister(BlueStore::Onode* o) {
+  std::lock_guard<std::mutex> lock(onode_track_lock);  
+  onode_track_set.erase(o);
+}
+void BlueStore::onode_dump(ceph::Formatter* f) {
+  std::lock_guard<std::mutex> lock(onode_track_lock);    
+  f->open_array_section("onodes");
+  for (auto& p : onode_track_set) {
+    f->open_object_section("onode");
+    f->dump_string("oid", p->oid.hobj.to_str());
+    f->dump_int("cs", (uintptr_t)(p->s));
+    f->dump_int("col", (uintptr_t)(p->c));
+    f->close_section();
+  }
+  f->close_section();
+}
+
+int BlueStore::call(std::string_view command, const cmdmap_t& cmdmap,
+		    ceph::Formatter *f, std::ostream& errss, ceph::buffer::list& out) {
+  onode_dump(f);
+  return 0;
 }
 
 const char **BlueStore::get_tracked_conf_keys() const
