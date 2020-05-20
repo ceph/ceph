@@ -44,6 +44,7 @@
 
 #include "tools/RadosDump.h"
 #include "cls/cas/cls_cas_client.h"
+#include "cls/cas/cls_cas_internal.h"
 #include "include/stringify.h"
 #include "global/signal_handler.h"
 #include "common/CDC.h"
@@ -130,7 +131,7 @@ ceph::mutex glock = ceph::make_mutex("glock");
 
 void usage()
 {
-  cout << " usage: [--op <estimate|chunk_scrub|add_chunk_ref|get_chunk_ref>] [--pool <pool_name> ] " << std::endl;
+  cout << " usage: [--op <estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|dump-chunk-refs>] [--pool <pool_name> ] " << std::endl;
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
   cout << "   --chunk-algorithm <fixed|fastcdc> " << std::endl;
@@ -713,7 +714,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     chunk_pool_name = i->second.c_str();
   } else {
-    cerr << "must specify pool" << std::endl;
+    cerr << "must specify --chunk-pool" << std::endl;
     exit(1);
   }
   i = opts.find("max-thread");
@@ -798,7 +799,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
 
     return ret;
 
-  } else if (op_name == "get-chunk-ref") {
+  } else if (op_name == "dump-chunk-refs") {
     i = opts.find("object");
     if (i != opts.end()) {
       object_name = i->second.c_str();
@@ -806,16 +807,20 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
       cerr << "must specify object" << std::endl;
       exit(1);
     }
-    set<hobject_t> refs;
-    cout << " refs: " << std::endl;
-    ret = cls_cas_chunk_read_refs(chunk_io_ctx, object_name, &refs);
-    for (auto p : refs) {
-      cout << " " << p.oid.name << " ";
+    bufferlist t;
+    ret = chunk_io_ctx.getxattr(object_name, CHUNK_REFCOUNT_ATTR, t);
+    if (ret < 0) {
+      return ret;
     }
-    cout << std::endl;
-    return ret;
+    chunk_obj_refcount refs;
+    auto p = t.cbegin();
+    decode(refs, p);
+    auto f = Formatter::create("json-pretty");
+    f->dump_object("refs", refs);
+    f->flush(cout);
+    return 0;
   }
-  
+
   glock.lock();
   begin = chunk_io_ctx.object_list_begin();
   end = chunk_io_ctx.object_list_end();
@@ -929,11 +934,11 @@ int main(int argc, const char **argv)
   } else if (op_name == "chunk-get-ref" ||
 	     op_name == "chunk-put-ref") {
     return chunk_scrub_common(opts, args);
-  } else if (op_name == "get-chunk-ref") {
+  } else if (op_name == "dump-chunk-refs") {
     return chunk_scrub_common(opts, args);
   } else {
-    usage();
-    exit(0);
+    cerr << "unrecognized op " << op_name << std::endl;
+    exit(1);
   }
 
   unregister_async_signal_handler(SIGINT, handle_signal);
