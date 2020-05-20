@@ -778,12 +778,10 @@ void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_
   }
   m_image_ctx.image_lock.unlock_shared();
 
-  uint64_t request_id = ++m_async_request_seq;
   operation::SnapshotCreateRequest<I> *req =
     new operation::SnapshotCreateRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish),
-      snap_namespace, snap_name, journal_op_tid, request_id, skip_object_map,
-      prog_ctx);
+      snap_namespace, snap_name, journal_op_tid, skip_object_map, prog_ctx);
   req->send();
 }
 

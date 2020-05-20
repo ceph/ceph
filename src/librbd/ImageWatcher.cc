@@ -340,9 +340,10 @@ void ImageWatcher<I>::notify_header_update(librados::IoCtx &io_ctx,
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_quiesce(uint64_t request_id,
-                                     ProgressContext &prog_ctx,
-                                     Context *on_finish) {
+uint64_t ImageWatcher<I>::notify_quiesce(ProgressContext &prog_ctx,
+                                         Context *on_finish) {
+  uint64_t request_id = m_image_ctx.operations->reserve_async_request_id();
+
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": request_id="
                              << request_id << dendl;
 
@@ -352,6 +353,8 @@ void ImageWatcher<I>::notify_quiesce(uint64_t request_id,
     "rbd_quiesce_notification_attempts");
 
   notify_quiesce(async_request_id, attempts, prog_ctx, on_finish);
+
+  return request_id;
 }
 
 template <typename I>

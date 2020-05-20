@@ -72,8 +72,7 @@ public:
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
 
-  void notify_quiesce(uint64_t request_id, ProgressContext &prog_ctx,
-                      Context *on_finish);
+  uint64_t notify_quiesce(ProgressContext &prog_ctx, Context *on_finish);
   void notify_unquiesce(uint64_t request_id, Context *on_finish);
 
 private:

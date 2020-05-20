@@ -30,13 +30,11 @@ SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
 						const cls::rbd::SnapshotNamespace &snap_namespace,
                                                 const std::string &snap_name,
                                                 uint64_t journal_op_tid,
-                                                uint64_t request_id,
                                                 bool skip_object_map,
                                                 ProgressContext &prog_ctx)
   : Request<I>(image_ctx, on_finish, journal_op_tid),
     m_snap_namespace(snap_namespace), m_snap_name(snap_name),
-    m_request_id(request_id), m_skip_object_map(skip_object_map),
-    m_prog_ctx(prog_ctx) {
+    m_skip_object_map(skip_object_map), m_prog_ctx(prog_ctx) {
 }
 
 template <typename I>
@@ -60,8 +58,8 @@ void SnapshotCreateRequest<I>::send_notify_quiesce() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  image_ctx.image_watcher->notify_quiesce(
-    m_request_id, m_prog_ctx, create_async_context_callback(
+  m_request_id = image_ctx.image_watcher->notify_quiesce(
+    m_prog_ctx, create_async_context_callback(
       image_ctx, create_context_callback<SnapshotCreateRequest<I>,
       &SnapshotCreateRequest<I>::handle_notify_quiesce>(this)));
 }
