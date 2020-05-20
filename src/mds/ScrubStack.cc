@@ -70,6 +70,7 @@ void ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header,
     dout(10) << __func__ << " with {" << *dir << "}"
 	     << ", on_finish=" << on_finish << ", top=" << top << dendl;
     // The edge directory must be in memory
+    dir->auth_pin(this);
     dir->scrub_initialize(header, on_finish);
   } else {
     ceph_assert(0 == "queue dentry to scrub stack");
@@ -197,14 +198,21 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
 
   for (auto &fg : frags) {
     CDir *dir = in->get_or_open_dirfrag(mdcache, fg);
-    if (dir->get_version() == 0)
+    if (!dir->is_auth()) {
+      dout(20) << __func__ << " not auth " << *dir  << dendl;
+      // no-op
+    } else if (!dir->can_auth_pin()) {
+      dout(20) << __func__ << " freezing/frozen " << *dir  << dendl;
+      dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
+    } else if (dir->get_version() == 0) {
+      dout(20) << __func__ << " barebones " << *dir  << dendl;
       dir->fetch(gather.new_sub());
+    }
   }
   if (gather.has_subs()) {
     scrubs_in_progress++;
     gather.set_finisher(&scrub_kick);
     gather.activate();
-    dout(10) << __func__ << " barebones dirfrags, fetching" << dendl;
     return;
   }
 
@@ -241,7 +249,6 @@ class C_InodeValidated : public MDSInternalContext
       stack->_validate_inode_done(target, r, result);
     }
 };
-
 
 void ScrubStack::scrub_dir_inode_final(CInode *in)
 {
@@ -298,6 +305,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
 
   MDSContext *c = nullptr;
   dir->scrub_finished(&c);
+  dir->auth_unpin(this);
   if (c)
     finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
 
@@ -554,6 +562,7 @@ void ScrubStack::abort_pending_scrubs() {
     } else if (CDir *dir = dynamic_cast<CDir*>(*it)) {
       MDSContext *ctx = nullptr;
       dir->scrub_aborted(&ctx);
+      dir->auth_unpin(this);
       if (ctx != nullptr) {
 	ctx->complete(-ECANCELED);
       }
