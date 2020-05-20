@@ -2211,9 +2211,13 @@ private:
       MetaCache(BlueStore *s) : MempoolCache(s) {};
 
       virtual uint64_t _get_used_bytes() const {
-	return mempool::bluestore_cache_meta::allocated_bytes() +
-	       mempool::bluestore_cache_other::allocated_bytes() +
-	       mempool::bluestore_cache_onode::allocated_bytes();
+        return mempool::bluestore_Buffer::allocated_bytes() +
+          mempool::bluestore_Blob::allocated_bytes() +
+          mempool::bluestore_Extent::allocated_bytes() +
+          mempool::bluestore_cache_meta::allocated_bytes() +
+          mempool::bluestore_cache_other::allocated_bytes() +
+          mempool::bluestore_SharedBlob::allocated_bytes() +
+          mempool::bluestore_inline_bl::allocated_bytes();
       }
 
       virtual std::string get_cache_name() const {
