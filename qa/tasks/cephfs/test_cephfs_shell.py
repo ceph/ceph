@@ -31,50 +31,52 @@ def humansize(nbytes):
     f = ('%d' % nbytes).rstrip('.')
     return '%s%s' % (f, suffixes[i])
 
-def str_to_bool(val):
-    val = val.strip()
-    trueval = ['true', 'yes', 'y', '1']
-    return True if val == 1 or val.lower() in trueval else False
-
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
-    def run_cephfs_shell_cmd(self, cmd, mount_x=None, opts=None, stdin=None, config_path=None):
+    def run_cephfs_shell_cmd(self, cmd, mount_x=None, shell_conf_path=None,
+                             opts=None, stdin=None):
         if mount_x is None:
             mount_x = self.mount_a
-        if config_path is None:
-            config_path = self.mount_a.config_path
 
         if isinstance(cmd, list):
             cmd = " ".join(cmd)
 
-        args = ["cephfs-shell", "-c", config_path]
-
-        if opts is not None:
-            args.extend(opts)
-
+        args = ["cephfs-shell"]
+        if shell_conf_path:
+            args += ["-c", shell_conf_path]
+        if opts:
+            args += opts
         args.extend(("--", cmd))
 
         log.info("Running command: {}".format(" ".join(args)))
         return mount_x.client_remote.run(args=args, stdout=BytesIO(),
                                          stderr=BytesIO(), stdin=stdin)
 
-    def get_cephfs_shell_cmd_error(self, cmd, mount_x=None, opts=None,
+    def get_cephfs_shell_cmd_error(self, cmd, mount_x=None,
+                                   shell_conf_path=None, opts=None,
+                                   stdin=None):
+        return ensure_str(self.run_cephfs_shell_cmd(
+            cmd=cmd, mount_x=mount_x, shell_conf_path=shell_conf_path,
+            opts=opts, stdin=stdin).stderr.getvalue().strip())
+
+    def get_cephfs_shell_cmd_output(self, cmd, mount_x=None,
+                                    shell_conf_path=None, opts=None,
                                     stdin=None):
-        return ensure_str(self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stderr.\
-            getvalue().strip())
+        return ensure_str(self.run_cephfs_shell_cmd(
+            cmd=cmd, mount_x=mount_x, shell_conf_path=shell_conf_path,
+            opts=opts, stdin=stdin).stdout.getvalue().strip())
 
-    def get_cephfs_shell_cmd_output(self, cmd, mount_x=None, opts=None,
-                                    stdin=None, config_path=None):
-        return ensure_str(self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin,
-                                         config_path).\
-            stdout.getvalue().strip())
+    def get_cephfs_shell_script_output(self, script, mount_x=None,
+                                       shell_conf_path=None, opts=None,
+                                       stdin=None):
+        return ensure_str(self.run_cephfs_shell_script(
+            script=script, mount_x=mount_x, shell_conf_path=shell_conf_path,
+            opts=opts, stdin=stdin).stdout.getvalue().strip())
 
-    def get_cephfs_shell_script_output(self, script, mount_x=None, stdin=None):
-        return ensure_str(self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
-            getvalue().strip())
-
-    def run_cephfs_shell_script(self, script, mount_x=None, stdin=None):
+    def run_cephfs_shell_script(self, script, mount_x=None,
+                                shell_conf_path=None, opts=None,
+                                stdin=None):
         if mount_x is None:
             mount_x = self.mount_a
 
@@ -85,7 +87,9 @@ class TestCephFSShell(CephFSTestCase):
         mount_x.client_remote.put_file(scriptpath, scriptpath)
         mount_x.run_shell('chmod 755 ' + scriptpath)
 
-        args = ["cephfs-shell", "-c", mount_x.config_path, '-b', scriptpath]
+        args = ["cephfs-shell", '-b', scriptpath]
+        if shell_conf_path:
+            args[1:1] = ["-c", shell_conf_path]
         log.info('Running script \"' + scriptpath + '\"')
         return mount_x.client_remote.run(args=args, stdout=BytesIO(),
                                          stderr=BytesIO(), stdin=stdin)
@@ -907,9 +911,8 @@ class TestMisc(TestCephFSShell):
         dirname = 'somedirectory'
         self.run_cephfs_shell_cmd(['mkdir', dirname])
 
-        output = self.mount_a.client_remote.sh([
-            'cephfs-shell', '-c', self.mount_a.config_path, 'ls'
-        ]).strip()
+        output = self.mount_a.client_remote.sh(['cephfs-shell', 'ls']).\
+            strip()
 
         if sys_version_info.major >= 3:
             self.assertRegex(output, dirname)
@@ -925,50 +928,71 @@ class TestMisc(TestCephFSShell):
         o = self.get_cephfs_shell_cmd_output("help all")
         log.info("output:\n{}".format(o))
 
-class TestConfReading(TestCephFSShell):
-    def test_reading_conf_opt(self):
+class TestShellOpts(TestCephFSShell):
+    """
+    Contains tests for shell options from conf file and shell prompt.
+    """
+
+    def setUp(self):
+        super(type(self), self).setUp()
+
+        # output of following command -
+        # editor - was: 'vim'
+        # now: '?'
+        # editor: '?'
+        self.editor_val = self.get_cephfs_shell_cmd_output(
+            'set editor ?, set editor').split('\n')[2]
+        self.editor_val = self.editor_val.split(':')[1].\
+            replace("'", "", 2).strip()
+
+    def write_tempconf(self, confcontents):
+        self.tempconfpath = self.mount_a.client_remote.mktemp(
+            suffix='cephfs-shell.conf')
+        sudo_write_file(self.mount_a.client_remote, self.tempconfpath,
+                         confcontents)
+
+    def test_reading_conf(self):
+        self.write_tempconf("[cephfs-shell]\neditor =  ???")
+
+        # output of following command -
+        # CephFS:~/>>> set editor
+        # editor: 'vim'
+        final_editor_val = self.get_cephfs_shell_cmd_output(
+            cmd='set editor', shell_conf_path=self.tempconfpath)
+        final_editor_val = final_editor_val.split(': ')[1]
+        final_editor_val = final_editor_val.replace("'", "", 2)
+
+        self.assertNotEqual(self.editor_val, final_editor_val)
+
+    def test_reading_conf_with_dup_opt(self):
         """
         Read conf without duplicate sections/options.
         """
-        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
-                                                       'client','debug_shell')
-        debugval = str_to_bool(debugval)
-        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
-                                            'debug_shell', str(not debugval))
-        output = self.get_cephfs_shell_cmd_output('set debug')
-        new_debug_val = \
-            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
-        assert not debugval == new_debug_val
+        self.write_tempconf("[cephfs-shell]\neditor = ???\neditor = " +
+                            self.editor_val)
 
-    def test_reading_conf_after_setting_opt_twice(self):
-        """
-        Read conf without duplicate sections/options.
-        """
-        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
-                                                       'client','debug_shell')
-        debugval = str_to_bool(debugval)
+        # output of following command -
+        # CephFS:~/>>> set editor
+        # editor: 'vim'
+        final_editor_val = self.get_cephfs_shell_cmd_output(
+            cmd='set editor', shell_conf_path=self.tempconfpath)
+        final_editor_val = final_editor_val.split(': ')[1]
+        final_editor_val = final_editor_val.replace("'", "", 2)
 
-        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
-                                            'debug_shell', str(not debugval))
-        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
-                                            'debug_shell', str(not debugval))
-        output = self.get_cephfs_shell_cmd_output('set debug')
-        new_debug_val = \
-            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
-        assert not debugval == new_debug_val
+        self.assertEqual(self.editor_val, final_editor_val)
 
-    def test_reading_conf_after_resetting_opt(self):
-        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
-                                                       'client','debug_shell')
-        debugval = str_to_bool(debugval)
+    def test_setting_opt_after_reading_conf(self):
+        self.write_tempconf("[cephfs-shell]\neditor = ???")
 
-        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
-                                            'debug_shell', str(not debugval))
-        self.fs.mon_manager.raw_cluster_cmd('config', 'rm', 'client',
-                                            'debug_shell')
-        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
-                                            'debug_shell', str(not debugval))
-        output = self.get_cephfs_shell_cmd_output('set debug')
-        new_debug_val = \
-            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
-        assert not debugval == new_debug_val
+        # output of following command -
+        # editor - was: vim
+        # now: vim
+        # editor: vim
+        final_editor_val = self.get_cephfs_shell_cmd_output(
+            cmd='set editor %s, set editor' % (self.editor_val),
+            shell_conf_path=self.tempconfpath)
+        final_editor_val = final_editor_val.split('\n')[2]
+        final_editor_val = final_editor_val.split(': ')[1]
+        final_editor_val = final_editor_val.replace("'", "", 2)
+
+        self.assertEqual(self.editor_val, final_editor_val)
