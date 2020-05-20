@@ -181,7 +181,7 @@ private:
    * Scrub a dirfrag. It queues child dentries, then does final
    * scrub of the dirfrag.
    *
-   * @param dir The dirfrag to scrub
+   * @param dir The dirfrag to scrub (must be auth)
    * @param done set to true if we started to do final scrub
    */
   void scrub_dirfrag(CDir *dir, bool *done);

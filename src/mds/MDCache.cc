@@ -11396,12 +11396,12 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     return false;
   }
 
-  if (diri->scrub_is_in_progress()) {
-    dout(7) << "can_fragment: scrub in progress" << dendl;
-    return false;
-  }
-
   for (const auto& dir : dirs) {
+    if (dir->scrub_is_in_progress()) {
+      dout(7) << "can_fragment: scrub in progress " << *dir << dendl;
+      return false;
+    }
+
     if (dir->state_test(CDir::STATE_FRAGMENTING)) {
       dout(7) << "can_fragment: already fragmenting " << *dir << dendl;
       return false;
