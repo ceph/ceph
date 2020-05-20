@@ -2128,6 +2128,8 @@ fi
 %if %{with lttng}
 %{_libdir}/librbd_tp.so.*
 %endif
+%dir %{_libdir}/ceph/librbd
+%{_libdir}/ceph/librbd/libceph_*.so*
 
 %post -n librbd1 -p /sbin/ldconfig
 
