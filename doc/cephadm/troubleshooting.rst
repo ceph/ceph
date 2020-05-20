@@ -161,3 +161,14 @@ This means that you must run a command of this form::
   ceph config set mon public_network <mon_network>
 
 For more detail on operations of this kind, see :ref:`deploy_additional_monitors`
+
+Accessing the admin socket
+--------------------------
+
+Each Ceph daemon provides an admin socket that bypasses the
+MONs (See :ref:`rados-monitoring-using-admin-socket`).
+
+To access the admin socket, first enter the daemon container on the host::
+
+    [root@mon1 ~]# cephadm enter --name <daemon-name>
+    [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
