@@ -155,8 +155,7 @@
         <li routerLinkActive="active"
             class="tc_submenuitem tc_submenuitem_monitoring"
             *ngIf="permissions.prometheus.read">
-          <a i18n
-             routerLink="/monitoring">
+          <a routerLink="/monitoring">
             <ng-container i18n>Monitoring</ng-container>
             <small *ngIf="prometheusAlertService.alerts.length > 0"
                    class="badge badge-danger">{{ prometheusAlertService.alerts.length }}</small>

@@ -58,10 +58,9 @@ export class SmartListComponent implements OnInit, OnChanges {
         let userMessage = '';
         if (smartData.smartctl_error_code === -22) {
           userMessage = this.i18n(
-            'Smartctl has received an unknown argument (error code ' +
-              '{{code}}). You may be using an ' +
-              'incompatible version of smartmontools. Version >= 7.0 of ' +
-              'smartmontools is required to successfully retrieve data.',
+            `Smartctl has received an unknown argument (error code {{code}}). \
+You may be using an incompatible version of smartmontools. Version >= 7.0 of \
+smartmontools is required to successfully retrieve data.`,
             { code: smartData.smartctl_error_code }
           );
         } else {
