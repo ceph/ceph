@@ -124,8 +124,7 @@ class NFSGanesha(object):
             'prefix': 'auth caps',
             'entity': entity,
             'caps': ['mon', 'allow r',
-                     'osd', osd_caps,
-                     'mds', 'allow rw'],
+                     'osd', osd_caps],
         })
 
         if ret != 0:
