@@ -64,9 +64,6 @@ private:
    *                                             INIT_PLUGIN_REGISTRY
    *                                                |
    *                                                v
-   *                                             INIT_PARENT_CACHE(skip if
-   *                                                |               disable)
-   *                                                v
    *                                             INIT_CACHE
    *                                                |
    *                                                v
@@ -128,9 +125,6 @@ private:
 
   void send_init_plugin_registry();
   Context* handle_init_plugin_registry(int *result);
-
-  Context* send_parent_cache(int *result);
-  Context* handle_parent_cache(int *result);
 
   Context *send_init_cache(int *result);
 
