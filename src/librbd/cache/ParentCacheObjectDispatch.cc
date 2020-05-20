@@ -45,8 +45,11 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  if (m_image_ctx->parent != nullptr) {
-    ldout(cct, 5) << "child image: skipping" << dendl;
+  if (m_image_ctx->child == nullptr) {
+    ldout(cct, 5) << "non-parent image: skipping" << dendl;
+    if (on_finish != nullptr) {
+      on_finish->complete(-EINVAL);
+    }
     return;
   }
 
