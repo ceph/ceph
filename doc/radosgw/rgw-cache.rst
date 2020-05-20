@@ -7,7 +7,7 @@ RGW Data caching and CDN
 .. contents::
 
 This feature adds to RGW the ability to securely cache objects and offload the workload from the cluster, using Nginx.
-After an object is accessed the first time it will be stored in Nginx directory.
+After an object is accessed the first time it will be stored in the Nginx directory.
 When data is already cached, it need not be fetched from RGW. A permission check will be made against RGW to ensure the requesting user has access.
 This feature is based on some Nginx modules, ngx_http_auth_request_module, https://github.com/kaltura/nginx-aws-auth-module, Openresty for lua capabilities.     
 Currently this feature only works for GET requests and it will cache only AWSv4 requests (only s3 requests).
@@ -34,7 +34,7 @@ Returns success if the encapsulated request would be granted.
 Cache API
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This API meant to allow changing signed Range headers using a privileged user, cache user.
+This API is meant to allow changing signed Range headers using a privileged user, cache user.
 
 Creating cache user
 
@@ -77,7 +77,7 @@ Compile openresty, Make sure that you have pcre lib and openssl lib:
 ::
 
 $ sudo yum install pcre-devel openssl-devel gcc curl zlib-devel nginx
-$ ./configure --add-module=<the nginx-aws-auth-module dir> --with-http_auth_request_module --with-http_slice_module
+$ ./configure --add-module=<the nginx-aws-auth-module dir> --with-http_auth_request_module --with-http_slice_module --conf-path=/etc/nginx/nginx.conf
 $ gmake -j $(nproc)
 $ sudo gmake install
 $ sudo ln -sf /usr/local/openresty/bin/openresty /usr/bin/nginx
@@ -86,9 +86,27 @@ Put in-place your nginx configuration files and edit them according to your envi
 
 All nginx conf files are under: https://github.com/ceph/ceph/tree/master/examples/rgw-cache 
 
-nginx.conf should go to /etc/nginx/nginx.conf
+nginx.conf should go to /etc/nginx/nginx.conf  
+
 nginx-lua-file.lua should go to /etc/nginx/nginx-lua-file.lua
-nginx-default.conf should go to /etc/nginx/conf.d/nginx-default.conf
+
+nginx-default.conf should go to /etc/nginx/conf.d/nginx-default.conf  
+
+The parameters that are most likely to require adjustment according to the environment are located in the file nginx-default.conf   
+
+Modify the example values of *proxy_cache_path* and *max_size* at:
+
+`proxy_cache_path /data/cache levels=2:2:2 keys_zone=mycache:999m max_size=20G inactive=1d use_temp_path=off;` 
+
+And modify the example *server* values to point to the RGWs URIs: 
+
+`server rgw1:8000 max_fails=2 fail_timeout=5s;`
+
+`server rgw2:8000 max_fails=2 fail_timeout=5s;`
+
+`server rgw3:8000 max_fails=2 fail_timeout=5s;` 
+   
+It is important to substitute the access key and secret key located in the nginx.conf with those belong to the user with the amz-cache caps 
 
 It is possible to use nginx slicing which is a better method for streaming purposes.
 
@@ -106,4 +124,4 @@ Using noprefetch means that if the client is sending range request of 0-4095 and
 Run nginx(openresty):
 ::
 
-$ nginx -c /etc/nginx/nginx.conf
+$ sudo systemctl restart nginx
