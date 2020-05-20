@@ -13,6 +13,7 @@ overrides:
         debug rocksdb: 10
         bluestore compression mode: aggressive
         bluestore fsck on mount: true
+        bluestore compression algorithm: lz4
         # lower the full ratios since we can fill up a 100gb osd so quickly
         mon osd full ratio: .9
         mon osd backfillfull_ratio: .85
