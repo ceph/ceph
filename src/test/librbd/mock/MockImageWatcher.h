@@ -25,7 +25,7 @@ struct MockImageWatcher {
   MOCK_METHOD0(notify_released_lock, void());
   MOCK_METHOD0(notify_request_lock, void());
 
-  MOCK_METHOD3(notify_quiesce, void(uint64_t, ProgressContext &, Context *));
+  MOCK_METHOD2(notify_quiesce, uint64_t(ProgressContext &, Context *));
   MOCK_METHOD2(notify_unquiesce, void(uint64_t, Context *));
 };
 
