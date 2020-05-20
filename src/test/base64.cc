@@ -16,6 +16,7 @@
 #include "common/config.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "common/Clock.h"
 
 #include "gtest/gtest.h"
 
@@ -97,4 +98,70 @@ TEST(FuzzEncoding, BadDecode2) {
     failed = true;
   }
   ASSERT_EQ(failed, true);
+}
+
+void bench_base64_encode(size_t len, int encode_count) {
+  bufferlist bl;
+
+  int fd = open("/dev/urandom", O_RDONLY);
+  if (fd < 0) {
+    std::cout << "open /dev/urandom failed" << std::endl;
+    return;
+  }
+  bl.read_fd(fd, len);
+  EXPECT_EQ(bl.length(), len);
+
+  utime_t start = ceph_clock_now();
+  for (int i = 0; i < encode_count; i++) {
+    bufferlist rst;
+    bl.encode_base64(rst);
+  }
+  utime_t end = ceph_clock_now();
+  cout << "base64 encode len: " << setw(8) << len << ", "
+       << "encode " << setw(4) << encode_count << " times, "
+       << "total time(s): " << setw(8) << end - start << std::endl;
+}
+
+TEST(BenchBase64, BenchEncode) {
+  bench_base64_encode(8388608, 10);
+  bench_base64_encode(8192, 20);
+  bench_base64_encode(4096, 20);
+  bench_base64_encode(1024, 40);
+  bench_base64_encode(256, 80);
+  bench_base64_encode(128, 100);
+  bench_base64_encode(40, 100);
+}
+
+void bench_base64_decode(size_t reverse_encode_len, int decode_count) {
+  bufferlist bl;
+  int fd = open("/dev/urandom", O_RDONLY);
+  if (fd < 0) {
+    std::cout << "open /dev/urandom failed" << std::endl;
+    return;
+  }
+  bl.read_fd(fd, reverse_encode_len);
+  EXPECT_EQ(bl.length(), reverse_encode_len);
+
+  bufferlist bl_enc;
+  bl.encode_base64(bl_enc);
+
+  utime_t start = ceph_clock_now();
+  for (int i = 0; i < decode_count; i++) {
+    bufferlist rst;
+    rst.decode_base64(bl_enc);
+  }
+  utime_t end = ceph_clock_now();
+  cout << "base64 decode len: " << setw(8) << bl_enc.length() << ", "
+       << "decode " << setw(4) << decode_count << " times, "
+       << "total time(s): " << setw(8) << end - start << std::endl;
+}
+
+TEST(BenchBase64, BenchDecode) {
+  bench_base64_decode(8388608, 10);
+  bench_base64_decode(8192, 20);
+  bench_base64_decode(4096, 20);
+  bench_base64_decode(1024, 40);
+  bench_base64_decode(256, 80);
+  bench_base64_decode(128, 100);
+  bench_base64_decode(40, 100);
 }
