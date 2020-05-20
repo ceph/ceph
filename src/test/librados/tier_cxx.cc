@@ -14,6 +14,7 @@
 #include "test/librados/testcase_cxx.h"
 #include "json_spirit/json_spirit.h"
 #include "cls/cas/cls_cas_ops.h"
+#include "cls/cas/cls_cas_internal.h"
 
 #include "osd/HitSet.h"
 
@@ -3213,29 +3214,29 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
   }
   // redirect's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read_refs", in, out);
-    cls_cas_chunk_read_refs_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar", CHUNK_REFCOUNT_ATTR, t);
+    chunk_obj_refcount refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1U, read_ret.refs.size());
+    ASSERT_EQ(1U, refs.refs.size());
   }
   // chunk's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read_refs", in, out);
-    cls_cas_chunk_read_refs_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    chunk_obj_refcount refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, read_ret.refs.size());
+    ASSERT_EQ(1u, refs.refs.size());
   }
 
   // wait for maps to settle before next test
@@ -3303,29 +3304,29 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   }
   // redirect's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read_refs", in, out);
-    cls_cas_chunk_read_refs_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar", CHUNK_REFCOUNT_ATTR, t);
+    chunk_obj_refcount refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, read_ret.refs.size());
+    ASSERT_EQ(1u, refs.refs.size());
   }
   // chunk's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read_refs", in, out);
-    cls_cas_chunk_read_refs_ret read_ret;
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    chunk_obj_refcount refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, read_ret.refs.size());
+    ASSERT_EQ(1u, refs.refs.size());
   }
 
   // unset-manifest for set-redirect
@@ -3351,9 +3352,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   }
   // redirect's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar", "cas", "chunk_read_refs", in, out);
-    if (out.length() != 0U) {
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    if (t.length() != 0U) {
       ObjectWriteOperation op;
       op.unset_manifest();
       librados::AioCompletion *completion = cluster.aio_create_completion();
@@ -3365,9 +3366,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   }
   // chunk's refcount 
   {
-    bufferlist in, out;
-    cache_ioctx.exec("bar-chunk", "cas", "chunk_read_refs", in, out);
-    if (out.length() != 0U) {
+    bufferlist t;
+    cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
+    if (t.length() != 0U) {
       ObjectWriteOperation op;
       op.unset_manifest();
       librados::AioCompletion *completion = cluster.aio_create_completion();
@@ -3489,7 +3490,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   }
   // chunk's refcount 
   {
-    bufferlist in, out;
+    bufferlist t;
     SHA1 sha1_gen;
     int size = strlen("There hi");
     unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];
@@ -3497,15 +3498,15 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     sha1_gen.Update((const unsigned char *)"There hi", size);
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
-    cache_ioctx.exec(p_str, "cas", "chunk_read_refs", in, out);
-    cls_cas_chunk_read_refs_ret read_ret;
+    cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
+    chunk_obj_refcount refs;
     try {
-      auto iter = out.cbegin();
-      decode(read_ret, iter);
+      auto iter = t.cbegin();
+      decode(refs, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, read_ret.refs.size());
+    ASSERT_EQ(2u, refs.refs.size());
   }
 
   // wait for maps to settle before next test
