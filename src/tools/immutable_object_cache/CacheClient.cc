@@ -58,6 +58,7 @@ namespace immutable_obj_cache {
         thd->join();
         delete thd;
       }
+      delete m_worker_io_service_work;
       delete m_worker;
     }
     return 0;
