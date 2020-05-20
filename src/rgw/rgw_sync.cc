@@ -1049,10 +1049,12 @@ public:
     RGWRESTConn *conn = sync_env->conn;
     reenter(this) {
       yield {
+        string key_encode;
+        url_encode(key, key_encode);
         rgw_http_param_pair pairs[] = { { "key" , key.c_str()},
 	                                { NULL, NULL } };
 
-        string p = string("/admin/metadata/") + section + "/" + key;
+        string p = string("/admin/metadata/") + section + "/" + key_encode;
 
         http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
 
