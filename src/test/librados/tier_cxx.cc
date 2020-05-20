@@ -3223,7 +3223,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1U, refs.refs.size());
+    ASSERT_EQ(1U, refs.count());
   }
   // chunk's refcount 
   {
@@ -3236,7 +3236,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, refs.refs.size());
+    ASSERT_EQ(1u, refs.count());
   }
 
   // wait for maps to settle before next test
@@ -3313,7 +3313,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, refs.refs.size());
+    ASSERT_EQ(1u, refs.count());
   }
   // chunk's refcount 
   {
@@ -3326,7 +3326,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(1u, refs.refs.size());
+    ASSERT_EQ(1u, refs.count());
   }
 
   // unset-manifest for set-redirect
@@ -3506,7 +3506,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
     }
-    ASSERT_EQ(2u, refs.refs.size());
+    ASSERT_EQ(2u, refs.count());
   }
 
   // wait for maps to settle before next test
