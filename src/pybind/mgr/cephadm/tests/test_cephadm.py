@@ -251,16 +251,43 @@ class TestCephadm(object):
         with pytest.raises(OrchestratorError):
             out = cephadm_module.osd_service.find_destroyed_osds()
 
-    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    @mock.patch("cephadm.module.SpecStore.save")
-    def test_apply_osd_save(self, _save_spec, cephadm_module):
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm")
+    def test_apply_osd_save(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
         with self._with_host(cephadm_module, 'test'):
-            json_spec = {'service_type': 'osd', 'host_pattern': 'test', 'service_id': 'foo', 'data_devices': {'all': True}}
-            spec = ServiceSpec.from_json(json_spec)
-            assert isinstance(spec, DriveGroupSpec)
+
+            spec = DriveGroupSpec(
+                service_id='foo',
+                placement=PlacementSpec(
+                    host_pattern='*',
+                ),
+                data_devices=DeviceSelection(
+                    all=True
+                )
+            )
+
             c = cephadm_module.apply_drivegroups([spec])
             assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
-            _save_spec.assert_called_with(spec)
+
+            inventory = Devices([
+                Device(
+                    '/dev/sdb',
+                    available=True
+                ),
+            ])
+
+            cephadm_module.cache.update_host_devices_networks('test', inventory.devices, {})
+
+            _run_cephadm.return_value = (['{}'], '', 0)
+
+            assert cephadm_module._apply_all_services() == False
+
+            _run_cephadm.assert_any_call(
+                'test', 'osd', 'ceph-volume',
+                ['--config-json', '-', '--', 'lvm', 'prepare', '--bluestore', '--data', '/dev/sdb', '--no-systemd'],
+                env_vars=[], error_ok=True, stdin='{"config": "", "keyring": ""}')
+            _run_cephadm.assert_called_with('test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
