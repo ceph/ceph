@@ -71,7 +71,7 @@ public:
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
                         const cls::rbd::SnapshotNamespace &snap_namespace,
                         const std::string &snap_name, uint64_t journal_op_tid,
-                        bool skip_object_map, ProgressContext &prog_ctx);
+                        uint64_t flags, ProgressContext &prog_ctx);
 
 protected:
   void send_op() override;
