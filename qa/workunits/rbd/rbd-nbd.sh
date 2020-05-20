@@ -106,7 +106,7 @@ unmap_device()
 
     for s in 0.5 1 2 4 8 16 32; do
 	sleep ${s}
-        rbd-nbd list-mapped | expect_false grep "${list_dev} $" && return 0
+        rbd-nbd list-mapped | expect_false grep "${list_dev} *$" && return 0
     done
     return 1
 }
