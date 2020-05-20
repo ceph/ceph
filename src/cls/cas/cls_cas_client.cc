@@ -53,40 +53,6 @@ void cls_cas_chunk_put_ref(
   op.exec("cas", "chunk_put_ref", in);
 }
 
-void cls_cas_chunk_set_refs(
-  librados::ObjectWriteOperation& op,
-  set<hobject_t>& refs)
-{
-  bufferlist in;
-  cls_cas_chunk_set_refs_op call;
-  call.refs = refs;
-  encode(call, in);
-  op.exec("cas", "chunk_set_refs", in);
-}
-
-int cls_cas_chunk_read_refs(
-  librados::IoCtx& io_ctx,
-  string& oid,
-  set<hobject_t> *refs)
-{
-  bufferlist in, out;
-  int r = io_ctx.exec(oid, "cas", "chunk_read_refs", in, out);
-  if (r < 0)
-    return r;
-
-  cls_cas_chunk_read_refs_ret ret;
-  try {
-    auto iter = out.cbegin();
-    decode(ret, iter);
-  } catch (ceph::buffer::error& err) {
-    return -EIO;
-  }
-
-  *refs = ret.refs;
-
-  return r;
-}
-
 int cls_cas_references_chunk(
   librados::IoCtx& io_ctx,
   const string& oid,
