@@ -186,6 +186,10 @@ public:
   const auto& get_message() const {
     return *msg;
   }
+
+  size_t get_processed_rw_ops_num() const {
+    return num_read + num_write;
+  }
 };
 
 template <class Context, class MainFunc, class EffectFunc>
