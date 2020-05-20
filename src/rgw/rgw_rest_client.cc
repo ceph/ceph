@@ -279,7 +279,16 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
   new_info.rebuild_from(info);
-
+  string bucket_encode;
+  string request_uri_encode;
+  size_t pos = new_info.request_uri.substr(1, new_info.request_uri.size() - 1).find("/");
+  string bucket = new_info.request_uri.substr(1, pos);
+  url_encode(bucket, bucket_encode);
+  if (std::string::npos != pos)
+    request_uri_encode = string("/") + bucket_encode + new_info.request_uri.substr(pos + 1);
+  else
+    request_uri_encode = string("/") + bucket_encode;
+  new_info.request_uri = request_uri_encode;
   new_env.set("HTTP_DATE", date_str.c_str());
 
   int ret = sign_request(cct, key, new_env, new_info);
