@@ -430,10 +430,17 @@ void ChunkScrub::chunk_scrub_common()
       }
       auto oid = i.oid;
       set<hobject_t> refs;
-      set<hobject_t> real_refs;
-      ret = cls_cas_chunk_read_refs(chunk_io_ctx, oid, &refs);
-      if (ret < 0) {
-	continue;
+
+      chunk_obj_refcount real_refs;
+      {
+	bufferlist t;
+	ret = chunk_io_ctx.getxattr(oid, CHUNK_REFCOUNT_ATTR, t);
+	if (ret < 0) {
+	  continue;
+	}
+#warning fixme
+	//auto p = t.cbegin();
+	//decode(refs, p);
       }
 
       for (auto pp : refs) {
@@ -448,11 +455,15 @@ void ChunkScrub::chunk_scrub_common()
 
 	ret = cls_cas_references_chunk(target_io_ctx, pp.oid.name, oid);
 	if (ret != -ENOENT) {
-	  real_refs.insert(pp);
-	} 
+#warning fixme
+	  //real_refs.get(pp);
+	}
       }
 
-      if (refs.size() != real_refs.size()) {
+      /*
+      if (refs.size() != real_refs.refs.size()) {
+	cerr << "ref count mismatch on " << oid << std::endl;
+#warning fixme
 	ObjectWriteOperation op;
 	cls_cas_chunk_set_refs(op, real_refs);
 	ret = chunk_io_ctx.operate(oid, &op);
@@ -461,6 +472,7 @@ void ChunkScrub::chunk_scrub_common()
 	}
 	fixed_objects++;
       }
+	*/
       examined_objects++;
       m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
       if (cur_time + utime_t(report_period, 0) < ceph_clock_now()) {
