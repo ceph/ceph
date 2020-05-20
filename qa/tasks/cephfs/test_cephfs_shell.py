@@ -4,9 +4,11 @@ export $PATH.
 """
 from io import BytesIO
 from os import path
+from os import getcwd as os_getcwd
 import crypt
 import logging
 from tempfile import mkstemp as tempfile_mkstemp
+from tempfile import mkdtemp as tempfile_mkdtemp
 import math
 from six import ensure_str
 from sys import version_info as sys_version_info
@@ -14,6 +16,7 @@ from re import search as re_search
 from time import sleep
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.misc import sudo_write_file
+from teuthology.misc import sh as misc_sh
 from teuthology.orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -257,60 +260,39 @@ class TestRmdir(TestCephFSShell):
         self.mount_a.stat(self.dir_name)
 
 class TestGetAndPut(TestCephFSShell):
-    # the 'put' command gets tested as well with the 'get' comamnd
-    def test_put_and_get_without_target_directory(self):
+    def test_without_target_dir(self):
         """
-        Test that put fails without target path
+        Test put and get commands without target path.
         """
-        # generate test data in a directory
-        self.run_cephfs_shell_cmd("!mkdir p1")
-        self.run_cephfs_shell_cmd('!dd if=/dev/urandom of=p1/dump1 bs=1M count=1')
-        self.run_cephfs_shell_cmd('!dd if=/dev/urandom of=p1/dump2 bs=2M count=1')
-        self.run_cephfs_shell_cmd('!dd if=/dev/urandom of=p1/dump3 bs=3M count=1')
+        tempdir = self.mount_a.client_remote.mkdtemp()
+        tempdirname = path.basename(tempdir)
+        files = ('dump1', 'dump2', 'dump3', tempdirname)
 
-        # copy the whole directory over to the cephfs
-        o = self.get_cephfs_shell_cmd_output("put p1")
-        log.info("cephfs-shell output:\n{}".format(o))
+        for i, file_ in enumerate(files[ : -1]):
+            size = i + 1
+            ofarg = 'of=' + path.join(tempdir, file_)
+            bsarg = 'bs=' + str(size) + 'M'
+            self.mount_a.run_shell(['dd', 'if=/dev/urandom', ofarg, bsarg,
+                                    'count=1'])
 
-        # put p1 should pass
-        o = self.mount_a.stat('p1')
-        log.info("mount_a output:\n{}".format(o))
-        o = self.mount_a.stat('p1/dump1')
-        log.info("mount_a output:\n{}".format(o))
-        o = self.mount_a.stat('p1/dump2')
-        log.info("mount_a output:\n{}".format(o))
-        o = self.mount_a.stat('p1/dump3')
-        log.info("mount_a output:\n{}".format(o))
+        self.run_cephfs_shell_cmd('put ' + tempdir)
+        for file_ in files:
+            if file_ == tempdirname:
+                self.mount_a.stat(path.join(self.mount_a.mountpoint, file_))
+            else:
+                self.mount_a.stat(path.join(self.mount_a.mountpoint,
+                                            tempdirname, file_))
 
-        self.run_cephfs_shell_cmd('!rm -rf p1')
-        o = self.get_cephfs_shell_cmd_output("get p1")
-        o = self.get_cephfs_shell_cmd_output('!stat p1 || echo $?')
-        log.info("cephfs-shell output:\n{}".format(o))
-        self.validate_stat_output(o)
+        self.mount_a.run_shell(['rm', '-rf', tempdir])
 
-        o = self.get_cephfs_shell_cmd_output('!stat p1/dump1 || echo $?')
-        log.info("cephfs-shell output:\n{}".format(o))
-        self.validate_stat_output(o)
-
-        o = self.get_cephfs_shell_cmd_output('!stat p1/dump2 || echo $?')
-        log.info("cephfs-shell output:\n{}".format(o))
-        self.validate_stat_output(o)
-
-        o = self.get_cephfs_shell_cmd_output('!stat p1/dump3 || echo $?')
-        log.info("cephfs-shell output:\n{}".format(o))
-        self.validate_stat_output(o)
-
-    def validate_stat_output(self, s):
-        l = s.split('\n')
-        log.info("lines:\n{}".format(l))
-        rv = l[-1] # get last line; a failed stat will have "1" as the line
-        log.info("rv:{}".format(rv))
-        r = 0
-        try:
-            r = int(rv) # a non-numeric line will cause an exception
-        except:
-            pass
-        assert(r == 0)
+        self.run_cephfs_shell_cmd('get ' + tempdirname)
+        pwd = self.get_cephfs_shell_cmd_output('!pwd')
+        for file_ in files:
+            if file_ == tempdirname:
+               self.mount_a.run_shell('stat ' + path.join(pwd, file_))
+            else:
+               self.mount_a.run_shell('stat ' + path.join(pwd, tempdirname,
+                                                          file_))
 
     def test_get_with_target_name(self):
         """
