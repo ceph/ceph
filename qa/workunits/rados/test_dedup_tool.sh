@@ -134,7 +134,7 @@ function test_dedup_chunk_scrub()
   CHUNK_OID=$(echo -n "There hi" | sha1sum)
 
   POOL_ID=$(ceph osd pool ls detail | grep $POOL |  awk '{print$2}')
-  $DEDUP_TOOL --op add-chunk-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref bar --target-ref-pool-id $POOL_ID
+  $DEDUP_TOOL --op get-chunk-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref bar --target-ref-pool-id $POOL_ID
   RESULT=$($DEDUP_TOOL --op get-chunk-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID)
 
   $DEDUP_TOOL --op chunk-scrub --chunk-pool $CHUNK_POOL
