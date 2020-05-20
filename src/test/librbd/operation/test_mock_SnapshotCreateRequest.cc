@@ -188,7 +188,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, false, prog_ctx);
+    "snap1", 0, 0, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
@@ -211,7 +211,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, NotifyQuiesceError) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, false, prog_ctx);
+    "snap1", 0, 0, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
@@ -244,7 +244,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, AllocateSnapIdError) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, false, prog_ctx);
+    "snap1", 0, 0, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
@@ -286,7 +286,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapStale) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, false, prog_ctx);
+    "snap1", 0, 0, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
@@ -320,7 +320,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapError) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, false, prog_ctx);
+    "snap1", 0, 0, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
@@ -354,7 +354,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, ReleaseSnapIdError) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, false, prog_ctx);
+    "snap1", 0, 0, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
@@ -394,7 +394,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, SkipObjectMap) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, true, prog_ctx);
+    "snap1", 0, SNAP_CREATE_FLAG_SKIP_OBJECT_MAP, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
@@ -441,7 +441,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, SetImageState) {
     mock_image_ctx, &cond_ctx,
     cls::rbd::MirrorSnapshotNamespace{
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {}, "", CEPH_NOSNAP},
-    "snap1", 0, false, prog_ctx);
+    "snap1", 0, 0, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();

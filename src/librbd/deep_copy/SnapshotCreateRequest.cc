@@ -81,9 +81,9 @@ void SnapshotCreateRequest<I>::send_create_snap() {
       finish_op_ctx->complete(0);
     });
   std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
-  m_dst_image_ctx->operations->execute_snap_create(m_snap_namespace,
-                                                   m_snap_name.c_str(), ctx, 0U,
-                                                   true, m_prog_ctx);
+  m_dst_image_ctx->operations->execute_snap_create(
+      m_snap_namespace, m_snap_name.c_str(), ctx, 0U,
+      SNAP_CREATE_FLAG_SKIP_OBJECT_MAP, m_prog_ctx);
 }
 
 template <typename I>

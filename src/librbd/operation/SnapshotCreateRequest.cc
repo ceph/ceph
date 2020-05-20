@@ -30,11 +30,12 @@ SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
 						const cls::rbd::SnapshotNamespace &snap_namespace,
                                                 const std::string &snap_name,
                                                 uint64_t journal_op_tid,
-                                                bool skip_object_map,
+                                                uint64_t flags,
                                                 ProgressContext &prog_ctx)
   : Request<I>(image_ctx, on_finish, journal_op_tid),
     m_snap_namespace(snap_namespace), m_snap_name(snap_name),
-    m_skip_object_map(skip_object_map), m_prog_ctx(prog_ctx) {
+    m_skip_object_map(flags & SNAP_CREATE_FLAG_SKIP_OBJECT_MAP),
+    m_prog_ctx(prog_ctx) {
 }
 
 template <typename I>

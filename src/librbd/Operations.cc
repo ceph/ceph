@@ -742,7 +742,7 @@ void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespac
     m_image_ctx, "snap_create", exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
     true,
     boost::bind(&Operations<I>::execute_snap_create, this, snap_namespace, snap_name,
-		_1, 0, false, boost::ref(*prog_ctx)),
+		_1, 0, 0, boost::ref(*prog_ctx)),
     boost::bind(&ImageWatcher<I>::notify_snap_create, m_image_ctx.image_watcher,
                 request_id, snap_namespace, snap_name, boost::ref(*prog_ctx),
                 _1),
@@ -755,7 +755,7 @@ void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_
 					const std::string &snap_name,
                                         Context *on_finish,
                                         uint64_t journal_op_tid,
-                                        bool skip_object_map,
+                                        uint64_t flags,
                                         ProgressContext &prog_ctx) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
@@ -781,7 +781,7 @@ void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_
   operation::SnapshotCreateRequest<I> *req =
     new operation::SnapshotCreateRequest<I>(
       m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish),
-      snap_namespace, snap_name, journal_op_tid, skip_object_map, prog_ctx);
+      snap_namespace, snap_name, journal_op_tid, flags, prog_ctx);
   req->send();
 }
 
