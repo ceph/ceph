@@ -99,6 +99,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    * Auto reload time in ms - per default every 5s
    * You can set it to 0, undefined or false to disable the auto reload feature in order to
    * trigger 'fetchData' if the reload button is clicked.
+   * You can set it to a negative number to, on top of disabling the auto reload,
+   * prevent triggering fetchData when initializing the table.
    */
   @Input()
   autoReload: any = 5000;
@@ -269,8 +271,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
           });
         });
       });
-    } else {
+    } else if (!this.autoReload) {
       this.reloadData();
+    } else {
+      this.useData();
     }
   }
 
