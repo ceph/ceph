@@ -32,7 +32,7 @@ struct MockOperations {
 					 const std::string &snap_name,
                                          Context *on_finish,
                                          uint64_t journal_op_tid,
-                                         bool skip_object_map,
+                                         uint64_t flags,
                                          ProgressContext &prog_ctx));
   MOCK_METHOD3(snap_remove, void(const cls::rbd::SnapshotNamespace &snap_namespace,
 				 const std::string &snap_name,
