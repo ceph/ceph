@@ -2066,7 +2066,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     if (s3website_enabled) {
       in_hosted_domain_s3website = rgw_find_host_in_domains(info.host, &s3website_domain, &s3website_subdomain, hostnames_s3website_set);
       if (in_hosted_domain_s3website) {
-	in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
+        in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
         domain = s3website_domain;
         subdomain = s3website_subdomain;
       }
@@ -2080,35 +2080,36 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       << dendl;
 
     if (g_conf()->rgw_resolve_cname
-	&& !in_hosted_domain
-	&& !in_hosted_domain_s3website) {
+        && !in_hosted_domain
+        && !in_hosted_domain_s3website
+        && !looks_like_ip_address(info.host.c_str())) {
       string cname;
       bool found;
       int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
-	ldout(s->cct, 0)
-	  << "WARNING: rgw_resolver->resolve_cname() returned r=" << r
-	  << dendl;
+        ldout(s->cct, 0)
+          << "WARNING: rgw_resolver->resolve_cname() returned r=" << r
+          << dendl;
       }
 
       if (found) {
-	ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
-			 << cname << dendl;
-	in_hosted_domain =
-	  rgw_find_host_in_domains(cname, &domain, &subdomain, hostnames_set);
+        ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
+                         << cname << dendl;
+        in_hosted_domain =
+          rgw_find_host_in_domains(cname, &domain, &subdomain, hostnames_set);
 
         if (s3website_enabled
-	    && !in_hosted_domain_s3website) {
-	  in_hosted_domain_s3website =
-	    rgw_find_host_in_domains(cname, &s3website_domain,
-				     &s3website_subdomain,
-				     hostnames_s3website_set);
-	  if (in_hosted_domain_s3website) {
-	    in_hosted_domain = true; // TODO: should hostnames be a
-				     // strict superset of hostnames_s3website?
-	    domain = s3website_domain;
-	    subdomain = s3website_subdomain;
-	  }
+            && !in_hosted_domain_s3website) {
+          in_hosted_domain_s3website =
+            rgw_find_host_in_domains(cname, &s3website_domain,
+                                     &s3website_subdomain,
+                                     hostnames_s3website_set);
+          if (in_hosted_domain_s3website) {
+            in_hosted_domain = true; // TODO: should hostnames be a
+                                     // strict superset of hostnames_s3website?
+            domain = s3website_domain;
+            subdomain = s3website_subdomain;
+          }
         }
 
         ldout(s->cct, 20)
