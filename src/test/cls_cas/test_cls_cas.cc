@@ -41,9 +41,11 @@ static librados::ObjectWriteOperation *new_op() {
   return new librados::ObjectWriteOperation();
 }
 
+/*
 static librados::ObjectReadOperation *new_rop() {
   return new librados::ObjectReadOperation();
 }
+*/
 
 TEST_F(cls_cas, get_put)
 {
