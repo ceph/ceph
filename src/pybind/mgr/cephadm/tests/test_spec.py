@@ -422,7 +422,7 @@ def test_spec_octopus():
         ),
         DaemonDescription(
             daemon_type='nfs',
-            daemon_id="a.abc123",
+            daemon_id="ahost1.abc123",
             hostname="host1",
         ),
         False
