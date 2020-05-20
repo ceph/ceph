@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
+#include "include/stringify.h"
 #include "cls/cas/cls_cas_client.h"
 #include "cls/cas/cls_cas_internal.h"
 
@@ -284,4 +285,38 @@ TEST_F(cls_cas, get_wrong_data)
     ASSERT_EQ(0, ioctx.operate(oid, op));
   }
   ASSERT_EQ(-ENOENT, ioctx.read(oid, t, 0, 0));
+}
+
+static int count_bits(unsigned long n)
+{
+    // base case
+    if (n == 0)
+        return 0;
+    else
+        return 1 + count_bits(n & (n - 1));
+}
+
+TEST(chunk_obj_refcount, size)
+{
+  chunk_obj_refcount r;
+  size_t max = 1048576;
+  for (size_t i = 0; i < max; ++i) {
+    hobject_t h(sobject_t(object_t("foo"s + stringify(i)), 1));
+    bool ret = r.get(h);
+    ASSERT_TRUE(ret);
+    if (count_bits(i) <= 2) {
+      bufferlist bl;
+      r.dynamic_encode(bl, 1024);
+      if (count_bits(i) == 1) {
+	cout << i << "\t" << bl.length() << "\t" << r.get_type() << std::endl;
+      }
+    }
+  }
+  ASSERT_EQ(max, r.count());
+  for (size_t i = 0; i < max; ++i) {
+    hobject_t h(sobject_t(object_t("foo"s + stringify(i)), 1));
+    bool ret = r.put(h);
+    ASSERT_TRUE(ret);
+  }
+  ASSERT_EQ(0, r.count());
 }

@@ -26,7 +26,7 @@ static int chunk_read_refcount(
   chunk_obj_refcount *objr)
 {
   bufferlist bl;
-  objr->refs.clear();
+  objr->clear();
   int ret = cls_cxx_getxattr(hctx, CHUNK_REFCOUNT_ATTR, &bl);
   if (ret == -ENODATA) {
     return 0;
@@ -88,7 +88,7 @@ static int chunk_create_or_get_ref(cls_method_context_t hctx,
     if (ret < 0) {
       return ret;
     }
-    objr.refs.insert(op.source);
+    objr.get(op.source);
     ret = chunk_set_refcount(hctx, objr);
     if (ret < 0) {
       return ret;
@@ -107,10 +107,9 @@ static int chunk_create_or_get_ref(cls_method_context_t hctx,
     CLS_LOG(10, "inc ref oid=%s\n",
 	    op.source.oid.name.c_str());
 
-    if (objr.refs.count(op.source)) {
+    if (!objr.get(op.source)) {
       return -EEXIST;
     }
-    objr.refs.insert(op.source);
 
     ret = chunk_set_refcount(hctx, objr);
     if (ret < 0) {
@@ -143,10 +142,9 @@ static int chunk_get_ref(cls_method_context_t hctx,
   // existing chunk; inc ref
   CLS_LOG(10, "oid=%s\n", op.source.oid.name.c_str());
   
-  if (objr.refs.count(op.source)) {
+  if (!objr.get(op.source)) {
     return -EEXIST;
   }
-  objr.refs.insert(op.source);
 
   ret = chunk_set_refcount(hctx, objr);
   if (ret < 0) {
@@ -173,19 +171,12 @@ static int chunk_put_ref(cls_method_context_t hctx,
   if (ret < 0)
     return ret;
 
-  if (objr.refs.empty()) {// shouldn't happen!
-    CLS_LOG(0, "ERROR was called without any references!\n");
-    return -ENOLINK;
-  }
-
-  auto p = objr.refs.find(op.source);
-  if (p == objr.refs.end()) {
+  if (!objr.put(op.source)) {
     CLS_LOG(10, "oid=%s (no ref)\n", op.source.oid.name.c_str());
     return -ENOLINK;
   }
-  objr.refs.erase(p);
 
-  if (objr.refs.empty()) {
+  if (objr.empty()) {
     CLS_LOG(10, "oid=%s (last ref)\n", op.source.oid.name.c_str());
     return cls_cxx_remove(hctx);
   }
