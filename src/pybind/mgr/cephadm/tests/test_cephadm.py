@@ -15,7 +15,7 @@ except ImportError:
 from execnet.gateway_bootstrap import HostNotFound
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec
+    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
@@ -483,19 +483,47 @@ class TestCephadm(object):
             (ServiceSpec('alertmanager'), CephadmOrchestrator.apply_alertmanager),
             (ServiceSpec('rbd-mirror'), CephadmOrchestrator.apply_rbd_mirror),
             (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.apply_mds),
+            (ServiceSpec(
+                'mds', service_id='fsname',
+                placement=PlacementSpec(
+                    hosts=[HostPlacementSpec(
+                        hostname='test',
+                        name='fsname',
+                        network=''
+                    )]
+                )
+            ), CephadmOrchestrator.apply_mds),
             (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.apply_rgw),
+            (RGWSpec(
+                rgw_realm='realm', rgw_zone='zone',
+                placement=PlacementSpec(
+                    hosts=[HostPlacementSpec(
+                        hostname='test',
+                        name='realm.zone.a',
+                        network=''
+                    )]
+                )
+            ), CephadmOrchestrator.apply_rgw),
             (NFSServiceSpec('name', pool='pool', namespace='namespace'), CephadmOrchestrator.apply_nfs),
             (IscsiServiceSpec('name', pool='pool', api_user='user', api_password='password'),
              CephadmOrchestrator.apply_iscsi),
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module):
+    def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with self._with_host(cephadm_module, 'test'):
-            spec.placement = PlacementSpec(hosts=['test'], count=1)
+            if not spec.placement:
+                spec.placement = PlacementSpec(hosts=['test'], count=1)
             c = meth(cephadm_module, spec)
             assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
             assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
+
+            cephadm_module._apply_all_services()
+
+            dds = wait(cephadm_module, cephadm_module.list_daemons())
+            for dd in dds:
+                assert dd.service_name() == spec.service_name()
+
 
             assert_rm_service(cephadm_module, spec.service_name())
 

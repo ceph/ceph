@@ -54,6 +54,8 @@ if 'UNITTEST' in os.environ:
             self._ceph_get_version = mock.Mock()
             self._ceph_get = mock.MagicMock()
             self._ceph_get_option = mock.MagicMock()
+            self._ceph_get_context = mock.MagicMock()
+            self._ceph_register_client = mock.MagicMock()
             self._configure_logging = lambda *_: None
             self._unconfigure_logging = mock.MagicMock()
             self._ceph_log = mock.MagicMock()
