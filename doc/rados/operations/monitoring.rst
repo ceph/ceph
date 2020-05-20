@@ -499,6 +499,7 @@ For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 
 .. _Monitoring OSDs and Placement Groups: ../monitoring-osd-pg
 
+.. _rados-monitoring-using-admin-socket:
 
 Using the Admin Socket
 ======================
