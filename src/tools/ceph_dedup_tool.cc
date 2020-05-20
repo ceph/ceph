@@ -750,7 +750,8 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     goto out;
   }
 
-  if (op_name == "add-chunk-ref") {
+  if (op_name == "chunk-get-ref" ||
+      op_name == "chunk-put-ref") {
     string target_object_name;
     uint64_t pool_id;
     i = opts.find("object");
@@ -785,7 +786,11 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     hobject_t oid(sobject_t(target_object_name, CEPH_NOSNAP), "", hash, pool_id, "");
 
     ObjectWriteOperation op;
-    cls_cas_chunk_get_ref(op, oid);
+    if (op_name == "chunk-get-ref") {
+      cls_cas_chunk_get_ref(op, oid);
+    } else {
+      cls_cas_chunk_put_ref(op, oid);
+    }
     ret = chunk_io_ctx.operate(object_name, &op);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
@@ -921,7 +926,8 @@ int main(int argc, const char **argv)
     return estimate_dedup_ratio(opts, args);
   } else if (op_name == "chunk-scrub") {
     return chunk_scrub_common(opts, args);
-  } else if (op_name == "add-chunk-ref") {
+  } else if (op_name == "chunk-get-ref" ||
+	     op_name == "chunk-put-ref") {
     return chunk_scrub_common(opts, args);
   } else if (op_name == "get-chunk-ref") {
     return chunk_scrub_common(opts, args);
