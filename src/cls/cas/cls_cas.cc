@@ -198,52 +198,6 @@ static int chunk_put_ref(cls_method_context_t hctx,
   return 0;
 }
 
-static int chunk_set_refs(cls_method_context_t hctx,
-			  bufferlist *in, bufferlist *out)
-{
-  auto in_iter = in->cbegin();
-
-  cls_cas_chunk_set_refs_op op;
-  try {
-    decode(op, in_iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_cas_chunk_set(): failed to decode entry\n");
-    return -EINVAL;
-  }
-
-  if (!op.refs.size()) {
-    return cls_cxx_remove(hctx);
-  }
-
-  chunk_obj_refcount objr;
-  objr.refs = op.refs;
-
-  int ret = chunk_set_refcount(hctx, objr);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-static int chunk_read_refs(cls_method_context_t hctx,
-			   bufferlist *in, bufferlist *out)
-{
-  chunk_obj_refcount objr;
-
-  cls_cas_chunk_read_refs_ret read_ret;
-  int ret = chunk_read_refcount(hctx, &objr);
-  if (ret < 0)
-    return ret;
-
-  for (auto &p : objr.refs) {
-    read_ret.refs.insert(p);
-  }
-
-  encode(read_ret, *out);
-
-  return 0;
-}
-
 static int references_chunk(cls_method_context_t hctx,
 			    bufferlist *in, bufferlist *out)
 {
@@ -273,8 +227,6 @@ CLS_INIT(cas)
   cls_method_handle_t h_chunk_create_or_get_ref;
   cls_method_handle_t h_chunk_get_ref;
   cls_method_handle_t h_chunk_put_ref;
-  cls_method_handle_t h_chunk_set_refs;
-  cls_method_handle_t h_chunk_read_refs;
   cls_method_handle_t h_references_chunk;
 
   cls_register("cas", &h_class);
@@ -291,13 +243,6 @@ CLS_INIT(cas)
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  chunk_put_ref,
 			  &h_chunk_put_ref);
-  cls_register_cxx_method(h_class, "chunk_set_refs",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  chunk_set_refs,
-			  &h_chunk_set_refs);
-  cls_register_cxx_method(h_class, "chunk_read_refs", CLS_METHOD_RD,
-			  chunk_read_refs,
-			  &h_chunk_read_refs);
   cls_register_cxx_method(h_class, "references_chunk", CLS_METHOD_RD,
 			  references_chunk,
 			  &h_references_chunk);

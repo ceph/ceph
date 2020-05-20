@@ -65,8 +65,6 @@ TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
 TYPE(cls_cas_chunk_create_or_get_ref_op)
 TYPE(cls_cas_chunk_get_ref_op)
 TYPE(cls_cas_chunk_put_ref_op)
-TYPE(cls_cas_chunk_set_refs_op)
-TYPE(cls_cas_chunk_read_refs_ret)
 
 #include "cls/cas/cls_cas_internal.h"
 TYPE(chunk_obj_refcount)

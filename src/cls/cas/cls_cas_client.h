@@ -34,17 +34,6 @@ void cls_cas_chunk_put_ref(
 // advanced (used for scrub, repair, etc.)
 //
 
-/// read list of all chunk references
-int cls_cas_chunk_read_refs(
-  librados::IoCtx& io_ctx,
-  std::string& oid,
-  std::set<hobject_t> *refs);
-
-/// force update on chunk references
-void cls_cas_chunk_set_refs(
-  librados::ObjectWriteOperation& op,
-  std::set<hobject_t>& refs);
-
 /// check if a tiered rados object links to a chunk
 int cls_cas_references_chunk(
   librados::IoCtx& io_ctx,
