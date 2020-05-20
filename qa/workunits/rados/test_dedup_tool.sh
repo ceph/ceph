@@ -135,11 +135,11 @@ function test_dedup_chunk_scrub()
 
   POOL_ID=$(ceph osd pool ls detail | grep $POOL |  awk '{print$2}')
   $DEDUP_TOOL --op get-chunk-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID --target-ref bar --target-ref-pool-id $POOL_ID
-  RESULT=$($DEDUP_TOOL --op get-chunk-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID)
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID)
 
   $DEDUP_TOOL --op chunk-scrub --chunk-pool $CHUNK_POOL
 
-  RESULT=$($DEDUP_TOOL --op get-chunk-ref --chunk-pool $CHUNK_POOL --object $CHUNK_OID | grep bar)
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID | grep bar)
   if [ -n "$RESULT" ] ; then
     $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
     $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
