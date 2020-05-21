@@ -2,7 +2,7 @@ import os
 import random
 import signal
 
-from mock import patch, Mock
+from unittest.mock import patch, Mock
 
 from teuthology import exit
 

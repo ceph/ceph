@@ -1,5 +1,5 @@
 import logging
-import mock
+import unittest.mock as mock
 import os
 import os.path
 from pytest import raises, mark

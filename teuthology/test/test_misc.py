@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime
 
-from mock import Mock, patch
+from unittest.mock import Mock, patch
 from teuthology.orchestra import cluster
 from teuthology.config import config
 from teuthology import misc

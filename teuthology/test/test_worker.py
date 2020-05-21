@@ -1,7 +1,7 @@
 import beanstalkc
 import os
 
-from mock import patch, Mock, MagicMock
+from unittest.mock import patch, Mock, MagicMock
 from datetime import datetime, timedelta
 
 from teuthology import worker

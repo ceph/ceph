@@ -1,4 +1,4 @@
-from mock import patch, Mock
+from unittest.mock import patch, Mock
 
 import teuthology.lock.util
 from teuthology import provision

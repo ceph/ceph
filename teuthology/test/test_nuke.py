@@ -4,7 +4,7 @@ import os
 import pytest
 import subprocess
 
-from mock import patch, Mock, DEFAULT
+from unittest.mock import patch, Mock, DEFAULT
 
 from teuthology import nuke
 from teuthology import misc
