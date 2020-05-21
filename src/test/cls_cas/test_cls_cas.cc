@@ -296,9 +296,9 @@ static int count_bits(unsigned long n)
         return 1 + count_bits(n & (n - 1));
 }
 
-TEST(chunk_obj_refcount, size)
+TEST(chunk_refs_t, size)
 {
-  chunk_obj_refcount r;
+  chunk_refs_t r;
   size_t max = 1048576;
 
   // mix in pool changes as i gets bigger
@@ -322,7 +322,7 @@ TEST(chunk_obj_refcount, size)
       }
 
       // verify reencoding is correct
-      chunk_obj_refcount a;
+      chunk_refs_t a;
       auto t = bl.cbegin();
       decode(a, t);
       bufferlist bl2;

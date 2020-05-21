@@ -3,11 +3,11 @@
 
 #include "cls_cas_internal.h"
 
-struct refs_by_object : public chunk_obj_refcount::refs_t {
+struct refs_by_object : public chunk_refs_t::refs_t {
   std::set<hobject_t> by_object;
 
   uint8_t get_type() const {
-    return chunk_obj_refcount::TYPE_BY_OBJECT;
+    return chunk_refs_t::TYPE_BY_OBJECT;
   }
   bool empty() const override {
     return by_object.empty();
@@ -52,7 +52,7 @@ struct refs_by_object : public chunk_obj_refcount::refs_t {
 };
 WRITE_CLASS_ENCODER(refs_by_object)
 
-struct refs_by_hash : public chunk_obj_refcount::refs_t {
+struct refs_by_hash : public chunk_refs_t::refs_t {
   uint64_t total = 0;
   uint32_t hash_bits = 32;          ///< how many bits of mask to encode
   std::map<std::pair<int64_t,uint32_t>,uint64_t> by_hash;
@@ -91,7 +91,7 @@ struct refs_by_hash : public chunk_obj_refcount::refs_t {
   }
 
   uint8_t get_type() const {
-    return chunk_obj_refcount::TYPE_BY_HASH;
+    return chunk_refs_t::TYPE_BY_HASH;
   }
   bool empty() const override {
     return by_hash.empty();
@@ -168,7 +168,7 @@ struct refs_by_hash : public chunk_obj_refcount::refs_t {
 };
 WRITE_CLASS_DENC(refs_by_hash)
 
-struct refs_by_pool : public chunk_obj_refcount::refs_t {
+struct refs_by_pool : public chunk_refs_t::refs_t {
   uint64_t total = 0;
   map<int64_t,uint64_t> by_pool;
 
@@ -181,7 +181,7 @@ struct refs_by_pool : public chunk_obj_refcount::refs_t {
   }
 
   uint8_t get_type() const {
-    return chunk_obj_refcount::TYPE_BY_POOL;
+    return chunk_refs_t::TYPE_BY_POOL;
   }
   bool empty() const override {
     return by_pool.empty();
@@ -249,7 +249,7 @@ struct refs_by_pool : public chunk_obj_refcount::refs_t {
 };
 WRITE_CLASS_DENC(refs_by_pool)
 
-struct refs_count : public chunk_obj_refcount::refs_t {
+struct refs_count : public chunk_refs_t::refs_t {
   uint64_t total = 0;
 
   refs_count() {}
@@ -258,7 +258,7 @@ struct refs_count : public chunk_obj_refcount::refs_t {
   }
 
   uint8_t get_type() const {
-    return chunk_obj_refcount::TYPE_COUNT;
+    return chunk_refs_t::TYPE_COUNT;
   }
   bool empty() const override {
     return total == 0;
@@ -298,21 +298,21 @@ WRITE_CLASS_ENCODER(refs_count)
 
 //
 
-void chunk_obj_refcount::clear()
+void chunk_refs_t::clear()
 {
   // default to most precise impl
   r.reset(new refs_by_object);
 }
 
 
-void chunk_obj_refcount::encode(ceph::buffer::list& bl) const
+void chunk_refs_t::encode(ceph::buffer::list& bl) const
 {
   bufferlist t;
   _encode_r(t);
   _encode_final(bl, t);
 }
 
-void chunk_obj_refcount::_encode_r(ceph::bufferlist& bl) const
+void chunk_refs_t::_encode_r(ceph::bufferlist& bl) const
 {
   using ceph::encode;
   switch (r->get_type()) {
@@ -333,7 +333,7 @@ void chunk_obj_refcount::_encode_r(ceph::bufferlist& bl) const
   }
 }
 
-void chunk_obj_refcount::dynamic_encode(ceph::buffer::list& bl, size_t max)
+void chunk_refs_t::dynamic_encode(ceph::buffer::list& bl, size_t max)
 {
   bufferlist t;
   while (true) {
@@ -361,7 +361,7 @@ void chunk_obj_refcount::dynamic_encode(ceph::buffer::list& bl, size_t max)
   _encode_final(bl, t);
 }
 
-void chunk_obj_refcount::_encode_final(bufferlist& bl, bufferlist& t) const
+void chunk_refs_t::_encode_final(bufferlist& bl, bufferlist& t) const
 {
   ENCODE_START(1, 1, bl);
   encode(r->get_type(), bl);
@@ -369,7 +369,7 @@ void chunk_obj_refcount::_encode_final(bufferlist& bl, bufferlist& t) const
   ENCODE_FINISH(bl);
 }
 
-void chunk_obj_refcount::decode(ceph::buffer::list::const_iterator& p)
+void chunk_refs_t::decode(ceph::buffer::list::const_iterator& p)
 {
   DECODE_START(1, p);
   uint8_t t;
