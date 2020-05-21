@@ -180,16 +180,16 @@ TEST_F(cls_cas, dup_get)
   }
   ASSERT_EQ(bl.length(), ioctx.read(oid, t, 0, 0));
 
-  // dup create_or_get_ref, get_ref
+  // dup create_or_get_ref, get_ref will succeed but take no additional ref.
   {
     auto op = new_op();
     cls_cas_chunk_create_or_get_ref(*op, ref1, bl);
-    ASSERT_EQ(-EEXIST, ioctx.operate(oid, op));
+    ASSERT_EQ(0, ioctx.operate(oid, op));
   }
   {
     auto op = new_op();
     cls_cas_chunk_get_ref(*op, ref1);
-    ASSERT_EQ(-EEXIST, ioctx.operate(oid, op));
+    ASSERT_EQ(0, ioctx.operate(oid, op));
   }
 
   {
