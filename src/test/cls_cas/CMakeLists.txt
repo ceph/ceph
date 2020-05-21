@@ -3,6 +3,7 @@ add_executable(ceph_test_cls_cas
 target_link_libraries(ceph_test_cls_cas
   librados
   cls_cas_client
+  cls_cas_internal
   global
   radostest-cxx
   ${UNITTEST_LIBS}
