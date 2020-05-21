@@ -492,7 +492,7 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
 {
   Rados rados;
   IoCtx io_ctx;
-  std::string chunk_algo;
+  std::string chunk_algo = "fastcdc";
   string fp_algo = "sha1";
   string pool_name;
   uint64_t chunk_size = 0;
