@@ -180,5 +180,4 @@ INSTANTIATE_TEST_SUITE_P(
   ::testing::Values(
     "fixed",   // note: we skip most tests bc this is not content-based
     "fastcdc"
-    //, "rabin" // rabin fails insert_{front,middle}
     ));
