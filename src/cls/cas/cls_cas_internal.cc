@@ -89,10 +89,35 @@ struct refs_by_hash : public chunk_obj_refcount::refs_t {
     --total;
     return true;
   }
-  DENC(refs_by_hash, v, p) {
+  DENC_HELPERS
+  void bound_encode(size_t& p) const {
+    p += 6 + sizeof(uint64_t) + by_hash.size() * (10 + 10);
+  }
+  void encode(::ceph::buffer::list::contiguous_appender& p) const {
     DENC_START(1, 1, p);
-    denc(v.total, p);
-    denc(v.by_hash, p);
+    denc_varint(total, p);
+    denc_varint(by_hash.size(), p);
+    for (auto& i : by_hash) {
+      denc_signed_varint(i.first.first, p);
+      denc(i.first.second, p);
+      denc_varint(i.second, p);
+    }
+    DENC_FINISH(p);
+  }
+  void decode(::ceph::buffer::ptr::const_iterator& p) {
+    DENC_START(1, 1, p);
+    denc_varint(total, p);
+    uint64_t n;
+    denc_varint(n, p);
+    while (n--) {
+      int64_t poolid;
+      uint32_t hash;
+      uint64_t count;
+      denc_signed_varint(poolid, p);
+      denc(hash, p);
+      denc_varint(count, p);
+      by_hash[make_pair(poolid, hash)] = count;
+    }
     DENC_FINISH(p);
   }
   void dump(Formatter *f) const override {
