@@ -84,10 +84,8 @@ private:
   // allocated in at once
   static const std::initializer_list<uint16_t> reshard_primes;
 
-  int create_new_bucket_instance(int new_num_shards,
-				 RGWBucketInfo& new_bucket_info);
+  int update_num_shards(int new_num_shards);
   int do_reshard(int num_shards,
-		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
                  bool verbose,
                  ostream *os,
@@ -228,7 +226,7 @@ protected:
 public:
   RGWReshard(rgw::sal::RGWRadosStore* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(cls_rgw_reshard_entry& entry);
-  int update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
+  int update(const RGWBucketInfo& bucket_info);
   int get(cls_rgw_reshard_entry& entry);
   int remove(cls_rgw_reshard_entry& entry);
   int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
