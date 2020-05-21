@@ -9,8 +9,6 @@ import { ToastrService } from 'ngx-toastr';
 export class Copy2ClipboardButtonDirective implements OnInit {
   @Input()
   private cdCopy2ClipboardButton: string;
-  @Input()
-  private formatted = 'no';
 
   constructor(
     private elementRef: ElementRef,
@@ -34,17 +32,15 @@ export class Copy2ClipboardButtonDirective implements OnInit {
   @HostListener('click')
   onClick() {
     try {
-      const tagName = this.formatted === '' ? 'textarea' : 'input';
-      // Create the input to hold our text.
-      const tmpInputElement = document.createElement(tagName);
-      tmpInputElement.value = this.getInputElement().value;
-      document.body.appendChild(tmpInputElement);
-      // Copy text to clipboard.
-      tmpInputElement.select();
-      document.execCommand('copy');
-      // Finally remove the element.
-      document.body.removeChild(tmpInputElement);
-
+      // Checking if we have the clipboard-write permission
+      navigator.permissions
+        .query({ name: 'clipboard-write' as PermissionName })
+        .then((result: any) => {
+          if (result.state === 'granted' || result.state === 'prompt') {
+            // Copy text to clipboard.
+            navigator.clipboard.writeText(this.getInputElement().value);
+          }
+        });
       this.toastr.success('Copied text to the clipboard successfully.');
     } catch (err) {
       this.toastr.error('Failed to copy text to the clipboard.');
