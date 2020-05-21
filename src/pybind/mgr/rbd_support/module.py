@@ -12,6 +12,7 @@ from mgr_module import MgrModule
 from .common import NotAuthorizedError
 from .mirror_snapshot_schedule import MirrorSnapshotScheduleHandler
 from .perf import PerfHandler
+from .snapshot_schedule import SnapshotScheduleHandler
 from .task import TaskHandler
 from .trash_purge_schedule import TrashPurgeScheduleHandler
 
@@ -19,10 +20,12 @@ from .trash_purge_schedule import TrashPurgeScheduleHandler
 class Module(MgrModule):
     COMMANDS = MirrorSnapshotScheduleHandler.MODULE_COMMANDS + \
         PerfHandler.MODULE_COMMANDS + \
+        SnapshotScheduleHandler.MODULE_COMMANDS + \
         TaskHandler.MODULE_COMMANDS + \
         TrashPurgeScheduleHandler.MODULE_COMMANDS
     MODULE_OPTIONS = [
         {'name': MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME},
+        {'name': SnapshotScheduleHandler.MODULE_OPTION_NAME},
         {'name': TrashPurgeScheduleHandler.MODULE_OPTION_NAME},
     ]
 
@@ -32,6 +35,7 @@ class Module(MgrModule):
         self.handlers = [
             MirrorSnapshotScheduleHandler(self),
             PerfHandler(self),
+            SnapshotScheduleHandler(self),
             TaskHandler(self),
             TrashPurgeScheduleHandler(self),
         ]
