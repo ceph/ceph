@@ -155,18 +155,21 @@ void FastCDC::calc_chunks(
     ceph_assert(pos < len);
 
     // find an end marker
-    if (_scan(&p, &pp, &pe, pos,  // for the first "small" region
-	      std::min(len,
-		       cstart + (1 << (target_bits - TARGET_WINDOW_BITS))),
-	      fp, small_mask, table) &&
-	_scan(&p, &pp, &pe, pos,  // for the middle range (close to our target)
-	      std::min(len,
-		       cstart + (1 << (target_bits + TARGET_WINDOW_BITS))),
-	      fp, target_mask, table) &&
-	_scan(&p, &pp, &pe, pos,  // we're past target, use large_mask!
-	      std::min(len,
-		       cstart + (1 << max_bits)),
-	      fp, large_mask, table)) ;
+    if (
+      // for the first "small" region
+      _scan(&p, &pp, &pe, pos,
+	    std::min(len, cstart + (1 << (target_bits - TARGET_WINDOW_BITS))),
+	    fp, small_mask, table) &&
+      // for the middle range (close to our target)
+      (TARGET_WINDOW_BITS == 0 ||
+       _scan(&p, &pp, &pe, pos,
+	     std::min(len, cstart + (1 << (target_bits + TARGET_WINDOW_BITS))),
+	     fp, target_mask, table)) &&
+      // we're past target, use large_mask!
+      _scan(&p, &pp, &pe, pos,
+	    std::min(len,
+		     cstart + (1 << max_bits)),
+	    fp, large_mask, table)) ;
 
     chunks->push_back(std::pair<uint64_t,uint64_t>(cstart, pos - cstart));
   }
