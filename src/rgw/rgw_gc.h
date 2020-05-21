@@ -25,6 +25,8 @@ class RGWGC : public DoutPrefixProvider {
   string *obj_names;
   std::atomic<bool> down_flag = { false };
 
+  static constexpr uint64_t seed = 8675309;
+
   int tag_index(const string& tag);
 
   class GCWorker : public Thread {
