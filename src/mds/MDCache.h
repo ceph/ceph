@@ -1315,6 +1315,8 @@ class MDCache {
   bool export_ephemeral_random_config;
   unsigned export_ephemeral_dist_frag_bits;
 
+  int64_t kill_dirfrag_at;
+
   // File size recovery
   RecoveryQueue recovery_queue;
 

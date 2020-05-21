@@ -3670,6 +3670,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_export_ephemeral_distributed",
     "mds_health_cache_threshold",
     "mds_inject_migrator_session_race",
+    "mds_kill_dirfrag_at",
     "mds_log_pause",
     "mds_max_export_size",
     "mds_max_purge_files",

@@ -154,6 +154,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
   export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
 
+  kill_dirfrag_at = g_conf().get_val<int64_t>("mds_kill_dirfrag_at");
+
   lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
 
   bottom_lru.lru_set_midpoint(0);
@@ -203,6 +205,11 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
   if (changed.count("mds_export_ephemeral_random_max")) {
     export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
   }
+
+  if (changed.count("mds_kill_dirgrag_at")) {
+    kill_dirfrag_at = g_conf().get_val<int64_t>("mds_kill_dirfrag_at");
+  }
+
   if (changed.count("mds_health_cache_threshold"))
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
@@ -11451,6 +11458,7 @@ void MDCache::fragment_freeze_dirs(const std::vector<CDir*>& dirs)
     else
       any_non_subtree = true;
   }
+  ceph_assert(kill_dirfrag_at != 1);
 
   if (any_subtree && any_non_subtree) {
     // either all dirfrags are subtree roots or all are not.
@@ -11836,6 +11844,8 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
 
   mdr->apply();  // mark scatterlock
 
+  ceph_assert(kill_dirfrag_at != 8);
+
   // store resulting frags
   MDSGatherBuilder gather(g_ceph_context, new C_MDC_FragmentStore(this, mdr));
 
@@ -11904,6 +11914,7 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
     }
 
     mds->send_message_mds(notify, p.first);
+    ceph_assert(kill_dirfrag_at != 4);
   }
 
   // journal commit
@@ -11926,6 +11937,8 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
     dir->unfreeze_dir();
   }
 
+  ceph_assert(kill_dirfrag_at != 5);
+
   if (info.notify_ack_waiting.empty()) {
     fragment_drop_locks(info);
   } else {
@@ -11940,6 +11953,8 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, const MDRequestRef& mdr
     mdr->mark_event("commit logged");
 
   ufragment &uf = uncommitted_fragments.at(basedirfrag);
+
+  ceph_assert(kill_dirfrag_at != 9);
 
   // remove old frags
   C_GatherBuilder gather(
@@ -11980,6 +11995,7 @@ void MDCache::_fragment_old_purged(dirfrag_t basedirfrag, int bits, const MDRequ
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_FINISH, basedirfrag, bits);
   mds->mdlog->start_submit_entry(le);
 
+  ceph_assert(kill_dirfrag_at != 10);
   finish_uncommitted_fragment(basedirfrag, EFragment::OP_FINISH);
 
   if (mds->logger) {
@@ -12026,6 +12042,7 @@ void MDCache::fragment_maybe_finish(const fragment_info_iterator& it)
   }
 
   fragments.erase(it);
+  ceph_assert(kill_dirfrag_at != 7);
 }
 
 
@@ -12048,12 +12065,14 @@ void MDCache::handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &ac
   if (it->second.notify_ack_waiting.erase(from) &&
       it->second.notify_ack_waiting.empty()) {
     fragment_drop_locks(it->second);
+    ceph_assert(kill_dirfrag_at != 6);
     fragment_maybe_finish(it);
   }
 }
 
 void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
 {
+  ceph_assert(kill_dirfrag_at != 2);
   dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << dendl;
   mds_rank_t from = mds_rank_t(notify->get_source().num());
 
@@ -12102,6 +12121,7 @@ void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
     auto ack = make_message<MMDSFragmentNotifyAck>(notify->get_base_dirfrag(),
 					     notify->get_bits(), notify->get_tid());
     mds->send_message_mds(ack, from);
+    ceph_assert(kill_dirfrag_at != 3);
   }
 }
 
