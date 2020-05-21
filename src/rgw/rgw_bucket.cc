@@ -1624,13 +1624,13 @@ int RGWBucketAdminOp::set_quota(rgw::sal::RGWRadosStore *store, RGWBucketAdminOp
 
 static int purge_bucket_instance(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const DoutPrefixProvider *dpp)
 {
-  int max_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
+  const auto& index = bucket_info.layout.current_index;
+  int max_shards = index.layout.normal.num_shards;
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(store->getRados());
-    int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-    int ret = bs.init(bucket_info.bucket, shard_id, bucket_info.layout.current_index, nullptr, dpp);
+    int ret = bs.init(bucket_info.bucket, i, bucket_info.layout.current_index, nullptr, dpp);
     if (ret < 0) {
-      cerr << "ERROR: bs.init(bucket=" << bucket_info.bucket << ", shard=" << shard_id
+      cerr << "ERROR: bs.init(bucket=" << bucket_info.bucket << ", shard=" << i
            << "): " << cpp_strerror(-ret) << std::endl;
       return ret;
     }

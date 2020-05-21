@@ -520,7 +520,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  if (cur_bucket_info.reshard_status == cls_rgw_reshard_status::IN_PROGRESS) {
+  if (cur_bucket_info.layout.resharding != rgw::BucketReshardState::None) {
     ldout(store->ctx(), 0) << __func__ << ": reshard in progress. Skipping "
                            << orphan_bucket.name << ": "
                            << orphan_bucket.bucket_id << dendl;

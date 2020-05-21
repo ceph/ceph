@@ -2724,7 +2724,7 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
     return ret;
   }
 
-  if (bucket_info.reshard_status != cls_rgw_reshard_status::NOT_RESHARDING) {
+  if (bucket_info.layout.resharding != rgw::BucketReshardState::None) {
     // if in_progress or done then we have an old BucketInfo
     cerr << "ERROR: the bucket is currently undergoing resharding and "
       "cannot be added to the reshard list at this time" << std::endl;
@@ -6593,16 +6593,15 @@ next:
       max_entries = 1000;
     }
 
-    int max_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
+    const auto& index = bucket_info.layout.current_index;
+    int max_shards = index.layout.normal.num_shards;
 
     formatter->open_array_section("entries");
 
     int i = (specified_shard_id ? shard_id : 0);
     for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(store->getRados());
-      int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-
-      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */, dpp());
+      int ret = bs.init(bucket, i, index, nullptr /* no RGWBucketInfo */, dpp());
       marker.clear();
 
       if (ret < 0) {
@@ -6661,14 +6660,14 @@ next:
       return EINVAL;
     }
 
-    int max_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
+    const auto& index = bucket_info.layout.current_index;
+    int max_shards = index.layout.normal.num_shards;
 
     for (int i = 0; i < max_shards; i++) {
       RGWRados::BucketShard bs(store->getRados());
-      int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */, dpp());
+      int ret = bs.init(bucket, i, index, nullptr /* no RGWBucketInfo */, dpp());
       if (ret < 0) {
-        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
+        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i << "): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
