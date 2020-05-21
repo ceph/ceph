@@ -149,17 +149,33 @@ struct refs_by_pool : public chunk_obj_refcount::refs_t {
     --total;
     return true;
   }
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(total, bl);
-    encode(by_pool, bl);
-    ENCODE_FINISH(bl);
+  void bound_encode(size_t& p) const {
+    p += 6 + sizeof(uint64_t) + by_pool.size() * (9 + 9);
   }
-  void decode(bufferlist::const_iterator& p) {
-    DECODE_START(1, p);
-    decode(total, p);
-    decode(by_pool, p);
-    DECODE_FINISH(p);
+  DENC_HELPERS
+  void encode(::ceph::buffer::list::contiguous_appender& p) const {
+    DENC_START(1, 1, p);
+    denc_varint(total, p);
+    denc_varint(by_pool.size(), p);
+    for (auto& i : by_pool) {
+      denc_signed_varint(i.first, p);
+      denc_varint(i.second, p);
+    }
+    DENC_FINISH(p);
+  }
+  void decode(::ceph::buffer::ptr::const_iterator& p) {
+    DENC_START(1, 1, p);
+    denc_varint(total, p);
+    uint64_t n;
+    denc_varint(n, p);
+    while (n--) {
+      int64_t poolid;
+      uint64_t count;
+      denc_signed_varint(poolid, p);
+      denc_varint(count, p);
+      by_pool[poolid] = count;
+    }
+    DENC_FINISH(p);
   }
   void dump(Formatter *f) const override {
     f->dump_string("type", "by_pool");
@@ -174,7 +190,7 @@ struct refs_by_pool : public chunk_obj_refcount::refs_t {
     f->close_section();
   }
 };
-WRITE_CLASS_ENCODER(refs_by_pool)
+WRITE_CLASS_DENC(refs_by_pool)
 
 struct refs_count : public chunk_obj_refcount::refs_t {
   uint64_t total = 0;
