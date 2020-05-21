@@ -23,7 +23,7 @@ CLS_NAME(cas)
 
 static int chunk_read_refcount(
   cls_method_context_t hctx,
-  chunk_obj_refcount *objr)
+  chunk_refs_t *objr)
 {
   bufferlist bl;
   objr->clear();
@@ -47,7 +47,7 @@ static int chunk_read_refcount(
 
 static int chunk_set_refcount(
   cls_method_context_t hctx,
-  const struct chunk_obj_refcount& objr)
+  const struct chunk_refs_t& objr)
 {
   bufferlist bl;
 
@@ -78,7 +78,7 @@ static int chunk_create_or_get_ref(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  chunk_obj_refcount objr;
+  chunk_refs_t objr;
   int ret = chunk_read_refcount(hctx, &objr);
   if (ret == -ENOENT) {
     // new chunk; init refs
@@ -138,7 +138,7 @@ static int chunk_get_ref(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  chunk_obj_refcount objr;
+  chunk_refs_t objr;
   int ret = chunk_read_refcount(hctx, &objr);
   if (ret < 0) {
     CLS_LOG(1, "ERROR: failed to read attr\n");
@@ -178,7 +178,7 @@ static int chunk_put_ref(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  chunk_obj_refcount objr;
+  chunk_refs_t objr;
   int ret = chunk_read_refcount(hctx, &objr);
   if (ret < 0)
     return ret;

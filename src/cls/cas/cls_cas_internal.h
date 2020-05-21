@@ -11,9 +11,9 @@
 #include "common/Formatter.h"
 #include "common/hobject.h"
 
-#define CHUNK_REFCOUNT_ATTR "chunk_refcount"
+#define CHUNK_REFCOUNT_ATTR "chunk_refs"
 
-struct chunk_obj_refcount {
+struct chunk_refs_t {
   enum {
     TYPE_BY_OBJECT = 1,
     TYPE_BY_HASH = 2,
@@ -46,7 +46,7 @@ struct chunk_obj_refcount {
 
   std::unique_ptr<refs_t> r;
 
-  chunk_obj_refcount() {
+  chunk_refs_t() {
     clear();
   }
 
@@ -87,8 +87,8 @@ struct chunk_obj_refcount {
   void dump(Formatter *f) const {
     r->dump(f);
   }
-  static void generate_test_instances(std::list<chunk_obj_refcount*>& ls) {
-    ls.push_back(new chunk_obj_refcount());
+  static void generate_test_instances(std::list<chunk_refs_t*>& ls) {
+    ls.push_back(new chunk_refs_t());
   }
 };
-WRITE_CLASS_ENCODER(chunk_obj_refcount)
+WRITE_CLASS_ENCODER(chunk_refs_t)
