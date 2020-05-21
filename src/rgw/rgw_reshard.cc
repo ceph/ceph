@@ -696,14 +696,13 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   ret = update_num_shards(num_shards, dpp);
   if (ret < 0) {
-    return ret;
+    // shard state is uncertain, but this will attempt to remove them anyway
     goto error_out;
   }
 
   if (reshard_log) {
     ret = reshard_log->update(dpp, bucket_info);
     if (ret < 0) {
-      return ret;
       goto error_out;
     }
   }
@@ -734,7 +733,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
    // at this point since all we're using a best effort to remove old
    // shard objects
 
-   ret = store->svc()->bi->clean_index(dpp, bucket_info);
+   ret = store->svc()->bi->clean_index(dpp, bucket_info, std::nullopt);
    if (ret < 0) {
      lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up old shards; " <<
@@ -755,7 +754,7 @@ error_out:
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->svc()->bi->clean_index(dpp, bucket_info);
+  int ret2 = store->svc()->bi->clean_index(dpp, bucket_info, std::nullopt);
   if (ret2 < 0) {
     ldpp_dout(dpp, -1) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<
@@ -795,6 +794,11 @@ void RGWReshard::get_bucket_logshard_oid(const string& tenant, const string& buc
 
 int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
 {
+  if (!store->svc()->zone->can_reshard()) {
+    ldpp_dout(dpp, 20) << __func__ << " Resharding is disabled"  << dendl;
+    return 0;
+  }
+
   string logshard_oid;
 
   get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
