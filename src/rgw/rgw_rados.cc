@@ -2244,7 +2244,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 
       /* only remove it if it's a different bucket instance */
       if (orig_info.bucket.bucket_id != bucket.bucket_id) {
-	int r = svc.bi->clean_index(info);
+	int r = svc.bi->clean_index(info, std::nullopt);
         if (r < 0) {
 	  ldout(cct, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
 	}
@@ -2617,7 +2617,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
 }
 
 int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
-				int sid, const rgw::bucket_index_layout_generation& idx_layout,
+				int sid, const rgw::bucket_index_layout_generation& target_layout,
 				RGWBucketInfo* bucket_info_out)
 {
   bucket = _bucket;
@@ -2636,7 +2636,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
 
   string oid;
 
-  ret = store->svc.bi_rados->open_bucket_index_shard(*bucket_info_p, shard_id, idx_layout, &bucket_obj);
+  ret = store->svc.bi_rados->open_bucket_index_shard(*bucket_info_p, shard_id, target_layout, &bucket_obj);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
@@ -2664,12 +2664,12 @@ int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int sid)
+int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& target_layout, int sid)
 {
   bucket = bucket_info.bucket;
   shard_id = sid;
 
-  int ret = store->svc.bi_rados->open_bucket_index_shard(bucket_info, shard_id, idx_layout, &bucket_obj);
+  int ret = store->svc.bi_rados->open_bucket_index_shard(bucket_info, shard_id, target_layout, &bucket_obj);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
@@ -8085,7 +8085,8 @@ int RGWRados::bi_remove(BucketShard& bs)
 int RGWRados::bi_list(const RGWBucketInfo& bucket_info, int shard_id, const string& filter_obj, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
 {
   BucketShard bs(this);
-  int ret = bs.init(bucket_info.bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */);
+  const auto& current = bucket_info.layout.current_index;
+  int ret = bs.init(bucket_info.bucket, shard_id, current, nullptr /* no RGWBucketInfo */);
   if (ret < 0) {
     ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
@@ -8291,6 +8292,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     "[" << start_after.instance <<
     "]\", prefix=\"" << prefix <<
     "\" num_entries=" << num_entries <<
+    ", shard_id=" << shard_id <<
     ", list_versions=" << list_versions <<
     ", expansion_factor=" << expansion_factor << dendl;
 
@@ -8923,6 +8925,7 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, ve
   map<int, string> oids;
   map<int, struct rgw_cls_list_ret> list_results;
   int r = svc.bi_rados->open_bucket_index(bucket_info, shard_id, &index_pool, &oids, bucket_instance_ids);
+  ldout(cct, 20) << "open_bucket_index() run" << dendl;
   if (r < 0) {
     ldout(cct, 20) << "cls_bucket_head: open_bucket_index() returned "
                    << r << dendl;
@@ -8930,6 +8933,7 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, ve
   }
 
   r = CLSRGWIssueGetDirHeader(index_pool.ioctx(), oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
+  ldout(cct, 20) << "CLSRGWIssueGetDirHeader issued" << dendl;
   if (r < 0) {
     ldout(cct, 20) << "cls_bucket_head: CLSRGWIssueGetDirHeader() returned "
                    << r << dendl;
