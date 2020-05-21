@@ -19,4 +19,7 @@ tasks:
     extra_packages: ['librados2']
 - print: "**** done install mimic"
 - ceph:
+    conf:
+      global:
+        mon pg warn min per osd: 0
 - print: "**** done ceph"

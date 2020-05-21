@@ -16,6 +16,7 @@ tasks:
     conf:
       global:
         bluestore_warn_on_legacy_statfs: false
+        mon pg warn min per osd: 0
 - exec:
     osd.0:
       - ceph osd require-osd-release luminous
