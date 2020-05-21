@@ -121,13 +121,14 @@ inline bucket_log_layout_generation log_layout_from_index(
 }
 
 enum class BucketReshardState : uint8_t {
-  None,
-  InProgress,
+  NOT_RESHARDING,
+  IN_PROGRESS,
+  DONE,
 };
 
 // describes the layout of bucket index objects
 struct BucketLayout {
-  BucketReshardState resharding = BucketReshardState::None;
+  BucketReshardState resharding = BucketReshardState::NOT_RESHARDING;
 
   // current bucket index layout
   bucket_index_layout_generation current_index;
