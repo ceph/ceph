@@ -120,8 +120,7 @@ public:
   }
 
   int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
-  int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
-
+  int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, std::optional<uint64_t> gen);
 
   /* RADOS specific */
 
