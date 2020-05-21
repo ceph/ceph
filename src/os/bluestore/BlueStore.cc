@@ -3926,6 +3926,7 @@ void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
 
   for (auto i : store->onode_cache_shards) {
     i->set_max(max_shard_onodes);
+    i->trim();
   }
   for (auto i : store->buffer_cache_shards) {
     i->set_max(max_shard_buffer);
