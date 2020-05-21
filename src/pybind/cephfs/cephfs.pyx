@@ -252,6 +252,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     uint32_t ceph_get_cap_return_timeout(ceph_mount_info *cmount)
     void ceph_set_uuid(ceph_mount_info *cmount, const char *uuid)
     void ceph_set_session_timeout(ceph_mount_info *cmount, unsigned timeout)
+    int ceph_get_file_layout(ceph_mount_info *cmount, int fh, int *stripe_unit, int *stripe_count, int *object_size, int *pg_pool)
+    int ceph_get_file_pool_name(ceph_mount_info *cmount, int fh, char *buf, size_t buflen)
+    int ceph_get_default_data_pool_name(ceph_mount_info *cmount, char *buf, size_t buflen)
 
 
 class Error(Exception):
@@ -2586,3 +2589,81 @@ cdef class LibCephFS(object):
 
         with nogil:
             ceph_set_session_timeout(self.cluster, _timeout)
+
+    def get_layout(self, fd):
+        """
+        Set ceph client session timeout. Must be called before mount.
+
+        :param fd: file descriptor of the file/directory for which to get the layout
+        """
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+
+        cdef:
+            int _fd = fd
+            int stripe_unit
+            int stripe_count
+            int object_size
+            int pool_id
+            char *buf = NULL
+            int buflen = 256
+            dict_result = dict()
+
+        with nogil:
+            ret = ceph_get_file_layout(self.cluster, _fd, &stripe_unit, &stripe_count, &object_size, &pool_id)
+        if ret < 0:
+            raise make_ex(stripe_unit, "error in get_file_layout")
+        dict_result["stripe_unit"] = stripe_unit
+        dict_result["stripe_count"] = stripe_count
+        dict_result["object_size"] = object_size
+        dict_result["pool_id"] = pool_id
+
+        try:
+            while True:
+                buf = <char *>realloc_chk(buf, buflen)
+                with nogil:
+                    ret = ceph_get_file_pool_name(self.cluster, _fd, buf, buflen)
+                if ret > 0:
+                    dict_result["pool_name"] = decode_cstr(buf)
+                    return dict_result
+                elif ret == -errno.ERANGE:
+                    buflen = buflen * 2
+                else:
+                    raise make_ex(ret, "error in get_file_pool_name")
+        finally:
+           free(buf)
+
+
+    def get_default_pool(self):
+        """
+        Get the default pool name and id of cephfs. This returns dict{pool_name, pool_id}.
+        """
+
+        cdef:
+            char *buf = NULL
+            int buflen = 256
+            dict_result = dict()
+
+        try:
+            while True:
+                buf = <char *>realloc_chk(buf, buflen)
+                with nogil:
+                    ret = ceph_get_default_data_pool_name(self.cluster, buf, buflen)
+                if ret > 0:
+                    dict_result["pool_name"] = decode_cstr(buf)
+                    break
+                elif ret == -errno.ERANGE:
+                    buflen = buflen * 2
+                else:
+                    raise make_ex(ret, "error in get_default_data_pool_name")
+
+            with nogil:
+                ret = ceph_get_pool_id(self.cluster, buf)
+            if ret < 0:
+                raise make_ex(ret, "error in get_pool_id")
+            dict_result["pool_id"] = ret
+            return dict_result
+
+        finally:
+           free(buf)

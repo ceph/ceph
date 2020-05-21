@@ -721,3 +721,35 @@ def test_fsetattrx():
     assert_equal(10, st1["size"])
     cephfs.close(fd)
     cephfs.unlink(b'file-fsetattrx')
+
+@with_setup(setup_test)
+def test_get_layout():
+    fd = cephfs.open(b'file-get-layout', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    assert_raises(TypeError, cephfs.get_layout, "fd")
+    l_dict = cephfs.get_layout(fd)
+    assert('stripe_unit' in l_dict.keys())
+    assert('stripe_count' in l_dict.keys())
+    assert('object_size' in l_dict.keys())
+    assert('pool_id' in l_dict.keys())
+    assert('pool_name' in l_dict.keys())
+
+    cephfs.close(fd)
+    cephfs.unlink(b'file-get-layout')
+
+@with_setup(setup_test)
+def test_get_default_pool():
+    dp_dict = cephfs.get_default_pool()
+    assert('pool_id' in dp_dict.keys())
+    assert('pool_name' in dp_dict.keys())
+
+@with_setup(setup_test)
+def test_get_pool():
+    dp_dict = cephfs.get_default_pool()
+    assert('pool_id' in dp_dict.keys())
+    assert('pool_name' in dp_dict.keys())
+    assert_equal(cephfs.get_pool_id(dp_dict["pool_name"]), dp_dict["pool_id"])
+    get_rep_cnt_cmd = "ceph osd pool get " + dp_dict["pool_name"] + " size"
+    s=os.popen(get_rep_cnt_cmd).read().strip('\n')
+    size=int(s.split(" ")[-1])
+    assert_equal(cephfs.get_pool_replication(dp_dict["pool_id"]), size)
