@@ -219,7 +219,7 @@ static int references_chunk(cls_method_context_t hctx,
   if (ret) {
     return 0;
   }
-  return -ENOENT;
+  return -ENOLINK;
 }
 
 CLS_INIT(cas)
