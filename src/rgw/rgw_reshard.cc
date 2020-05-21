@@ -901,11 +901,6 @@ void RGWReshard::get_bucket_logshard_oid(const string& tenant, const string& buc
 
 int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
 {
-  if (!store->svc()->zone->can_reshard()) {
-    ldpp_dout(dpp, 20) << __func__ << " Resharding is disabled"  << dendl;
-    return 0;
-  }
-
   string logshard_oid;
 
   get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
