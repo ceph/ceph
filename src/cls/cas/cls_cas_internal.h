@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "boost/variant.hpp"
 
 #include "include/stringify.h"
@@ -19,6 +21,15 @@ struct chunk_obj_refcount {
     TYPE_BY_POOL = 4,
     TYPE_COUNT = 5,
   };
+  static const char *type_name(int t) {
+    switch (t) {
+    case TYPE_BY_OBJECT: return "by_object";
+    case TYPE_BY_HASH: return "by_hash";
+    case TYPE_BY_POOL: return "by_pool";
+    case TYPE_COUNT: return "count";
+    default: return "???";
+    }
+  }
 
   struct refs_t {
     virtual ~refs_t() {}
@@ -28,6 +39,9 @@ struct chunk_obj_refcount {
     virtual bool get(const hobject_t& o) = 0;
     virtual bool put(const hobject_t& o) = 0;
     virtual void dump(Formatter *f) const = 0;
+    virtual std::string describe_encoding() const {
+      return type_name(get_type());
+    }
   };
 
   std::unique_ptr<refs_t> r;
@@ -40,6 +54,9 @@ struct chunk_obj_refcount {
 
   int get_type() const {
     return r->get_type();
+  }
+  std::string describe_encoding() const {
+    return r->describe_encoding();
   }
 
   bool empty() const {
