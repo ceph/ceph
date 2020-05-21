@@ -1370,6 +1370,19 @@ private:
   StrayManager stray_manager;
 
  private:
+  enum dirfrag_killpoint : std::int8_t {
+    FRAGMENT_FREEZE = 1,
+    FRAGMENT_HANDLE_NOTIFY,
+    FRAGMENT_HANDLE_NOTIFY_POSTACK,
+    FRAGMENT_STORED_POST_NOTIFY,
+    FRAGMENT_STORED_POST_JOURNAL,
+    FRAGMENT_HANDLE_NOTIFY_ACK,
+    FRAGMENT_MAYBE_FINISH,
+    FRAGMENT_LOGGED,
+    FRAGMENT_COMMITTED,
+    FRAGMENT_OLD_PURGED,
+  };
+
   std::set<inodeno_t> replay_taken_inos; // the inos have been taken when replaying
 
   // -- fragmenting --
@@ -1499,6 +1512,7 @@ private:
 
   // Stores the symlink target on the file object's head
   bool symlink_recovery;
+  enum dirfrag_killpoint kill_dirfrag_at;
 
   // File size recovery
   RecoveryQueue recovery_queue;
