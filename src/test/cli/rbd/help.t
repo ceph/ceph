@@ -52,6 +52,7 @@
       group snap remove (... rm)        Remove a snapshot from a group.
       group snap rename                 Rename group's snapshot.
       group snap rollback               Rollback group to snapshot.
+      image-cache show                  Show image cache config
       image-meta get                    Image metadata get the value associated
                                         with the key.
       image-meta list (image-meta ls)   Image metadata list keys with values.
@@ -1024,6 +1025,26 @@
     --namespace arg      namespace name
     --group arg          group name
     --snap arg           snapshot name
+  
+  rbd help image-cache show
+  usage: rbd image-cache show [--pool <pool>] [--namespace <namespace>] 
+                              [--image <image>] [--image-id <image-id>] 
+                              [--format <format>] [--pretty-format] 
+                              <image-spec> 
+  
+  Show image cache config
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --image-id arg       image id
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--namespace <namespace>] 
