@@ -2930,7 +2930,7 @@ int check_reshard_bucket_params(rgw::sal::RadosStore* store,
     return ret;
   }
 
-  if ((*bucket)->get_info().reshard_status != cls_rgw_reshard_status::NOT_RESHARDING) {
+  if ((*bucket)->get_info().layout.resharding != rgw::BucketReshardState::None) {
     // if in_progress or done then we have an old BucketInfo
     cerr << "ERROR: the bucket is currently undergoing resharding and "
       "cannot be added to the reshard list at this time" << std::endl;
@@ -7248,7 +7248,8 @@ next:
       max_entries = 1000;
     }
 
-    int max_shards = (bucket->get_info().layout.current_index.layout.normal.num_shards > 0 ? bucket->get_info().layout.current_index.layout.normal.num_shards : 1);
+    const auto& index = bucket->get_info().layout.current_index;
+    int max_shards = index.layout.normal.num_shards;
 
     formatter->open_array_section("entries");
 
@@ -7256,8 +7257,7 @@ next:
     for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(store)->getRados());
       int shard_id = (bucket->get_info().layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-
-      int ret = bs.init(bucket->get_key(), shard_id, bucket->get_info().layout.current_index, nullptr /* no RGWBucketInfo */, dpp());
+      int ret = bs.init(bucket->get_key(), shard_id, index, nullptr /* no RGWBucketInfo */, dpp());
       marker.clear();
 
       if (ret < 0) {
@@ -7316,9 +7316,23 @@ next:
       return EINVAL;
     }
 
-    ret = bucket->purge_instance(dpp());
-    if (ret < 0) {
-      return -ret;
+    const auto& index = bucket->get_info().layout.current_index;
+    int max_shards = index.layout.normal.num_shards;
+
+    for (int i = 0; i < max_shards; i++) {
+      RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(store)->getRados());
+      int shard_id = (bucket->get_info().layout.current_index.layout.normal.num_shards > 0  ? i : -1);
+      int ret = bs.init(bucket->get_key(), shard_id, index, nullptr /* no RGWBucketInfo */, dpp());
+      if (ret < 0) {
+        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i << "): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      ret = static_cast<rgw::sal::RadosStore*>(store)->getRados()->bi_remove(dpp(), bs);
+      if (ret < 0) {
+        cerr << "ERROR: failed to remove bucket index object: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 
