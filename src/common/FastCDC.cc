@@ -7,17 +7,32 @@
 #include "rabin.h"
 
 
-// if we are close to the target, use the target mask.  if we are very
-// small or very large, use an adjusted mask.  this tries to keep /most/
-// cut points using the same mask.
+// Unlike FastCDC describe in the paper, if we are close to the
+// target, use the target mask.  If we are very small or very large,
+// use an adjusted mask--like the paper.  This tries to keep more
+// cut points using the same mask, and fewer using the small or large
+// masks.
 
-//  how many bits to set/clear in the small/large masks
+// How many more/fewer bits to set in the small/large masks.
+//
+// This is the "normalization level" or "NC level" in the FastCDC
+// paper.
 #define TARGET_WINDOW_MASK_BITS  2
 
-//  how big the 'target window' is (in which we use the target mask)
+// How big the 'target window' is (in which we use the target mask).
+//
+// In the FastCDC paper, this is always 0: there is not "target
+// window," and either small_mask (maskS) or large_mask (maskL) is
+// used--never target_mask (maskA).
 #define TARGET_WINDOW_BITS       1
 
-//  hard limits on size
+// How many bits larger/smaller than target for hard limits on chunk
+// size.
+//
+// We assume the min and max sizes are always this many bits
+// larger/smaller than the target.  (Note that the FastCDC paper 8KB
+// example has a min of 2KB (2 bits smaller) and max of 64 KB (3 bits
+// larger), although it is not clear why they chose those values.)
 #define SIZE_WINDOW_BITS         2
 
 void FastCDC::_setup(int target, int size_window_bits)
