@@ -83,6 +83,7 @@ public:
       "BackfillRecovery::PGPipeline::process"
     };
     friend class BackfillRecovery;
+    friend class PeeringEvent;
   };
 
   template <class EventT>
@@ -91,6 +92,8 @@ public:
     ShardServices &ss,
     epoch_t epoch_started,
     const EventT& evt);
+
+  static BackfillRecoveryPipeline &bp(PG &pg);
 };
 
 template <class EventT>

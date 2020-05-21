@@ -108,6 +108,11 @@ seastar::future<bool> PglogBasedRecovery::do_recovery()
       crimson::common::local_conf()->osd_recovery_max_single_start));
 }
 
+BackfillRecovery::BackfillRecoveryPipeline &BackfillRecovery::bp(PG &pg)
+{
+  return pg.backfill_pipeline;
+}
+
 seastar::future<bool> BackfillRecovery::do_recovery()
 {
   logger().debug("{}", __func__);
@@ -122,7 +127,8 @@ seastar::future<bool> BackfillRecovery::do_recovery()
     // process_event() of our boost::statechart machine is non-reentrant.
     // with the backfill_pipeline we protect it from a second entry from
     // the implementation of BackfillListener.
-    handle.enter(pg->backfill_pipeline.process)
+    // additionally, this stage serves to synchronize with PeeringEvent.
+    handle.enter(bp(*pg).process)
   ).then([this] {
     pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
     return seastar::make_ready_future<bool>(false);

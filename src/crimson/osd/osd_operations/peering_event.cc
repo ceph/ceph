@@ -77,6 +77,11 @@ seastar::future<> PeeringEvent::start()
       }).then([this, pg](auto) {
 	return with_blocking_future(handle.enter(pp(*pg).process));
       }).then([this, pg] {
+        // TODO: likely we should synchronize also with the pg log-based
+        // recovery.
+	return with_blocking_future(
+          handle.enter(BackfillRecovery::bp(*pg).process));
+      }).then([this, pg] {
 	pg->do_peering_event(evt, ctx);
 	handle.exit();
 	return complete_rctx(pg);
