@@ -54,6 +54,7 @@ WRITE_CLASS_ENCODER(refs_by_object)
 
 struct refs_by_hash : public chunk_obj_refcount::refs_t {
   uint64_t total = 0;
+  uint32_t hash_bits = 32;          ///< how many bits of mask to encode
   std::map<std::pair<int64_t,uint32_t>,uint64_t> by_hash;
 
   refs_by_hash() {}
@@ -62,6 +63,31 @@ struct refs_by_hash : public chunk_obj_refcount::refs_t {
     for (auto& i : o->by_object) {
       by_hash[make_pair(i.pool, i.get_hash())]++;
     }
+  }
+
+  std::string describe_encoding() const {
+    return "by_hash("s + stringify(hash_bits) + " bits)"s;
+  }
+
+  uint32_t mask() {
+    // with the hobject_t reverse-bitwise sort, the least significant
+    // hash values are actually the most significant, so preserve them
+    // as we lose resolution.
+    return 0xffffffff >> (32 - hash_bits);
+  }
+
+  bool shrink() {
+    if (hash_bits <= 1) {
+      return false;
+    }
+    hash_bits--;
+    std::map<std::pair<int64_t,uint32_t>,uint64_t> old;
+    old.swap(by_hash);
+    auto m = mask();
+    for (auto& i : old) {
+      by_hash[make_pair(i.first.first, i.first.second & m)] = i.second;
+    }
+    return true;
   }
 
   uint8_t get_type() const {
@@ -74,12 +100,12 @@ struct refs_by_hash : public chunk_obj_refcount::refs_t {
     return total;
   }
   bool get(const hobject_t& o) override {
-    by_hash[make_pair(o.pool, o.get_hash())]++;
+    by_hash[make_pair(o.pool, o.get_hash() & mask())]++;
     ++total;
     return true;
   }
   bool put(const hobject_t& o) override {
-    auto p = by_hash.find(make_pair(o.pool, o.get_hash()));
+    auto p = by_hash.find(make_pair(o.pool, o.get_hash() & mask()));
     if (p == by_hash.end()) {
       return false;
     }
@@ -96,10 +122,13 @@ struct refs_by_hash : public chunk_obj_refcount::refs_t {
   void encode(::ceph::buffer::list::contiguous_appender& p) const {
     DENC_START(1, 1, p);
     denc_varint(total, p);
+    denc_varint(hash_bits, p);
     denc_varint(by_hash.size(), p);
+    int hash_bytes = (hash_bits + 7) / 8;
     for (auto& i : by_hash) {
       denc_signed_varint(i.first.first, p);
-      denc(i.first.second, p);
+      // this may write some bytes past where we move cursor too; harmless!
+      *(__le32*)p.get_pos_add(hash_bytes) = i.first.second;
       denc_varint(i.second, p);
     }
     DENC_FINISH(p);
@@ -107,22 +136,25 @@ struct refs_by_hash : public chunk_obj_refcount::refs_t {
   void decode(::ceph::buffer::ptr::const_iterator& p) {
     DENC_START(1, 1, p);
     denc_varint(total, p);
+    denc_varint(hash_bits, p);
     uint64_t n;
     denc_varint(n, p);
+    int hash_bytes = (hash_bits + 7) / 8;
     while (n--) {
       int64_t poolid;
-      uint32_t hash;
+      __le32 hash;
       uint64_t count;
       denc_signed_varint(poolid, p);
-      denc(hash, p);
+      memcpy(&hash, p.get_pos_add(hash_bytes), hash_bytes);
       denc_varint(count, p);
-      by_hash[make_pair(poolid, hash)] = count;
+      by_hash[make_pair(poolid, (uint32_t)hash)] = count;
     }
     DENC_FINISH(p);
   }
   void dump(Formatter *f) const override {
     f->dump_string("type", "by_hash");
     f->dump_unsigned("count", total);
+    f->dump_unsigned("hash_bits", hash_bits);
     f->open_array_section("refs");
     for (auto& i : by_hash) {
       f->open_object_section("hash");
@@ -313,16 +345,17 @@ void chunk_obj_refcount::dynamic_encode(ceph::buffer::list& bl, size_t max)
     std::unique_ptr<refs_t> n;
     switch (r->get_type()) {
     case TYPE_BY_OBJECT:
-      n.reset(new refs_by_hash(static_cast<refs_by_object*>(r.get())));
+      r.reset(new refs_by_hash(static_cast<refs_by_object*>(r.get())));
       break;
     case TYPE_BY_HASH:
-      n.reset(new refs_by_pool(static_cast<refs_by_hash*>(r.get())));
+      if (!static_cast<refs_by_hash*>(r.get())->shrink()) {
+	r.reset(new refs_by_pool(static_cast<refs_by_hash*>(r.get())));
+      }
       break;
     case TYPE_BY_POOL:
-      n.reset(new refs_count(r.get()));
+      r.reset(new refs_count(r.get()));
       break;
     }
-    r.swap(n);
     t.clear();
   }
   _encode_final(bl, t);
