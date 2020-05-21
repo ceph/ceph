@@ -765,7 +765,6 @@ struct cls_rgw_bucket_instance_entry {
 
   void clear() {
     reshard_status = RESHARD_STATUS::NOT_RESHARDING;
-    //bucket_instance_id.clear();
   }
 
   void set_status(const std::string& instance_id,

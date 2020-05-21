@@ -676,14 +676,13 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   ret = update_num_shards(num_shards); //modifies existing bucket
   if (ret < 0) {
-    return ret;
+    // shard state is uncertain, but this will attempt to remove them anyway
     goto error_out;
   }
 
   if (reshard_log) {
     ret = reshard_log->update(bucket_info);
     if (ret < 0) {
-      return ret;
       goto error_out;
     }
   }
@@ -775,6 +774,10 @@ void RGWReshard::get_bucket_logshard_oid(const string& tenant, const string& buc
 
 int RGWReshard::add(cls_rgw_reshard_entry& entry)
 {
+  if (!store->svc()->zone->can_reshard()) {
+    ldout(store->ctx(), 20) << __func__ << " Resharding is disabled"  << dendl;
+    return 0;
+  }
 
   string logshard_oid;
 
