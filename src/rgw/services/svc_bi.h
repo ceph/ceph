@@ -30,7 +30,7 @@ public:
   virtual ~RGWSI_BucketIndex() {}
 
   virtual int init_index(RGWBucketInfo& bucket_info) = 0;
-  virtual int clean_index(RGWBucketInfo& bucket_info) = 0;
+  virtual int clean_index(RGWBucketInfo& bucket_info, std::optional<uint64_t> gen) = 0;
 
   virtual int read_stats(const RGWBucketInfo& bucket_info,
                          RGWBucketEnt *stats,
