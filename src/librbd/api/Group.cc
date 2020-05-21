@@ -11,6 +11,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/internal.h"
 #include "librbd/io/AioCompletion.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -438,6 +439,53 @@ finish:
   return ret_code;
 }
 
+template <typename I>
+void notify_unquiesce(std::vector<I*> &ictxs,
+                      const std::vector<uint64_t> &requests) {
+  ceph_assert(requests.size() == ictxs.size());
+  int image_count = ictxs.size();
+  std::vector<C_SaferCond> on_finishes(image_count);
+
+  for (int i = 0; i < image_count; ++i) {
+    ImageCtx *ictx = ictxs[i];
+
+    ictx->image_watcher->notify_unquiesce(requests[i], &on_finishes[i]);
+  }
+
+  for (int i = 0; i < image_count; ++i) {
+    on_finishes[i].wait();
+  }
+}
+
+template <typename I>
+int notify_quiesce(std::vector<I*> &ictxs, ProgressContext &prog_ctx,
+                   std::vector<uint64_t> *requests) {
+  int image_count = ictxs.size();
+  std::vector<C_SaferCond> on_finishes(image_count);
+
+  requests->resize(image_count);
+  for (int i = 0; i < image_count; ++i) {
+    auto ictx = ictxs[i];
+
+    (*requests)[i] = ictx->image_watcher->notify_quiesce(prog_ctx,
+                                                         &on_finishes[i]);
+  }
+
+  int ret_code = 0;
+  for (int i = 0; i < image_count; ++i) {
+    int r = on_finishes[i].wait();
+    if (r < 0) {
+      ret_code = r;
+    }
+  }
+
+  if (ret_code != 0) {
+    notify_unquiesce(ictxs, *requests);
+  }
+
+  return ret_code;
+}
+
 } // anonymous namespace
 
 template <typename I>
@@ -843,6 +891,8 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 
   std::vector<librbd::ImageCtx*> ictxs;
   std::vector<C_SaferCond*> on_finishes;
+  std::vector<uint64_t> quiesce_requests;
+  NoOpProgressContext prog_ctx;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
@@ -931,6 +981,13 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   if (ret_code != 0) {
     goto remove_record;
   }
+
+  ldout(cct, 20) << "Sending quiesce notification" << dendl;
+  ret_code = notify_quiesce(ictxs, prog_ctx, &quiesce_requests);
+  if (ret_code != 0) {
+    goto remove_record;
+  }
+
   ldout(cct, 20) << "Requesting exclusive locks for images" << dendl;
 
   for (auto ictx: ictxs) {
@@ -962,6 +1019,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     }
   }
   if (ret_code != 0) {
+    notify_unquiesce(ictxs, quiesce_requests);
     goto remove_record;
   }
 
@@ -973,7 +1031,10 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 
     C_SaferCond* on_finish = new C_SaferCond;
 
-    ictx->operations->snap_create(ne, ind_snap_name.c_str(), on_finish);
+    std::shared_lock owner_locker{ictx->owner_lock};
+    ictx->operations->execute_snap_create(
+        ne, ind_snap_name.c_str(), on_finish, 0,
+        SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE, prog_ctx);
 
     on_finishes[i] = on_finish;
   }
@@ -1013,9 +1074,13 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     goto remove_image_snaps;
   }
 
+  ldout(cct, 20) << "Sending unquiesce notification" << dendl;
+  notify_unquiesce(ictxs, quiesce_requests);
+
   goto finish;
 
 remove_image_snaps:
+  notify_unquiesce(ictxs, quiesce_requests);
 
   for (int i = 0; i < image_count; ++i) {
     ImageCtx *ictx = ictxs[i];
