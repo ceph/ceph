@@ -22,6 +22,9 @@ class TestExiter(object):
             wraps=os.kill,
         )
 
+        #Keep a copy of the unpatched kill and call this in place of os.kill
+        #In the Exiter objects, the os.kill calls are patched.
+        #So the call_count should be 1.
         self.kill_unpatched = os.kill
         self.m_kill = self.patcher_kill.start()
 
