@@ -3216,7 +3216,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
   {
     bufferlist t;
     cache_ioctx.getxattr("bar", CHUNK_REFCOUNT_ATTR, t);
-    chunk_obj_refcount refs;
+    chunk_refs_t refs;
     try {
       auto iter = t.cbegin();
       decode(refs, iter);
@@ -3229,7 +3229,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
   {
     bufferlist t;
     cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
-    chunk_obj_refcount refs;
+    chunk_refs_t refs;
     try {
       auto iter = t.cbegin();
       decode(refs, iter);
@@ -3306,7 +3306,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   {
     bufferlist t;
     cache_ioctx.getxattr("bar", CHUNK_REFCOUNT_ATTR, t);
-    chunk_obj_refcount refs;
+    chunk_refs_t refs;
     try {
       auto iter = t.cbegin();
       decode(refs, iter);
@@ -3319,7 +3319,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   {
     bufferlist t;
     cache_ioctx.getxattr("bar-chunk", CHUNK_REFCOUNT_ATTR, t);
-    chunk_obj_refcount refs;
+    chunk_refs_t refs;
     try {
       auto iter = t.cbegin();
       decode(refs, iter);
@@ -3499,7 +3499,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
     sha1_gen.Final(fingerprint);
     buf_to_hex(fingerprint, CEPH_CRYPTO_SHA1_DIGESTSIZE, p_str);
     cache_ioctx.getxattr(p_str, CHUNK_REFCOUNT_ATTR, t);
-    chunk_obj_refcount refs;
+    chunk_refs_t refs;
     try {
       auto iter = t.cbegin();
       decode(refs, iter);
