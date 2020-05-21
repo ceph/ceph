@@ -73,19 +73,20 @@ void decode(bucket_index_layout_generation& l, bufferlist::const_iterator& bl);
 
 
 enum class BucketReshardState : uint8_t {
-  None,
-  InProgress,
+  NOT_RESHARDING,
+  IN_PROGRESS,
+  DONE,
 };
 
 // describes the layout of bucket index objects
 struct BucketLayout {
-  BucketReshardState resharding = BucketReshardState::None;
+  BucketReshardState resharding = BucketReshardState::NOT_RESHARDING;
 
   // current bucket index layout
   bucket_index_layout_generation current_index;
 
   // target index layout of a resharding operation
-  std::optional<bucket_index_layout_generation> target_index;
+  bucket_index_layout_generation target_index;
 };
 
 void encode(const BucketLayout& l, bufferlist& bl, uint64_t f=0);
