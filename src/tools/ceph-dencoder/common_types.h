@@ -67,7 +67,7 @@ TYPE(cls_cas_chunk_get_ref_op)
 TYPE(cls_cas_chunk_put_ref_op)
 
 #include "cls/cas/cls_cas_internal.h"
-TYPE(chunk_obj_refcount)
+TYPE(chunk_refs_t)
 
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)

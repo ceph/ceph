@@ -430,7 +430,7 @@ void ChunkScrub::chunk_scrub_common()
       }
       auto oid = i.oid;
       cout << oid << std::endl;
-      chunk_obj_refcount refs;
+      chunk_refs_t refs;
       {
 	bufferlist t;
 	ret = chunk_io_ctx.getxattr(oid, CHUNK_REFCOUNT_ATTR, t);
@@ -442,14 +442,14 @@ void ChunkScrub::chunk_scrub_common()
       }
 
       examined_objects++;
-      if (refs.get_type() != chunk_obj_refcount::TYPE_BY_OBJECT) {
+      if (refs.get_type() != chunk_refs_t::TYPE_BY_OBJECT) {
 	// we can't do anything here
 	continue;
       }
 
       // check all objects
-      chunk_obj_refcount::refs_by_object *byo =
-	static_cast<chunk_obj_refcount::refs_by_object*>(refs.r.get());
+      chunk_refs_t::refs_by_object *byo =
+	static_cast<chunk_refs_t::refs_by_object*>(refs.r.get());
       set<hobject_t> real_refs;
 
       uint64_t pool_missing = 0;
@@ -824,7 +824,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     if (ret < 0) {
       return ret;
     }
-    chunk_obj_refcount refs;
+    chunk_refs_t refs;
     auto p = t.cbegin();
     decode(refs, p);
     auto f = Formatter::create("json-pretty");
