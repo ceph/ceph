@@ -94,8 +94,7 @@ public:
   }
 
   int init_index(RGWBucketInfo& bucket_info);
-  int clean_index(RGWBucketInfo& bucket_info);
-
+  int clean_index(RGWBucketInfo& bucket_info, std::optional<uint64_t> gen);
 
   /* RADOS specific */
 
