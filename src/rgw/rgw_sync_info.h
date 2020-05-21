@@ -72,6 +72,10 @@ public:
   virtual int handle_entry(const stage_id_t& sid,
                            Entry& entry,
                            std::function<int(EntryInfoBase&)> f) = 0;
+
+  virtual int trim(const stage_id_t& sid,
+                   int shard_id,
+                   const std::string& marker) = 0;
 };
 
 class SIProviderCommon : public virtual SIProvider
@@ -98,6 +102,7 @@ protected:
   virtual int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int do_get_start_marker(int shard_id, std::string *marker) const = 0;
   virtual int do_get_cur_state(int shard_id, std::string *marker) const = 0;
+  virtual int do_trim(int shard_id, const std::string& marker) = 0;
 public:
   SIProvider_SingleStage(CephContext *_cct,
                          const std::string& name,
@@ -130,6 +135,8 @@ public:
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker) const override;
   int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker) const override;
+
+  int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
 using SIProviderRef = std::shared_ptr<SIProvider>;
@@ -168,6 +175,8 @@ public:
   int handle_entry(const stage_id_t& sid,
                    Entry& entry,
                    std::function<int(EntryInfoBase&)> f) override;
+
+  int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
 template <class T>

@@ -814,6 +814,7 @@ enum class OPT {
   SCRIPT_PACKAGE_LIST
   SI_PROVIDER_LIST,
   SI_PROVIDER_FETCH,
+  SI_PROVIDER_TRIM,
 };
 
 }
@@ -1045,6 +1046,7 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
   { "si provider list", OPT::SI_PROVIDER_LIST },
   { "si provider fetch", OPT::SI_PROVIDER_FETCH },
+  { "si provider trim", OPT::SI_PROVIDER_TRIM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -10162,6 +10164,25 @@ next:
      }
    }
    formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT::SI_PROVIDER_TRIM) {
+   if (!opt_sip) {
+     cerr << "ERROR: --sip not specified" << std::endl;
+     return EINVAL;
+   }
+   auto provider = store->ctl()->si.mgr->find_sip(*opt_sip, opt_sip_instance);
+   if (!provider) {
+     cerr << "ERROR: sync info provider not found" << std::endl;
+     return ENOENT;
+   }
+
+   auto stage_id = opt_stage_id.value_or(provider->get_first_stage());
+   int r = provider->trim(stage_id, shard_id, marker);
+   if (r < 0) {
+     cerr << "ERROR: failed to trim sync info provider: " << cpp_strerror(-r) << std::endl;
+     return -r;
+   }
  }
 
   return 0;

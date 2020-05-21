@@ -66,6 +66,11 @@ protected:
     return 0;
   }
 
+
+  int do_trim(int shard_id, const std::string& marker) override {
+    return 0;
+  }
+
 public:
   SIProvider_MetaFull(CephContext *_cct,
                       RGWMetadataManager *meta_mgr) : SIProvider_SingleStage(_cct,
@@ -107,6 +112,8 @@ protected:
 
   int do_get_start_marker(int shard_id, std::string *marker) const override;
   int do_get_cur_state(int shard_id, std::string *marker) const;
+
+  int do_trim( int shard_id, const std::string& marker) override;
 public:
   SIProvider_MetaInc(CephContext *_cct,
                      RGWSI_MDLog *_mdlog,

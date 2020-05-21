@@ -41,8 +41,8 @@ public:
   int log_trim(const DoutPrefixProvider *dpp,
                const RGWBucketInfo& bucket_info,
                int shard_id,
-               std::string& start_marker,
-               std::string& end_marker);
+               const std::string& start_marker,
+               const std::string& end_marker);
   int log_list(const DoutPrefixProvider *dpp,
                const RGWBucketInfo& bucket_info,
                int shard_id,

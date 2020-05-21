@@ -29,6 +29,14 @@ int SIProvider_SingleStage::get_cur_state(const stage_id_t& sid, int shard_id, s
   return do_get_cur_state(shard_id, marker);
 }
 
+int SIProvider_SingleStage::trim(const stage_id_t& sid, int shard_id, const std::string& marker)
+{
+  if (sid != stage_info.sid) {
+    return -ERANGE;
+  }
+  return do_trim(shard_id, marker);
+}
+
 SIProvider_Container::SIProvider_Container(CephContext *_cct,
                                            const std::string& _name,
                                            std::vector<SIProviderRef>& _providers) : SIProviderCommon(_cct, _name),
@@ -225,6 +233,19 @@ int SIProvider_Container::handle_entry(const stage_id_t& sid,
   }
 
   return provider->handle_entry(psid, entry, f);
+}
+
+int SIProvider_Container::trim(const stage_id_t& sid, int shard_id, const std::string& marker)
+{
+  SIProviderRef provider;
+  stage_id_t psid;
+
+  if (!decode_sid(sid,  &provider, &psid)) {
+    ldout(cct, 20) << __func__ << "() can't decode sid: " << dendl;
+    return -ENOENT;
+  }
+
+  return provider->trim(psid, shard_id, marker);
 }
 
 int SIProviderClient::init_markers()

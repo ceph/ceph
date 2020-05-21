@@ -197,6 +197,18 @@ int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker) co
   return 0;
 }
 
+int SIProvider_BucketInc::do_trim( int shard_id, const std::string& marker)
+{
+  int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
+
+  int ret = store->svc()->bilog_rados->log_trim(bucket_info, sid, string(), marker);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << ": log_trim() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " marker=" << marker << " returned ret=" << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+
 SIProviderRef RGWSIPGen_BucketInc::get(std::optional<std::string> instance)
 {
   if (!instance) {

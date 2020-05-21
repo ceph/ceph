@@ -260,3 +260,20 @@ int SIProvider_MetaInc::do_get_cur_state(int shard_id, std::string *marker) cons
 #warning FIXME
   return 0;
 }
+
+int SIProvider_MetaInc::do_trim(int shard_id, const std::string& marker)
+{
+  utime_t start_time, end_time;
+  int ret;
+  // trim until -ENODATA
+  do {
+    ret = meta_log->trim(shard_id, start_time.to_real_time(),
+                         end_time.to_real_time(), string(), marker);
+  } while (ret == 0);
+  if (ret < 0 && ret != -ENODATA) {
+    ldout(cct, 20) << "ERROR: meta_log->trim(): returned ret=" << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+

@@ -56,6 +56,10 @@ protected:
     return 0;
   }
 
+  int do_trim( int shard_id, const std::string& marker) override {
+    return 0;
+  }
+
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo bucket_info;
 
@@ -108,6 +112,8 @@ protected:
   }
 
   int do_get_cur_state(int shard_id, std::string *marker) const override;
+
+  int do_trim( int shard_id, const std::string& marker) override;
 
   rgw::sal::RGWRadosStore *store;
 
