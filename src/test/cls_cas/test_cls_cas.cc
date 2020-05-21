@@ -299,9 +299,11 @@ static int count_bits(unsigned long n)
 TEST(chunk_obj_refcount, size)
 {
   chunk_obj_refcount r;
+  size_t poolmask = 0xf0f0f0;
   size_t max = 1048576;
   for (size_t i = 0; i < max; ++i) {
-    hobject_t h(sobject_t(object_t("foo"s + stringify(i)), 1));
+    hobject_t h(sobject_t(object_t("foo"s + stringify(i)), i));
+    h.pool = i & poolmask;
     bool ret = r.get(h);
     ASSERT_TRUE(ret);
     if (count_bits(i) <= 2) {
@@ -315,6 +317,7 @@ TEST(chunk_obj_refcount, size)
   ASSERT_EQ(max, r.count());
   for (size_t i = 0; i < max; ++i) {
     hobject_t h(sobject_t(object_t("foo"s + stringify(i)), 1));
+    h.pool = i & poolmask;
     bool ret = r.put(h);
     ASSERT_TRUE(ret);
   }
