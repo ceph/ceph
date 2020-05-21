@@ -1,4 +1,5 @@
-#!/bin/bash -e
+#!/usr/bin/env bash 
+set -e
 #
 # ceph-backport.sh - Ceph backporting script
 #
