@@ -195,7 +195,7 @@ thread_local bool is_asio_thread = false;
 
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
-                      optional_yield y)
+                      int flags, optional_yield y)
 {
 #ifdef HAVE_BOOST_CONTEXT
   // given a yield_context, call async_operate() to yield the coroutine instead
@@ -204,7 +204,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    auto bl = librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
+    auto bl = librados::async_operate(context, ioctx, oid, op, flags, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
     }
@@ -215,25 +215,38 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
 #endif
-  return ioctx.operate(oid, op, nullptr);
+  return ioctx.operate(oid, op, nullptr, flags);
 }
 
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
-                      librados::ObjectWriteOperation *op, optional_yield y)
+                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      optional_yield y)
+{
+  return rgw_rados_operate(ioctx, oid, op, pbl, 0, y);
+}
+
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectWriteOperation *op, int flags, optional_yield y)
 {
 #ifdef HAVE_BOOST_CONTEXT
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
+    librados::async_operate(context, ioctx, oid, op, flags, yield[ec]);
     return -ec.value();
   }
   if (is_asio_thread) {
     dout(20) << "WARNING: blocking librados call" << dendl;
   }
 #endif
-  return ioctx.operate(oid, op);
+  return ioctx.operate(oid, op, flags);
+}
+
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectWriteOperation *op, optional_yield y)
+{
+  return rgw_rados_operate(ioctx, oid, op, 0, y);
 }
 
 void parse_mime_map_line(const char *start, const char *end)

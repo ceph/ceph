@@ -45,7 +45,15 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
                       optional_yield y);
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      int flags, optional_yield y);
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y);
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectWriteOperation *op, int flags, optional_yield y);
+int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+                     bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
+                     optional_yield y);
 
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();
