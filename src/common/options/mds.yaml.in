@@ -1061,6 +1061,14 @@ options:
   fmt_desc: Ceph will inject MDS failure in the subtree import code
     (for developers only).
   with_legacy: true
+- name: mds_kill_dirfrag_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_kill_link_at
   type: int
   level: dev
