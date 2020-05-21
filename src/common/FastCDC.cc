@@ -4,10 +4,9 @@
 #include <random>
 
 #include "FastCDC.h"
-#include "rabin.h"
 
 
-// Unlike FastCDC describe in the paper, if we are close to the
+// Unlike FastCDC described in the paper, if we are close to the
 // target, use the target mask.  If we are very small or very large,
 // use an adjusted mask--like the paper.  This tries to keep more
 // cut points using the same mask, and fewer using the small or large
