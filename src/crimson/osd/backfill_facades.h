@@ -42,6 +42,10 @@ struct BackfillState::PeeringFacade {
     return peering_state.update_complete_backfill_object_stats(hoid, stats);
   }
 
+  bool is_backfilling() const {
+    return peering_state.is_backfilling();
+  }
+
   PeeringFacade(PeeringState& peering_state)
     : peering_state(peering_state) {
   }
