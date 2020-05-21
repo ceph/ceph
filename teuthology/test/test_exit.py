@@ -22,6 +22,7 @@ class TestExiter(object):
             wraps=os.kill,
         )
 
+        self.kill_unpatched = os.kill
         self.m_kill = self.patcher_kill.start()
 
         def m_kill_unwrap(pid, sig):
@@ -47,9 +48,9 @@ class TestExiter(object):
         m_func = Mock()
         obj.add_handler(sig, m_func)
         assert len(obj.handlers) == 1
-        os.kill(self.pid, sig)
+        self.kill_unpatched(self.pid, sig)
         assert m_func.call_count == 1
-        assert self.m_kill.call_count == 2
+        assert self.m_kill.call_count == 1
         for arg_list in self.m_kill.call_args_list:
             assert arg_list[0] == (self.pid, sig)
 
@@ -66,8 +67,8 @@ class TestExiter(object):
         for handler in handlers:
             handler.remove()
         assert obj.handlers == list()
-        os.kill(self.pid, send_sig)
-        assert self.m_kill.call_count == 2
+        self.kill_unpatched(self.pid, send_sig)
+        assert self.m_kill.call_count == 1
         for handler in handlers:
             assert handler.func.call_count == 0
 
@@ -82,10 +83,10 @@ class TestExiter(object):
             m_func = Mock(name="handler %s" % i)
             handlers.append(obj.add_handler(sig, m_func))
         assert obj.handlers == handlers
-        os.kill(self.pid, send_sig)
+        self.kill_unpatched(self.pid, send_sig)
         for i in range(n):
             assert handlers[i].func.call_count == 1
-        assert self.m_kill.call_count == 2
+        assert self.m_kill.call_count == 1
         for arg_list in self.m_kill.call_args_list:
             assert arg_list[0] == (self.pid, send_sig)
 
