@@ -402,6 +402,49 @@ TEST_F(TestMockOperationSnapshotCreateRequest, SkipObjectMap) {
   ASSERT_EQ(0, cond_ctx.wait());
 }
 
+TEST_F(TestMockOperationSnapshotCreateRequest, SkipNotifyQuiesce) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+  }
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+
+  expect_verify_lock_ownership(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  ::testing::InSequence seq;
+  expect_block_writes(mock_image_ctx);
+  expect_allocate_snap_id(mock_image_ctx, 0);
+  expect_snap_create(mock_image_ctx, 0);
+  if (!mock_image_ctx.old_format) {
+    expect_object_map_snap_create(mock_image_ctx);
+    expect_update_snap_context(mock_image_ctx);
+  }
+  expect_unblock_writes(mock_image_ctx);
+
+  C_SaferCond cond_ctx;
+  librbd::NoOpProgressContext prog_ctx;
+  MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
+    "snap1", 0, SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE, prog_ctx);
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    req->send();
+  }
+  ASSERT_EQ(0, cond_ctx.wait());
+}
+
 TEST_F(TestMockOperationSnapshotCreateRequest, SetImageState) {
   REQUIRE_FORMAT_V2();
 
