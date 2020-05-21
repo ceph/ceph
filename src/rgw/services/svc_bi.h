@@ -30,14 +30,14 @@ public:
   virtual ~RGWSI_BucketIndex() {}
 
   virtual int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info) = 0;
-  virtual int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info) = 0;
+  virtual int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, std::optional<uint64_t> gen) = 0;
 
   virtual int read_stats(const DoutPrefixProvider *dpp,
                          const RGWBucketInfo& bucket_info,
                          RGWBucketEnt *stats,
                          optional_yield y) = 0;
 
-  virtual int handle_overwrite(const DoutPrefixProvider *dpp, 
+  virtual int handle_overwrite(const DoutPrefixProvider *dpp,
                                const RGWBucketInfo& info,
                                const RGWBucketInfo& orig_info) = 0;
 };
