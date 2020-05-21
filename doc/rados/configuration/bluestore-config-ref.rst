@@ -23,7 +23,7 @@ device.  The storage device is normally partitioned into two parts:
 
 It is also possible to deploy BlueStore across two additional devices:
 
-* A *write-ahead log (WAL) device* can be used for BlueStore's internal journal or
+* A *WAL device* can be used for BlueStore's internal journal or
   write-ahead log.  It is identified by the ``block.wal`` symlink in
   the data directory.  It is only useful to use a WAL device if the
   device is faster than the primary device (e.g., when it is on an SSD
