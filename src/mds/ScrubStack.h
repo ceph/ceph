@@ -34,7 +34,8 @@ public:
     clog(clog),
     finisher(finisher_),
     scrub_stack(member_offset(MDSCacheObject, item_scrub)),
-    scrub_kick(mdc, this) {}
+    scrub_waiting(member_offset(MDSCacheObject, item_scrub)),
+    scrub_kick(this) {}
   ~ScrubStack() {
     ceph_assert(scrub_stack.empty());
     ceph_assert(!scrubs_in_progress);
@@ -99,7 +100,7 @@ public:
 protected:
   class C_KickOffScrubs : public MDSInternalContext {
   public:
-    C_KickOffScrubs(MDCache *mdcache, ScrubStack *s);
+    C_KickOffScrubs(ScrubStack *s);
     void finish(int r) override { }
     void complete(int r) override {
       if (r == -ECANCELED) {
@@ -122,12 +123,14 @@ protected:
 
   /// The stack of inodes we want to scrub
   elist<MDSCacheObject*> scrub_stack;
+  elist<MDSCacheObject*> scrub_waiting;
   /// current number of dentries we're actually scrubbing
   int scrubs_in_progress = 0;
   int stack_size = 0;
 
   C_KickOffScrubs scrub_kick;
 
+  friend class C_RetryScrub;
 private:
   // scrub abort is _not_ a state, rather it's an operation that's
   // performed after in-progress scrubs are finished.
@@ -153,6 +156,17 @@ private:
    * state of the stack.
    */
   void kick_off_scrubs();
+
+  /**
+   * Move the inode/dirfrag that can't be scrubbed immediately
+   * from scrub queue to waiting list.
+   */
+  void add_to_waiting(MDSCacheObject *obj);
+  /**
+   * Move the inode/dirfrag back to scrub queue.
+   */
+  void remove_from_waiting(MDSCacheObject *obj);
+
   /**
    * Scrub a file inode.
    * @param in The inode to scrub
