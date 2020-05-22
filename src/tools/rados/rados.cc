@@ -243,7 +243,10 @@ void usage(ostream& out)
 "   --with-clones                    include clones when doing flush or evict\n"
 "\n"
 "OMAP OPTIONS:\n"
-"    --omap-key-file file            read the omap key from a file\n";
+"    --omap-key-file file            read the omap key from a file\n"
+"\n"
+"GENERIC OPTIONS:\n";
+  generic_client_usage();
 }
 
 namespace detail {
