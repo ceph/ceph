@@ -9939,7 +9939,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
     _set_compression_alert(false, alg_name);
     r = -EIO;
   } else {
-    r = cp->decompress(i, chdr.length, *result);
+    r = cp->decompress(i, chdr.length, *result, chdr.compressor_message);
     if (r < 0) {
       derr << __func__ << " decompression failed with exit code " << r << dendl;
       r = -EIO;
@@ -13621,7 +13621,8 @@ int BlueStore::_do_alloc_write(
 
       // FIXME: memory alignment here is bad
       bufferlist t;
-      int r = c->compress(wi.bl, t);
+      boost::optional<int32_t> compressor_message;
+      int r = c->compress(wi.bl, t, compressor_message);
       uint64_t want_len_raw = wi.blob_length * crr;
       uint64_t want_len = p2roundup(want_len_raw, min_alloc_size);
       bool rejected = false;
@@ -13633,6 +13634,7 @@ int BlueStore::_do_alloc_write(
 	bluestore_compression_header_t chdr;
 	chdr.type = c->get_type();
 	chdr.length = t.length();
+	chdr.compressor_message = compressor_message;
 	encode(chdr, wi.compressed_bl);
 	wi.compressed_bl.claim_append(t);
 

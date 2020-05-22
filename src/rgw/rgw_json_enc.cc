@@ -2051,6 +2051,9 @@ void RGWCompressionInfo::dump(Formatter *f) const
 {
   f->dump_string("compression_type", compression_type);
   f->dump_unsigned("orig_size", orig_size);
+  if (compressor_message) {
+    f->dump_int("compressor_message", *compressor_message);
+  }
   ::encode_json("blocks", blocks, f);
 }
 
