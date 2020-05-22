@@ -41,7 +41,7 @@ export class AuthService {
 
   logout(callback: Function = null) {
     return this.http.post('api/auth/logout', null).subscribe((resp: any) => {
-      this.router.navigate(['/logout'], { skipLocationChange: true });
+      this.router.navigate(['/login'], { skipLocationChange: true });
       this.authStorageService.remove();
       if (callback) {
         callback();

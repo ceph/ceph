@@ -11,7 +11,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let httpTesting: HttpTestingController;
 
-  const routes: Routes = [{ path: 'logout', children: [] }];
+  const routes: Routes = [{ path: 'login', children: [] }];
 
   configureTestBed({
     providers: [AuthService, AuthStorageService],
