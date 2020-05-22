@@ -585,10 +585,6 @@ static int remove_expired_obj(lc_op_ctx& oc, bool remove_indeed)
   del_op.params.obj_owner = obj_owner;
   del_op.params.unmod_since = meta.mtime;
 
-  if (perfcounter) {
-    perfcounter->inc(l_rgw_lc_remove_expired, 1);
-  }
-
   return del_op.delete_obj(null_yield);
 } /* remove_expired_obj */
 
@@ -842,20 +838,26 @@ int RGWLC::handle_multipart_expiration(
 	return;
       }
       RGWObjectCtx rctx(store);
-      ret = abort_multipart_upload(store, cct, &rctx, bucket_info, mp_obj);
-      if (ret < 0 && ret != -ERR_NO_SUCH_UPLOAD) {
-	ldpp_dout(wk->get_lc(), 0)
-	  << "ERROR: abort_multipart_upload failed, ret=" << ret
-	  << wq->thr_name()
-	  << ", meta:" << obj.key
-	  << dendl;
-      } else if (ret == -ERR_NO_SUCH_UPLOAD) {
-	ldpp_dout(wk->get_lc(), 5)
-	  << "ERROR: abort_multipart_upload failed, ret=" << ret
-	  << wq->thr_name()
-	  << ", meta:" << obj.key
-	  << dendl;
-      }
+      int ret = abort_multipart_upload(store, cct, &rctx, bucket_info, mp_obj);
+      if (ret == 0) {
+        if (perfcounter) {
+          perfcounter->inc(l_rgw_lc_abort_mpu, 1);
+        }
+      } else {
+	if (ret == -ERR_NO_SUCH_UPLOAD) {
+	  ldpp_dout(wk->get_lc(), 5)
+	    << "ERROR: abort_multipart_upload failed, ret=" << ret
+	    << wq->thr_name()
+	    << ", meta:" << obj.key
+	    << dendl;
+	} else {
+	  ldpp_dout(wk->get_lc(), 0)
+	    << "ERROR: abort_multipart_upload failed, ret=" << ret
+	    << wq->thr_name()
+	    << ", meta:" << obj.key
+	    << dendl;
+	}
+      } /* abort failed */
     } /* expired */
   };
 
@@ -1085,6 +1087,9 @@ public:
 			 << oc.wq->thr_name() << dendl;
 	return r;
       }
+      if (perfcounter) {
+        perfcounter->inc(l_rgw_lc_expire_current, 1);
+      }
       ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key
 		       << " " << oc.wq->thr_name() << dendl;
     }
@@ -1130,6 +1135,9 @@ public:
 		       << " " << oc.wq->thr_name() << dendl;
       return r;
     }
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_lc_expire_noncurrent, 1);
+    }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key
 		     << " (non-current expiration) "
 		     << oc.wq->thr_name() << dendl;
@@ -1171,6 +1179,9 @@ public:
 		       << " " << oc.wq->thr_name()
 		       << dendl;
       return r;
+    }
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_lc_expire_dm, 1);
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key
 		     << " (delete marker expiration) "
@@ -1280,6 +1291,15 @@ protected:
 public:
   LCOpAction_CurrentTransition(const transition_action& _transition)
     : LCOpAction_Transition(_transition) {}
+    int process(lc_op_ctx& oc) {
+      int r = LCOpAction_Transition::process(oc);
+      if (r == 0) {
+        if (perfcounter) {
+          perfcounter->inc(l_rgw_lc_transition_current, 1);
+        }
+      }
+      return r;
+    }
 };
 
 class LCOpAction_NonCurrentTransition : public LCOpAction_Transition {
@@ -1296,6 +1316,15 @@ public:
 				  const transition_action& _transition)
     : LCOpAction_Transition(_transition)
     {}
+    int process(lc_op_ctx& oc) {
+      int r = LCOpAction_Transition::process(oc);
+      if (r == 0) {
+        if (perfcounter) {
+          perfcounter->inc(l_rgw_lc_transition_noncurrent, 1);
+        }
+      }
+      return r;
+    }
 };
 
 void LCOpRule::build()
@@ -1897,7 +1926,8 @@ void RGWLifecycleConfiguration::generate_test_instances(
   o.push_back(new RGWLifecycleConfiguration);
 }
 
-void get_lc_oid(CephContext *cct, const string& shard_id, string *oid)
+static inline void get_lc_oid(CephContext *cct,
+			      const string& shard_id, string *oid)
 {
   int max_objs =
     (cct->_conf->rgw_lc_max_objs > HASH_PRIME ? HASH_PRIME :
