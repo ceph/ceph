@@ -169,14 +169,7 @@ public:
     ceph_le32 dest_cid;
     ceph_le32 dest_oid;               //OP_CLONE, OP_CLONERANGE
     ceph_le64 dest_off;               //OP_CLONERANGE
-    union {
-	struct {
-	  ceph_le32 hint_type;          //OP_COLL_HINT
-	} __attribute__ ((packed));
-	struct {
-	  ceph_le32 alloc_hint_flags;   //OP_SETALLOCHINT
-	} __attribute__ ((packed));
-    } __attribute__ ((packed));
+    ceph_le32 hint;                   //OP_COLL_HINT,OP_SETALLOCHINT
     ceph_le64 expected_object_size;   //OP_SETALLOCHINT
     ceph_le64 expected_write_size;    //OP_SETALLOCHINT
     ceph_le32 split_bits;             //OP_SPLIT_COLLECTION2,OP_COLL_SET_BITS,
@@ -1025,7 +1018,7 @@ public:
     Op* _op = _get_next_op();
     _op->op = OP_COLL_HINT;
     _op->cid = _get_coll_id(cid);
-    _op->hint_type = type;
+    _op->hint = type;
     encode(hint, data_bl);
     data.ops = data.ops + 1;
   }
@@ -1259,7 +1252,7 @@ public:
     _op->oid = _get_object_id(oid);
     _op->expected_object_size = expected_object_size;
     _op->expected_write_size = expected_write_size;
-    _op->alloc_hint_flags = flags;
+    _op->hint = flags;
     data.ops = data.ops + 1;
   }
 
