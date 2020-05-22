@@ -1,137 +1,144 @@
-<tabset *ngIf="selection">
-  <tab i18n-heading
-       heading="Details">
-    <div *ngIf="selection">
-      <table class="table table-striped table-bordered">
-        <tbody>
-          <tr>
-            <td i18n
-                class="bold w-25">Name</td>
-            <td class="w-75">{{ selection.bid }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">ID</td>
-            <td>{{ selection.id }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Owner</td>
-            <td>{{ selection.owner }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Index type</td>
-            <td>{{ selection.index_type }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Placement rule</td>
-            <td>{{ selection.placement_rule }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Marker</td>
-            <td>{{ selection.marker }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Maximum marker</td>
-            <td>{{ selection.max_marker }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Version</td>
-            <td>{{ selection.ver }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Master version</td>
-            <td>{{ selection.master_ver }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Modification time</td>
-            <td>{{ selection.mtime | cdDate }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Zonegroup</td>
-            <td>{{ selection.zonegroup }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Versioning</td>
-            <td>{{ selection.versioning }}</td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">MFA Delete</td>
-            <td>{{ selection.mfa_delete }}</td>
-          </tr>
-        </tbody>
-      </table>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold w-25">Name</td>
+              <td class="w-75">{{ selection.bid }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">ID</td>
+              <td>{{ selection.id }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Owner</td>
+              <td>{{ selection.owner }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Index type</td>
+              <td>{{ selection.index_type }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Placement rule</td>
+              <td>{{ selection.placement_rule }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Marker</td>
+              <td>{{ selection.marker }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Maximum marker</td>
+              <td>{{ selection.max_marker }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Version</td>
+              <td>{{ selection.ver }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Master version</td>
+              <td>{{ selection.master_ver }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Modification time</td>
+              <td>{{ selection.mtime | cdDate }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Zonegroup</td>
+              <td>{{ selection.zonegroup }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Versioning</td>
+              <td>{{ selection.versioning }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">MFA Delete</td>
+              <td>{{ selection.mfa_delete }}</td>
+            </tr>
+          </tbody>
+        </table>
 
-      <!-- Bucket quota -->
-      <div *ngIf="selection.bucket_quota">
-        <legend i18n>Bucket quota</legend>
+        <!-- Bucket quota -->
+        <div *ngIf="selection.bucket_quota">
+          <legend i18n>Bucket quota</legend>
+          <table class="table table-striped table-bordered">
+            <tbody>
+              <tr>
+                <td i18n
+                    class="bold w-25">Enabled</td>
+                <td class="w-75">{{ selection.bucket_quota.enabled | booleanText }}</td>
+              </tr>
+              <tr>
+                <td i18n
+                    class="bold">Maximum size</td>
+                <td *ngIf="selection.bucket_quota.max_size <= -1"
+                    i18n>Unlimited</td>
+                <td *ngIf="selection.bucket_quota.max_size > -1">
+                  {{ selection.bucket_quota.max_size | dimless }}
+                </td>
+              </tr>
+              <tr>
+                <td i18n
+                    class="bold">Maximum objects</td>
+                <td *ngIf="selection.bucket_quota.max_objects <= -1"
+                    i18n>Unlimited</td>
+                <td *ngIf="selection.bucket_quota.max_objects > -1">
+                  {{ selection.bucket_quota.max_objects }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Locking -->
+        <legend i18n>Locking</legend>
         <table class="table table-striped table-bordered">
           <tbody>
             <tr>
               <td i18n
                   class="bold w-25">Enabled</td>
-              <td class="w-75">{{ selection.bucket_quota.enabled | booleanText }}</td>
+              <td class="w-75">{{ selection.lock_enabled | booleanText }}</td>
             </tr>
-            <tr>
-              <td i18n
-                  class="bold">Maximum size</td>
-              <td *ngIf="selection.bucket_quota.max_size <= -1"
-                  i18n>Unlimited</td>
-              <td *ngIf="selection.bucket_quota.max_size > -1">
-                {{ selection.bucket_quota.max_size | dimless }}
-              </td>
-            </tr>
-            <tr>
-              <td i18n
-                  class="bold">Maximum objects</td>
-              <td *ngIf="selection.bucket_quota.max_objects <= -1"
-                  i18n>Unlimited</td>
-              <td *ngIf="selection.bucket_quota.max_objects > -1">
-                {{ selection.bucket_quota.max_objects }}
-              </td>
-            </tr>
+            <ng-container *ngIf="selection.lock_enabled">
+              <tr>
+                <td i18n
+                    class="bold">Mode</td>
+                <td>{{ selection.lock_mode }}</td>
+              </tr>
+              <tr>
+                <td i18n
+                    class="bold">Days</td>
+                <td>{{ selection.lock_retention_period_days }}</td>
+              </tr>
+              <tr>
+                <td i18n
+                    class="bold">Years</td>
+                <td>{{ selection.lock_retention_period_years }}</td>
+              </tr>
+            </ng-container>
           </tbody>
         </table>
-      </div>
+      </ng-template>
+    </li>
+  </ul>
 
-      <!-- Locking -->
-      <legend i18n>Locking</legend>
-      <table class="table table-striped table-bordered">
-        <tbody>
-          <tr>
-            <td i18n
-                class="bold w-25">Enabled</td>
-            <td class="w-75">{{ selection.lock_enabled | booleanText }}</td>
-          </tr>
-          <ng-container *ngIf="selection.lock_enabled">
-            <tr>
-              <td i18n
-                  class="bold">Mode</td>
-              <td>{{ selection.lock_mode }}</td>
-            </tr>
-            <tr>
-              <td i18n
-                  class="bold">Days</td>
-              <td>{{ selection.lock_retention_period_days }}</td>
-            </tr>
-            <tr>
-              <td i18n
-                  class="bold">Years</td>
-              <td>{{ selection.lock_retention_period_years }}</td>
-            </tr>
-          </ng-container>
-        </tbody>
-      </table>
-    </div>
-  </tab>
-</tabset>
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

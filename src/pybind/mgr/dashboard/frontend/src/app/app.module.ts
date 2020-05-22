@@ -14,7 +14,6 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 
 import { AppRoutingModule } from './app-routing.module';
@@ -47,7 +46,6 @@ export function jwtTokenGetter() {
     SharedModule,
     CephModule,
     BsDropdownModule.forRoot(),
-    TabsModule.forRoot(),
     JwtModule.forRoot({
       config: {
         tokenGetter: jwtTokenGetter

@@ -1,35 +1,45 @@
-<tabset #tabset>
-  <tab heading="Issues"
-       i18n-heading>
-    <cd-table *ngIf="tabset.tabs[0]?.active"
-              [data]="image_error.data"
-              columnMode="flex"
-              [columns]="image_error.columns"
-              [autoReload]="-1"
-              (fetchData)="refresh()">
-    </cd-table>
-  </tab>
-  <tab heading="Syncing"
-       i18n-heading>
-    <cd-table *ngIf="tabset.tabs[1]?.active"
-              [data]="image_syncing.data"
-              columnMode="flex"
-              [columns]="image_syncing.columns"
-              [autoReload]="-1"
-              (fetchData)="refresh()">
-    </cd-table>
-  </tab>
-  <tab heading="Ready"
-       i18n-heading>
-    <cd-table *ngIf="tabset.tabs[2]?.active"
-              [data]="image_ready.data"
-              columnMode="flex"
-              [columns]="image_ready.columns"
-              [autoReload]="-1"
-              (fetchData)="refresh()">
-    </cd-table>
-  </tab>
-</tabset>
+<ul ngbNav
+    #nav="ngbNav"
+    class="nav-tabs">
+  <li ngbNavItem>
+    <a ngbNavLink
+       i18n>Issues</a>
+    <ng-template ngbNavContent>
+      <cd-table [data]="image_error.data"
+                columnMode="flex"
+                [columns]="image_error.columns"
+                [autoReload]="-1"
+                (fetchData)="refresh()">
+      </cd-table>
+    </ng-template>
+  </li>
+  <li ngbNavItem>
+    <a ngbNavLink
+       i18n>Syncing</a>
+    <ng-template ngbNavContent>
+      <cd-table [data]="image_syncing.data"
+                columnMode="flex"
+                [columns]="image_syncing.columns"
+                [autoReload]="-1"
+                (fetchData)="refresh()">
+      </cd-table>
+    </ng-template>
+  </li>
+  <li ngbNavItem>
+    <a ngbNavLink
+       i18n>Ready</a>
+    <ng-template ngbNavContent>
+      <cd-table [data]="image_ready.data"
+                columnMode="flex"
+                [columns]="image_ready.columns"
+                [autoReload]="-1"
+                (fetchData)="refresh()">
+      </cd-table>
+    </ng-template>
+  </li>
+</ul>
+
+<div [ngbNavOutlet]="nav"></div>
 
 <ng-template #stateTmpl
              let-row="row"

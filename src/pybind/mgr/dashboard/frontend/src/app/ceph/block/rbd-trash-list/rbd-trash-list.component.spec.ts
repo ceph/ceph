@@ -4,8 +4,8 @@ import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as moment from 'moment';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -37,7 +37,7 @@ describe('RbdTrashListComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       SharedModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       ToastrModule.forRoot()
     ],
     providers: [TaskListService, i18nProviders]

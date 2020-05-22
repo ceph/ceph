@@ -5,7 +5,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -23,7 +22,6 @@ describe('PoolListComponent', () => {
       BrowserAnimationsModule,
       SharedModule,
       BsDropdownModule.forRoot(),
-      TabsModule.forRoot(),
       ProgressbarModule.forRoot(),
       HttpClientTestingModule,
       RouterTestingModule,

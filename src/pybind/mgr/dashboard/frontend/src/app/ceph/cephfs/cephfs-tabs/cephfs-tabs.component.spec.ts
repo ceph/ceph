@@ -2,9 +2,9 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
 import * as _ from 'lodash';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -80,7 +80,7 @@ describe('CephfsTabsComponent', () => {
   configureTestBed({
     imports: [
       SharedModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       HttpClientTestingModule,
       TreeModule,
       ToastrModule.forRoot()
