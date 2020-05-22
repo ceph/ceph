@@ -27,6 +27,9 @@ enum {
   // Reed requests with hit and miss extents
   l_librbd_rwl_rd_part_hit_req,  // read ops
 
+  // Per SyncPoint's LogEntry number and write bytes distribution
+  l_librbd_rwl_syncpoint_hist,
+
   // All write requests
   l_librbd_rwl_wr_req,             // write requests
   l_librbd_rwl_wr_req_def,         // write requests deferred for resources
