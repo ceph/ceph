@@ -83,6 +83,9 @@ private:
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
 
+  template <class EventT>
+  void start_backfill_recovery(
+    const EventT& evt);
   void request_replica_scan(
     const pg_shard_t& target,
     const hobject_t& begin,

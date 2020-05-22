@@ -401,6 +401,17 @@ void PGRecovery::_committed_pushed_object(epoch_t epoch,
   }
 }
 
+template <class EventT>
+void PGRecovery::start_backfill_recovery(const EventT& evt)
+{
+  using BackfillRecovery = crimson::osd::BackfillRecovery;
+  std::ignore = pg->get_shard_services().start_operation<BackfillRecovery>(
+    static_cast<crimson::osd::PG*>(pg),
+    pg->get_shard_services(),
+    pg->get_osdmap_epoch(),
+    evt);
+}
+
 void PGRecovery::request_replica_scan(
   const pg_shard_t& target,
   const hobject_t& begin,
@@ -465,10 +476,5 @@ void PGRecovery::on_backfill_reserved()
     std::make_unique<BackfillState::PeeringFacade>(pg->get_peering_state()),
     std::make_unique<BackfillState::PGFacade>(
       *static_cast<crimson::osd::PG*>(pg)));
-  using BackfillRecovery = crimson::osd::BackfillRecovery;
-  pg->get_shard_services().start_operation<BackfillRecovery>(
-    static_cast<crimson::osd::PG*>(pg),
-    pg->get_shard_services(),
-    pg->get_osdmap_epoch(),
-    BackfillState::Triggered{});
+  start_backfill_recovery(BackfillState::Triggered{});
 }
