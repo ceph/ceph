@@ -99,7 +99,7 @@ class SubvolumeBase(object):
         else:
             self.metadata_mgr = MetadataManager(self.fs, self.config_path, 0o640)
 
-    def _set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
+    def set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
         # set size
         if size is not None:
             try:
@@ -130,7 +130,11 @@ class SubvolumeBase(object):
             # layout remains unset and will undesirably change with ancestor's
             # pool layout changes.
             xattr_key = 'ceph.dir.layout.pool'
-            xattr_val = get_ancestor_xattr(self.fs, path, "ceph.dir.layout.pool")
+            xattr_val = None
+            try:
+                self.fs.getxattr(path, 'ceph.dir.layout.pool').decode('utf-8')
+            except cephfs.NoData as e:
+                xattr_val = get_ancestor_xattr(self.fs, os.path.split(path)[0], "ceph.dir.layout.pool")
         if xattr_key and xattr_val:
             try:
                 self.fs.setxattr(path, xattr_key, xattr_val.encode('utf-8'), 0)
