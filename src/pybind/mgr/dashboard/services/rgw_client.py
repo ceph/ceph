@@ -252,6 +252,9 @@ class RgwClient(RestClient):
             ['api_name', 'zones']
         ) for zonegroup in zonegroups['zonegroups']]
 
+    def _get_realms_info(self):  # type: () -> dict
+        return json_str_to_object(self.proxy('GET', 'realm?list', None, None))
+
     @staticmethod
     def _rgw_settings():
         return (Settings.RGW_API_HOST,
@@ -490,6 +493,13 @@ class RgwClient(RestClient):
             )
 
         return {'zonegroup': zonegroup_name, 'placement_targets': placement_targets}
+
+    def get_realms(self):  # type: () -> List
+        realms_info = self._get_realms_info()
+        if 'realms' in realms_info and realms_info['realms']:
+            return realms_info['realms']
+
+        return []
 
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):

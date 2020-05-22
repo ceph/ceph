@@ -95,7 +95,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
     };
 
     if (!this.editing) {
-      promises['getPlacementTargets'] = this.rgwSiteService.getPlacementTargets();
+      promises['getPlacementTargets'] = this.rgwSiteService.get('placement-targets');
     }
 
     // Process route parameters.

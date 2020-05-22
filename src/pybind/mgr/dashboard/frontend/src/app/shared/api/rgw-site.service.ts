@@ -13,9 +13,11 @@ export class RgwSiteService {
 
   constructor(private http: HttpClient) {}
 
-  getPlacementTargets() {
+  get(query?: string) {
     let params = new HttpParams();
-    params = params.append('query', 'placement-targets');
+    if (query) {
+      params = params.append('query', query);
+    }
 
     return this.http.get(this.url, { params: params });
   }

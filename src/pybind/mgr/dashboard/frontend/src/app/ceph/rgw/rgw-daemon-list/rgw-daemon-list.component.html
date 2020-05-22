@@ -21,4 +21,13 @@
                 grafanaStyle="two">
     </cd-grafana>
   </tab>
+
+  <tab i18n-heading
+       *ngIf="grafanaPermission.read && isMultiSite"
+       heading="Sync Performance">
+    <cd-grafana [grafanaPath]="'radosgw-sync-overview?'"
+                uid="rgw-sync-overview"
+                grafanaStyle="two">
+    </cd-grafana>
+  </tab>
 </tabset>
