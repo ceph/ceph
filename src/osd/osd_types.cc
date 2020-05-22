@@ -5827,6 +5827,13 @@ bool chunk_info_t::operator==(const chunk_info_t& cit) const
   return false;
 }
 
+bool operator==(const std::pair<const long unsigned int, chunk_info_t> & l,
+		const std::pair<const long unsigned int, chunk_info_t> & r) 
+{
+  return l.first == r.first &&
+	 l.second == r.second;
+}
+
 ostream& operator<<(ostream& out, const chunk_info_t& ci)
 {
   return out << "(len: " << ci.length << " oid: " << ci.oid
@@ -5836,19 +5843,24 @@ ostream& operator<<(ostream& out, const chunk_info_t& ci)
 
 // -- object_manifest_t --
 
-void object_manifest_t::build_intersection_set(std::map<uint64_t, chunk_info_t>& map, 
-	      set<uint64_t>& intersection, interval_set<uint64_t>* check_intersection)
-{
-  for (auto p : chunk_map) {
-    if (check_intersection) {
-      if (check_intersection->intersects(p.first, p.second.length)) {
-	intersection.insert(p.first);	
-	continue;
-      }
-    }
+/**
+ * build_intersection_set
+ *
+ * Returns the set offsets to references common (offset, length, and target match) to
+ * both map and this->chunk_map.
+ *
+ * @param map [in] map of object against which to compare
+ * @param map [in,out] set of target ids common to both maps
+ * @return void
+ */
 
-    for (auto c : map) {
-      if (p.second == c.second) {
+void object_manifest_t::build_intersection_set(const std::map<uint64_t, chunk_info_t>& map,
+					       std::set<uint64_t>& intersection)
+{
+  for (const auto &p : chunk_map) {
+    auto c = map.find(p.first);
+    if (c != map.cend()) {
+      if (p == *c) {
 	intersection.insert(p.first);
       }
     }

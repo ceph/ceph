@@ -3459,13 +3459,13 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
 }
 
 void PrimaryLogPG::dec_refcount_non_intersection(ObjectContextRef obc, const object_info_t& oi, 
-						  set<uint64_t> intersection_set)
+						  const set<uint64_t>& intersection_set)
 {
   for (auto c : oi.manifest.chunk_map) {
     auto iter = intersection_set.find(c.first);
     if (intersection_set.end() == iter) {
-      dout(10) << __func__ << " need dereference. " << " offset: " <<  c.first 
-	      << " length: " << c.second.length << " oid: " << c.second.oid << dendl;
+      dout(10) << __func__ << ": decrement reference on offset " << c.first << " length: " 
+	       << c.second.length << " oid: " << c.second.oid << dendl;
       object_locator_t target_oloc(c.second.oid);
       refcount_manifest(obc, obc->obs.oi.soid, target_oloc, c.second.oid, 
 			SnapContext(), refcount_t::DECREMENT_REF, NULL);
@@ -3480,9 +3480,8 @@ void PrimaryLogPG::dec_all_refcount_head_manifest(object_info_t& oi, OpContext* 
   ceph_assert(oi.soid.is_head());
   // has snapshot
   if (ssc && ssc->snapset.clones.size() > 0) {
+    ceph_assert(ssc);
     dout(15) << __func__ <<  " has snapset " << dendl;
-    interval_set<uint64_t> &newest_overlap =
-      ssc->snapset.clone_overlap.rbegin()->second;
     set<uint64_t> refs;
     ceph_assert(oi.manifest.is_chunked());
     ceph_assert(!oi.manifest.is_redirect());
@@ -3495,7 +3494,7 @@ void PrimaryLogPG::dec_all_refcount_head_manifest(object_info_t& oi, OpContext* 
       return;
     }
     object_info_t& coi = cobc->obs.oi;
-    oi.manifest.build_intersection_set(coi.manifest.chunk_map, refs, &newest_overlap);
+    oi.manifest.build_intersection_set(coi.manifest.chunk_map, refs);
 
     ctx->register_on_commit(
       [oi, ctx, this, refs](){
@@ -4523,6 +4522,7 @@ int PrimaryLogPG::trim_object(
       ctx->delta_stats.num_objects_pinned--;
     if (coi.has_manifest()) {
       set<uint64_t> refs;
+      object_info_t oi;
       for (auto p : snapset.clones) {
 	hobject_t clone_oid = coid;
 	if (clone_oid.snap == p) {
@@ -4537,10 +4537,15 @@ int PrimaryLogPG::trim_object(
 	}
 
 	// check if the references is still used
-	object_info_t& oi = cobc->obs.oi;
+	oi = cobc->obs.oi;
 	if (oi.has_manifest()) {
-	  coi.manifest.build_intersection_set(oi.manifest.chunk_map, refs, NULL);
+	  coi.manifest.build_intersection_set(oi.manifest.chunk_map, refs);
 	}
+      }
+      // head
+      oi = head_obc->obs.oi;
+      if (oi.has_manifest()) {
+	coi.manifest.build_intersection_set(oi.manifest.chunk_map, refs);
       }
 
       dec_refcount_non_intersection(head_obc, coi, refs);
@@ -7989,14 +7994,15 @@ inline int PrimaryLogPG::_delete_oid(
   }
   oi.watchers.clear();
 
+  if (oi.has_manifest()) {
+    ctx->delta_stats.num_objects_manifest--;
+    dec_all_refcount_head_manifest(oi, ctx);
+  }
+
   if (whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
-    if (oi.has_manifest()) {
-      ctx->delta_stats.num_objects_manifest--;
-      dec_all_refcount_head_manifest(oi, ctx);
-    }
     t->create(soid);
     osd->logger->inc(l_osd_tier_whiteout);
     return 0;
@@ -8013,10 +8019,6 @@ inline int PrimaryLogPG::_delete_oid(
   }
   if (oi.is_cache_pinned()) {
     ctx->delta_stats.num_objects_pinned--;
-  }
-  if (oi.has_manifest()) {
-    ctx->delta_stats.num_objects_manifest--;
-    dec_all_refcount_head_manifest(oi, ctx);
   }
   obs.exists = false;
   return 0;
