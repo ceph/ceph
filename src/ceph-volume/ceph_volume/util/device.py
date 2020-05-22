@@ -338,16 +338,27 @@ class Device(object):
     def is_partition(self):
         if self.disk_api:
             return self.disk_api['TYPE'] == 'part'
+        elif self.blkid_api:
+            return self.blkid_api['TYPE'] == 'part'
         return False
 
     @property
     def is_device(self):
+        api = None
         if self.disk_api:
-            is_device = self.disk_api['TYPE'] == 'device'
-            is_disk = self.disk_api['TYPE'] == 'disk'
+            api = self.disk_api
+        elif self.blkid_api:
+            api = self.blkid_api
+        if api:
+            is_device = api['TYPE'] == 'device'
+            is_disk = api['TYPE'] == 'disk'
             if is_device or is_disk:
                 return True
         return False
+
+    @property
+    def is_acceptable_device(self):
+        return self.is_device or self.is_partition
 
     @property
     def is_encrypted(self):
@@ -393,9 +404,12 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
-        # reject disks smaller than 5GB
-        if int(self.sys_api.get('size', 0)) < 5368709120:
-            rejected.append('Insufficient space (<5GB)')
+        if self.is_acceptable_device:
+            # reject disks smaller than 5GB
+            if int(self.sys_api.get('size', 0)) < 5368709120:
+                rejected.append('Insufficient space (<5GB)')
+        else:
+            rejected.append("Device type is not acceptable. It should be raw device or partition")
         if self.is_ceph_disk_member:
             rejected.append("Used by ceph-disk")
         if self.has_bluestore_label:
