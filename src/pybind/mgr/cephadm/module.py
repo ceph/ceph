@@ -771,6 +771,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return 0, '', ''
 
     @orchestrator._cli_write_command(
+        'cephadm set-priv-key',
+        desc='Set cluster SSH private key (use -i <private_key>)')
+    def _set_priv_key(self, inbuf=None):
+        if inbuf is None or len(inbuf) == 0:
+            return -errno.EINVAL, "", "empty private ssh key provided"
+        self.set_store("ssh_identity_key", inbuf)
+        self.log.info('Set ssh private key')
+        self._reconfig_ssh()
+        return 0, "", ""
+
+    @orchestrator._cli_write_command(
+        'cephadm set-pub-key',
+        desc='Set cluster SSH public key (use -i <public_key>)')
+    def _set_pub_key(self, inbuf=None):
+        if inbuf is None or len(inbuf) == 0:
+            return -errno.EINVAL, "", "empty public ssh key provided"
+        self.set_store("ssh_identity_pub", inbuf)
+        self.log.info('Set ssh public key')
+        self._reconfig_ssh()
+        return 0, "", ""
+
+    @orchestrator._cli_write_command(
         'cephadm clear-key',
         desc='Clear cluster SSH key')
     def _clear_key(self):

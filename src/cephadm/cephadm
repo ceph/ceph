@@ -2573,31 +2573,40 @@ def command_bootstrap():
         logger.info('Setting orchestrator backend to cephadm...')
         cli(['orch', 'set', 'backend', 'cephadm'])
 
-        logger.info('Generating ssh key...')
-        cli(['cephadm', 'generate-key'])
-        ssh_pub = cli(['cephadm', 'get-pub-key'])
+        if args.ssh_private_key and args.ssh_public_key:
+            logger.info('Using provided ssh keys...')
+            mounts = {
+                pathify(args.ssh_private_key.name): '/tmp/cephadm-ssh-key:z',
+                pathify(args.ssh_public_key.name): '/tmp/cephadm-ssh-key.pub:z'
+            }
+            cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
+            cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
+        else:
+            logger.info('Generating ssh key...')
+            cli(['cephadm', 'generate-key'])
+            ssh_pub = cli(['cephadm', 'get-pub-key'])
 
-        with open(args.output_pub_ssh_key, 'w') as f:
-            f.write(ssh_pub)
-        logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
+            with open(args.output_pub_ssh_key, 'w') as f:
+                f.write(ssh_pub)
+            logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
 
-        logger.info('Adding key to root@localhost\'s authorized_keys...')
-        if not os.path.exists('/root/.ssh'):
-            os.mkdir('/root/.ssh', 0o700)
-        auth_keys_file = '/root/.ssh/authorized_keys'
-        add_newline = False
-        if os.path.exists(auth_keys_file):
-            with open(auth_keys_file, 'r') as f:
-                f.seek(0, os.SEEK_END)
-                if f.tell() > 0:
-                    f.seek(f.tell()-1, os.SEEK_SET) # go to last char
-                    if f.read() != '\n':
-                        add_newline = True
-        with open(auth_keys_file, 'a') as f:
-            os.fchmod(f.fileno(), 0o600)  # just in case we created it
-            if add_newline:
-                f.write('\n')
-            f.write(ssh_pub.strip() + '\n')
+            logger.info('Adding key to root@localhost\'s authorized_keys...')
+            if not os.path.exists('/root/.ssh'):
+                os.mkdir('/root/.ssh', 0o700)
+            auth_keys_file = '/root/.ssh/authorized_keys'
+            add_newline = False
+            if os.path.exists(auth_keys_file):
+                with open(auth_keys_file, 'r') as f:
+                    f.seek(0, os.SEEK_END)
+                    if f.tell() > 0:
+                        f.seek(f.tell()-1, os.SEEK_SET) # go to last char
+                        if f.read() != '\n':
+                            add_newline = True
+            with open(auth_keys_file, 'a') as f:
+                os.fchmod(f.fileno(), 0o600)  # just in case we created it
+                if add_newline:
+                    f.write('\n')
+                f.write(ssh_pub.strip() + '\n')
 
         host = get_hostname()
         logger.info('Adding host %s...' % host)
@@ -4474,6 +4483,15 @@ def _get_parser():
         '--dashboard-crt',
         type=argparse.FileType('r'),
         help='Dashboard certificate')
+
+    parser_bootstrap.add_argument(
+        '--ssh-private-key',
+        type=argparse.FileType('r'),
+        help='SSH private key')
+    parser_bootstrap.add_argument(
+        '--ssh-public-key',
+        type=argparse.FileType('r'),
+        help='SSH public key')
 
     parser_bootstrap.add_argument(
         '--skip-mon-network',
