@@ -737,7 +737,6 @@ int RocksDBStore::apply_sharding(const rocksdb::Options& opt,
 }
 
 int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
-				  const std::string& sharding_text,
 				  std::vector<rocksdb::ColumnFamilyDescriptor>& existing_cfs,
 				  std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 				  std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
@@ -758,43 +757,12 @@ int RocksDBStore::verify_sharding(const rocksdb::Options& opt,
     //no "sharding_def" present
   }
   //check if sharding_def matches stored_sharding_def
-  std::vector<ColumnFamily> sharding_def;
   std::vector<ColumnFamily> stored_sharding_def;
-  if (!sharding_text.empty()) {
-    parse_sharding_def(sharding_text, sharding_def);
-  } else {
-    //if sharding requested is empty, assume that it agrees with stored
-    //this is necessary for ceph-bluestore-tool fsck
-    parse_sharding_def(stored_sharding_text, sharding_def);
-  }
   parse_sharding_def(stored_sharding_text, stored_sharding_def);
 
-  std::sort(sharding_def.begin(), sharding_def.end(),
-	    [](ColumnFamily& a, ColumnFamily& b) { return a.name < b.name; } );
   std::sort(stored_sharding_def.begin(), stored_sharding_def.end(),
 	    [](ColumnFamily& a, ColumnFamily& b) { return a.name < b.name; } );
 
-  bool match = true;
-  if (sharding_def.size() != stored_sharding_def.size()) {
-    match = false;
-  } else {
-    for (size_t i = 0; i < sharding_def.size(); i++) {
-      auto& a = sharding_def[i];
-      auto& b = stored_sharding_def[i];
-      if ( (a.name != b.name) ||
-	   (a.shard_cnt != b.shard_cnt) ||
-	   (a.hash_l != b.hash_l) ||
-	   (a.hash_h != b.hash_h) ) {
-	match = false;
-	break;
-      }
-    }
-  }
-  if (!match) {
-    derr << __func__ << " mismatch on sharding. requested = " << sharding_def
-	 << " stored = " << stored_sharding_def << dendl;
-    return -EIO;
-  }
   std::vector<string> rocksdb_cfs;
   status = rocksdb::DB::ListColumnFamilies(rocksdb::DBOptions(opt),
 					   path, &rocksdb_cfs);
@@ -896,7 +864,7 @@ int RocksDBStore::do_open(ostream &out,
     std::vector<rocksdb::ColumnFamilyDescriptor> missing_cfs;
     std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> > missing_cfs_shard;
 
-    r = verify_sharding(opt, sharding_text,
+    r = verify_sharding(opt,
 			existing_cfs, existing_cfs_shard,
 			missing_cfs, missing_cfs_shard);
     if (r < 0) {
