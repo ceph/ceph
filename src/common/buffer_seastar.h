@@ -3,6 +3,7 @@
 
 #include <seastar/core/temporary_buffer.hh>
 #include "include/buffer.h"
+#include "common/error_code.h"
 
 namespace details {
 

@@ -11,12 +11,14 @@
  * Foundation.  See file COPYING.
  *
  */
-#include <string>
 
 #ifndef CEPH_LIBRADOS_LISTOBJECTIMPL_H
 #define CEPH_LIBRADOS_LISTOBJECTIMPL_H
 
+#include <string>
 #include <include/rados/librados.hpp>
+
+#include "include/cmp.h"
 
 namespace librados {
 struct ListObjectImpl {

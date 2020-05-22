@@ -11442,8 +11442,8 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
       bufferlist::const_iterator bvp = bv.begin();
       try {
 	ssc->snapset.decode(bvp);
-      } catch (ceph::buffer::error& e) {
-        dout(0) << __func__ << " Can't decode snapset: " << e << dendl;
+      } catch (const ceph::buffer::error& e) {
+        dout(0) << __func__ << " Can't decode snapset: " << e.what() << dendl;
 	return NULL;
       }
       ssc->exists = true;

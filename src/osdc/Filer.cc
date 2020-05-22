@@ -418,7 +418,7 @@ void Filer::truncate(inodeno_t ino,
   if (num_objs == 1) {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    vector<OSDOp> ops(1);
+    osdc_opvec ops(1);
     ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
     ops[0].op.extent.truncate_seq = truncate_seq;
     ops[0].op.extent.truncate_size = extents[0].offset;
@@ -477,7 +477,7 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 
   // Issue objecter ops outside tr->lock to avoid lock dependency loop
   for (const auto& p : extents) {
-    vector<OSDOp> ops(1);
+    osdc_opvec ops(1);
     ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
     ops[0].op.extent.truncate_size = p.offset;
     ops[0].op.extent.truncate_seq = tr->truncate_seq;

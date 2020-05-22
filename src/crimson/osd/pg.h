@@ -14,6 +14,8 @@
 
 #include "common/dout.h"
 #include "crimson/net/Fwd.h"
+#include "messages/MOSDRepOpReply.h"
+#include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "crimson/osd/object_context.h"

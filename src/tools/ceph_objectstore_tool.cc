@@ -681,7 +681,7 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
       try {
 	e.decode_with_checksum(bp);
       } catch (const buffer::error &e) {
-	cerr << "Error reading pg log entry: " << e << std::endl;
+	cerr << "Error reading pg log entry: " << e.what() << std::endl;
       }
       if (debug) {
 	cerr << "read entry " << e << std::endl;

@@ -46,6 +46,7 @@
 #include "byteorder.h"
 
 #include "common/convenience.h"
+#include "common/error_code.h"
 
 template<typename T, typename=void>
 struct denc_traits {
