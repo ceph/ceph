@@ -1,60 +1,63 @@
-<tabset>
-  <tab i18n-heading
-       heading="OSDs List">
+<ul ngbNav
+    #nav="ngbNav"
+    class="nav-tabs">
+  <li ngbNavItem>
+    <a ngbNavLink
+       i18n>OSDs List</a>
+    <ng-template ngbNavContent>
+      <cd-table [autoReload]="false"
+                [data]="osds"
+                (fetchData)="getOsdList()"
+                [columns]="columns"
+                selectionType="multiClick"
+                [hasDetails]="true"
+                (setExpandedRow)="setExpandedRow($event)"
+                (updateSelection)="updateSelection($event)"
+                [updateSelectionOnRefresh]="'never'">
 
-    <cd-table [autoReload]="false"
-              [data]="osds"
-              (fetchData)="getOsdList()"
-              [columns]="columns"
-              selectionType="multiClick"
-              [hasDetails]="true"
-              (setExpandedRow)="setExpandedRow($event)"
-              (updateSelection)="updateSelection($event)"
-              [updateSelectionOnRefresh]="'never'">
+        <div class="table-actions btn-toolbar">
+          <cd-table-actions [permission]="permissions.osd"
+                            [selection]="selection"
+                            class="btn-group"
+                            id="osd-actions"
+                            [tableActions]="tableActions">
+          </cd-table-actions>
+          <cd-table-actions [permission]="{read: true}"
+                            [selection]="selection"
+                            dropDownOnly="Cluster-wide configuration"
+                            btnColor="light"
+                            class="btn-group"
+                            id="cluster-wide-actions"
+                            [tableActions]="clusterWideActions">
+          </cd-table-actions>
+        </div>
 
-      <div class="table-actions btn-toolbar">
-        <cd-table-actions [permission]="permissions.osd"
-                          [selection]="selection"
-                          class="btn-group"
-                          id="osd-actions"
-                          [tableActions]="tableActions">
-        </cd-table-actions>
-        <cd-table-actions [permission]="{read: true}"
-                          [selection]="selection"
-                          dropDownOnly="Cluster-wide configuration"
-                          btnColor="light"
-                          class="btn-group"
-                          id="cluster-wide-actions"
-                          [tableActions]="clusterWideActions">
-        </cd-table-actions>
-      </div>
-
-      <cd-osd-details cdTableDetail
-                      [selection]="expandedRow">
-      </cd-osd-details>
-    </cd-table>
-
-    <ng-template #osdUsageTpl
-                 let-row="row">
-      <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
-                    [usedBytes]="row.stats.stat_bytes_used">
-      </cd-usage-bar>
+        <cd-osd-details cdTableDetail
+                        [selection]="expandedRow">
+        </cd-osd-details>
+      </cd-table>
     </ng-template>
-  </tab>
-  <tab i18n-heading
-       *ngIf="permissions.grafana.read"
-       heading="Overall Performance">
-    <cd-grafana [grafanaPath]="'osd-overview?'"
-                uid="lo02I1Aiz"
-                grafanaStyle="three">
-    </cd-grafana>
-  </tab>
-</tabset>
+  </li>
+
+  <li ngbNavItem
+      *ngIf="permissions.grafana.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+    <ng-template ngbNavContent>
+      <cd-grafana [grafanaPath]="'osd-overview?'"
+                  uid="lo02I1Aiz"
+                  grafanaStyle="three">
+      </cd-grafana>
+    </ng-template>
+  </li>
+</ul>
+
+<div [ngbNavOutlet]="nav"></div>
 
 <ng-template #markOsdConfirmationTpl
              let-markActionDescription="markActionDescription">
   <ng-container i18n><strong>OSD(s) {{  getSelectedOsdIds() | join }}</strong> will be marked
-<strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
+  <strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
 
 <ng-template #criticalConfirmationTpl
@@ -64,8 +67,16 @@
   <div *ngIf="!safeToPerform"
        class="danger">
     <cd-alert-panel type="warning"
-                    i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to be {{ actionDescription }}! {{ message }}</cd-alert-panel>
+                    i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to be
+      {{ actionDescription }}! {{ message }}</cd-alert-panel>
   </div>
   <ng-container i18n><strong>OSD {{ getSelectedOsdIds() | join }}</strong> will be
-<strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+  <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+</ng-template>
+
+<ng-template #osdUsageTpl
+             let-row="row">
+  <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
+                [usedBytes]="row.stats.stat_bytes_used">
+  </cd-usage-bar>
 </ng-template>

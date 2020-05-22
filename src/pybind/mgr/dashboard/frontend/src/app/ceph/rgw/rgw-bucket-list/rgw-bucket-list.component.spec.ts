@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ModalModule } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import {
   configureTestBed,
@@ -27,7 +27,7 @@ describe('RgwBucketListComponent', () => {
       RouterTestingModule,
       ModalModule.forRoot(),
       SharedModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       HttpClientTestingModule
     ],
     providers: i18nProviders

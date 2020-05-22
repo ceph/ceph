@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -21,7 +20,6 @@ describe('DaemonListComponent', () => {
       BrowserAnimationsModule,
       SharedModule,
       BsDropdownModule.forRoot(),
-      TabsModule.forRoot(),
       ProgressbarModule.forRoot(),
       HttpClientTestingModule
     ],

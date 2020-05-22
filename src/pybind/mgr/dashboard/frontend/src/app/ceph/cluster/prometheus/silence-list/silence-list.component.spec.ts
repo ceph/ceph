@@ -5,7 +5,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -32,7 +31,6 @@ describe('SilenceListComponent', () => {
       BrowserAnimationsModule,
       SharedModule,
       BsDropdownModule.forRoot(),
-      TabsModule.forRoot(),
       ModalModule.forRoot(),
       ToastrModule.forRoot(),
       RouterTestingModule,

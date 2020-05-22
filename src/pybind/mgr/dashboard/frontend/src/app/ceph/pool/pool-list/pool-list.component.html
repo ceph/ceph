@@ -1,47 +1,57 @@
-<tabset>
-  <tab i18n-heading
-       heading="Pools List">
-    <cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
-                   [status]="viewCacheStatus.status"
-                   [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
+<ul ngbNav
+    #nav="ngbNav"
+    class="nav-tabs">
+  <li ngbNavItem>
+    <a ngbNavLink
+       i18n>Pools List</a>
+    <ng-template ngbNavContent>
+      <cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
+                     [status]="viewCacheStatus.status"
+                     [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
 
-    <cd-table #table
-              id="pool-list"
-              [data]="pools"
-              [columns]="columns"
-              selectionType="single"
-              [hasDetails]="true"
-              (setExpandedRow)="setExpandedRow($event)"
-              (updateSelection)="updateSelection($event)">
-      <cd-table-actions id="pool-list-actions"
-                        class="table-actions"
-                        [permission]="permissions.pool"
-                        [selection]="selection"
-                        [tableActions]="tableActions">
-      </cd-table-actions>
-      <cd-pool-details cdTableDetail
-                       id="pool-list-details"
-                       [selection]="expandedRow"
-                       [permissions]="permissions"
-                       [cacheTiers]="cacheTiers">
-      </cd-pool-details>
-    </cd-table>
-
-    <ng-template #poolUsageTpl
-                 let-row="row">
-      <cd-usage-bar *ngIf="row.stats?.max_avail?.latest"
-                    [totalBytes]="row.stats.bytes_used.latest + row.stats.max_avail.latest"
-                    [usedBytes]="row.stats.bytes_used.latest">
-      </cd-usage-bar>
+      <cd-table #table
+                id="pool-list"
+                [data]="pools"
+                [columns]="columns"
+                selectionType="single"
+                [hasDetails]="true"
+                (setExpandedRow)="setExpandedRow($event)"
+                (updateSelection)="updateSelection($event)">
+        <cd-table-actions id="pool-list-actions"
+                          class="table-actions"
+                          [permission]="permissions.pool"
+                          [selection]="selection"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+        <cd-pool-details cdTableDetail
+                         id="pool-list-details"
+                         [selection]="expandedRow"
+                         [permissions]="permissions"
+                         [cacheTiers]="cacheTiers">
+        </cd-pool-details>
+      </cd-table>
     </ng-template>
-  </tab>
+  </li>
 
-  <tab i18n-heading
-       *ngIf="permissions.grafana.read"
-       heading="Overall Performance">
-    <cd-grafana [grafanaPath]="'ceph-pools-overview?'"
-                uid="z99hzWtmk"
-                grafanaStyle="two">
-    </cd-grafana>
-  </tab>
-</tabset>
+  <li ngbNavItem
+      *ngIf="permissions.grafana.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+    <ng-template ngbNavContent>
+      <cd-grafana [grafanaPath]="'ceph-pools-overview?'"
+                  uid="z99hzWtmk"
+                  grafanaStyle="two">
+      </cd-grafana>
+    </ng-template>
+  </li>
+</ul>
+
+<div [ngbNavOutlet]="nav"></div>
+
+<ng-template #poolUsageTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row.stats?.max_avail?.latest"
+                [totalBytes]="row.stats.bytes_used.latest + row.stats.max_avail.latest"
+                [usedBytes]="row.stats.bytes_used.latest">
+  </cd-usage-bar>
+</ng-template>

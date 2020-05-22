@@ -1,34 +1,48 @@
-<tabset *ngIf="selection">
-  <tab i18n-heading
-       (selectTab)="softRefresh()"
-       heading="Details">
-    <cd-cephfs-detail [data]="details">
-    </cd-cephfs-detail>
-  </tab>
-  <tab (selectTab)="softRefresh()">
-    <ng-template tabHeading>
-      <ng-container i18n>Clients</ng-container>
-      <span class="badge badge-pill badge-tab ml-1">{{ clients.data.length }}</span>
-    </ng-template>
-    <cd-cephfs-clients [id]="id"
-                       [clients]="clients"
-                       (triggerApiUpdate)="refresh()">
-    </cd-cephfs-clients>
-  </tab>
-  <tab i18n-heading
-       (selectTab)="directoriesSelected = true"
-       heading="Directories">
-    <cd-cephfs-directories *ngIf="directoriesSelected"
-                           [id]="id">
-    </cd-cephfs-directories>
-  </tab>
-  <tab i18n-heading
-       *ngIf="grafanaPermission.read && grafanaId"
-       heading="Performance Details">
-    <cd-grafana [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"
-                uid="tbO9LAiZz"
-                grafanaStyle="one">
-    </cd-grafana>
-  </tab>
-</tabset>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      (navChange)="softRefresh()"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-detail [data]="details">
+        </cd-cephfs-detail>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink>
+        <ng-container i18n>Clients</ng-container>
+        <span class="badge badge-pill badge-tab ml-1">{{ clients.data.length }}</span>
+      </a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-clients [id]="id"
+                           [clients]="clients"
+                           (triggerApiUpdate)="refresh()">
+        </cd-cephfs-clients>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Directories</a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-directories *ngIf="directoriesSelected"
+                               [id]="id">
+        </cd-cephfs-directories>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Performance Details</a>
+      <ng-template ngbNavContent>
+        <cd-grafana [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"
+                    uid="tbO9LAiZz"
+                    grafanaStyle="one">
+        </cd-grafana>
+      </ng-template>
+    </li>
+  </ul>
 
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

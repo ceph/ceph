@@ -1,41 +1,50 @@
 <div *ngIf="contentData">
   <ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
 
-  <tabset>
-    <tab i18n-heading
-         heading="Cluster Logs">
-      <div class="card bg-light mb-3"
-           *ngIf="clog">
-        <div class="card-body">
-          <p *ngFor="let line of clog">
-            <span class="timestamp">{{ line.stamp | cdDate }}</span>
-            <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-            <span class="message">{{ line.message }}</span>
-          </p>
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Cluster Logs</a>
+      <ng-template ngbNavContent>
+        <div class="card bg-light mb-3"
+             *ngIf="clog">
+          <div class="card-body">
+            <p *ngFor="let line of clog">
+              <span class="timestamp">{{ line.stamp | cdDate }}</span>
+              <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
+              <span class="message">{{ line.message }}</span>
+            </p>
 
-          <span *ngIf="contentData.clog.length === 0"
-                i18n>No entries found</span>
+            <span *ngIf="contentData.clog.length === 0"
+                  i18n>No entries found</span>
+          </div>
         </div>
-      </div>
-    </tab>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Audit Logs</a>
+      <ng-template ngbNavContent>
+        <div class="card bg-light mb-3"
+             *ngIf="audit_log">
+          <div class="card-body">
+            <p *ngFor="let line of audit_log">
+              <span class="timestamp">{{ line.stamp | cdDate }}</span>
+              <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
+              <span class="message">{{ line.message }}</span>
+            </p>
 
-    <tab i18n-heading
-         heading="Audit Logs">
-      <div class="card bg-light mb-3"
-           *ngIf="audit_log">
-        <div class="card-body">
-          <p *ngFor="let line of audit_log">
-            <span class="timestamp">{{ line.stamp | cdDate }}</span>
-            <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
-            <span class="message">{{ line.message }}</span>
-          </p>
-
-          <span *ngIf="contentData.audit_log.length === 0"
-                i18n>No entries found</span>
+            <span *ngIf="contentData.audit_log.length === 0"
+                  i18n>No entries found</span>
+          </div>
         </div>
-      </div>
-    </tab>
-  </tabset>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav"></div>
 </div>
 
 <ng-template #logFiltersTpl>

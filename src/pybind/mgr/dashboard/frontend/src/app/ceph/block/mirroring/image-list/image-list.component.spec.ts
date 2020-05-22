@@ -2,9 +2,9 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -21,7 +21,7 @@ describe('ImageListComponent', () => {
       BrowserAnimationsModule,
       SharedModule,
       BsDropdownModule.forRoot(),
-      TabsModule.forRoot(),
+      NgbNavModule,
       ProgressbarModule.forRoot(),
       HttpClientTestingModule
     ],

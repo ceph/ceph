@@ -2,9 +2,13 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  TabHelper
+} from '../../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SummaryService } from '../../../../shared/services/summary.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -16,7 +20,7 @@ describe('ServiceDetailsComponent', () => {
   let fixture: ComponentFixture<ServiceDetailsComponent>;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, RouterTestingModule, TabsModule.forRoot(), SharedModule],
+    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule, NgbNavModule],
     declarations: [ServiceDetailsComponent, ServiceDaemonListComponent],
     providers: [
       i18nProviders,
@@ -46,13 +50,14 @@ describe('ServiceDetailsComponent', () => {
       fixture.detectChanges();
     });
 
-    it('should recognize a tabset child', () => {
-      const tabsetChild = component.tabsetChild;
-      expect(tabsetChild).toBeDefined();
+    it('should have a NgbNav', () => {
+      const ngbNav = TabHelper.getNgbNav(fixture);
+      expect(ngbNav).toBeDefined();
     });
 
     it('should show tabs', () => {
-      expect(component.tabsetChild.tabs.map((t) => t.heading)).toEqual(['Daemons']);
+      const ngbNavItems = TabHelper.getTextContents(fixture);
+      expect(ngbNavItems).toEqual(['Daemons']);
     });
   });
 });

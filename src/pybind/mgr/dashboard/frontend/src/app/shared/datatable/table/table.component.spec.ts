@@ -52,7 +52,7 @@ describe('TableComponent', () => {
     component = fixture.componentInstance;
 
     component.data = createFakeData(10);
-    component.columns = [
+    component.localColumns = component.columns = [
       { prop: 'a', name: 'Index', filterable: true },
       { prop: 'b', name: 'Index times ten' },
       { prop: 'c', name: 'Odd?', filterable: true }
@@ -295,7 +295,7 @@ describe('TableComponent', () => {
 
       beforeEach(() => {
         component.data = [testObject];
-        component.columns = [{ prop: 'obj', name: 'Object' }];
+        component.localColumns = [{ prop: 'obj', name: 'Object' }];
       });
 
       it('should not search through objects as default case', () => {
@@ -366,7 +366,7 @@ describe('TableComponent', () => {
     });
 
     it('should search through arrays', () => {
-      component.columns = [
+      component.localColumns = [
         { prop: 'a', name: 'Index' },
         { prop: 'b', name: 'ArrayColumn' }
       ];
@@ -454,15 +454,15 @@ describe('TableComponent', () => {
     });
 
     it('should have updated the column definitions', () => {
-      expect(component.columns[0].flexGrow).toBe(1);
-      expect(component.columns[1].flexGrow).toBe(2);
-      expect(component.columns[2].flexGrow).toBe(2);
-      expect(component.columns[2].resizeable).toBe(false);
+      expect(component.localColumns[0].flexGrow).toBe(1);
+      expect(component.localColumns[1].flexGrow).toBe(2);
+      expect(component.localColumns[2].flexGrow).toBe(2);
+      expect(component.localColumns[2].resizeable).toBe(false);
     });
 
     it('should have table columns', () => {
       expect(component.tableColumns.length).toBe(3);
-      expect(component.tableColumns).toEqual(component.columns);
+      expect(component.tableColumns).toEqual(component.localColumns);
     });
 
     it('should have a unique identifier which it searches for', () => {
