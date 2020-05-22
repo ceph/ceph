@@ -685,7 +685,9 @@ EOF
         rgw crypt s3 kms backend = testing
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
-        ; uncomment the following to set LC days as the value in seconds;
+	rgw sts key= abcdefghijklmnop
+	rgw s3 auth use sts= true
+	; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
 
@@ -1448,6 +1450,8 @@ do_rgw_create_users()
         --secret opqrstuvwxyzabcdefghijklmnopqrstuvwxyzab \
         --display-name tenanteduser \
         --email tenanteduser@example.com -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin caps add -c $conf_fn --uid=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --caps="roles=*" > /dev/null
+    $CEPH_BIN/radosgw-admin caps add -c $conf_fn --uid=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --caps="user-policy=*" > /dev/null
 
     # Create Swift user
     debug echo "setting up user tester"
