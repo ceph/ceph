@@ -1663,9 +1663,10 @@ void PrimaryLogPG::calc_trim_to_aggressive()
     target = cct->_conf->osd_max_pg_log_entries;
   }
   // limit pg log trimming up to the can_rollback_to value
-  eversion_t limit = std::min(
+  eversion_t limit = std::min({
     pg_log.get_head(),
-    pg_log.get_can_rollback_to());
+    pg_log.get_can_rollback_to(),
+    last_update_ondisk});
   dout(10) << __func__ << " limit = " << limit << dendl;
 
   if (limit != eversion_t() &&

@@ -25,5 +25,6 @@ tasks:
     conf:
       osd:
         osd min pg log entries: 5
+        osd pg log trim min: 0
         osd_fast_fail_on_connection_refused: false
 - osd_recovery:
