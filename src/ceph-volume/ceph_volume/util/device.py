@@ -393,7 +393,7 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
-        # reject disks small than 5GB
+        # reject disks smaller than 5GB
         if int(self.sys_api.get('size', 0)) < 5368709120:
             rejected.append('Insufficient space (<5GB)')
         if self.is_ceph_disk_member:
@@ -404,11 +404,11 @@ class Device(object):
 
     def _check_lvm_reject_reasons(self):
         rejected = []
-        available_vgs = [vg for vg in self.vgs if vg.free >= 5368709120]
-        if self.vgs and not available_vgs:
-            rejected.append('Insufficient space (<5GB) on vgs')
-
-        if not self.vgs:
+        if self.vgs:
+            available_vgs = [vg for vg in self.vgs if vg.free >= 5368709120]
+            if not available_vgs:
+                rejected.append('Insufficient space (<5GB) on vgs')
+        else:
             # only check generic if no vgs are present. Vgs might hold lvs and
             # that might cause 'locked' to trigger
             rejected.extend(self._check_generic_reject_reasons())
