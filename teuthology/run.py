@@ -170,7 +170,7 @@ def get_initial_tasks(lock, config, machine_type):
     overrides = config.get('overrides')
     having_repos = ('install' in config and 'repos' in config.get('install')) \
         or (overrides and 'install' in overrides and 'repos' in overrides.get('install'))
-    if not having_repos:
+    if not ('redhat' in config or having_repos):
         init_tasks += [
             {'internal.check_packages': None},
             {'internal.buildpackages_prep': None},
