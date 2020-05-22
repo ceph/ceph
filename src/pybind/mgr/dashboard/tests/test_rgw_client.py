@@ -3,9 +3,9 @@
 import unittest
 
 try:
-    from mock import patch
-except ImportError:
     from unittest.mock import patch
+except ImportError:
+    from mock import patch  # type: ignore
 
 from ..services.rgw_client import RgwClient, _parse_frontend_config
 from ..settings import Settings
@@ -123,6 +123,23 @@ class RgwClientTest(unittest.TestCase, KVStoreMockMixin):
             ]
         }
         self.assertEqual(expected_result, instance.get_placement_targets())
+
+    @patch.object(RgwClient, '_get_realms_info')
+    def test_get_realms(self, realms_info):
+        realms_info.side_effect = [
+            {
+                'default_info': '51de8373-bc24-4f74-a9b7-8e9ef4cb71f7',
+                'realms': [
+                    'realm1',
+                    'realm2'
+                ]
+            },
+            {}
+        ]
+        instance = RgwClient.admin_instance()
+
+        self.assertEqual(['realm1', 'realm2'], instance.get_realms())
+        self.assertEqual([], instance.get_realms())
 
 
 class RgwClientHelperTest(unittest.TestCase):

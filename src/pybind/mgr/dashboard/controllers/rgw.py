@@ -115,11 +115,11 @@ class RgwRESTController(RESTController):
 class RgwSite(RgwRESTController):
     def list(self, query=None):
         if query == 'placement-targets':
-            instance = RgwClient.admin_instance()
-            result = instance.get_placement_targets()
+            result = RgwClient.admin_instance().get_placement_targets()
+        elif query == 'realms':
+            result = RgwClient.admin_instance().get_realms()
         else:
-            # @TODO: (it'll be required for multisite workflows):
-            # by default, retrieve cluster realms/zonegroups map.
+            # @TODO: for multisite: by default, retrieve cluster topology/map.
             raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
 
         return result
