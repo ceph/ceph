@@ -2731,6 +2731,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   // previously allocated extents.
   bool must_dirty = false;
   uint64_t clear_upto = 0;
+  bool need_wait = cct->_conf->bluefs_preextend_wal_files &&
+    h->writer_type == WRITER_WAL; // this might cause overlapped IO hence
+                                  // enable aio wait
+
   if (allocated < offset + length) {
     // we should never run out of log space here; see the min runway check
     // in _flush_and_sync_log.
@@ -2811,12 +2815,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     x_off -= partial;
     offset -= partial;
     length += partial;
-    dout(20) << __func__ << " waiting for previous aio to complete" << dendl;
-    for (auto p : h->iocv) {
-      if (p) {
-	p->aio_wait();
-      }
-    }
+    need_wait = true;
   }
   if (length == partial + h->buffer.length() || clear_upto != 0) {
     /* in case of inital allocation and need to zero, limited flush is unacceptable */
@@ -2854,7 +2853,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       bl.append_zero(clear_upto - (offset + length));
       length += clear_upto - (offset + length);
     } 
-  } 
+  }
   ceph_assert(bl.length() == length);
 
   switch (h->writer_type) {
@@ -2869,7 +2868,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   dout(30) << "dump:\n";
   bl.hexdump(*_dout);
   *_dout << dendl;
-
+ 
   uint64_t bloff = 0;
   uint64_t bytes_written_slow = 0;
   while (length > 0) {
@@ -2895,7 +2894,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       if (h->iocv[i] && h->iocv[i]->has_pending_aios()) {
-        bdev[i]->aio_submit(h->iocv[i]);
+        bdev[i]->aio_submit(h->iocv[i], need_wait);
       }
     }
   }
@@ -3018,6 +3017,7 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<ceph::mutex>& l)
     ceph_assert(h->file->dirty_seq == 0 ||  // cleaned
 	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
+  dout(10) << __func__ << " done." << dendl;
   return 0;
 }
 

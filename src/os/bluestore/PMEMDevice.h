@@ -39,7 +39,7 @@ public:
   PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv);
 
 
-  void aio_submit(IOContext *ioc) override;
+  void aio_submit(IOContext *ioc, bool check_if_should_wait) override;
 
   int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
 

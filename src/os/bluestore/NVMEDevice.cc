@@ -760,7 +760,7 @@ int NVMEDevice::flush()
   return 0;
 }
 
-void NVMEDevice::aio_submit(IOContext *ioc)
+void NVMEDevice::aio_submit(IOContext *ioc, bool /*check_if_should_wait*/)
 {
   dout(20) << __func__ << " ioc " << ioc << " pending "
            << ioc->num_pending.load() << " running "
@@ -887,7 +887,7 @@ int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered, int write_hin
   IOContext ioc(cct, NULL);
   write_split(this, off, bl, &ioc);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
-  aio_submit(&ioc);
+  aio_submit(&ioc, false);
   ioc.aio_wait();
   return 0;
 }
@@ -907,7 +907,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ceph_assert(ioc->nvme_task_last == nullptr);
   make_read_tasks(this, off, ioc, buf, len, &t, off, len);
   dout(5) << __func__ << " " << off << "~" << len << dendl;
-  aio_submit(ioc);
+  aio_submit(ioc, false);
 
   pbl->push_back(std::move(p));
   return t.return_code;
@@ -944,7 +944,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   Task t(this, IOCommand::READ_COMMAND, aligned_off, aligned_len, 1);
 
   make_read_tasks(this, aligned_off, &ioc, buf, aligned_len, &t, off, len);
-  aio_submit(&ioc);
+  aio_submit(&ioc, false);
 
   return t.return_code;
 }

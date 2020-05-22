@@ -171,7 +171,7 @@ int PMEMDevice::flush()
 }
 
 
-void PMEMDevice::aio_submit(IOContext *ioc)
+void PMEMDevice::aio_submit(IOContext *ioc, bool /*check_if_should_wait*/)
 {
   if (ioc->priv) {
     ceph_assert(ioc->num_running == 0);

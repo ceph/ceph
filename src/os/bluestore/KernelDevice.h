@@ -111,7 +111,7 @@ class KernelDevice : public BlockDevice {
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
 
-  void aio_submit(IOContext *ioc) override;
+  void aio_submit(IOContext *ioc, bool check_if_should_wait) override;
   void discard_drain() override;
 
   int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;

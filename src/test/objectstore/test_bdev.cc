@@ -77,7 +77,7 @@ TEST(KernelDevice, Ticket45337) {
   ASSERT_EQ(r, 0);
 
   if (ioc->has_pending_aios()) {
-    b->aio_submit(ioc.get());
+    b->aio_submit(ioc.get(), false);
     ioc->aio_wait();
   }
 

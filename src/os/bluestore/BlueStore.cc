@@ -9872,7 +9872,7 @@ int BlueStore::_do_read(
   int64_t num_ios = length;
   if (ioc.has_pending_aios()) {
     num_ios = -ioc.get_num_ios();
-    bdev->aio_submit(&ioc);
+    bdev->aio_submit(&ioc, false);
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
     r = ioc.get_return_value();
@@ -10226,7 +10226,7 @@ int BlueStore::_do_readv(
   auto num_ios = m.size();
   if (ioc.has_pending_aios()) {
     num_ios = ioc.get_num_ios();
-    bdev->aio_submit(&ioc);
+    bdev->aio_submit(&ioc, false);
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
     r = ioc.get_return_value();
@@ -12267,7 +12267,7 @@ void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
     ++i;
   }
 
-  bdev->aio_submit(&b->ioc);
+  bdev->aio_submit(&b->ioc, false);
 }
 
 struct C_DeferredTrySubmit : public Context {
@@ -12493,7 +12493,7 @@ int BlueStore::queue_transactions(
 void BlueStore::_txc_aio_submit(TransContext *txc)
 {
   dout(10) << __func__ << " txc " << txc << dendl;
-  bdev->aio_submit(&txc->ioc);
+  bdev->aio_submit(&txc->ioc, false);
 }
 
 void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)

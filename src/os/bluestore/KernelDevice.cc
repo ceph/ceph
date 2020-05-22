@@ -697,8 +697,9 @@ void KernelDevice::_aio_log_start(
     if (debug_inflight.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of 0x"
 	   << std::hex
-	   << offset << "~" << length << std::dec
-	   << " with " << debug_inflight << dendl;
+	   << offset << "~" << length
+	   << " with " << debug_inflight << std::dec
+           << dendl;
       ceph_abort();
     }
     debug_inflight.insert(offset, length);
@@ -753,7 +754,7 @@ void KernelDevice::_aio_log_finish(
   }
 }
 
-void KernelDevice::aio_submit(IOContext *ioc)
+void KernelDevice::aio_submit(IOContext *ioc, bool check_if_should_wait)
 {
   dout(20) << __func__ << " ioc " << ioc
 	   << " pending " << ioc->num_pending.load()
@@ -764,6 +765,18 @@ void KernelDevice::aio_submit(IOContext *ioc)
     return;
   }
 
+  if (check_if_should_wait && ioc->num_running.load() > 0) {
+    for(auto& r : ioc->running_aios) {
+      for (auto& p : ioc->pending_aios) {
+        if ((r.offset < p.offset + p.length) &&
+            (p.offset < r.offset + r.length)) {
+          dout(20) << __func__ << " waiting prior to submit" << dendl;
+          ioc->aio_wait();
+          break;
+        }
+      }
+    }
+  }
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
