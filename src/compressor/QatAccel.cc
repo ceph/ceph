@@ -59,7 +59,7 @@ bool QatAccel::init(const std::string &alg) {
   return true;
 }
 
-int QatAccel::compress(const bufferlist &in, bufferlist &out) {
+int QatAccel::compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message) {
   for (auto &i : in.buffers()) {
     const unsigned char* c_in = (unsigned char*) i.c_str();
     unsigned int len = i.length();
@@ -75,14 +75,15 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out) {
   return 0;
 }
 
-int QatAccel::decompress(const bufferlist &in, bufferlist &out) {
+int QatAccel::decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message) {
   auto i = in.begin();
-  return decompress(i, in.length(), out);
+  return decompress(i, in.length(), out, compressor_message);
 }
 
 int QatAccel::decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
-		 bufferlist &dst) {
+		 bufferlist &dst,
+		 boost::optional<int32_t> compressor_message) {
   unsigned int ratio_idx = 0;
   bool read_more = false;
   bool joint = false;
