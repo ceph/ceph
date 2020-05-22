@@ -338,7 +338,8 @@ void chunk_refs_t::dynamic_encode(ceph::buffer::list& bl, size_t max)
   bufferlist t;
   while (true) {
     _encode_r(t);
-    if (t.length() <= max) {
+    // account for the additional overhead in _encode_final
+    if (t.length() + 8 <= max) {
       break;
     }
     // downgrade resolution
