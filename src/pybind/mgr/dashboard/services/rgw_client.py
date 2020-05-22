@@ -6,7 +6,7 @@ from distutils.util import strtobool
 from ..awsauth import S3Auth
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
-from ..tools import build_url, dict_contains_path, is_valid_ip_address
+from ..tools import build_url, dict_contains_path, is_valid_ip_address, json_str_to_object
 from .. import mgr, logger
 
 
@@ -227,6 +227,9 @@ class RgwClient(RestClient):
         # Append the instance to the internal map.
         RgwClient._user_instances[RgwClient._SYSTEM_USERID] = instance
 
+    def _get_realms_info(self):  # type: () -> dict
+        return json_str_to_object(self.proxy('GET', 'realm?list', None, None))
+
     @staticmethod
     def _rgw_settings():
         return (Settings.RGW_API_HOST,
@@ -435,3 +438,10 @@ class RgwClient(RestClient):
     def create_bucket(self, bucket_name, request=None):
         logger.info("Creating bucket: %s", bucket_name)
         return request()
+
+    def get_realms(self):  # type: () -> List
+        realms_info = self._get_realms_info()
+        if 'realms' in realms_info and realms_info['realms']:
+            return realms_info['realms']
+
+        return []

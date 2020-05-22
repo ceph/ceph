@@ -880,6 +880,26 @@ def str_to_bool(val):
     return bool(strtobool(val))
 
 
+def json_str_to_object(value):  # type: (AnyStr) -> Any
+    """
+    It converts a JSON valid string representation to object.
+
+    >>> result = json_str_to_object('{"a": 1}')
+    >>> result == {'a': 1}
+    True
+    """
+    if value == '':
+        return value
+
+    try:
+        # json.loads accepts binary input from version >=3.6
+        value = value.decode('utf-8')  # type: ignore
+    except AttributeError:
+        pass
+
+    return json.loads(value)
+
+
 def get_request_body_params(request):
     """
     Helper function to get parameters from the request body.
