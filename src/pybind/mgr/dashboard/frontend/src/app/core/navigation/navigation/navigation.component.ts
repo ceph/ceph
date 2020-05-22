@@ -7,6 +7,7 @@ import {
   FeatureTogglesMap$,
   FeatureTogglesService
 } from '../../../shared/services/feature-toggles.service';
+import { PrometheusAlertService } from '../../../shared/services/prometheus-alert.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
@@ -27,7 +28,8 @@ export class NavigationComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private prometheusService: PrometheusService,
     private summaryService: SummaryService,
-    private featureToggles: FeatureTogglesService
+    private featureToggles: FeatureTogglesService,
+    public prometheusAlertService: PrometheusAlertService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
