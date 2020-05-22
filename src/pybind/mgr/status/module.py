@@ -64,7 +64,7 @@ class Module(MgrModule):
                 continue
 
             rank_table = PrettyTable(
-                ("RANK", "STATE", "MDS", "ACTIVITY", "DNS", "INOS"),
+                ("RANK", "STATE", "MDS", "ACTIVITY", "DNS", "INOS", "DIRS", "CAPS"),
                 border=False,
             )
             rank_table.left_padding_width = 0
@@ -81,6 +81,8 @@ class Module(MgrModule):
                     info = mdsmap['info']['gid_{0}'.format(gid)]
                     dns = self.get_latest("mds", info['name'], "mds_mem.dn")
                     inos = self.get_latest("mds", info['name'], "mds_mem.ino")
+                    dirs = self.get_latest("mds", info['name'], "mds_mem.dir")
+                    caps = self.get_latest("mds", info['name'], "mds_mem.cap")
 
                     if rank == 0:
                         client_count = self.get_latest("mds", info['name'],
@@ -120,14 +122,18 @@ class Module(MgrModule):
                             'state': state,
                             'rate': rate if state == "active" else "0",
                             'dns': dns,
-                            'inos': inos
+                            'inos': inos,
+                            'dirs': dirs,
+                            'caps': caps
                         })
                     else:
                         rank_table.add_row([
                             mgr_util.bold(rank.__str__()), c_state, info['name'],
                             activity,
                             mgr_util.format_dimless(dns, 5),
-                            mgr_util.format_dimless(inos, 5)
+                            mgr_util.format_dimless(inos, 5),
+                            mgr_util.format_dimless(dirs, 5),
+                            mgr_util.format_dimless(caps, 5)
                         ])
                 else:
                     if output_format in ('json', 'json-pretty'):
@@ -137,7 +143,7 @@ class Module(MgrModule):
                         })
                     else:
                         rank_table.add_row([
-                            rank, "failed", "", "", "", ""
+                            rank, "failed", "", "", "", "", "", ""
                         ])
 
             # Find the standby replays
@@ -147,6 +153,8 @@ class Module(MgrModule):
 
                 inos = self.get_latest("mds", daemon_info['name'], "mds_mem.ino")
                 dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
+                dirs = self.get_latest("mds", daemon_info['name'], "mds_mem.dir")
+                caps = self.get_latest("mds", daemon_info['name'], "mds_mem.cap")
 
                 events = self.get_rate("mds", daemon_info['name'], "mds_log.replayed")
                 if output_format not in ('json', 'json-pretty'):
@@ -162,14 +170,18 @@ class Module(MgrModule):
                         'state': 'standby-replay',
                         'events': events,
                         'dns': 5,
-                        'inos': 5
+                        'inos': 5,
+                        'dirs': 5,
+                        'caps': 5
                     })
                 else:
                     rank_table.add_row([
                         "{0}-s".format(daemon_info['rank']), "standby-replay",
                         daemon_info['name'], activity,
                         mgr_util.format_dimless(dns, 5),
-                        mgr_util.format_dimless(inos, 5)
+                        mgr_util.format_dimless(inos, 5),
+                        mgr_util.format_dimless(dirs, 5),
+                        mgr_util.format_dimless(caps, 5)
                     ])
 
             df = self.get("df")
