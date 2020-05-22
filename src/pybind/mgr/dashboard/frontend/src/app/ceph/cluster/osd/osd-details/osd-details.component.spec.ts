@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -22,7 +22,7 @@ describe('OsdDetailsComponent', () => {
   let getDetailsSpy: jasmine.Spy;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, TabsModule.forRoot(), SharedModule],
+    imports: [HttpClientTestingModule, NgbNavModule, SharedModule],
     declarations: [
       OsdDetailsComponent,
       DeviceListComponent,

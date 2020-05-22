@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
@@ -16,7 +16,7 @@ describe('RulesListComponent', () => {
 
   configureTestBed({
     declarations: [RulesListComponent],
-    imports: [HttpClientTestingModule, SharedModule, TabsModule.forRoot(), BrowserAnimationsModule],
+    imports: [HttpClientTestingModule, SharedModule, NgbNavModule, BrowserAnimationsModule],
     providers: [PrometheusService, SettingsService, i18nProviders]
   });
 

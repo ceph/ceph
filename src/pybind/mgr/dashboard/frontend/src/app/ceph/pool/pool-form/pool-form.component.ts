@@ -2,10 +2,11 @@ import { Component, EventEmitter, OnInit, Type, ViewChild } from '@angular/core'
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsetComponent } from 'ngx-bootstrap/tabs';
 import { TooltipDirective } from 'ngx-bootstrap/tooltip';
 import { Observable, Subscription } from 'rxjs';
 
@@ -54,9 +55,9 @@ interface FormFieldDescription {
   styleUrls: ['./pool-form.component.scss']
 })
 export class PoolFormComponent extends CdForm implements OnInit {
-  @ViewChild('crushInfoTabs') crushInfoTabs: TabsetComponent;
+  @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
   @ViewChild('crushDeletionBtn') crushDeletionBtn: TooltipDirective;
-  @ViewChild('ecpInfoTabs') ecpInfoTabs: TabsetComponent;
+  @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
   @ViewChild('ecpDeletionBtn') ecpDeletionBtn: TooltipDirective;
 
   permission: Permission;
@@ -632,7 +633,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       deletionBtn: this.ecpDeletionBtn,
       dataName: 'erasureInfo',
       getTabs: () => this.ecpInfoTabs,
-      tabPosition: 1,
+      tabPosition: 'used-by-pools',
       nameAttribute: 'name',
       itemDescription: this.i18n('erasure code profile'),
       reloadFn: () => this.reloadECPs(),
@@ -658,8 +659,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     usage: string[];
     deletionBtn: TooltipDirective;
     dataName: string;
-    getTabs: () => TabsetComponent;
-    tabPosition: number;
+    getTabs: () => NgbNav;
+    tabPosition: string;
     nameAttribute: string;
     itemDescription: string;
     reloadFn: Function;
@@ -675,7 +676,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       setTimeout(() => {
         const tabs = getTabs();
         if (tabs) {
-          tabs.tabs[tabPosition].active = true;
+          tabs.select(tabPosition);
         }
       }, 50);
       return;
@@ -722,7 +723,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       deletionBtn: this.crushDeletionBtn,
       dataName: 'crushInfo',
       getTabs: () => this.crushInfoTabs,
-      tabPosition: 2,
+      tabPosition: 'used-by-pools',
       nameAttribute: 'rule_name',
       itemDescription: this.i18n('crush rule'),
       reloadFn: () => this.reloadCrushRules(),

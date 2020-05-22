@@ -1,33 +1,46 @@
-<tabset>
-  <tab i18n-heading
-       heading="Daemons List">
-    <cd-table [data]="daemons"
-              [columns]="columns"
-              columnMode="flex"
-              [hasDetails]="true"
-              (setExpandedRow)="setExpandedRow($event)"
-              (fetchData)="getDaemonList($event)">
-      <cd-rgw-daemon-details cdTableDetail
-                             [selection]="expandedRow">
-      </cd-rgw-daemon-details>
-    </cd-table>
-  </tab>
+<ul ngbNav
+    #nav="ngbNav"
+    class="nav-tabs">
+  <li ngbNavItem>
+    <a ngbNavLink
+       i18n>Daemons List</a>
+    <ng-template ngbNavContent>
+      <cd-table [data]="daemons"
+                [columns]="columns"
+                columnMode="flex"
+                [hasDetails]="true"
+                (setExpandedRow)="setExpandedRow($event)"
+                (fetchData)="getDaemonList($event)">
+        <cd-rgw-daemon-details cdTableDetail
+                               [selection]="expandedRow">
+        </cd-rgw-daemon-details>
+      </cd-table>
+    </ng-template>
+  </li>
 
-  <tab i18n-heading
-       *ngIf="grafanaPermission.read"
-       heading="Overall Performance">
-    <cd-grafana [grafanaPath]="'rgw-overview?'"
-                uid="WAkugZpiz"
-                grafanaStyle="two">
-    </cd-grafana>
-  </tab>
+  <li ngbNavItem
+      *ngIf="grafanaPermission.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+    <ng-template ngbNavContent>
+      <cd-grafana [grafanaPath]="'rgw-overview?'"
+                  uid="WAkugZpiz"
+                  grafanaStyle="two">
+      </cd-grafana>
+    </ng-template>
+  </li>
 
-  <tab i18n-heading
-       *ngIf="grafanaPermission.read && isMultiSite"
-       heading="Sync Performance">
-    <cd-grafana [grafanaPath]="'radosgw-sync-overview?'"
-                uid="rgw-sync-overview"
-                grafanaStyle="two">
-    </cd-grafana>
-  </tab>
-</tabset>
+  <li ngbNavItem
+      *ngIf="grafanaPermission.read && isMultiSite">
+    <a ngbNavLink
+       i18n>Sync Performance</a>
+    <ng-template ngbNavContent>
+      <cd-grafana [grafanaPath]="'radosgw-sync-overview?'"
+                  uid="rgw-sync-overview"
+                  grafanaStyle="two">
+      </cd-grafana>
+    </ng-template>
+  </li>
+</ul>
+
+<div [ngbNavOutlet]="nav"></div>

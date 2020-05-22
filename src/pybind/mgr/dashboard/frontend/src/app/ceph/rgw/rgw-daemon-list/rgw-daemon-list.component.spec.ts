@@ -3,10 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders, TabHelper } from '../../../../testing/unit-test-helper';
 import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -21,11 +21,11 @@ describe('RgwDaemonListComponent', () => {
   let getPermissionsSpy: jasmine.Spy;
   let getRealmsSpy: jasmine.Spy;
   const permissions = new Permissions({ grafana: ['read'] });
-  const expectTabsAndHeading = (length: number, heading: string) => {
-    const tabs = fixture.debugElement.nativeElement.querySelectorAll('tab');
 
+  const expectTabsAndHeading = (length: number, heading: string) => {
+    const tabs = TabHelper.getTextContents(fixture);
     expect(tabs.length).toEqual(length);
-    expect(tabs[length - 1].getAttribute('heading')).toEqual(heading);
+    expect(tabs[length - 1]).toEqual(heading);
   };
 
   configureTestBed({
@@ -33,7 +33,7 @@ describe('RgwDaemonListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       HttpClientTestingModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       PerformanceCounterModule,
       SharedModule,
       RouterTestingModule

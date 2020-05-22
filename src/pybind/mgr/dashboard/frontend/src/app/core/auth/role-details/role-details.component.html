@@ -1,14 +1,23 @@
-<tabset *ngIf="selection">
-  <tab heading="Details"
-       i18n-heading>
-    <cd-table [data]="scopes_permissions"
-              [columns]="columns"
-              columnMode="flex"
-              [toolHeader]="false"
-              [autoReload]="false"
-              [autoSave]="false"
-              [footer]="false"
-              [limit]="0">
-    </cd-table>
-  </tab>
-</tabset>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <cd-table [data]="scopes_permissions"
+                  [columns]="columns"
+                  columnMode="flex"
+                  [toolHeader]="false"
+                  [autoReload]="false"
+                  [autoSave]="false"
+                  [footer]="false"
+                  [limit]="0">
+        </cd-table>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

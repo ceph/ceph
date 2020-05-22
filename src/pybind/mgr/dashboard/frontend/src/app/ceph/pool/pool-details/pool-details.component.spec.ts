@@ -3,9 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders, TabHelper } from '../../../../testing/unit-test-helper';
 import { Permissions } from '../../../shared/models/permissions';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
@@ -18,7 +18,7 @@ describe('PoolDetailsComponent', () => {
   configureTestBed({
     imports: [
       BrowserAnimationsModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       SharedModule,
       HttpClientTestingModule,
       RouterTestingModule
@@ -51,16 +51,17 @@ describe('PoolDetailsComponent', () => {
 
     it('should recognize a tabset child', () => {
       fixture.detectChanges();
-      const tabsetChild: TabsetComponent = poolDetailsComponent.tabsetChild;
-      expect(tabsetChild).toBeDefined();
+      const ngbNav = TabHelper.getNgbNav(fixture);
+      expect(ngbNav).toBeDefined();
     });
 
     it('should show "Cache Tiers Details" tab if selected pool has "tiers"', () => {
       fixture.detectChanges();
-      const tabs = poolDetailsComponent.tabsetChild.tabs;
-      expect(tabs.length).toBe(3);
-      expect(tabs[2].heading).toBe('Cache Tiers Details');
-      expect(tabs[0].active).toBeTruthy();
+      const tabsItem = TabHelper.getNgbNavItems(fixture);
+      const tabsText = TabHelper.getTextContents(fixture);
+      expect(tabsItem.length).toBe(3);
+      expect(tabsText[2]).toBe('Cache Tiers Details');
+      expect(tabsItem[0].active).toBeTruthy();
     });
 
     it('should not show "Cache Tiers Details" tab if selected pool has no "tiers"', () => {
@@ -68,17 +69,19 @@ describe('PoolDetailsComponent', () => {
         tiers: []
       };
       fixture.detectChanges();
-      const tabs = poolDetailsComponent.tabsetChild.tabs;
+      const tabs = TabHelper.getNgbNavItems(fixture);
       expect(tabs.length).toEqual(2);
       expect(tabs[0].active).toBeTruthy();
     });
 
     it('current active status of tabs should not change when selection is the same as previous selection', () => {
       fixture.detectChanges();
-      const tabs = poolDetailsComponent.tabsetChild.tabs;
+      const tabs = TabHelper.getNgbNavItems(fixture);
       expect(tabs[0].active).toBeTruthy();
 
-      tabs[1].active = true;
+      const ngbNav = TabHelper.getNgbNav(fixture);
+      ngbNav.select(tabs[1].id);
+
       fixture.detectChanges();
       expect(tabs[1].active).toBeTruthy();
     });

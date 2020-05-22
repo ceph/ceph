@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 
 import { Router } from '@angular/router';
 
@@ -7,16 +7,6 @@ import { Router } from '@angular/router';
   templateUrl: './iscsi-tabs.component.html',
   styleUrls: ['./iscsi-tabs.component.scss']
 })
-export class IscsiTabsComponent implements OnInit {
-  url: string;
-
-  constructor(private router: Router) {}
-
-  ngOnInit() {
-    this.url = this.router.url;
-  }
-
-  navigateTo(url: string) {
-    this.router.navigate([url]);
-  }
+export class IscsiTabsComponent {
+  constructor(public router: Router) {}
 }
