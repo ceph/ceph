@@ -41,7 +41,7 @@ Journal::initialize_segment_ertr::future<> Journal::initialize_segment(
   written_to = segment_manager.get_block_size();
   return segment.write(0, bl).handle_error(
     init_ertr::pass_further{},
-    crimson::ct_error::all_same_way([] { ceph_assert(0 == "TODO"); }));
+    crimson::ct_error::assert_all{ "TODO" });
 }
 
 ceph::bufferlist Journal::encode_record(
@@ -92,7 +92,7 @@ Journal::write_record_ertr::future<> Journal::write_record(
     rsize.dlength);
   return current_journal_segment->write(target, to_write).handle_error(
     write_record_ertr::pass_further{},
-    crimson::ct_error::all_same_way([] { ceph_assert(0 == "TODO"); }));
+    crimson::ct_error::assert_all{ "TODO" });
 }
 
 Journal::record_size_t Journal::get_encoded_record_length(
