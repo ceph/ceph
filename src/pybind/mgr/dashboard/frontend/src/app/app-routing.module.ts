@@ -300,8 +300,7 @@ const routes: Routes = [
         path: 'login-change-password',
         component: LoginPasswordFormComponent,
         canActivate: [NoSsoGuardService]
-      },
-      { path: 'logout', children: [] }
+      }
     ]
   },
   {
