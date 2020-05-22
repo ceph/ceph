@@ -17,6 +17,8 @@
 
 #include <string>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/radosstriper/libradosstriper.h"
@@ -26,6 +28,7 @@
 #include "librados/IoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
 #include "common/RefCountedObj.h"
+#include "common/ceph_context.h"
 
 namespace libradosstriper {
 

@@ -17,6 +17,8 @@
 
 #include <string_view>
 
+#include <boost/asio/io_context.hpp>
+
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
@@ -151,7 +153,8 @@ class MDSRank {
         MonClient *monc_,
         MgrClient *mgrc,
         Context *respawn_hook_,
-        Context *suicide_hook_);
+        Context *suicide_hook_,
+	boost::asio::io_context& ioc);
 
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
@@ -580,6 +583,7 @@ private:
     void send_task_status();
 
     mono_time starttime = mono_clock::zero();
+    boost::asio::io_context& ioc;
 };
 
 /* This expects to be given a reference which it is responsible for.
@@ -628,7 +632,8 @@ public:
       MonClient *monc_,
       MgrClient *mgrc,
       Context *respawn_hook_,
-      Context *suicide_hook_);
+      Context *suicide_hook_,
+      boost::asio::io_context& ioc);
 
   void init();
   void tick();

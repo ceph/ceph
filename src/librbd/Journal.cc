@@ -1644,7 +1644,7 @@ int Journal<I>::check_resync_requested(bool *do_resync) {
     decode(client_data, bl_it);
   } catch (const buffer::error &err) {
     lderr(cct) << this << " " << __func__ << ": "
-               << "failed to decode client data: " << err << dendl;
+               << "failed to decode client data: " << err.what() << dendl;
     return -EINVAL;
   }
 

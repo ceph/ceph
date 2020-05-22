@@ -322,11 +322,13 @@ set(libcommon_files
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
+  common/error_code.cc
   log/Log.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
   mon/MonSub.cc
+  mon/error_code.cc
   mgr/MgrClient.cc
   mon/PGMap.cc
   mgr/ServiceMap.cc
@@ -335,12 +337,14 @@ set(libcommon_files
   osd/OSDMap.cc
   osd/OSDMapMapping.cc
   osd/osd_types.cc
+  osd/error_code.cc
   osd/PGPeeringEvent.cc
   osd/OpRequest.cc
   osd/ClassHandler.cc
   osd/osd_op_util.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
 set_source_files_properties(ceph_ver.c
@@ -373,6 +377,7 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
+  fmt::fmt
   StdFilesystem::filesystem
   fmt::fmt
   ${BLKID_LIBRARIES}
@@ -485,6 +490,7 @@ option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
 add_subdirectory(include)
 add_subdirectory(librados)
+add_subdirectory(neorados)
 
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)

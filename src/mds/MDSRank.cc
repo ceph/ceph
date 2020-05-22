@@ -16,6 +16,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/async/blocked_completion.h"
 
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
@@ -484,10 +485,11 @@ MDSRank::MDSRank(
     MonClient *monc_,
     MgrClient *mgrc,
     Context *respawn_hook_,
-    Context *suicide_hook_) :
+    Context *suicide_hook_,
+    boost::asio::io_context& ioc) :
     cct(msgr->cct), mds_lock(mds_lock_), clog(clog_),
     timer(timer_), mdsmap(mdsmap_),
-    objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
+    objecter(new Objecter(g_ceph_context, msgr, monc_, ioc, 0, 0)),
     damage_table(whoami_), sessionmap(this),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),
@@ -504,7 +506,8 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_), mgrc(mgrc),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
-    starttime(mono_clock::now())
+    starttime(mono_clock::now()),
+    ioc(ioc)
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
@@ -1682,7 +1685,6 @@ void MDSRank::calc_recovery_set()
   dout(1) << " recovery set is " << rs << dendl;
 }
 
-
 void MDSRank::replay_start()
 {
   dout(1) << "replay_start" << dendl;
@@ -1693,17 +1695,20 @@ void MDSRank::replay_start()
   calc_recovery_set();
 
   // Check if we need to wait for a newer OSD map before starting
-  Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL));
-  bool const ready = objecter->wait_for_map(
-      mdsmap->get_last_failure_osd_epoch(),
-      fin);
+  bool const ready = objecter->with_osdmap(
+    [this](const OSDMap& o) {
+      return o.get_epoch() >= mdsmap->get_last_failure_osd_epoch();
+    });
 
   if (ready) {
-    delete fin;
     boot_start();
   } else {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
 	    << " (which blacklists prior instance)" << dendl;
+    Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL));
+    objecter->wait_for_map(
+      mdsmap->get_last_failure_osd_epoch(),
+      lambdafy(fin));
   }
 }
 
@@ -1755,10 +1760,11 @@ void MDSRank::standby_replay_restart()
     /* We are transitioning out of standby: wait for OSD map update
        before making final pass */
     dout(1) << "standby_replay_restart (final takeover pass)" << dendl;
-    Context *fin = new C_IO_Wrapper(this, new C_MDS_StandbyReplayRestart(this));
-    bool ready = objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(), fin);
+    bool ready = objecter->with_osdmap(
+      [this](const OSDMap& o) {
+	return o.get_epoch() >= mdsmap->get_last_failure_osd_epoch();
+      });
     if (ready) {
-      delete fin;
       mdlog->get_journaler()->reread_head_and_probe(
         new C_MDS_StandbyReplayRestartFinish(
           this,
@@ -1769,8 +1775,11 @@ void MDSRank::standby_replay_restart()
       dout(1) << " opening open_file_table (async)" << dendl;
       mdcache->open_file_table.load(nullptr);
     } else {
+      auto fin = new C_IO_Wrapper(this, new C_MDS_StandbyReplayRestart(this));
       dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
-              << " (which blacklists prior instance)" << dendl;
+	      << " (which blacklists prior instance)" << dendl;
+      objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(),
+			     lambdafy(fin));
     }
   }
 }
@@ -2493,12 +2502,9 @@ void MDSRankDispatcher::handle_asok_command(
       std::lock_guard l(mds_lock);
       set_osd_epoch_barrier(target_epoch);
     }
-    C_SaferCond cond;
-    bool already_got = objecter->wait_for_map(target_epoch, &cond);
-    if (!already_got) {
-      dout(4) << __func__ << ": waiting for OSD epoch " << target_epoch << dendl;
-      cond.wait();
-    }
+    boost::system::error_code ec;
+    dout(4) << __func__ << ": possibly waiting for OSD epoch " << target_epoch << dendl;
+    objecter->wait_for_map(target_epoch, ceph::async::use_blocked[ec]);
   } else if (command == "session ls" ||
 	     command == "client ls") {
     std::lock_guard l(mds_lock);
@@ -3431,7 +3437,7 @@ bool MDSRank::evict_client(int64_t session_id,
 
     Context *on_blacklist_done = new LambdaContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
-       new C_OnFinisher(
+      lambdafy((new C_OnFinisher(
          new LambdaContext([this, fn](int r) {
               std::lock_guard l(mds_lock);
               auto epoch = objecter->with_osdmap([](const OSDMap &o){
@@ -3442,7 +3448,7 @@ bool MDSRank::evict_client(int64_t session_id,
 
               fn();
             }), finisher)
-       );
+      )));
     });
 
     dout(4) << "Sending mon blacklist command: " << cmd[0] << dendl;
@@ -3503,9 +3509,10 @@ MDSRankDispatcher::MDSRankDispatcher(
     MonClient *monc_,
     MgrClient *mgrc,
     Context *respawn_hook_,
-    Context *suicide_hook_)
+    Context *suicide_hook_,
+    boost::asio::io_context& ioc)
   : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
-            msgr, monc_, mgrc, respawn_hook_, suicide_hook_)
+            msgr, monc_, mgrc, respawn_hook_, suicide_hook_, ioc)
 {
     g_conf().add_observer(this);
 }
