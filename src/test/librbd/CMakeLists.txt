@@ -142,6 +142,7 @@ target_link_libraries(unittest_librbd
   rbd_api
   rbd_internal
   rbd_types
+  ceph_immutable_object_cache_lib
   osdc
   ceph-common
   global
