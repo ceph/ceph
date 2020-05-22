@@ -139,6 +139,14 @@ if(WITH_BLUESTORE)
     )
   add_ceph_unittest(unittest_bluestore_types)
   target_link_libraries(unittest_bluestore_types os global)
+
+  # unittest_bdev
+  add_executable(unittest_bdev
+    test_bdev.cc
+    )
+  add_ceph_unittest(unittest_bdev)
+  target_link_libraries(unittest_bdev os global)
+
 endif(WITH_BLUESTORE)
 
 # unittest_transaction
