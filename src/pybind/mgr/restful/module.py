@@ -251,7 +251,7 @@ class Module(MgrModule):
                 self._serve()
                 self.server.socket.close()
             except CannotServe as cs:
-                self.log.warn("server not running: %s", cs)
+                self.log.warning("server not running: %s", cs)
             except:
                 self.log.error(str(traceback.format_exc()))
 
@@ -409,7 +409,7 @@ class Module(MgrModule):
 
 
     def handle_command(self, inbuf, command):
-        self.log.warn("Handling command: '%s'" % str(command))
+        self.log.warning("Handling command: '%s'" % str(command))
         if command['prefix'] == "restful create-key":
             if command['key_name'] in self.keys:
                 return 0, self.keys[command['key_name']], ""

@@ -203,7 +203,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             if me.errno == -errno.ENOENT:
                 return False
             else:
-                log.warn("error checking protected snap {0} ({1})".format(snapname, me))
+                log.warning("error checking protected snap {0} ({1})".format(snapname, me))
                 raise VolumeException(-errno.EINVAL, "snapshot protection check failed")
         else:
             return True
@@ -238,7 +238,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.update_section("protected snaps", snapname, "1")
             self.metadata_mgr.flush()
         except MetadataMgrException as me:
-            log.warn("error updating protected snap list ({0})".format(me))
+            log.warning("error updating protected snap list ({0})".format(me))
             raise VolumeException(-errno.EINVAL, "error protecting snapshot")
 
     def _unprotect_snapshot(self, snapname):
@@ -246,7 +246,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.remove_option("protected snaps", snapname)
             self.metadata_mgr.flush()
         except MetadataMgrException as me:
-            log.warn("error updating protected snap list ({0})".format(me))
+            log.warning("error updating protected snap list ({0})".format(me))
             raise VolumeException(-errno.EINVAL, "error unprotecting snapshot")
 
     def protect_snapshot(self, snapname):
@@ -285,7 +285,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 track_idx = index.track(tgt_subvolume.base_path)
                 self._add_snap_clone(track_idx, snapname)
         except (IndexException, MetadataMgrException) as e:
-            log.warn("error creating clone index: {0}".format(e))
+            log.warning("error creating clone index: {0}".format(e))
             raise VolumeException(-errno.EINVAL, "error cloning subvolume")
 
     def detach_snapshot(self, snapname, track_id):
@@ -296,5 +296,5 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 index.untrack(track_id)
                 self._remove_snap_clone(track_id)
         except (IndexException, MetadataMgrException) as e:
-            log.warn("error delining snapshot from clone: {0}".format(e))
+            log.warning("error delining snapshot from clone: {0}".format(e))
             raise VolumeException(-errno.EINVAL, "error delinking snapshot from clone")

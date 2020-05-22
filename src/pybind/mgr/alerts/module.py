@@ -157,7 +157,7 @@ class Alerts(MgrModule):
                 for code, alert in r.items():
                     checks[code] = alert
         else:
-            self.log.warn('Alert is not sent because smtp_host is not configured')
+            self.log.warning('Alert is not sent because smtp_host is not configured')
         self.set_health_checks(checks)
 
     def serve(self):
