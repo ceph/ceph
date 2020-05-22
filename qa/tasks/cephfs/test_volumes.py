@@ -566,6 +566,24 @@ class TestVolumes(CephFSTestCase):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_create_idempotence_resize(self):
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # try creating w/ same subvolume name with size -- should set quota
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "1000000000")
+
+        # get subvolume metadata
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+        self.assertEqual(subvol_info["bytes_quota"], 1000000000)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_create_with_invalid_data_pool_layout(self):
         subvolume = self._generate_random_subvolume_name()
         data_pool = "invalid_pool"
