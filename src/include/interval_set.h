@@ -509,7 +509,6 @@ class interval_set {
   
   void erase(iterator &i) {
     _size -= i.get_len();
-    ceph_assert(_size >= 0);
     m.erase(i._iter);
   }
 
@@ -522,7 +521,6 @@ class interval_set {
     auto p = find_inc_m(start);
 
     _size -= len;
-    ceph_assert(_size >= 0);
 
     ceph_assert(p != m.end());
     ceph_assert(p->first <= start);
