@@ -9,6 +9,7 @@
 #include "common/Timer.h"
 #include "common/safe_io.h"
 #include "common/TracepointProvider.h"
+#include "common/openssl_opts_handler.h"
 #include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
@@ -299,6 +300,8 @@ int radosgw_Main(int argc, const char **argv)
   mutex.lock();
   init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
   mutex.unlock();
+
+  ceph::crypto::init_openssl_engine_once();
 
   common_init_finish(g_ceph_context);
 
