@@ -3019,7 +3019,7 @@ void FileStore::_do_transaction(
     case Transaction::OP_COLL_HINT:
       {
         const coll_t &cid = i.get_cid(op->cid);
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         bufferlist hint;
         i.decode_bl(hint);
         auto hiter = hint.cbegin();

@@ -800,7 +800,7 @@ void MemStore::_do_transaction(Transaction& t)
     case Transaction::OP_COLL_HINT:
       {
         coll_t cid = i.get_cid(op->cid);
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         ceph::buffer::list hint;
         i.decode_bl(hint);
         auto hiter = hint.cbegin();
