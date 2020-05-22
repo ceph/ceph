@@ -5530,8 +5530,8 @@ struct object_manifest_t {
     redirect_target = hobject_t();
     chunk_map.clear();
   }
-  void build_intersection_set(std::map<uint64_t, chunk_info_t>& map, 
-		set<uint64_t>& intersection, interval_set<uint64_t>* check_intersection);
+  void build_intersection_set(const std::map<uint64_t, chunk_info_t>& map,
+                              std::set<uint64_t>& intersection);
   static void generate_test_instances(std::list<object_manifest_t*>& o);
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);

@@ -1503,7 +1503,7 @@ protected:
 			 hobject_t tgt_soid, SnapContext snapc, refcount_t type, RefCountCallback* cb);
   void dec_all_refcount_head_manifest(object_info_t& oi, OpContext* ctx);
   void dec_refcount_non_intersection(ObjectContextRef obc, const object_info_t& oi, 
-				     set<uint64_t> intersection_set);
+				     const set<uint64_t>& intersection_set);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
