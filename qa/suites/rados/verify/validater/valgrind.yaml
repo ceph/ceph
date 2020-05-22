@@ -9,16 +9,21 @@ overrides:
   ceph:
     conf:
       global:
-        osd heartbeat grace: 40
-        debug refs: 5
+        osd heartbeat grace: 80
       mon:
         mon osd crush smoke test: false
       osd:
         osd fast shutdown: false
+        debug bluestore: 1
+        debug bluefs: 1
     log-whitelist:
       - overall HEALTH_
 # valgrind is slow.. we might get PGs stuck peering etc
       - \(PG_
+# mons sometimes are left off of initial quorum due to valgrind slowness.  ok to whitelist here because we'll still catch an actual crash due to the core
+      - \(MON_DOWN\)
+      - \(SLOW_OPS\)
+      - slow request
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
