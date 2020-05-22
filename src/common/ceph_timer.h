@@ -25,6 +25,7 @@
 #include <boost/intrusive/set.hpp>
 
 #include "include/function2.hpp"
+#include "include/compat.h"
 
 namespace bi = boost::intrusive;
 namespace ceph {
@@ -145,6 +146,7 @@ class timer {
 public:
   timer() : suspended(false) {
     thread = std::thread(&timer::timer_thread, this);
+    ceph_pthread_setname(thread.native_handle(), "ceph_timer");
   }
 
   // Create a suspended timer, jobs will be executed in order when
