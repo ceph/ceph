@@ -21,7 +21,7 @@
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
-#include "librbd/operation/ResizeRequest.h"
+#include "librbd/PluginRegistry.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
@@ -32,6 +32,7 @@
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/QosImageDispatch.h"
 #include "librbd/journal/StandardPolicy.h"
+#include "librbd/operation/ResizeRequest.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -123,6 +124,7 @@ public:
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
       op_work_queue(nullptr),
+      plugin_registry(new PluginRegistry<ImageCtx>(this)),
       external_callback_completions(32),
       event_socket_completions(32),
       asok_hook(nullptr),
@@ -179,6 +181,8 @@ public:
     delete exclusive_lock_policy;
     delete operations;
     delete state;
+
+    delete plugin_registry;
   }
 
   void ImageCtx::init() {
