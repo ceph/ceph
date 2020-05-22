@@ -314,7 +314,7 @@ TEST(chunk_refs_t, size)
     ASSERT_TRUE(ret);
     if (count_bits(i) <= 2) {
       bufferlist bl;
-      r.dynamic_encode(bl, 1024);
+      r.dynamic_encode(bl, 512);
       if (count_bits(i) == 1) {
 	cout << i << "\t" << bl.length()
 	     << "\t" << r.describe_encoding()

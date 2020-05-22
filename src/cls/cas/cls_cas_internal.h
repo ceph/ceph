@@ -80,7 +80,7 @@ struct chunk_refs_t {
 
   void _encode_r(bufferlist& bl) const;
   void _encode_final(bufferlist& bl, bufferlist& t) const;
-  void dynamic_encode(ceph::buffer::list& bl, size_t max = 1024);
+  void dynamic_encode(ceph::buffer::list& bl, size_t max);
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
 
