@@ -241,6 +241,7 @@ void usage(ostream& out)
 "\n"
 "CACHE POOLS OPTIONS:\n"
 "   --with-clones                    include clones when doing flush or evict\n"
+"\n"
 "OMAP OPTIONS:\n"
 "    --omap-key-file file            read the omap key from a file\n";
 }
