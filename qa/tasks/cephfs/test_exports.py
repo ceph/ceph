@@ -133,10 +133,10 @@ class TestExports(CephFSTestCase):
             log.debug("mount.getfattr('1','ceph.dir.pin'): %s " % dir_pin)
             if str(p) < "5" and not(dir_pin):
                 self.skipTest("Kernel does not support getting the extended attribute ceph.dir.pin")
-        self.assertEqual(self.mount_a.getfattr("1", "ceph.dir.pin"), b'1')
-        self.assertEqual(self.mount_a.getfattr("1/2", "ceph.dir.pin"), b'0')
+        self.assertEqual(self.mount_a.getfattr("1", "ceph.dir.pin"), '1')
+        self.assertEqual(self.mount_a.getfattr("1/2", "ceph.dir.pin"), '0')
         if (len(self.fs.get_active_names()) > 2):
-            self.assertEqual(self.mount_a.getfattr("1/2/3", "ceph.dir.pin"), b'2')
+            self.assertEqual(self.mount_a.getfattr("1/2/3", "ceph.dir.pin"), '2')
 
     def test_session_race(self):
         """
