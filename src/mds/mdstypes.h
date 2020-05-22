@@ -1090,6 +1090,7 @@ struct fnode_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<fnode_t*>& ls);
 
   version_t version = 0;
