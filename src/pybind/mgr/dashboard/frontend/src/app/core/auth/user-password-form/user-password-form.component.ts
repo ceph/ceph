@@ -116,10 +116,6 @@ export class UserPasswordFormComponent {
    */
   onPasswordChange() {
     this.notificationService.show(NotificationType.success, this.i18n('Updated user password"'));
-    // Theoretically it is not necessary to navigate to '/logout' because
-    // the auth token gets invalid after changing the password in the
-    // backend, thus the user would be automatically logged out after the
-    // next periodically API request is executed.
-    this.router.navigate(['/logout']);
+    this.router.navigate(['/login']);
   }
 }
