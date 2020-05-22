@@ -1,6 +1,8 @@
 import logging
 from typing import TYPE_CHECKING, List
 
+from mgr_module import MonCommandFailed
+
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
@@ -21,6 +23,38 @@ class CephadmService:
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
         raise NotImplementedError()
+
+    def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
+        raise NotImplementedError()
+
+    def _inventory_get_addr(self, hostname: str):
+        """Get a host's address with its hostname."""
+        return self.mgr.inventory.get_addr(hostname)
+
+    def _set_service_url_on_dashboard(self,
+                                      service_name: str,
+                                      get_mon_cmd: str,
+                                      set_mon_cmd: str,
+                                      service_url: str):
+        """A helper to get and set service_url via Dashboard's MON command."""
+        try:
+            _, out, _ = self.mgr.check_mon_command({
+                'prefix': get_mon_cmd
+            })
+        except MonCommandFailed as e:
+            logger.warning('Failed to get service URL for %s: %s', service_name, e)
+            return
+        if out.strip() != service_url:
+            try:
+                logger.info(
+                    'Setting service URL %s for %s in the Dashboard', service_url, service_name)
+                _, out, _ = self.mgr.check_mon_command({
+                    'prefix': set_mon_cmd,
+                    'value': service_url,
+                })
+            except MonCommandFailed as e:
+                logger.warning('Failed to set service URL %s for %s in the Dashboard: %s',
+                               service_url, service_name, e)
 
 
 class MonService(CephadmService):
