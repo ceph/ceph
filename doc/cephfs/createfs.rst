@@ -35,6 +35,8 @@ Generally, the metadata pool will have at most a few gigabytes of data. For
 this reason, a smaller PG count is usually recommended. 64 or 128 is commonly
 used in practice for large clusters.
 
+.. note:: The names of the file systems, metadata pools, and data pools can
+          only have characters in the set [a-zA-Z0-9\_-.].
 
 Creating a file system
 ======================
