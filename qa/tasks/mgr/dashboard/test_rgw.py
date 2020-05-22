@@ -112,6 +112,27 @@ class RgwApiCredentialsTest(RgwTestCase):
                       data['message'])
 
 
+class RgwSiteTest(RgwTestCase):
+
+    AUTH_ROLES = ['rgw-manager']
+
+    def test_get_placement_targets(self):
+        data = self._get('/api/rgw/site?query=placement-targets')
+        self.assertStatus(200)
+        self.assertSchema(data, JObj({
+            'zonegroup': str,
+            'placement_targets': JList(JObj({
+                'name': str,
+                'data_pool': str
+            }))
+        }))
+
+    def test_get_realms(self):
+        data = self._get('/api/rgw/site?query=realms')
+        self.assertStatus(200)
+        self.assertSchema(data, JList(str))
+
+
 class RgwBucketTest(RgwTestCase):
 
     _mfa_token_serial = '1'

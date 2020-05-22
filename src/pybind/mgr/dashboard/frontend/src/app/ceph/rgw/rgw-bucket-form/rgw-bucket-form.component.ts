@@ -91,7 +91,7 @@ export class RgwBucketFormComponent implements OnInit {
 
     if (!this.editing) {
       // Get placement targets:
-      this.rgwSiteService.getPlacementTargets().subscribe((placementTargets: any) => {
+      this.rgwSiteService.get('placement-targets').subscribe((placementTargets: any) => {
         this.zonegroup = placementTargets['zonegroup'];
         _.forEach(placementTargets['placement_targets'], (placementTarget) => {
           placementTarget['description'] = `${placementTarget['name']} (${this.i18n('pool')}: ${
