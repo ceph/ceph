@@ -103,6 +103,37 @@ void ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header,
   kick_off_scrubs();
 }
 
+void ScrubStack::add_to_waiting(MDSCacheObject *obj)
+{
+  scrubs_in_progress++;
+  obj->item_scrub.remove_myself();
+  scrub_waiting.push_back(&obj->item_scrub);
+}
+
+void ScrubStack::remove_from_waiting(MDSCacheObject *obj)
+{
+  scrubs_in_progress--;
+  if (obj->item_scrub.is_on_list()) {
+    obj->item_scrub.remove_myself();
+    scrub_stack.push_front(&obj->item_scrub);
+    kick_off_scrubs();
+  }
+}
+
+class C_RetryScrub : public MDSInternalContext {
+public:
+  C_RetryScrub(ScrubStack *s, MDSCacheObject *o) :
+    MDSInternalContext(s->mdcache->mds), stack(s), obj(o) {
+    stack->add_to_waiting(obj);
+  }
+  void finish(int r) override {
+    stack->remove_from_waiting(obj);
+  }
+private:
+  ScrubStack *stack;
+  MDSCacheObject *obj;
+};
+
 void ScrubStack::kick_off_scrubs()
 {
   ceph_assert(ceph_mutex_is_locked(mdcache->mds->mds_lock));
@@ -144,6 +175,7 @@ void ScrubStack::kick_off_scrubs()
     assert(state == STATE_RUNNING || state == STATE_IDLE);
     set_state(STATE_RUNNING);
 
+
     if (CInode *in = dynamic_cast<CInode*>(*it)) {
       dout(20) << __func__ << " examining " << *in << dendl;
       ++it;
@@ -170,12 +202,16 @@ void ScrubStack::kick_off_scrubs()
 	}
       }
     } else if (CDir *dir = dynamic_cast<CDir*>(*it)) {
+      auto next = it;
+      ++next;
       bool done = false; // it's done, so pop it off the stack
       scrub_dirfrag(dir, &done);
-      ++it;
       if (done) {
 	dout(20) << __func__ << " dirfrag, done" << dendl;
+	++it; // child inodes were queued at bottom of stack
 	dequeue(dir);
+      } else {
+	it = next;
       }
     } else {
       ceph_assert(0 == "dentry in scrub stack");
@@ -210,8 +246,7 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
     }
   }
   if (gather.has_subs()) {
-    scrubs_in_progress++;
-    gather.set_finisher(&scrub_kick);
+    gather.set_finisher(new C_RetryScrub(this, in));
     gather.activate();
     return;
   }
@@ -272,8 +307,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
   dout(10) << __func__ << " " << *dir << dendl;
 
   if (!dir->is_complete()) {
-    scrubs_in_progress++;
-    dir->fetch(&scrub_kick, true); // already auth pinned
+    dir->fetch(new C_RetryScrub(this, dir), true); // already auth pinned
     dout(10) << __func__ << " incomplete, fetching" << dendl;
     return;
   }
@@ -393,8 +427,8 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
   }
 }
 
-ScrubStack::C_KickOffScrubs::C_KickOffScrubs(MDCache *mdcache, ScrubStack *s)
-  : MDSInternalContext(mdcache->mds), stack(s) { }
+ScrubStack::C_KickOffScrubs::C_KickOffScrubs(ScrubStack *s)
+  : MDSInternalContext(s->mdcache->mds), stack(s) { }
 
 void ScrubStack::complete_control_contexts(int r) {
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
@@ -548,8 +582,8 @@ void ScrubStack::abort_pending_scrubs() {
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   ceph_assert(clear_stack);
 
-  for (auto it = scrub_stack.begin(); !it.end(); ++it) {
-    if (CInode *in = dynamic_cast<CInode*>(*it))  {
+  auto abort_one = [this](MDSCacheObject *obj) {
+    if (CInode *in = dynamic_cast<CInode*>(obj))  {
       if (in == in->scrub_info()->header->get_origin()) {
 	scrub_origins.erase(in);
 	clog_scrub_summary(in);
@@ -559,7 +593,7 @@ void ScrubStack::abort_pending_scrubs() {
       if (ctx != nullptr) {
 	ctx->complete(-ECANCELED);
       }
-    } else if (CDir *dir = dynamic_cast<CDir*>(*it)) {
+    } else if (CDir *dir = dynamic_cast<CDir*>(obj)) {
       MDSContext *ctx = nullptr;
       dir->scrub_aborted(&ctx);
       dir->auth_unpin(this);
@@ -569,10 +603,15 @@ void ScrubStack::abort_pending_scrubs() {
     } else {
       ceph_abort(0 == "dentry in scrub stack");
     }
-  }
+  };
+  for (auto it = scrub_stack.begin(); !it.end(); ++it)
+    abort_one(*it);
+  for (auto it = scrub_waiting.begin(); !it.end(); ++it)
+    abort_one(*it);
 
   stack_size = 0;
   scrub_stack.clear();
+  scrub_waiting.clear();
   clear_stack = false;
 }
 
