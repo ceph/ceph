@@ -6,6 +6,9 @@ CephFS Administrative commands
 File Systems
 ------------
 
+.. note:: The names of the file systems, metadata pools, and data pools can
+          only have characters in the set [a-zA-Z0-9\_-.].
+
 These commands operate on the CephFS file systems in your Ceph cluster.
 Note that by default only one file system is permitted: to enable
 creation of multiple file systems use ``ceph fs flag set enable_multiple true``.
