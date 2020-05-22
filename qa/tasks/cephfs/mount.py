@@ -714,7 +714,7 @@ class CephFSMount(object):
             else:
                 raise
 
-        return p.stdout.getvalue()
+        return str(p.stdout.getvalue())
 
     def df(self):
         """
