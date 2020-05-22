@@ -259,7 +259,7 @@ void Transaction::dump(ceph::Formatter *f)
       {
 	using ceph::decode;
         coll_t cid = i.get_cid(op->cid);
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         f->dump_string("op_name", "coll_hint");
         f->dump_stream("collection") << cid;
         f->dump_unsigned("type", type);
@@ -503,7 +503,7 @@ void Transaction::dump(ceph::Formatter *f)
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
-        uint32_t alloc_hint_flags = op->alloc_hint_flags;
+        uint32_t alloc_hint_flags = op->hint;
         f->dump_string("op_name", "op_setallochint");
         f->dump_stream("collection") << cid;
         f->dump_stream("oid") << oid;
