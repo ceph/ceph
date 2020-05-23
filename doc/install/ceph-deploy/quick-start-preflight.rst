@@ -37,7 +37,7 @@ For Debian and Ubuntu distributions, perform the following steps:
 	sudo apt update
 	sudo apt install ceph-deploy
 
-.. note:: You can also use the EU mirror eu.ceph.com for downloading your packages by replacing ``https://ceph.com/`` by ``http://eu.ceph.com/``
+.. note:: You can also use the EU mirror eu.ceph.com for downloading your packages by replacing ``https://download.ceph.com/`` by ``http://eu.ceph.com/``
 
 
 RHEL/CentOS
@@ -80,7 +80,7 @@ For CentOS 7, perform the following steps:
 	sudo yum update
 	sudo yum install ceph-deploy
 
-.. note:: You can also use the EU mirror eu.ceph.com for downloading your packages by replacing ``https://ceph.com/`` by ``http://eu.ceph.com/``
+.. note:: You can also use the EU mirror eu.ceph.com for downloading your packages by replacing ``https://download.ceph.com/`` by ``http://eu.ceph.com/``
 
 
 openSUSE
