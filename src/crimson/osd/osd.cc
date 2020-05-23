@@ -536,12 +536,12 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map,
       return store->open_collection(cid);
     }
   };
-  return seastar::when_all_succeed(
+  return seastar::when_all(
     std::move(get_pool_info),
     std::move(get_collection)
-  ).then([pgid, create_map, this] (auto info,
-				   auto coll) {
-    auto [pool, name, ec_profile] = std::move(info);
+  ).then([pgid, create_map, this] (auto&& ret) {
+    auto [pool, name, ec_profile] = std::move(std::get<0>(ret).get0());
+    auto coll = std::move(std::get<1>(ret).get0());
     return seastar::make_ready_future<Ref<PG>>(
       new PG{pgid,
 	     pg_shard_t{whoami, pgid.shard},
