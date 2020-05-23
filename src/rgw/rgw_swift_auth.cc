@@ -3,8 +3,8 @@
 
 #include <array>
 #include <algorithm>
+#include <string_view>
 
-#include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string.hpp>
@@ -193,8 +193,8 @@ public:
   SignatureHelper() = default;
 
   const char* calc(const std::string& key,
-                   const boost::string_view& method,
-                   const boost::string_view& path,
+                   const std::string_view& method,
+                   const std::string_view& path,
                    const std::string& expires) {
 
     using ceph::crypto::HMACSHA1;
@@ -227,9 +227,9 @@ class TempURLEngine::PrefixableSignatureHelper
     : private TempURLEngine::SignatureHelper {
   using base_t = SignatureHelper;
 
-  const boost::string_view decoded_uri;
-  const boost::string_view object_name;
-  boost::string_view no_obj_uri;
+  const std::string_view decoded_uri;
+  const std::string_view object_name;
+  std::string_view no_obj_uri;
 
   const boost::optional<const std::string&> prefix;
 
@@ -242,7 +242,7 @@ public:
       prefix(prefix) {
     /* Transform: v1/acct/cont/obj - > v1/acct/cont/
      *
-     * NOTE(rzarzynski): we really want to substr() on boost::string_view,
+     * NOTE(rzarzynski): we really want to substr() on std::string_view,
      * not std::string. Otherwise we would end with no_obj_uri referencing
      * a temporary. */
     no_obj_uri = \
@@ -250,8 +250,8 @@ public:
   }
 
   const char* calc(const std::string& key,
-                   const boost::string_view& method,
-                   const boost::string_view& path,
+                   const std::string_view& method,
+                   const std::string_view& path,
                    const std::string& expires) {
     if (!prefix) {
       return base_t::calc(key, method, path, expires);
@@ -327,14 +327,14 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
 
   /* XXX can we search this ONCE? */
   const size_t pos = g_conf()->rgw_swift_url_prefix.find_last_not_of('/') + 1;
-  const boost::string_view ref_uri = s->decoded_uri;
-  const std::array<boost::string_view, 2> allowed_paths = {
+  const std::string_view ref_uri = s->decoded_uri;
+  const std::array<std::string_view, 2> allowed_paths = {
     ref_uri,
     ref_uri.substr(pos + 1)
   };
 
   /* Account owner calculates the signature also against a HTTP method. */
-  boost::container::static_vector<boost::string_view, 3> allowed_methods;
+  boost::container::static_vector<std::string_view, 3> allowed_methods;
   if (strcmp("HEAD", s->info.method) == 0) {
     /* HEAD requests are specially handled. */
     /* TODO: after getting a newer boost (with static_vector supporting

@@ -4,7 +4,6 @@
 #include "include/compat.h"
 #include "common/errno.h"
 
-#include <boost/utility/string_ref.hpp>
 
 #include <curl/curl.h>
 #include <curl/easy.h>
@@ -20,6 +19,7 @@
 #include "rgw_tools.h"
 
 #include <atomic>
+#include <string_view>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -606,12 +606,12 @@ RGWHTTPClient::~RGWHTTPClient()
 
 int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
 {
-  const boost::string_ref header_line(static_cast<const char *>(ptr), len);
+  const std::string_view header_line(static_cast<const char *>(ptr), len);
 
   /* We're tokening the line that way due to backward compatibility. */
   const size_t sep_loc = header_line.find_first_of(" \t:");
 
-  if (boost::string_ref::npos == sep_loc) {
+  if (std::string_view::npos == sep_loc) {
     /* Wrongly formatted header? Just skip it. */
     return 0;
   }
@@ -628,8 +628,8 @@ int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
   const size_t val_loc_s = value_part.find_first_not_of(' ');
   const size_t val_loc_e = value_part.find_first_of("\r\n");
 
-  if (boost::string_ref::npos == val_loc_s ||
-      boost::string_ref::npos == val_loc_e) {
+  if (std::string_view::npos == val_loc_s ||
+      std::string_view::npos == val_loc_e) {
     /* Empty value case. */
     found_headers.emplace(name, header_value_t());
   } else {

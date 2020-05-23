@@ -6,8 +6,8 @@
 #define TIME_BUF_SIZE 128
 
 #include <mutex>
+#include <string_view>
 
-#include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
 
 #include "common/sstring.hh"
@@ -893,9 +893,9 @@ public:
   public:
     virtual ~VersionAbstractor() {};
 
-    using access_key_id_t = boost::string_view;
-    using client_signature_t = boost::string_view;
-    using session_token_t = boost::string_view;
+    using access_key_id_t = std::string_view;
+    using client_signature_t = std::string_view;
+    using session_token_t = std::string_view;
     using server_signature_t = basic_sstring<char, uint16_t, SIGNATURE_MAX_SIZE>;
     using string_to_sign_t = std::string;
 
@@ -944,9 +944,9 @@ protected:
    * the signature get_auth_data() of VersionAbstractor is too complicated.
    * Replace these thing with a simple, dedicated structure. */
   virtual result_t authenticate(const DoutPrefixProvider* dpp,
-                                const boost::string_view& access_key_id,
-                                const boost::string_view& signature,
-                                const boost::string_view& session_token,
+                                const std::string_view& access_key_id,
+                                const std::string_view& signature,
+                                const std::string_view& session_token,
                                 const string_to_sign_t& string_to_sign,
                                 const signature_factory_t& signature_factory,
                                 const completer_factory_t& completer_factory,
@@ -962,7 +962,7 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
 
   virtual boost::optional<std::string>
   get_v4_canonical_headers(const req_info& info,
-                           const boost::string_view& signedheaders,
+                           const std::string_view& signedheaders,
                            const bool using_qs) const;
 
   auth_data_t get_auth_data_v2(const req_state* s) const;
@@ -979,7 +979,7 @@ public:
 class AWSGeneralBoto2Abstractor : public AWSGeneralAbstractor {
   boost::optional<std::string>
   get_v4_canonical_headers(const req_info& info,
-                           const boost::string_view& signedheaders,
+                           const std::string_view& signedheaders,
                            const bool using_qs) const override;
 
 public:
@@ -1021,9 +1021,9 @@ protected:
   auth_info_t get_creds_info(const rgw::RGWToken& token) const noexcept;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
-                        const boost::string_view& access_key_id,
-                        const boost::string_view& signature,
-                        const boost::string_view& session_token,
+                        const std::string_view& access_key_id,
+                        const std::string_view& signature,
+                        const std::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t&,
                         const completer_factory_t& completer_factory,
@@ -1054,9 +1054,9 @@ class LocalEngine : public AWSEngine {
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
-                        const boost::string_view& access_key_id,
-                        const boost::string_view& signature,
-                        const boost::string_view& session_token,
+                        const std::string_view& access_key_id,
+                        const std::string_view& signature,
+                        const std::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
@@ -1090,13 +1090,13 @@ class STSEngine : public AWSEngine {
   acl_strategy_t get_acl_strategy() const { return nullptr; };
   auth_info_t get_creds_info(const STS::SessionToken& token) const noexcept;
 
-  int get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
+  int get_session_token(const DoutPrefixProvider* dpp, const std::string_view& session_token,
                         STS::SessionToken& token) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp, 
-                        const boost::string_view& access_key_id,
-                        const boost::string_view& signature,
-                        const boost::string_view& session_token,
+                        const std::string_view& access_key_id,
+                        const std::string_view& signature,
+                        const std::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,

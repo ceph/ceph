@@ -2,9 +2,9 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
+#include <string_view>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/utility/string_ref.hpp>
 
 #include "civetweb/civetweb.h"
 #include "rgw_civetweb.h"
@@ -102,7 +102,7 @@ int RGWCivetWeb::init_env(CephContext *cct)
       return -EINVAL;
     }
 
-    const boost::string_ref name(header->name);
+    const std::string_view name(header->name);
     const auto& value = header->value;
 
     if (boost::algorithm::iequals(name, "content-length")) {
@@ -118,7 +118,7 @@ int RGWCivetWeb::init_env(CephContext *cct)
       explicit_conn_close = boost::algorithm::iequals(value, "close");
     }
 
-    static const boost::string_ref HTTP_{"HTTP_"};
+    static const std::string_view HTTP_{"HTTP_"};
 
     char buf[name.size() + HTTP_.size() + 1];
     auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
@@ -182,8 +182,8 @@ size_t RGWCivetWeb::send_100_continue()
   return sent;
 }
 
-size_t RGWCivetWeb::send_header(const boost::string_ref& name,
-                                const boost::string_ref& value)
+size_t RGWCivetWeb::send_header(const std::string_view& name,
+                                const std::string_view& value)
 {
   static constexpr char HEADER_SEP[] = ": ";
   static constexpr char HEADER_END[] = "\r\n";
