@@ -8392,6 +8392,12 @@ void OSD::handle_osd_map(MOSDMap *m)
     assert(0 == "MOSDMap lied about what maps it had?");
   }
 
+  if (start > last) {
+  	dout(10) << "handle_osd_map  crc err, no transaction" << dendl;
+  	m->put();
+	return;
+  }
+
   // even if this map isn't from a mon, we may have satisfied our subscription
   monc->sub_got("osdmap", last);
 
