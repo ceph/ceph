@@ -797,7 +797,7 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
   return backend.list_objects(lower_bound, limit).then(
     [&backend, filter, nspace](auto&& ret) {
       auto& [objects, next] = ret;
-      return seastar::when_all_succeed(
+      return seastar::when_all(
         seastar::map_reduce(std::move(objects),
           [&backend, filter, nspace](const hobject_t& obj) {
             if (obj.get_namespace() == nspace) {
@@ -818,7 +818,9 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
             return std::move(entries);
           }),
         seastar::make_ready_future<hobject_t>(next));
-    }).then([pg_end](entries_t entries, hobject_t next) {
+    }).then([pg_end](auto&& ret) {
+      auto entries = std::move(std::get<0>(ret).get0());
+      auto next = std::move(std::get<1>(ret).get0());
       pg_ls_response_t response;
       response.handle = next.is_max() ? pg_end : next;
       response.entries = std::move(entries);
