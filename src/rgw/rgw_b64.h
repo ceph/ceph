@@ -4,14 +4,13 @@
 #ifndef RGW_B64_H
 #define RGW_B64_H
 
-#include <boost/utility/string_ref.hpp>
-#include <boost/utility/string_view.hpp>
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/insert_linebreaks.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 #include <boost/archive/iterators/remove_whitespace.hpp>
 #include <limits>
+#include <string_view>
 
 namespace rgw {
 
@@ -19,14 +18,14 @@ namespace rgw {
    * A header-only Base64 encoder built on boost::archive.  The
    * formula is based on a class poposed for inclusion in boost in
    * 2011 by Denis Shevchenko (abandoned), updated slightly
-   * (e.g., uses boost::string_view).
+   * (e.g., uses std::string_view).
    *
    * Also, wrap_width added as template argument, based on
    * feedback from Marcus.
    */
 
   template<int wrap_width = std::numeric_limits<int>::max()>
-  inline std::string to_base64(boost::string_view sview)
+  inline std::string to_base64(std::string_view sview)
   {
     using namespace boost::archive::iterators;
 
@@ -43,7 +42,7 @@ namespace rgw {
       insert_linebreaks<
         base64_from_binary<
           transform_width<
-	    boost::string_view::const_iterator
+	    std::string_view::const_iterator
             ,6,8>
           >
           ,wrap_width
@@ -59,7 +58,7 @@ namespace rgw {
     return outstr;
   }
 
-  inline std::string from_base64(boost::string_view sview)
+  inline std::string from_base64(std::string_view sview)
   {
     using namespace boost::archive::iterators;
     if (sview.empty())
@@ -70,7 +69,7 @@ namespace rgw {
       transform_width<
       binary_from_base64<
 	remove_whitespace<
-	  boost::string_view::const_iterator>>
+	  std::string_view::const_iterator>>
       ,8,6
       > b64_iter;
 

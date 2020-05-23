@@ -31,10 +31,9 @@
 #include "services/svc_zone.h"
 
 #include <array>
+#include <string_view>
 #include <sstream>
 #include <memory>
-
-#include <boost/utility/string_ref.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -2395,14 +2394,14 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
 
 bool RGWSwiftWebsiteHandler::is_web_mode() const
 {
-  const boost::string_ref webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
+  const std::string_view webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
   return boost::algorithm::iequals(webmode, "true");
 }
 
 bool RGWSwiftWebsiteHandler::can_be_website_req() const
 {
   /* Static website works only with the GET or HEAD method. Nothing more. */
-  static const std::set<boost::string_ref> ws_methods = { "GET", "HEAD" };
+  static const std::set<std::string_view> ws_methods = { "GET", "HEAD" };
   if (ws_methods.count(s->info.method) == 0) {
     return false;
   }

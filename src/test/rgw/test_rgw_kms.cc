@@ -18,7 +18,7 @@ class MockTransitSecretEngine : public TransitSecretEngine {
 public:
   MockTransitSecretEngine(CephContext *cct) : TransitSecretEngine(cct){}
 
-  MOCK_METHOD(int, send_request, (boost::string_view key_id, JSONParser* parser), (override));
+  MOCK_METHOD(int, send_request, (std::string_view key_id, JSONParser* parser), (override));
 
 };
 
@@ -27,7 +27,7 @@ class MockKvSecretEngine : public KvSecretEngine {
 public:
   MockKvSecretEngine(CephContext *cct) : KvSecretEngine(cct){}
 
-  MOCK_METHOD(int, send_request, (boost::string_view key_id, JSONParser* parser), (override));
+  MOCK_METHOD(int, send_request, (std::string_view key_id, JSONParser* parser), (override));
 
 };
 
@@ -58,7 +58,7 @@ TEST_F(TestSSEKMS, vault_token_file_unset)
   TransitSecretEngine te(cct);
   KvSecretEngine kv(cct);
 
-  boost::string_view key_id("my_key");
+  std::string_view key_id("my_key");
   std::string actual_key;
 
   ASSERT_EQ(te.get_key(key_id, actual_key), -EINVAL);
@@ -73,7 +73,7 @@ TEST_F(TestSSEKMS, non_existent_vault_token_file)
   TransitSecretEngine te(cct);
   KvSecretEngine kv(cct);
 
-  boost::string_view key_id("my_key/1");
+  std::string_view key_id("my_key/1");
   std::string actual_key;
 
   ASSERT_EQ(te.get_key(key_id, actual_key), -ENOENT);
@@ -81,7 +81,7 @@ TEST_F(TestSSEKMS, non_existent_vault_token_file)
 }
 
 
-typedef int SendRequestMethod(boost::string_view, JSONParser*);
+typedef int SendRequestMethod(std::string_view, JSONParser*);
 
 class SetPointedValueAction : public ActionInterface<SendRequestMethod> {
  public:
@@ -91,7 +91,7 @@ class SetPointedValueAction : public ActionInterface<SendRequestMethod> {
     this->json = json;
   }
 
-  int Perform(const ::std::tuple<boost::string_view, JSONParser*>& args) override {
+  int Perform(const ::std::tuple<std::string_view, JSONParser*>& args) override {
     JSONParser* p = ::std::get<1>(args);
     JSONParser* parser = new JSONParser();
 
@@ -117,11 +117,11 @@ TEST_F(TestSSEKMS, test_transit_key_version_extraction){
 
   int res;
   for (const auto &test: tests) {
-    res = transit_engine->get_key(boost::string_view(test), actual_key);
+    res = transit_engine->get_key(std::string_view(test), actual_key);
     ASSERT_EQ(res, -EINVAL);
   }
 
-  res = transit_engine->get_key(boost::string_view("1/2/3/4/5/6"), actual_key);
+  res = transit_engine->get_key(std::string_view("1/2/3/4/5/6"), actual_key);
   ASSERT_EQ(res, 0);
   ASSERT_EQ(actual_key, from_base64("8qgPWvdtf6zrriS5+nkOzDJ14IGVR6Bgkub5dJn6qeg="));
 }
@@ -129,7 +129,7 @@ TEST_F(TestSSEKMS, test_transit_key_version_extraction){
 
 TEST_F(TestSSEKMS, test_transit_backend){
 
-  boost::string_view my_key("my_key/1");
+  std::string_view my_key("my_key/1");
   std::string actual_key;
 
   // Mocks the expected return Value from Vault Server using custom Argument Action
@@ -145,7 +145,7 @@ TEST_F(TestSSEKMS, test_transit_backend){
 
 TEST_F(TestSSEKMS, test_kv_backend){
 
-  boost::string_view my_key("my_key");
+  std::string_view my_key("my_key");
   std::string actual_key;
 
   // Mocks the expected return value from Vault Server using custom Argument Action
@@ -186,7 +186,7 @@ TEST_F(TestSSEKMS, concat_url)
 
 TEST_F(TestSSEKMS, test_transit_backend_empty_response)
 {
-  boost::string_view my_key("/key/nonexistent/1");
+  std::string_view my_key("/key/nonexistent/1");
   std::string actual_key;
 
   // Mocks the expected return Value from Vault Server using custom Argument Action

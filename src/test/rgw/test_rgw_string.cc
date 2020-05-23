@@ -19,7 +19,7 @@ const std::string abc{"abc"};
 const char *def{"def"}; // const char*
 char ghi_arr[] = {'g', 'h', 'i', '\0'};
 char *ghi{ghi_arr}; // char*
-constexpr boost::string_view jkl{"jkl", 3};
+constexpr std::string_view jkl{"jkl", 3};
 #define mno "mno" // string literal (char[4])
 char pqr[] = {'p', 'q', 'r', '\0'};
 

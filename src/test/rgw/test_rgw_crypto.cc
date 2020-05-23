@@ -35,7 +35,7 @@ public:
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override
   {
-    sink << boost::string_ref(bl.c_str()+bl_ofs, bl_len);
+    sink << std::string_view(bl.c_str()+bl_ofs, bl_len);
     return 0;
   }
   std::string get_sink()
@@ -50,7 +50,7 @@ class ut_put_sink: public rgw::putobj::DataProcessor
 public:
   int process(bufferlist&& bl, uint64_t ofs) override
   {
-    sink << boost::string_ref(bl.c_str(),bl.length());
+    sink << std::string_view(bl.c_str(),bl.length());
     return 0;
   }
   std::string get_sink()
@@ -138,8 +138,8 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity)
       ASSERT_TRUE(aes->decrypt(encrypted, 0, end - begin, decrypted, offset));
 
       ASSERT_EQ(decrypted.length(), end - begin);
-      ASSERT_EQ(boost::string_ref(input.c_str() + begin, end - begin),
-                boost::string_ref(decrypted.c_str(), end - begin) );
+      ASSERT_EQ(std::string_view(input.c_str() + begin, end - begin),
+                std::string_view(decrypted.c_str(), end - begin) );
     }
   }
 }
@@ -186,8 +186,8 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_2)
       ASSERT_TRUE(aes->decrypt(encrypted, 0, end, decrypted, offset));
 
       ASSERT_EQ(decrypted.length(), end);
-      ASSERT_EQ(boost::string_ref(input.c_str(), end),
-                boost::string_ref(decrypted.c_str(), end) );
+      ASSERT_EQ(std::string_view(input.c_str(), end),
+                std::string_view(decrypted.c_str(), end) );
     }
   }
 }
@@ -263,8 +263,8 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_3)
       }
       ASSERT_EQ(encrypted1.length(), end);
       ASSERT_EQ(encrypted2.length(), end);
-      ASSERT_EQ(boost::string_ref(encrypted1.c_str(), end),
-                boost::string_ref(encrypted2.c_str(), end) );
+      ASSERT_EQ(std::string_view(encrypted1.c_str(), end),
+                std::string_view(encrypted2.c_str(), end) );
     }
   }
 }
@@ -312,8 +312,8 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_size_0_15)
       ASSERT_TRUE(aes->encrypt(encrypted, 0, end, decrypted, offset));
       ASSERT_EQ(encrypted.length(), end);
       ASSERT_EQ(decrypted.length(), end);
-      ASSERT_EQ(boost::string_ref(input.c_str(), end),
-                boost::string_ref(decrypted.c_str(), end) );
+      ASSERT_EQ(std::string_view(input.c_str(), end),
+                std::string_view(decrypted.c_str(), end) );
     }
   }
 }
@@ -388,8 +388,8 @@ TEST(TestRGWCrypto, verify_AES_256_CBC_identity_last_block)
       }
       ASSERT_EQ(encrypted1.length(), end);
       ASSERT_EQ(encrypted2.length(), end);
-      ASSERT_EQ(boost::string_ref(encrypted1.c_str(), end),
-                boost::string_ref(encrypted2.c_str(), end) );
+      ASSERT_EQ(std::string_view(encrypted1.c_str(), end),
+                std::string_view(encrypted2.c_str(), end) );
     }
   }
 }
@@ -436,7 +436,7 @@ TEST(TestRGWCrypto, verify_RGWGetObj_BlockDecrypt_ranges)
     const std::string& decrypted = get_sink.get_sink();
     size_t expected_len = end - begin + 1;
     ASSERT_EQ(decrypted.length(), expected_len);
-    ASSERT_EQ(decrypted, boost::string_ref(input.c_str()+begin, expected_len));
+    ASSERT_EQ(decrypted, std::string_view(input.c_str()+begin, expected_len));
   }
 }
 
@@ -492,7 +492,7 @@ TEST(TestRGWCrypto, verify_RGWGetObj_BlockDecrypt_chunks)
     const std::string& decrypted = get_sink.get_sink();
     size_t expected_len = end - begin + 1;
     ASSERT_EQ(decrypted.length(), expected_len);
-    ASSERT_EQ(decrypted, boost::string_ref(input.c_str()+begin, expected_len));
+    ASSERT_EQ(decrypted, std::string_view(input.c_str()+begin, expected_len));
   }
 }
 
@@ -740,8 +740,8 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
     ASSERT_TRUE(cbc->decrypt(encrypted, 0, test_size, decrypted, 0));
 
     ASSERT_EQ(decrypted.length(), test_size);
-    ASSERT_EQ(boost::string_ref(decrypted.c_str(), test_size),
-              boost::string_ref(input.c_str(), test_size));
+    ASSERT_EQ(std::string_view(decrypted.c_str(), test_size),
+              std::string_view(input.c_str(), test_size));
   }
 }
 
@@ -790,7 +790,7 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
     decrypt.handle_data(bl, 0, bl.length());
     decrypt.flush();
     ASSERT_EQ(get_sink.get_sink().length(), test_size);
-    ASSERT_EQ(get_sink.get_sink(), boost::string_ref((char*)test_in,test_size));
+    ASSERT_EQ(get_sink.get_sink(), std::string_view((char*)test_in,test_size));
   }
   while (test_size < 20000);
 }

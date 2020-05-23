@@ -562,7 +562,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
   }
-  const boost::string_view str = rgw_trim_whitespace(boost::string_view(p));
+  const std::string_view str = rgw_trim_whitespace(std::string_view(p));
   int len = str.size();
 
   if (len == 0 || (len == 1 && str[0] == 'Z'))
@@ -573,8 +573,8 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     return false;
 
   uint32_t ms;
-  boost::string_view nsstr = str.substr(1,  len - 2);
-  int r = stringtoul(nsstr.to_string(), &ms);
+  std::string_view nsstr = str.substr(1,  len - 2);
+  int r = stringtoul(std::string(nsstr), &ms);
   if (r < 0)
     return false;
 
@@ -623,12 +623,12 @@ int parse_key_value(string& in_str, string& key, string& val)
   return parse_key_value(in_str, "=", key,val);
 }
 
-boost::optional<std::pair<boost::string_view, boost::string_view>>
-parse_key_value(const boost::string_view& in_str,
-                const boost::string_view& delim)
+boost::optional<std::pair<std::string_view, std::string_view>>
+parse_key_value(const std::string_view& in_str,
+                const std::string_view& delim)
 {
   const size_t pos = in_str.find(delim);
-  if (pos == boost::string_view::npos) {
+  if (pos == std::string_view::npos) {
     return boost::none;
   }
 
@@ -638,8 +638,8 @@ parse_key_value(const boost::string_view& in_str,
   return std::make_pair(key, val);
 }
 
-boost::optional<std::pair<boost::string_view, boost::string_view>>
-parse_key_value(const boost::string_view& in_str)
+boost::optional<std::pair<std::string_view, std::string_view>>
+parse_key_value(const std::string_view& in_str)
 {
   return parse_key_value(in_str, "=");
 }
@@ -725,7 +725,7 @@ using ceph::crypto::SHA256;
 /*
  * calculate the sha256 hash value of a given msg
  */
-sha256_digest_t calc_hash_sha256(const boost::string_view& msg)
+sha256_digest_t calc_hash_sha256(const std::string_view& msg)
 {
   sha256_digest_t hash;
 
@@ -1511,7 +1511,7 @@ static char hex_to_num(char c)
   return hex_table.to_num(c);
 }
 
-std::string url_decode(const boost::string_view& src_str, bool in_query)
+std::string url_decode(const std::string_view& src_str, bool in_query)
 {
   std::string dest_str;
   dest_str.reserve(src_str.length() + 1);
@@ -1651,9 +1651,9 @@ string rgw_trim_whitespace(const string& src)
   return src.substr(start, end - start + 1);
 }
 
-boost::string_view rgw_trim_whitespace(const boost::string_view& src)
+std::string_view rgw_trim_whitespace(const std::string_view& src)
 {
-  boost::string_view res = src;
+  std::string_view res = src;
 
   while (res.size() > 0 && std::isspace(res.front())) {
     res.remove_prefix(1);
@@ -1935,7 +1935,7 @@ int rgw_parse_op_type_list(const string& str, uint32_t *perm)
   return rgw_parse_list_of_flags(op_type_mapping, str, perm);
 }
 
-bool match_policy(boost::string_view pattern, boost::string_view input,
+bool match_policy(std::string_view pattern, std::string_view input,
                   uint32_t flag)
 {
   const uint32_t flag2 = flag & (MATCH_POLICY_ACTION|MATCH_POLICY_ARN) ?
@@ -1943,8 +1943,8 @@ bool match_policy(boost::string_view pattern, boost::string_view input,
   const bool colonblocks = !(flag & (MATCH_POLICY_RESOURCE |
 				     MATCH_POLICY_STRING));
 
-  const auto npos = boost::string_view::npos;
-  boost::string_view::size_type last_pos_input = 0, last_pos_pattern = 0;
+  const auto npos = std::string_view::npos;
+  std::string_view::size_type last_pos_input = 0, last_pos_pattern = 0;
   while (true) {
     auto cur_pos_input = colonblocks ? input.find(":", last_pos_input) : npos;
     auto cur_pos_pattern =
