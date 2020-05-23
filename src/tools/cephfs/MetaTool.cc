@@ -416,7 +416,7 @@ int MetaTool::_show_fn(inode_meta_t& inode_meta, const string& fn){
                 ::decode(got_fnode, p);
             }catch (const buffer::error &err){
                 cerr << "corrupt fnode header in " << oid
-                     << ": " << err << std::endl;
+                     << ": " << err.what() << std::endl;
                 return -1;
             }
             if (oids.size() != 0)
