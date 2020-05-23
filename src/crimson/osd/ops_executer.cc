@@ -815,7 +815,7 @@ static seastar::future<ceph::bufferlist> do_pgls_common(
             if (!obj.is_min()) {
               entries.emplace_back(obj.oid, obj.get_key());
             }
-            return std::move(entries);
+            return entries;
           }),
         seastar::make_ready_future<hobject_t>(next));
     }).then([pg_end](auto&& ret) {
