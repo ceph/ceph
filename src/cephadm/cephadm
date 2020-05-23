@@ -62,6 +62,7 @@ except ImportError:
     pass
 import uuid
 
+from contextlib import contextmanager
 from functools import wraps
 from glob import glob
 from threading import Thread
@@ -1154,6 +1155,21 @@ def default_image(func):
 
     return _default_image
 
+@contextmanager
+def container_registry_credentials(args):
+    if getattr(container_registry_credentials, 'do_login', True):
+        username = args.registry_username
+        password = args.registry_password
+        if username and password:
+            out, err, code = call([container_path, 'login',
+                                   '-u', username,
+                                   '-p', password])
+            if code != 0:
+                logger.warning('unable to login: %s', err)
+        # don't try again even if we fail to login
+        container_registry_credentials.do_login = False
+    yield
+
 def get_last_local_ceph_image():
     """
     :return: The most recent local ceph image (already pulled)
@@ -2179,9 +2195,10 @@ class CephContainer:
     def run(self, timeout=DEFAULT_TIMEOUT):
         # type: (Optional[int]) -> str
         logger.debug(self.run_cmd())
-        out, _, _ = call_throws(
+        with container_registry_credentials(args):
+            out, _, _ = call_throws(
                 self.run_cmd(), desc=self.entrypoint, timeout=timeout)
-        return out
+            return out
 
 ##################################
 
@@ -2198,7 +2215,8 @@ def command_version():
 def command_pull():
     # type: () -> int
     logger.info('Pulling latest %s...' % args.image)
-    call_throws([container_path, 'pull', args.image])
+    with container_registry_credentials(args):
+        call_throws([container_path, 'pull', args.image])
     return command_inspect_image()
 
 ##################################
@@ -2330,7 +2348,8 @@ def command_bootstrap():
 
     if not args.skip_pull:
         logger.info('Pulling latest %s container...' % args.image)
-        call_throws([container_path, 'pull', args.image])
+        with container_registry_credentials(args):
+            call_throws([container_path, 'pull', args.image])
 
     logger.info('Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid()
@@ -3139,7 +3158,8 @@ def command_adopt():
 
     if not args.skip_pull:
         logger.info('Pulling latest %s container...' % args.image)
-        call_throws([container_path, 'pull', args.image])
+        with container_registry_credentials(args):
+            call_throws([container_path, 'pull', args.image])
 
     (daemon_type, daemon_id) = args.name.split('.', 1)
 
@@ -4210,6 +4230,12 @@ def _get_parser():
         action='append',
         default=[],
         help='set environment variable')
+    parser.add_argument(
+        '--registry-password',
+        help='password for container registry server')
+    parser.add_argument(
+        '--registry-username',
+        help='username for container registry server')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
