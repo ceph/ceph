@@ -6,8 +6,8 @@ Archived Releases
    :maxdepth: 1
 
    Luminous <luminous>
-   Jewel <jewel>
    Kraken <kraken>
+   Jewel <jewel>
    Infernalis <infernalis>
    Hammer <hammer>
    Giant <giant>
