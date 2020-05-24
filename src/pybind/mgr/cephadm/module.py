@@ -167,6 +167,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'runtime': True,
         },
         {
+            'name': 'container_registry_username',
+            'default': None,
+            'desc': 'username for container registry server',
+            'runtime': True,
+        },
+        {
+            'name': 'container_registry_password',
+            'default': None,
+            'desc': 'password for container registry server',
+            'runtime': True,
+        },
+        {
             'name': 'warn_on_stray_hosts',
             'type': 'bool',
             'default': True,
@@ -231,6 +243,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.host_check_interval = 0
             self.mode = ''
             self.container_image_base = ''
+            self.container_registry_username = None
+            self.container_registry_password = None
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -1572,7 +1586,7 @@ you may want to run:
             host, name, 'deploy',
             [
                 '--name', name,
-            ] + extra_args,
+            ] + extra_args + self._get_registry_login_args(),
             stdin=json.dumps(cephadm_config))
         if not code and host in self.cache.daemons:
             # prime cached service state with what we (should have)
@@ -2027,6 +2041,16 @@ you may want to run:
     def apply_alertmanager(self, spec: ServiceSpec):
         return self._apply(spec)
 
+    def _get_registry_login_args(self):
+        login_args = []
+        if self.container_registry_username:
+            login_args.extend(['--registry-username',
+                               self.container_registry_username])
+        if self.container_registry_password:
+            login_args.extend(['--registry-password',
+                               self.container_registry_password])
+        return login_args
+
     def _get_container_image_id(self, image_name):
         # pick a random host...
         host = None
@@ -2036,7 +2060,7 @@ you may want to run:
         if not host:
             raise OrchestratorError('no hosts defined')
         out, err, code = self._run_cephadm(
-            host, None, 'pull', [],
+            host, None, 'pull', self._get_registry_login_args(),
             image=image_name,
             no_fsid=True,
             error_ok=True)
