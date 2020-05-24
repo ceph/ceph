@@ -392,7 +392,8 @@ int MetaTool::show_fn(meta_op &op){
     }
     return 0;
 }
-int MetaTool::_show_fn(inode_meta_t& inode_meta, const string& fn){
+int MetaTool::_show_fn(inode_meta_t& inode_meta, const string& fn)
+{
     std::list<frag_t> frags;
     inode_meta.get_meta()->dirfragtree.get_leaves(frags);
     std::stringstream ds;
@@ -414,12 +415,12 @@ int MetaTool::_show_fn(inode_meta_t& inode_meta, const string& fn){
             try {
                 auto p = hbl.cbegin();
                 ::decode(got_fnode, p);
-            }catch (const buffer::error &err){
+            } catch (const buffer::error &err) {
                 cerr << "corrupt fnode header in " << oid
-                     << ": " << err << std::endl;
+                     << ": " << err.what() << std::endl;
                 return -1;
             }
-            if (oids.size() != 0)
+            if (!oids.empty())
                 oids += ",";
             oids += oid;
             f->open_object_section(oid.c_str());
