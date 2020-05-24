@@ -107,6 +107,9 @@ def install_packages(ctx, config):
         packages[client] = toxvenv_sh(ctx, remote,
                 ['bindep', '--brief', '--file', '{}/bindep.txt'.format(get_keystone_dir(ctx))],
                 check_status=False).splitlines() # returns 1 on success?
+        # install python3 as bindep installs python34 which is not supported
+        # by keystone or tempest's tox based tests.
+        packages[client].append('python3')
         for dep in packages[client]:
             install_package(dep, remote)
     try:
