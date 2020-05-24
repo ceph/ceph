@@ -25,7 +25,6 @@ def override_arg_defaults(name, default, env=os.environ):
         '--suite-repo'        : 'TEUTH_SUITE_REPO',
         '--ceph-branch'       : 'TEUTH_CEPH_BRANCH',
         '--suite-branch'      : 'TEUTH_SUITE_BRANCH',
-        '--teuthology-branch' : 'TEUTH_BRANCH',
     }
     if name in env_arg and env_arg[name] in env.keys():
         variable = env_arg[name]

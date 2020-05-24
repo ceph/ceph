@@ -54,7 +54,13 @@ Standard arguments:
                               [default: basic]
   -t <branch>, --teuthology-branch <branch>
                               The teuthology branch to run against.
-                              [default: {default_teuthology_branch}]
+                              Default value is determined in the next order.
+                              There is TEUTH_BRANCH environment variable set.
+                              There is `qa/.teuthology_branch` present in
+                              the suite repo and contains non-empty string.
+                              There is `teuthology_branch` present in one of
+                              the user or system `teuthology.yaml` configuration
+                              files respectively, otherwise use `master`.
   -m <type>, --machine-type <type>
                               Machine type [default: {default_machine_type}]
   -d <distro>, --distro <distro>
@@ -165,7 +171,6 @@ Scheduler arguments:
     default_suite_repo=defaults('--suite-repo',
                             config.get_ceph_qa_suite_git_url()),
     default_ceph_branch=defaults('--ceph-branch', 'master'),
-    default_teuthology_branch=defaults('--teuthology-branch', 'master'),
 )
 
 
