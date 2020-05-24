@@ -314,6 +314,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_write_op_append(rados_write_op_t write_op, const char *buffer, size_t len)
     void rados_write_op_write_full(rados_write_op_t write_op, const char *buffer, size_t len)
     void rados_write_op_assert_version(rados_write_op_t write_op, uint64_t ver)
+    void rados_write_op_assert_exists(rados_write_op_t write_op)
     void rados_write_op_write(rados_write_op_t write_op, const char *buffer, size_t len, uint64_t offset)
     void rados_write_op_remove(rados_write_op_t write_op)
     void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset)
@@ -2186,6 +2187,13 @@ cdef class WriteOp(object):
 
         with nogil:
             rados_write_op_assert_version(self.write_op, _version)
+
+    def assert_exists(self):
+        """
+        Check if object exists
+        """
+        with nogil:
+            rados_write_op_assert_exists(self.write_op)
 
     @requires(('offset', int), ('length', int))
     def zero(self, offset, length):

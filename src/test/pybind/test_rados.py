@@ -454,6 +454,17 @@ class TestIoctx(object):
         self.ioctx.remove_snap("snap1")
         self.ioctx.remove_object("inhead")
 
+    def test_assert_exists(self):
+        with WriteOpCtx() as write_op:
+            write_op.new(0)
+            write_op.assert_exists()
+            self.ioctx.operate_write_op(write_op, 'abc')
+            eq(self.ioctx.read('abc'), b'')
+            write_op.remove()
+            self.ioctx.operate_write_op(write_op, "abc")
+            with assert_raises(ObjectNotFound):
+                self.ioctx.read('abc')
+
     def test_set_omap(self):
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
