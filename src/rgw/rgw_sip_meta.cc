@@ -166,7 +166,7 @@ int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fet
       m = entries.back().marker;
 
       for (auto& k : entries) {
-        auto e = create_entry(section, k.marker);
+        auto e = create_entry(section, k.key, rgw::to_base64(k.marker));
         result->entries.push_back(e);
       }
     }

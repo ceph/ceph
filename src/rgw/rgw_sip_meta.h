@@ -87,10 +87,11 @@ public:
   std::string to_marker(const std::string& section, const std::string& k) const;
 
   SIProvider::Entry create_entry(const std::string& section,
-                                 const std::string& k) const {
+                                 const std::string& k,
+                                 const std::string& m) const {
     siprovider_meta_info meta_info = { section, k };
     SIProvider::Entry e;
-    e.key = to_marker(section, k);
+    e.key = to_marker(section, m);
     meta_info.encode(e.data);
     return e;
   }
