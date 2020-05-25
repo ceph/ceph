@@ -79,6 +79,6 @@ describe('UserPasswordFormComponent', () => {
     });
     request.flush({});
     expect(component.onPasswordChange).toHaveBeenCalled();
-    expect(router.navigate).toHaveBeenCalledWith(['/logout']);
+    expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
 });
