@@ -688,20 +688,34 @@ int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
 void KernelDevice::_aio_log_start(
   IOContext *ioc,
   uint64_t offset,
-  uint64_t length)
+  uint64_t length,
+  bool is_read)
 {
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
     std::lock_guard l(debug_lock);
-    if (debug_inflight.intersects(offset, length)) {
+      if (debug_inflight_write.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of 0x"
 	   << std::hex
 	   << offset << "~" << length << std::dec
-	   << " with " << debug_inflight << dendl;
+	   << " with " << debug_inflight_write << dendl;
       ceph_abort();
+      }
+    if (!is_read) {
+      if (debug_inflight_read.intersects(offset, length)) {
+      derr << __func__ << " inflight overlap of 0x"
+	   << std::hex
+	   << offset << "~" << length << std::dec
+	   << " with " << debug_inflight_read << dendl;
+      ceph_abort();
+      }
     }
-    debug_inflight.insert(offset, length);
+  if (is_read)
+    debug_inflight_read.insert(offset, length);
+  else
+    debug_inflight_write.insert(offset, length);
+
   }
 }
 
@@ -749,7 +763,10 @@ void KernelDevice::_aio_log_finish(
 	   << std::hex << offset << "~" << length << std::dec << dendl;
   if (cct->_conf->bdev_debug_inflight_ios) {
     std::lock_guard l(debug_lock);
-    debug_inflight.erase(offset, length);
+    if (debug_inflight_write.intersects(offset, length))
+      debug_inflight_write.erase(offset, length);
+    if (debug_inflight_read.intersects(offset, length))
+      debug_inflight_read.erase(offset, length);
   }
 }
 
@@ -891,7 +908,7 @@ int KernelDevice::aio_write(
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  _aio_log_start(ioc, off, len);
+  _aio_log_start(ioc, off, len, false);
 
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
@@ -985,7 +1002,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	  << dendl;
   ceph_assert(is_valid_io(off, len));
 
-  _aio_log_start(ioc, off, len);
+  _aio_log_start(ioc, off, len, true);
 
   auto start1 = mono_clock::now();
 
@@ -1035,7 +1052,7 @@ int KernelDevice::aio_read(
 #ifdef HAVE_LIBAIO
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
-    _aio_log_start(ioc, off, len);
+    _aio_log_start(ioc, off, len, true);
     ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();

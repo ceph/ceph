@@ -40,7 +40,8 @@ class KernelDevice : public BlockDevice {
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
 
   ceph::mutex debug_lock = ceph::make_mutex("KernelDevice::debug_lock");
-  interval_set<uint64_t> debug_inflight;
+  interval_set<uint64_t> debug_inflight_read;
+  interval_set<uint64_t> debug_inflight_write;
 
   std::atomic<bool> io_since_flush = {false};
   ceph::mutex flush_mutex = ceph::make_mutex("KernelDevice::flush_mutex");
@@ -88,7 +89,7 @@ class KernelDevice : public BlockDevice {
   int _discard_start();
   void _discard_stop();
 
-  void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
+  void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length, bool is_read);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
   int _sync_write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint);
