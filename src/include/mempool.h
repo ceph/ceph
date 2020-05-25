@@ -223,6 +223,7 @@ struct type_t {
   const char *type_name;
   size_t item_size;
   ceph::atomic<ssize_t> items = {0};  // signed
+  ceph::atomic<ssize_t> bytes = {0};  // signed
 };
 
 struct type_info_hash {
@@ -386,6 +387,8 @@ public:
   bool operator==(const pool_allocator&) const { return true; }
   bool operator!=(const pool_allocator&) const { return false; }
 
+  // form a relation between pool_allocator and block_pool_allocator;
+  // used by maybe_remap_to_block_allocator
   using block_allocator = block_pool_allocator<pool_ix, T>;
 };
 
@@ -433,10 +436,10 @@ public:
     shard->bytes += total;
     shard->items += 1;
     if (type) {
+      type->bytes += total;
       type->items += 1;
     }
-    T* r = reinterpret_cast<T*>(new char[total]);
-    return r;
+    return reinterpret_cast<T*>(new char[total]);
   }
 
   void deallocate(T* p, size_t n) {
@@ -445,6 +448,7 @@ public:
     shard->bytes -= total;
     shard->items -= 1;
     if (type) {
+      type->bytes -= total;
       type->items -= 1;
     }
     delete[] reinterpret_cast<char*>(p);
@@ -456,14 +460,14 @@ public:
     shard->bytes += total;
     shard->items += 1;
     if (type) {
+      type->bytes += total;
       type->items += 1;
     }
     char *ptr;
     int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
     if (rc)
       throw std::bad_alloc();
-    T* r = reinterpret_cast<T*>(ptr);
-    return r;
+    return reinterpret_cast<T*>(ptr);
   }
 
   void deallocate_aligned(T* p, size_t n) {
@@ -472,6 +476,7 @@ public:
     shard->bytes -= total;
     shard->items -= 1;
     if (type) {
+      type->bytes -= total;
       type->items -= 1;
     }
     ::free(p);
@@ -490,7 +495,7 @@ public:
     ::new ((void *)p) T(val);
   }
 
-  template<class U, class... Args> void construct(U* p,Args&&... args) {
+  template<class U, class... Args> void construct(U* p, Args&&... args) {
     ::new((void *)p) U(std::forward<Args>(args)...);
   }
 
@@ -498,15 +503,7 @@ public:
   bool operator!=(const block_pool_allocator&) const { return false; }
 };
 
-template<typename A, typename = void>
-struct check_for_type {};
-
-template<typename A>
-struct check_for_type<A> {
-  typedef void type;
-};
-
-// Template optional_remap_to_block_allocator is intended for use in other templates.
+// Template maybe_remap_to_block_allocator is intended for use in other templates.
 // It allows to redirect allocator for some elements to block_allocator, but preserve for others.
 // For example one can prefer to have block accounting for strings but
 // default for other data structure elements:
@@ -514,7 +511,7 @@ struct check_for_type<A> {
 // template<template<typename> class Allocator>
 // using block_string = std::basic_string<char,
 //   std::char_traits<char>,
-//   typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>;
+//   typename mempool::maybe_remap_to_block_allocator<Allocator<char>>::allocator>;
 //
 // template<template<typename> class Allocator>
 // using block_xattr_map = compact_map<block_string<Allocator>,
@@ -524,13 +521,16 @@ struct check_for_type<A> {
 //						  ceph::bufferptr>>>;
 //
 
-template<typename T, typename X = void>
-struct optional_remap_to_block_allocator {
+template<typename T, typename X = std::void_t<> >
+struct maybe_remap_to_block_allocator {
     using allocator = T;
 };
 
 template<typename T>
-struct optional_remap_to_block_allocator<T, typename check_for_type<typename T::block_allocator>::type> {
+struct maybe_remap_to_block_allocator<T,
+				      std::void_t<typename T::block_allocator>
+				      >
+{
   using allocator = typename T::block_allocator;
 };
 

@@ -384,7 +384,7 @@ using xattr_map = compact_map<alloc_string<Allocator>,
 template<template<typename> class Allocator>
 using block_string = std::basic_string<char,
   std::char_traits<char>,
-  typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>;
+  typename mempool::maybe_remap_to_block_allocator<Allocator<char>>::allocator>;
 
 template<template<typename> class Allocator>
 using block_xattr_map = compact_map<block_string<Allocator>,
@@ -398,17 +398,18 @@ using vector_remapped =
   std::vector<std::basic_string<
 		char,
 		std::char_traits<char>,
-		typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>,
+		typename mempool::maybe_remap_to_block_allocator<Allocator<char>>::allocator>,
 	      Allocator<
 		std::basic_string<
 		  char,
 		  std::char_traits<char>,
-		  typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>
+		  typename mempool::maybe_remap_to_block_allocator<Allocator<char>>::allocator>
 		>
 	      >;
 
 TEST(mempool, string_remap_allocator)
 {
+  /*instantialize variables so maybe_remap_to_block_allocator can be tested*/
   xattr_map<std::allocator> std_map;
   xattr_map<mempool::mds_co::pool_allocator> mds_map;
   block_xattr_map<std::allocator> block_std_map;
@@ -432,14 +433,12 @@ TEST(mempool, string_remap_allocator)
   EXPECT_EQ(mempool::mds_co::allocated_items(), 2);
   block_mds_map.clear();
 
-  static_assert(std::is_same<
-    typename mempool::optional_remap_to_block_allocator<mempool::mds_co::pool_allocator<char>>::allocator,
-    mempool::mds_co::pool_allocator<char>::block_allocator
-  >::value);
-  static_assert(std::is_same<
-    typename mempool::optional_remap_to_block_allocator<std::allocator<char>>::allocator,
-    std::allocator<char>
-  >::value);
+  static_assert(std::is_same_v<
+    typename mempool::maybe_remap_to_block_allocator<mempool::mds_co::pool_allocator<char>>::allocator,
+    mempool::mds_co::pool_allocator<char>::block_allocator>);
+  static_assert(std::is_same_v<
+    typename mempool::maybe_remap_to_block_allocator<std::allocator<char>>::allocator,
+    std::allocator<char> >);
 
   std::vector<
     mempool::mds_co::block_string,
@@ -447,9 +446,9 @@ TEST(mempool, string_remap_allocator)
   vector_remapped<std::allocator> vector_1;
   vector_remapped<mempool::mds_co::pool_allocator> vector_2;
 
-  static_assert(std::is_same<decltype(vector_0)::value_type, mempool::mds_co::block_string>::value);
-  static_assert(std::is_same<decltype(vector_1)::value_type, std::string>::value);
-  static_assert(std::is_same<decltype(vector_2)::value_type, mempool::mds_co::block_string>::value);
+  static_assert(std::is_same_v<decltype(vector_0)::value_type, mempool::mds_co::block_string>);
+  static_assert(std::is_same_v<decltype(vector_1)::value_type, std::string>);
+  static_assert(std::is_same_v<decltype(vector_2)::value_type, mempool::mds_co::block_string>);
 }
 
 TEST(mempool, bufferlist)
