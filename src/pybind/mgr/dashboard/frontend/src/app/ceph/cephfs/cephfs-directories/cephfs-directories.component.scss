@@ -1,3 +1,5 @@
+@import 'defaults.scss';
+
 // Angular2-Tree Component
 ::ng-deep tree-root {
   .tree-children {
@@ -7,8 +9,8 @@
 
 .quota-origin {
   &:hover {
-    color: #212121;
+    color: $color-gray13;
   }
   cursor: pointer;
-  color: #2b99a8;
+  color: $color-brand-teal;
 }
