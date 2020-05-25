@@ -13,7 +13,6 @@ import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
-import { AccordionModule } from 'ngx-bootstrap/accordion';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
@@ -47,7 +46,6 @@ export function jwtTokenGetter() {
     CoreModule,
     SharedModule,
     CephModule,
-    AccordionModule.forRoot(),
     BsDropdownModule.forRoot(),
     TabsModule.forRoot(),
     JwtModule.forRoot({
