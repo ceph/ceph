@@ -142,7 +142,7 @@ if [ -z "$NO_CLOBBER" ] || [ ! -e ./$VENV ]; then
     if ! which virtualenv > /dev/null; then
         pip install virtualenv
     fi
-    virtualenv --python=$PYTHON --setuptools $VENV
+    virtualenv --python=$PYTHON $VENV
 fi
 
 PVER=$(./$VENV/bin/python --version 2>&1 | grep Python)
