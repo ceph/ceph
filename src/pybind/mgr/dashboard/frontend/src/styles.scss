@@ -299,9 +299,9 @@ a {
   display: table-cell;
 
   &:focus {
-    border-color: rgba($color-primary, 0.8);
+    border-color: $color-primary-transparent;
     outline: 0;
-    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px 2px rgba($color-primary, 0.5);
+    box-shadow: inset 0 1px 1px $color-transparent-black1, 0 0 8px 2px $color-primary-transparent1;
   }
 }
 
@@ -388,9 +388,9 @@ cd-modal {
 }
 
 .tooltip-inner {
-  background-color: white;
-  border: 1px solid grey;
-  color: #333;
+  background-color: $color-solid-white;
+  border: 1px solid $color-gray20;
+  color: $color-gray13;
   font-size: 1.1em;
 }
 

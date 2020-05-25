@@ -1,10 +1,12 @@
+@import 'defaults.scss';
+
 .about-container {
-  background-color: #374249;
+  background-color: $color-secondary;
   background-image: url('assets/ceph_background.gif');
   background-position: right bottom;
   background-repeat: no-repeat;
-  color: #fff;
-  text-shadow: 1px 1px #374249;
+  color: $color-solid-white;
+  text-shadow: 1px 1px $color-secondary;
 }
 .product-versions {
   margin-top: 30px;
@@ -16,7 +18,7 @@
   border-bottom: none;
 }
 .modal-header .close {
-  color: #fff;
+  color: $color-solid-white;
   font-size: 2em;
 }
 .modal-body {
