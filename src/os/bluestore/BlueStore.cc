@@ -4147,6 +4147,7 @@ BlueStore::BlueStore(CephContext *cct,
     throttle(cct),
     finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
+    kv_submit_thread(this),
     kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
@@ -11718,6 +11719,8 @@ void BlueStore::_kv_start()
 
   finisher.start();
   kv_sync_thread.create("bstore_kv_sync");
+  kv_submit_thread.create("bstore_kv_sub");
+
   kv_finalize_thread.create("bstore_kv_final");
 }
 
@@ -11741,6 +11744,7 @@ void BlueStore::_kv_stop()
     kv_finalize_cond.notify_all();
   }
   kv_sync_thread.join();
+  kv_submit_thread.join();
   kv_finalize_thread.join();
   ceph_assert(removed_collections.empty());
   {
@@ -11757,6 +11761,34 @@ void BlueStore::_kv_stop()
   dout(10) << __func__ << " stopped" << dendl;
 }
 
+void BlueStore::_kv_submit_thread()
+{
+  std::unique_lock l{kv_submit_lock};
+  while (true) {
+    if (kv_submit_committing.empty()) {
+      if (kv_stop)
+	break;
+      kv_submit_cond.wait(l);
+    } else {
+      for (auto txc : kv_submit_committing) {
+	throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_queued_lat);
+	if (txc->state == TransContext::STATE_KV_QUEUED) {
+	  _txc_apply_kv(txc, false);
+	  --txc->osr->kv_committing_serially;
+	  ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	} else {
+	  ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	}
+	if (txc->had_ios) {
+	  --txc->osr->txc_with_unstable_io;
+	}
+      }
+      kv_submit_committing.clear();
+      kv_submit_cond.notify_one();
+    }
+  }
+}
+
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -11770,8 +11802,10 @@ void BlueStore::_kv_sync_thread()
     if (kv_queue.empty() &&
 	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
 	 !deferred_aggressive)) {
-      if (kv_stop)
+      if (kv_stop) {
+	kv_submit_cond.notify_one();
 	break;
+      }
       dout(20) << __func__ << " sleep" << dendl;
       kv_sync_in_progress = false;
       kv_cond.wait(l);
@@ -11865,19 +11899,63 @@ void BlueStore::_kv_sync_thread()
 	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
       }
 
-      for (auto txc : kv_committing) {
-	throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_queued_lat);
-	if (txc->state == TransContext::STATE_KV_QUEUED) {
-	  _txc_apply_kv(txc, false);
-	  --txc->osr->kv_committing_serially;
-	} else {
-	  ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+      if (kv_committing.size() < cct->_conf.get_val<uint64_t>("bluestore_split_submit_transaction_num")) {
+	for (auto txc : kv_committing) {
+	  throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_queued_lat);
+	  if (txc->state == TransContext::STATE_KV_QUEUED) {
+	    _txc_apply_kv(txc, false);
+	    --txc->osr->kv_committing_serially;
+	  } else {
+	    ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	  }
+	  if (txc->had_ios) {
+	    --txc->osr->txc_with_unstable_io;
+	  }
 	}
-	if (txc->had_ios) {
-	  --txc->osr->txc_with_unstable_io;
+      } else {
+	deque<TransContext*> kv_part_committing, tmp;
+	ceph_assert(kv_submit_committing.size() == 0);
+	for (auto txc : kv_committing) {
+	  int num = txc->osr->sequencer_id % 2;
+	  switch(num) {
+	    case 0:
+	      kv_part_committing.push_back(txc);
+	      break;
+	    case 1:
+	      tmp.push_back(txc);
+	      break;
+	  }
+	}
+	// wake up submit thread
+	{
+	  {
+	    std::lock_guard l{kv_submit_lock};
+	    kv_submit_committing.swap(tmp);
+	    kv_submit_cond.notify_one();
+	  }
+	}
+	for (auto txc : kv_part_committing) {
+	  throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_queued_lat);
+	  if (txc->state == TransContext::STATE_KV_QUEUED) {
+	    _txc_apply_kv(txc, false);
+	    --txc->osr->kv_committing_serially;
+	  } else {
+	    ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	  }
+	  if (txc->had_ios) {
+	    --txc->osr->txc_with_unstable_io;
+	  }
+	}
+
+	// wait submit thread completed
+	{
+	  {
+	    std::unique_lock l{kv_submit_lock};
+	    while (!kv_submit_committing.empty())
+	      kv_submit_cond.wait(l);
+	  }
 	}
       }
-
       // release throttle *before* we commit.  this allows new ops
       // to be prepared and enter pipeline while we are waiting on
       // the kv commit sync/flush.  then hopefully on the next
@@ -11931,7 +12009,6 @@ void BlueStore::_kv_sync_thread()
 	}
       }
 #endif
-
       {
 	std::unique_lock m{kv_finalize_lock};
 	if (kv_committing_to_finalize.empty()) {

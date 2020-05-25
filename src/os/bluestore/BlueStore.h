@@ -1907,6 +1907,15 @@ public:
       return NULL;
     }
   };
+  struct KVSubmitThread : public Thread {
+    BlueStore *store;
+    explicit KVSubmitThread(BlueStore *s) : store(s) {}
+    void *entry() override {
+      store->_kv_submit_thread();
+      return NULL;
+    }
+  };
+
   struct KVFinalizeThread : public Thread {
     BlueStore *store;
     explicit KVFinalizeThread(BlueStore *s) : store(s) {}
@@ -2021,6 +2030,11 @@ private:
   std::deque<TransContext*> kv_committing;        ///< currently syncing
   std::deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
   bool kv_sync_in_progress = false;
+
+  KVSubmitThread kv_submit_thread;
+  ceph::mutex kv_submit_lock = ceph::make_mutex("BlueStore::kv_sub_lock");
+  ceph::condition_variable kv_submit_cond;
+  deque<TransContext*> kv_submit_committing;        ///< currently sub syncing
 
   KVFinalizeThread kv_finalize_thread;
   ceph::mutex kv_finalize_lock = ceph::make_mutex("BlueStore::kv_finalize_lock");
@@ -2375,6 +2389,7 @@ private:
   void _kv_start();
   void _kv_stop();
   void _kv_sync_thread();
+  void _kv_submit_thread();
   void _kv_finalize_thread();
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
