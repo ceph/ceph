@@ -135,6 +135,10 @@
       snap rename                       Rename a snapshot.
       snap rollback (snap revert)       Rollback image to snapshot.
       snap unprotect                    Allow a snapshot to be deleted.
+      snapshot schedule add             Add snapshot schedule.
+      snapshot schedule list (... ls)   List snapshot schedule.
+      snapshot schedule remove (... rm) Remove snapshot schedule.
+      snapshot schedule status          Show snapshot schedule status.
       sparsify                          Reclaim space for zeroed image extents.
       status                            Show the status of this image.
       trash list (trash ls)             List trash images.
@@ -2298,6 +2302,68 @@
     --image arg          image name
     --snap arg           snapshot name
     --image-id arg       image id
+  
+  rbd help snapshot schedule add
+  usage: rbd snapshot schedule add [--pool <pool>] [--namespace <namespace>] 
+                                   [--image <image>] [--keep <keep>] 
+                                   <interval> <start-time> 
+  
+  Add snapshot schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --keep arg           keep this number of last snapshots
+  
+  rbd help snapshot schedule list
+  usage: rbd snapshot schedule list [--pool <pool>] [--namespace <namespace>] 
+                                    [--image <image>] [--recursive] 
+                                    [--format <format>] [--pretty-format] 
+  
+  List snapshot schedule.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    -R [ --recursive ]   list all schedules
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help snapshot schedule remove
+  usage: rbd snapshot schedule remove [--pool <pool>] [--namespace <namespace>] 
+                                      [--image <image>] 
+                                      <interval> <start-time> 
+  
+  Remove snapshot schedule.
+  
+  Positional arguments
+    <interval>           schedule interval
+    <start-time>         schedule start time
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+  
+  rbd help snapshot schedule status
+  usage: rbd snapshot schedule status [--pool <pool>] [--namespace <namespace>] 
+                                      [--image <image>] [--format <format>] 
+                                      [--pretty-format] 
+  
+  Show snapshot schedule status.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help sparsify
   usage: rbd sparsify [--pool <pool>] [--namespace <namespace>] 

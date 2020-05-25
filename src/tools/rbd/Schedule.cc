@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/stringify.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include "common/ceph_json.h"
@@ -171,6 +172,23 @@ int get_schedule_args(const po::variables_map &vm, bool mandatory,
   return 0;
 }
 
+void add_retention_policy_options(const std::string &name,
+                                  po::options_description *options) {
+  options->add_options()
+    ("keep", po::value<uint64_t>(),
+     ("keep this number of last " + name).c_str());
+}
+
+int get_retention_policy_args(const po::variables_map &vm,
+                              std::map<std::string, std::string> *args) {
+  if (vm.count("keep")) {
+    
+    (*args)["keep"] = stringify(vm["keep"].as<uint64_t>());
+  }
+
+  return 0;
+}
+
 int Schedule::parse(json_spirit::mValue &schedule_val) {
   if (schedule_val.type() != json_spirit::array_type) {
     std::cerr << "rbd: unexpected schedule JSON received: "
@@ -193,14 +211,19 @@ int Schedule::parse(json_spirit::mValue &schedule_val) {
                   << "interval is not string" << std::endl;
         return -EBADMSG;
       }
-      auto interval = item["interval"].get_str();
 
-      std::string start_time;
+      Item i;
+      i.interval = item["interval"].get_str();
+
       if (item["start_time"].type() == json_spirit::str_type) {
-        start_time = item["start_time"].get_str();
+        i.start_time = item["start_time"].get_str();
       }
 
-      items.push_back({interval, start_time});
+      if (item["keep"].type() == json_spirit::int_type) {
+        i.keep = item["keep"].get_uint64();
+      }
+
+      items.push_back(i);
     }
 
   } catch (std::runtime_error &) {
@@ -215,8 +238,12 @@ void Schedule::dump(ceph::Formatter *f) {
   f->open_array_section("items");
   for (auto &item : items) {
     f->open_object_section("item");
-    f->dump_string("interval", item.first);
-    f->dump_string("start_time", item.second);
+    f->dump_string("interval", item.interval);
+    f->dump_string("start_time",
+                   item.start_time ? *item.start_time : std::string());
+    if (item.keep) {
+      f->dump_unsigned("keep", *item.keep);
+    }
     f->close_section(); // item
   }
   f->close_section(); // items
@@ -225,9 +252,12 @@ void Schedule::dump(ceph::Formatter *f) {
 std::ostream& operator<<(std::ostream& os, Schedule &s) {
   std::string delimiter;
   for (auto &item : s.items) {
-    os << delimiter << "every " << item.first;
-    if (!item.second.empty()) {
-      os << " starting at " << item.second;
+    os << delimiter << "every " << item.interval;
+    if (item.start_time) {
+      os << " starting at " << *item.start_time;
+    }
+    if (item.keep) {
+      os << " keep " << *item.keep;
     }
     delimiter = ", ";
   }
