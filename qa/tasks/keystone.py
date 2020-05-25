@@ -157,6 +157,13 @@ def configure_instance(ctx, config):
         # prepare the config file
         run_in_keystone_dir(ctx, client,
             [
+                'source',
+                f'{get_toxvenv_dir(ctx)}/bin/activate',
+                run.Raw('&&'),
+                'tox', '-e', 'genconfig'
+            ])
+        run_in_keystone_dir(ctx, client,
+            [
                 'cp', '-f',
                 'etc/keystone.conf.sample',
                 'etc/keystone.conf'
@@ -287,8 +294,8 @@ def run_section_cmds(ctx, cclient, section_cmd, specials,
 
     auth_section = [
         ( 'os-token', 'ADMIN' ),
-        ( 'os-identity-api-version', '2.0' ),
-        ( 'os-url', 'http://{host}:{port}/v2.0'.format(host=admin_host,
+        ( 'os-identity-api-version', '3' ),
+        ( 'os-url', 'http://{host}:{port}/v3'.format(host=admin_host,
                                                        port=admin_port) ),
     ]
 
@@ -299,16 +306,16 @@ def run_section_cmds(ctx, cclient, section_cmd, specials,
             [ '--debug' ])
 
 def create_endpoint(ctx, cclient, service, url, adminurl=None):
-    endpoint_section = {
-        'service': service,
-        'publicurl': url,
-    }
+    endpoint_sections = [
+        {'service': service, 'interface': 'public', 'url': url},
+    ]
     if adminurl:
-        endpoint_section.update( {
-            'adminurl': adminurl,
-            } )
-    return run_section_cmds(ctx, cclient, 'endpoint create', 'service',
-                            [ endpoint_section ])
+        endpoint_sections.append(
+            {'service': service, 'interface': 'admin', 'url': adminurl}
+        )
+    run_section_cmds(ctx, cclient, 'endpoint create',
+                     'service,interface,url',
+                     endpoint_sections)
 
 @contextlib.contextmanager
 def fill_keystone(ctx, config):
@@ -316,22 +323,24 @@ def fill_keystone(ctx, config):
 
     for (cclient, cconfig) in config.items():
         # configure tenants/projects
+        run_section_cmds(ctx, cclient, 'domain create', 'name',
+                         cconfig['domains'])
         run_section_cmds(ctx, cclient, 'project create', 'name',
-                         cconfig['tenants'])
+                         cconfig['projects'])
         run_section_cmds(ctx, cclient, 'user create', 'name',
                          cconfig['users'])
         run_section_cmds(ctx, cclient, 'role create', 'name',
                          cconfig['roles'])
         run_section_cmds(ctx, cclient, 'role add', 'name',
                          cconfig['role-mappings'])
-        run_section_cmds(ctx, cclient, 'service create', 'name',
+        run_section_cmds(ctx, cclient, 'service create', 'type',
                          cconfig['services'])
 
         public_host, public_port = ctx.keystone.public_endpoints[cclient]
-        url = 'http://{host}:{port}/v2.0'.format(host=public_host,
+        url = 'http://{host}:{port}/v3'.format(host=public_host,
                                                  port=public_port)
         admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
-        admin_url = 'http://{host}:{port}/v2.0'.format(host=admin_host,
+        admin_url = 'http://{host}:{port}/v3'.format(host=admin_host,
                                                        port=admin_port)
         create_endpoint(ctx, cclient, 'keystone', url, admin_url)
         # for the deferred endpoint creation; currently it's used in rgw.py
@@ -371,7 +380,10 @@ def task(ctx, config):
       - keystone:
           client.0:
             force-branch: master
-            tenants:
+            domains:
+              - name: default
+                description: Default Domain
+            projects:
               - name: admin
                 description:  Admin Tenant
             users:

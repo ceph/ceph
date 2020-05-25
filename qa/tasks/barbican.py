@@ -394,9 +394,12 @@ def task(ctx, config):
       - tox: [ client.0 ]
       - keystone:
           client.0:
-            sha1: 12.0.0.0b2
+            sha1: 17.0.0.0rc2
             force-branch: master
-            tenants:
+            domains:
+              - name: default
+                description: Default Domain
+            projects:
               - name: admin
                 description:  Admin Tenant
               - name: rgwcrypt
