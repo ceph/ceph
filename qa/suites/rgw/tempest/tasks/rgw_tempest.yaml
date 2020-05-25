@@ -8,15 +8,20 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      sha1: 12.0.0.0b2
+      sha1: 17.0.0.0rc2
       force-branch: master
-      tenants:
+      domains:
+        - name: default
+          description: Default Domain
+      projects:
         - name: admin
           description:  Admin Tenant
+          domain: default
       users:
         - name: admin
           password: ADMIN
           project: admin
+          domain: default
       roles: [ name: admin, name: Member ]
       role-mappings:
         - name: admin
@@ -46,7 +51,9 @@ tasks:
       identity:
         uri: http://{keystone_public_host}:{keystone_public_port}/v2.0/
         uri_v3: http://{keystone_public_host}:{keystone_public_port}/v3/
+        auth_version: v3
         admin_role: admin
+        default_domain_name: default
       object-storage:
         reseller_admin_role: admin
       object-storage-feature-enabled:
@@ -69,6 +76,7 @@ overrides:
         osd_min_pg_log_entries: 10
         osd_max_pg_log_entries: 10
       client:
+        rgw keystone api version: 3
         rgw keystone admin token: ADMIN
         rgw keystone accepted roles: admin,Member
         rgw keystone implicit tenants: true
