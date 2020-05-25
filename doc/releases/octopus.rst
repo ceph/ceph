@@ -638,7 +638,7 @@ Upgrade compatibility notes
 
     ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
 
-* The format of MDSs in `ceph fs dump` has changed.
+* The format of MDSs in ``ceph fs dump`` has changed.
 
 * The ``mds_cache_size`` config option is completely removed. Since luminous,
   the ``mds_cache_memory_limit`` config option has been preferred to configure
