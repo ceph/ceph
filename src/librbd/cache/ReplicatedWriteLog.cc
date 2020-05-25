@@ -2385,6 +2385,9 @@ void ReplicatedWriteLog<I>::new_sync_point(DeferredContexts &later) {
    * nullptr, but m_current_sync_gen may not be zero. */
   if (old_sync_point) {
     new_sync_point->setup_earlier_sync_point(old_sync_point, m_last_op_sequence_num);
+    m_perfcounter->hinc(l_librbd_rwl_syncpoint_hist,
+                        old_sync_point->log_entry->writes,
+                        old_sync_point->log_entry->bytes);
     /* This sync point will acquire no more sub-ops. Activation needs
      * to acquire m_lock, so defer to later*/
     later.add(new LambdaContext(
