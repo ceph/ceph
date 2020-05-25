@@ -39,6 +39,8 @@ export class TelemetryComponent extends CdForm implements OnInit {
   ];
   report: object = undefined;
   reportId: number = undefined;
+  sendToUrl = '';
+  sendToDeviceUrl = '';
   step = 1;
 
   constructor(
@@ -60,9 +62,12 @@ export class TelemetryComponent extends CdForm implements OnInit {
     ];
     observableForkJoin(observables).subscribe(
       (resp: object) => {
-        this.moduleEnabled = resp[1]['enabled'];
+        const configResp = resp[1];
+        this.moduleEnabled = configResp['enabled'];
+        this.sendToUrl = configResp['url'];
+        this.sendToDeviceUrl = configResp['device_url'];
         this.options = _.pick(resp[0], this.requiredFields);
-        const configs = _.pick(resp[1], this.requiredFields);
+        const configs = _.pick(configResp, this.requiredFields);
         this.createConfigForm();
         this.configForm.setValue(configs);
         this.loadingReady();
