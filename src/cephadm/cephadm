@@ -2623,9 +2623,10 @@ def command_bootstrap():
         # dashboard crt and key
         if args.dashboard_key and args.dashboard_crt:
             logger.info('Using provided dashboard certificate...')
-            mounts = {}
-            mounts[pathify(args.dashboard_crt)] = '/tmp/dashboard.crt:z'
-            mounts[pathify(args.dashboard_key)] = '/tmp/dashboard.key:z'
+            mounts = {
+                pathify(args.dashboard_crt.name): '/tmp/dashboard.crt:z',
+                pathify(args.dashboard_key.name): '/tmp/dashboard.key:z'
+            }
             cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
             cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
         else:
@@ -4470,9 +4471,11 @@ def _get_parser():
 
     parser_bootstrap.add_argument(
         '--dashboard-key',
+        type=argparse.FileType('r'),
         help='Dashboard key')
     parser_bootstrap.add_argument(
         '--dashboard-crt',
+        type=argparse.FileType('r'),
         help='Dashboard certificate')
 
     parser_bootstrap.add_argument(
