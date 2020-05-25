@@ -724,7 +724,7 @@ public:
 
   struct discard_all {
     template <class ErrorT, EnableIf<ErrorT>...>
-    decltype(auto) operator()(ErrorT&&) {
+    void operator()(ErrorT&&) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
     }
@@ -971,7 +971,7 @@ namespace ct_error {
 
   struct discard_all {
     template <class ErrorT>
-    decltype(auto) operator()(ErrorT&&) {
+    void operator()(ErrorT&&) {
     }
   };
 
