@@ -15,30 +15,41 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      sha1: 12.0.0.0b2
+      sha1: 17.0.0.0rc2
       force-branch: master
-      tenants:
+      domains:
+        - name: default
+          description: Default Domain
+      projects:
         - name: admin
           description:  Admin Tenant
+          domain: default
         - name: rgwcrypt
           description: Encryption Tenant
+          domain: default
         - name: barbican
           description: Barbican
+          domain: default
         - name: s3
           description: S3 project
+          domain: default
       users:
         - name: admin
           password: ADMIN
           project: admin
+          domain: default
         - name: rgwcrypt-user
           password: rgwcrypt-pass
           project: rgwcrypt
+          domain: default
         - name: barbican-user
           password: barbican-pass
           project: barbican
+          domain: default
         - name: s3-user
           password: s3-pass
           project: s3
+          domain: default
       roles: [ name: admin, name: Member, name: creator ]
       role-mappings:
         - name: admin
