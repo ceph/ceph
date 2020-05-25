@@ -187,6 +187,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'runtime': True,
         },
         {
+            'name': 'container_image_prometheus',
+            'default': 'prom/prometheus:v2.18.1',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_grafana',
+            'default': 'ceph/ceph-grafana:latest',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_alertmanager',
+            'default': 'prom/alertmanager:v0.20.0',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_node_exporter',
+            'default': 'prom/node-exporter:v0.18.1',
+            'desc': 'Prometheus container image',
+        },
+        {
             'name': 'warn_on_stray_hosts',
             'type': 'bool',
             'default': True,
@@ -251,6 +271,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.host_check_interval = 0
             self.mode = ''
             self.container_image_base = ''
+            self.container_image_prometheus = ''
+            self.container_image_grafana = ''
+            self.container_image_alertmanager = ''
+            self.container_image_node_exporter = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -891,6 +915,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         'key': 'container_image',
                     })
                     image = image.strip() # type: ignore
+                elif daemon_type == 'prometheus':
+                    image = self.container_image_prometheus
+                elif daemon_type == 'grafana':
+                    image = self.container_image_grafana
+                elif daemon_type == 'alertmanager':
+                    image = self.container_image_alertmanager
+                elif daemon_type == 'node-exporter':
+                    image = self.container_image_node_exporter
+
             self.log.debug('%s container image %s' % (entity, image))
 
             final_args = []
