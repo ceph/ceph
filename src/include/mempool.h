@@ -275,6 +275,8 @@ public:
 
 void dump(ceph::Formatter *f);
 
+template<pool_index_t pool_ix, typename T>
+class block_pool_allocator;
 
 // STL allocator for use with containers.  All actual state
 // is stored in the static pool_allocator_base_t, which saves us from
@@ -383,8 +385,154 @@ public:
 
   bool operator==(const pool_allocator&) const { return true; }
   bool operator!=(const pool_allocator&) const { return false; }
+
+  using block_allocator = block_pool_allocator<pool_ix, T>;
 };
 
+// Variant of pool_allocator that treats single allocation of multiple objects as 1 entity.
+// This is useful only for compound types, like sequence of chars where single char is irrelevant,
+// and sequence of chars is actual entity.
+
+template<pool_index_t pool_ix, typename T>
+class block_pool_allocator {
+  pool_t *pool;
+  type_t *type = nullptr;
+
+public:
+  typedef block_pool_allocator<pool_ix, T> allocator_type;
+  typedef T value_type;
+  typedef value_type *pointer;
+  typedef const value_type * const_pointer;
+  typedef value_type& reference;
+  typedef const value_type& const_reference;
+  typedef std::size_t size_type;
+  typedef std::ptrdiff_t difference_type;
+
+  template<typename U> struct rebind {
+    typedef block_pool_allocator<pool_ix,U> other;
+  };
+
+  void init(bool force_register) {
+    pool = &get_pool(pool_ix);
+    if (debug_mode || force_register) {
+      type = pool->get_type(typeid(T[]), sizeof(T));
+    }
+  }
+
+  block_pool_allocator(bool force_register=false) {
+    init(force_register);
+  }
+  template<typename U>
+  block_pool_allocator(const block_pool_allocator<pool_ix,U>&) {
+    init(false);
+  }
+
+  T* allocate(size_t n, void *p = nullptr) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = pool->pick_a_shard();
+    shard->bytes += total;
+    shard->items += 1;
+    if (type) {
+      type->items += 1;
+    }
+    T* r = reinterpret_cast<T*>(new char[total]);
+    return r;
+  }
+
+  void deallocate(T* p, size_t n) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = pool->pick_a_shard();
+    shard->bytes -= total;
+    shard->items -= 1;
+    if (type) {
+      type->items -= 1;
+    }
+    delete[] reinterpret_cast<char*>(p);
+  }
+
+  T* allocate_aligned(size_t n, size_t align, void *p = nullptr) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = pool->pick_a_shard();
+    shard->bytes += total;
+    shard->items += 1;
+    if (type) {
+      type->items += 1;
+    }
+    char *ptr;
+    int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
+    if (rc)
+      throw std::bad_alloc();
+    T* r = reinterpret_cast<T*>(ptr);
+    return r;
+  }
+
+  void deallocate_aligned(T* p, size_t n) {
+    size_t total = sizeof(T) * n;
+    shard_t *shard = pool->pick_a_shard();
+    shard->bytes -= total;
+    shard->items -= 1;
+    if (type) {
+      type->items -= 1;
+    }
+    ::free(p);
+  }
+
+  void destroy(T* p) {
+    p->~T();
+  }
+
+  template<class U>
+  void destroy(U *p) {
+    p->~U();
+  }
+
+  void construct(T* p, const T& val) {
+    ::new ((void *)p) T(val);
+  }
+
+  template<class U, class... Args> void construct(U* p,Args&&... args) {
+    ::new((void *)p) U(std::forward<Args>(args)...);
+  }
+
+  bool operator==(const block_pool_allocator&) const { return true; }
+  bool operator!=(const block_pool_allocator&) const { return false; }
+};
+
+template<typename A, typename = void>
+struct check_for_type {};
+
+template<typename A>
+struct check_for_type<A> {
+  typedef void type;
+};
+
+// Template optional_remap_to_block_allocator is intended for use in other templates.
+// It allows to redirect allocator for some elements to block_allocator, but preserve for others.
+// For example one can prefer to have block accounting for strings but
+// default for other data structure elements:
+//
+// template<template<typename> class Allocator>
+// using block_string = std::basic_string<char,
+//   std::char_traits<char>,
+//   typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>;
+//
+// template<template<typename> class Allocator>
+// using block_xattr_map = compact_map<block_string<Allocator>,
+//			      ceph::bufferptr,
+//			      std::less<block_string<Allocator>>,
+//			      Allocator<std::pair<const block_string<Allocator>,
+//						  ceph::bufferptr>>>;
+//
+
+template<typename T, typename X = void>
+struct optional_remap_to_block_allocator {
+    using allocator = T;
+};
+
+template<typename T>
+struct optional_remap_to_block_allocator<T, typename check_for_type<typename T::block_allocator>::type> {
+  using allocator = typename T::block_allocator;
+};
 
 // Namespace mempool
 
@@ -396,6 +544,9 @@ public:
                                                                         \
     using string = std::basic_string<char,std::char_traits<char>,       \
                                      pool_allocator<char>>;             \
+                                                                        \
+    using block_string = std::basic_string<char,std::char_traits<char>, \
+                                     block_pool_allocator<id, char>>;   \
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\

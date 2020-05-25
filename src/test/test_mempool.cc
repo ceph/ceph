@@ -321,6 +321,137 @@ TEST(mempool, string_test)
   }
 }
 
+TEST(mempool, block_string)
+{
+  {
+    mempool::osdmap::block_string s;
+    s.reserve(100);
+    EXPECT_GE(mempool::osdmap::allocated_bytes(), s.capacity() + 1u); // +1 for zero-byte termination :
+    for (size_t i = 0; i < 10; ++i) {
+      s += '1';
+      s.append(s);
+      EXPECT_EQ(mempool::osdmap::allocated_items(), 1);
+    }
+  }
+  EXPECT_EQ(mempool::osdmap::allocated_items(), 0);
+}
+
+TEST(mempool, small_block_string_optimization)
+{
+  //be aware of small string optimization, but it must end somewhere
+  mempool::osdmap::block_string s;
+  size_t max_small_string = 0;
+  for (size_t i = 0; i <= 100; ++i) {
+    s = mempool::osdmap::block_string(i, i);
+    if (mempool::osdmap::allocated_items() == 0) {
+      EXPECT_EQ(mempool::osdmap::allocated_bytes(), 0);
+      max_small_string = i;
+    } else {
+      EXPECT_EQ(mempool::osdmap::allocated_items(), 1);
+      EXPECT_GE(mempool::osdmap::allocated_bytes(), i + 1);
+    }
+  }
+  EXPECT_LT(max_small_string, 100);
+}
+
+TEST(mempool, block_string_test_more)
+{
+  std::vector<mempool::osdmap::block_string> s;
+  size_t siz = 0;
+  for (size_t i = 1; i <= 10; ++i) {
+    s.push_back(mempool::osdmap::block_string(100 + i * 10, i));
+    siz += 100 + i * 10 + 1;
+    EXPECT_GE(mempool::osdmap::allocated_bytes(), siz);
+    EXPECT_EQ(mempool::osdmap::allocated_items(), i);
+  }
+  s.resize(0);
+  EXPECT_EQ(mempool::osdmap::allocated_bytes(), 0);
+  EXPECT_EQ(mempool::osdmap::allocated_items(), 0);
+}
+
+/*from mdstypes.h*/
+template<template<typename> class Allocator>
+using alloc_string = std::basic_string<char,
+				       std::char_traits<char>,
+				       Allocator<char>>;
+
+template<template<typename> class Allocator>
+using xattr_map = compact_map<alloc_string<Allocator>,
+			      ceph::bufferptr,
+			      std::less<alloc_string<Allocator>>,
+			      Allocator<std::pair<const alloc_string<Allocator>,
+						  ceph::bufferptr>>>;
+template<template<typename> class Allocator>
+using block_string = std::basic_string<char,
+  std::char_traits<char>,
+  typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>;
+
+template<template<typename> class Allocator>
+using block_xattr_map = compact_map<block_string<Allocator>,
+			      ceph::bufferptr,
+			      std::less<block_string<Allocator>>,
+			      Allocator<std::pair<const block_string<Allocator>,
+						  ceph::bufferptr>>>;
+
+template<template<typename> class Allocator>
+using vector_remapped =
+  std::vector<std::basic_string<
+		char,
+		std::char_traits<char>,
+		typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>,
+	      Allocator<
+		std::basic_string<
+		  char,
+		  std::char_traits<char>,
+		  typename mempool::optional_remap_to_block_allocator<Allocator<char>>::allocator>
+		>
+	      >;
+
+TEST(mempool, string_remap_allocator)
+{
+  xattr_map<std::allocator> std_map;
+  xattr_map<mempool::mds_co::pool_allocator> mds_map;
+  block_xattr_map<std::allocator> block_std_map;
+  block_xattr_map<mempool::mds_co::pool_allocator> block_mds_map;
+
+  ceph::bufferptr ptr;
+
+  EXPECT_EQ(mempool::mds_co::allocated_bytes(), 0);
+  EXPECT_EQ(mempool::mds_co::allocated_items(), 0);
+  mds_map.emplace(mempool::mds_co::string(), ptr);
+  EXPECT_LT(mempool::mds_co::allocated_bytes(), 200);
+  EXPECT_EQ(mempool::mds_co::allocated_items(), 1);
+  mds_map.emplace(mempool::mds_co::string(10000,'k'), ptr);
+  EXPECT_GT(mempool::mds_co::allocated_bytes(), 10000);
+  EXPECT_GT(mempool::mds_co::allocated_items(), 10000);
+  mds_map.clear();
+  EXPECT_EQ(mempool::mds_co::allocated_bytes(), 0);
+  EXPECT_EQ(mempool::mds_co::allocated_items(), 0);
+  block_mds_map.emplace(mempool::mds_co::block_string(10000,'k'), ptr);
+  EXPECT_GT(mempool::mds_co::allocated_bytes(), 10000);
+  EXPECT_EQ(mempool::mds_co::allocated_items(), 2);
+  block_mds_map.clear();
+
+  static_assert(std::is_same<
+    typename mempool::optional_remap_to_block_allocator<mempool::mds_co::pool_allocator<char>>::allocator,
+    mempool::mds_co::pool_allocator<char>::block_allocator
+  >::value);
+  static_assert(std::is_same<
+    typename mempool::optional_remap_to_block_allocator<std::allocator<char>>::allocator,
+    std::allocator<char>
+  >::value);
+
+  std::vector<
+    mempool::mds_co::block_string,
+    mempool::mds_co::pool_allocator<mempool::mds_co::block_string>> vector_0;
+  vector_remapped<std::allocator> vector_1;
+  vector_remapped<mempool::mds_co::pool_allocator> vector_2;
+
+  static_assert(std::is_same<decltype(vector_0)::value_type, mempool::mds_co::block_string>::value);
+  static_assert(std::is_same<decltype(vector_1)::value_type, std::string>::value);
+  static_assert(std::is_same<decltype(vector_2)::value_type, mempool::mds_co::block_string>::value);
+}
+
 TEST(mempool, bufferlist)
 {
   bufferlist bl;
