@@ -8470,9 +8470,11 @@ std::vector<Option> get_mds_client_options() {
     .set_default(true)
     .set_description("pass atomic_o_trunc flag to FUSE on mount"),
 
-    Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_flag(Option::FLAG_STARTUP)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_description("enable debugging for the libfuse"),
 
     Option("fuse_multithreaded", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

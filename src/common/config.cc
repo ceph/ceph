@@ -670,6 +670,7 @@ int md_config_t::parse_argv(ConfigValues& values,
       set_val_or_die(values, tracker, "daemonize", "false");
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
+      set_val_or_die(values, tracker, "fuse_debug", "true");
       set_val_or_die(values, tracker, "daemonize", "false");
       set_val_or_die(values, tracker, "log_file", "");
       set_val_or_die(values, tracker, "log_to_stderr", "true");
