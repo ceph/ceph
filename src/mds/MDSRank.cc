@@ -1932,6 +1932,14 @@ void MDSRank::rejoin_done()
   mdcache->show_subtrees();
   mdcache->show_cache();
 
+  if (mdcache->is_any_uncommitted_fragment()) {
+    dout(1) << " waiting for uncommitted fragments" << dendl;
+    MDSGatherBuilder gather(g_ceph_context, new C_MDS_VoidFn(this, &MDSRank::rejoin_done));
+    mdcache->wait_for_uncommitted_fragments(gather.get());
+    gather.activate();
+    return;
+  }
+
   // funny case: is our cache empty?  no subtrees?
   if (!mdcache->is_subtrees()) {
     if (whoami == 0) {
