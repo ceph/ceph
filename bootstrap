@@ -88,7 +88,13 @@ Linux)
 	fi
 	;;
     "openSUSE project"|"SUSE LINUX"|"openSUSE")
-        for package in python-pip python-devel python-virtualenv libev-devel libvirt-devel libmysqlclient-devel libffi-devel; do
+
+	if [[ "$PYTHON" =~ "python2" ]]; then
+	    deps=(python-pip python-devel python-virtualenv libev-devel libvirt-devel libmysqlclient-devel libffi-devel)
+	else
+	    deps=(python3-pip python3-devel python3-virtualenv libev-devel libvirt-devel libmysqlclient-devel libffi-devel)
+	fi
+	for package in ${deps[@]}; do
             if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
                 if [ "$(rpm -q --whatprovides $package)" == "no package provides $package" ]; then
                     missing="${missing:+$missing }$package"
