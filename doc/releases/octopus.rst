@@ -638,7 +638,7 @@ Upgrade compatibility notes
 
     ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
 
-* The format of MDSs in `ceph fs dump` has changed.
+* The format of MDSs in ``ceph fs dump`` has changed.
 
 * The ``mds_cache_size`` config option is completely removed. Since luminous,
   the ``mds_cache_memory_limit`` config option has been preferred to configure
@@ -649,6 +649,15 @@ Upgrade compatibility notes
   number of PGs.  To change this behavior, or to learn more about PG
   autoscaling, see :ref:`pg-autoscaler`.  Note that existing pools in
   upgraded clusters will still be set to ``warn`` by default.
+
+* The pool parameter ``target_size_ratio``, used by the pg autoscaler,
+  has changed meaning. It is now normalized across pools, rather than
+  specifying an absolute ratio. For details, see :ref:`pg-autoscaler`.
+  If you have set target size ratios on any pools, you may want to set
+  these pools to autoscale ``warn`` mode to avoid data movement during
+  the upgrade::
+
+    ceph osd pool set <pool-name> pg_autoscale_mode warn
 
 * The ``upmap_max_iterations`` config option of mgr/balancer has been
   renamed to ``upmap_max_optimizations`` to better match its behaviour.
@@ -667,6 +676,64 @@ Upgrade compatibility notes
   only global, ``client``, and ``client.foo.bar`` options would apply.
   This change may affect the configuration for clients that include a
   ``.`` in their name.
+
+* MDS default cache memory limit is now 4GB.
+
+* The behaviour of the ``-o`` argument to the rados tool has been 
+  reverted to its original behaviour of indicating an output file. This 
+  reverts it to a more consistent behaviour when compared to other 
+  tools. Specifying obect size is now accomplished by using an 
+  upper-case O ``-O``.
+
+* In certain rare cases, OSDs would self-classify themselves as type
+  'nvme' instead of 'hdd' or 'ssd'.  This appears to be limited to
+  cases where BlueStore was deployed with older versions of ceph-disk,
+  or manually without ceph-volume and LVM.  Going forward, the OSD
+  will limit itself to only 'hdd' and 'ssd' (or whatever device class
+  the user manually specifies).
+
+* RGW: a mismatch between the bucket notification documentation and 
+  the actual message format was fixed. This means that any endpoints 
+  receiving bucket notification, will now receive the same notifications 
+  inside an JSON array named 'Records'. Note that this does not affect 
+  pulling bucket notification from a subscription in a 'pubsub' zone, 
+  as these are already wrapped inside that array.
+
+* The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for 
+  upmap balancing has been removed. Instead use the mgr balancer config
+  ``upmap_max_deviation`` which now is an integer number of PGs of 
+  deviation from the target PGs per OSD.  This can be set with a command 
+  like ``ceph config set mgr mgr/balancer/upmap_max_deviation 2``. The 
+  default ``upmap_max_deviation`` is 1.  There are situations where 
+  crush rules would not allow a pool to ever have completely balanced 
+  PGs. For example, if crush requires 1 replica on each of 3 racks, but
+  there are fewer OSDs in one of the racks. In those cases, the 
+  configuration value can be increased.
+
+* MDS daemons can now be assigned to manage a particular file system via the
+  new ``mds_join_fs`` option. The monitors will try to use only MDS for a file
+  system with mds_join_fs equal to the file system name (strong affinity).
+  Monitors may also deliberately failover an active MDS to a standby when the
+  cluster is otherwise healthy if the standby has stronger affinity.
+
+* RGW Multisite: A new fine grained bucket-granularity policy configuration
+  system has been introduced and it supersedes the previous coarse zone sync
+  configuration (specifically the ``sync_from`` and ``sync_from_all`` fields
+  in the zonegroup configuration. New configuration should only be configured
+  after all relevant zones in the zonegroup have been upgraded.
+
+* RGW S3: Support has been added for BlockPublicAccess set of APIs at a bucket
+  level, currently blocking/ignoring public acls & policies are supported.
+  User/Account level APIs are planned to be added in the future
+
+* RGW: The default number of bucket index shards for new buckets was raised
+  from 1 to 11 to increase the amount of write throughput for small buckets
+  and delay the onset of dynamic resharding. This change only affects new
+  deployments/zones. To change this default value on existing deployments,
+  use ``radosgw-admin zonegroup modify --bucket-index-max-shards=11``.
+  If the zonegroup is part of a realm, the change must be committed with
+  ``radosgw-admin period update --commit`` - otherwise the change will take
+  effect after radosgws are restarted.
 
 
 Changelog
