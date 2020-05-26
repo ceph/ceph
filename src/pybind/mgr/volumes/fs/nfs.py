@@ -210,29 +210,26 @@ class FSExport(object):
     def _create_user_key(self, entity, path, fs_name):
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
                 self.rados_pool, self.rados_namespace, fs_name)
-        ret, out, err = self.mgr.mon_command({
+
+        ret, out, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.{}'.format(entity),
             'caps' : ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
             'format': 'json',
             })
 
-        if ret!= 0:
-            return ret, err
-
         json_res = json.loads(out)
-        log.info("Export user is {}".format(json_res[0]['entity']))
-
+        log.info("Export user created is {}".format(json_res[0]['entity']))
         return json_res[0]['entity'], json_res[0]['key']
 
     def _delete_user(self, entity):
-        ret, out, err = self.mgr.mon_command({
-            'prefix': 'auth del',
-            'entity': 'client.{}'.format(entity),
-            })
-
-        if ret!= 0:
-            log.warning(f"User could not be deleted: {err}")
+        try:
+            self.mgr.check_mon_command({
+                'prefix': 'auth del',
+                'entity': 'client.{}'.format(entity),
+                })
+        except MonCommandFailed as e:
+            log.warning(f"User could not be deleted: {e}")
 
     def format_path(self, path):
         if path is not None:
@@ -311,9 +308,6 @@ class FSExport(object):
             ex_id = self._gen_export_id()
             user_id = f"{cluster_id}{ex_id}"
             user_out, key = self._create_user_key(user_id, path, fs_name)
-
-            if isinstance(user_out, int):
-                return user_out, "", key
 
             ex_dict = {
                     'path': self.format_path(path),
@@ -442,11 +436,8 @@ class NFSCluster:
                 return r, out, err
             log.info("{}".format(out))
 
-            command = {'prefix': 'osd pool application enable', 'pool': self.pool_name, 'app': 'nfs'}
-            r, out, err = self.mgr.mon_command(command)
-
-            if r != 0:
-                return r, out, err
+            self.mgr.check_mon_command({'prefix': 'osd pool application enable',
+                'pool': self.pool_name, 'app': 'nfs'})
 
         self._set_pool_namespace(cluster_id)
         self._set_cluster_id(cluster_id)
