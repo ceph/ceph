@@ -24,13 +24,19 @@ export class CriticalConfirmationModalComponent implements OnInit {
   itemNames: string[];
   actionDescription = 'delete';
 
+  childFormGroup: CdFormGroup;
+  childFormGroupTemplate: TemplateRef<any>;
+
   constructor(public modalRef: BsModalRef) {}
 
   ngOnInit() {
-    this.deletionForm = new CdFormGroup({
+    const controls = {
       confirmation: new FormControl(false, [Validators.requiredTrue])
-    });
-
+    };
+    if (this.childFormGroup) {
+      controls['child'] = this.childFormGroup;
+    }
+    this.deletionForm = new CdFormGroup(controls);
     if (!(this.submitAction || this.submitActionObservable)) {
       throw new Error('No submit action defined');
     }
