@@ -80,3 +80,24 @@
                 [usedBytes]="row.stats.stat_bytes_used">
   </cd-usage-bar>
 </ng-template>
+
+<ng-template #deleteOsdExtraTpl
+             let-form="form">
+  <ng-container [formGroup]="form">
+    <ng-container formGroupName="child">
+      <div class="form-group">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox"
+                 class="custom-control-input"
+                 name="preserve"
+                 id="preserve"
+                 formControlName="preserve"
+                 autofocus>
+          <label class="custom-control-label"
+                 for="preserve"
+                 i18n>Preserve OSD ID(s) for replacement.</label>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
+</ng-template>
