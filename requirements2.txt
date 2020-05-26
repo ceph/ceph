@@ -102,6 +102,7 @@ scandir==1.8              # via pathlib2
 simplejson==3.10.0        # via osc-lib, python-cinderclient, python-neutronclient, python-novaclient
 six==1.14.0               # via bcrypt, cliff, cmd2, configobj, cryptography, debtcollector, keystoneauth1, more-itertools, openstacksdk, osc-lib, oslo.config, oslo.i18n, oslo.serialization, oslo.utils, pathlib2, pip-tools, pynacl, pyopenssl, pytest, python-cinderclient, python-dateutil, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, stevedore, teuthology, tox, warlock
 stevedore==1.21.0         # via cliff, keystoneauth1, openstacksdk, osc-lib, oslo.config, python-keystoneclient
+toml==0.10.1              # via teuthology
 tox==3.0.0                # via teuthology
 typing==3.7.4.1           # via apache-libcloud
 unicodecsv==0.14.1        # via cliff
