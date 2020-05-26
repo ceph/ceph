@@ -133,9 +133,21 @@ command.  There are several ways to do this:
   ceph commands, including ``ceph``, ``rbd``, ``mount.ceph`` (for mounting
   CephFS file systems), etc.::
 
+First, install the APT/RPM repo keys.
+ 
+APT:
+
+    # sudo rpm --import 'https://download.ceph.com/keys/release.asc'
+ 
+RPM:
+
+    # wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
+    
+And then install the release repo, and the ceph-common tooling:
+    
     # cephadm add-repo --release octopus
     # cephadm install ceph-common
-
+    
 Confirm that the ``ceph`` command is accessible with::
 
   # ceph -v
