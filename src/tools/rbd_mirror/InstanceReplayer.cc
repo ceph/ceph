@@ -274,9 +274,17 @@ void InstanceReplayer<I>::stop(Context *on_finish)
 {
   dout(10) << dendl;
 
+  if (on_finish == nullptr) {
+    on_finish = new C_TrackedOp(m_async_op_tracker, on_finish);
+  } else {
+    on_finish = new LambdaContext(
+      [this, on_finish] (int r) {
+        m_async_op_tracker.wait_for_ops(on_finish);
+      });
+  }
+
   auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
-  auto gather_ctx = new C_Gather(
-    cct, new C_TrackedOp(m_async_op_tracker, on_finish));
+  auto gather_ctx = new C_Gather(cct, on_finish);
   {
     std::lock_guard locker{m_lock};
 
