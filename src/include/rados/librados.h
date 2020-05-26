@@ -172,7 +172,7 @@ typedef enum {
  *
  * A handle for interacting with a RADOS cluster. It encapsulates all
  * RADOS client configuration, including username, key for
- * authentication, logging, and debugging. Talking different clusters
+ * authentication, logging, and debugging. Talking to different clusters
  * -- or to the same cluster with different users -- requires
  * different cluster handles.
  */
