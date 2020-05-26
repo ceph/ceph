@@ -8,6 +8,8 @@
 
 #include <seastar/core/future-util.hh>
 
+#include "include/ceph_assert.h"
+
 namespace crimson {
 
 template<typename Iterator, typename AsyncAction>
@@ -724,9 +726,31 @@ public:
 
   struct discard_all {
     template <class ErrorT, EnableIf<ErrorT>...>
-    decltype(auto) operator()(ErrorT&&) {
+    void operator()(ErrorT&&) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
+    }
+  };
+
+  // assert_all{ "TODO" };
+  class assert_all {
+    const char* const msg = nullptr;
+  public:
+    template <std::size_t N>
+    assert_all(const char (&msg)[N])
+      : msg(msg) {
+    }
+    assert_all() = default;
+
+    template <class ErrorT, EnableIf<ErrorT>...>
+    void operator()(ErrorT&&) {
+      static_assert(contains_once_v<std::decay_t<ErrorT>>,
+                    "discarding disallowed ErrorT");
+      if (msg) {
+        ceph_abort(msg);
+      } else {
+        ceph_abort();
+      }
     }
   };
 
@@ -949,7 +973,26 @@ namespace ct_error {
 
   struct discard_all {
     template <class ErrorT>
-    decltype(auto) operator()(ErrorT&&) {
+    void operator()(ErrorT&&) {
+    }
+  };
+
+  class assert_all {
+    const char* const msg = nullptr;
+  public:
+    template <std::size_t N>
+    assert_all(const char (&msg)[N])
+      : msg(msg) {
+    }
+    assert_all() = default;
+
+    template <class ErrorT>
+    void operator()(ErrorT&&) {
+      if (msg) {
+        ceph_abort(msg);
+      } else {
+        ceph_abort();
+      }
     }
   };
 
