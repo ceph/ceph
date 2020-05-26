@@ -47,6 +47,8 @@ struct RootBlock : CachedExtent {
   template <typename... T>
   RootBlock(T&&... t) : CachedExtent(std::forward<T>(t)...) {}
 
+  RootBlock(const RootBlock &rhs) = default;
+
   CachedExtentRef duplicate_for_write() final {
     return CachedExtentRef(new RootBlock(*this));
   };

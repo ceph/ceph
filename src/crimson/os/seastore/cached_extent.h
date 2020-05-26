@@ -305,9 +305,9 @@ protected:
 
 
   friend class Cache;
-  template <typename T, typename... Args>
-  static TCachedExtentRef<T> make_cached_extent_ref(Args&&... args) {
-    return new T(std::forward<Args>(args)...);
+  template <typename T>
+  static TCachedExtentRef<T> make_cached_extent_ref(bufferptr &&ptr) {
+    return new T(std::move(ptr));
   }
 
   void set_paddr(paddr_t offset) { poffset = offset; }
