@@ -302,7 +302,7 @@ class FSExport(object):
         self.rados_namespace = cluster_id
         access_type = "RW"
         if read_only:
-            access_type = "R"
+            access_type = "RO"
 
         if not self._fetch_export(pseudo_path):
             ex_id = self._gen_export_id()
