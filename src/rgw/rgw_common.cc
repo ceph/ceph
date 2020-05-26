@@ -918,6 +918,18 @@ RGWHTTPArgs::get_optional(const std::string& name) const
   }
 }
 
+std::optional<std::string>
+RGWHTTPArgs::get_std_optional(const std::string& name) const
+{
+  bool exists;
+  const std::string& value = get(name, &exists);
+  if (exists) {
+    return value;
+  } else {
+    return std::nullopt;
+  }
+}
+
 int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists) const
 {
   map<string, string>::const_iterator iter;

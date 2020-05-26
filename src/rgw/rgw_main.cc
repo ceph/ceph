@@ -31,6 +31,7 @@
 #include "rgw_rest_log.h"
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
+#include "rgw_rest_sip.h"
 #include "rgw_rest_sts.h"
 #include "rgw_rest_ratelimit.h"
 #include "rgw_swift_auth.h"
@@ -506,6 +507,7 @@ int radosgw_Main(int argc, const char **argv)
     admin_resource->register_resource("user", new RGWRESTMgr_User);
     /* XXX dang part of this is RADOS specific */
     admin_resource->register_resource("bucket", new RGWRESTMgr_Bucket);
+    admin_resource->register_resource("sip", new RGWRESTMgr_SIP);
   
     /*Registering resource for /admin/metadata */
     admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
