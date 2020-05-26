@@ -185,7 +185,7 @@ def generate_combinations(path, mat, generate_from, generate_to):
     for i in range(generate_from, generate_to):
         output = mat.index(i)
         ret.append((
-            matrix.generate_desc(combine_path, output),
+            matrix.generate_desc(combine_path, output).replace('.yaml', ''),
             matrix.generate_paths(path, output, combine_path)))
     return ret
 

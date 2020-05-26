@@ -637,9 +637,9 @@ class TestSubset(object):
                     sub_max_facets, max_fanout,
                     max_depth - 1, namegen, top=False)
                 if subtree is not None:
-                    tree[next(namegen)] = subtree
+                    tree['d' + next(namegen)] = subtree
                 else:
-                    tree[yamilify(next(namegen))] = None
+                    tree[yamilify('f' + next(namegen))] = None
             random.choice([
                 lambda: tree.update({'%': None}),
                 lambda: None])()
@@ -680,7 +680,12 @@ class TestSubset(object):
                     ret += ('\t'*tabs) + (k + ':').ljust(10) + "\n"
                     ret += pptree(v, tabs+1)
             return ret
-        for facet in flatten(tree):
+        def deyamlify(name):
+            if name.endswith('.yaml'):
+                return name[:-5]
+            else:
+                return name
+        for facet in (deyamlify(_) for _ in flatten(tree)):
             found = False
             for i in description_list:
                 if facet in i:
