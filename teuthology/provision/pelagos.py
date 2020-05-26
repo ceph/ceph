@@ -79,27 +79,29 @@ class Pelagos(object):
             raise RuntimeError("Pelagos is not configured!")
         location = None
         try:
+            params=dict(os=self.os_name, node=self.name)
             response = self.do_request('node/provision',
-                                      data={'os': self.os_name,
-                                            'node': self.name},
-                                      method='POST')
+                                data=params, method='POST')
             location = response.headers.get('Location')
-            self.log.info("Waiting for deploy to finish")
-            self.log.info("Observe location: '%s'", location)
+            self.log.debug("provision task: '%s'", location)
+            # gracefully wait till provision task gets created on pelagos
             time.sleep(2)
-            with safe_while(sleep=15, tries=60) as proceed:
+            self.log.info("Waiting for deploy to finish")
+            sleep_time=15
+            with safe_while(sleep=sleep_time, tries=60) as proceed:
                 while proceed():
                     if not self.is_task_active(location):
                         break
+                    self.log.info('Sleeping %s seconds' % sleep_time)
         except Exception as e:
             if location:
                 self.cancel_deploy_task(location)
             else:
-                self.log.error("No task started")
+                self.log.error("Failed to start deploy tasks!")
             raise e
-        self.log.info("Deploy completed")
+        self.log.info("Deploy complete!")
         if self.task_status_response.status_code != 200:
-            raise Exception("Provisioning failed")
+            raise Exception("Deploy failed")
         return self.task_status_response
 
     def cancel_deploy_task(self,  task_id):
@@ -117,11 +119,13 @@ class Pelagos(object):
                 return False
             else:
                 raise HTTPError(err.code, err.reason)
-            self.log.info("Response code '%s'", str(status_response.status_code))
+            self.log.debug("Response code '%s'",
+                                str(status_response.status_code))
         self.task_status_response = status_response
         if status_response.status_code == 202:
-            self.log.info("Status response: '%s'", status_response.headers['status'])
-            if status_response.headers['status'] == 'not completed':
+            status = status_response.headers['status']
+            self.log.debug("Status response: '%s'", status)
+            if status == 'not completed':
                 return True
         return False
 
@@ -136,12 +140,10 @@ class Pelagos(object):
                        unsuccessful (default: True)
         :returns: A requests.models.Response object
         """
-        prepared_url = config.pelagos['endpoint'] + url_suffix
-        if url != '':
-            prepared_url = url
-        self.log.info("Connect to: '%s'", prepared_url)
-        if data is not None:
-            self.log.info("Send data: '%s'", str(data))
+        prepared_url = url or config.pelagos['endpoint'] + url_suffix
+        self.log.debug("Sending %s request to: '%s'", method, prepared_url)
+        if data:
+            self.log.debug("Using data: '%s'", str(data))
         req = requests.Request(
             method,
             prepared_url,
@@ -149,9 +151,9 @@ class Pelagos(object):
         )
         prepared = req.prepare()
         resp = requests.Session().send(prepared)
-        self.log.debug("do_request code %s text %s", resp.status_code, resp.text)
         if not resp.ok and resp.text:
-            self.log.error("%s: %s", resp.status_code, resp.text)
+            self.log.error("Returned status code: '%s', text: %s",
+                           resp.status_code, resp.text or 'Empty')
         if verify:
             resp.raise_for_status()
         return resp
