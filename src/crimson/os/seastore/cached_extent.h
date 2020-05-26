@@ -81,6 +81,16 @@ public:
   virtual void on_initial_write() {}
 
   /**
+   * on_clean_read
+   *
+   * Called after read of initially written extent.
+   *  State will be CLEAN. Implentation may use this
+   * call to fixup the buffer with the newly available
+   * absolute get_paddr().
+   */
+  virtual void on_clean_read() {}
+
+  /**
    * on_delta_write
    *
    * Called after commit of delta.  State will be DIRTY.
