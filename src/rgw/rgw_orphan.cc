@@ -59,30 +59,6 @@ static string obj_fingerprint(const string& oid, const char *force_ns = NULL)
   return s.substr(0, i + 1);
 }
 
-
-static string obj_force_ns(const string& oid, const char *force_ns)
-{
-  ssize_t pos = oid.find('_');
-  if (pos < 0) {
-    cerr << "ERROR: object does not have a bucket marker: " << oid << std::endl;
-  }
-
-  string obj_marker = oid.substr(0, pos);
-
-  rgw_obj_key obj;
-  rgw_obj_key::parse_raw_oid(oid.substr(pos + 1), &obj);
-
-  if (obj.ns.empty()) {
-    return oid;
-  }
-
-  obj.set_ns(force_ns);
-
-  string s = obj_marker + obj.get_oid();
-
-  return s;
-}
-
 int RGWOrphanStore::read_job(const string& job_name, RGWOrphanSearchState & state)
 {
   set<string> keys;
