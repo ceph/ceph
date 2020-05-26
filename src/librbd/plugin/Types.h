@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_PLUGIN_TYPES_H
 #define CEPH_LIBRBD_PLUGIN_TYPES_H
 
+#include "include/common_fwd.h"
 #include "common/PluginRegistry.h"
 
 struct CephContext;
