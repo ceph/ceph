@@ -1080,6 +1080,72 @@ test_mirror_snapshot_schedule() {
     ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
 }
 
+test_snapshot_schedule() {
+    echo "testing snapshot schedule..."
+    remove_images
+    ceph osd pool create rbd2 8
+    rbd pool init rbd2
+    rbd namespace create rbd2/ns1
+
+    expect_fail rbd snapshot schedule period ls
+    test "$(rbd snapshot schedule period ls -R --format json)" = "[]"
+
+    rbd create $RBD_CREATE_ARGS -s 1 rbd2/ns1/test1
+
+    test "$(rbd snap ls rbd2/ns1/test1 | grep -c scheduled)" = '0'
+
+    rbd snapshot schedule period add --image rbd2/ns1/test1 1m
+    test "$(rbd snapshot schedule period ls --image rbd2/ns1/test1)" = 'every 1m'
+
+    for i in `seq 12`; do
+        test "$(rbd snap ls rbd2/ns1/test1 | grep -c scheduled)" -gt '0' && break
+        sleep 10
+    done
+
+    test "$(rbd snap ls rbd2/ns1/test1 | grep -c scheduled)" -gt '0'
+
+    for i in `seq 12`; do
+        test "$(rbd snap ls rbd2/ns1/test1 | grep -c scheduled)" -gt '1' && break
+        sleep 10
+    done
+
+    test "$(rbd snap ls rbd2/ns1/test1 | grep -c scheduled)" -gt '1'
+
+    rbd snapshot schedule period ls -R | grep 'rbd2 *ns1 *test1 *every 1m'
+    test "$(rbd snapshot schedule period ls -p rbd2/ns1 --image test1)" = 'every 1m'
+
+    rbd snapshot schedule period status
+    test "$(rbd snapshot schedule period status --format xml |
+        $XMLSTARLET sel -t -v '//scheduled_images/image/image')" = 'rbd2/ns1/test1'
+
+    rbd snapshot schedule retention add --image rbd2/ns1/test1 1m 1
+    test "$(rbd snapshot schedule retention ls --image rbd2/ns1/test1)" = 'last 1 every 1m'
+
+    for i in `seq 12`; do
+        test "$(rbd snap ls rbd2/ns1/test1 | grep -c scheduled)" = '1' && break
+        sleep 10
+    done
+
+    test "$(rbd snap ls rbd2/ns1/test1 | grep -c scheduled)" = '1'
+
+    rbd snapshot schedule period add 1h 00:15
+    test "$(rbd snapshot schedule period ls)" = 'every 1h starting at 00:15:00'
+
+    rbd snap purge rbd2/ns1/test1
+    rbd rm rbd2/ns1/test1
+
+    for i in `seq 12`; do
+        rbd snapshot schedule period status | grep 'rbd2/ns1/test1' || break
+        sleep 10
+    done
+
+    rbd snapshot schedule period remove
+    test "$(rbd snapshot schedule period ls -R --format json)" = "[]"
+
+    remove_images
+    ceph osd pool rm rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -1102,5 +1168,6 @@ test_thick_provision
 test_namespace
 test_trash_purge_schedule
 test_mirror_snapshot_schedule
+test_snapshot_schedule
 
 echo OK
