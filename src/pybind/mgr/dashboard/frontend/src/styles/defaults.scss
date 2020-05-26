@@ -53,6 +53,7 @@ $color-input-border: #ced4da;
 $color-input-border-hover: #adadad;
 $color-brand-teal: #2b99a8 !default;
 $color-brand-gray: #374249 !default;
+$color-mirage-gray: #333e46 !default;
 
 $color-primary: $color-brand-teal !default;
 $color-secondary: $color-brand-gray !default;
@@ -86,7 +87,7 @@ $color-login-row-text: $color-solid-white !default;
 $color-login-row-bg: $color-secondary !default;
 $color-password-toggle-text: $color-solid-white !default;
 $color-password-toggle-placeholder-text: $color-blue-gray !default;
-$color-password-toggle-bg: $color-solid-gray !default;
+$color-password-toggle-bg: $color-mirage-gray !default;
 $color-password-toggle-focus: $color-primary !default;
 // $color-login-active-row-bg: $color-light-yellow !default;
 // $color-login-active-row-text: $color-black !default;
