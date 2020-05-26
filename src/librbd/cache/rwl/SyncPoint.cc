@@ -93,8 +93,6 @@ void SyncPoint::add_in_on_appending_ctxs(Context* ctx) {
 
 void SyncPoint::setup_earlier_sync_point(std::shared_ptr<SyncPoint> sync_point,
                                          uint64_t last_op_sequence_num) {
-    m_perfcounter->inc(l_librbd_rwl_syncpoint_hist,
-                       sync_point->log_entry->writes, sync_point->log_entry->bytes);
     earlier_sync_point = sync_point;
     log_entry->prior_sync_point_flushed = false;
     earlier_sync_point->log_entry->next_sync_point_entry = log_entry;
