@@ -13,16 +13,36 @@ void RootBlock::prepare_write()
   bpiter.copy(tmp.length(), get_bptr().c_str());
 }
 
-CachedExtent::complete_load_ertr::future<> RootBlock::complete_load()
+RootBlock::complete_load_ertr::future<> RootBlock::complete_load()
 {
   auto biter = get_bptr().cbegin();
   root.decode(biter);
+  if (root.lba_root.lba_root_addr.is_relative()) {
+    root.lba_root.lba_root_addr = get_paddr().add_block_relative(
+      root.lba_root.lba_root_addr);
+  }
   return complete_load_ertr::now();
 }
 
-void RootBlock::set_lba_root(btree_lba_root_t lba_root)
+void RootBlock::on_delta_write(paddr_t record_block_offset)
 {
-  root.lba_root = lba_root;
+  if (root.lba_root.lba_root_addr.is_relative()) {
+    root.lba_root.lba_root_addr = record_block_offset.add_record_relative(
+      root.lba_root.lba_root_addr);
+  }
+}
+
+void RootBlock::on_initial_write()
+{
+  if (root.lba_root.lba_root_addr.is_relative()) {
+    root.lba_root.lba_root_addr = get_paddr().add_block_relative(
+      root.lba_root.lba_root_addr);
+  }
+}
+
+btree_lba_root_t &RootBlock::get_lba_root()
+{
+  return root.lba_root;
 }
 
 }

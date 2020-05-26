@@ -13,8 +13,8 @@ using depth_t = uint32_t;
  * permit more than one lba_manager implementation
  */
 struct btree_lba_root_t {
-  depth_t lba_depth;
-  depth_t segment_depth;
+  depth_t lba_depth = 0;
+  depth_t segment_depth = 0;
   paddr_t lba_root_addr;
   paddr_t segment_root;
 
@@ -38,6 +38,25 @@ struct root_block_t {
   }
 };
 
+/**
+ * RootBlock
+ *
+ * Holds the physical addresses of all metadata roots.
+ * In-memory values may be
+ * - absolute: reference to block which predates the current transaction
+ * - record_relative: reference to block updated in this transaction
+ *   if !is_initial_pending()
+ * - block_relative: reference to block updated in this transaction
+ *   if is_initial_pending()
+ *
+ * Upon initial commit, on_initial_write checks physical references and updates
+ * based on newly discovered address (relative ones must be block_relative).
+ *
+ * complete_load also updates addresses in memory post load based on block addr.
+ *
+ * Upon delta commit, on_delta_write uses record addr to update in-memory values.
+ * apply_delta will do the same once implemented (TODO).
+ */
 struct RootBlock : CachedExtent {
   constexpr static segment_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<RootBlock>;
@@ -53,6 +72,11 @@ struct RootBlock : CachedExtent {
     return CachedExtentRef(new RootBlock(*this));
   };
 
+  /**
+   * prepare_write
+   *
+   * For RootBlock, serializes RootBlock::root into the bptr.
+   */
   void prepare_write() final;
 
   static constexpr extent_types_t TYPE = extent_types_t::ROOT;
@@ -61,7 +85,6 @@ struct RootBlock : CachedExtent {
   }
 
   ceph::bufferlist get_delta() final {
-    ceph_assert(0 == "TODO");
     return ceph::bufferlist();
   }
 
@@ -69,12 +92,16 @@ struct RootBlock : CachedExtent {
     ceph_assert(0 == "TODO");
   }
 
+  /// Patches relative addrs in memory based on actual address
   complete_load_ertr::future<> complete_load() final;
 
-  void set_lba_root(btree_lba_root_t lba_root);
-  btree_lba_root_t &get_lba_root() {
-    return root.lba_root;
-  }
+  /// Patches relative addrs in memory based on record commit addr
+  void on_delta_write(paddr_t record_block_offset) final;
+
+  /// Patches relative addrs in memory based on record addr
+  void on_initial_write() final;
+
+  btree_lba_root_t &get_lba_root();
 
 };
 using RootBlockRef = RootBlock::Ref;
