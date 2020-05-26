@@ -180,8 +180,9 @@ class LevelSpec:
                                     "namespace {} does not exist".format(
                                         namespace))
                             name += namespace + "/"
+                            ioctx.set_namespace(namespace)
                             if namespace_validator:
-                                ioctx.set_namespace(namespace)
+                                namespace_validator(ioctx)
                         elif not match.group(3):
                             name += "/"
                         if match.group(3):
@@ -391,10 +392,10 @@ class Schedules:
                                 level_spec = LevelSpec.from_id(
                                     self.handler, k, namespace_validator,
                                     image_validator)
-                            except ValueError:
+                            except ValueError as e:
                                 self.handler.log.debug(
-                                    "Stail schedule key {} in pool".format(
-                                        k, pool_name))
+                                    "Stail schedule key {} in pool {}: {}".format(
+                                        k, pool_name, e))
                                 stale_keys += (k,)
                                 continue
 
