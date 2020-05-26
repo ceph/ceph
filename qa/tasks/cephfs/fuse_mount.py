@@ -420,16 +420,17 @@ class FuseMount(CephFSMount):
     def _prefix(self):
         return ""
 
-    def admin_socket(self, args):
+    def find_admin_socket(self):
         pyscript = """
 import glob
 import re
 import os
 import subprocess
 
-def find_socket(client_name):
+def _find_admin_socket(client_name):
         asok_path = "{asok_path}"
         files = glob.glob(asok_path)
+        mountpoint = "{mountpoint}"
 
         # Given a non-glob path, it better be there
         if "*" not in asok_path:
@@ -439,20 +440,24 @@ def find_socket(client_name):
         for f in files:
                 pid = re.match(".*\.(\d+)\.asok$", f).group(1)
                 if os.path.exists("/proc/{{0}}".format(pid)):
-                        return f
+                    with open("/proc/{{0}}/cmdline".format(pid), 'r') as proc_f:
+                        contents = proc_f.read()
+                        if mountpoint in contents:
+                            return f
         raise RuntimeError("Client socket {{0}} not found".format(client_name))
 
-print(find_socket("{client_name}"))
+print(_find_admin_socket("{client_name}"))
 """.format(
             asok_path=self._asok_path(),
-            client_name="client.{0}".format(self.client_id))
+            client_name="client.{0}".format(self.client_id),
+            mountpoint=self.mountpoint)
 
-        # Find the admin socket
-        asok_path = self.client_remote.sh(
-            ['sudo', 'python3', '-c', pyscript],
-            stdout=StringIO(),
-            timeout=(15*60)).strip()
+        asok_path = self.run_python(pyscript)
         log.info("Found client admin socket at {0}".format(asok_path))
+        return asok_path
+
+    def admin_socket(self, args):
+        asok_path = self.find_admin_socket()
 
         # Query client ID from admin socket, wait 2 seconds
         # and retry 10 times if it is not ready
