@@ -157,16 +157,28 @@ class Osd(RESTController):
     @raise_if_no_orchestrator
     @handle_orchestrator_error('osd')
     @osd_task('delete', {'svc_id': '{svc_id}'})
-    def delete(self, svc_id, force=None):
+    def delete(self, svc_id, preserve_id=None, force=None):
+        replace = False
+        check = False
+        try:
+            if preserve_id is not None:
+                replace = str_to_bool(preserve_id)
+            if force is not None:
+                check = not str_to_bool(force)
+        except ValueError:
+            raise DashboardException(
+                component='osd', http_status_code=400, msg='Invalid parameter(s)')
+
         orch = OrchClient.instance()
-        if not force:
+        if check:
             logger.info('Check for removing osd.%s...', svc_id)
             check = self._check_delete([svc_id])
             if not check['safe']:
                 logger.error('Unable to remove osd.%s: %s', svc_id, check['message'])
                 raise DashboardException(component='osd', msg=check['message'])
-        logger.info('Start removing osd.%s...', svc_id)
-        orch.osds.remove([svc_id])
+
+        logger.info('Start removing osd.%s (replace: %s)...', svc_id, replace)
+        orch.osds.remove([svc_id], replace)
         while True:
             removal_osds = orch.osds.removing_status()
             logger.info('Current removing OSDs %s', removal_osds)
