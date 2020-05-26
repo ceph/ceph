@@ -54,3 +54,8 @@ tasks:
         - libuuid-devel
         - xfsprogs-devel
   - ceph:
+  - exec:
+      mon.a:
+        - ceph config set mds mds_bal_fragment_size_max 10000
+        - ceph config set mds mds_bal_split_size 100
+        - ceph config set mds mds_bal_merge_size 5

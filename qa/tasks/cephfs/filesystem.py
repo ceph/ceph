@@ -207,6 +207,17 @@ class FSStatus(object):
         #all matching
         return False
 
+    def hadfailover_rank(self, fscid, status, rank):
+        """
+        Compares two statuses for mds failovers for a
+        particular rank
+        """
+        rank_info = self.get_rank(fscid, rank)
+        orig_rank_info = status.get_rank(fscid, rank)
+        if ((rank_info['gid'] != orig_rank_info['gid']) or (rank_info['incarnation'] != orig_rank_info['incarnation'])):
+            return True
+        return False
+
 class CephCluster(object):
     @property
     def admin_remote(self):
@@ -585,6 +596,10 @@ class Filesystem(MDSCluster):
     def set_flag(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
         self.mon_manager.raw_cluster_cmd("fs", "flag", "set", var, *a)
+
+    def set_config(self, opt, val, rank=0, status=None):
+        command = ["config", "set", opt, val]
+        self.rank_asok(command, rank, status=status)
 
     def set_allow_multifs(self, yes=True):
         self.set_flag("enable_multiple", yes)
