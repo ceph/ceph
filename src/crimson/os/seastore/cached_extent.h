@@ -389,7 +389,7 @@ public:
 	bottom->get_paddr().add_offset(bottom->get_length()) <= addr)
       ++bottom;
 
-    auto top = extent_index.upper_bound(addr.add_offset(len), paddr_cmp());
+    auto top = extent_index.lower_bound(addr.add_offset(len), paddr_cmp());
     return std::make_pair(
       bottom,
       top
