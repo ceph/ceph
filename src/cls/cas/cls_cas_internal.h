@@ -49,6 +49,9 @@ struct chunk_refs_t {
   chunk_refs_t() {
     clear();
   }
+  chunk_refs_t(const chunk_refs_t& other);
+
+  chunk_refs_t& operator=(const chunk_refs_t&);
 
   void clear();
 

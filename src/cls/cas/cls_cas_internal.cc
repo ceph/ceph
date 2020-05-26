@@ -298,6 +298,21 @@ WRITE_CLASS_ENCODER(refs_count)
 
 //
 
+chunk_refs_t::chunk_refs_t(const chunk_refs_t& other)
+{
+  *this = other;
+}
+
+chunk_refs_t& chunk_refs_t::operator=(const chunk_refs_t& other)
+{
+  // this is inefficient, but easy.
+  bufferlist bl;
+  other.encode(bl);
+  auto p = bl.cbegin();
+  decode(p);
+  return *this;
+}
+
 void chunk_refs_t::clear()
 {
   // default to most precise impl
