@@ -90,6 +90,7 @@ set(librbd_internal_srcs
   io/RefreshImageDispatch.cc
   io/SimpleSchedulerObjectDispatch.cc
   io/Utils.cc
+  io/WriteBlockImageDispatch.cc
   journal/CreateRequest.cc
   journal/DemoteRequest.cc
   journal/ObjectDispatch.cc
