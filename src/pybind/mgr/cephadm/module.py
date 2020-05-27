@@ -1110,9 +1110,8 @@ you may want to run:
         self.cache.loading_osdspec_preview.add(search_host)
         previews = []
         # query OSDSpecs for host <search host> and generate/get the preview
-        for preview in self.osd_service.get_previews(search_host):
-            # There can be multiple previews for one host due to multiple OSDSpecs.
-            previews.append(preview)
+        # There can be multiple previews for one host due to multiple OSDSpecs.
+        previews.extend(self.osd_service.get_previews(search_host))
         self.log.debug(f"Loading OSDSpec previews to HostCache")
         self.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
