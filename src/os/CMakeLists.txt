@@ -45,6 +45,12 @@ if(HAVE_LIBAIO OR HAVE_POSIXAIO)
     bluestore/aio.cc)
 endif()
 
+if(HAVE_LIBZBC)
+  list(APPEND libos_srcs
+    bluestore/HMSMRDevice.cc
+    bluestore/ZonedAllocator.cc)
+endif()
+
 if(WITH_FUSE)
   list(APPEND libos_srcs
     FuseStore.cc)
@@ -91,6 +97,10 @@ endif(WITH_BLUEFS)
 if(HAVE_LIBAIO)
   target_link_libraries(os ${AIO_LIBRARIES})
 endif(HAVE_LIBAIO)
+
+if(HAVE_LIBZBC)
+  target_link_libraries(os ${ZBC_LIBRARIES})
+endif()
 
 if(WITH_FUSE)
   target_link_libraries(os FUSE::FUSE)
