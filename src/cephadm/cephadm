@@ -87,6 +87,12 @@ cached_stdin = None
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
+
+class termcolor:
+    yellow = '\033[93m'
+    red = '\033[31m'
+    end = '\033[0m'
+
 class Error(Exception):
     pass
 
@@ -1116,14 +1122,12 @@ def infer_config(func):
 
 def _get_default_image():
     if DEFAULT_IMAGE_IS_MASTER:
-        yellow = '\033[93m'
-        end = '\033[0m'
         warn = '''This is a development version of cephadm.
 For information regarding the latest stable release:
     https://docs.ceph.com/docs/{}/cephadm/install
 '''.format(LATEST_STABLE_RELEASE)
         for line in warn.splitlines():
-            logger.warning('{}{}{}'.format(yellow, line, end))
+            logger.warning('{}{}{}'.format(termcolor.yellow, line, termcolor.end))
     return DEFAULT_IMAGE
 
 def infer_image(func):
@@ -1625,6 +1629,22 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
+
+    try:
+        if args.shared_ceph_folder:  # make easy manager modules/ceph-volume development
+            ceph_folder = pathify(args.shared_ceph_folder)
+            if os.path.exists(ceph_folder):
+                mounts[ceph_folder + '/src/ceph-volume/ceph_volume'] = '/usr/lib/python3.6/site-packages/ceph_volume'
+                mounts[ceph_folder + '/src/pybind/mgr'] = '/usr/share/ceph/mgr'
+                mounts[ceph_folder + '/src/python-common/ceph'] = '/usr/lib/python3.6/site-packages/ceph'
+                mounts[ceph_folder + '/monitoring/grafana/dashboards'] = '/etc/grafana/dashboards/ceph-dashboard'
+                mounts[ceph_folder + '/monitoring/prometheus/alerts'] = '/etc/prometheus/ceph'
+            else:
+                logger.error('{}{}{}'.format(termcolor.red,
+                'Ceph shared source folder does not exist.',
+                termcolor.end))
+    except AttributeError:
+        pass
 
     if daemon_type in Monitoring.components and daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
@@ -4585,6 +4605,11 @@ def _get_parser():
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
 
+
+    parser_bootstrap.add_argument(
+        '--shared_ceph_folder',
+        metavar='CEPH_SOURCE_FOLDER',
+        help='Development mode. Several folders in containers are volumes mapped to different sub-folders in the ceph source folder')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
