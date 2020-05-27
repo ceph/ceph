@@ -76,6 +76,45 @@ completed, you should see something like this from ``ceph orch ls``::
   node-exporter      2/2  6s ago     docker.io/prom/node-exporter:latest             e5a616e4b9cf  present
   prometheus         1/1  6s ago     docker.io/prom/prometheus:latest                e935122ab143  present
 
+Using custom images
+~~~~~~~~~~~~~~~~~~~
+
+It is possible to install or upgrade monitoring components based on other
+images.  To do so, the name of the image to be used needs to be stored in the
+configuration first.  The following configuration options are available.
+
+- ``container_image_prometheus``
+- ``container_image_grafana``
+- ``container_image_alertmanager``
+- ``container_image_node_exporter``
+
+Custom images can be set with the ``ceph config`` command::
+
+     ceph config set mgr mgr/cephadm/<option_name> <value>
+
+For example::
+
+     ceph config set mgr mgr/cephadm/container_image_prometheus prom/prometheus:v1.4.1
+
+.. note::
+
+     By setting a custom image, the default value will be overridden (but not
+     overwritten).  The default value changes when updates become available.
+     By setting a custom image, you will not be able to update the component
+     you have set the custom image for automatically.  You will need to
+     manually update the configuration (image name and tag) to be able to
+     install updates.
+     
+     If you choose to go with the recommendations instead, you can reset the
+     custom image you have set before.  After that, the default value will be
+     used again.  Use ``ceph config rm`` to reset the configuration option::
+
+          ceph config rm mgr mgr/cephadm/<option_name>
+
+     For example::
+
+          ceph config rm mgr mgr/cephadm/container_image_prometheus
+
 Disabling monitoring
 --------------------
 
