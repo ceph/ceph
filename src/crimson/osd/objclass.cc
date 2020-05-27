@@ -356,7 +356,9 @@ int cls_cxx_map_clear(cls_method_context_t hctx)
 
 int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_OMAPSETHEADER};
+  op.indata.claim(*inbl);
+  return execute_osd_op(hctx, op);
 }
 
 int cls_cxx_map_remove_range(cls_method_context_t hctx,
