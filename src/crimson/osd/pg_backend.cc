@@ -521,6 +521,17 @@ seastar::future<ceph::bufferlist> PGBackend::omap_get_header(
   return store->omap_get_header(c, oid);
 }
 
+seastar::future<> PGBackend::omap_get_header(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  return omap_get_header(coll, ghobject_t{os.oi.soid}).then(
+    [&osd_op] (ceph::bufferlist&& header) {
+      osd_op.outdata = std::move(header);
+      return seastar::now();
+    });
+}
+
 seastar::future<> PGBackend::omap_get_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
