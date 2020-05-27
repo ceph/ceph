@@ -600,9 +600,15 @@ class IscsiServiceSpec(ServiceSpec):
         if not self.api_secure and self.ssl_cert and self.ssl_key:
             self.api_secure = True
 
-    def validate_add(self):
-        servicespec_validate_add(self)
+    def validate(self):
+        super(IscsiServiceSpec, self).validate()
 
         if not self.pool:
             raise ServiceSpecValidationError(
                 'Cannot add ISCSI: No Pool specified')
+        if not self.api_user:
+            raise ServiceSpecValidationError(
+                'Cannot add ISCSI: No Api user specified')
+        if not self.api_password:
+            raise ServiceSpecValidationError(
+                'Cannot add ISCSI: No Api password specified')
