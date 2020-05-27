@@ -51,6 +51,11 @@ function _make() {
   make -j $NUM_WORKERS $@
 }
 
+if [[ -d $DEPS_DIR ]]; then
+    echo "Cleaning up dependency build dir: $DEPS_DIR"
+    rm -rf $DEPS_DIR
+fi
+
 mkdir -p $DEPS_DIR
 mkdir -p $depsToolsetDir
 mkdir -p $depsSrcDir
