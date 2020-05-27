@@ -779,6 +779,8 @@ class LocalFuseMount(FuseMount):
 
         self.gather_mount_info()
 
+        self.mounted = True
+
     def _run_python(self, pyscript, py_version='python'):
         """
         Override this to remove the daemon-helper prefix that is used otherwise
