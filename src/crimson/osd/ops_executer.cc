@@ -768,6 +768,15 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.omap_set_header(os, osd_op, txn);
     }, true);
+  case CEPH_OSD_OP_OMAPRMKEYRANGE:
+#if 0
+    if (!pg.get_pool().info.supports_omap()) {
+      return crimson::ct_error::operation_not_supported::make();
+    }
+#endif
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_remove_range(os, osd_op, txn);
+    }, true);
 
   // watch/notify
   case CEPH_OSD_OP_WATCH:
