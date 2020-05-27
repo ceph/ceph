@@ -15,6 +15,7 @@
 #include "librbd/io/QueueImageDispatch.h"
 #include "librbd/io/QosImageDispatch.h"
 #include "librbd/io/RefreshImageDispatch.h"
+#include "librbd/io/WriteBlockImageDispatch.h"
 #include <boost/variant.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -108,14 +109,17 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
   auto image_dispatch = new ImageDispatch(image_ctx);
   this->register_dispatch(image_dispatch);
 
-  m_queue_image_dispatch = new QueueImageDispatch(image_ctx);
-  this->register_dispatch(m_queue_image_dispatch);
+  auto queue_image_dispatch = new QueueImageDispatch(image_ctx);
+  this->register_dispatch(queue_image_dispatch);
 
   m_qos_image_dispatch = new QosImageDispatch<I>(image_ctx);
   this->register_dispatch(m_qos_image_dispatch);
 
   auto refresh_image_dispatch = new RefreshImageDispatch(image_ctx);
   this->register_dispatch(refresh_image_dispatch);
+
+  m_write_block_dispatch = new WriteBlockImageDispatch<I>(image_ctx);
+  this->register_dispatch(m_write_block_dispatch);
 }
 
 template <typename I>
@@ -150,27 +154,27 @@ void ImageDispatcher<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
 
 template <typename I>
 bool ImageDispatcher<I>::writes_blocked() const {
-  return m_queue_image_dispatch->writes_blocked();
+  return m_write_block_dispatch->writes_blocked();
 }
 
 template <typename I>
 int ImageDispatcher<I>::block_writes() {
-  return m_queue_image_dispatch->block_writes();
+  return m_write_block_dispatch->block_writes();
 }
 
 template <typename I>
 void ImageDispatcher<I>::block_writes(Context *on_blocked) {
-  m_queue_image_dispatch->block_writes(on_blocked);
+  m_write_block_dispatch->block_writes(on_blocked);
 }
 
 template <typename I>
 void ImageDispatcher<I>::unblock_writes() {
-  m_queue_image_dispatch->unblock_writes();
+  m_write_block_dispatch->unblock_writes();
 }
 
 template <typename I>
 void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
-  m_queue_image_dispatch->wait_on_writes_unblocked(on_unblocked);
+  m_write_block_dispatch->wait_on_writes_unblocked(on_unblocked);
 }
 
 template <typename I>
