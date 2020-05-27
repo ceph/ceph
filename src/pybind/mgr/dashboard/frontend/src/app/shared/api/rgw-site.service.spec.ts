@@ -26,9 +26,15 @@ describe('RgwSiteService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call getPlacementTargets', () => {
-    service.getPlacementTargets().subscribe();
-    const req = httpTesting.expectOne('api/rgw/site?query=placement-targets');
+  it('should contain site endpoint in GET request', () => {
+    service.get().subscribe();
+    const req = httpTesting.expectOne(service['url']);
     expect(req.request.method).toBe('GET');
+  });
+
+  it('should add query param in GET request', () => {
+    const query = 'placement-targets';
+    service.get(query).subscribe();
+    httpTesting.expectOne(`${service['url']}?query=placement-targets`);
   });
 });
