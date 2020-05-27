@@ -690,6 +690,21 @@ seastar::future<> PGBackend::omap_set_vals(
   return seastar::now();
 }
 
+seastar::future<> PGBackend::omap_set_header(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  maybe_create_new_object(os, txn);
+  txn.omap_setheader(coll->get_cid(), ghobject_t{os.oi.soid}, osd_op.indata);
+  //TODO:
+  //ctx->clean_regions.mark_omap_dirty();
+	//ctx->delta_stats.num_wr++;
+  os.oi.set_flag(object_info_t::FLAG_OMAP);
+  os.oi.clear_omap_digest();
+  return seastar::now();
+}
+
 seastar::future<struct stat> PGBackend::stat(
   CollectionRef c,
   const ghobject_t& oid) const
