@@ -6,6 +6,7 @@
 #include <limits>
 #include <iostream>
 
+#include "include/byteorder.h"
 #include "include/denc.h"
 #include "include/buffer.h"
 #include "include/cmp.h"
@@ -148,6 +149,22 @@ constexpr paddr_t make_block_relative_paddr(segment_off_t off) {
   return paddr_t{BLOCK_REL_SEG_ID, off};
 }
 
+struct paddr_le_t {
+  ceph_le32 segment = init_le32(NULL_SEG_ID);
+  ceph_les32 offset = init_les32(NULL_SEG_OFF);
+
+  paddr_le_t() = default;
+  paddr_le_t(ceph_le32 segment, ceph_les32 offset)
+    : segment(segment), offset(offset) {}
+  paddr_le_t(segment_id_t segment, segment_off_t offset)
+    : segment(init_le32(segment)), offset(init_les32(offset)) {}
+  paddr_le_t(const paddr_t &addr) : paddr_le_t(addr.segment, addr.offset) {}
+
+  operator paddr_t() const {
+    return paddr_t{segment, offset};
+  }
+};
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
 
 // logical addr, see LBAManager, TransactionManager
@@ -158,10 +175,17 @@ constexpr laddr_t L_ADDR_NULL = std::numeric_limits<laddr_t>::max();
 constexpr laddr_t L_ADDR_ROOT = std::numeric_limits<laddr_t>::max() - 1;
 constexpr laddr_t L_ADDR_LBAT = std::numeric_limits<laddr_t>::max() - 2;
 
+using laddr_le_t = ceph_le64;
+
 // logical offset, see LBAManager, TransactionManager
 using extent_len_t = uint32_t;
 constexpr extent_len_t EXTENT_LEN_MAX =
   std::numeric_limits<extent_len_t>::max();
+
+using extent_len_le_t = ceph_le32;
+inline extent_len_le_t init_extent_len_le_t(extent_len_t len) {
+  return init_le32(len);
+}
 
 struct laddr_list_t : std::list<std::pair<laddr_t, extent_len_t>> {
   template <typename... T>

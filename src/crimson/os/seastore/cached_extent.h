@@ -108,14 +108,16 @@ public:
   virtual extent_types_t get_type() const = 0;
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
+  virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
-    return out << "CachedExtent(addr=" << this
-	       << ", type=" << get_type()
-	       << ", version=" << version
-	       << ", paddr=" << get_paddr()
-	       << ", state=" << state
-	       << ", refcount=" << use_count()
-	       << ")";
+    out << "CachedExtent(addr=" << this
+	<< ", type=" << get_type()
+	<< ", version=" << version
+	<< ", paddr=" << get_paddr()
+	<< ", state=" << state
+	<< ", refcount=" << use_count();
+    print_detail(out);
+    return out << ")";
   }
 
   /**
