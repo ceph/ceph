@@ -293,6 +293,11 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx,
 
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
 {
+  OSDOp op{CEPH_OSD_OP_OMAPGETHEADER};
+  if (const auto ret = execute_osd_op(hctx, op); ret < 0) {
+    return ret;
+  }
+  outbl->claim(op.outdata);
   return 0;
 }
 
