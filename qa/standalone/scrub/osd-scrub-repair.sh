@@ -45,7 +45,7 @@ walk(if type == "object" then del(.mtime) else . end)
 | walk(if type == "object" then del(.version) else . end)
 | walk(if type == "object" then del(.prior_version) else . end)'
 
-sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print(json.dumps(ud, sort_keys=True, indent=2))'
 
 function run() {
     local dir=$1
