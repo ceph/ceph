@@ -134,9 +134,9 @@ class OSDService(CephadmService):
     def get_previews(self, host) -> List[Dict[str, Any]]:
         # Find OSDSpecs that match host.
         osdspecs = self.mgr.resolve_osdspecs_for_host(host)
-        return self.generate_previews(osdspecs)
+        return self.generate_previews(osdspecs, host)
 
-    def generate_previews(self, osdspecs: List[DriveGroupSpec]) -> List[Dict[str, Any]]:
+    def generate_previews(self, osdspecs: List[DriveGroupSpec], for_host: str) -> List[Dict[str, Any]]:
         """
 
         The return should look like this:
@@ -166,6 +166,8 @@ class OSDService(CephadmService):
 
             # prepare driveselection
             for host, ds in self.prepare_drivegroup(osdspec):
+                if host != for_host:
+                    continue
 
                 # driveselection for host
                 cmd = self.driveselection_to_ceph_volume(osdspec,
