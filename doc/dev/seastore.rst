@@ -223,10 +223,36 @@ Because the cache/transaction machinery lives below the level of the
 lba tree, we can represent atomic mutations of the lba tree and other
 structures by simply including both in a transaction.
 
-LBA Tree
---------
+LBAManager/BtreeLBAManager
+--------------------------
 
-TODO
+Implementations of the LBAManager interface are responsible for managing
+the logical->physical mapping -- see crimson/os/seastore/lba_manager.h.
+
+The BtreeLBAManager implements this interface directly on top of
+Journal and SegmentManager using a wandering btree approach.
+
+Because SegmentManager does not let us predict the location of a
+committed record (a property of both SMR and Zone devices), references
+to blocks created within the same transaction will necessarily be
+*relative* addresses.  The BtreeLBAManager maintains an invariant by
+which the in-memory copy of any block will contain only absolute
+addresses when !is_pending() -- on_commit and complete_load fill in
+absolute addresses based on the actual block addr and on_delta_write
+does so based on the just committed record.  When is_pending(), if
+is_initial_pending references in memory are block_relative (because
+they will be written to the original block location) and
+record_relative otherwise (value will be written to delta).
+
+TransactionManager
+------------------
+
+The TransactionManager is responsible for presenting a unified
+interface on top of the Journal, SegmentManager, Cache, and
+LBAManager.  Users can allocate and mutate extents based on logical
+addresses with segment cleaning handled in the background.
+
+See crimson/os/seastore/transaction_manager.h
 
 Next Steps
 ==========
@@ -251,7 +277,9 @@ Cache
 LBAManager
 ----------
 
-- Complete initial implementation of lba tree
+- Add support for pinning
+- Fill in replay and misc todos
+- Add segment -> laddr for use in GC
 - Support for locating remaining used blocks in segments
 
 GC
