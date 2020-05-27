@@ -1,13 +1,12 @@
 import json
 import errno
 import logging
-import time
 from threading import Event
 from functools import wraps
 
 import string
-from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
-    Any, NamedTuple, Iterator, Set, Sequence, TYPE_CHECKING, cast, Union
+from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
+    Any, Set, TYPE_CHECKING, cast
 
 import datetime
 import six
@@ -187,6 +186,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'runtime': True,
         },
         {
+            'name': 'container_image_prometheus',
+            'default': 'prom/prometheus:v2.18.1',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_grafana',
+            'default': 'ceph/ceph-grafana:latest',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_alertmanager',
+            'default': 'prom/alertmanager:v0.20.0',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_node_exporter',
+            'default': 'prom/node-exporter:v0.18.1',
+            'desc': 'Prometheus container image',
+        },
+        {
             'name': 'warn_on_stray_hosts',
             'type': 'bool',
             'default': True,
@@ -251,6 +270,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.host_check_interval = 0
             self.mode = ''
             self.container_image_base = ''
+            self.container_image_prometheus = ''
+            self.container_image_grafana = ''
+            self.container_image_alertmanager = ''
+            self.container_image_node_exporter = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -873,14 +896,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             executable_path))
         return executable_path
 
-    def _run_cephadm(self, host, entity, command, args,
-                     addr=None,
-                     stdin=None,
+    def _run_cephadm(self,
+                     host: str,
+                     entity: Optional[str],
+                     command: str,
+                     args: List[str],
+                     addr: Optional[str] = None,
+                     stdin: Optional[str] = None,
                      no_fsid=False,
                      error_ok=False,
-                     image=None,
-                     env_vars=None):
-        # type: (str, Optional[str], str, List[str], Optional[str], Optional[str], bool, bool, Optional[str], Optional[List[str]]) -> Tuple[List[str], List[str], int]
+                     image: Optional[str] = None,
+                     env_vars: Optional[List[str]] = None,
+                     ) -> Tuple[List[str], List[str], int]:
         """
         Run cephadm on the remote host with the given command + args
 
@@ -902,7 +929,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
             assert image or entity
             if not image:
-                daemon_type = entity.split('.', 1)[0] # type: ignore
+                daemon_type = entity.split('.', 1)[0]  # type: ignore
                 if daemon_type in CEPH_TYPES or \
                         daemon_type == 'nfs' or \
                         daemon_type == 'iscsi':
@@ -912,7 +939,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         'who': utils.name_to_config_section(entity),
                         'key': 'container_image',
                     })
-                    image = image.strip() # type: ignore
+                    image = image.strip()  # type: ignore
+                elif daemon_type == 'prometheus':
+                    image = self.container_image_prometheus
+                elif daemon_type == 'grafana':
+                    image = self.container_image_grafana
+                elif daemon_type == 'alertmanager':
+                    image = self.container_image_alertmanager
+                elif daemon_type == 'node-exporter':
+                    image = self.container_image_node_exporter
+
             self.log.debug('%s container image %s' % (entity, image))
 
             final_args = []
@@ -929,8 +965,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
 
+            self.log.debug('args: %s' % (' '.join(final_args)))
             if self.mode == 'root':
-                self.log.debug('args: %s' % (' '.join(final_args)))
                 if stdin:
                     self.log.debug('stdin: %s' % stdin)
                 script = 'injected_argv = ' + json.dumps(final_args) + '\n'
@@ -1551,11 +1587,18 @@ you may want to run:
             'keyring': keyring,
         }
 
-    def _create_daemon(self, daemon_type, daemon_id, host,
-                       keyring=None,
-                       extra_args=None, extra_config=None,
+    def _create_daemon(self,
+                       daemon_type: str,
+                       daemon_id: str,
+                       host: str,
+                       keyring: Optional[str] = None,
+                       extra_args: Optional[List[str]] = None,
+                       extra_config: Optional[Dict[str, Any]] = None,
                        reconfig=False,
-                       osd_uuid_map=None) -> str:
+                       osd_uuid_map: Optional[Dict[str, Any]] = None,
+                       redeploy=False,
+                       ) -> str:
+
         if not extra_args:
             extra_args = []
         if not extra_config:
@@ -1564,7 +1607,7 @@ you may want to run:
 
         start_time = datetime.datetime.utcnow()
         deps = []  # type: List[str]
-        cephadm_config = {} # type: Dict[str, Any]
+        cephadm_config = {}  # type: Dict[str, Any]
         if daemon_type == 'prometheus':
             cephadm_config, deps = self.prometheus_service.generate_config()
             extra_args.extend(['--config-json', '-'])
@@ -1597,7 +1640,7 @@ you may want to run:
                     osd_uuid_map = self.get_osd_uuid_map()
                 osd_uuid = osd_uuid_map.get(daemon_id)
                 if not osd_uuid:
-                    raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
+                    raise OrchestratorError('osd.%s not in osdmap' % daemon_id)
                 extra_args.extend(['--osd-fsid', osd_uuid])
 
         if reconfig:
