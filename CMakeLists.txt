@@ -180,6 +180,8 @@ if(WITH_BLUESTORE)
   if(LINUX)
     find_package(aio)
     set(HAVE_LIBAIO ${AIO_FOUND})
+    find_package(zbc)
+    set(HAVE_LIBZBC ${ZBC_FOUND})
   elseif(FREEBSD)
     # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
     set(HAVE_POSIXAIO ON)
