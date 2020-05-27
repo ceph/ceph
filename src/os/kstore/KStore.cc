@@ -2226,7 +2226,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_COLL_HINT:
       {
-        uint32_t type = op->hint_type;
+        uint32_t type = op->hint;
         bufferlist hint;
         i.decode_bl(hint);
         auto hiter = hint.cbegin();
@@ -2465,7 +2465,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
         uint64_t expected_object_size = op->expected_object_size;
         uint64_t expected_write_size = op->expected_write_size;
-	uint32_t flags = op->alloc_hint_flags;
+	uint32_t flags = op->hint;
 	r = _setallochint(txc, c, o,
 			  expected_object_size,
 			  expected_write_size,
