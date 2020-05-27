@@ -564,7 +564,7 @@ Examples:
                             table.add_row((dg_name, host, block_data, db_path, wal_path))
                 ret = table.get_string()
                 if not ret:
-                    ret = "Couldn't draw any conclusion.. This is likely a bug and should be reported"
+                    ret = "No preview available"
                 return ret
 
         if preview and (unmanaged is not None):
