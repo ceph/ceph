@@ -1173,14 +1173,18 @@ def add_mirror_to_cluster(ctx, mirror):
     registries_conf = '/etc/containers/registries.conf'
     
     for remote in ctx.cluster.remotes.keys():
-        config = teuthology.get_file(
-            remote=remote,
-            path=registries_conf
-        )
-        new_config = toml.dumps(registries_add_mirror_to_docker_io(config.decode('utf-8'), mirror))
+        try:
+            config = teuthology.get_file(
+                remote=remote,
+                path=registries_conf
+            )
+            new_config = toml.dumps(registries_add_mirror_to_docker_io(config.decode('utf-8'), mirror))
 
-        teuthology.sudo_write_file(
-            remote=remote,
-            path=registries_conf,
-            data=new_config,
-        )
+            teuthology.sudo_write_file(
+                remote=remote,
+                path=registries_conf,
+                data=new_config,
+            )
+        except FileNotFoundError as e:
+            # Docker doesn't ship a registries.conf
+            log.info('Failed to add mirror: %s' % str(e))
