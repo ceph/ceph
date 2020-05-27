@@ -329,10 +329,10 @@ add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
 add_ceph_unittest(unittest_async_shared_mutex)
 target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)
 
-add_executable(unittest_rabin_chunk test_rabin_chunk.cc
+add_executable(unittest_cdc test_cdc.cc
   $<TARGET_OBJECTS:unit-main>)
-target_link_libraries(unittest_rabin_chunk global ceph-common)
-add_ceph_unittest(unittest_rabin_chunk)
+target_link_libraries(unittest_cdc global ceph-common)
+add_ceph_unittest(unittest_cdc)
 
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
