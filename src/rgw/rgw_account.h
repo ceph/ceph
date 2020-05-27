@@ -112,5 +112,7 @@ public:
   int remove_info(const RGWAccountInfo& info,
 		  optional_yield y);
   // TODO
-  // get_info_by_tenant()
+  int get_info_by_tenant(const std::string& tenant,
+			 RGWAccountInfo* info,
+			 optional_yield y);
 };
