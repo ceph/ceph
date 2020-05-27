@@ -448,8 +448,8 @@ void ChunkScrub::chunk_scrub_common()
       }
 
       // check all objects
-      chunk_refs_t::refs_by_object *byo =
-	static_cast<chunk_refs_t::refs_by_object*>(refs.r.get());
+      chunk_refs_by_object_t *byo =
+	static_cast<chunk_refs_by_object_t*>(refs.r.get());
       set<hobject_t> real_refs;
 
       uint64_t pool_missing = 0;
