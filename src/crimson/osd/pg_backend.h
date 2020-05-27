@@ -134,6 +134,9 @@ public:
   seastar::future<ceph::bufferlist> omap_get_header(
     crimson::os::CollectionRef& c,
     const ghobject_t& oid);
+  seastar::future<> omap_get_header(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
