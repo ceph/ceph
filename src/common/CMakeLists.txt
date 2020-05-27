@@ -16,8 +16,11 @@ set(common_srcs
   BackTrace.cc
   ConfUtils.cc
   Cycles.cc
+  CDC.cc
   DecayCounter.cc
+  FastCDC.cc
   Finisher.cc
+  FixedCDC.cc
   Formatter.cc
   Graylog.cc
   HTMLFormatter.cc
@@ -88,7 +91,6 @@ set(common_srcs
   perf_counters_collection.cc
   perf_histogram.cc
   pick_address.cc
-  rabin.cc
   random_string.cc
   reverse.c
   run_cmd.cc
