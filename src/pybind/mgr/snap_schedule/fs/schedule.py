@@ -110,7 +110,7 @@ class Schedule(object):
         retention TEXT,
         active INT NOT NULL,
         FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON DELETE CASCADE,
-        UNIQUE (start, repeat)
+        UNIQUE (schedule_id, start, repeat)
     );'''
 
     EXEC_QUERY = '''SELECT
