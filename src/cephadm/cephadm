@@ -2562,6 +2562,13 @@ def command_bootstrap():
         logger.info('Setting orchestrator backend to cephadm...')
         cli(['orch', 'set', 'backend', 'cephadm'])
 
+        if args.ssh_config:
+            logger.info('Using provided ssh config...')
+            mounts = {
+                pathify(args.ssh_config.name): '/tmp/cephadm-ssh-config:z',
+            }
+            cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
+
         if args.ssh_private_key and args.ssh_public_key:
             logger.info('Using provided ssh keys...')
             mounts = {
@@ -4473,6 +4480,10 @@ def _get_parser():
         '--dashboard-crt',
         help='Dashboard certificate')
 
+    parser_bootstrap.add_argument(
+        '--ssh-config',
+        type=argparse.FileType('r'),
+        help='SSH config')
     parser_bootstrap.add_argument(
         '--ssh-private-key',
         type=argparse.FileType('r'),
