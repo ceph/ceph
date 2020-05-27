@@ -615,13 +615,14 @@ seastar::future<> PGBackend::omap_get_vals(
         const auto& [key, value] = *iter;
         if (key.substr(0, filter_prefix.size()) != filter_prefix) {
           break;
-        } else if (num++ >= max_return ||
+        } else if (num >= max_return ||
             result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
           truncated = true;
           break;
         }
         encode(key, result);
         encode(value, result);
+        ++num;
       }
       encode(num, osd_op.outdata);
       osd_op.outdata.claim_append(result);
