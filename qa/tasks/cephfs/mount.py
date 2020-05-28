@@ -60,7 +60,6 @@ class CephFSMount(object):
         if not isinstance(path, str):
             raise RuntimeError('path should be of str type.')
         self._mountpoint = path
-        self._parse_netns_name()
 
     @property
     def netns_name(self):
