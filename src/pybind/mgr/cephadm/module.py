@@ -43,6 +43,15 @@ from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 
 try:
     import remoto
+    # NOTE(mattoliverau) Patch remoto until remoto PR
+    # (https://github.com/alfredodeza/remoto/pull/56) lands
+    from distutils.version import StrictVersion
+    if StrictVersion(remoto.__version__) <= StrictVersion('1.2'):
+        def remoto_has_connection(self):
+            return self.gateway.hasreceiver()
+
+        from remoto.backends import BaseConnection
+        BaseConnection.has_connection = remoto_has_connection
     import remoto.process
     import execnet.gateway_bootstrap
 except ImportError as e:
@@ -881,10 +890,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         Setup a connection for running commands on remote host.
         """
-        conn_and_r = self._cons.get(host)
-        if conn_and_r:
-            self.log.debug('Have connection to %s' % host)
-            return conn_and_r
+        conn, r = self._cons.get(host, (None, None))
+        if conn:
+            if conn.has_connection():
+                self.log.debug('Have connection to %s' % host)
+                return conn, r
+            else:
+                self._reset_con(host)
         n = self.ssh_user + '@' + host
         self.log.debug("Opening connection to {} with ssh options '{}'".format(
             n, self._ssh_options))
