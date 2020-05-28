@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
@@ -50,7 +49,6 @@ describe('RbdListComponent', () => {
       ModalModule.forRoot(),
       TooltipModule.forRoot(),
       ToastrModule.forRoot(),
-      AlertModule.forRoot(),
       RouterTestingModule,
       HttpClientTestingModule
     ],
