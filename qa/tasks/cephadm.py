@@ -1078,7 +1078,8 @@ def task(ctx, config):
         ctx.ceph[cluster_name].bootstrapped = False
  
     # image
-    ctx.ceph[cluster_name].image = config.get('image')
+    if not hasattr(ctx.ceph[cluster_name], 'image'):
+        ctx.ceph[cluster_name].image = config.get('image')
     ref = None
     if not ctx.ceph[cluster_name].image:
         sha1 = config.get('sha1')
