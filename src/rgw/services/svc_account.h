@@ -51,7 +51,8 @@ public:
 			  const std::string& account_id,
 			  const rgw_user& rgw_user) = 0;
 
-  virtual int store_account_info(RGWSI_MetaBackend::Context *ctx,
+  virtual int store_account_info(const DoutPrefixProvider *dpp,
+				 RGWSI_MetaBackend::Context *ctx,
 				 const RGWAccountInfo& info,
 				 RGWObjVersionTracker * const objv_tracker,
 				 const real_time& mtime,
