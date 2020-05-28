@@ -14,7 +14,6 @@ from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
-
 class CephFSMount(object):
     def __init__(self, ctx, test_dir, client_id, client_remote, brxnet):
         """
@@ -41,6 +40,33 @@ class CephFSMount(object):
         self.test_files = ['a', 'b', 'c']
 
         self.background_procs = []
+
+    # This will cleanup the stale netnses, which are from the
+    # last failed test cases.
+    @staticmethod
+    def cleanup_stale_netnses_and_bridge(remote):
+        p = remote.run(args=['ip', 'netns', 'list'],
+                       stdout=StringIO(), timeout=(5*60))
+        p = p.stdout.getvalue().strip()
+
+        # Get the netns name list
+        netns_list = re.findall(r'ceph-ns-[^()\s][-.\w]+[^():\s]', p)
+
+        # Remove the stale netnses
+        for ns in netns_list:
+            ns_name = ns.split()[0]
+            args = ['sudo', 'ip', 'netns', 'delete', '{0}'.format(ns_name)]
+            try:
+                remote.run(args=args, timeout=(5*60), omit_sudo=False)
+            except Exception:
+                pass
+
+        # Remove the stale 'ceph-brx'
+        try:
+            args = ['sudo', 'ip', 'link', 'delete', 'ceph-brx']
+            remote.run(args=args, timeout=(5*60), omit_sudo=False)
+        except Exception:
+            pass
 
     def _parse_netns_name(self):
         self._netns_name = '-'.join(["ceph-ns",
@@ -171,13 +197,19 @@ class CephFSMount(object):
             for ns in netns_list:
                 ns_name = ns.split()[0]
                 args = ['sudo', 'ip', 'netns', 'exec', '{0}'.format(ns_name), 'ip', 'addr']
-                p = self.client_remote.run(args=args, stderr=StringIO(),
-                                           stdout=StringIO(), timeout=(5*60),
-                                           omit_sudo=False)
-                q = re.search("{0}".format(ip), p.stdout.getvalue())
-                if q is not None:
-                    found = True
-                    break
+                try:
+                    p = self.client_remote.run(args=args, stderr=StringIO(),
+                                               stdout=StringIO(), timeout=(5*60),
+                                               omit_sudo=False)
+                    q = re.search("{0}".format(ip), p.stdout.getvalue())
+                    if q is not None:
+                        found = True
+                        break
+                except CommandFailedError:
+                    if "No such file or directory" in p.stderr.getvalue():
+                        pass
+                    if "Invalid argument" in p.stderr.getvalue():
+                        pass
 
             if found == False:
                 break
