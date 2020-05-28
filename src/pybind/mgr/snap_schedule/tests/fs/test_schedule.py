@@ -50,3 +50,70 @@ class TestSchedule(object):
             rows = db.execute(SELECT_ALL).fetchall()
 
         assert len(rows) == len(simple_schedules)
+
+    def test_update_last(self, db, simple_schedule):
+        simple_schedule.store_schedule(db)
+
+        row = ()
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert row['last'] is None
+
+        first_time = datetime.datetime.now(datetime.timezone.utc)
+        simple_schedule.update_last(first_time, db)
+
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert datetime.datetime.fromisoformat(row['last']) == first_time
+
+        second_time = datetime.datetime.now(datetime.timezone.utc)
+        simple_schedule.update_last(second_time, db)
+
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert datetime.datetime.fromisoformat(row['last']) == second_time
+
+    def test_update_created_count(self, db, simple_schedule):
+        simple_schedule.store_schedule(db)
+
+        row = ()
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert row['created_count'] == 0
+
+        first_time = datetime.datetime.now(datetime.timezone.utc)
+        simple_schedule.update_last(first_time, db)
+
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert row['created_count'] == 1
+
+        second_time = datetime.datetime.now(datetime.timezone.utc)
+        simple_schedule.update_last(second_time, db)
+
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert row['created_count'] == 2
+
+    def test_update_first(self, db, simple_schedule):
+        simple_schedule.store_schedule(db)
+
+        row = ()
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert row['first'] is None
+
+        first_time = datetime.datetime.now(datetime.timezone.utc)
+        simple_schedule.update_last(first_time, db)
+
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert datetime.datetime.fromisoformat(row['first']) == first_time
+
+        second_time = datetime.datetime.now(datetime.timezone.utc)
+        simple_schedule.update_last(second_time, db)
+
+        with db:
+            row = db.execute(SELECT_ALL).fetchone()
+        assert datetime.datetime.fromisoformat(row['first']) == first_time
+
