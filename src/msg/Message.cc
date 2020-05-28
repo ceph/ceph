@@ -145,6 +145,7 @@
 #include "messages/MMDSOpenIno.h"
 #include "messages/MMDSOpenInoReply.h"
 #include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSScrub.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -758,6 +759,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_FRAGMENTNOTIFYACK:
     m = make_message<MMDSFragmentNotifyAck>();
+    break;
+
+  case MSG_MDS_SCRUB:
+    m = make_message<MMDSScrub>();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:

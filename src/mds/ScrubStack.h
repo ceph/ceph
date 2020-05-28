@@ -23,6 +23,7 @@
 
 #include "common/LogClient.h"
 #include "include/elist.h"
+#include "messages/MMDSScrub.h"
 
 class MDCache;
 class Finisher;
@@ -95,9 +96,33 @@ public:
 
   bool is_scrubbing() const { return !scrub_stack.empty(); }
 
+  void handle_mds_failure(mds_rank_t mds);
+
+  void dispatch(const cref_t<Message> &m);
+
   MDCache *mdcache;
 
 protected:
+
+  // reference to global cluster log client
+  LogChannelRef &clog;
+
+  /// A finisher needed so that we don't re-enter kick_off_scrubs
+  Finisher *finisher;
+
+  /// The stack of inodes we want to scrub
+  elist<MDSCacheObject*> scrub_stack;
+  elist<MDSCacheObject*> scrub_waiting;
+  /// current number of dentries we're actually scrubbing
+  int scrubs_in_progress = 0;
+  int stack_size = 0;
+
+  struct scrub_remote_t {
+    std::string tag;
+    std::set<mds_rank_t> gather_set;
+  };
+  std::map<CInode*, scrub_remote_t> remote_scrubs;
+
   class C_KickOffScrubs : public MDSInternalContext {
   public:
     C_KickOffScrubs(ScrubStack *s);
@@ -114,20 +139,6 @@ protected:
   private:
     ScrubStack *stack;
   };
-
-  // reference to global cluster log client
-  LogChannelRef &clog;
-
-  /// A finisher needed so that we don't re-enter kick_off_scrubs
-  Finisher *finisher;
-
-  /// The stack of inodes we want to scrub
-  elist<MDSCacheObject*> scrub_stack;
-  elist<MDSCacheObject*> scrub_waiting;
-  /// current number of dentries we're actually scrubbing
-  int scrubs_in_progress = 0;
-  int stack_size = 0;
-
   C_KickOffScrubs scrub_kick;
 
   friend class C_RetryScrub;
@@ -165,7 +176,12 @@ private:
   /**
    * Move the inode/dirfrag back to scrub queue.
    */
-  void remove_from_waiting(MDSCacheObject *obj);
+  void remove_from_waiting(MDSCacheObject *obj, bool kick=true);
+  /**
+   * Validate authority of the inode. If current mds is not auth of the inode,
+   * forword scrub to auth mds.
+   */
+  bool validate_inode_auth(CInode *in);
 
   /**
    * Scrub a file inode.
@@ -244,6 +260,8 @@ private:
    * @param in inode for which scrub has been queued or finished.
    */
   void clog_scrub_summary(CInode *in=nullptr);
+
+  void handle_scrub(const cref_t<MMDSScrub> &m);
 
   State state = STATE_IDLE;
   bool clear_stack = false;

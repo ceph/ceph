@@ -570,6 +570,10 @@ public:
     }
   }
 
+  void clear() {
+    _set.clear();
+  }
+
   void insert_raw(frag_t f){
     _set.insert(f);
   }
