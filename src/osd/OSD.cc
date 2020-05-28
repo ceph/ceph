@@ -1436,7 +1436,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
     if (get_inc_map_bl(e, bl)) {
       m->incremental_maps[e].claim(bl);
     } else {
-      derr << __func__ << " missing incremental map " << e << dendl;
+      dout(10) << __func__ << " missing incremental map " << e << dendl;
       if (!get_map_bl(e, bl)) {
 	derr << __func__ << " also missing full map " << e << dendl;
 	goto panic;
@@ -1946,7 +1946,7 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f, std::ostream& o
  
 }} // namespace ceph::osd_cmds
 
-int OSD::mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami)
+int OSD::mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami, string osdspec_affinity)
 {
   int ret;
 
@@ -2019,7 +2019,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, uuid_d fsid, int whoami)
     }
   }
 
-  ret = write_meta(cct, store, sb.cluster_fsid, sb.osd_fsid, whoami);
+  ret = write_meta(cct, store, sb.cluster_fsid, sb.osd_fsid, whoami, osdspec_affinity);
   if (ret) {
     derr << "OSD::mkfs: failed to write fsid file: error "
          << cpp_strerror(ret) << dendl;
@@ -2036,7 +2036,7 @@ free_store:
   return ret;
 }
 
-int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
+int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami, string& osdspec_affinity)
 {
   char val[80];
   int r;
@@ -2076,6 +2076,11 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
       if (r < 0)
 	return r;
     }
+  }
+  if (!osdspec_affinity.empty()) {
+    r = store->write_meta("osdspec_affinity", osdspec_affinity.c_str());
+    if (r < 0)
+      return r;
   }
 
   r = store->write_meta("ready", "ready");
@@ -8451,7 +8456,6 @@ bool OSD::advance_pg(
   }
   ceph_assert(pg->is_locked());
   OSDMapRef lastmap = pg->get_osdmap();
-  ceph_assert(lastmap->get_epoch() < osd_epoch);
   set<PGRef> new_pgs;  // any split children
   bool ret = true;
 

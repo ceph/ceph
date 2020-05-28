@@ -557,8 +557,8 @@
   Memcheck:Leak
   match-leak-kinds: reachable
   ...
-  fun:*boost*detail*make_external_thread_data*
-  fun:*boost*detail*add_new_tss_node*
+  fun:_Znwm
+  ...
   fun:*boost*detail*set_tss_data*
   ...
 }
