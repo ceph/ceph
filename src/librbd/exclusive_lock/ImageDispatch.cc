@@ -286,6 +286,7 @@ bool ImageDispatch<I>::needs_exclusive_lock(bool read_op, uint64_t tid,
 
     ceph_assert(m_on_dispatches.empty() || retesting_lock);
     m_on_dispatches.push_back(on_dispatched);
+    locker.unlock();
 
     *dispatch_result = io::DISPATCH_RESULT_RESTART;
     auto ctx = create_context_callback<
