@@ -1,8 +1,6 @@
 import os
-import sys
 import time
 import logging
-import subprocess
 from collections import OrderedDict
 from textwrap import dedent
 from textwrap import fill
@@ -67,46 +65,18 @@ def results(archive_dir, name, email, timeout, dry_run):
 
     (subject, body) = build_email_body(name)
 
-    try:
-        if email and dry_run:
-            print("From: %s" % (config.results_sending_email or 'teuthology'))
-            print("To: %s" % email)
-            print("Subject: %s" % subject)
-            print(body)
-        elif email:
-            email_results(
-                subject=subject,
-                from_=(config.results_sending_email or 'teuthology'),
-                to=email,
-                body=body,
-            )
-    finally:
-        generate_coverage(archive_dir, name)
-
-
-def generate_coverage(archive_dir, name):
-    coverage_config_keys = ('coverage_output_dir', 'coverage_html_dir',
-                            'coverage_tools_dir')
-    for key in coverage_config_keys:
-        if key not in config.to_dict():
-            log.warn(
-                "'%s' not in teuthology config; skipping coverage report",
-                key)
-            return
-    log.info('starting coverage generation')
-    subprocess.Popen(
-        args=[
-            os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
-            '-v',
-            '-o',
-            os.path.join(config.coverage_output_dir, name),
-            '--html-output',
-            os.path.join(config.coverage_html_dir, name),
-            '--cov-tools-dir',
-            config.coverage_tools_dir,
-            archive_dir,
-        ],
-    )
+    if email and dry_run:
+        print("From: %s" % (config.results_sending_email or 'teuthology'))
+        print("To: %s" % email)
+        print("Subject: %s" % subject)
+        print(body)
+    elif email:
+        email_results(
+            subject=subject,
+            from_=(config.results_sending_email or 'teuthology'),
+            to=email,
+            body=body,
+        )
 
 
 def email_results(subject, from_, to, body):
