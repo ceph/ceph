@@ -19,9 +19,14 @@
 
 #include "include/types.h"
 
-class RGWRole;
 class rgw_user;
 class optional_yield;
+class RGWRole;
+
+class RGWSI_Zone;
+class RGWSI_Account;
+class RGWSI_MetaBackend_Handler;
+class RGWObjVersionTracker;
 
 struct AccountQuota {
   uint16_t max_users {1000};
@@ -89,7 +94,16 @@ WRITE_CLASS_ENCODER(RGWAccountInfo)
 
 class RGWAccountCtl
 {
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Account *account {nullptr};
+  } svc;
+
+  RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:
+  RGWAccountCtl(RGWSI_Zone *zone_svc,
+		RGWSI_Account *account_svc);
+
   int add_user(const std::string& account_id,
 	       const rgw_user& user);
   int add_role(const RGWRole& role);
@@ -104,6 +118,10 @@ public:
 		     optional_yield y);
 
   int store_info(const RGWAccountInfo& info,
+		 RGWObjVersionTracker *objv_tracker,
+		 const real_time& mtime,
+		 bool exclusive,
+		 map<string, bufferlist> *pattrs,
 		 optional_yield y);
 
   int read_info(RGWAccountInfo* info,
