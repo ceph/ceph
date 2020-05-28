@@ -9,6 +9,7 @@ from teuthology.orchestra.run import CommandFailedError
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
 from tasks.cephfs.kernel_mount import KernelMount
+from tasks.cephfs.mount import cleanup_stale_netnses_and_bridge
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +76,9 @@ def task(ctx, config):
     clients = list(misc.get_clients(ctx=ctx, roles=client_roles))
 
     test_dir = misc.get_testdir(ctx)
+
+    for id_, remote in clients:
+        cleanup_stale_netnses_and_bridge(remote)
 
     mounts = {}
     for id_, remote in clients:

@@ -130,6 +130,7 @@ try:
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.kernel_mount import KernelMount
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
+    from tasks.cephfs.mount import cleanup_stale_netnses_and_bridge
     from tasks.mgr.mgr_test_case import MgrCluster
     from teuthology.contextutil import MaxWhileTries
     from teuthology.task import interactive
@@ -1286,6 +1287,8 @@ def exec_test():
 
     global remote
     remote = LocalRemote()
+
+    cleanup_stale_netnses_and_bridge(remote)
 
     # Tolerate no MDSs or clients running at start
     ps_txt = remote.run(args=["ps", "-u"+str(os.getuid())],

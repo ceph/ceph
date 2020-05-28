@@ -7,6 +7,7 @@ import logging
 
 from teuthology import misc as teuthology
 from tasks.cephfs.fuse_mount import FuseMount
+from tasks.cephfs.mount import cleanup_stale_netnses_and_bridge
 
 log = logging.getLogger(__name__)
 
@@ -109,11 +110,13 @@ def task(ctx, config):
     all_mounts = getattr(ctx, 'mounts', {})
     mounted_by_me = {}
     skipped = {}
+    remotes = set()
 
     brxnet = config.get("brxnet", None)
 
     # Construct any new FuseMount instances
     for id_, remote in clients:
+        remotes.add(remote)
         client_config = config.get("client.%s" % id_)
         if client_config is None:
             client_config = {}
@@ -137,6 +140,15 @@ def task(ctx, config):
 
     ctx.mounts = all_mounts
 
+    # Umount any pre-existing clients that we have not been asked to mount
+    for client_id in set(all_mounts.keys()) - set(mounted_by_me.keys()) - set(skipped.keys()):
+        mount = all_mounts[client_id]
+        if mount.is_mounted():
+            mount.umount_wait()
+
+    for remote in remotes:
+        cleanup_stale_netnses_and_bridge(remote)
+
     # Mount any clients we have been asked to (default to mount all)
     log.info('Mounting ceph-fuse clients...')
     for info in mounted_by_me.values():
@@ -147,12 +159,6 @@ def task(ctx, config):
 
     for info in mounted_by_me.values():
         info["mount"].wait_until_mounted()
-
-    # Umount any pre-existing clients that we have not been asked to mount
-    for client_id in set(all_mounts.keys()) - set(mounted_by_me.keys()) - set(skipped.keys()):
-        mount = all_mounts[client_id]
-        if mount.is_mounted():
-            mount.umount_wait()
 
     try:
         yield all_mounts
