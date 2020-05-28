@@ -28,6 +28,8 @@ public:
   RGWSI_Account(CephContext *cct);
   virtual ~RGWSI_Account();
 
+  static std::string get_meta_key(const RGWAccountInfo& info);
+
   virtual int read_account_info(RGWSI_MetaBackend::Context *ctx,
 				const std::string& account_id,
 				RGWAccountInfo *info,
