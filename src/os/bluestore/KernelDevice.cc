@@ -38,7 +38,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
-#define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
+#define dout_prefix *_dout << "bdev:kd:" << __LINE__ << "(" << this << " " << path << ") "
 
 using std::list;
 using std::map;
@@ -54,6 +54,10 @@ using ceph::operator <<;
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
+//XXXAIO<<<<<<< HEAD
+//=======
+//    io_queue(cct->_conf->bdev_aio_max_queue_depth),
+//>>>>>>> bluestore: FreeBSD make `ceph-osd mkfs` use AIO.
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
@@ -387,9 +391,15 @@ bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
 {
+#if defined(F_SET_FILE_RW_HINT)
   assert(write_hint >= WRITE_LIFE_NOT_SET && write_hint < WRITE_LIFE_MAX);
   if (!enable_wrt)
     write_hint = WRITE_LIFE_NOT_SET;
+#else
+  // Without WRITE_LIFE capabilities, only one file is used.
+  // And rocksdb sets this value also to > 0.
+  write_hint = WRITE_LIFE_NOT_SET;
+#endif
   return buffered ? fd_buffereds[write_hint] : fd_directs[write_hint];
 }
 
@@ -522,15 +532,30 @@ void KernelDevice::_aio_thread()
     dout(40) << __func__ << " polling" << dendl;
     int max = cct->_conf->bdev_aio_reap_max;
     aio_t *aio[max];
+#if defined(HAVE_LIBAIO)
     int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
 					 aio, max);
+#elif defined(HAVE_POSIXAIO)
+    int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms, 
+                                         aio, max, choose_fd(false, 0));
+#endif
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
+#if defined(__linux__)
       ceph_abort_msg("got unexpected error from io_getevents");
+#elif defined(__FreeBSD__)
+      ceph_abort_msg("got unexpected error from kevent");
+#endif
     }
     if (r > 0) {
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
       for (int i = 0; i < r; ++i) {
+        dout(35) << __func__
+                 << " aio[i] = "  << aio[i]
+                 << "( fd = "     << aio[i]->fd
+                 << ", offset = " << aio[i]->offset
+                 << ", offset = " << aio[i]->length
+                 << ")" << dendl;
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
 	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
 	if (aio[i]->queue_item.is_linked()) {
@@ -882,7 +907,7 @@ int KernelDevice::write(
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-  dout(40) << "data: ";
+  dout(40) << "data: \n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
@@ -911,13 +936,13 @@ int KernelDevice::aio_write(
       bl.rebuild_aligned_size_and_memory(block_size, block_size, IOV_MAX)) {
     dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
   }
-  dout(40) << "data: ";
+  dout(40) << "data: \n";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
   _aio_log_start(ioc, off, len);
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -926,7 +951,7 @@ int KernelDevice::aio_write(
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
-      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+      ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
       ++ioc->num_pending;
       auto& aio = ioc->pending_aios.back();
       bufferptr p = ceph::buffer::create_small_page_aligned(len);
@@ -937,7 +962,7 @@ int KernelDevice::aio_write(
     } else {
       if (bl.length() <= RW_IO_MAX) {
 	// fast path (non-huge write)
-	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
 	++ioc->num_pending;
 	auto& aio = ioc->pending_aios.back();
 	bl.prepare_iov(&aio.iov);
@@ -957,7 +982,7 @@ int KernelDevice::aio_write(
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }
 	  auto len = tmp.length();
-	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	  ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
 	  ++ioc->num_pending;
 	  auto& aio = ioc->pending_aios.back();
 	  tmp.prepare_iov(&aio.iov);
@@ -1037,7 +1062,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ceph_assert((uint64_t)r == len);
   pbl->push_back(std::move(p));
 
-  dout(40) << "data: ";
+  dout(40) << "data: \n";
   pbl->hexdump(*_dout);
   *_dout << dendl;
 
@@ -1056,11 +1081,11 @@ int KernelDevice::aio_read(
 	  << dendl;
 
   int r = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
+    ioc->pending_aios.push_back(aio_t(cct, ioc, fd_directs[WRITE_LIFE_NOT_SET]));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     bufferptr p = ceph::buffer::create_small_page_aligned(len);
@@ -1107,7 +1132,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
   ceph_assert((uint64_t)r == aligned_len);
   memcpy(buf, p.c_str() + (off - aligned_off), len);
 
-  dout(40) << __func__ << " data: ";
+  dout(40) << __func__ << " data: \n";
   bufferlist bl;
   bl.append(buf, len);
   bl.hexdump(*_dout);
@@ -1180,7 +1205,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
     ceph_assert((uint64_t)r == len);
   }
 
-  dout(40) << __func__ << " data: ";
+  dout(40) << __func__ << " data: \n";
   bufferlist bl;
   bl.append(buf, len);
   bl.hexdump(*_dout);
