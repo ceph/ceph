@@ -223,13 +223,11 @@ class FSExport(object):
         return json_res[0]['entity'], json_res[0]['key']
 
     def _delete_user(self, entity):
-        try:
-            self.mgr.check_mon_command({
-                'prefix': 'auth del',
-                'entity': 'client.{}'.format(entity),
-                })
-        except MonCommandFailed as e:
-            log.warning(f"User could not be deleted: {e}")
+        self.mgr.check_mon_command({
+            'prefix': 'auth del',
+            'entity': 'client.{}'.format(entity),
+            })
+        log.info(f"Export user deleted is {entity}")
 
     def format_path(self, path):
         if path is not None:
@@ -292,48 +290,47 @@ class FSExport(object):
         self._update_common_conf(export.cluster_id, export.export_id)
 
     def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
-        if not self.check_fs(fs_name):
-            return -errno.EINVAL,"", "Invalid CephFS name"
+        try:
+            if not self.check_fs(fs_name):
+                return -errno.EINVAL,"", "Invalid CephFS name"
 
-        #TODO Check if valid cluster
-        if cluster_id not in self.exports:
-            self.exports[cluster_id] = []
+            #TODO Check if valid cluster
+            if cluster_id not in self.exports:
+                self.exports[cluster_id] = []
 
-        self.rados_namespace = cluster_id
-        access_type = "RW"
-        if read_only:
-            access_type = "RO"
+            self.rados_namespace = cluster_id
 
-        if not self._fetch_export(pseudo_path):
-            ex_id = self._gen_export_id()
-            user_id = f"{cluster_id}{ex_id}"
-            user_out, key = self._create_user_key(user_id, path, fs_name)
-
-            ex_dict = {
-                    'path': self.format_path(path),
-                    'pseudo': self.format_path(pseudo_path),
-                    'cluster_id': cluster_id,
-                    'access_type': access_type,
-                    'fsal': {"name": "CEPH", "user_id": user_id,
-                             "fs_name": fs_name, "sec_label_xattr": ""},
-                    'clients': []
-                    }
-
-            export = Export.from_dict(ex_id, ex_dict)
-            export.fsal.cephx_key = key
-            self._save_export(export)
-        else:
-            log.error("Export already exists")
-
-        result = {
-            "bind": pseudo_path,
-            "fs": fs_name,
-            "path": path,
-            "cluster": cluster_id,
-            "mode": access_type,
-            }
-
-        return (0, json.dumps(result, indent=4), '')
+            if not self._fetch_export(pseudo_path):
+                ex_id = self._gen_export_id()
+                user_id = f"{cluster_id}{ex_id}"
+                user_out, key = self._create_user_key(user_id, path, fs_name)
+                access_type = "RW"
+                if read_only:
+                    access_type = "RO"
+                ex_dict = {
+                        'path': self.format_path(path),
+                        'pseudo': self.format_path(pseudo_path),
+                        'cluster_id': cluster_id,
+                        'access_type': access_type,
+                        'fsal': {"name": "CEPH", "user_id": user_id,
+                            "fs_name": fs_name, "sec_label_xattr": ""},
+                        'clients': []
+                        }
+                export = Export.from_dict(ex_id, ex_dict)
+                export.fsal.cephx_key = key
+                self._save_export(export)
+                result = {
+                        "bind": pseudo_path,
+                        "fs": fs_name,
+                        "path": path,
+                        "cluster": cluster_id,
+                        "mode": access_type,
+                        }
+                return (0, json.dumps(result, indent=4), '')
+            return 0, "", "Export already exists"
+        except Exception as e:
+            log.warning("Failed to create exports")
+            return -errno.EINVAL, "", str(e)
 
     def delete_export(self, cluster_id, pseudo_path, export_obj=None):
         try:
@@ -348,18 +345,21 @@ class FSExport(object):
                 self._delete_export_url(common_conf, export.export_id)
                 self.exports[cluster_id].remove(export)
                 self._delete_user(export.fsal.user_id)
-            else:
-                log.warn("Export does not exist")
+                return 0, "Successfully deleted export", ""
+            return 0, "", "Export does not exist"
         except KeyError:
-            log.warn("Cluster does not exist")
-
-        return 0, "", "Successfully deleted export"
+            return -errno.EINVAL, "", "Cluster does not exist"
+        except Exception as e:
+            log.warning("Failed to delete exports")
+            return -errno.EINVAL, "", str(e)
 
     def delete_all_exports(self, cluster_id):
         try:
             export_list = list(self.exports[cluster_id])
             for export in export_list:
-                self.delete_export(cluster_id, None, export)
+               ret, out, err = self.delete_export(cluster_id, None, export)
+               if ret != 0:
+                   raise Exception("Failed to delete exports: {err} and {ret}")
             log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
         except KeyError:
             log.info("No exports to delete")
@@ -396,13 +396,10 @@ class NFSCluster:
             log.info(f"Deleted object:{common_conf}")
 
     def available_clusters(self):
-        try:
-            completion = self.mgr.describe_service(service_type='nfs')
-            self.mgr._orchestrator_wait([completion])
-            orchestrator.raise_if_exception(completion)
-            return [cluster.spec.service_id for cluster in completion.result]
-        except Exception as e:
-            log.exception(str(e))
+        completion = self.mgr.describe_service(service_type='nfs')
+        self.mgr._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return [cluster.spec.service_id for cluster in completion.result]
 
     def _set_cluster_id(self, cluster_id):
         self.cluster_id = "ganesha-%s" % cluster_id
@@ -417,67 +414,63 @@ class NFSCluster:
         spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
                               pool=self.pool_name, namespace=self.pool_ns,
                               placement=PlacementSpec.from_string(placement))
-        try:
-            completion = self.mgr.apply_nfs(spec)
-            self.mgr._orchestrator_wait([completion])
-            orchestrator.raise_if_exception(completion)
-        except Exception as e:
-            log.exception("Failed to create NFS daemons:{}".format(e))
+        completion = self.mgr.apply_nfs(spec)
+        self.mgr._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
 
     def create_nfs_cluster(self, export_type, cluster_id, placement):
         if export_type != 'cephfs':
-            return -errno.EINVAL,"", f"Invalid export type: {export_type}"
+            return -errno.EINVAL, "", f"Invalid export type: {export_type}"
+        try:
+            pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
 
-        pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
+            if self.pool_name not in pool_list:
+                r, out, err = create_pool(self.mgr, self.pool_name)
+                if r != 0:
+                    return r, out, err
+                log.info(f"Pool Status: {out}")
 
-        if self.pool_name not in pool_list:
-            r, out, err = create_pool(self.mgr, self.pool_name)
-            if r != 0:
-                return r, out, err
-            log.info("{}".format(out))
+                self.mgr.check_mon_command({'prefix': 'osd pool application enable',
+                    'pool': self.pool_name, 'app': 'nfs'})
 
-            self.mgr.check_mon_command({'prefix': 'osd pool application enable',
-                'pool': self.pool_name, 'app': 'nfs'})
+            self._set_pool_namespace(cluster_id)
+            self._set_cluster_id(cluster_id)
+            self.create_empty_rados_obj()
 
-        self._set_pool_namespace(cluster_id)
-        self._set_cluster_id(cluster_id)
-        self.create_empty_rados_obj()
-
-        cluster_list = self.available_clusters()
-        if isinstance(cluster_list, list) and self.cluster_id not in cluster_list:
-            self._call_orch_apply_nfs(placement)
-        else:
-            log.error(f"{self.cluster_id} cluster already exists")
-
-        return 0, "", "NFS Cluster Created Successfully"
+            if self.cluster_id not in self.available_clusters():
+                self._call_orch_apply_nfs(placement)
+                return 0, "NFS Cluster Created Successfully", ""
+            return 0, "", f"{self.cluster_id} cluster already exists"
+        except Exception as e:
+            log.warning("NFS Cluster could not be created")
+            return -errno.EINVAL, "", str(e)
 
     def update_nfs_cluster(self, cluster_id, placement):
-        self._set_pool_namespace(cluster_id)
-        self._set_cluster_id(cluster_id)
-
-        cluster_list = self.available_clusters()
-        if isinstance(cluster_list, list) and self.cluster_id in cluster_list:
-            self._call_orch_apply_nfs(placement)
-            return 0, "", "NFS Cluster Updated Successfully"
-
-        return -errno.EINVAL, "", "Cluster does not exist"
+        try:
+            self._set_pool_namespace(cluster_id)
+            self._set_cluster_id(cluster_id)
+            if self.cluster_id in self.available_clusters():
+                self._call_orch_apply_nfs(placement)
+                return 0, "NFS Cluster Updated Successfully", ""
+            return -errno.EINVAL, "", "Cluster does not exist"
+        except Exception as e:
+            log.warning("NFS Cluster could not be updated")
+            return -errno.EINVAL, "", str(e)
 
     def delete_nfs_cluster(self, cluster_id):
-        self._set_cluster_id(cluster_id)
-        cluster_list = self.available_clusters()
+        try:
+            self._set_cluster_id(cluster_id)
+            cluster_list = self.available_clusters()
 
-        if isinstance(cluster_list, list) and self.cluster_id in cluster_list:
-            try:
+            if self.cluster_id in self.available_clusters():
                 self.mgr.fs_export.delete_all_exports(cluster_id)
                 completion = self.mgr.remove_service('nfs.' + self.cluster_id)
                 self.mgr._orchestrator_wait([completion])
                 orchestrator.raise_if_exception(completion)
                 if len(cluster_list) == 1:
                     self.delete_common_config_obj()
-            except Exception as e:
-                log.exception("Failed to delete NFS Cluster")
-                return -errno.EINVAL, "", str(e)
-        else:
-            log.error("Cluster does not exist")
-
-        return 0, "", "NFS Cluster Deleted Successfully"
+                return 0, "NFS Cluster Deleted Successfully", ""
+            return 0, "", "Cluster does not exist"
+        except Exception as e:
+            log.warning("Failed to delete NFS Cluster")
+            return -errno.EINVAL, "", str(e)
