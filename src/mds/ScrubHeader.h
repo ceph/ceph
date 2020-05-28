@@ -37,10 +37,7 @@ public:
   ScrubHeader(std::string_view tag_, bool is_tag_internal_, bool force_,
               bool recursive_, bool repair_, ceph::Formatter *f_)
     : tag(tag_), is_tag_internal(is_tag_internal_), force(force_),
-      recursive(recursive_), repair(repair_), formatter(f_)
-  {
-    ceph_assert(formatter != nullptr);
-  }
+      recursive(recursive_), repair(repair_), formatter(f_) {}
 
   // Set after construction because it won't be known until we've
   // started resolving path and locking
@@ -51,7 +48,7 @@ public:
   bool get_force() const { return force; }
   bool is_internal_tag() const { return is_tag_internal; }
   CInode *get_origin() const { return origin; }
-  std::string_view get_tag() const { return tag; }
+  const std::string& get_tag() const { return tag; }
   ceph::Formatter& get_formatter() const { return *formatter; }
 
   bool get_repaired() const { return repaired; }

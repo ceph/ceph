@@ -110,13 +110,14 @@ void ScrubStack::add_to_waiting(MDSCacheObject *obj)
   scrub_waiting.push_back(&obj->item_scrub);
 }
 
-void ScrubStack::remove_from_waiting(MDSCacheObject *obj)
+void ScrubStack::remove_from_waiting(MDSCacheObject *obj, bool kick)
 {
   scrubs_in_progress--;
   if (obj->item_scrub.is_on_list()) {
     obj->item_scrub.remove_myself();
     scrub_stack.push_front(&obj->item_scrub);
-    kick_off_scrubs();
+    if (kick)
+      kick_off_scrubs();
   }
 }
 
@@ -175,10 +176,13 @@ void ScrubStack::kick_off_scrubs()
     assert(state == STATE_RUNNING || state == STATE_IDLE);
     set_state(STATE_RUNNING);
 
-
     if (CInode *in = dynamic_cast<CInode*>(*it)) {
       dout(20) << __func__ << " examining " << *in << dendl;
       ++it;
+
+      if (!validate_inode_auth(in))
+	continue;
+
       if (!in->is_dir()) {
 	// it's a regular file, symlink, or hard link
 	dequeue(in); // we only touch it this once, so remove from stack
@@ -219,47 +223,125 @@ void ScrubStack::kick_off_scrubs()
   }
 }
 
+bool ScrubStack::validate_inode_auth(CInode *in)
+{
+  if (in->is_auth()) {
+    if (!in->can_auth_pin()) {
+      dout(10) << __func__ << " can't auth pin" << dendl;
+      in->add_waiter(CInode::WAIT_UNFREEZE, new C_RetryScrub(this, in));
+      return false;
+    }
+    return true;
+  } else {
+    MDSRank *mds = mdcache->mds;
+    if (in->is_ambiguous_auth()) {
+      dout(10) << __func__ << " ambiguous auth" << dendl;
+      in->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_RetryScrub(this, in));
+    } else if (mds->is_cluster_degraded()) {
+      dout(20) << __func__ << " cluster degraded" << dendl;
+      mds->wait_for_cluster_recovered(new C_RetryScrub(this, in));
+    } else {
+      ScrubHeaderRef header = in->get_scrub_header();
+      ceph_assert(header);
+
+      auto ret = remote_scrubs.emplace(std::piecewise_construct,
+				       std::forward_as_tuple(in),
+				       std::forward_as_tuple());
+      ceph_assert(ret.second); // FIXME: parallel scrubs?
+      auto &scrub_r = ret.first->second;
+      scrub_r.tag = header->get_tag();
+
+      mds_rank_t auth = in->authority().first;
+      dout(10) << __func__ << " forward to mds." << auth << dendl;
+      auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEINO, in->ino(),
+				       std::move(in->scrub_queued_frags()),
+				       header->get_tag(), header->is_internal_tag(),
+				       header->get_force(), header->get_recursive(),
+				       header->get_repair());
+      mdcache->mds->send_message_mds(r, auth);
+
+      scrub_r.gather_set.insert(auth);
+      // wait for ACK
+      add_to_waiting(in);
+    }
+    return false;
+  }
+}
+
 void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
 {
   dout(10) << __func__ << " " << *in << dendl;
+  ceph_assert(in->is_auth());
+  MDSRank *mds = mdcache->mds;
 
   ScrubHeaderRef header = in->get_scrub_header();
   ceph_assert(header);
 
   MDSGatherBuilder gather(g_ceph_context);
 
+  auto &queued = in->scrub_queued_frags();
+  std::map<mds_rank_t, fragset_t> scrub_remote;
+
   frag_vec_t frags;
   in->dirfragtree.get_leaves(frags);
   dout(20) << __func__ << "recursive mode, frags " << frags << dendl;
-
   for (auto &fg : frags) {
+    if (queued.contains(fg))
+      continue;
     CDir *dir = in->get_or_open_dirfrag(mdcache, fg);
     if (!dir->is_auth()) {
-      dout(20) << __func__ << " not auth " << *dir  << dendl;
-      // no-op
+      if (dir->is_ambiguous_auth()) {
+	dout(20) << __func__ << " ambiguous auth " << *dir  << dendl;
+	dir->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, gather.new_sub());
+      } else if (mds->is_cluster_degraded()) {
+	dout(20) << __func__ << " cluster degraded" << dendl;
+	mds->wait_for_cluster_recovered(gather.new_sub());
+      } else {
+	mds_rank_t auth = dir->authority().first;
+	scrub_remote[auth].insert_raw(fg);
+      }
     } else if (!dir->can_auth_pin()) {
       dout(20) << __func__ << " freezing/frozen " << *dir  << dendl;
       dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
     } else if (dir->get_version() == 0) {
       dout(20) << __func__ << " barebones " << *dir  << dendl;
       dir->fetch(gather.new_sub());
+    } else {
+      _enqueue(dir, header, nullptr, true);
+      queued.insert_raw(dir->get_frag());
+      *added_children = true;
     }
   }
+
+  queued.simplify();
+
   if (gather.has_subs()) {
     gather.set_finisher(new C_RetryScrub(this, in));
     gather.activate();
     return;
   }
 
-  std::vector<CDir*> dfs;
-  in->get_dirfrags(dfs);
-  for (auto &dir : dfs) {
-    if (dir->is_auth()){
-      _enqueue(dir, header, nullptr, true);
-      *added_children = true;
-    } else {
-      // FIXME: ask auth mds to scrub
+  if (!scrub_remote.empty()) {
+    auto ret = remote_scrubs.emplace(std::piecewise_construct,
+				     std::forward_as_tuple(in),
+				     std::forward_as_tuple());
+    ceph_assert(ret.second); // FIXME: parallel scrubs?
+    auto &scrub_r = ret.first->second;
+    scrub_r.tag = header->get_tag();
+
+    for (auto& p : scrub_remote) {
+      p.second.simplify();
+      dout(20) << __func__ << " forward " << p.second  << " to mds." << p.first << dendl;
+      auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEDIR, in->ino(),
+				       std::move(p.second), header->get_tag(),
+				       header->is_internal_tag(), header->get_force(),
+				       header->get_recursive(), header->get_repair());
+      mds->send_message_mds(r, p.first);
+      scrub_r.gather_set.insert(p.first);
     }
+    // wait for ACKs
+    add_to_waiting(in);
+    return;
   }
 
   scrub_dir_inode_final(in);
@@ -415,13 +497,13 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
   if (in == header->get_origin()) {
     scrub_origins.erase(in);
     clog_scrub_summary(in);
-    if (!header->get_recursive()) {
+    if (!header->get_recursive() && header->get_formatter()) {
       if (r >= 0) { // we got into the scrubbing dump it
-        result.dump(&(header->get_formatter()));
+        result.dump(header->get_formatter());
       } else { // we failed the lookup or something; dump ourselves
-        header->get_formatter().open_object_section("results");
-        header->get_formatter().dump_int("return_code", r);
-        header->get_formatter().close_section(); // results
+        header->get_formatter()->open_object_section("results");
+        header->get_formatter()->dump_int("return_code", r);
+        header->get_formatter()->close_section(); // results
       }
     }
   }
@@ -612,6 +694,11 @@ void ScrubStack::abort_pending_scrubs() {
   stack_size = 0;
   scrub_stack.clear();
   scrub_waiting.clear();
+
+  for (auto& p : remote_scrubs)
+    remove_from_waiting(p.first, false);
+  remote_scrubs.clear();
+
   clear_stack = false;
 }
 
@@ -695,4 +782,164 @@ void ScrubStack::clog_scrub_summary(CInode *in) {
   }
 
   clog->info() << "scrub summary: " << scrub_summary();
+}
+
+void ScrubStack::dispatch(const cref_t<Message> &m)
+{
+  switch (m->get_type()) {
+  case MSG_MDS_SCRUB:
+    handle_scrub(ref_cast<MMDSScrub>(m));
+    break;
+
+  default:
+    derr << " scrub stack unknown message " << m->get_type() << dendl_impl;
+    ceph_abort_msg("scrub stack unknown message");
+  }
+}
+
+void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
+{
+
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
+
+  switch (m->get_op()) {
+  case MMDSScrub::OP_QUEUEDIR:
+    {
+      CInode *diri = mdcache->get_inode(m->get_ino());
+      ceph_assert(diri);
+
+      std::vector<CDir*> dfs;
+      MDSGatherBuilder gather(g_ceph_context);
+      for (const auto& fg : m->get_frags()) {
+	CDir *dir = diri->get_dirfrag(fg);
+	if (!dir) {
+	  dout(10) << __func__ << " no frag " << fg << dendl;
+	  continue;
+	}
+	if (!dir->is_auth()) {
+	  dout(10) << __func__ << " not auth " << *dir << dendl;
+	  continue;
+	}
+	if (!dir->can_auth_pin()) {
+	  dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
+	  dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
+	  continue;
+	}
+	dfs.push_back(dir);
+      }
+
+      if (gather.has_subs()) {
+	gather.set_finisher(new C_MDS_RetryMessage(mdcache->mds, m));
+	gather.activate();
+	return;
+      }
+
+      fragset_t queued;
+      if (!dfs.empty()) {
+	ScrubHeaderRef header = std::make_shared<ScrubHeader>(m->get_tag(), m->is_internal_tag(),
+							      m->is_force(), m->is_recursive(),
+							      m->is_repair(), nullptr);
+	for (auto dir : dfs) {
+	  queued.insert_raw(dir->get_frag());
+	  _enqueue(dir, header, nullptr, true);
+	}
+	queued.simplify();
+	kick_off_scrubs();
+      }
+
+      auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEDIR_ACK, m->get_ino(),
+				       std::move(queued), m->get_tag());
+      mdcache->mds->send_message_mds(r, from);
+    }
+    break;
+  case MMDSScrub::OP_QUEUEDIR_ACK:
+    {
+      CInode *diri = mdcache->get_inode(m->get_ino());
+      ceph_assert(diri);
+      auto it = remote_scrubs.find(diri);
+      if (it != remote_scrubs.end() &&
+	  m->get_tag() == it->second.tag) {
+	if (it->second.gather_set.erase(from)) {
+	  auto &queued = diri->scrub_queued_frags();
+	  for (auto &fg : m->get_frags())
+	    queued.insert_raw(fg);
+	  queued.simplify();
+
+	  if (it->second.gather_set.empty()) {
+	    remote_scrubs.erase(it);
+	    remove_from_waiting(diri);
+	  }
+	}
+      }
+    }
+    break;
+  case MMDSScrub::OP_QUEUEINO:
+    {
+      CInode *in = mdcache->get_inode(m->get_ino());
+      ceph_assert(in);
+
+      ScrubHeaderRef header = std::make_shared<ScrubHeader>(m->get_tag(), m->is_internal_tag(),
+							    m->is_force(), m->is_recursive(),
+							    m->is_repair(), nullptr);
+
+      _enqueue(in, header, nullptr, true);
+      in->scrub_queued_frags() = m->get_frags();
+      kick_off_scrubs();
+
+      fragset_t queued;
+      auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEINO_ACK, m->get_ino(),
+				       std::move(queued), m->get_tag());
+      mdcache->mds->send_message_mds(r, from);
+    }
+    break;
+  case MMDSScrub::OP_QUEUEINO_ACK:
+    {
+      CInode *in = mdcache->get_inode(m->get_ino());
+      ceph_assert(in);
+      auto it = remote_scrubs.find(in);
+      if (it != remote_scrubs.end() &&
+	  m->get_tag() == it->second.tag &&
+	  it->second.gather_set.erase(from)) {
+	ceph_assert(it->second.gather_set.empty());
+	remote_scrubs.erase(it);
+
+	remove_from_waiting(in, false);
+	dequeue(in);
+
+	if (in == in->scrub_info()->header->get_origin()) {
+	  scrub_origins.erase(in);
+	  clog_scrub_summary(in);
+	}
+	MDSContext *c = nullptr;
+	in->scrub_finished(&c);
+	if (c)
+	  finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
+
+	kick_off_scrubs();
+      }
+    }
+    break;
+  default:
+    derr << " scrub stack unknown scrub operation " << m->get_op() << dendl_impl;
+    ceph_abort_msg("scrub stack unknown scrub operation");
+  }
+}
+
+void ScrubStack::handle_mds_failure(mds_rank_t mds)
+{
+  bool kick = false;
+  for (auto it = remote_scrubs.begin(); it != remote_scrubs.end(); ) {
+    if (it->second.gather_set.erase(mds) &&
+	it->second.gather_set.empty()) {
+      CInode *in = it->first;
+      remote_scrubs.erase(it++);
+      remove_from_waiting(in, false);
+      kick = true;
+    } else {
+      ++it;
+    }
+  }
+  if (kick)
+    kick_off_scrubs();
 }
