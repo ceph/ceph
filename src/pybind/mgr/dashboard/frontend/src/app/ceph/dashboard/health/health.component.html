@@ -27,13 +27,8 @@
         </ng-template>
         <div class="info-card-content-clickable"
              [ngStyle]="healthData.health.status | healthColor"
-             [popover]="healthChecks"
-             triggers=""
-             #healthChecksTarget="bs-popover"
-             placement="bottom"
-             container="body"
-             containerClass="info-card-popover-cluster-status"
-             (click)="healthChecksTarget.toggle()">
+             [ngbPopover]="healthChecks"
+             popoverClass="info-card-popover-cluster-status">
           {{ healthData.health.status }}
         </div>
       </ng-container>
@@ -117,7 +112,8 @@
       {{ healthData.iscsi_daemons.up + healthData.iscsi_daemons.down }} total
       <span class="card-text-line-break"></span>
       {{ healthData.iscsi_daemons.up }} up,
-      <span [ngClass]="{'card-text-error': healthData.iscsi_daemons.down > 0}">{{ healthData.iscsi_daemons.down }} down</span>
+      <span [ngClass]="{'card-text-error': healthData.iscsi_daemons.down > 0}">{{ healthData.iscsi_daemons.down }}
+        down</span>
     </cd-info-card>
   </cd-info-group>
 
@@ -221,7 +217,6 @@
                   i18n-cardTitle
                   class="cd-capacity-card order-md-5 order-lg-3 order-xl-5"
                   contentClass="content-chart"
-                  (click)="pgStatusTarget.toggle()"
                   *ngIf="healthData.pg_info">
       <ng-template #pgStatus>
         <ng-container *ngTemplateOutlet="logsLink"></ng-container>
@@ -232,10 +227,7 @@
         </ul>
       </ng-template>
       <div class="pg-status-popover-wrapper">
-        <div [popover]="pgStatus"
-             triggers=""
-             #pgStatusTarget="bs-popover"
-             placement="bottom">
+        <div [ngbPopover]="pgStatus">
           <cd-health-pie [data]="healthData"
                          [config]="pgStatusChartConfig"
                          (prepareFn)="preparePgStatus($event[0], $event[1])">

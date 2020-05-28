@@ -4,7 +4,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
 import * as _ from 'lodash';
-import { PopoverModule } from 'ngx-bootstrap/popover';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -49,7 +48,7 @@ describe('HealthComponent', () => {
   let fakeFeatureTogglesService: jasmine.Spy;
 
   configureTestBed({
-    imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
+    imports: [SharedModule, HttpClientTestingModule],
     declarations: [
       HealthComponent,
       HealthPieComponent,

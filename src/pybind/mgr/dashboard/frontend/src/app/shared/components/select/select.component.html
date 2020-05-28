@@ -62,10 +62,7 @@
 
 <a class="select-menu-edit float-left"
    [ngClass]="elemClass"
-   [popover]="popTemplate"
-   placement="bottom"
-   container="body"
-   outsideClick="true"
+   [ngbPopover]="popTemplate"
    *ngIf="options.length > 0">
   <ng-content></ng-content>
 </a>
