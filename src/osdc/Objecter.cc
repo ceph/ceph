@@ -2853,20 +2853,19 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 		   << " acting " << acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if (acting_primary == -1) {
-      t->osd = -1;
-    } else {
+    if ((t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+                     CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+        !is_write && pi->is_replicated() && acting.size() > 1) {
       int osd;
-      bool read = is_read && !is_write;
-      if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+      ceph_assert(is_read && acting[0] == acting_primary);
+      if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
 	int p = rand() % acting.size();
 	if (p)
 	  t->used_replica = true;
 	osd = acting[p];
 	ldout(cct, 10) << " chose random osd." << osd << " of " << acting
 		       << dendl;
-      } else if (read && (t->flags & CEPH_OSD_FLAG_LOCALIZE_READS) &&
-		 acting.size() > 1) {
+      } else {
 	// look for a local replica.  prefer the primary if the
 	// distance is the same.
 	int best = -1;
@@ -2889,10 +2888,10 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	}
 	ceph_assert(best >= 0);
 	osd = acting[best];
-      } else {
-	osd = acting_primary;
       }
       t->osd = osd;
+    } else {
+      t->osd = acting_primary;
     }
   }
   if (legacy_change || unpaused || force_resend) {
