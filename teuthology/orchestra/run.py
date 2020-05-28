@@ -328,6 +328,8 @@ def copy_and_close(src, fdst):
                 src = io.StringIO(src)
             else:
                 src = io.BytesIO(src)
+        elif not PY3 and isinstance(src, unicode):  # noqa: F821
+            src = io.StringIO(src)
         shutil.copyfileobj(src, fdst)
     fdst.close()
 
