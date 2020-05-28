@@ -21,10 +21,10 @@ capability is available in two modes:
   updates between two mirror-snapshots and copy the deltas to its local copy of
   the image. With the help of the RBD fast-diff image feature, updated data
   blocks can be quickly computed without the need to scan the full RBD image.
-  Since this mode is not point-in-time consistent, the full snapshot delta will
-  need to be synced prior to use during a failover scenario. Any partially
-  applied snapshot deltas will be rolled back to the last fully synced snapshot
-  prior to use.
+  Since this mode is not as fine-grained as journaling, the complete delta 
+  between two snapshots will need to be synced prior to use during a failover
+  scenario. Any partially applied set of deltas will be rolled back at moment
+  of failover.
 
 .. note:: journal-based mirroring requires the Ceph Jewel release or later;
    snapshot-based mirroring requires the Ceph Octopus release or later.
