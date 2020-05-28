@@ -84,6 +84,8 @@ public:
   void handle_finished(int r, uint64_t tid) override;
 
 private:
+  struct C_BlockedWrites;
+
   typedef std::list<Context*> Contexts;
   typedef std::set<uint64_t> Tids;
 
@@ -100,6 +102,8 @@ private:
   bool process_io(bool read_op, uint64_t tid, DispatchResult* dispatch_result,
                   Context* on_dispatched);
   void flush_io(Context* on_finish);
+
+  void handle_blocked_writes(int r);
 
 };
 
