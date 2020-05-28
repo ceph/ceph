@@ -1093,7 +1093,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         r = HandleCommandResult(*self.mon_command(cmd_dict))
         if r.retval:
-            raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr}')
+            raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr} retval: {r.retval}')
         return r
 
     def mon_command(self, cmd_dict):

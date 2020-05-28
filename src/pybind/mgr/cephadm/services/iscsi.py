@@ -93,7 +93,7 @@ class IscsiService(CephadmService):
                 logger.warning(
                     'Unable to add iSCSI gateway to the Dashboard for %s: %s', dd, reason)
                 continue
-            host = self.mgr.inventory.get_addr(dd.hostname)
+            host = self._inventory_get_addr(dd.hostname)
             service_url = 'http://{}:{}@{}:{}'.format(
                 spec.api_user, spec.api_password, host, spec.api_port or '5000')
             gw = gateways.get(dd.hostname)
