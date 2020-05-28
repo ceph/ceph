@@ -5422,6 +5422,47 @@ static inline std::ostream& operator<<(std::ostream& out, const notify_info_t& n
 	     << " " << n.timeout << "s)";
 }
 
+class object_ref_delta_t {
+  std::map<hobject_t, int> ref_delta;
+
+public:
+  object_ref_delta_t() = default;
+  object_ref_delta_t(const object_ref_delta_t &) = default;
+  object_ref_delta_t(object_ref_delta_t &&) = default;
+
+  object_ref_delta_t(decltype(ref_delta) &&ref_delta)
+    : ref_delta(std::move(ref_delta)) {}
+  object_ref_delta_t(const decltype(ref_delta) &ref_delta)
+    : ref_delta(ref_delta) {}
+
+  object_ref_delta_t &operator=(const object_ref_delta_t &) = default;
+  object_ref_delta_t &operator=(object_ref_delta_t &&) = default;
+
+  void dec_ref(const hobject_t &hoid, unsigned num=1) {
+    mut_ref(hoid, -num);
+  }
+  void inc_ref(const hobject_t &hoid, unsigned num=1) {
+    mut_ref(hoid, num);
+  }
+  void mut_ref(const hobject_t &hoid, int num) {
+    auto [iter, _] = ref_delta.try_emplace(hoid, 0);
+    iter->second += num;
+    if (iter->second == 0)
+      ref_delta.erase(iter);
+  }
+
+  auto begin() const { return ref_delta.begin(); }
+  auto end() const { return ref_delta.end(); }
+
+  bool operator==(const object_ref_delta_t &rhs) const {
+    return ref_delta == rhs.ref_delta;
+  }
+  bool operator!=(const object_ref_delta_t &rhs) const {
+    return !(*this == rhs);
+  }
+  friend std::ostream& operator<<(std::ostream& out, const object_ref_delta_t & ci);
+};
+
 struct chunk_info_t {
   typedef enum {
     FLAG_DIRTY = 1, 
@@ -5486,6 +5527,9 @@ struct chunk_info_t {
   void dump(ceph::Formatter *f) const;
   friend std::ostream& operator<<(std::ostream& out, const chunk_info_t& ci);
   bool operator==(const chunk_info_t& cit) const;
+  bool operator!=(const chunk_info_t& cit) const {
+    return !(cit == *this);
+  }
 };
 WRITE_CLASS_ENCODER(chunk_info_t)
 std::ostream& operator<<(std::ostream& out, const chunk_info_t& ci);
@@ -5530,8 +5574,22 @@ struct object_manifest_t {
     redirect_target = hobject_t();
     chunk_map.clear();
   }
-  void build_intersection_set(const std::map<uint64_t, chunk_info_t>& map,
-                              std::set<uint64_t>& intersection);
+
+  /**
+   * calc_refs_to_drop_on_removal
+   *
+   * Takes the two adjacent manifests and returns the set of refs to
+   * drop upon removal of the clone containing *this.
+   *
+   * g should be nullptr if *this is on HEAD, l should be nullptr if
+   * *this is on the oldest clone (or head if there are no clones).
+   */
+  void calc_refs_to_drop_on_removal(
+    const object_manifest_t* g, ///< [in] manifest for clone > *this
+    const object_manifest_t* l, ///< [in] manifest for clone < *this
+    object_ref_delta_t &delta    ///< [out] set of refs to drop
+  ) const;
+
   static void generate_test_instances(std::list<object_manifest_t*>& o);
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);

@@ -5843,26 +5843,81 @@ ostream& operator<<(ostream& out, const chunk_info_t& ci)
 
 // -- object_manifest_t --
 
-/**
- * build_intersection_set
- *
- * Returns the set offsets to references common (offset, length, and target match) to
- * both map and this->chunk_map.
- *
- * @param map [in] map of object against which to compare
- * @param map [in,out] set of target ids common to both maps
- * @return void
- */
-
-void object_manifest_t::build_intersection_set(const std::map<uint64_t, chunk_info_t>& map,
-					       std::set<uint64_t>& intersection)
+std::ostream& operator<<(std::ostream& out, const object_ref_delta_t & ci)
 {
-  for (const auto &p : chunk_map) {
-    auto c = map.find(p.first);
-    if (c != map.cend()) {
-      if (p == *c) {
-	intersection.insert(p.first);
-      }
+  return out << ci.ref_delta << std::endl;
+}
+
+void object_manifest_t::calc_refs_to_drop_on_removal(
+  const object_manifest_t* _g,
+  const object_manifest_t* _l,
+  object_ref_delta_t &refs) const
+{
+  /* At a high level, the rule is that consecutive clones with the same reference
+   * at the same offset share a reference.  As such, removing *this may result
+   * in removing references in two cases:
+   * 1) *this has a reference which it shares with neither _g nor _l
+   * 2) _g and _l have a reference which they share with each other but not
+   *   *this.
+   *
+   * For a particular offset, both 1 and 2 can happen.
+   *
+   * Notably, this means that to evaluate the reference change from removing
+   * the object with *this, we only need to look at the two adjacent clones.
+   */
+
+  // Paper over possibly missing _g or _l -- nullopt is semantically the same
+  // as an empty chunk_map
+  static const object_manifest_t empty;
+  const object_manifest_t &g = _g ? *_g : empty;
+  const object_manifest_t &l = _l ? *_l : empty;
+
+  auto giter = g.chunk_map.begin();
+  auto iter = chunk_map.begin();
+  auto liter = l.chunk_map.begin();
+
+  // Translate iter, map pair to the current offset, end() -> max
+  auto get_offset = [](decltype(iter) &i, const object_manifest_t &manifest)
+    -> uint64_t {
+    return i == manifest.chunk_map.end() ?
+      std::numeric_limits<uint64_t>::max() : i->first;
+  };
+
+  // Translate current, iter, map to a chunk_info_t, nullopt_t if iter
+  // is ahead of current or is at end()
+  auto get_chunk = [](
+    uint64_t current, decltype(iter) &i, const object_manifest_t &manifest)
+    -> const chunk_info_t * {
+    if (i == manifest.chunk_map.end() || current != i->first) {
+      return nullptr;
+    } else {
+      // We advance the iterator iff we consider the chunk_map on this iteration
+      return &(i++)->second;
+    }
+  };
+
+  while (giter != g.chunk_map.end() ||
+	 iter != chunk_map.end() ||
+	 liter != l.chunk_map.end()) {
+    auto current = std::min(
+      std::min(get_offset(giter, g), get_offset(iter, *this)),
+      get_offset(liter, l));
+
+    auto gchunk = get_chunk(current, giter, g);
+    auto chunk = get_chunk(current, iter, *this);
+    auto lchunk = get_chunk(current, liter, l);
+
+    if (gchunk && lchunk && *gchunk == *lchunk &&
+	(!chunk || *gchunk != *chunk)) {
+      // case 1 from above: l and g match, chunk does not
+      refs.dec_ref(gchunk->oid);
+    }
+
+    if (chunk &&
+	(!gchunk || chunk->oid != gchunk->oid) &&
+	(!lchunk || chunk->oid != lchunk->oid)) {
+      // case 2 from above: *this matches neither
+      refs.dec_ref(chunk->oid);
     }
   }
 }
