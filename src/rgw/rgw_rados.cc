@@ -5819,6 +5819,9 @@ int RGWRados::Object::Read::prepare(optional_yield y)
     }
   }
 
+  if (params.lastmod)
+    *params.lastmod = astate->mtime;
+
   /* Convert all times go GMT to make them compatible */
   if (conds.mod_ptr || conds.unmod_ptr) {
     obj_time_weight src_weight;
@@ -5868,8 +5871,6 @@ int RGWRados::Object::Read::prepare(optional_yield y)
 
   if (params.obj_size)
     *params.obj_size = astate->size;
-  if (params.lastmod)
-    *params.lastmod = astate->mtime;
 
   return 0;
 }
