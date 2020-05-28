@@ -104,7 +104,7 @@ WRITE_CLASS_ENCODER(chunk_refs_t)
 // these are internal and should generally not be used directly
 
 struct chunk_refs_by_object_t : public chunk_refs_t::refs_t {
-  std::set<hobject_t> by_object;
+  std::multiset<hobject_t> by_object;
 
   uint8_t get_type() const {
     return chunk_refs_t::TYPE_BY_OBJECT;
@@ -116,9 +116,6 @@ struct chunk_refs_by_object_t : public chunk_refs_t::refs_t {
     return by_object.size();
   }
   bool get(const hobject_t& o) override {
-    if (by_object.count(o)) {
-      return false;
-    }
     by_object.insert(o);
     return true;
   }
