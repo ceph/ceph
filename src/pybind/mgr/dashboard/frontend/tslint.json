@@ -47,7 +47,6 @@
     "prefer-const": true,
     "quotemark": [true, "single", "avoid-escape"],
     "radix": true,
-    "semicolon": [true, "always"],
     "triple-equals": [true, "allow-null-check"],
     "typedef-whitespace": [
       true,

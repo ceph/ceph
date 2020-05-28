@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { BsModalRef } from 'ngx-bootstrap/modal';
-import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
 
 import {
   configureTestBed,
@@ -29,7 +29,7 @@ describe('SilenceMatcherModalComponent', () => {
     imports: [
       HttpClientTestingModule,
       SharedModule,
-      TypeaheadModule.forRoot(),
+      NgbTypeaheadModule,
       RouterTestingModule,
       ReactiveFormsModule
     ],
