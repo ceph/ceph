@@ -52,6 +52,8 @@ public:
   virtual int store_account_info(RGWSI_MetaBackend::Context *ctx,
 				 const RGWAccountInfo& info,
 				 RGWObjVersionTracker * const objv_tracker,
+				 const real_time& mtime,
+				 bool exclusive,
 				 map<std::string, bufferlist> * const pattrs,
 				 optional_yield y) = 0;
 };
