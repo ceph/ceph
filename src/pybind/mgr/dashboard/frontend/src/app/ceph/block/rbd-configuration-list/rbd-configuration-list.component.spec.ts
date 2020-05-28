@@ -7,7 +7,6 @@ import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { ChartsModule } from 'ng2-charts';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { PopoverModule } from 'ngx-bootstrap/popover';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
@@ -33,8 +32,7 @@ describe('RbdConfigurationListComponent', () => {
       AlertModule,
       BsDropdownModule.forRoot(),
       ChartsModule,
-      PipesModule,
-      PopoverModule
+      PipesModule
     ],
     declarations: [RbdConfigurationListComponent, TableComponent],
     providers: [FormatterService, RbdConfigurationService, i18nProviders]

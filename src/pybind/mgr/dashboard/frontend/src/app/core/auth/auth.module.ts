@@ -7,7 +7,6 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ButtonsModule } from 'ngx-bootstrap/buttons';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { PopoverModule } from 'ngx-bootstrap/popover';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { SharedModule } from '../../shared/shared.module';
@@ -27,7 +26,6 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     ButtonsModule.forRoot(),
     CommonModule,
     FormsModule,
-    PopoverModule.forRoot(),
     ReactiveFormsModule,
     SharedModule,
     NgbNavModule,
