@@ -5,6 +5,9 @@ import argparse
 import contextlib
 import logging
 
+# still need this for python3.6
+from collections import OrderedDict
+
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
@@ -260,25 +263,25 @@ def run_keystone(ctx, config):
                                cluster_name).stop()
 
 
-def dict_to_args(special, items):
+def dict_to_args(specials, items):
     """
     Transform
         [(key1, val1), (special, val_special), (key3, val3) ]
     into:
         [ '--key1', 'val1', '--key3', 'val3', 'val_special' ]
     """
-    args=[]
+    args = []
+    special_vals = OrderedDict((k, '') for k in specials.split(','))
     for (k, v) in items:
-        if k == special:
-            special_val = v
+        if k in special_vals:
+            special_vals[k] = v
         else:
             args.append('--{k}'.format(k=k))
             args.append(v)
-    if special_val:
-        args.append(special_val)
+    args.extend(arg for arg in special_vals.values() if arg)
     return args
 
-def run_section_cmds(ctx, cclient, section_cmd, special,
+def run_section_cmds(ctx, cclient, section_cmd, specials,
                      section_config_list):
     admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
 
@@ -292,7 +295,7 @@ def run_section_cmds(ctx, cclient, section_cmd, special,
     for section_item in section_config_list:
         run_in_keystone_venv(ctx, cclient,
             [ 'openstack' ] + section_cmd.split() +
-            dict_to_args(special, auth_section + list(section_item.items())) +
+            dict_to_args(specials, auth_section + list(section_item.items())) +
             [ '--debug' ])
 
 def create_endpoint(ctx, cclient, service, url, adminurl=None):
