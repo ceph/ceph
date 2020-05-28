@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -20,7 +20,7 @@ describe('GrafanaComponent', () => {
 
   configureTestBed({
     declarations: [GrafanaComponent, AlertPanelComponent, LoadingPanelComponent],
-    imports: [AlertModule.forRoot(), HttpClientTestingModule, RouterTestingModule, FormsModule],
+    imports: [NgbAlertModule, HttpClientTestingModule, RouterTestingModule, FormsModule],
     providers: [CephReleaseNamePipe, SettingsService, SummaryService, i18nProviders]
   });
 

@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { CdForm } from '../forms/cd-form';
@@ -28,7 +28,7 @@ describe('FormLoadingDirective', () => {
 
   configureTestBed({
     declarations: [TestComponent],
-    imports: [AlertModule.forRoot(), SharedModule],
+    imports: [SharedModule, NgbAlertModule],
     providers: [i18nProviders]
   });
 
@@ -50,7 +50,7 @@ describe('FormLoadingDirective', () => {
   it('should show loading component by default', () => {
     expectShown(0, 0, 1);
 
-    const alert = fixture.debugElement.nativeElement.querySelector('cd-loading-panel alert');
+    const alert = fixture.debugElement.nativeElement.querySelector('cd-loading-panel ngb-alert');
     expect(alert.textContent).toBe('Loading form data...');
   });
 

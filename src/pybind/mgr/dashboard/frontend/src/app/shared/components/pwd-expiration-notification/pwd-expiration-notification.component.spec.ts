@@ -4,12 +4,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { of as observableOf } from 'rxjs';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
-
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-
 import { SettingsService } from '../../api/settings.service';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification.component';
@@ -27,11 +25,7 @@ describe('PwdExpirationNotificationComponent', () => {
 
   configureTestBed({
     declarations: [PwdExpirationNotificationComponent, FakeComponent],
-    imports: [
-      AlertModule.forRoot(),
-      HttpClientTestingModule,
-      RouterTestingModule.withRoutes(routes)
-    ],
+    imports: [NgbAlertModule, HttpClientTestingModule, RouterTestingModule.withRoutes(routes)],
     providers: [SettingsService, AuthStorageService]
   });
 
