@@ -60,15 +60,6 @@ def download(ctx, config):
         sha1 = cconf.get('sha1')
         if sha1 is not None:
             run_in_tempest_dir(ctx, client, [ 'git', 'reset', '--hard', sha1 ])
-
-        # tox.ini contains a dead link, replace it with the new one
-        from_url = 'https://git.openstack.org/cgit/openstack/requirements/plain/upper-constraints.txt'
-        to_url = 'https://opendev.org/openstack/requirements/raw/branch/stable/pike/upper-constraints.txt'
-        run_in_tempest_dir(ctx, client, [
-                'sed', '-i',
-                run.Raw('"s|{}|{}|"'.format(from_url, to_url)),
-                'tox.ini'
-            ])
     try:
         yield
     finally:
