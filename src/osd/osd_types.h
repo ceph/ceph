@@ -5460,6 +5460,9 @@ public:
   bool operator!=(const object_ref_delta_t &rhs) const {
     return !(*this == rhs);
   }
+  bool is_empty() {
+    return ref_delta.empty();
+  }
   friend std::ostream& operator<<(std::ostream& out, const object_ref_delta_t & ci);
 };
 

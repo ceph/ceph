@@ -1501,9 +1501,9 @@ protected:
   void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
   void refcount_manifest(ObjectContextRef obc, hobject_t src_soid, object_locator_t oloc,
 			 hobject_t tgt_soid, SnapContext snapc, refcount_t type, RefCountCallback* cb);
-  void dec_all_refcount_head_manifest(object_info_t& oi, OpContext* ctx);
-  void dec_refcount_non_intersection(ObjectContextRef obc, const object_info_t& oi, 
-				     const set<uint64_t>& intersection_set);
+  void dec_all_refcount_head_manifest(object_info_t& oi, OpContext* ctx, const hobject_t &coid);
+  void dec_refcount(ObjectContextRef obc, const object_info_t& oi, 
+		    const object_ref_delta_t& refs);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
