@@ -5107,6 +5107,7 @@ void CInode::scrub_initialize(ScrubHeaderRef& header,
   scrub_info();
   scrub_infop->on_finish = f;
   scrub_infop->scrub_in_progress = true;
+  scrub_infop->queued_frags.clear();
   scrub_infop->header = header;
   // right now we don't handle remote inodes
 }
