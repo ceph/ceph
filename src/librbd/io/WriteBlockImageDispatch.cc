@@ -19,6 +19,18 @@ namespace librbd {
 namespace io {
 
 template <typename I>
+struct WriteBlockImageDispatch<I>::C_BlockedWrites : public Context {
+  WriteBlockImageDispatch *dispatch;
+  explicit C_BlockedWrites(WriteBlockImageDispatch *dispatch)
+    : dispatch(dispatch) {
+  }
+
+  void finish(int r) override {
+    dispatch->handle_blocked_writes(r);
+  }
+};
+
+template <typename I>
 WriteBlockImageDispatch<I>::WriteBlockImageDispatch(I* image_ctx)
   : m_image_ctx(image_ctx),
     m_lock(ceph::make_shared_mutex(
@@ -202,14 +214,15 @@ void WriteBlockImageDispatch<I>::handle_finished(int r, uint64_t tid) {
   }
   m_in_flight_write_tids.erase(it);
 
-  Contexts write_blocker_contexts;
-  if (m_in_flight_write_tids.empty()) {
-    std::swap(write_blocker_contexts, m_write_blocker_contexts);
+  bool writes_blocked = false;
+  if (m_write_blockers > 0 && m_in_flight_write_tids.empty()) {
+    ldout(cct, 10) << "flushing all in-flight IO for blocked writes" << dendl;
+    writes_blocked = true;
   }
   locker.unlock();
 
-  for (auto ctx : write_blocker_contexts) {
-    ctx->complete(0);
+  if (writes_blocked) {
+    flush_io(new C_BlockedWrites(this));
   }
 }
 
@@ -243,6 +256,22 @@ void WriteBlockImageDispatch<I>::flush_io(Context* on_finish) {
     *m_image_ctx, IMAGE_DISPATCH_LAYER_WRITE_BLOCK, aio_comp,
     FLUSH_SOURCE_INTERNAL, {});
   req->send();
+}
+
+template <typename I>
+void WriteBlockImageDispatch<I>::handle_blocked_writes(int r) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << dendl;
+
+  Contexts write_blocker_contexts;
+  {
+    std::unique_lock locker{m_lock};
+    std::swap(write_blocker_contexts, m_write_blocker_contexts);
+  }
+
+  for (auto ctx : write_blocker_contexts) {
+    ctx->complete(0);
+  }
 }
 
 } // namespace io
