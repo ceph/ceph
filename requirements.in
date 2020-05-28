@@ -1,1 +1,1 @@
--e .[coverage,orchestra,test]
+-e .[orchestra,test]

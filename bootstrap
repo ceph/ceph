@@ -21,9 +21,9 @@ Linux)
     Ubuntu|Debian|LinuxMint)
         # Ensure setuptools is installed
         if [[ "$PYTHON" =~ "python2" ]]; then
-            deps=(qemu-utils python-dev libssl-dev python-pip python-virtualenv libev-dev libvirt-dev libmysqlclient-dev libffi-dev libyaml-dev)
+            deps=(qemu-utils python-dev libssl-dev python-pip python-virtualenv libev-dev libvirt-dev libffi-dev libyaml-dev)
         else
-            deps=(qemu-utils python3-dev libssl-dev python3-pip python3-virtualenv libev-dev libvirt-dev libmysqlclient-dev libffi-dev libyaml-dev)
+            deps=(qemu-utils python3-dev libssl-dev python3-pip python3-virtualenv libev-dev libvirt-dev libffi-dev libyaml-dev)
         fi
         for package in ${deps[@]}; do
             if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
@@ -64,7 +64,7 @@ Linux)
 	fi
 	;;
     Fedora)
-        for package in python2-pip python2-virtualenv libev-devel libvirt-devel community-mysql-devel libffi-devel; do
+        for package in python2-pip python2-virtualenv libev-devel libvirt-devel libffi-devel; do
 	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
 		missing="${missing:+$missing }$package"
 	    fi
@@ -90,9 +90,9 @@ Linux)
     "openSUSE project"|"SUSE LINUX"|"openSUSE")
 
 	if [[ "$PYTHON" =~ "python2" ]]; then
-	    deps=(python-pip python-devel python-virtualenv libev-devel libvirt-devel libmysqlclient-devel libffi-devel)
+	    deps=(python-pip python-devel python-virtualenv libev-devel libvirt-devel libffi-devel)
 	else
-	    deps=(python3-pip python3-devel python3-virtualenv libev-devel libvirt-devel libmysqlclient-devel libffi-devel)
+	    deps=(python3-pip python3-devel python3-virtualenv libev-devel libvirt-devel libffi-devel)
 	fi
 	for package in ${deps[@]}; do
             if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
@@ -118,7 +118,7 @@ Darwin)
         echo "You need Homebrew: http://brew.sh/"
         exit 1
     fi
-    for keg in python libvirt libev mysql libffi; do
+    for keg in python libvirt libev libffi; do
         if brew list $keg >/dev/null 2>&1; then
             echo "Found $keg"
         else
