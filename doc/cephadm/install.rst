@@ -369,3 +369,6 @@ RADOS pool *nfs-ganesha* and namespace *nfs-ns*,::
 
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
+Deploying custom containers
+===========================
+It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard. 
