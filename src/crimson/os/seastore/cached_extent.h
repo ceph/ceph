@@ -196,6 +196,14 @@ public:
     return version;
   }
 
+  /// Returns crc32c of buffer
+  uint32_t get_crc32c(uint32_t crc) {
+    return ceph_crc32c(
+      crc,
+      reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
+      get_length());
+  }
+
   /// Get ref to raw buffer
   bufferptr &get_bptr() { return ptr; }
   const bufferptr &get_bptr() const { return ptr; }
