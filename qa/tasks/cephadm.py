@@ -306,7 +306,8 @@ def ceph_bootstrap(ctx, config):
     ctx.cluster.run(args=[
         'sudo', 'chmod', '777', '/etc/ceph',
         ]);
-    add_mirror_to_cluster(ctx, config.get('docker_registry_mirror', 'vossi04.front.sepia.ceph.com:5000'))
+    if teuth_config['container_images']['base_registry_mirror']:
+        add_mirror_to_cluster(ctx, teuth_config['container_images']['base_registry_mirror'])
     try:
         # write seed config
         log.info('Writing seed config...')
@@ -1083,13 +1084,13 @@ def task(ctx, config):
     if not ctx.ceph[cluster_name].image:
         sha1 = config.get('sha1')
         if sha1:
-            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % sha1
+            ctx.ceph[cluster_name].image = '{}:{}'.format(teuth_config['container_images']['ci_image'], sha1)
             ref = sha1
         else:
             # hmm, fall back to branch?
             branch = config.get('branch', 'master')
             ref = branch
-            ctx.ceph[cluster_name].image = 'quay.io/ceph-ci/ceph:%s' % branch
+            ctx.ceph[cluster_name].image = '{}:{}'.format(teuth_config['container_images']['ci_image'], branch)
     log.info('Cluster image is %s' % ctx.ceph[cluster_name].image)
 
 
