@@ -224,7 +224,7 @@ class FSExport(object):
 
     def _delete_user(self, entity):
         self.mgr.check_mon_command({
-            'prefix': 'auth del',
+            'prefix': 'auth rm',
             'entity': 'client.{}'.format(entity),
             })
         log.info(f"Export user deleted is {entity}")
