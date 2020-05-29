@@ -231,7 +231,7 @@ class NFSGanesha(object):
 
     @staticmethod
     def get_version(container_id):
-        # type(str) -> Optional[str]
+        # type: (str) -> Optional[str]
         version = None
         out, err, code = call(
             [container_path, 'exec', container_id,
@@ -243,7 +243,7 @@ class NFSGanesha(object):
         return version
 
     def validate(self):
-        # type () -> None
+        # type: () -> None
         if not is_fsid(self.fsid):
             raise Error('not an fsid: %s' % self.fsid)
         if not self.daemon_id:
@@ -380,7 +380,7 @@ class CephIscsi(object):
 
     @staticmethod
     def get_version(container_id):
-        # type(str) -> Optional[str]
+        # type: (str) -> Optional[str]
         version = None
         out, err, code = call(
             [container_path, 'exec', container_id,
@@ -390,7 +390,7 @@ class CephIscsi(object):
         return version
 
     def validate(self):
-        # type () -> None
+        # type: () -> None
         if not is_fsid(self.fsid):
             raise Error('not an fsid: %s' % self.fsid)
         if not self.daemon_id:
@@ -445,6 +445,7 @@ class CephIscsi(object):
 
     @staticmethod
     def configfs_mount_umount(data_dir, mount=True):
+        # type: (str, bool) -> List[str]
         mount_path = os.path.join(data_dir, 'configfs')
         if mount:
             cmd = "if ! grep -qs {0} /proc/mounts; then " \
@@ -457,6 +458,7 @@ class CephIscsi(object):
 ##################################
 
 def get_supported_daemons():
+    # type: () -> List[str]
     supported_daemons = list(Ceph.daemons)
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
@@ -467,7 +469,7 @@ def get_supported_daemons():
 ##################################
 
 def attempt_bind(s, address, port):
-    # type (str) -> None
+    # type: (socket.socket, str, int) -> None
     try:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((address, port))
@@ -482,7 +484,7 @@ def attempt_bind(s, address, port):
         s.close()
 
 def port_in_use(port_num):
-    # type (int) -> bool
+    # type: (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
     logger.info('Verifying port %d ...' % port_num)
     try:
@@ -497,6 +499,7 @@ def port_in_use(port_num):
         return False
 
 def check_ip_port(ip, port):
+    # type: (str, int) -> None
     if not args.skip_ping_check:
         logger.info('Verifying IP %s port %d ...' % (ip, port))
         if ip.startswith('[') or '::' in ip:
@@ -934,6 +937,7 @@ def pathify(p):
     return os.path.abspath(p)
 
 def get_file_timestamp(fn):
+    # type: (str) -> Optional[str]
     try:
         mt = os.path.getmtime(fn)
         return datetime.datetime.fromtimestamp(
@@ -943,6 +947,7 @@ def get_file_timestamp(fn):
         return None
 
 def try_convert_datetime(s):
+    # type: (str) -> Optional[str]
     # This is super irritating because
     #  1) podman and docker use different formats
     #  2) python's strptime can't parse either one
@@ -1171,6 +1176,7 @@ def get_last_local_ceph_image():
     return None
 
 def write_tmp(s, uid, gid):
+    # type: (str, int, int) -> Any
     tmp_f = tempfile.NamedTemporaryFile(mode='w',
                                         prefix='ceph-tmp')
     os.fchown(tmp_f.fileno(), uid, gid)
@@ -3788,6 +3794,7 @@ class CustomValidation(argparse.Action):
 ##################################
 
 def get_distro():
+    # type: () -> Tuple[Optional[str], Optional[str], Optional[str]]
     distro = None
     distro_version = None
     distro_codename = None
