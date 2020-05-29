@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
+import * as moment from 'moment';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { AuthService } from '../../../shared/api/auth.service';
@@ -53,12 +54,8 @@ export class UserFormComponent extends CdForm implements OnInit {
   passwordStrengthLevelClass: string;
   passwordValuation: string;
   icons = Icons;
-  minDate: Date;
-  bsConfig = {
-    dateInputFormat: 'YYYY-MM-DD',
-    containerClass: 'theme-default'
-  };
   pwdExpirationSettings: CdPwdExpirationSettings;
+  pwdExpirationFormat = 'YYYY-MM-DD';
 
   constructor(
     private authService: AuthService,
@@ -110,7 +107,7 @@ export class UserFormComponent extends CdForm implements OnInit {
           ]
         ],
         confirmpassword: [''],
-        pwdExpirationDate: [''],
+        pwdExpirationDate: [undefined],
         email: ['', [CdValidators.email]],
         roles: [[]],
         enabled: [true, [Validators.required]],
@@ -129,7 +126,6 @@ export class UserFormComponent extends CdForm implements OnInit {
     } else {
       this.action = this.actionLabels.CREATE;
     }
-    this.minDate = new Date();
 
     const observables = [this.roleService.list(), this.settingsService.getStandardSettings()];
     observableForkJoin(observables).subscribe(
@@ -145,11 +141,9 @@ export class UserFormComponent extends CdForm implements OnInit {
         } else {
           if (this.pwdExpirationSettings.pwdExpirationSpan > 0) {
             const pwdExpirationDateField = this.userForm.get('pwdExpirationDate');
-            const expirationDate = new Date();
-            expirationDate.setDate(
-              this.minDate.getDate() + this.pwdExpirationSettings.pwdExpirationSpan
-            );
-            pwdExpirationDateField.setValue(expirationDate);
+            const expirationDate = moment();
+            expirationDate.add(this.pwdExpirationSettings.pwdExpirationSpan, 'day');
+            pwdExpirationDateField.setValue(expirationDate.format(this.pwdExpirationFormat));
             pwdExpirationDateField.setValidators([Validators.required]);
           }
 
@@ -182,7 +176,12 @@ export class UserFormComponent extends CdForm implements OnInit {
     );
     const expirationDate = response['pwdExpirationDate'];
     if (expirationDate) {
-      this.userForm.get('pwdExpirationDate').setValue(new Date(expirationDate * 1000));
+      const mom = moment(expirationDate * 1000);
+      console.log(this.pwdExpirationFormat, mom.format(this.pwdExpirationFormat));
+
+      this.userForm
+        .get('pwdExpirationDate')
+        .setValue(moment(expirationDate * 1000).format(this.pwdExpirationFormat));
     }
   }
 
@@ -193,13 +192,14 @@ export class UserFormComponent extends CdForm implements OnInit {
     );
     const expirationDate = this.userForm.get('pwdExpirationDate').value;
     if (expirationDate) {
+      const mom = moment(expirationDate, this.pwdExpirationFormat);
       if (
         this.mode !== this.userFormMode.editing ||
-        this.response.pwdExpirationDate !== Number(expirationDate) / 1000
+        this.response.pwdExpirationDate !== mom.unix()
       ) {
-        expirationDate.setHours(23, 59, 59);
+        mom.set({ hour: 23, minute: 59, second: 59 });
       }
-      userFormModel['pwdExpirationDate'] = Number(expirationDate) / 1000;
+      userFormModel['pwdExpirationDate'] = mom.unix();
     }
     return userFormModel;
   }
