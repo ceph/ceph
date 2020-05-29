@@ -1,5 +1,3 @@
-// Temprary fix until ngx-bootstrap merges: https://github.com/valor-software/ngx-bootstrap/pull/4509
-::ng-deep .bs-datepicker-head bs-datepicker-navigation-view {
-  display: flex;
-  justify-content: space-between;
+.invalid-feedback {
+  display: block;
 }

@@ -2,9 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
-import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { TimepickerModule } from 'ngx-bootstrap/timepicker';
+import { NgbDatepickerModule, NgbNavModule, NgbTimepickerModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
@@ -19,9 +17,9 @@ describe('LogsComponent', () => {
       HttpClientTestingModule,
       NgbNavModule,
       SharedModule,
-      BsDatepickerModule.forRoot(),
-      TimepickerModule.forRoot(),
-      FormsModule
+      FormsModule,
+      NgbDatepickerModule,
+      NgbTimepickerModule
     ],
     declarations: [LogsComponent]
   });
@@ -46,9 +44,9 @@ describe('LogsComponent', () => {
       expect(filters.eTime).toBe(1439);
     });
     it('change date', () => {
-      component.selectedDate = new Date(2019, 0, 1);
-      component.startTime = new Date(2019, 1, 1, 1, 10);
-      component.endTime = new Date(2019, 1, 1, 12, 10);
+      component.selectedDate = { year: 2019, month: 1, day: 1 };
+      component.startTime = { hour: 1, minute: 10 };
+      component.endTime = { hour: 12, minute: 10 };
       const filters = component.abstractfilters();
       expect(filters.yearMonthDay).toBe('2019-01-01');
       expect(filters.sTime).toBe(70);
@@ -90,8 +88,8 @@ describe('LogsComponent', () => {
       component.selectedDate = null;
       component.priority = 'All';
       component.search = '';
-      component.startTime.setHours(0, 0);
-      component.endTime.setHours(23, 59);
+      component.startTime = { hour: 0, minute: 0 };
+      component.endTime = { hour: 23, minute: 59 };
     };
     beforeEach(() => {
       component.contentData = contentData;
@@ -112,7 +110,7 @@ describe('LogsComponent', () => {
 
     it('filter by date', () => {
       resetFilter();
-      component.selectedDate = new Date(2019, 0, 21);
+      component.selectedDate = { year: 2019, month: 1, day: 21 };
       component.filterLogs();
       expect(component.clog.length).toBe(1);
       expect(component.clog[0].name).toBe('date');
@@ -128,8 +126,8 @@ describe('LogsComponent', () => {
 
     it('filter by time range', () => {
       resetFilter();
-      component.startTime.setHours(1, 0);
-      component.endTime.setHours(2, 0);
+      component.startTime = { hour: 1, minute: 0 };
+      component.endTime = { hour: 2, minute: 0 };
       component.filterLogs();
       expect(component.clog.length).toBe(1);
       expect(component.clog[0].name).toBe('time');
