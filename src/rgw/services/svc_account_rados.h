@@ -55,6 +55,31 @@ public:
 			 std::map<std::string, bufferlist> * const pattrs,
 			 optional_yield y) override;
 
+  int read_account_info(RGWSI_MetaBackend::Context *ctx,
+  			const std::string& account_id,
+  			RGWAccountInfo *info,
+  			RGWObjVersionTracker * const objv_tracker,
+  			rgw_cache_entry_info * const cache_info,
+  			std::map<std::string, bufferlist> * const pattrs,
+  			optional_yield y) override
+  { return -ERR_NOT_IMPLEMENTED; }
+
+  int remove_account_info(RGWSI_MetaBackend::Context *ctx,
+  			  const RGWAccountInfo& info,
+  			  RGWObjVersionTracker *objv_tracker,
+  			  optional_yield y) override
+  { return -ERR_NOT_IMPLEMENTED; }
+
+  int add_user(RGWSI_MetaBackend::Context *ctx,
+  	       const std::string& account_id,
+  	       const rgw_user& rgw_user) override
+  { return -ERR_NOT_IMPLEMENTED; }
+
+  int remove_user(RGWSI_MetaBackend::Context *ctx,
+  		  const std::string& account_id,
+  		  const rgw_user& rgw_user) override
+  { return -ERR_NOT_IMPLEMENTED; }
+
 private:
   RGWSI_MetaBackend_Handler *be_handler;
 };
