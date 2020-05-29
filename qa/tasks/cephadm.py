@@ -12,6 +12,8 @@ import json
 import re
 import uuid
 
+import six
+import toml
 from ceph_manager import CephManager
 from tarfile import ReadError
 from teuthology import misc as teuthology
@@ -302,6 +304,7 @@ def ceph_bootstrap(ctx, config):
     ctx.cluster.run(args=[
         'sudo', 'chmod', '777', '/etc/ceph',
         ]);
+    add_mirror_to_cluster(ctx, config.get('docker_registry_mirror', 'vossi04.front.sepia.ceph.com:5000'))
     try:
         # write seed config
         log.info('Writing seed config...')
@@ -1110,3 +1113,56 @@ def task(ctx, config):
 
         finally:
             log.info('Teardown begin')
+
+
+def registries_add_mirror_to_docker_io(conf, mirror):
+    config = toml.loads(conf)
+    is_v1 = 'registries' in config
+    if is_v1:
+        search = config.get('registries', {}).get('search', {}).get('registries', [])
+        insecure = config.get('registries', {}).get('search', {}).get('insecure', [])
+        # v2: MutableMapping[str, Any] = { needs Python 3
+        v2 = {
+            'unqualified-search-registries': search,
+            'registry': [
+                {
+                    'prefix': reg,
+                    'location': reg,
+                    'insecure': reg in insecure,
+                    'blocked': False,
+                } for reg in search
+            ]
+        }
+    else:
+        v2 = config  # type: ignore
+    dockers = [r for r in v2['registry'] if r['prefix'] == 'docker.io']
+    if dockers:
+        docker = dockers[0]
+        docker['mirror'] = [{
+            "location": mirror,
+            "insecure": True,
+        }]
+    return v2
+
+
+def add_mirror_to_cluster(ctx, mirror):
+    log.info('Adding local image mirror %s' % mirror)
+    
+    registries_conf = '/etc/containers/registries.conf'
+    
+    for remote in ctx.cluster.remotes.keys():
+        try:
+            config = teuthology.get_file(
+                remote=remote,
+                path=registries_conf
+            )
+            new_config = toml.dumps(registries_add_mirror_to_docker_io(config.decode('utf-8'), mirror))
+
+            teuthology.sudo_write_file(
+                remote=remote,
+                path=registries_conf,
+                data=six.ensure_str(new_config),
+            )
+        except FileNotFoundError as e:
+            # Docker doesn't ship a registries.conf
+            log.info('Failed to add mirror: %s' % str(e))
