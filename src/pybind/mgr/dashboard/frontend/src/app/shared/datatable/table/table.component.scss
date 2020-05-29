@@ -28,25 +28,6 @@
     }
   }
 
-  .dropdown-menu {
-    white-space: nowrap;
-    & li {
-      cursor: default;
-      & label {
-        width: 100%;
-        margin-bottom: 0;
-        padding-left: 0;
-        padding-right: 0;
-        cursor: pointer;
-        &:hover {
-          background-color: $color-table-dropdown-bg;
-        }
-        & input {
-          cursor: pointer;
-        }
-      }
-    }
-  }
   .dataTables_length > input {
     line-height: 25px;
     text-align: right;

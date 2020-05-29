@@ -3,9 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
@@ -42,7 +42,7 @@ describe('TableComponent', () => {
       FormsModule,
       ComponentsModule,
       RouterTestingModule,
-      BsDropdownModule.forRoot(),
+      NgbDropdownModule,
       PipesModule
     ]
   });
@@ -436,10 +436,8 @@ describe('TableComponent', () => {
   describe('after ngInit', () => {
     const toggleColumn = (prop: string, checked: boolean) => {
       component.toggleColumn({
-        target: {
-          name: prop,
-          checked: checked
-        }
+        prop: prop,
+        isHidden: checked
       });
     };
 

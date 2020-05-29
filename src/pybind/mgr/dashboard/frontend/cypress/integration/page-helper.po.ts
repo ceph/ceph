@@ -214,10 +214,10 @@ export abstract class PageHelper {
   filterTable(name: string, option: string) {
     this.waitDataTableToLoad();
 
-    cy.get('.tc_filter_name > a').click();
+    cy.get('.tc_filter_name > button').click();
     cy.contains(`.tc_filter_name .dropdown-item`, name).click();
 
-    cy.get('.tc_filter_option > a').click();
+    cy.get('.tc_filter_option > button').click();
     cy.contains(`.tc_filter_option .dropdown-item`, option).click();
   }
 
@@ -245,11 +245,11 @@ export abstract class PageHelper {
 
     // Clicks on table Delete button
     cy.get('.table-actions button.dropdown-toggle').first().click(); // open submenu
-    cy.get('li.delete a').click(); // click on "delete" menu item
+    cy.get('button.delete').click(); // click on "delete" menu item
 
     // Confirms deletion
-    cy.get('.custom-control-label').click();
-    cy.contains('button', 'Delete').click();
+    cy.get('cd-modal .custom-control-label').click();
+    cy.contains('cd-modal button', 'Delete').click();
 
     // Wait for modal to close
     cy.get('cd-modal').should('not.exist');

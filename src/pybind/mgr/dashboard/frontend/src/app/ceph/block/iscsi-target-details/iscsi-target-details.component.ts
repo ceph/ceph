@@ -280,7 +280,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       const tempData = this.metadata[node.data.cdId] || {};
 
       if (node.data.cdId === 'root') {
-        this.detailTable?.toggleColumn({ target: { name: 'default', checked: true } });
+        this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
         this.data = _.map(this.settings.target_default_controls, (value, key) => {
           value = this.format(value);
           return {
@@ -300,7 +300,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
           });
         }
       } else if (node.data.cdId.toString().startsWith('disk_')) {
-        this.detailTable?.toggleColumn({ target: { name: 'default', checked: true } });
+        this.detailTable?.toggleColumn({ prop: 'default', isHidden: true });
         this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
           value = this.format(value);
           return {
@@ -326,7 +326,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
           }
         });
       } else {
-        this.detailTable?.toggleColumn({ target: { name: 'default', checked: false } });
+        this.detailTable?.toggleColumn({ prop: 'default', isHidden: false });
         this.data = _.map(tempData, (value, key) => {
           return {
             displayName: key,

@@ -55,7 +55,7 @@
     }
   }
 
-  .navbar-nav > li > .cd-navbar > [dropdown] > a,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a,
   .navbar-nav > li > .cd-navbar > a,
   .navbar-nav > li > a {
     color: $color-nav-links;
@@ -71,16 +71,16 @@
     color: $color-nav-links;
   }
 
-  .navbar-nav > li > .cd-navbar > [dropdown] > a:hover,
-  .navbar-nav > li > .cd-navbar > [dropdown].open > a,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a:hover,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown].open > a,
   .navbar-nav > li > .cd-navbar > a:hover,
   .navbar-nav > li > a:hover,
   .navbar-nav > li:hover {
     background-color: $color-nav-links-hover;
   }
 
-  .navbar-nav > .open > .cd-navbar > [dropdown] > a,
-  .navbar-nav > .open > .cd-navbar > [dropdown] > a:hover,
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a:hover,
   .navbar-nav > .open > .cd-navbar > a,
   .navbar-nav > .open > .cd-navbar > a:focus,
   .navbar-nav > .open > .cd-navbar > a:hover,

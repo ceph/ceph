@@ -25,46 +25,40 @@
     <!-- column filters -->
     <div *ngIf="columnFilters.length !== 0"
          class="btn-group widget-toolbar">
-      <div dropdown
-           class="btn-group tc_filter_name">
-        <a dropdownToggle
-           class="btn btn-light dropdown-toggle"
-           data-toggle="dropdown">
+      <div ngbDropdown
+           placement="bottom-right"
+           class="tc_filter_name">
+        <button ngbDropdownToggle
+                class="btn btn-light">
           <i [ngClass]="[icons.large, icons.filter]"></i>
           {{ selectedFilter.column.name }}
-        </a>
-        <ul *dropdownMenu
-            class="dropdown-menu px-1"
-            role="menu">
-          <li *ngFor="let filter of columnFilters"
-              role="menuitem">
-            <a href=""
-               class="dropdown-item"
-               (click)="onSelectFilter(filter); false">{{ filter.column.name }}</a>
-          </li>
-        </ul>
+        </button>
+        <div ngbDropdownMenu>
+          <ng-container *ngFor="let filter of columnFilters">
+            <button ngbDropdownItem
+                    (click)="onSelectFilter(filter); false">{{ filter.column.name }}</button>
+          </ng-container>
+        </div>
       </div>
-      <div dropdown
-           class="btn-group tc_filter_option">
-        <a dropdownToggle
-           class="btn btn-light dropdown-toggle"
-           [class.disabled]="selectedFilter.options.length === 0"
-           data-toggle="dropdown">
-           {{ selectedFilter.value ? selectedFilter.value.formatted: 'Any' }}
-        </a>
-        <ul *dropdownMenu
-            class="dropdown-menu px-1"
-            role="menu">
-          <li *ngFor="let option of selectedFilter.options"
-              role="menuitem">
-            <a href=""
-               class="dropdown-item"
-               (click)="onChangeFilter(selectedFilter, option); false">{{ option.formatted }}
+
+      <div ngbDropdown
+           placement="bottom-right"
+           class="tc_filter_option">
+        <button ngbDropdownToggle
+                class="btn btn-light"
+                [class.disabled]="selectedFilter.options.length === 0">
+          {{ selectedFilter.value ? selectedFilter.value.formatted: 'Any' }}
+        </button>
+        <div ngbDropdownMenu>
+          <ng-container *ngFor="let option of selectedFilter.options">
+            <button ngbDropdownItem
+                    (click)="onChangeFilter(selectedFilter, option); false">
+              {{ option.formatted }}
               <i *ngIf="selectedFilter.value !== undefined && (selectedFilter.value.raw === option.raw)"
                  [ngClass]="[icons.check]"></i>
-            </a>
-          </li>
-        </ul>
+            </button>
+          </ng-container>
+        </div>
       </div>
     </div>
     <!-- end column filters -->
@@ -74,7 +68,7 @@
          *ngIf="searchField">
       <span class="input-group-prepend">
         <span class="input-group-text">
-        <i [ngClass]="[icons.search]"></i>
+          <i [ngClass]="[icons.search]"></i>
         </span>
       </span>
       <input class="form-control"
@@ -106,31 +100,30 @@
 
     <!-- show hide columns -->
     <div class="widget-toolbar">
-      <div dropdown
-           [autoClose]="false"
-           class="dropdown tc_menuitem tc_menuitem_cluster">
-        <a dropdownToggle
-           class="btn btn-light dropdown-toggle tc_columnBtn"
-           data-toggle="dropdown">
+      <div ngbDropdown
+           autoClose="outside"
+           class="tc_menuitem">
+        <button ngbDropdownToggle
+                class="btn btn-light tc_columnBtn">
           <i [ngClass]="[icons.large, icons.table]"></i>
-        </a>
-        <ul *dropdownMenu
-            class="dropdown-menu px-3">
+        </button>
+        <div ngbDropdownMenu>
           <ng-container *ngFor="let column of columns">
-            <li *ngIf="column.name !== ''" >
-              <div class="custom-control custom-checkbox">
+            <button ngbDropdownItem
+                    *ngIf="column.name !== ''"
+                    (click)="toggleColumn(column); false;">
+              <div class="custom-control custom-checkbox py-0">
                 <input class="custom-control-input"
                        type="checkbox"
-                       (change)="toggleColumn($event)"
                        [name]="column.prop"
                        [id]="column.prop"
                        [checked]="!column.isHidden">
                 <label class="custom-control-label"
                        [for]="column.prop">{{ column.name }}</label>
               </div>
-            </li>
+            </button>
           </ng-container>
-        </ul>
+        </div>
       </div>
     </div>
     <!-- end show hide columns -->
