@@ -105,6 +105,8 @@ public:
   RGWAccountCtl(RGWSI_Zone *zone_svc,
 		RGWSI_Account *account_svc);
 
+  ~RGWAccountCtl() = default;
+
   int add_user(const std::string& account_id,
 	       const rgw_user& user);
   int add_role(const RGWRole& role);
