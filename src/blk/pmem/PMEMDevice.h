@@ -14,14 +14,14 @@
  *
  */
 
-#ifndef CEPH_OS_BLUESTORE_PMEMDEVICE_H
-#define CEPH_OS_BLUESTORE_PMEMDEVICE_H
+#ifndef CEPH_BLK_PMEMDEVICE_H
+#define CEPH_BLK_PMEMDEVICE_H
 
 #include <atomic>
 
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
-#include "ceph_aio.h"
+#include "aio/aio.h"
 #include "BlockDevice.h"
 
 class PMEMDevice : public BlockDevice {

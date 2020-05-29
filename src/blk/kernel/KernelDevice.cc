@@ -33,7 +33,7 @@
 #include "common/numa.h"
 
 #include "global/global_context.h"
-#include "ceph_io_uring.h"
+#include "io_uring.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
