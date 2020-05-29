@@ -58,6 +58,8 @@ Ceph clusters using Ansible.
 
 Ceph can also be :ref:`installed manually <install-manual>`.
 
+See also the guide for configuring ceph with :ref:`loadbalancer appliances <lb_ceph_obj_gate>`.
+
 
 .. toctree::
    :hidden:
