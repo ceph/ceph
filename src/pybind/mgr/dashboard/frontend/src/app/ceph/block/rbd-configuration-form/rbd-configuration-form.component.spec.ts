@@ -5,7 +5,6 @@ import { By } from '@angular/platform-browser';
 
 import { ComponentLoaderFactory } from 'ngx-bootstrap/component-loader';
 import { PositioningService } from 'ngx-bootstrap/positioning';
-import { TooltipConfig, TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { DirectivesModule } from '../../../shared/directives/directives.module';
@@ -24,12 +23,11 @@ describe('RbdConfigurationFormComponent', () => {
   let fh: FormHelper;
 
   configureTestBed({
-    imports: [ReactiveFormsModule, TooltipModule, DirectivesModule, SharedModule],
+    imports: [ReactiveFormsModule, DirectivesModule, SharedModule],
     declarations: [RbdConfigurationFormComponent],
     providers: [
       ComponentLoaderFactory,
       PositioningService,
-      TooltipConfig,
       RbdConfigurationService,
       FormatterService,
       DimlessBinaryPerSecondPipe,

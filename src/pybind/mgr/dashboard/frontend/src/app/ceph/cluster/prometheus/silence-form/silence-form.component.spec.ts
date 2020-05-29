@@ -5,10 +5,10 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { BsDatepickerDirective, BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
@@ -62,7 +62,7 @@ describe('SilenceFormComponent', () => {
       BsDatepickerModule.forRoot(),
       SharedModule,
       ToastrModule.forRoot(),
-      TooltipModule.forRoot(),
+      NgbTooltipModule,
       ReactiveFormsModule
     ],
     providers: [

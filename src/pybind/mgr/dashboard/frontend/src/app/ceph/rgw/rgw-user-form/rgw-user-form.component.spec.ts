@@ -4,8 +4,8 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
@@ -33,7 +33,7 @@ describe('RgwUserFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      TooltipModule.forRoot()
+      NgbTooltipModule
     ],
     providers: [BsModalService, i18nProviders]
   });

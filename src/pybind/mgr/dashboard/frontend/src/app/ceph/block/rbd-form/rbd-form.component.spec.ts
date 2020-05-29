@@ -3,7 +3,6 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ToastrModule } from 'ngx-toastr';
 
@@ -35,8 +34,7 @@ describe('RbdFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       ToastrModule.forRoot(),
-      SharedModule,
-      TooltipModule
+      SharedModule
     ],
     declarations: [RbdFormComponent, RbdConfigurationFormComponent],
     providers: [
