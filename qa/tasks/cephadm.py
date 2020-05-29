@@ -12,6 +12,7 @@ import uuid
 
 from io import BytesIO
 import toml
+import six
 from six import StringIO
 from tarfile import ReadError
 from tasks.ceph_manager import CephManager
@@ -1183,7 +1184,7 @@ def add_mirror_to_cluster(ctx, mirror):
             teuthology.sudo_write_file(
                 remote=remote,
                 path=registries_conf,
-                data=new_config,
+                data=six.ensure_str(new_config),
             )
         except FileNotFoundError as e:
             # Docker doesn't ship a registries.conf
