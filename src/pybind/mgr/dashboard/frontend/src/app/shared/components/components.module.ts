@@ -3,14 +3,13 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbAlertModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbAlertModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ClickOutsideModule } from 'ng-click-outside';
 import { ChartsModule } from 'ng2-charts';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { DirectivesModule } from '../directives/directives.module';
@@ -46,7 +45,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     NgbAlertModule,
     NgbPopoverModule,
     ProgressbarModule.forRoot(),
-    TooltipModule.forRoot(),
+    NgbTooltipModule,
     ChartsModule,
     ReactiveFormsModule,
     PipesModule,

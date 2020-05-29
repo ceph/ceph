@@ -8,7 +8,6 @@ import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../../shared/shared.module';
 
@@ -42,7 +41,6 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     ProgressbarModule.forRoot(),
     BsDropdownModule.forRoot(),
     ModalModule.forRoot(),
-    TooltipModule.forRoot(),
     NgBootstrapFormValidationModule
   ],
   declarations: [

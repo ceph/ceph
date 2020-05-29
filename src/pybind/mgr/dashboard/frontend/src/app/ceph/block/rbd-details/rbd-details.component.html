@@ -62,7 +62,7 @@
               <td>
                 <span *ngIf="selection.features_name?.indexOf('fast-diff') === -1">
                   <span class="form-text text-muted"
-                        [tooltip]="usageNotAvailableTooltipTpl"
+                        [ngbTooltip]="usageNotAvailableTooltipTpl"
                         placement="right"
                         i18n>N/A</span>
                 </span>
@@ -77,7 +77,7 @@
               <td>
                 <span *ngIf="selection.features_name?.indexOf('fast-diff') === -1">
                   <span class="form-text text-muted"
-                        [tooltip]="usageNotAvailableTooltipTpl"
+                        [ngbTooltip]="usageNotAvailableTooltipTpl"
                         placement="right"
                         i18n>N/A</span>
                 </span>
@@ -152,12 +152,12 @@
              let-value="value">
   <ng-container *ngIf="+value; else global">
     <strong i18n
-            i18n-tooltip
-            tooltip="This setting overrides the global value">Image</strong>
+            i18n-ngbTooltip
+            ngbTooltip="This setting overrides the global value">Image</strong>
   </ng-container>
   <ng-template #global>
     <span i18n
-          i18n-tooltip
-          tooltip="This is the global value. No value for this option has been set for this image.">Global</span>
+          i18n-ngbTooltip
+          ngbTooltip="This is the global value. No value for this option has been set for this image.">Global</span>
   </ng-template>
 </ng-template>
