@@ -21,6 +21,7 @@
 #include "svc_meta_be.h"
 
 class RGWAccountInfo;
+class RGWSI_MetaBackend_Handler;
 
 class RGWSI_Account : public RGWServiceInstance
 {
@@ -29,6 +30,8 @@ public:
   virtual ~RGWSI_Account();
 
   static std::string get_meta_key(const RGWAccountInfo& info);
+
+  virtual RGWSI_MetaBackend_Handler *get_be_handler() = 0;
 
   virtual int read_account_info(RGWSI_MetaBackend::Context *ctx,
 				const std::string& account_id,

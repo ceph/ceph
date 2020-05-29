@@ -24,16 +24,27 @@ class RGWSI_Meta;
 class RGWSI_SyncModules;
 class RGWSI_MetaBackend_Handler;
 
-class RGWSI_Account_Rados : public RGWSI_Account
+class RGWSI_Account_RADOS : public RGWSI_Account
 {
 public:
   struct Svc {
     RGWSI_Zone *zone {nullptr};
+    RGWSI_Meta *meta {nullptr};
     RGWSI_MetaBackend *meta_be {nullptr};
   } svc;
 
-  RGWSI_Account_Rados(CephContext *cct);
-  ~RGWSI_Account_Rados() = default;
+  RGWSI_Account_RADOS(CephContext *cct);
+  ~RGWSI_Account_RADOS() = default;
+
+  RGWSI_MetaBackend_Handler *get_be_handler() override {
+    return be_handler;
+  }
+
+  int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
+
+  void init(RGWSI_Zone *_zone_svc,
+	    RGWSI_Meta *_meta_svc,
+	    RGWSI_MetaBackend *_meta_be_svc);
 
   int store_account_info(const DoutPrefixProvider *dpp,
 			 RGWSI_MetaBackend::Context *ctx,

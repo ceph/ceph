@@ -1,17 +1,33 @@
 #include "svc_account_rados.h"
 #include "svc_sys_obj.h"
 #include "svc_meta_be_sobj.h"
+#include "svc_meta.h"
 #include "rgw/rgw_account.h"
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_zone.h"
 #include "svc_zone.h"
 
 
-RGWSI_Account_Rados::RGWSI_Account_Rados(CephContext *cct) :
+RGWSI_Account_RADOS::RGWSI_Account_RADOS(CephContext *cct) :
   RGWSI_Account(cct) {
 }
 
-int RGWSI_Account_Rados::store_account_info(const DoutPrefixProvider *dpp,
+void RGWSI_Account_RADOS::init(RGWSI_Zone *_zone_svc,
+                               RGWSI_Meta *_meta_svc,
+                               RGWSI_MetaBackend *_meta_be_svc)
+{
+  svc.zone = _zone_svc;
+  svc.meta = _meta_svc;
+  svc.meta_be = _meta_be_svc;
+}
+
+int RGWSI_Account_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
+{
+  return svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ,
+                                     &be_handler);
+}
+
+int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
                                             RGWSI_MetaBackend::Context *_ctx,
                                             const RGWAccountInfo& info,
                                             RGWObjVersionTracker *objv_tracker,
