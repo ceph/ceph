@@ -1,8 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
@@ -21,6 +21,7 @@ import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permissions } from '../../../shared/models/permissions';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
@@ -51,7 +52,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   pools: Pool[];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
   tableActions: CdTableAction[];
@@ -64,7 +65,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
     private taskListService: TaskListService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private i18n: I18n,
     private pgCategoryService: PgCategoryService,
     private dimlessPipe: DimlessPipe,
@@ -221,15 +222,13 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   deletePoolModal() {
     const name = this.selection.first().pool_name;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'Pool',
-        itemNames: [name],
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
-            call: this.poolService.delete(name)
-          })
-      }
+      itemDescription: 'Pool',
+      itemNames: [name],
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
+          call: this.poolService.delete(name)
+        })
     });
   }
 

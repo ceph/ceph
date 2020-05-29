@@ -1,7 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
 
 import { CdFormGroup } from '../../forms/cd-form-group';
@@ -27,7 +27,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   childFormGroup: CdFormGroup;
   childFormGroupTemplate: TemplateRef<any>;
 
-  constructor(public modalRef: BsModalRef) {}
+  constructor(public activeModal: NgbActiveModal) {}
 
   ngOnInit() {
     const controls = {
@@ -54,7 +54,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   }
 
   hideModal() {
-    this.modalRef.hide();
+    this.activeModal.close();
   }
 
   stopLoadingSpinner() {

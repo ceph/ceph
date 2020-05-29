@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -28,7 +28,7 @@ describe('EditSiteNameModalComponent', () => {
       SharedModule,
       ToastrModule.forRoot()
     ],
-    providers: [BsModalRef, BsModalService, i18nProviders]
+    providers: [NgbActiveModal, i18nProviders]
   });
 
   beforeEach(() => {
@@ -50,14 +50,14 @@ describe('EditSiteNameModalComponent', () => {
     beforeEach(() => {
       spyOn(rbdMirroringService, 'getSiteName').and.callFake(() => of({ site_name: 'site-A' }));
       spyOn(rbdMirroringService, 'refresh').and.stub();
-      spyOn(component.modalRef, 'hide').and.callThrough();
+      spyOn(component.activeModal, 'close').and.callThrough();
       fixture.detectChanges();
     });
 
     afterEach(() => {
       expect(rbdMirroringService.getSiteName).toHaveBeenCalledTimes(1);
       expect(rbdMirroringService.refresh).toHaveBeenCalledTimes(1);
-      expect(component.modalRef.hide).toHaveBeenCalledTimes(1);
+      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
     });
 
     it('should call setSiteName', () => {

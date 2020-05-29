@@ -1,8 +1,8 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Observable } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
 
@@ -34,7 +34,7 @@ export class SilenceMatcherModalComponent {
   constructor(
     private formBuilder: CdFormBuilder,
     private silenceMatcher: PrometheusSilenceMatcherService,
-    public bsModalRef: BsModalRef
+    public activeModal: NgbActiveModal
   ) {
     this.createForm();
     this.subscribeToChanges();
@@ -76,7 +76,7 @@ export class SilenceMatcherModalComponent {
 
   onSubmit() {
     this.submitAction.emit(this.form.value);
-    this.bsModalRef.hide();
+    this.activeModal.close();
   }
 
   search = (text$: Observable<string>) => {

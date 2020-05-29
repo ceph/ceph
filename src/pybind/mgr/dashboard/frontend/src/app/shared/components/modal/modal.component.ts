@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'cd-modal',
@@ -9,7 +9,7 @@ import { BsModalRef } from 'ngx-bootstrap/modal';
 })
 export class ModalComponent {
   @Input()
-  modalRef: BsModalRef;
+  modalRef: NgbActiveModal;
 
   /**
    * Should be a function that is triggered when the modal is hidden.
@@ -18,9 +18,7 @@ export class ModalComponent {
   hide = new EventEmitter();
 
   close() {
-    if (this.modalRef) {
-      this.modalRef.hide();
-    }
+    this.modalRef?.close();
     this.hide.emit();
   }
 }

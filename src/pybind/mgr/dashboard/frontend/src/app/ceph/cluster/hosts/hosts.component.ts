@@ -1,8 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { HostService } from '../../../shared/api/host.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
@@ -23,6 +23,7 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
 import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { DepCheckerService } from '../../../shared/services/dep-checker.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
@@ -48,7 +49,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   cdParams = { fromLink: '/hosts' };
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -58,7 +59,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     private router: Router,
     private depCheckerService: DepCheckerService,
@@ -199,16 +200,14 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   deleteAction() {
     const hostname = this.selection.first().hostname;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'Host',
-        itemNames: [hostname],
-        actionDescription: 'delete',
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('host/delete', { hostname: hostname }),
-            call: this.hostService.delete(hostname)
-          })
-      }
+      itemDescription: 'Host',
+      itemNames: [hostname],
+      actionDescription: 'delete',
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('host/delete', { hostname: hostname }),
+          call: this.hostService.delete(hostname)
+        })
     });
   }
 

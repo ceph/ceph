@@ -1,8 +1,8 @@
 import { Component } from '@angular/core';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Observable, Subscriber } from 'rxjs';
 
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
@@ -22,6 +22,7 @@ import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
 
@@ -39,7 +40,7 @@ export class SilenceListComponent extends ListWithDetails {
   tableActions: CdTableAction[];
   permission: Permission;
   selection = new CdTableSelection();
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   customCss = {
     'badge badge-danger': 'active',
     'badge badge-warning': 'pending',
@@ -52,7 +53,7 @@ export class SilenceListComponent extends ListWithDetails {
     private i18n: I18n,
     private cdDatePipe: CdDatePipe,
     private prometheusService: PrometheusService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private notificationService: NotificationService,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
@@ -168,33 +169,31 @@ export class SilenceListComponent extends ListWithDetails {
     const i18nSilence = this.i18n('Silence');
     const applicationName = 'Prometheus';
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: i18nSilence,
-        itemNames: [id],
-        actionDescription: this.actionLabels.EXPIRE,
-        submitActionObservable: () =>
-          new Observable((observer: Subscriber<any>) => {
-            this.prometheusService.expireSilence(id).subscribe(
-              () => {
-                this.notificationService.show(
-                  NotificationType.success,
-                  `${this.succeededLabels.EXPIRED} ${i18nSilence} ${id}`,
-                  undefined,
-                  undefined,
-                  applicationName
-                );
-              },
-              (resp) => {
-                resp['application'] = applicationName;
-                observer.error(resp);
-              },
-              () => {
-                observer.complete();
-                this.refresh();
-              }
-            );
-          })
-      }
+      itemDescription: i18nSilence,
+      itemNames: [id],
+      actionDescription: this.actionLabels.EXPIRE,
+      submitActionObservable: () =>
+        new Observable((observer: Subscriber<any>) => {
+          this.prometheusService.expireSilence(id).subscribe(
+            () => {
+              this.notificationService.show(
+                NotificationType.success,
+                `${this.succeededLabels.EXPIRED} ${i18nSilence} ${id}`,
+                undefined,
+                undefined,
+                applicationName
+              );
+            },
+            (resp) => {
+              resp['application'] = applicationName;
+              observer.error(resp);
+            },
+            () => {
+              observer.complete();
+              this.refresh();
+            }
+          );
+        })
     });
   }
 }

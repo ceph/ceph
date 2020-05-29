@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { detect } from 'detect-browser';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
@@ -28,7 +28,7 @@ export class AboutComponent implements OnInit, OnDestroy {
   copyright: string;
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private summaryService: SummaryService,
     private userService: UserService,
     private authStorageService: AuthStorageService

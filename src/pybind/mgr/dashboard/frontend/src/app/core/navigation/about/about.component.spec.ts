@@ -1,7 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { BehaviorSubject } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
@@ -30,7 +30,7 @@ describe('AboutComponent', () => {
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule],
     declarations: [AboutComponent],
-    providers: [BsModalRef, { provide: SummaryService, useClass: SummaryServiceMock }]
+    providers: [NgbActiveModal, { provide: SummaryService, useClass: SummaryServiceMock }]
   });
 
   beforeEach(() => {

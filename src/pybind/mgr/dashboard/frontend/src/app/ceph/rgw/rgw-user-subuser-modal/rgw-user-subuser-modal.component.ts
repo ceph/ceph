@@ -1,9 +1,9 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
@@ -32,7 +32,7 @@ export class RgwUserSubuserModalComponent {
 
   constructor(
     private formBuilder: CdFormBuilder,
-    public bsModalRef: BsModalRef,
+    public bsModalRef: NgbActiveModal,
     private i18n: I18n,
     private actionLabels: ActionLabelsI18n
   ) {
@@ -127,6 +127,6 @@ export class RgwUserSubuserModalComponent {
     subuser.generate_secret = values.generate_secret;
     subuser.secret_key = values.secret_key;
     this.submitAction.emit(subuser);
-    this.bsModalRef.hide();
+    this.bsModalRef.close();
   }
 }

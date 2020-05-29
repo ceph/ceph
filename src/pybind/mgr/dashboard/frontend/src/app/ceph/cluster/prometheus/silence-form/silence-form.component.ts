@@ -4,7 +4,6 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
 
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import {
@@ -24,6 +23,7 @@ import {
 import { Permission } from '../../../../shared/models/permissions';
 import { AlertmanagerAlert, PrometheusRule } from '../../../../shared/models/prometheus-alerts';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../../shared/services/modal.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '../../../../shared/services/prometheus-silence-matcher.service';
 import { TimeDiffService } from '../../../../shared/services/time-diff.service';
@@ -79,7 +79,7 @@ export class SilenceFormComponent {
     private notificationService: NotificationService,
     private route: ActivatedRoute,
     private timeDiff: TimeDiffService,
-    private bsModalService: BsModalService,
+    private modalService: ModalService,
     private silenceMatcher: PrometheusSilenceMatcherService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n
@@ -271,14 +271,14 @@ export class SilenceFormComponent {
   }
 
   showMatcherModal(index?: number) {
-    const modalRef = this.bsModalService.show(SilenceMatcherModalComponent);
-    const modal = modalRef.content as SilenceMatcherModalComponent;
-    modal.rules = this.rules;
+    const modalRef = this.modalService.show(SilenceMatcherModalComponent);
+    const modalComponent = modalRef.componentInstance as SilenceMatcherModalComponent;
+    modalComponent.rules = this.rules;
     if (_.isNumber(index)) {
-      modal.editMode = true;
-      modal.preFillControls(this.matchers[index]);
+      modalComponent.editMode = true;
+      modalComponent.preFillControls(this.matchers[index]);
     }
-    modalRef.content.submitAction.subscribe((matcher: AlertmanagerSilenceMatcher) => {
+    modalComponent.submitAction.subscribe((matcher: AlertmanagerSilenceMatcher) => {
       this.setMatcher(matcher, index);
     });
   }

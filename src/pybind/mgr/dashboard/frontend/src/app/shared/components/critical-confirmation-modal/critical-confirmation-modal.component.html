@@ -1,5 +1,5 @@
 <cd-modal #modal
-          [modalRef]="modalRef">
+          [modalRef]="activeModal">
   <ng-container class="modal-title">
     <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
   </ng-container>
@@ -47,7 +47,7 @@
                           (submitAction)="callSubmitAction()">
           <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
         </cd-submit-button>
-        <cd-back-button [back]="modalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Cancel"
                         i18n-name>
         </cd-back-button>

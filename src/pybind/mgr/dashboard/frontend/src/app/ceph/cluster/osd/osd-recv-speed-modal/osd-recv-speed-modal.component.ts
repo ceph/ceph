@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -27,7 +27,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   priorityAttrs = {};
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private authStorageService: AuthStorageService,
     private configService: ConfigurationService,
     private notificationService: NotificationService,
@@ -228,10 +228,10 @@ export class OsdRecvSpeedModalComponent implements OnInit {
             value: this.osdRecvSpeedForm.getValue('priority')
           })
         );
-        this.bsModalRef.hide();
+        this.activeModal.close();
       },
       () => {
-        this.bsModalRef.hide();
+        this.activeModal.close();
       }
     );
   }

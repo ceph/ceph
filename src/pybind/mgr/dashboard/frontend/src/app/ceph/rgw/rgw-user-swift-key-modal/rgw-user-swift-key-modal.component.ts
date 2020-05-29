@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 
@@ -17,7 +17,7 @@ export class RgwUserSwiftKeyModalComponent {
   action: string;
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
   ) {

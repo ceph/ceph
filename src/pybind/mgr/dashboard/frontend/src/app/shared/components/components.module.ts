@@ -13,7 +13,6 @@ import {
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ClickOutsideModule } from 'ng-click-outside';
 import { ChartsModule } from 'ng2-charts';
-import { ModalModule } from 'ngx-bootstrap/modal';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { DirectivesModule } from '../directives/directives.module';
@@ -54,7 +53,6 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     ChartsModule,
     ReactiveFormsModule,
     PipesModule,
-    ModalModule.forRoot(),
     DirectivesModule,
     NgbDropdownModule,
     NgBootstrapFormValidationModule,

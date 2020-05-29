@@ -9,7 +9,6 @@ import {
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
@@ -26,6 +25,7 @@ import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { ModalService } from '../../../shared/services/modal.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 
 const BASE_URL = 'rgw/bucket';
@@ -57,7 +57,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private dimlessPipe: DimlessPipe,
     private rgwBucketService: RgwBucketService,
-    private bsModalService: BsModalService,
+    private modalService: ModalService,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
@@ -182,36 +182,34 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   }
 
   deleteAction() {
-    this.bsModalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: this.selection.hasSingleSelection
-          ? this.i18n('bucket')
-          : this.i18n('buckets'),
-        itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
-        submitActionObservable: () => {
-          return new Observable((observer: Subscriber<any>) => {
-            // Delete all selected data table rows.
-            observableForkJoin(
-              this.selection.selected.map((bucket: any) => {
-                return this.rgwBucketService.delete(bucket.bid);
-              })
-            ).subscribe({
-              error: (error) => {
-                // Forward the error to the observer.
-                observer.error(error);
-                // Reload the data table content because some deletions might
-                // have been executed successfully in the meanwhile.
-                this.table.refreshBtn();
-              },
-              complete: () => {
-                // Notify the observer that we are done.
-                observer.complete();
-                // Reload the data table content.
-                this.table.refreshBtn();
-              }
-            });
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: this.selection.hasSingleSelection
+        ? this.i18n('bucket')
+        : this.i18n('buckets'),
+      itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          // Delete all selected data table rows.
+          observableForkJoin(
+            this.selection.selected.map((bucket: any) => {
+              return this.rgwBucketService.delete(bucket.bid);
+            })
+          ).subscribe({
+            error: (error) => {
+              // Forward the error to the observer.
+              observer.error(error);
+              // Reload the data table content because some deletions might
+              // have been executed successfully in the meanwhile.
+              this.table.refreshBtn();
+            },
+            complete: () => {
+              // Notify the observer that we are done.
+              observer.complete();
+              // Reload the data table content.
+              this.table.refreshBtn();
+            }
           });
-        }
+        });
       }
     });
   }

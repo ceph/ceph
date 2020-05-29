@@ -2,8 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
 
 import {
   configureTestBed,
@@ -53,13 +53,12 @@ describe('InputModalComponent', () => {
 
   configureTestBed({
     imports: [
-      ModalModule.forRoot(),
       NgBootstrapFormValidationModule.forRoot(),
       RouterTestingModule,
       ReactiveFormsModule,
       SharedModule
     ],
-    providers: [i18nProviders, BsModalRef]
+    providers: [i18nProviders, NgbActiveModal]
   });
 
   beforeEach(() => {

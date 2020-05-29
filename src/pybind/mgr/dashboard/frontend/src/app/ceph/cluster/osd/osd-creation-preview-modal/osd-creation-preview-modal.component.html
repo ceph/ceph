@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="bsModalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container class="modal-title"
                 i18n>OSD creation preview</ng-container>
 
@@ -13,7 +13,7 @@
       <div class="modal-footer">
         <cd-submit-button (submitAction)="onSubmit()"
                           [form]="formGroup">{{ action | titlecase }}</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+        <cd-back-button [back]="activeModal.close"></cd-back-button>
       </div>
     </form>
   </ng-container>

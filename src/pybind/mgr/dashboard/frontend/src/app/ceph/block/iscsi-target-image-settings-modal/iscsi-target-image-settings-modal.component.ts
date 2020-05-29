@@ -1,8 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { AbstractControl, FormControl } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -23,7 +23,7 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
 
   settingsForm: CdFormGroup;
 
-  constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
+  constructor(public activeModal: NgbActiveModal, public iscsiService: IscsiService) {}
 
   ngOnInit() {
     const fg: Record<string, FormControl> = {
@@ -77,6 +77,6 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
     this.imagesSettings[this.image][backstore] = settings;
     this.imagesSettings = { ...this.imagesSettings };
     this.control.updateValueAndValidity({ emitEvent: false });
-    this.modalRef.hide();
+    this.activeModal.close();
   }
 }
