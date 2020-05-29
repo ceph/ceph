@@ -544,6 +544,7 @@ endif()
 
 add_subdirectory(kv)
 add_subdirectory(os)
+add_subdirectory(blk)
 
 add_subdirectory(osd)
 

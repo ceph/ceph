@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "ceph_io_uring.h"
+#include "io_uring.h"
 
 #if defined(HAVE_LIBURING) && defined(__x86_64__)
 
