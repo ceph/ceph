@@ -3,9 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { ChartsModule } from 'ng2-charts';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../shared/components/components.module';
@@ -27,7 +27,7 @@ describe('RbdConfigurationListComponent', () => {
       NgxDatatableModule,
       RouterTestingModule,
       ComponentsModule,
-      BsDropdownModule.forRoot(),
+      NgbDropdownModule,
       ChartsModule,
       PipesModule
     ],

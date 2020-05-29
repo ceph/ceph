@@ -7,7 +7,6 @@ import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstra
 import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 
@@ -72,7 +71,6 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     RouterModule,
     FormsModule,
     ReactiveFormsModule,
-    BsDropdownModule.forRoot(),
     BsDatepickerModule.forRoot(),
     ModalModule.forRoot(),
     NgbTooltipModule,

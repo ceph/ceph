@@ -3,8 +3,8 @@ import { NgModule } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { ComponentsModule } from '../components/components.module';
 import { PipesModule } from '../pipes/pipes.module';
@@ -17,7 +17,7 @@ import { TableComponent } from './table/table.component';
     CommonModule,
     NgxDatatableModule,
     FormsModule,
-    BsDropdownModule.forRoot(),
+    NgbDropdownModule,
     PipesModule,
     ComponentsModule,
     RouterModule
