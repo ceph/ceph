@@ -105,14 +105,16 @@ class TestNFS(MgrTestCase):
         self._check_export_obj_deleted()
         self._test_delete_cluster()
 
-    def _test_create_multiple_exports(self):
+    def test_create_multiple_exports(self):
         #Export-1 with default values
         self._create_default_export()
         #Export-2 with r only
-        self._create_export(export_id='2', extra_cmd=[self.pseudo_path, '--readonly'])
+        self._create_export(export_id='2', extra_cmd=[self.pseudo_path+'1', '--readonly'])
         #Export-3 for subvolume with r only
         self._cmd('fs', 'subvolume', 'create', self.fs_name, 'sub_vol')
         fs_path = self._cmd('fs', 'subvolume', 'getpath', self.fs_name, 'sub_vol')
-        self._create_export(export_id='3', extra_cmd=[self.pseudo_path, '--readonly', fs_path.strip()])
+        self._create_export(export_id='3', extra_cmd=[self.pseudo_path+'2', '--readonly', fs_path.strip()])
+        #Export-4 for subvolume
+        self._create_export(export_id='4', extra_cmd=[self.pseudo_path+'3', fs_path.strip()])
         self._test_delete_cluster()
         self._check_export_obj_deleted(conf_obj=True)
