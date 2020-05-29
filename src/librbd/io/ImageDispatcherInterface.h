@@ -19,7 +19,7 @@ struct ImageDispatcherInterface
 public:
   virtual void apply_qos_schedule_tick_min(uint64_t tick) = 0;
   virtual void apply_qos_limit(uint64_t flag, uint64_t limit,
-                               uint64_t burst) = 0;
+                               uint64_t burst, uint64_t burst_seconds) = 0;
 
   virtual bool writes_blocked() const = 0;
   virtual int block_writes() = 0;
