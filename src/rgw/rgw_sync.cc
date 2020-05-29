@@ -396,10 +396,7 @@ class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
   RGWMetadataLog *mdlog;
   int shard_id;
-  string *marker;
   int max_entries;
-  list<cls_log_entry> *entries;
-  bool *truncated;
 
 protected:
   int _send_request() override {
@@ -408,22 +405,24 @@ protected:
 
     void *handle;
 
-    mdlog->init_list_entries(shard_id, from_time, end_time, *marker, &handle);
+    mdlog->init_list_entries(shard_id, from_time, end_time, marker, &handle);
 
-    int ret = mdlog->list_entries(handle, max_entries, *entries, marker, truncated);
+    int ret = mdlog->list_entries(handle, max_entries, entries, &marker, &truncated);
 
     mdlog->complete_list_entries(handle);
 
     return ret;
   }
 public:
+  string marker;
+  list<cls_log_entry> entries;
+  bool truncated;
+
   RGWAsyncReadMDLogEntries(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                            RGWMetadataLog* mdlog, int _shard_id,
-                           string* _marker, int _max_entries,
-                           list<cls_log_entry> *_entries, bool *_truncated)
+                           std::string _marker, int _max_entries)
     : RGWAsyncRadosRequest(caller, cn), store(_store), mdlog(mdlog),
-      shard_id(_shard_id), marker(_marker), max_entries(_max_entries),
-      entries(_entries), truncated(_truncated) {}
+      shard_id(_shard_id), max_entries(_max_entries), marker(std::move(_marker)) {}
 };
 
 class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
@@ -455,17 +454,16 @@ public:
   int send_request() override {
     marker = *pmarker;
     req = new RGWAsyncReadMDLogEntries(this, stack->create_completion_notifier(),
-                                       sync_env->store, mdlog, shard_id, &marker,
-                                       max_entries, entries, truncated);
+                                       sync_env->store, mdlog, shard_id, marker,
+                                       max_entries);
     sync_env->async_rados->queue(req);
     return 0;
   }
 
   int request_complete() override {
-    int ret = req->get_ret_status();
-    if (ret >= 0 && !entries->empty()) {
-     *pmarker = marker;
-    }
+    *pmarker = std::move(req->marker);
+    *entries = std::move(req->entries);
+    *truncated = req->truncated;
     return req->get_ret_status();
   }
 };
