@@ -351,7 +351,8 @@ Depends: ceph-mgr (= ${binary:Version}),
 	 python3-six,
          ${misc:Depends},
          ${python:Depends},
-         openssh-client
+         openssh-client,
+         python3-jinja2
 Description: cephadm orchestrator module for ceph-mgr
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
