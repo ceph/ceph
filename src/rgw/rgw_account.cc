@@ -8,6 +8,7 @@ RGWAccountCtl::RGWAccountCtl(RGWSI_Zone *zone_svc,
 {
   svc.zone = zone_svc;
   svc.account = account_svc;
+  be_handler = account_svc->get_be_handler();
 }
 
 int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
