@@ -37,6 +37,7 @@ void FlushTracker<I>::shut_down() {
   for (auto& [flush_tid, ctxs] : m_flush_contexts) {
     flush_ctxs.insert(flush_ctxs.end(), ctxs.begin(), ctxs.end());
   }
+  m_flush_contexts.clear();
   locker.unlock();
 
   for (auto ctx : flush_ctxs) {
