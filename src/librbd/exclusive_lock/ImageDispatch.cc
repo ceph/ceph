@@ -41,9 +41,6 @@ ImageDispatch<I>::~ImageDispatch() {
 
 template <typename I>
 void ImageDispatch<I>::shut_down(Context* on_finish) {
-  // TODO remove when ImageRequestWQ is removed
-  unset_require_lock(io::DIRECTION_BOTH);
-
   // release any IO waiting on exclusive lock
   Contexts on_dispatches;
   {
