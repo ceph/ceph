@@ -43,6 +43,7 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
+from .template import TemplateMgr
 
 try:
     import remoto
@@ -355,6 +356,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'crash': self.crash_service,
             'iscsi': self.iscsi_service,
         }
+
+        self.template = TemplateMgr()
 
     def shutdown(self):
         self.log.debug('shutdown')
