@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
@@ -28,7 +28,7 @@ export class PoolEditPeerModalComponent implements OnInit {
   response: PoolEditPeerResponseModel;
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -132,7 +132,7 @@ export class PoolEditPeerModalComponent implements OnInit {
       error: () => this.editPeerForm.setErrors({ cdSubmitButton: true }),
       complete: () => {
         this.rbdMirroringService.refresh();
-        this.modalRef.hide();
+        this.activeModal.close();
       }
     });
   }

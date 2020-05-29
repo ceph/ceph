@@ -1,15 +1,14 @@
 import { Injectable } from '@angular/core';
 
-import { BsModalService } from 'ngx-bootstrap/modal';
-
 import { OrchestratorService } from '../api/orchestrator.service';
 import { OrchestratorDocModalComponent } from '../components/orchestrator-doc-modal/orchestrator-doc-modal.component';
+import { ModalService } from './modal.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class DepCheckerService {
-  constructor(private orchService: OrchestratorService, private modalService: BsModalService) {}
+  constructor(private orchService: OrchestratorService, private modalService: ModalService) {}
 
   /**
    * Check if orchestrator is available. Display an information modal if not.
@@ -25,10 +24,8 @@ export class DepCheckerService {
         func();
       } else {
         this.modalService.show(OrchestratorDocModalComponent, {
-          initialState: {
-            actionDescription: actionDescription,
-            itemDescription: itemDescription
-          }
+          actionDescription: actionDescription,
+          itemDescription: itemDescription
         });
       }
     });

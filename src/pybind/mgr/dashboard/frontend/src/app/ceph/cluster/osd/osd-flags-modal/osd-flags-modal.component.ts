@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
@@ -121,7 +121,7 @@ export class OsdFlagsModalComponent implements OnInit {
   unknownFlags: string[] = [];
 
   constructor(
-    public bsModalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
     private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private notificationService: NotificationService,
@@ -152,10 +152,10 @@ export class OsdFlagsModalComponent implements OnInit {
     this.osdService.updateFlags(newFlags).subscribe(
       () => {
         this.notificationService.show(NotificationType.success, this.i18n('Updated OSD Flags'));
-        this.bsModalRef.hide();
+        this.activeModal.close();
       },
       () => {
-        this.bsModalRef.hide();
+        this.activeModal.close();
       }
     );
   }

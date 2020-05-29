@@ -1,4 +1,4 @@
-<cd-modal [modalRef]="modalRef">
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n
                 class="modal-title">Create Bootstrap Token</ng-container>
 
@@ -82,7 +82,7 @@
       </div>
 
       <div class="modal-footer">
-        <cd-back-button [back]="modalRef.hide"
+        <cd-back-button [back]="activeModal.close"
                         name="Close"
                         i18n-name>
         </cd-back-button>

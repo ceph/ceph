@@ -2,9 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { FormArray, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
@@ -17,6 +17,7 @@ import { CdForm } from '../../../shared/forms/cd-form';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { ModalService } from '../../../shared/services/modal.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { IscsiTargetImageSettingsModalComponent } from '../iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
 import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
@@ -29,7 +30,7 @@ import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settin
 export class IscsiTargetFormComponent extends CdForm implements OnInit {
   cephIscsiConfigVersion: number;
   targetForm: CdFormGroup;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   api_version = 0;
   minimum_gateways = 1;
   target_default_controls: any;
@@ -90,7 +91,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   constructor(
     private iscsiService: IscsiService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private rbdService: RbdService,
     private router: Router,
     private route: ActivatedRoute,
@@ -785,7 +786,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       target_controls_limits: this.target_controls_limits
     };
 
-    this.modalRef = this.modalService.show(IscsiTargetIqnSettingsModalComponent, { initialState });
+    this.modalRef = this.modalService.show(IscsiTargetIqnSettingsModalComponent, initialState);
   }
 
   imageSettingsModal(image: string) {
@@ -799,9 +800,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       control: this.targetForm.get('disks')
     };
 
-    this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, {
-      initialState
-    });
+    this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, initialState);
   }
 
   validFeatures(image: Record<string, any>, backstore: string) {

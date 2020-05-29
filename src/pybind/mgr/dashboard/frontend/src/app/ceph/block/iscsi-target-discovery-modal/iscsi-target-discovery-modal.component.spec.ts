@@ -8,7 +8,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 
 import {
@@ -39,7 +39,7 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
       ToastrModule.forRoot(),
       RouterTestingModule
     ],
-    providers: [i18nProviders, BsModalRef]
+    providers: [i18nProviders, NgbActiveModal]
   });
 
   beforeEach(() => {

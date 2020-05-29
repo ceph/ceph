@@ -125,7 +125,7 @@
         <cd-submit-button (submitAction)="onSubmit()"
                           i18n="form action button|Example: Create Pool@@formActionButton"
                           [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+        <cd-back-button [back]="bsModalRef.close"></cd-back-button>
       </div>
     </form>
   </ng-container>
