@@ -99,6 +99,11 @@ enum ImageReadOnlyFlag {
   IMAGE_READ_ONLY_FLAG_NON_PRIMARY = 1 << 1,
 };
 
+enum SnapCreateFlag {
+  SNAP_CREATE_FLAG_SKIP_OBJECT_MAP     = 1 << 0,
+  SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE = 1 << 1,
+};
+
 struct MigrationInfo {
   int64_t pool_id = -1;
   std::string pool_namespace;

@@ -108,7 +108,8 @@ public:
   void expect_snap_create(librbd::MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id, int r) {
     EXPECT_CALL(*mock_image_ctx.operations,
-                execute_snap_create(_, StrEq(snap_name), _, 0, true, _))
+                execute_snap_create(_, StrEq(snap_name), _, 0,
+                                    SNAP_CREATE_FLAG_SKIP_OBJECT_MAP, _))
                   .WillOnce(DoAll(InvokeWithoutArgs([&mock_image_ctx, snap_id, snap_name]() {
                                     inject_snap(mock_image_ctx, snap_id, snap_name);
                                   }),

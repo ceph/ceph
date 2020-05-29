@@ -71,8 +71,7 @@ public:
   SnapshotCreateRequest(ImageCtxT &image_ctx, Context *on_finish,
                         const cls::rbd::SnapshotNamespace &snap_namespace,
                         const std::string &snap_name, uint64_t journal_op_tid,
-                        uint64_t request_id, bool skip_object_map,
-                        ProgressContext &prog_ctx);
+                        uint64_t flags, ProgressContext &prog_ctx);
 
 protected:
   void send_op() override;
@@ -89,10 +88,11 @@ protected:
 private:
   cls::rbd::SnapshotNamespace m_snap_namespace;
   std::string m_snap_name;
-  uint64_t m_request_id;
   bool m_skip_object_map;
+  bool m_skip_notify_quiesce;
   ProgressContext &m_prog_ctx;
 
+  uint64_t m_request_id = 0;
   int m_ret_val = 0;
 
   uint64_t m_snap_id = CEPH_NOSNAP;
@@ -126,7 +126,7 @@ private:
   void send_release_snap_id();
   Context *handle_release_snap_id(int *result);
 
-  void send_notify_unquiesce();
+  Context *send_notify_unquiesce();
   Context *handle_notify_unquiesce(int *result);
 
   void update_snap_context();
