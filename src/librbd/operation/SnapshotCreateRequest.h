@@ -29,12 +29,12 @@ public:
    *            <start>
    *               |
    *               v
-   *           STATE_NOTIFY_QUIESCE
-   *               |
-   *               v
-   *           STATE_SUSPEND_REQUESTS
-   *               |
-   *               v
+   *           STATE_NOTIFY_QUIESCE  * * * * * * * * * * * * *
+   *               |                                         *
+   *               v                                         *
+   *           STATE_SUSPEND_REQUESTS                        *
+   *               |                                         *
+   *               v                                         *
    *           STATE_SUSPEND_AIO * * * * * * * * * * * * * * *
    *               |                                         *
    *               v                                         *
@@ -94,6 +94,7 @@ private:
 
   uint64_t m_request_id = 0;
   int m_ret_val = 0;
+  bool m_writes_blocked = false;
 
   uint64_t m_snap_id = CEPH_NOSNAP;
   uint64_t m_size;
