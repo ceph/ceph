@@ -137,7 +137,7 @@ namespace librbd {
     ceph::mutex async_ops_lock; // protects async_ops and async_requests
     ceph::mutex copyup_list_lock; // protects copyup_waiting_list
 
-    unsigned extra_read_flags;
+    unsigned extra_read_flags;  // librados::OPERATION_*
 
     bool old_format;
     uint8_t order;
@@ -211,7 +211,7 @@ namespace librbd {
     bool clone_copy_on_read;
     bool enable_alloc_hint;
     uint32_t alloc_hint_flags = 0U;
-    uint32_t read_flags = 0U;
+    uint32_t read_flags = 0U;  // librados::OPERATION_*
     uint32_t discard_granularity_bytes = 0;
     bool blkin_trace_all;
     uint64_t mirroring_replay_delay;
