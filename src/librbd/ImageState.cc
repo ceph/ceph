@@ -295,7 +295,7 @@ public:
     notify(UNQUIESCE, on_finish);
   }
 
-  void quiesce_complete() {
+  void quiesce_complete(int r) {
     Context *on_notify = nullptr;
     {
       std::lock_guard locker{m_lock};
@@ -311,7 +311,7 @@ public:
       std::swap(on_notify, m_on_notify);
     }
 
-    on_notify->complete(0);
+    on_notify->complete(r);
   }
 
 private:
@@ -980,8 +980,8 @@ void ImageState<I>::notify_unquiesce(Context *on_finish) {
 }
 
 template <typename I>
-void ImageState<I>::quiesce_complete() {
-  m_quiesce_watchers->quiesce_complete();
+void ImageState<I>::quiesce_complete(int r) {
+  m_quiesce_watchers->quiesce_complete(r);
 }
 
 } // namespace librbd

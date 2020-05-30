@@ -784,7 +784,7 @@ public:
 
   int quiesce_watch(QuiesceWatchCtx *ctx, uint64_t *handle);
   int quiesce_unwatch(uint64_t handle);
-  void quiesce_complete();
+  void quiesce_complete(int r);
 
 private:
   friend class RBD;
