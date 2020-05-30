@@ -366,10 +366,15 @@ void ImageWatcher<I>::notify_quiesce(const AsyncRequestId &async_request_id,
                              << dendl;
 
   ceph_assert(attempts > 0);
+  auto notify_response = new watcher::NotifyResponse();
   auto on_notify = new LambdaContext(
-    [this, async_request_id, &prog_ctx, on_finish, attempts=attempts-1](int r) {
+    [notify_response=std::unique_ptr<watcher::NotifyResponse>(notify_response),
+     this, async_request_id, &prog_ctx, on_finish, attempts=attempts-1](int r) {
       auto total_attempts = m_image_ctx.config.template get_val<uint64_t>(
         "rbd_quiesce_notification_attempts");
+      if (total_attempts < attempts) {
+        total_attempts = attempts;
+      }
       prog_ctx.update_progress(total_attempts - attempts, total_attempts);
 
       if (r == -ETIMEDOUT) {
@@ -379,6 +384,28 @@ void ImageWatcher<I>::notify_quiesce(const AsyncRequestId &async_request_id,
           notify_quiesce(async_request_id, attempts, prog_ctx, on_finish);
           return;
         }
+      } else if (r == 0) {
+        for (auto &[client_id, bl] : notify_response->acks) {
+          if (bl.length() == 0) {
+            continue;
+          }
+          try {
+            auto iter = bl.cbegin();
+
+            ResponseMessage response_message;
+            using ceph::decode;
+            decode(response_message, iter);
+
+            if (response_message.result != -EOPNOTSUPP) {
+              r = response_message.result;
+            }
+          } catch (const buffer::error &err) {
+            r = -EINVAL;
+          }
+          if (r < 0) {
+            break;
+          }
+        }
       }
       if (r < 0) {
         lderr(m_image_ctx.cct) << this << " failed to notify quiesce: "
@@ -387,7 +414,9 @@ void ImageWatcher<I>::notify_quiesce(const AsyncRequestId &async_request_id,
       on_finish->complete(r);
     });
 
-  send_notify(new QuiescePayload(async_request_id), on_notify);
+  bufferlist bl;
+  encode(NotifyMessage(new QuiescePayload(async_request_id)), bl);
+  Watcher::send_notify(bl, notify_response, on_notify);
 }
 
 template <typename I>
@@ -691,11 +720,13 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
 
   return new LambdaContext(
     [this, request, unquiesce_ctx, timeout](int r) {
-      ceph_assert(r == 0);
-
-      m_task_finisher->add_event_after(Task(TASK_CODE_QUIESCE, request),
-                                       timeout, unquiesce_ctx);
-
+      if (r < 0) {
+        std::unique_lock async_request_locker{m_async_request_lock};
+        m_async_pending.erase(request);
+      } else {
+        m_task_finisher->add_event_after(Task(TASK_CODE_QUIESCE, request),
+                                         timeout, unquiesce_ctx);
+      }
       auto ctx = remove_async_request(request);
       ceph_assert(ctx != nullptr);
       ctx = new C_ResponseMessage(static_cast<C_NotifyAck *>(ctx));

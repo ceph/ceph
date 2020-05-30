@@ -1385,9 +1385,9 @@ CEPH_RBD_API int rbd_quiesce_watch(rbd_image_t image,
  * Notify quiesce is complete
  *
  * @param image the image to notify
- * @returns 0 on success
+ * @param r the return code
  */
-CEPH_RADOS_API void rbd_quiesce_complete(rbd_image_t image);
+CEPH_RADOS_API void rbd_quiesce_complete(rbd_image_t image, int r);
 
 /**
  * Unregister a quiesce/unquiesce watcher.
