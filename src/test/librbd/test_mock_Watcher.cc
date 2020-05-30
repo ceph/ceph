@@ -293,12 +293,6 @@ TEST_F(TestMockWatcher, ReregisterWatchBlacklist) {
   expect_aio_unwatch(mock_image_ctx, 0);
   expect_aio_watch(mock_image_ctx, -EBLACKLISTED);
 
-  C_SaferCond blacklist_ctx;
-  expect_aio_watch(mock_image_ctx, 0, [&blacklist_ctx]() {
-      blacklist_ctx.wait();
-    });
-  expect_aio_unwatch(mock_image_ctx, 0);
-
   C_SaferCond register_ctx;
   mock_image_watcher.register_watch(&register_ctx);
   ASSERT_TRUE(wait_for_watch(mock_image_ctx, 1));
@@ -309,17 +303,11 @@ TEST_F(TestMockWatcher, ReregisterWatchBlacklist) {
 
   // wait for recovery unwatch/watch
   ASSERT_TRUE(wait_for_watch(mock_image_ctx, 2));
-
   ASSERT_TRUE(mock_image_watcher.is_blacklisted());
-  blacklist_ctx.complete(0);
-
-  // wait for post-blacklist recovery watch
-  ASSERT_TRUE(wait_for_watch(mock_image_ctx, 1));
 
   C_SaferCond unregister_ctx;
   mock_image_watcher.unregister_watch(&unregister_ctx);
   ASSERT_EQ(0, unregister_ctx.wait());
-  ASSERT_FALSE(mock_image_watcher.is_blacklisted());
 }
 
 TEST_F(TestMockWatcher, ReregisterUnwatchPendingUnregister) {
