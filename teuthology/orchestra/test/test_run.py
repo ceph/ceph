@@ -6,7 +6,7 @@ import socket
 from mock import MagicMock, patch
 from pytest import raises
 
-from six import ensure_str, ensure_binary
+from six import ensure_str, ensure_binary, PY2
 
 from teuthology.orchestra import run
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
@@ -259,6 +259,14 @@ class TestRun(object):
         code = proc.wait()
         assert code == 0
         assert proc.exitstatus == 0
+
+    def test_copy_and_close(self):
+        run.copy_and_close(None, MagicMock())
+        run.copy_and_close('', MagicMock())
+        run.copy_and_close(b'', MagicMock())
+        if PY2:
+            run.copy_and_close(u'', MagicMock())
+
 
 
 class TestQuote(object):
