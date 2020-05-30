@@ -1,28 +1,31 @@
-<tabset>
+<tabset #tabset>
   <tab heading="Issues"
        i18n-heading>
-    <cd-table [data]="image_error.data"
+    <cd-table *ngIf="tabset.tabs[0]?.active"
+              [data]="image_error.data"
               columnMode="flex"
               [columns]="image_error.columns"
-              [autoReload]="0"
+              [autoReload]="-1"
               (fetchData)="refresh()">
     </cd-table>
   </tab>
   <tab heading="Syncing"
        i18n-heading>
-    <cd-table [data]="image_syncing.data"
+    <cd-table *ngIf="tabset.tabs[1]?.active"
+              [data]="image_syncing.data"
               columnMode="flex"
               [columns]="image_syncing.columns"
-              [autoReload]="0"
+              [autoReload]="-1"
               (fetchData)="refresh()">
     </cd-table>
   </tab>
   <tab heading="Ready"
        i18n-heading>
-    <cd-table [data]="image_ready.data"
+    <cd-table *ngIf="tabset.tabs[2]?.active"
+              [data]="image_ready.data"
               columnMode="flex"
               [columns]="image_ready.columns"
-              [autoReload]="0"
+              [autoReload]="-1"
               (fetchData)="refresh()">
     </cd-table>
   </tab>

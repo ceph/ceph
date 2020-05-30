@@ -148,3 +148,16 @@ To verify that the public key is in the authorized_keys file, run the following 
 
      [root@mon1 ~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_pub > key.pub
      [root@mon1 ~]# grep "`cat key.pub`"  /root/.ssh/authorized_keys
+
+Failed to infer CIDR network error
+----------------------------------
+
+If you see this error::
+
+   ERROR: Failed to infer CIDR network for mon ip ***; pass --skip-mon-network to configure it later
+
+This means that you must run a command of this form::
+
+  ceph config set mon public_network <mon_network>
+
+For more detail on operations of this kind, see :ref:`deploy_additional_monitors`

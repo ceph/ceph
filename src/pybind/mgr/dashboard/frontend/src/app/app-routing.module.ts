@@ -19,6 +19,7 @@ import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component
 import { MonitoringListComponent } from './ceph/cluster/prometheus/monitoring-list/monitoring-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
+import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
@@ -142,6 +143,11 @@ const routes: Routes = [
         path: 'logs',
         component: LogsComponent,
         data: { breadcrumbs: 'Cluster/Logs' }
+      },
+      {
+        path: 'telemetry',
+        component: TelemetryComponent,
+        data: { breadcrumbs: 'Telemetry configuration' }
       },
       {
         path: 'monitoring',
