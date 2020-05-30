@@ -527,14 +527,11 @@ int RGWBucketReshard::do_reshard(int num_shards,
 				 ostream *out,
 				 Formatter *formatter)
 {
-  rgw_bucket& bucket = bucket_info.bucket;
-
-  int ret = 0;
-
   if (out) {
-    (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
-    (*out) << "bucket name: " << bucket_info.bucket.name << std::endl;
-    (*out) << "old bucket instance id: " << bucket_info.bucket.bucket_id <<
+    const rgw_bucket& bucket = bucket_info.bucket;
+    (*out) << "tenant: " << bucket.tenant << std::endl;
+    (*out) << "bucket name: " << bucket.name << std::endl;
+    (*out) << "old bucket instance id: " << bucket.bucket_id <<
       std::endl;
     (*out) << "new bucket instance id: " << new_bucket_info.bucket.bucket_id <<
       std::endl;
@@ -553,7 +550,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   // complete successfully
   BucketInfoReshardUpdate bucket_info_updater(store, bucket_info, bucket_attrs, new_bucket_info.bucket.bucket_id);
 
-  ret = bucket_info_updater.start();
+  int ret = bucket_info_updater.start();
   if (ret < 0) {
     ldout(store->ctx(), 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
     return ret;
