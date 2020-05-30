@@ -808,9 +808,9 @@ public:
       read_flags = 0;
       auto read_policy = config.get_val<std::string>("rbd_read_from_replica_policy");
       if (read_policy == "balance") {
-        read_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+        read_flags |= librados::OPERATION_BALANCE_READS;
       } else if (read_policy == "localize") {
-        read_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+        read_flags |= librados::OPERATION_LOCALIZE_READS;
       }
     }
 
