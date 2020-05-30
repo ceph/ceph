@@ -206,6 +206,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, NotifyQuiesceError) {
 
   ::testing::InSequence seq;
   expect_notify_quiesce(mock_image_ctx, -EINVAL);
+  expect_notify_unquiesce(mock_image_ctx, 0);
 
   C_SaferCond cond_ctx;
   librbd::NoOpProgressContext prog_ctx;

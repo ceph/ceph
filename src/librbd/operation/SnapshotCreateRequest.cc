@@ -79,7 +79,9 @@ Context *SnapshotCreateRequest<I>::handle_notify_quiesce(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to notify quiesce: " << cpp_strerror(*result)
                << dendl;
-    return this->create_context_finisher(*result);
+    save_result(result);
+    send_notify_unquiesce();
+    return nullptr;
   }
 
   std::shared_lock owner_locker{image_ctx.owner_lock};
@@ -132,6 +134,8 @@ Context *SnapshotCreateRequest<I>::handle_suspend_aio(int *result) {
     save_result(result);
     return send_notify_unquiesce();
   }
+
+  m_writes_blocked = true;
 
   send_append_op_event();
   return nullptr;
@@ -357,7 +361,9 @@ Context *SnapshotCreateRequest<I>::send_notify_unquiesce() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  image_ctx.io_image_dispatcher->unblock_writes();
+  if (m_writes_blocked) {
+    image_ctx.io_image_dispatcher->unblock_writes();
+  }
 
   if (m_skip_notify_quiesce) {
     return this->create_context_finisher(m_ret_val);
