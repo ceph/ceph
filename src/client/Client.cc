@@ -4389,10 +4389,12 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
 	  all = false;
         }
       }
+      if (in->ll_ref == 1 && in->ino != MDS_INO_ROOT) {
+         _schedule_ino_release_callback(in.get());
+      }
       if (all && in->ino != MDS_INO_ROOT) {
         ldout(cct, 20) << __func__ << " counting as trimmed: " << *in << dendl;
 	trimmed++;
-	_schedule_ino_release_callback(in.get());
       }
     }
   }
