@@ -10,9 +10,11 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Image.h"
-#include <boost/variant.hpp>
 #include "include/Context.h"
 #include "common/Cond.h"
+
+#include <bitset>
+#include <boost/variant.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -307,6 +309,32 @@ int Snapshot<I>::exists(I *ictx, const cls::rbd::SnapshotNamespace& snap_namespa
   std::shared_lock l{ictx->image_lock};
   *exists = ictx->get_snap_id(snap_namespace, snap_name) != CEPH_NOSNAP;
   return 0;
+}
+
+template <typename I>
+int Snapshot<I>::create(I *ictx, const char *snap_name, uint32_t flags,
+                        ProgressContext& pctx) {
+  ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name
+                       << " flags: " << flags << dendl;
+
+  uint64_t internal_flags = 0;
+
+  if (flags & RBD_SNAP_CREATE_SKIP_QUIESCE) {
+    internal_flags |= SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE;
+    flags &= ~RBD_SNAP_CREATE_SKIP_QUIESCE;
+  } else if (flags & RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR) {
+    internal_flags |= SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR;
+    flags &= ~RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR;
+  }
+
+  if (flags != 0) {
+    lderr(ictx->cct) << "invalid snap create flags: " << std::bitset<32>(flags)
+                     << dendl;
+    return -EINVAL;
+  }
+
+  return ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+                                       snap_name, internal_flags, pctx);
 }
 
 template <typename I>

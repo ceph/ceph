@@ -173,7 +173,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
   expect_op_work_queue(mock_image_ctx);
 
   ::testing::InSequence seq;
-  expect_notify_quiesce(mock_image_ctx, 0);
+  expect_notify_quiesce(mock_image_ctx, -EINVAL);
   expect_block_writes(mock_image_ctx);
   expect_allocate_snap_id(mock_image_ctx, 0);
   expect_snap_create(mock_image_ctx, 0);
@@ -188,7 +188,7 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
   librbd::NoOpProgressContext prog_ctx;
   MockSnapshotCreateRequest *req = new MockSnapshotCreateRequest(
     mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(),
-    "snap1", 0, 0, prog_ctx);
+    "snap1", 0, SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR, prog_ctx);
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();

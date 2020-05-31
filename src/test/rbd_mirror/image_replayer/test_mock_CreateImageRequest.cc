@@ -230,10 +230,11 @@ public:
   }
 
   void snap_create(librbd::ImageCtx *image_ctx, const std::string &snap_name) {
+    librbd::NoOpProgressContext prog_ctx;
     ASSERT_EQ(0, image_ctx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					            snap_name.c_str()));
+					            snap_name, 0, prog_ctx));
     ASSERT_EQ(0, image_ctx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
-						     snap_name.c_str()));
+						     snap_name));
     ASSERT_EQ(0, image_ctx->state->refresh());
   }
 

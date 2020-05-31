@@ -196,6 +196,7 @@ template <typename I>
 void ImageWatcher<I>::notify_snap_create(uint64_t request_id,
                                          const cls::rbd::SnapshotNamespace &snap_namespace,
 					 const std::string &snap_name,
+                                         uint64_t flags,
                                          ProgressContext &prog_ctx,
                                          Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
@@ -206,7 +207,7 @@ void ImageWatcher<I>::notify_snap_create(uint64_t request_id,
 
   notify_async_request(async_request_id,
                        new SnapCreatePayload(async_request_id, snap_namespace,
-                                             snap_name),
+                                             snap_name, flags),
                        prog_ctx, on_finish);
 }
 
@@ -992,11 +993,13 @@ bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
         ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
 				   << payload.async_request_id << " "
                                    << payload.snap_namespace << " "
-                                   << payload.snap_name << dendl;
+                                   << payload.snap_name << " "
+                                   << payload.flags << dendl;
 
         m_image_ctx.operations->execute_snap_create(payload.snap_namespace,
                                                     payload.snap_name,
-                                                    ctx, 0, false, *prog_ctx);
+                                                    ctx, 0, payload.flags,
+                                                    *prog_ctx);
       }
       return complete;
     } else if (r < 0) {

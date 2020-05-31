@@ -612,6 +612,7 @@ public:
   bool snap_exists(const char *snapname) CEPH_RBD_DEPRECATED;
   int snap_exists2(const char *snapname, bool *exists);
   int snap_create(const char *snapname);
+  int snap_create2(const char *snapname, uint32_t flags, ProgressContext& pctx);
   int snap_remove(const char *snapname);
   int snap_remove2(const char *snapname, uint32_t flags, ProgressContext& pctx);
   int snap_remove_by_id(uint64_t snap_id);

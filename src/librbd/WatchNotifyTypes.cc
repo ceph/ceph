@@ -196,6 +196,7 @@ void SnapCreatePayload::encode(bufferlist &bl) const {
   using ceph::encode;
   SnapPayloadBase::encode(bl);
   encode(async_request_id, bl);
+  encode(flags, bl);
 }
 
 void SnapCreatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
@@ -206,6 +207,7 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   }
   if (version >= 7) {
     decode(async_request_id, iter);
+    decode(flags, iter);
   }
 }
 
@@ -214,6 +216,7 @@ void SnapCreatePayload::dump(Formatter *f) const {
   async_request_id.dump(f);
   f->close_section();
   SnapPayloadBase::dump(f);
+  f->dump_unsigned("flags", flags);
 }
 
 void SnapRenamePayload::encode(bufferlist &bl) const {
@@ -395,7 +398,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(new ResizePayload(123, true, AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(new SnapCreatePayload(AsyncRequestId(ClientId(0, 1), 2),
                                                       cls::rbd::UserSnapshotNamespace(),
-                                                      "foo")));
+                                                      "foo", 1)));
   o.push_back(new NotifyMessage(new SnapRemovePayload(cls::rbd::UserSnapshotNamespace(), "foo")));
   o.push_back(new NotifyMessage(new SnapProtectPayload(cls::rbd::UserSnapshotNamespace(), "foo")));
   o.push_back(new NotifyMessage(new SnapUnprotectPayload(cls::rbd::UserSnapshotNamespace(), "foo")));

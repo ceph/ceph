@@ -170,12 +170,13 @@ public:
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
     }
 
+    librbd::NoOpProgressContext prog_ctx;
     EXPECT_EQ(0, ictx->operations->snap_create(
-                   cls::rbd::UserSnapshotNamespace(), snap_name.c_str()));
+                   cls::rbd::UserSnapshotNamespace(), snap_name, 0, prog_ctx));
 
     if (protect) {
       EXPECT_EQ(0, ictx->operations->snap_protect(
-                     cls::rbd::UserSnapshotNamespace(), snap_name.c_str()));
+                     cls::rbd::UserSnapshotNamespace(), snap_name));
     }
 
     EXPECT_EQ(0, ictx->state->close());
@@ -190,8 +191,9 @@ public:
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
     }
 
+    librbd::NoOpProgressContext prog_ctx;
     EXPECT_EQ(0, ictx->operations->snap_create(
-                   cls::rbd::UserSnapshotNamespace(), "snap1"));
+                   cls::rbd::UserSnapshotNamespace(), "snap1", 0, prog_ctx));
     EXPECT_EQ(0, ictx->operations->snap_protect(
                    cls::rbd::UserSnapshotNamespace(), "snap1"));
     EXPECT_EQ(0, librbd::api::Image<>::snap_set(

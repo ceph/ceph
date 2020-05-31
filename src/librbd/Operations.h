@@ -50,9 +50,11 @@ public:
                       Context *on_finish, uint64_t journal_op_tid);
 
   int snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-		  const std::string& snap_name);
+		  const std::string& snap_name, uint64_t flags,
+                  ProgressContext& prog_ctx);
   void snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-		   const std::string& snap_name, Context *on_finish);
+		   const std::string& snap_name, uint64_t flags,
+                   ProgressContext& prog_ctx, Context *on_finish);
   void execute_snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
 			   const std::string &snap_name, Context *on_finish,
                            uint64_t journal_op_tid, uint64_t flags,

@@ -146,18 +146,20 @@ public:
   }
 
   void expect_create_snapshot(MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, snap_create(_, _, _))
+    EXPECT_CALL(*mock_image_ctx.operations, snap_create(_, _, _, _, _))
       .WillOnce(DoAll(
                   Invoke([this, &mock_image_ctx, r](
                              const cls::rbd::SnapshotNamespace &ns,
                              const std::string& snap_name,
+                             uint64_t flags,
+                             ProgressContext &prog_ctx,
                              Context *on_finish) {
                            if (r != 0) {
                              return;
                            }
                            snap_create(mock_image_ctx, ns, snap_name);
                          }),
-                  WithArg<2>(CompleteContext(
+                  WithArg<4>(CompleteContext(
                                r, mock_image_ctx.image_ctx->op_work_queue))
                   ));
   }

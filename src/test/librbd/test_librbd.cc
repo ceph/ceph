@@ -8341,8 +8341,6 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     struct Watcher : public librbd::QuiesceWatchCtx {
       librbd::Image &image;
       int r;
-      mutex m_lock;
-      condition_variable m_cond;
       size_t quiesce_count = 0;
       size_t unquiesce_count = 0;
 
@@ -8350,24 +8348,12 @@ TEST_F(TestLibRBD, QuiesceWatchError)
       }
 
       void handle_quiesce() override {
-        lock_guard<mutex> locker(m_lock);
         quiesce_count++;
         image.quiesce_complete(r);
-        m_cond.notify_one();
       }
 
       void handle_unquiesce() override {
-        lock_guard<mutex> locker(m_lock);
         unquiesce_count++;
-        m_cond.notify_one();
-      }
-
-      void wait_for_unquiesce_count(size_t count) {
-        unique_lock<mutex> locker(m_lock);
-        ASSERT_TRUE(m_cond.wait_for(locker, seconds(60),
-                                    [this, count] {
-                                      return this->unquiesce_count == count;
-                                    }));
       }
     } watcher1(image1, -EINVAL), watcher2(image2, 0);
     uint64_t handle1, handle2;
@@ -8376,16 +8362,19 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &handle2));
 
     ASSERT_EQ(-EINVAL, image1.snap_create("snap1"));
-    ASSERT_EQ(1U, watcher2.quiesce_count);
-    watcher2.wait_for_unquiesce_count(1U);
     ASSERT_EQ(1U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
+    ASSERT_EQ(1U, watcher2.quiesce_count);
+    ASSERT_EQ(1U, watcher2.unquiesce_count);
 
-    ASSERT_EQ(-EINVAL, image2.snap_create("snap2"));
-    ASSERT_EQ(2U, watcher2.quiesce_count);
-    watcher2.wait_for_unquiesce_count(2U);
+    PrintProgress prog_ctx;
+    ASSERT_EQ(0, image2.snap_create2("snap2",
+                                     RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
+                                     prog_ctx));
     ASSERT_EQ(2U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
+    ASSERT_EQ(2U, watcher2.quiesce_count);
+    ASSERT_EQ(2U, watcher2.unquiesce_count);
 
     ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
 
@@ -8393,9 +8382,16 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     ASSERT_EQ(3U, watcher2.quiesce_count);
     ASSERT_EQ(3U, watcher2.unquiesce_count);
 
+    ASSERT_EQ(0, image2.snap_create2("snap4", RBD_SNAP_CREATE_SKIP_QUIESCE,
+                                     prog_ctx));
+    ASSERT_EQ(3U, watcher2.quiesce_count);
+    ASSERT_EQ(3U, watcher2.unquiesce_count);
+
     ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
 
+    ASSERT_EQ(0, image1.snap_remove("snap2"));
     ASSERT_EQ(0, image1.snap_remove("snap3"));
+    ASSERT_EQ(0, image1.snap_remove("snap4"));
   }
 
   ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));

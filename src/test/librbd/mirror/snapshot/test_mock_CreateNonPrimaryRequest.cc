@@ -155,8 +155,8 @@ public:
   }
 
   void expect_create_snapshot(MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, snap_create(_, _, _))
-      .WillOnce(WithArg<2>(CompleteContext(
+    EXPECT_CALL(*mock_image_ctx.operations, snap_create(_, _, _, _, _))
+      .WillOnce(WithArg<4>(CompleteContext(
                              r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 

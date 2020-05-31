@@ -7,6 +7,7 @@
 #include "include/buffer.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Types.h"
+#include "librbd/internal.h"
 #include "librbd/mirror/snapshot/Types.h"
 
 #include <string>
@@ -89,6 +90,7 @@ private:
   std::string m_snap_name;
 
   bufferlist m_out_bl;
+  NoOpProgressContext m_prog_ctx;
 
   bool is_orphan() const {
     return m_primary_mirror_uuid.empty();

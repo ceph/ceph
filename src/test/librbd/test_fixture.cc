@@ -85,8 +85,9 @@ int TestFixture::open_image(const std::string &image_name,
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
                              const std::string &snap_name) {
+  librbd::NoOpProgressContext prog_ctx;
   return ictx.operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-				      snap_name.c_str());
+				      snap_name.c_str(), 0, prog_ctx);
 }
 
 int TestFixture::snap_protect(librbd::ImageCtx &ictx,

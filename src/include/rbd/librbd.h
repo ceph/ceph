@@ -117,6 +117,9 @@ typedef struct {
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
+#define RBD_SNAP_CREATE_SKIP_QUIESCE		1 << 0
+#define RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR	1 << 1
+
 #define RBD_SNAP_REMOVE_UNPROTECT	1 << 0
 #define RBD_SNAP_REMOVE_FLATTEN		1 << 1
 #define RBD_SNAP_REMOVE_FORCE		(RBD_SNAP_REMOVE_UNPROTECT | RBD_SNAP_REMOVE_FLATTEN)
@@ -780,6 +783,9 @@ CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
 CEPH_RBD_API void rbd_snap_list_end(rbd_snap_info_t *snaps);
 CEPH_RBD_API int rbd_snap_exists(rbd_image_t image, const char *snapname, bool *exists);
 CEPH_RBD_API int rbd_snap_create(rbd_image_t image, const char *snapname);
+CEPH_RBD_API int rbd_snap_create2(rbd_image_t image, const char *snap_name,
+                                  uint32_t flags, librbd_progress_fn_t cb,
+                                  void *cbdata);
 CEPH_RBD_API int rbd_snap_remove(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove2(rbd_image_t image, const char *snap_name,
                                   uint32_t flags, librbd_progress_fn_t cb,
