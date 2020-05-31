@@ -172,12 +172,6 @@ def configure_instance(ctx, config):
         run_in_keystone_dir(ctx, client,
             [
                 'sed',
-                '-e', 's/#admin_token =.*/admin_token = ADMIN/',
-                '-i', 'etc/keystone.conf'
-            ])
-        run_in_keystone_dir(ctx, client,
-            [
-                'sed',
                 '-e', 's^#key_repository =.*^key_repository = {kr}^'.format(kr = keyrepo_dir),
                 '-i', 'etc/keystone.conf'
             ])
@@ -294,10 +288,14 @@ def run_section_cmds(ctx, cclient, section_cmd, specials,
     admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
 
     auth_section = [
-        ( 'os-token', 'ADMIN' ),
+        ( 'os-username', 'admin' ),
+        ( 'os-password', 'ADMIN' ),
+        ( 'os-user-domain-id', 'default' ),
+        ( 'os-project-name', 'admin' ),
+        ( 'os-project-domain-id', 'default' ),
         ( 'os-identity-api-version', '3' ),
-        ( 'os-url', 'http://{host}:{port}/v3'.format(host=admin_host,
-                                                       port=admin_port) ),
+        ( 'os-auth-url', 'http://{host}:{port}/v3'.format(host=admin_host,
+                                                          port=admin_port) ),
     ]
 
     for section_item in section_config_list:
