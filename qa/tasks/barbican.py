@@ -396,12 +396,7 @@ def task(ctx, config):
           client.0:
             sha1: 17.0.0.0rc2
             force-branch: master
-            domains:
-              - name: default
-                description: Default Domain
             projects:
-              - name: admin
-                description:  Admin Tenant
               - name: rgwcrypt
                 description: Encryption Tenant
               - name: barbican
@@ -409,9 +404,6 @@ def task(ctx, config):
               - name: s3
                 description: S3 project
             users:
-              - name: admin
-                password: ADMIN
-                project: admin
               - name: rgwcrypt-user
                 password: rgwcrypt-pass
                 project: rgwcrypt
@@ -421,11 +413,8 @@ def task(ctx, config):
               - name: s3-user
                 password: s3-pass
                 project: s3
-            roles: [ name: admin, name: Member, name: creator ]
+            roles: [ name: Member, name: creator ]
             role-mappings:
-              - name: admin
-                user: admin
-                project: admin
               - name: Member
                 user: rgwcrypt-user
                 project: rgwcrypt
