@@ -7,6 +7,7 @@ import logging
 
 # still need this for python3.6
 from collections import OrderedDict
+from itertools import chain
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -322,27 +323,40 @@ def fill_keystone(ctx, config):
     assert isinstance(config, dict)
 
     for (cclient, cconfig) in config.items():
-        # configure tenants/projects
-        run_section_cmds(ctx, cclient, 'domain create', 'name',
-                         cconfig['domains'])
-        run_section_cmds(ctx, cclient, 'project create', 'name',
-                         cconfig['projects'])
-        run_section_cmds(ctx, cclient, 'user create', 'name',
-                         cconfig['users'])
-        run_section_cmds(ctx, cclient, 'role create', 'name',
-                         cconfig['roles'])
-        run_section_cmds(ctx, cclient, 'role add', 'name',
-                         cconfig['role-mappings'])
-        run_section_cmds(ctx, cclient, 'service create', 'type',
-                         cconfig['services'])
-
         public_host, public_port = ctx.keystone.public_endpoints[cclient]
         url = 'http://{host}:{port}/v3'.format(host=public_host,
-                                                 port=public_port)
+                                               port=public_port)
         admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
         admin_url = 'http://{host}:{port}/v3'.format(host=admin_host,
-                                                       port=admin_port)
-        create_endpoint(ctx, cclient, 'keystone', url, admin_url)
+                                                     port=admin_port)
+        opts = {'password': 'ADMIN',
+                'username': 'admin',
+                'project-name': 'admin',
+                'role-name': 'admin',
+                'service-name': 'keystone',
+                'region-id': 'RegionOne',
+                'admin-url': admin_url,
+                'public-url': url}
+        bootstrap_args = chain.from_iterable(('--bootstrap-{}'.format(k), v)
+                                             for k, v in opts.items())
+        run_in_keystone_venv(ctx, cclient,
+                             ['keystone-manage', 'bootstrap'] +
+                             list(bootstrap_args))
+
+        # configure tenants/projects
+        run_section_cmds(ctx, cclient, 'domain create', 'name',
+                         cconfig.get('domains', []))
+        run_section_cmds(ctx, cclient, 'project create', 'name',
+                         cconfig.get('projects', []))
+        run_section_cmds(ctx, cclient, 'user create', 'name',
+                         cconfig.get('users', []))
+        run_section_cmds(ctx, cclient, 'role create', 'name',
+                         cconfig.get('roles', []))
+        run_section_cmds(ctx, cclient, 'role add', 'name',
+                         cconfig.get('role-mappings', []))
+        run_section_cmds(ctx, cclient, 'service create', 'type',
+                         cconfig.get('services', []))
+
         # for the deferred endpoint creation; currently it's used in rgw.py
         ctx.keystone.create_endpoint = create_endpoint
 
