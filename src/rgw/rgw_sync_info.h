@@ -231,16 +231,16 @@ using SIClientRef = std::shared_ptr<SIClient>;
 class SIProviderClient : public SIClient
 {
   SIProviderRef provider;
-  std::vector<std::string> markers;
 
   using stage_id_t = SIProvider::stage_id_t;
 
-  std::map<stage_id_t, std::vector<std::string> > initial_stage_markers;
-
-  SIProvider::StageInfo stage_info;
-  int num_complete{0};
-
-  std::vector<bool> done;
+  struct State {
+    std::vector<std::string> markers;
+    std::map<stage_id_t, std::vector<std::string> > initial_stage_markers;
+    SIProvider::StageInfo stage_info;
+    int num_complete{0};
+    std::vector<bool> done;
+  } state;
 
   int init_stage(const stage_id_t& new_stage);
 
@@ -252,20 +252,20 @@ public:
   int fetch(int shard_id, int max, SIProvider::fetch_result *result) override;
 
   SIProvider::StageInfo get_stage_info() const override {
-    return stage_info;
+    return state.stage_info;
   }
 
   int stage_num_shards() const override {
-    return stage_info.num_shards;
+    return state.stage_info.num_shards;
   }
 
   bool is_shard_done(int shard_id) const override {
     return (shard_id < stage_num_shards() &&
-            done[shard_id]);
+            state.done[shard_id]);
   }
 
   bool stage_complete() const override {
-    return (num_complete == stage_num_shards());
+    return (state.num_complete == stage_num_shards());
   }
 
   int promote_stage(int *new_num_shards);

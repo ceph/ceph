@@ -266,7 +266,7 @@ int SIProviderClient::init_markers()
     }
     bool all_history = (prev.type != SIProvider::StageType::FULL ||
                         sinfo.type != SIProvider::StageType::INC);
-    auto& stage_markers = initial_stage_markers[sinfo.sid];
+    auto& stage_markers = state.initial_stage_markers[sinfo.sid];
     stage_markers.reserve(sinfo.num_shards);
     for (int i = 0; i < sinfo.num_shards; ++i) {
       std::string marker;
@@ -286,15 +286,20 @@ int SIProviderClient::init_markers()
 
 int SIProviderClient::init_stage(const stage_id_t& new_sid)
 {
+  auto& stage_info = state.stage_info;
+  auto& markers = state.markers;
+  auto& done = state.done;
+  auto& stage_markers = state.initial_stage_markers;
+
   int r = provider->get_stage_info(new_sid, &stage_info);
   if (r < 0) {
     return r;
   }
 
-  auto iter = initial_stage_markers.find(stage_info.sid);
-  if (iter != initial_stage_markers.end()) {
+  auto iter = stage_markers.find(stage_info.sid);
+  if (iter != stage_markers.end()) {
     markers = std::move(iter->second);
-    initial_stage_markers.erase(iter);
+    stage_markers.erase(iter);
   } else {
     markers.resize(stage_info.num_shards);
     markers.clear();
@@ -303,12 +308,15 @@ int SIProviderClient::init_stage(const stage_id_t& new_sid)
   done.resize(stage_info.num_shards);
   done.clear();
 
-  num_complete = 0;
+  state.num_complete = 0;
   return 0;
 }
 
 
 int SIProviderClient::fetch(int shard_id, int max, SIProvider::fetch_result *result) {
+  auto& stage_info = state.stage_info;
+  auto& markers = state.markers;
+
   if (shard_id > stage_info.num_shards) {
     return -ERANGE;
   }
@@ -322,8 +330,10 @@ int SIProviderClient::fetch(int shard_id, int max, SIProvider::fetch_result *res
     markers[shard_id] = result->entries.back().key;
   }
 
+  auto& done = state.done;
+
   if (result->done && !done[shard_id]) {
-    ++num_complete;
+    ++state.num_complete;
     done[shard_id] = result->done;
   }
 
@@ -334,7 +344,7 @@ int SIProviderClient::promote_stage(int *new_num_shards)
 {
   stage_id_t next_sid;
 
-  int r = provider->get_next_stage(stage_info.sid, &next_sid);
+  int r = provider->get_next_stage(state.stage_info.sid, &next_sid);
   if (r < 0) {
     return r;
   }

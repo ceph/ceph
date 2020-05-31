@@ -24,6 +24,7 @@
 #include "rgw_sync_counters.h"
 #include "rgw_sync_error_repo.h"
 #include "rgw_sync_module.h"
+#include "rgw_sync_info.h"
 #include "rgw_sal.h"
 
 #include "cls/lock/cls_lock_client.h"
@@ -3663,6 +3664,88 @@ done:
     return 0;
   }
 };
+
+
+class SIPClientCRHandler {
+  CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
+
+  SIClientRef sipc;
+
+  struct InitMarkersAction : public RGWGenericAsyncCR::Action {
+    CephContext *cct;
+    SIClientRef sipc;
+
+    InitMarkersAction(CephContext *_cct, SIClientRef _sipc) : cct(_cct),
+                                                              sipc(_sipc) {}
+    int operate() override {
+      int r = sipc->init_markers();
+      if (r < 0) {
+        ldout(cct, 0) << "ERROR: " << __func__ << "(): init_markers() failed (r=" << r << ")" << dendl;
+        return r;
+      }
+
+      return 0;
+    }
+  };
+
+  struct FetchAction : public RGWGenericAsyncCR::Action {
+    CephContext *cct;
+    SIClientRef sipc;
+
+    int shard_id;
+    int max;
+
+    std::shared_ptr<SIProvider::fetch_result> result;
+
+
+    FetchAction(CephContext *_cct,
+                SIClientRef _sipc,
+                int _shard_id,
+                int _max,
+                std::shared_ptr<SIProvider::fetch_result>& _result) : cct(_cct),
+                                                                      sipc(_sipc),
+                                                                      shard_id(_shard_id),
+                                                                      max(_max),
+                                                                      result(_result) {}
+    int operate() override {
+      int r = sipc->fetch(shard_id, max, result.get());
+      if (r < 0) {
+        ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to fetch bucket sync info (r=" << r << ")" << dendl;
+        return r;
+      }
+
+      return 0;
+    }
+  };
+
+public:
+  SIPClientCRHandler(CephContext *_cct,
+                     RGWAsyncRadosProcessor *_async_rados,
+                     SIClientRef& _sipc) : cct(_cct),
+                                           async_rados(_async_rados),
+                                           sipc(_sipc) {}
+
+  RGWCoroutine *init_markers_cr() {
+    auto init_action = make_shared<InitMarkersAction>(cct, sipc);
+
+    return new RGWGenericAsyncCR(cct,
+                                 async_rados,
+                                 init_action);
+  }
+
+
+  RGWCoroutine *fetch_cr(int shard_id,
+                         int max,
+                         std::shared_ptr<SIProvider::fetch_result>& result) {
+    auto fetch_action = make_shared<FetchAction>(cct, sipc, shard_id, max, result);
+
+    return new RGWGenericAsyncCR(cct,
+                                 async_rados,
+                                 fetch_action);
+  }
+};
+
 
 #define BUCKET_SYNC_SPAWN_WINDOW 20
 
