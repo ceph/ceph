@@ -28,6 +28,7 @@ tasks:
         admin_project_name: admin
         admin_password: ADMIN
         admin_domain_name: Default
+        tempest_roles: admin
       identity:
         uri: http://{keystone_public_host}:{keystone_public_port}/v2.0/
         uri_v3: http://{keystone_public_host}:{keystone_public_port}/v3/
@@ -56,10 +57,13 @@ overrides:
         osd_max_pg_log_entries: 10
       client:
         rgw keystone api version: 3
-        rgw keystone admin token: ADMIN
         rgw keystone accepted roles: admin,Member
         rgw keystone implicit tenants: true
         rgw keystone accepted admin roles: admin
         rgw swift enforce content length: true
         rgw swift account in url: true
         rgw swift versioning enabled: true
+        rgw keystone admin domain: Default
+        rgw keystone admin user: admin
+        rgw keystone admin password: ADMIN
+        rgw keystone admin project: admin

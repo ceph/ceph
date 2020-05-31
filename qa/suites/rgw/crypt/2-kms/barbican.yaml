@@ -3,9 +3,21 @@ overrides:
     conf:
       client:
         rgw crypt s3 kms backend: barbican
-        rgw keystone barbican tenant: rgwcrypt
+        rgw keystone barbican project: rgwcrypt
         rgw keystone barbican user: rgwcrypt-user
         rgw keystone barbican password: rgwcrypt-pass
+        rgw keystone barbican domain: Default
+        rgw keystone api version: 3
+        rgw keystone accepted roles: admin,Member,creator
+        rgw keystone implicit tenants: true
+        rgw keystone accepted admin roles: admin
+        rgw swift enforce content length: true
+        rgw swift account in url: true
+        rgw swift versioning enabled: true
+        rgw keystone admin project: admin
+        rgw keystone admin user: admin
+        rgw keystone admin password: ADMIN
+        rgw keystone admin domain: Default
   rgw:
     client.0:
       use-keystone-role: client.0

@@ -181,13 +181,17 @@ def task(ctx, config):
         ceph:
           conf:
             client:
-              rgw keystone admin token: ADMIN
+              rgw keystone api version: 3
               rgw keystone accepted roles: admin,Member
               rgw keystone implicit tenants: true
               rgw keystone accepted admin roles: admin
               rgw swift enforce content length: true
               rgw swift account in url: true
               rgw swift versioning enabled: true
+              rgw keystone admin domain: Default
+              rgw keystone admin user: admin
+              rgw keystone admin password: ADMIN
+              rgw keystone admin project: admin
       tasks:
       # typically, the task should be preceded with install, ceph, tox,
       # keystone and rgw. Tox and Keystone are specific requirements
