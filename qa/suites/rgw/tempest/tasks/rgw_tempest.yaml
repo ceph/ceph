@@ -10,27 +10,7 @@ tasks:
     client.0:
       sha1: 17.0.0.0rc2
       force-branch: master
-      domains:
-        - name: default
-          description: Default Domain
-      projects:
-        - name: admin
-          description:  Admin Tenant
-          domain: default
-      users:
-        - name: admin
-          password: ADMIN
-          project: admin
-          domain: default
-      roles: [ name: admin, name: Member ]
-      role-mappings:
-        - name: admin
-          user: admin
-          project: admin
       services:
-        - name: keystone
-          type: identity
-          description: Keystone Identity Service
         - name: swift
           type: object-store
           description: Swift Service
@@ -53,7 +33,7 @@ tasks:
         uri_v3: http://{keystone_public_host}:{keystone_public_port}/v3/
         auth_version: v3
         admin_role: admin
-        default_domain_name: default
+        default_domain_name: Default
       object-storage:
         reseller_admin_role: admin
       object-storage-feature-enabled:

@@ -17,13 +17,7 @@ tasks:
     client.0:
       sha1: 17.0.0.0rc2
       force-branch: master
-      domains:
-        - name: default
-          description: Default Domain
       projects:
-        - name: admin
-          description:  Admin Tenant
-          domain: default
         - name: rgwcrypt
           description: Encryption Tenant
           domain: default
@@ -34,10 +28,6 @@ tasks:
           description: S3 project
           domain: default
       users:
-        - name: admin
-          password: ADMIN
-          project: admin
-          domain: default
         - name: rgwcrypt-user
           password: rgwcrypt-pass
           project: rgwcrypt
@@ -50,11 +40,8 @@ tasks:
           password: s3-pass
           project: s3
           domain: default
-      roles: [ name: admin, name: Member, name: creator ]
+      roles: [ name: Member, name: creator ]
       role-mappings:
-        - name: admin
-          user: admin
-          project: admin
         - name: Member
           user: rgwcrypt-user
           project: rgwcrypt
@@ -65,9 +52,6 @@ tasks:
           user: s3-user
           project: s3
       services:
-        - name: keystone
-          type: identity
-          description: Keystone Identity Service
         - name: swift
           type: object-store
           description: Swift Service
