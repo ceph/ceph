@@ -21,6 +21,7 @@
 #define CEPH_BASE64_H
 
 #include <stdint.h>
+#include "base64/base64_plain.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,12 +36,20 @@ extern base64_decode_func_t arch_decode_base64;
 
 static inline
 int ceph_armor(char *dst, const char *dst_end, const char *src, const char *src_end) {
-  return arch_encode_base64(dst, dst_end, src, src_end);
+  if((int)(src_end - src) < 256) {
+    return plain_armor(dst, dst_end, src, src_end);
+  } else {
+    return arch_encode_base64(dst, dst_end, src, src_end);
+  }
 }
 
 static inline
 int ceph_unarmor(char *dst, const char *dst_end, const char *src, const char *src_end) {
-  return arch_decode_base64(dst, dst_end, src, src_end);
+  if((int)(src_end - src) < 256) {
+    return plain_unarmor(dst, dst_end, src, src_end);
+  } else {
+    return arch_decode_base64(dst, dst_end, src, src_end);
+  }
 }
 
 #ifdef __cplusplus
