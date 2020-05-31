@@ -159,10 +159,8 @@ def run_tempest(ctx, config):
                 get_tempest_dir(ctx) + '/workspace.yaml',
                 '--workspace',
                 'rgw',
-                '--regex',
-                    '(tempest.api.object_storage)' +
-                    ''.join([ '(?!{blackitem})'.format(blackitem=blackitem)
-                        for blackitem in blacklist])
+                '--regex', '^tempest.api.object_storage',
+                '--black-regex', '|'.join(blacklist)
             ])
     try:
         yield
