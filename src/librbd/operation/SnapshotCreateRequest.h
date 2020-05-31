@@ -90,6 +90,7 @@ private:
   std::string m_snap_name;
   bool m_skip_object_map;
   bool m_skip_notify_quiesce;
+  bool m_ignore_notify_quiesce_error;
   ProgressContext &m_prog_ctx;
 
   uint64_t m_request_id = 0;

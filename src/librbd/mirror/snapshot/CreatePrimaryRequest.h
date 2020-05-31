@@ -7,6 +7,7 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_types.h"
+#include "librbd/internal.h"
 #include "librbd/mirror/snapshot/Types.h"
 
 #include <string>
@@ -77,6 +78,7 @@ private:
   std::string m_snap_name;
 
   bufferlist m_out_bl;
+  NoOpProgressContext m_prog_ctx;
 
   void get_mirror_peers();
   void handle_get_mirror_peers(int r);

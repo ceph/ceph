@@ -246,8 +246,9 @@ public:
 
   int create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
                   librados::snap_t *snap_id) {
+    NoOpProgressContext prog_ctx;
     int r = image_ctx->operations->snap_create(
-        cls::rbd::UserSnapshotNamespace(), snap_name);
+        cls::rbd::UserSnapshotNamespace(), snap_name, 0, prog_ctx);
     if (r < 0) {
       return r;
     }

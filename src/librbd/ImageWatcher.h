@@ -37,6 +37,7 @@ public:
   void notify_snap_create(uint64_t request_id,
                           const cls::rbd::SnapshotNamespace &snap_namespace,
 			  const std::string &snap_name,
+                          uint64_t flags,
                           ProgressContext &prog_ctx,
 			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
