@@ -38,17 +38,16 @@ tasks:
         reseller_admin_role: admin
       object-storage-feature-enabled:
         container_sync: false
-        discoverability: false
+        discoverability: true
       blacklist:
-        # TODO(rzarzynski): we really need to update the list after
-        # merging PRs #15369 and #12704. Additionally, we would be
-        # able to enable the discoverability API testing above.
-        - .*test_list_containers_reverse_order.*
-        - .*test_list_container_contents_with_end_marker.*
-        - .*test_delete_non_empty_container.*
+        - .*test_account_quotas_negative.AccountQuotasNegativeTest.test_user_modify_quota
+        - .*test_container_acl_negative.ObjectACLsNegativeTest.*
+        - .*test_container_services_negative.ContainerNegativeTest.test_create_container_metadata_.*
+        - .*test_container_staticweb.StaticWebTest.test_web_index
+        - .*test_container_staticweb.StaticWebTest.test_web_listing_css
         - .*test_container_synchronization.*
-        - .*test_get_object_after_expiration_time.*
-        - .*test_create_object_with_transfer_encoding.*
+        - .*test_object_services.PublicObjectTest.test_access_public_container_object_without_using_creds
+
 overrides:
   ceph:
     conf:
