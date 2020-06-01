@@ -19,7 +19,7 @@ std::ostream &operator<<(std::ostream &os,
   os << "block_extent=" << e.block_extent << ", "
      << "log_entry=[" << e.log_entry << "]";
   return os;
-};
+}
 
 template <typename T>
 LogMapEntry<T>::LogMapEntry(const BlockExtent block_extent,
