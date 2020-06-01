@@ -61,12 +61,13 @@ class NFSService(CephadmService):
 
     def config(self, spec):
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
-
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
     def create(self, daemon_id, host, spec):
+        logger.info('Create daemon %s on host %s with spec %s' % (
+            daemon_id, host, spec))
         return self.mgr._create_daemon('nfs', daemon_id, host)
 
 
