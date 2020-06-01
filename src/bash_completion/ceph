@@ -27,7 +27,7 @@ _ceph()
 	COMPREPLY=( $(compgen -W "${options_noarg} ${options_arg}" -- $cur) )
 	return 0
     fi
-    declare -A hint_args
+    declare -a hint_args
     for (( i=1 ; i<cnt ; i++ ))
     do
 	#skip this word if it is option

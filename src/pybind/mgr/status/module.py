@@ -12,7 +12,7 @@ import prettytable
 import six
 import json
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, HandleCommandResult
 
 
 class Module(MgrModule):
@@ -260,11 +260,11 @@ class Module(MgrModule):
                 output += version_table.get_string() + "\n"
 
         if output_format == "json":
-            return 0, "", json.dumps(json_output, sort_keys=True)
+            return HandleCommandResult(stdout=json.dumps(json_output, sort_keys=True))
         elif output_format == "json-pretty":
-            return 0, "", json.dumps(json_output, sort_keys=True, indent=4, separators=(',', ': '))
+            return HandleCommandResult(stdout=json.dumps(json_output, sort_keys=True, indent=4, separators=(',', ': ')))
         else:
-            return 0, output, ""
+            return HandleCommandResult(stdout=output)
 
     def handle_osd_status(self, cmd):
         osd_table = PrettyTable(['ID', 'HOST', 'USED', 'AVAIL', 'WR OPS',
