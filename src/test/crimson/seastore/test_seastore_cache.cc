@@ -190,6 +190,20 @@ TEST_F(cache_test_t, test_dirty_extent)
       addr = extent->get_paddr();
     }
     {
+      // test that consecutive reads on the same extent get the same ref
+      auto t = get_transaction();
+      auto extent = cache.get_extent<CacheTestBlock>(
+	*t,
+	addr,
+	CacheTestBlock::SIZE).unsafe_get0();
+      auto t2 = get_transaction();
+      auto extent2 = cache.get_extent<CacheTestBlock>(
+	*t2,
+	addr,
+	CacheTestBlock::SIZE).unsafe_get0();
+      ASSERT_EQ(&*extent, &*extent2);
+    }
+    {
       // read back test block
       auto t = get_transaction();
       auto extent = cache.get_extent<CacheTestBlock>(
