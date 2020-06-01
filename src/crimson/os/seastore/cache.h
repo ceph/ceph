@@ -195,9 +195,10 @@ public:
 	offset,
 	length,
 	ref->get_bptr()).safe_then(
-	  [ref=std::move(ref)]() mutable {
+	  [this, ref=std::move(ref)]() mutable {
 	    ref->on_clean_read();
 	    ref->complete_io();
+	    add_extent(ref);
 	    return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	      std::move(ref));
 	  },
