@@ -14,6 +14,7 @@ overrides:
     conf:
       global:
         bluestore warn on legacy statfs: false
+        mon pg warn min per osd: 0
       mon:
         mon warn on osd down out interval zero: false
 
