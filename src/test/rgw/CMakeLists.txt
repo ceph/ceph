@@ -86,6 +86,7 @@ target_link_libraries(ceph_test_rgw_obj
   cls_user_client
   librados
   global
+  ceph-common
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
