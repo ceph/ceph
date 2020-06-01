@@ -39,6 +39,7 @@ overrides:
     conf:
       global:
         mon_warn_on_pool_no_app: false
+        mon pg warn min per osd: 0
       mon:
         mon debug unsafe allow tier with nonempty snaps: true
       osd:
