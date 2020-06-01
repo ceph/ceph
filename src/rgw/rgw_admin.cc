@@ -136,6 +136,7 @@ void usage()
   cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
+  cout << "  bucket radoslist           list rados objects backing bucket's objects\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
   cout << "  bi put                     store bucket index object entries\n";
   cout << "  bi list                    list raw bucket index entries\n";
@@ -242,9 +243,10 @@ void usage()
   cout << "  datalog list               list data log\n";
   cout << "  datalog trim               trim data log\n";
   cout << "  datalog status             read data log status\n";
-  cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
-  cout << "  orphans finish             clean up search for leaked rados objects\n";
-  cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
+  cout << "  orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
+  cout << "  orphans finish             deprecated -- clean up search for leaked rados objects\n";
+  cout << "  orphans list-jobs          deprecated -- list the current job-ids for orphans search\n";
+  cout << "                           * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool\n";
   cout << "  role create                create a AWS role for use with STS\n";
   cout << "  role rm                    remove a role\n";
   cout << "  role get                   get a role\n";
@@ -586,6 +588,7 @@ enum class OPT {
   BUCKET_REWRITE,
   BUCKET_RESHARD,
   BUCKET_CHOWN,
+  BUCKET_RADOS_LIST,
   POLICY,
   POOL_ADD,
   POOL_RM,
@@ -785,6 +788,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
   { "bucket chown", OPT::BUCKET_CHOWN },
+  { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
+  { "bucket rados list", OPT::BUCKET_RADOS_LIST },
   { "policy", OPT::POLICY },
   { "pool add", OPT::POOL_ADD },
   { "pool rm", OPT::POOL_RM },
@@ -1076,8 +1081,12 @@ public:
   }
 };
 
-static int init_bucket(const string& tenant_name, const string& bucket_name, const string& bucket_id,
-                       RGWBucketInfo& bucket_info, rgw_bucket& bucket, map<string, bufferlist> *pattrs = nullptr)
+static int init_bucket(const string& tenant_name,
+		       const string& bucket_name,
+		       const string& bucket_id,
+                       RGWBucketInfo& bucket_info,
+		       rgw_bucket& bucket,
+		       map<string, bufferlist> *pattrs = nullptr)
 {
   if (!bucket_name.empty()) {
     auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
@@ -6076,6 +6085,29 @@ int main(int argc, const char **argv)
     } /* have bucket_name */
   } /* OPT::BUCKETS_LIST */
 
+  if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
+    RGWRadosList lister(store,
+			max_concurrent_ios, orphan_stale_secs, tenant);
+    if (bucket_name.empty()) {
+      ret = lister.run();
+    } else {
+      ret = lister.run(bucket_name);
+    }
+
+    if (ret < 0) {
+      std::cerr <<
+	"ERROR: bucket radoslist failed to finish before " <<
+	"encountering error: " << cpp_strerror(-ret) << std::endl;
+      std::cerr << "************************************"
+	"************************************" << std::endl;
+      std::cerr << "WARNING: THE RESULTS ARE NOT RELIABLE AND SHOULD NOT " <<
+	"BE USED IN DELETING ORPHANS" << std::endl;
+      std::cerr << "************************************"
+	"************************************" << std::endl;
+      return -ret;
+    }
+  }
+
   if (opt_cmd == OPT::BUCKET_STATS) {
     if (bucket_name.empty() && !bucket_id.empty()) {
       rgw_bucket bucket;
@@ -7273,10 +7305,14 @@ next:
 
   if (opt_cmd == OPT::ORPHANS_FIND) {
     if (!yes_i_really_mean_it) {
-      cerr << "accidental removal of active objects can not be reversed; "
+      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
+	   << "accidental removal of active objects cannot be reversed; "
 	   << "do you really mean it? (requires --yes-i-really-mean-it)"
 	   << std::endl;
       return EINVAL;
+    } else {
+      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
+	   << std::endl;
     }
 
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
@@ -7308,6 +7344,17 @@ next:
   }
 
   if (opt_cmd == OPT::ORPHANS_FINISH) {
+    if (!yes_i_really_mean_it) {
+      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
+	   << "accidental removal of active objects cannot be reversed; "
+	   << "do you really mean it? (requires --yes-i-really-mean-it)"
+	   << std::endl;
+      return EINVAL;
+    } else {
+      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
+	   << std::endl;
+    }
+
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
@@ -7328,6 +7375,16 @@ next:
   }
 
   if (opt_cmd == OPT::ORPHANS_LIST_JOBS){
+    if (!yes_i_really_mean_it) {
+      cerr << "this command is now deprecated; please consider using the rgw-orphan-list tool; "
+	   << "do you really mean it? (requires --yes-i-really-mean-it)"
+	   << std::endl;
+      return EINVAL;
+    } else {
+      cerr << "IMPORTANT: this command is now deprecated; please consider using the rgw-orphan-list tool"
+	   << std::endl;
+    }
+
     RGWOrphanStore orphan_store(store);
     int ret = orphan_store.init();
     if (ret < 0){

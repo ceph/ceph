@@ -31,6 +31,7 @@
     bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
+    bucket radoslist           list rados objects backing bucket's objects
     bi get                     retrieve bucket index object entries
     bi put                     store bucket index object entries
     bi list                    list raw bucket index entries
@@ -137,9 +138,10 @@
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
-    orphans find               init and run search for leaked rados objects (use job-id, pool)
-    orphans finish             clean up search for leaked rados objects
-    orphans list-jobs          list the current job-ids for orphans search
+    orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)
+    orphans finish             deprecated -- clean up search for leaked rados objects
+    orphans list-jobs          deprecated -- list the current job-ids for orphans search
+                             * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool
     role create                create a AWS role for use with STS
     role rm                    remove a role
     role get                   get a role

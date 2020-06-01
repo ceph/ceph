@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+# version 1
+
+# IMPORTANT: affects order produced by 'sort' and 'ceph-diff-sorted'
+# relies on this ordering
+export LANG=C
+
+out_dir="."
+temp_file=/tmp/temp.$$
+timestamp=$(date -u +%Y%m%d%k%M)
+lspools_err="${out_dir}/lspools-${timestamp}.error"
+rados_out="${out_dir}/rados-${timestamp}.intermediate"
+rados_err="${out_dir}/rados-${timestamp}.error"
+rgwadmin_out="${out_dir}/radosgw-admin-${timestamp}.intermediate"
+rgwadmin_err="${out_dir}/radosgw-admin-${timestamp}.error"
+delta_out="${out_dir}/orphan-list-${timestamp}.out"
+
+error_out() {
+    echo "An error was encountered while running '$1'. Aborting."
+    if [ $# -gt 1 ] ;then
+	echo "Review file '$2' for details."
+    fi
+    echo "***"
+    echo "*** WARNING: The results are incomplete. Do not use! ***"
+    echo "***"
+    exit 1
+}
+
+prompt_pool() {
+    echo "Available pools:"
+    rados lspools >"$temp_file" 2>"$lspools_err"
+    if [ "$?" -ne 0 ] ;then
+	error_out "rados lspools" "$lspools_err"
+    fi
+    sed 's/^/    /' $temp_file # list pools and indent
+    printf "Which pool do you want to search for orphans? "
+    local mypool
+    read mypool
+    echo $mypool
+}
+
+if [ $# -eq 0 ] ;then
+    pool="$(prompt_pool)"
+elif [ $# -eq 1 ] ;then
+    pool="$1"
+else
+    error_out "Usage: $0 [pool]"
+fi
+
+echo "Pool is \"$pool\"."
+
+echo "Note: output files produced will be tagged with the current timestamp -- ${timestamp}."
+
+echo "running 'rados ls' at $(date)"
+rados ls --pool="$pool" >"$rados_out" 2>"$rados_err"
+if [ "$?" -ne 0 ] ;then
+    error_out "rados ls" "$rados_err"
+fi
+sort -u "$rados_out" >"$temp_file"
+mv -f "$temp_file" "$rados_out"
+
+echo "running 'radosgw-admin bucket radoslist' at $(date)"
+radosgw-admin bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
+if [ "$?" -ne 0 ] ;then
+    error_out "radosgw-admin radoslist" "$rgwadmin_err"
+fi
+sort -u "$rgwadmin_out" >"$temp_file"
+mv -f "$temp_file" "$rgwadmin_out"
+
+echo "computing delta at $(date)"
+ceph-diff-sorted "$rados_out" "$rgwadmin_out" | grep "^<" | sed 's/^< *//' >"$delta_out"
+# use PIPESTATUS to get at exit status of first process in above pipe;
+# 0 means same, 1 means different, >1 means error
+if [ "${PIPESTATUS[0]}" -gt 1 ] ;then
+    error_out "ceph-diff-sorted"
+fi
+
+found="$(wc -l < $delta_out)"
+possible="$(wc -l < $rados_out)"
+percentage=$(expr 100 \* $found / $possible)
+
+echo "$found potential orphans found out of a possible $possible (${percentage}%)."
+echo "The results can be found in ${delta_out}."
+echo "    Intermediate files: ${rados_out} and ${rgwadmin_out}"
+echo "***"
+echo "*** WARNING: This is EXPERIMENTAL code and the results should be used"
+echo "***          only with CAUTION!"
+echo "***"
+echo "Done at $(date)."
