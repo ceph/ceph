@@ -237,6 +237,20 @@ struct WriteLogPmemEntry {
     /* Log entry is any type that writes data */
     return is_write() || is_discard() || is_writesame();
   }
+
+  DENC(WriteLogPmemEntry, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.sync_gen_number, p);
+    denc(v.write_sequence_number, p);
+    denc(v.image_offset_bytes, p);
+    denc(v.write_bytes, p);
+    denc(v.write_data_pos, p);
+    denc(v.bitfields, p);
+    denc(v.ws_datalen, p);
+    denc(v.entry_index, p);
+    DENC_FINISH(p);
+  }
+
   friend std::ostream& operator<<(std::ostream& os,
                                   const WriteLogPmemEntry &entry);
 };
@@ -313,5 +327,6 @@ public:
 } // namespace rwl
 } // namespace cache
 } // namespace librbd
+WRITE_CLASS_DENC(librbd::cache::rwl::WriteLogPmemEntry)
 
 #endif // CEPH_LIBRBD_CACHE_RWL_TYPES_H
