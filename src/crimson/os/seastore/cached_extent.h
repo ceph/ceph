@@ -278,12 +278,21 @@ private:
   }
 
 protected:
+  CachedExtent(CachedExtent &&other) = default;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
       ptr(other.ptr.c_str(), other.ptr.length()),
       version(other.version),
       poffset(other.poffset) {}
+
+  struct share_buffer_t {};
+  CachedExtent(const CachedExtent &other, share_buffer_t) :
+    state(other.state),
+    ptr(other.ptr),
+    version(other.version),
+    poffset(other.poffset) {}
+
 
   friend class Cache;
   template <typename T, typename... Args>
