@@ -40,7 +40,7 @@ std::ostream& SyncPointLogEntry::format(std::ostream &os) const {
      << "prior_sync_point_flushed=" << prior_sync_point_flushed << ", "
      << "next_sync_point_entry=" << next_sync_point_entry;
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const SyncPointLogEntry &entry) {
@@ -66,7 +66,7 @@ std::ostream& GenericWriteLogEntry::format(std::ostream &os) const {
   os << "], "
      << "referring_map_entries=" << referring_map_entries;
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const GenericWriteLogEntry &entry) {
@@ -125,7 +125,7 @@ buffer::list& WriteLogEntry::get_pmem_bl() {
     ceph_assert(0 != bl_refs);
   }
   return pmem_bl;
-};
+}
 
 /* Constructs a new bl containing copies of pmem_bp */
 void WriteLogEntry::copy_pmem_bl(bufferlist *out_bl) {
@@ -156,7 +156,7 @@ std::ostream& WriteLogEntry::format(std::ostream &os) const {
   os << "pmem_bl=" << pmem_bl << ", ";
   os << "bl_refs=" << bl_refs;
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const WriteLogEntry &entry) {
@@ -185,7 +185,7 @@ std::ostream &DiscardLogEntry::format(std::ostream &os) const {
   os << "(Discard) ";
   GenericWriteLogEntry::format(os);
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const DiscardLogEntry &entry) {
@@ -200,7 +200,7 @@ void WriteSameLogEntry::init_bl(buffer::ptr &bp, buffer::list &bl) {
   if (trailing_partial) {
     bl.append(bp, 0, trailing_partial);
   }
-};
+}
 
 void WriteSameLogEntry::writeback(librbd::cache::ImageWritebackInterface &image_writeback,
                                   Context *ctx) {
@@ -216,7 +216,7 @@ std::ostream &WriteSameLogEntry::format(std::ostream &os) const {
   os << "(WriteSame) ";
   WriteLogEntry::format(os);
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const WriteSameLogEntry &entry) {
