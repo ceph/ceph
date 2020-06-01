@@ -4,6 +4,7 @@ Deploy and configure Keystone for Teuthology
 import argparse
 import contextlib
 import logging
+from cStringIO import StringIO
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -15,42 +16,22 @@ from teuthology.packaging import remove_package
 log = logging.getLogger(__name__)
 
 
-@contextlib.contextmanager
-def install_packages(ctx, config):
-    """
-    Download the packaged dependencies of Keystone.
-    Remove install packages upon exit.
-
-    The context passed in should be identical to the context
-    passed in to the main task.
-    """
-    assert isinstance(config, dict)
-    log.info('Installing packages for Keystone...')
-
-    deps = {
-	'deb': [ 'libffi-dev', 'libssl-dev', 'libldap2-dev', 'libsasl2-dev' ],
-	'rpm': [ 'libffi-devel', 'openssl-devel' ],
-    }
-    for (client, _) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.keys()
-        for dep in deps[remote.os.package_type]:
-            install_package(dep, remote)
-    try:
-        yield
-    finally:
-        log.info('Removing packaged dependencies of Keystone...')
-
-        for (client, _) in config.items():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
-            for dep in deps[remote.os.package_type]:
-                remove_package(dep, remote)
-
 def get_keystone_dir(ctx):
     return '{tdir}/keystone'.format(tdir=teuthology.get_testdir(ctx))
 
-def run_in_keystone_dir(ctx, client, args):
-    ctx.cluster.only(client).run(
+def run_in_keystone_dir(ctx, client, args, **kwargs):
+    return ctx.cluster.only(client).run(
         args=[ 'cd', get_keystone_dir(ctx), run.Raw('&&'), ] + args,
+        **kwargs
+    )
+
+def get_toxvenv_dir(ctx):
+    return ctx.tox.venv_path
+
+def run_in_tox_venv(ctx, remote, args, **kwargs):
+    return remote.run(
+        args=[ 'source', '{}/bin/activate'.format(get_toxvenv_dir(ctx)), run.Raw('&&') ] + args,
+        **kwargs
     )
 
 def run_in_keystone_venv(ctx, client, args):
@@ -63,9 +44,6 @@ def run_in_keystone_venv(ctx, client, args):
 def get_keystone_venved_cmd(ctx, cmd, args):
     kbindir = get_keystone_dir(ctx) + '/.tox/venv/bin/'
     return [ kbindir + 'python', kbindir + cmd ] + args
-
-def get_toxvenv_dir(ctx):
-    return ctx.tox.venv_path
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -112,6 +90,40 @@ def download(ctx, config):
             ctx.cluster.only(client).run(
                 args=[ 'rm', '-rf', keystonedir ],
             )
+
+@contextlib.contextmanager
+def install_packages(ctx, config):
+    """
+    Download the packaged dependencies of Keystone.
+    Remove install packages upon exit.
+
+    The context passed in should be identical to the context
+    passed in to the main task.
+    """
+    assert isinstance(config, dict)
+    log.info('Installing packages for Keystone...')
+
+    packages = {}
+    for (client, _) in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        # use bindep to read which dependencies we need from keystone/bindep.txt
+        run_in_tox_venv(ctx, remote, ['pip', 'install', 'bindep'])
+        r = run_in_tox_venv(ctx, remote,
+                ['bindep', '--brief', '--file', '{}/bindep.txt'.format(get_keystone_dir(ctx))],
+                stdout=StringIO(),
+                check_status=False) # returns 1 on success?
+        packages[client] = r.stdout.getvalue().splitlines()
+        for dep in packages[client]:
+            install_package(dep, remote)
+    try:
+        yield
+    finally:
+        log.info('Removing packaged dependencies of Keystone...')
+
+        for (client, _) in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+            for dep in packages[client]:
+                remove_package(dep, remote)
 
 @contextlib.contextmanager
 def setup_venv(ctx, config):
@@ -379,8 +391,8 @@ def task(ctx, config):
     ctx.keystone.admin_endpoints = assign_ports(ctx, config, 35357)
 
     with contextutil.nested(
-        lambda: install_packages(ctx=ctx, config=config),
         lambda: download(ctx=ctx, config=config),
+        lambda: install_packages(ctx=ctx, config=config),
         lambda: setup_venv(ctx=ctx, config=config),
         lambda: configure_instance(ctx=ctx, config=config),
         lambda: run_keystone(ctx=ctx, config=config),
