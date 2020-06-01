@@ -89,7 +89,7 @@ class DupInodeWorkload(Workload):
 
     def damage(self):
         temp_bin_path = "/tmp/10000000000.00000000_omap.bin"
-        self._mount.umount()
+        self._mount.umount_wait()
         self._filesystem.mds_asok(["flush", "journal"])
         self._filesystem.mds_stop()
         self._filesystem.rados(["getomapval", "10000000000.00000000",
