@@ -17,29 +17,52 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ ceph nfs cluster create <type=cephfs> [--size=1] <clusterid>
+    $ ceph nfs cluster create <type=cephfs> <clusterid> [<placement>]
 
 This creates a common recovery pool for all Ganesha daemons, new user based on
 cluster_id and common ganesha config rados object.
 
-Here size denotes the number of ganesha daemons within a cluster and type is
-export type. Currently only CephFS is supported.
+Here type is export type and placement specifies the size of cluster and hosts.
+For more details on placement specification refer the `orchestrator doc
+<https://docs.ceph.com/docs/master/mgr/orchestrator/#placement-specification>`_.
+Currently only CephFS export type is supported.
 
-.. note:: This does not setup ganesha recovery database and start the daemons.
-          It needs to be done manually if not using vstart for creating
-          clusters. Please refer `ganesha-rados-grace doc
-          <https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/doc/man/ganesha-rados-grace.rst>`_
+Update NFS Ganesha Cluster
+==========================
+
+.. code:: bash
+
+    $ ceph nfs cluster update <clusterid> <placement>
+
+This updates the deployed cluster according to the placement value.
+
+Delete NFS Ganesha Cluster
+==========================
+
+.. code:: bash
+
+    $ ceph nfs cluster delete <clusterid>
+
+This deletes the deployed cluster.
 
 Create CephFS Export
 ====================
 
 .. code:: bash
 
-    $ ceph nfs export create <type=cephfs> <fsname> <binding> <clusterid> [--readonly] [--path=/path/in/cephfs]
+    $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
 
 It creates export rados objects containing the export block. Here binding is
-the pseudo root name and type is export type. Currently only CephFS is
-supported.
+the pseudo root name and type is export type.
+
+Delete CephFS Export
+====================
+
+.. code:: bash
+
+    $ ceph nfs export delete <clusterid> <binding>
+
+It deletes an export in cluster based on pseudo root name (binding).
 
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================

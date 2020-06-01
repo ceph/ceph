@@ -223,19 +223,19 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
-            'cmd': 'nfs export create '
-            'name=type,type=CephString '
+            'cmd': 'nfs export create cephfs '
             'name=fsname,type=CephString '
-            'name=binding,type=CephString '
             'name=attach,type=CephString '
+            'name=binding,type=CephString '
             'name=readonly,type=CephBool,req=false '
             'name=path,type=CephString,req=false ',
             'desc': "Create a cephfs export",
             'perm': 'rw'
         },
         {
-            'cmd': 'fs nfs export delete '
-                   'name=export_id,type=CephInt,req=true ',
+            'cmd': 'nfs export delete '
+                   'name=attach,type=CephString '
+                   'name=binding,type=CephString ',
             'desc': "Delete a cephfs export",
             'perm': 'rw'
         },
@@ -243,8 +243,21 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'nfs cluster create '
                    'name=type,type=CephString '
                    'name=clusterid,type=CephString '
-                   'name=size,type=CephInt,req=false ',
+                   'name=placement,type=CephString,req=false ',
             'desc': "Create an NFS Cluster",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'nfs cluster update '
+                   'name=clusterid,type=CephString '
+                   'name=placement,type=CephString ',
+            'desc': "Updates an NFS Cluster",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'nfs cluster delete '
+                   'name=clusterid,type=CephString ',
+            'desc': "Deletes an NFS Cluster",
             'perm': 'rw'
         },
         # volume ls [recursive]
@@ -268,6 +281,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.vc = VolumeClient(self)
         self.fs_export = FSExport(self)
+        self.nfs = NFSCluster(self)
 
     def __del__(self):
         self.vc.shutdown()
@@ -417,16 +431,20 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'],  group_name=cmd.get('group_name', None))
 
-    def _cmd_nfs_export_create(self, inbuf, cmd):
+    def _cmd_nfs_export_create_cephfs(self, inbuf, cmd):
         #TODO Extend export creation for rgw.
-        return self.fs_export.create_export(export_type=cmd['type'], fs_name=cmd['fsname'],
-                pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False),
-                path=cmd.get('path', '/'), cluster_id=cmd.get('attach'))
+        return self.fs_export.create_export(fs_name=cmd['fsname'], cluster_id=cmd['attach'],
+                pseudo_path=cmd['binding'], read_only=cmd.get('readonly', False), path=cmd.get('path', '/'))
 
-    def _cmd_fs_nfs_export_delete(self, inbuf, cmd):
-        return self.fs_export.delete_export(cmd['export_id'])
+    def _cmd_nfs_export_delete(self, inbuf, cmd):
+        return self.fs_export.delete_export(cluster_id=cmd['attach'], pseudo_path=cmd['binding'])
 
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
-        #TODO add placement option
-        nfs_cluster_obj = NFSCluster(self, cmd['clusterid'])
-        return nfs_cluster_obj.create_nfs_cluster(export_type=cmd['type'], size=cmd.get('size', 1))
+        return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'], export_type=cmd['type'],
+                                           placement=cmd.get('placement', None))
+
+    def _cmd_nfs_cluster_update(self, inbuf, cmd):
+        return self.nfs.update_nfs_cluster(cluster_id=cmd['clusterid'], placement=cmd['placement'])
+
+    def _cmd_nfs_cluster_delete(self, inbuf, cmd):
+        return self.nfs.delete_nfs_cluster(cluster_id=cmd['clusterid'])
