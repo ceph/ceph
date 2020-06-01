@@ -302,6 +302,7 @@ struct PurgeRange {
   int flags;
   Context *oncommit;
   int uncommitted;
+  int err = 0;
   PurgeRange(inodeno_t i, const file_layout_t& l, const SnapContext& sc,
 	     uint64_t fo, uint64_t no, ceph::real_time t, int fl,
 	     Context *fin)
@@ -330,7 +331,7 @@ int Filer::purge_range(inodeno_t ino,
   PurgeRange *pr = new PurgeRange(ino, *layout, snapc, first_obj,
 				  num_obj, mtime, flags, oncommit);
 
-  _do_purge_range(pr, 0);
+  _do_purge_range(pr, 0, 0);
   return 0;
 }
 
@@ -339,20 +340,22 @@ struct C_PurgeRange : public Context {
   PurgeRange *pr;
   C_PurgeRange(Filer *f, PurgeRange *p) : filer(f), pr(p) {}
   void finish(int r) override {
-    filer->_do_purge_range(pr, 1);
+    filer->_do_purge_range(pr, 1, r);
   }
 };
 
-void Filer::_do_purge_range(PurgeRange *pr, int fin)
+void Filer::_do_purge_range(PurgeRange *pr, int fin, int err)
 {
   PurgeRange::unique_lock prl(pr->lock);
+  if (err && err != -ENOENT)
+    pr->err = err;
   pr->uncommitted -= fin;
   ldout(cct, 10) << "_do_purge_range " << pr->ino << " objects " << pr->first
 		 << "~" << pr->num << " uncommitted " << pr->uncommitted
 		 << dendl;
 
   if (pr->num == 0 && pr->uncommitted == 0) {
-    pr->oncommit->complete(0);
+    pr->oncommit->complete(pr->err);
     prl.unlock();
     delete pr;
     return;
