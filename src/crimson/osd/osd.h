@@ -181,7 +181,8 @@ private:
 				      Ref<MOSDPeeringOp> m);
   seastar::future<> handle_recovery_subreq(crimson::net::Connection* conn,
 					   Ref<MOSDFastDispatchOp> m);
-
+  seastar::future<> handle_mark_me_down(crimson::net::Connection* conn,
+					Ref<MOSDMarkMeDown> m);
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
@@ -205,6 +206,12 @@ public:
 private:
   PGMap pg_map;
   crimson::common::Gated gate;
+
+  seastar::promise<> stop_acked;
+  void got_stop_ack() {
+    stop_acked.set_value();
+  }
+  seastar::future<> prepare_to_stop();
 public:
   blocking_future<Ref<PG>> get_or_create_pg(
     spg_t pgid,

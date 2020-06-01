@@ -10,6 +10,7 @@
 #include <boost/smart_ptr/make_local_shared.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <seastar/core/timer.hh>
 
 #include "common/pick_address.h"
 #include "include/util.h"
@@ -19,6 +20,7 @@
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
+#include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGPull.h"
@@ -457,42 +459,44 @@ seastar::future<> OSD::stop()
 {
   logger().info("stop");
   // see also OSD::shutdown()
-  state.set_stopping();
-
-  if (!public_msgr->dispatcher_chain_empty()) {
-    public_msgr->remove_dispatcher(*this);
-    public_msgr->remove_dispatcher(*mgrc);
-    public_msgr->remove_dispatcher(*monc);
-  }
-  if (!cluster_msgr->dispatcher_chain_empty()) {
-    cluster_msgr->remove_dispatcher(*this);
-    cluster_msgr->remove_dispatcher(*mgrc);
-    cluster_msgr->remove_dispatcher(*monc);
-  }
-  auto gate_close_fut = gate.close();
-  return asok->stop().then([this] {
-    return heartbeat->stop();
-  }).then([this] {
-    return store->umount();
-  }).then([this] {
-    return store->stop();
-  }).then([this] {
-    return seastar::parallel_for_each(pg_map.get_pgs(),
-      [](auto& p) {
-      return p.second->stop();
+  return prepare_to_stop().then([this] {
+    state.set_stopping();
+    logger().debug("prepared to stop");
+    if (!public_msgr->dispatcher_chain_empty()) {
+      public_msgr->remove_dispatcher(*this);
+      public_msgr->remove_dispatcher(*mgrc);
+      public_msgr->remove_dispatcher(*monc);
+    }
+    if (!cluster_msgr->dispatcher_chain_empty()) {
+      cluster_msgr->remove_dispatcher(*this);
+      cluster_msgr->remove_dispatcher(*mgrc);
+      cluster_msgr->remove_dispatcher(*monc);
+    }
+    auto gate_close_fut = gate.close();
+    return asok->stop().then([this] {
+      return heartbeat->stop();
+    }).then([this] {
+      return store->umount();
+    }).then([this] {
+      return store->stop();
+    }).then([this] {
+      return seastar::parallel_for_each(pg_map.get_pgs(),
+	[](auto& p) {
+	return p.second->stop();
+      });
+    }).then([this] {
+      return monc->stop();
+    }).then([this] {
+      return mgrc->stop();
+    }).then([fut=std::move(gate_close_fut)]() mutable {
+      return std::move(fut);
+    }).then([this] {
+      return when_all_succeed(
+	  public_msgr->shutdown(),
+	  cluster_msgr->shutdown());
+    }).handle_exception([](auto ep) {
+      logger().error("error while stopping osd: {}", ep);
     });
-  }).then([this] {
-    return monc->stop();
-  }).then([this] {
-    return mgrc->stop();
-  }).then([fut=std::move(gate_close_fut)]() mutable {
-    return std::move(fut);
-  }).then([this] {
-    return when_all_succeed(
-	public_msgr->shutdown(),
-	cluster_msgr->shutdown());
-  }).handle_exception([](auto ep) {
-    logger().error("error while stopping osd: {}", ep);
   });
 }
 
@@ -624,6 +628,8 @@ seastar::future<> OSD::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
       return seastar::now();
     case MSG_COMMAND:
       return handle_command(conn, boost::static_pointer_cast<MCommand>(m));
+    case MSG_OSD_MARK_ME_DOWN:
+      return handle_mark_me_down(conn, boost::static_pointer_cast<MOSDMarkMeDown>(m));
     case MSG_OSD_PG_PULL:
       [[fallthrough]];
     case MSG_OSD_PG_PUSH:
@@ -970,6 +976,11 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         heartbeat_timer.arm_periodic(
           std::chrono::seconds(TICK_INTERVAL));
       }
+    } else if (!osdmap->is_up(whoami)) {
+      if (state.is_prestop()) {
+	got_stop_ack();
+	return seastar::now();
+      }
     }
     check_osdmap_features();
     // yay!
@@ -1032,6 +1043,15 @@ seastar::future<> OSD::handle_rep_op_reply(crimson::net::Connection* conn,
     pg->second->handle_rep_op_reply(conn, *m);
   } else {
     logger().warn("stale reply: {}", *m);
+  }
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_mark_me_down(crimson::net::Connection* conn,
+					   Ref<MOSDMarkMeDown> m)
+{
+  if (state.is_prestop()) {
+    got_stop_ack();
   }
   return seastar::now();
 }
@@ -1178,6 +1198,31 @@ blocking_future<Ref<PG>> OSD::wait_for_pg(
   spg_t pgid)
 {
   return pg_map.get_pg(pgid).first;
+}
+
+seastar::future<> OSD::prepare_to_stop()
+{
+  if (osdmap && osdmap->is_up(whoami)) {
+    state.set_prestop();
+    return monc->send_message(
+	  make_message<MOSDMarkMeDown>(
+	    monc->get_fsid(),
+	    whoami,
+	    osdmap->get_addrs(whoami),
+	    osdmap->get_epoch(),
+	    true)).then([this] {
+      const auto timeout =
+	std::chrono::duration_cast<std::chrono::milliseconds>(
+	  std::chrono::duration<double>(
+	    local_conf().get_val<double>("osd_mon_shutdown_timeout")));
+      return seastar::with_timeout(
+      seastar::timer<>::clock::now() + timeout,
+      stop_acked.get_future());
+    }).handle_exception_type([this](seastar::timed_out_error&) {
+      return seastar::now();
+    });
+  }
+  return seastar::now();
 }
 
 }
