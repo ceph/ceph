@@ -1563,27 +1563,26 @@ def get_shell_conffile_path(arg_conf=''):
         return ''
 
 
-if __name__ == '__main__':
-    exe_and_quit = False
-    exe = sys.argv[0]
-
+def manage_args():
     main_parser = argparse.ArgumentParser(description='')
     main_parser.add_argument('-c', '--config', action='store',
-                             help='Path to cephfs-shell.conf', type=str)
-    main_parser.add_argument(
-        '-b', '--batch', action='store', help='Batch File path.', type=str)
+                             help='Path to Ceph configuration file.',
+                             type=str)
+    main_parser.add_argument('-b', '--batch', action='store',
+                             help='Path to CephFS shell script/batch file'
+                                  'containing CephFS shell commands',
+                             type=str)
     main_parser.add_argument('-t', '--test', action='store',
                              help='Test against transcript(s) in FILE',
                              nargs='+')
-    main_parser.add_argument(
-        'commands',
-        nargs='*',
-        help='Comma delimited commands. The shell executes the given command '
-             'and quits immediately with the return value of command. In '
-             'case no commands are provided, the shell is launched.',
-        default=[]
-    )
+    main_parser.add_argument('commands', nargs='*', help='Comma delimited '
+                             'commands. The shell executes the given command '
+                             'and quits immediately with the return value of '
+                             'command. In case no commands are provided, the '
+                             'shell is launched.', default=[])
+
     args = main_parser.parse_args()
+    args.exe_and_quit = False    # Execute and quit, don't launch the shell.
 
     if args.batch:
         if LooseVersion(cmd2_version) <= LooseVersion("0.9.13"):
@@ -1593,53 +1592,81 @@ if __name__ == '__main__':
     if args.test:
         args.commands.extend(['-t,'] + [arg + ',' for arg in args.test])
     if not args.batch and len(args.commands) > 0:
-        exe_and_quit = True
+        args.exe_and_quit = True
 
+    manage_sys_argv(args)
+
+    return args
+
+
+def manage_sys_argv(args):
+    exe = sys.argv[0]
     sys.argv.clear()
     sys.argv.append(exe)
     sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])
 
     setup_cephfs()
+
+
+def execute_cmd_args(args):
+    """
+    Launch a shell session if no arguments were passed, else just execute
+    the given argument as a shell command and exit the shell session
+    immediately at (last) command's termination with the (last) command's
+    return value.
+    """
+    if not args.exe_and_quit:
+        return shell.cmdloop()
+    return execute_cmds_and_quit(args)
+
+
+def execute_cmds_and_quit(args):
+    """
+    Multiple commands might be passed separated by commas, feed onecmd()
+    one command at a time.
+    """
+    # do_* methods triggered by cephfs-shell commands return None when they
+    # complete running successfully. Until 0.9.6, shell.onecmd() returned this
+    # value to indicate whether the execution of the commands should stop, but
+    # since 0.9.7 it returns the return value of do_* methods only if it's
+    # not None. When it is None it returns False instead of None.
+    if LooseVersion(cmd2_version) <= LooseVersion("0.9.6"):
+        stop_exec_val = None
+    else:
+        stop_exec_val = False
+
+    args_to_onecmd = ''
+    if len(args.commands) <= 1:
+        args.commands = args.commands[0].split(' ')
+    for cmdarg in args.commands:
+        if ',' in cmdarg:
+            args_to_onecmd += ' ' + cmdarg[0:-1]
+            onecmd_retval = shell.onecmd(args_to_onecmd)
+            # if the curent command failed, let's abort the execution of
+            # series of commands passed.
+            if onecmd_retval is not stop_exec_val:
+                return onecmd_retval
+            if shell.exit_code != 0:
+                return shell.exit_code
+
+            args_to_onecmd = ''
+            continue
+
+        args_to_onecmd += ' ' + cmdarg
+    return shell.onecmd(args_to_onecmd)
+
+
+if __name__ == '__main__':
+    args = manage_args()
+
     shell = CephFSShell()
     # TODO: perhaps, we should add an option to pass ceph.conf?
     read_shell_conf(shell, get_shell_conffile_path(args.config))
+    # XXX: setting shell.exit_code to zero so that in case there are no errors
+    # and exceptions, it is not set by any method or function of cephfs-shell
+    # and return values from shell.cmdloop() or shell.onecmd() is not an
+    # integer, we can treat it as the return value of cephfs-shell.
     shell.exit_code = 0
 
-    if exe_and_quit:
-        # do_* methods triggerd by cephfs-shell commands return None when they
-        # complete running successfully. Until 0.9.6, shell.onecmd() returned this
-        # value to indicate whether the execution of the commands should stop, but
-        # since 0.9.7 it returns the return value of do_* methods only if it's
-        # not None. When it is None it returns False instead of None.
-        if LooseVersion(cmd2_version) <= LooseVersion("0.9.6"):
-            stop_exec_val = None
-        else:
-            stop_exec_val = False
-
-        args_to_onecmd = ''
-        if len(args.commands) <= 1:
-            args.commands = args.commands[0].split(' ')
-        # multiple commands might be passed separated by commas, feed onecmd()
-        # one command at a time.
-        for cmdarg in args.commands:
-            if ',' in cmdarg:
-                args_to_onecmd += ' ' + cmdarg[0:-1]
-                onecmd_retval = shell.onecmd(args_to_onecmd)
-                # if the curent command failed, let's abort the execution of
-                # series of commands passed.
-                if onecmd_retval is not stop_exec_val:
-                    retval = onecmd_retval
-                    break
-                if shell.exit_code != 0:
-                    retval = shell.exit_code
-                    break
-
-                args_to_onecmd = ''
-                continue
-
-            args_to_onecmd += ' ' + cmdarg
-        retval = shell.onecmd(args_to_onecmd)
-    else:
-        retval = shell.cmdloop()
-
+    retval = execute_cmd_args(args)
     sys.exit(retval if retval else shell.exit_code)
