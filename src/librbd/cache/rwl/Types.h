@@ -195,15 +195,20 @@ struct WriteLogPmemEntry {
   uint64_t write_sequence_number = 0;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
-  TOID(uint8_t) write_data;
-  struct {
-    uint8_t entry_valid :1; /* if 0, this entry is free */
-    uint8_t sync_point :1;  /* No data. No write sequence number. Marks sync
-                               point for this sync gen number */
-    uint8_t sequenced :1;   /* write sequence number is valid */
-    uint8_t has_data :1;    /* write_data field is valid (else ignore) */
-    uint8_t discard :1;     /* has_data will be 0 if this is a discard */
-    uint8_t writesame :1;   /* ws_datalen indicates length of data at write_bytes */
+  union {
+    TOID(uint8_t) write_data;
+    uint64_t write_data_pos = 0; //SSD: data offset
+  };
+  union {
+    struct {
+      uint8_t entry_valid :1; /* if 0, this entry is free */
+      uint8_t sync_point :1;  /* No data. No write sequence number. Marks sync point for this sync gen number */
+      uint8_t sequenced :1;   /* write sequence number is valid */
+      uint8_t has_data :1;    /* write_data field is valid (else ignore) */
+      uint8_t discard :1;     /* has_data will be 0 if this is a discard */
+      uint8_t writesame :1;   /* ws_datalen indicates length of data at write_bytes */
+    };
+    uint8_t bitfields = 0; //bitfields has ENTRY_VALID/SYNC_POINT/SEQUENCED/HAS_DATA/DISCARD/WRITESAME
   };
   uint32_t ws_datalen = 0;  /* Length of data buffer (writesame only) */
   uint32_t entry_index = 0; /* For debug consistency check. Can be removed if
