@@ -177,6 +177,7 @@ class AMQPReceiver(object):
                 remaining_retries -= 1
                 print('failed to connect to rabbitmq (remaining retries '
                     + str(remaining_retries) + '): ' + str(error))
+                time.sleep(1)
 
         if remaining_retries == 0:
             raise Exception('failed to connect to rabbitmq - no retries left')
@@ -2220,6 +2221,113 @@ def test_ps_subscription():
     notification_conf.del_config()
     topic_conf.del_config()
     master_zone.delete_bucket(bucket_name)
+
+
+def test_ps_admin():
+    """ test radosgw-admin commands """
+    master_zone, ps_zone = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+
+    # create topic
+    topic_conf = PSTopic(ps_zone.conn, topic_name)
+    topic_conf.set_config()
+    result, status = topic_conf.get_config()
+    assert_equal(status, 200)
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['topic']['name'], topic_name)
+    result, status = ps_zone.zone.cluster.admin(['topic', 'list', '--uid', get_user()] + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    parsed_result = json.loads(result)
+    assert len(parsed_result['topics']) > 0
+    result, status = ps_zone.zone.cluster.admin(['topic', 'get', '--uid', get_user(), '--topic', topic_name] + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['topic']['name'], topic_name)
+
+    # create s3 topics
+    endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf_s3 = PSTopicS3(master_zone.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_conf_s3.set_config()
+    result, status = topic_conf_s3.get_config()
+    assert_equal(status, 200)
+    assert_equal(result['GetTopicResponse']['GetTopicResult']['Topic']['Name'], topic_name)
+    result, status = master_zone.zone.cluster.admin(['topic', 'list', '--uid', get_user()] + master_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    parsed_result = json.loads(result)
+    assert len(parsed_result['topics']) > 0
+    result, status = master_zone.zone.cluster.admin(['topic', 'get', '--uid', get_user(), '--topic', topic_name] + master_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['topic']['name'], topic_name)
+
+    # create bucket on the first of the rados zones
+    bucket = master_zone.create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zone.zone)
+    # create notifications
+    notification_conf = PSNotification(ps_zone.conn, bucket_name,
+                                       topic_name)
+    _, status = notification_conf.set_config()
+    assert_equal(status/100, 2)
+    # create subscription
+    sub_conf = PSSubscription(ps_zone.conn, bucket_name+SUB_SUFFIX,
+                              topic_name)
+    _, status = sub_conf.set_config()
+    assert_equal(status/100, 2)
+    result, status = ps_zone.zone.cluster.admin(['subscription', 'get', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX] 
+            + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['name'], bucket_name+SUB_SUFFIX)
+    # create objects in the bucket
+    number_of_objects = 110
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+    # wait for sync
+    # get events from subscription
+    zone_bucket_checkpoint(ps_zone.zone, master_zone.zone, bucket_name)
+    result, status = ps_zone.zone.cluster.admin(['subscription', 'pull', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX] 
+            + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    parsed_result = json.loads(result)
+    assert_equal(len(parsed_result['events']), 100)
+    marker = parsed_result['next_marker']
+    result, status = ps_zone.zone.cluster.admin(['subscription', 'pull', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX, '--marker', marker]
+            + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    parsed_result = json.loads(result)
+    assert_equal(len(parsed_result['events']), 10)
+    event_id = parsed_result['events'][0]['id']
+
+    # ack an event in the subscription 
+    result, status = ps_zone.zone.cluster.admin(['subscription', 'ack', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX, '--event-id', event_id]
+            + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+
+    # remove the subscription
+    result, status = ps_zone.zone.cluster.admin(['subscription', 'rm', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX]
+            + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+
+    # remove the topics
+    result, status = ps_zone.zone.cluster.admin(['topic', 'rm', '--uid', get_user(), '--topic', topic_name]
+            + ps_zone.zone.zone_arg())
+    assert_equal(status, 0)
+    result, status = master_zone.zone.cluster.admin(['topic', 'rm', '--uid', get_user(), '--topic', topic_name]
+            + master_zone.zone.zone_arg())
+    assert_equal(status, 0)
+
+    # cleanup
+    for key in bucket.list():
+        key.delete()
+    notification_conf.del_config()
+    master_zone.delete_bucket(bucket_name)
+
 
 def test_ps_incremental_sync():
     """ test that events are only sent on incremental sync """
