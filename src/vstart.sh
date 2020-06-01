@@ -1064,11 +1064,12 @@ EOF
 }
 
 # Ganesha Daemons requires nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rados-grace
-# (version 2.7.6-2 and above) packages installed. On Fedora>=30 these packages
-# can be installed directly with 'dnf'. For CentOS>=8 the packages need to be
-# downloaded first from  https://download.nfs-ganesha.org/2.7/2.7.6/CentOS/ and
-# then install it. Similarly for Ubuntu 16.04 follow the instructions on
-# https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.7
+# nfs-ganesha-rados-urls (version 2.8.3 and above) packages installed. On
+# Fedora>=31 these packages can be installed directly with 'dnf'. For CentOS>=8
+# the packages need to be downloaded first from
+# https://download.nfs-ganesha.org/2.8/2.8.3/CentOS and then installed.
+# Similarly for Ubuntu 16.04 follow the instructions on
+# https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.8
 
 start_ganesha() {
     GANESHA_PORT=$(($CEPH_PORT + 4000))
@@ -1084,6 +1085,7 @@ start_ganesha() {
         test_user="ganesha-$name"
         pool_name="nfs-ganesha"
         namespace=$name
+        url="rados://$pool_name/$namespace/conf-nfs.$test_user"
 
         prun rm -rf $ganesha_dir
         prun mkdir -p $ganesha_dir
@@ -1092,6 +1094,9 @@ start_ganesha() {
             osd "allow rw pool=$pool_name namespace=$namespace, allow rw tag cephfs data=a" \
             mds "allow rw path=/" \
             >> "$keyring_fn"
+
+        ceph_adm mgr module enable test_orchestrator
+        ceph_adm orch set backend test_orchestrator
         prun ceph_adm nfs cluster create cephfs $name
 
         echo "NFS_CORE_PARAM {
@@ -1101,7 +1106,7 @@ start_ganesha() {
             NFS_Port = $port;
         }
 
-        CACHEINODE {
+        MDCACHE {
            Dir_Chunk = 0;
            NParts = 1;
            Cache_Size = 1;
@@ -1112,7 +1117,7 @@ start_ganesha() {
            Minor_Versions = 1, 2;
         }
 
-        %url rados://$pool_name/$namespace/conf-nfs
+        %url $url
 
         RADOS_KV {
            pool = $pool_name;
@@ -1123,6 +1128,7 @@ start_ganesha() {
 
         RADOS_URLS {
 	   Userid = $test_user;
+	   watch_url = \"$url\";
         }" > "$ganesha_dir/ganesha.conf"
 	wconf <<EOF
 [ganesha.$name]
@@ -1133,7 +1139,7 @@ start_ganesha() {
         pid file = $ganesha_dir/ganesha.pid
 EOF
 
-        prun ceph_adm nfs export create cephfs "a" "/cephfs" $name
+        prun ceph_adm nfs export create cephfs "a" $name "/cephfs"
         prun ganesha-rados-grace -p $pool_name -n $namespace add $name
         prun ganesha-rados-grace -p $pool_name -n $namespace
 
@@ -1363,7 +1369,7 @@ EOF
 fi
 
 # Ganesha Daemons
-if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
+if [ $GANESHA_DAEMON_NUM -gt 0 ] && [ "$cephadm" -eq 0 ]; then
     start_ganesha
 fi
 

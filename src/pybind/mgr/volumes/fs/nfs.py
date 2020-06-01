@@ -2,6 +2,8 @@ import json
 import errno
 import logging
 
+from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
+
 import cephfs
 import orchestrator
 from .fs_util import create_pool
@@ -200,29 +202,32 @@ class FSExport(object):
         fs_map = self.mgr.get('fs_map')
         return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
 
-    def check_pseudo_path(self, pseudo_path):
+    def _fetch_export(self, pseudo_path):
         for ex in self.exports[self.rados_namespace]:
             if ex.pseudo == pseudo_path:
-                return True
-        return False
+                return ex
 
-    def _create_user_key(self, entity):
-        osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data=a'.format(
-                self.rados_pool, self.rados_namespace)
-        ret, out, err = self.mgr.mon_command({
+    def _create_user_key(self, entity, path, fs_name):
+        osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
+                self.rados_pool, self.rados_namespace, fs_name)
+
+        ret, out, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.{}'.format(entity),
-            'caps' : ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path=/'],
+            'caps' : ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
             'format': 'json',
             })
 
-        if ret!= 0:
-            return ret, err
-
         json_res = json.loads(out)
-        log.info("Export user is {}".format(json_res[0]['entity']))
-
+        log.info("Export user created is {}".format(json_res[0]['entity']))
         return json_res[0]['entity'], json_res[0]['key']
+
+    def _delete_user(self, entity):
+        self.mgr.check_mon_command({
+            'prefix': 'auth rm',
+            'entity': 'client.{}'.format(entity),
+            })
+        log.info(f"Export user deleted is {entity}")
 
     def format_path(self, path):
         if path is not None:
@@ -248,14 +253,29 @@ class FSExport(object):
                 ioctx.set_namespace(self.rados_namespace)
             if append:
                 ioctx.append(obj, raw_config.encode('utf-8'))
+                ioctx.notify(obj)
             else:
                 ioctx.write_full(obj, raw_config.encode('utf-8'))
             log.debug(
                     "write configuration into rados object %s/%s/%s:\n%s",
                     self.rados_pool, self.rados_namespace, obj, raw_config)
 
-    def _update_common_conf(self, ex_id):
-        common_conf = 'conf-nfs'
+    def _delete_export_url(self, obj, ex_id):
+        export_name = 'export-{}'.format(ex_id)
+        with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
+
+            export_urls = ioctx.read(obj)
+            url = '%url "{}"\n\n'.format(self.make_rados_url(export_name))
+            export_urls = export_urls.replace(url.encode('utf-8'), b'')
+            ioctx.remove_object(export_name)
+            ioctx.write_full(obj, export_urls)
+            ioctx.notify(obj)
+            log.debug("Export deleted: {}".format(url))
+
+    def _update_common_conf(self, cluster_id, ex_id):
+        common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
         conf_blocks = {
                 'block_name': '%url',
                 'value': self.make_rados_url(
@@ -267,52 +287,82 @@ class FSExport(object):
         self.exports[self.rados_namespace].append(export)
         conf_block = export.to_export_block()
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
-        self._update_common_conf(export.export_id)
+        self._update_common_conf(export.cluster_id, export.export_id)
 
-    def create_export(self, export_type, fs_name, pseudo_path, read_only, path, cluster_id):
-        if export_type != 'cephfs':
-            return -errno.EINVAL,"", f"Invalid export type: {export_type}"
-        #TODO Check if valid cluster
-        if cluster_id not in self.exports:
-            self.exports[cluster_id] = []
+    def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
+        try:
+            if not self.check_fs(fs_name):
+                return -errno.EINVAL,"", "Invalid CephFS name"
 
-        self.rados_namespace = cluster_id
-        if not self.check_fs(fs_name) or self.check_pseudo_path(pseudo_path):
-            return -errno.EINVAL,"", "Invalid CephFS name or export already exists"
+            #TODO Check if valid cluster
+            if cluster_id not in self.exports:
+                self.exports[cluster_id] = []
 
-        user_id, key = self._create_user_key(cluster_id)
-        if isinstance(user_id, int):
-            return user_id, "", key
-        access_type = "RW"
-        if read_only:
-            access_type = "R"
+            self.rados_namespace = cluster_id
 
-        ex_dict = {
-            'path': self.format_path(path),
-            'pseudo': self.format_path(pseudo_path),
-            'cluster_id': cluster_id,
-            'access_type': access_type,
-            'fsal': {"name": "CEPH", "user_id":cluster_id, "fs_name": fs_name, "sec_label_xattr": ""},
-            'clients': []
-            }
+            if not self._fetch_export(pseudo_path):
+                ex_id = self._gen_export_id()
+                user_id = f"{cluster_id}{ex_id}"
+                user_out, key = self._create_user_key(user_id, path, fs_name)
+                access_type = "RW"
+                if read_only:
+                    access_type = "RO"
+                ex_dict = {
+                        'path': self.format_path(path),
+                        'pseudo': self.format_path(pseudo_path),
+                        'cluster_id': cluster_id,
+                        'access_type': access_type,
+                        'fsal': {"name": "CEPH", "user_id": user_id,
+                            "fs_name": fs_name, "sec_label_xattr": ""},
+                        'clients': []
+                        }
+                export = Export.from_dict(ex_id, ex_dict)
+                export.fsal.cephx_key = key
+                self._save_export(export)
+                result = {
+                        "bind": pseudo_path,
+                        "fs": fs_name,
+                        "path": path,
+                        "cluster": cluster_id,
+                        "mode": access_type,
+                        }
+                return (0, json.dumps(result, indent=4), '')
+            return 0, "", "Export already exists"
+        except Exception as e:
+            log.warning("Failed to create exports")
+            return -errno.EINVAL, "", str(e)
 
-        ex_id = self._gen_export_id()
-        export = Export.from_dict(ex_id, ex_dict)
-        export.fsal.cephx_key = key
-        self._save_export(export)
+    def delete_export(self, cluster_id, pseudo_path, export_obj=None):
+        try:
+            self.rados_namespace = cluster_id
+            if export_obj:
+                export = export_obj
+            else:
+                export = self._fetch_export(pseudo_path)
 
-        result = {
-            "bind": pseudo_path,
-            "fs": fs_name,
-            "path": path,
-            "cluster": cluster_id,
-            "mode": access_type,
-            }
+            if export:
+                common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
+                self._delete_export_url(common_conf, export.export_id)
+                self.exports[cluster_id].remove(export)
+                self._delete_user(export.fsal.user_id)
+                return 0, "Successfully deleted export", ""
+            return 0, "", "Export does not exist"
+        except KeyError:
+            return -errno.EINVAL, "", "Cluster does not exist"
+        except Exception as e:
+            log.warning("Failed to delete exports")
+            return -errno.EINVAL, "", str(e)
 
-        return (0, json.dumps(result, indent=4), '')
-
-    def delete_export(self, ex_id):
-        raise NotImplementedError()
+    def delete_all_exports(self, cluster_id):
+        try:
+            export_list = list(self.exports[cluster_id])
+            for export in export_list:
+               ret, out, err = self.delete_export(cluster_id, None, export)
+               if ret != 0:
+                   raise Exception("Failed to delete exports: {err} and {ret}")
+            log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
+        except KeyError:
+            log.info("No exports to delete")
 
     def make_rados_url(self, obj):
         if self.rados_namespace:
@@ -320,50 +370,107 @@ class FSExport(object):
         return "rados://{}/{}".format(self.rados_pool, obj)
 
 class NFSCluster:
-    def __init__(self, mgr, cluster_id):
-        self.cluster_id = "ganesha-%s" % cluster_id
+    def __init__(self, mgr):
         self.pool_name = 'nfs-ganesha'
-        self.pool_ns = cluster_id
+        self.pool_ns = ''
         self.mgr = mgr
 
     def create_empty_rados_obj(self):
-        common_conf = 'conf-nfs'
+        common_conf = self._get_common_conf_obj_name()
         result = ''
         with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
             if self.pool_ns:
                 ioctx.set_namespace(self.pool_ns)
             ioctx.write_full(common_conf, result.encode('utf-8'))
             log.debug(
-                    "write configuration into rados object %s/%s/nfs-conf\n",
-                    self.pool_name, self.pool_ns)
+                    "write configuration into rados object %s/%s/%s\n",
+                    self.pool_name, self.pool_ns, common_conf)
 
-    def create_nfs_cluster(self, export_type, size):
+    def delete_common_config_obj(self):
+        common_conf = self._get_common_conf_obj_name()
+        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
+            if self.pool_ns:
+                ioctx.set_namespace(self.pool_ns)
+
+            ioctx.remove_object(common_conf)
+            log.info(f"Deleted object:{common_conf}")
+
+    def available_clusters(self):
+        completion = self.mgr.describe_service(service_type='nfs')
+        self.mgr._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+        return [cluster.spec.service_id for cluster in completion.result]
+
+    def _set_cluster_id(self, cluster_id):
+        self.cluster_id = "ganesha-%s" % cluster_id
+
+    def _set_pool_namespace(self, cluster_id):
+        self.pool_ns = cluster_id
+
+    def _get_common_conf_obj_name(self):
+        return 'conf-nfs.{}'.format(self.cluster_id)
+
+    def _call_orch_apply_nfs(self, placement):
+        spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
+                              pool=self.pool_name, namespace=self.pool_ns,
+                              placement=PlacementSpec.from_string(placement))
+        completion = self.mgr.apply_nfs(spec)
+        self.mgr._orchestrator_wait([completion])
+        orchestrator.raise_if_exception(completion)
+
+    def create_nfs_cluster(self, export_type, cluster_id, placement):
         if export_type != 'cephfs':
-            return -errno.EINVAL,"", f"Invalid export type: {export_type}"
+            return -errno.EINVAL, "", f"Invalid export type: {export_type}"
+        try:
+            pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
 
-        pool_list = [p['pool_name'] for p in self.mgr.get_osdmap().dump().get('pools', [])]
-        client = 'client.%s' % self.cluster_id
+            if self.pool_name not in pool_list:
+                r, out, err = create_pool(self.mgr, self.pool_name)
+                if r != 0:
+                    return r, out, err
+                log.info(f"Pool Status: {out}")
 
-        if self.pool_name not in pool_list:
-            r, out, err = create_pool(self.mgr, self.pool_name)
-            if r != 0:
-                return r, out, err
-            log.info("{}".format(out))
+                self.mgr.check_mon_command({'prefix': 'osd pool application enable',
+                    'pool': self.pool_name, 'app': 'nfs'})
 
-            command = {'prefix': 'osd pool application enable', 'pool': self.pool_name, 'app': 'nfs'}
-            r, out, err = self.mgr.mon_command(command)
+            self._set_pool_namespace(cluster_id)
+            self._set_cluster_id(cluster_id)
+            self.create_empty_rados_obj()
 
-            if r != 0:
-                return r, out, err
+            if self.cluster_id not in self.available_clusters():
+                self._call_orch_apply_nfs(placement)
+                return 0, "NFS Cluster Created Successfully", ""
+            return 0, "", f"{self.cluster_id} cluster already exists"
+        except Exception as e:
+            log.warning("NFS Cluster could not be created")
+            return -errno.EINVAL, "", str(e)
 
-        self.create_empty_rados_obj()
-        #TODO Check if cluster exists
-        #TODO Call Orchestrator to deploy cluster
+    def update_nfs_cluster(self, cluster_id, placement):
+        try:
+            self._set_pool_namespace(cluster_id)
+            self._set_cluster_id(cluster_id)
+            if self.cluster_id in self.available_clusters():
+                self._call_orch_apply_nfs(placement)
+                return 0, "NFS Cluster Updated Successfully", ""
+            return -errno.EINVAL, "", "Cluster does not exist"
+        except Exception as e:
+            log.warning("NFS Cluster could not be updated")
+            return -errno.EINVAL, "", str(e)
 
-        return 0, "", "NFS Cluster Created Successfully"
+    def delete_nfs_cluster(self, cluster_id):
+        try:
+            self._set_cluster_id(cluster_id)
+            cluster_list = self.available_clusters()
 
-    def update_nfs_cluster(self, size):
-        raise NotImplementedError()
-
-    def delete_nfs_cluster(self):
-        raise NotImplementedError()
+            if self.cluster_id in self.available_clusters():
+                self.mgr.fs_export.delete_all_exports(cluster_id)
+                completion = self.mgr.remove_service('nfs.' + self.cluster_id)
+                self.mgr._orchestrator_wait([completion])
+                orchestrator.raise_if_exception(completion)
+                if len(cluster_list) == 1:
+                    self.delete_common_config_obj()
+                return 0, "NFS Cluster Deleted Successfully", ""
+            return 0, "", "Cluster does not exist"
+        except Exception as e:
+            log.warning("Failed to delete NFS Cluster")
+            return -errno.EINVAL, "", str(e)
