@@ -27,7 +27,7 @@ std::ostream& GenericLogOperation::format(std::ostream &os) const {
      << "log_append_time=[" << log_append_time << "], "
      << "log_append_comp_time=[" << log_append_comp_time << "], ";
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const GenericLogOperation &op) {
@@ -50,7 +50,7 @@ std::ostream &SyncPointLogOperation::format(std::ostream &os) const {
   os << ", "
      << "sync_point=[" << *sync_point << "]";
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const SyncPointLogOperation &op) {
@@ -125,7 +125,7 @@ GenericWriteLogOperation::~GenericWriteLogOperation() { }
 std::ostream &GenericWriteLogOperation::format(std::ostream &os) const {
   GenericLogOperation::format(os);
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const GenericWriteLogOperation &op) {
@@ -197,7 +197,7 @@ std::ostream &WriteLogOperation::format(std::ostream &os) const {
   os << "bl=[" << bl << "],"
      << "buffer_alloc=" << buffer_alloc;
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const WriteLogOperation &op) {
@@ -264,7 +264,7 @@ std::ostream &operator<<(std::ostream &os,
      << "extent_ops_appending=[" << s.extent_ops_appending << ", "
      << "extent_ops_persist=[" << s.extent_ops_persist << "]";
   return os;
-};
+}
 
 DiscardLogOperation::DiscardLogOperation(std::shared_ptr<SyncPoint> sync_point,
                                          const uint64_t image_offset_bytes,
@@ -302,7 +302,7 @@ std::ostream &DiscardLogOperation::format(std::ostream &os) const {
     os << "log_entry=nullptr, ";
   }
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const DiscardLogOperation &op) {
@@ -326,7 +326,7 @@ std::ostream &WriteSameLogOperation::format(std::ostream &os) const {
   os << "(Write Same) ";
   WriteLogOperation::format(os);
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const WriteSameLogOperation &op) {

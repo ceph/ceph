@@ -131,7 +131,7 @@ std::ostream &operator<<(std::ostream &os,
      os << "op_set=" << *req.op_set;
   }
   return os;
-};
+}
 
 template <typename T>
 void C_WriteRequest<T>::blockguard_acquired(GuardedRequestFunctionContext &guard_ctx) {
@@ -408,7 +408,7 @@ std::ostream &operator<<(std::ostream &os,
   os << (C_BlockIORequest<T>&)req
      << " m_resources.allocated=" << req.m_resources.allocated;
   return os;
-};
+}
 
 void C_ReadRequest::finish(int r) {
   ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
@@ -563,7 +563,7 @@ std::ostream &operator<<(std::ostream &os,
     os << " op=nullptr";
   }
   return os;
-};
+}
 
 template <typename T>
 C_WriteSameRequest<T>::C_WriteSameRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
@@ -621,7 +621,7 @@ std::ostream &operator<<(std::ostream &os,
                          const C_WriteSameRequest<T> &req) {
   os << (C_WriteRequest<T>&)req;
   return os;
-};
+}
 
 template <typename T>
 C_CompAndWriteRequest<T>::C_CompAndWriteRequest(T &rwl, const utime_t arrived, io::Extents &&image_extents,
@@ -669,7 +669,7 @@ std::ostream &operator<<(std::ostream &os,
      << "compare_succeeded=" << req.compare_succeeded << ", "
      << "mismatch_offset=" << req.mismatch_offset;
   return os;
-};
+}
 
 std::ostream &operator<<(std::ostream &os,
                          const BlockGuardReqState &r) {
@@ -678,7 +678,7 @@ std::ostream &operator<<(std::ostream &os,
      << "detained=" << r.detained << ", "
      << "queued=" << r.queued;
   return os;
-};
+}
 
 GuardedRequestFunctionContext::GuardedRequestFunctionContext(boost::function<void(GuardedRequestFunctionContext&)> &&callback)
   : m_callback(std::move(callback)){ }
@@ -696,7 +696,7 @@ std::ostream &operator<<(std::ostream &os,
      << "block_extent.block_start=" << r.block_extent.block_start << ", "
      << "block_extent.block_start=" << r.block_extent.block_end;
   return os;
-};
+}
 
 } // namespace rwl
 } // namespace cache
