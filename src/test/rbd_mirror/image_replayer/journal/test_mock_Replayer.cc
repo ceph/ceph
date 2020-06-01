@@ -464,6 +464,15 @@ public:
     return 0;
   }
 
+  void expect_local_journal_add_listener(
+      librbd::MockTestJournal& mock_local_journal,
+      librbd::journal::Listener** local_journal_listener) {
+    EXPECT_CALL(mock_local_journal, add_listener(_))
+      .WillOnce(SaveArg<0>(local_journal_listener));
+    expect_is_tag_owner(mock_local_journal, false);
+    expect_is_resync_requested(mock_local_journal, 0, false);
+  }
+
   int init_entry_replayer(MockReplayer& mock_replayer,
                           MockThreads& mock_threads,
                           MockReplayerListener& mock_replayer_listener,
@@ -480,10 +489,8 @@ public:
                              {librbd::journal::MirrorPeerClientMeta{}}, 0);
     expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                  0);
-    EXPECT_CALL(mock_local_journal, add_listener(_))
-      .WillOnce(SaveArg<0>(local_journal_listener));
-    expect_is_tag_owner(mock_local_journal, false);
-    expect_is_resync_requested(mock_local_journal, 0, false);
+    expect_local_journal_add_listener(mock_local_journal,
+                                      local_journal_listener);
     EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _))
       .WillOnce(SaveArg<0>(remote_replay_handler));
     expect_notification(mock_threads, mock_replayer_listener);
@@ -562,34 +569,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitShutDown) {
                                         mock_local_journal_replay));
 }
 
-TEST_F(TestMockImageReplayerJournalReplayer, InitNoLocalJournal) {
-  librbd::MockTestJournal mock_local_journal;
-  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
-                                                mock_local_journal};
-  ::journal::MockJournaler mock_remote_journaler;
-  MockReplayerListener mock_replayer_listener;
-  MockThreads mock_threads{m_threads};
-
-  mock_local_image_ctx.journal = nullptr;
-  MockStateBuilder mock_state_builder(mock_local_image_ctx,
-                                      mock_remote_journaler,
-                                      {});
-  MockReplayer mock_replayer{
-    &mock_threads, "local mirror uuid", &mock_state_builder,
-    &mock_replayer_listener};
-
-  expect_work_queue_repeatedly(mock_threads);
-
-  InSequence seq;
-
-  MockCloseImageRequest mock_close_image_request;
-  expect_send(mock_close_image_request, 0);
-
-  C_SaferCond init_ctx;
-  mock_replayer.init(&init_ctx);
-  ASSERT_EQ(-EINVAL, init_ctx.wait());
-}
-
 TEST_F(TestMockImageReplayerJournalReplayer, InitRemoteJournalerError) {
   librbd::MockTestJournal mock_local_journal;
   librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
@@ -639,6 +618,39 @@ TEST_F(TestMockImageReplayerJournalReplayer, InitRemoteJournalerGetClientError) 
   EXPECT_CALL(mock_remote_journaler, add_listener(_));
   expect_get_cached_client(mock_remote_journaler, "local mirror uuid", {},
                            {librbd::journal::MirrorPeerClientMeta{}}, -EINVAL);
+  MockCloseImageRequest mock_close_image_request;
+  expect_send(mock_close_image_request, 0);
+  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
+
+  C_SaferCond init_ctx;
+  mock_replayer.init(&init_ctx);
+  ASSERT_EQ(-EINVAL, init_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerJournalReplayer, InitNoLocalJournal) {
+  librbd::MockTestJournal mock_local_journal;
+  librbd::MockTestImageCtx mock_local_image_ctx{*m_local_image_ctx,
+                                                mock_local_journal};
+  ::journal::MockJournaler mock_remote_journaler;
+  MockReplayerListener mock_replayer_listener;
+  MockThreads mock_threads{m_threads};
+
+  mock_local_image_ctx.journal = nullptr;
+  MockStateBuilder mock_state_builder(mock_local_image_ctx,
+                                      mock_remote_journaler,
+                                      {});
+  MockReplayer mock_replayer{
+    &mock_threads, "local mirror uuid", &mock_state_builder,
+    &mock_replayer_listener};
+
+  expect_work_queue_repeatedly(mock_threads);
+
+  InSequence seq;
+  expect_init(mock_remote_journaler, 0);
+  EXPECT_CALL(mock_remote_journaler, add_listener(_));
+  expect_get_cached_client(mock_remote_journaler, "local mirror uuid", {},
+                           {librbd::journal::MirrorPeerClientMeta{}}, 0);
+
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
@@ -1078,9 +1090,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, Replay) {
 
   // replay_flush
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_allocate_tag(mock_local_journal, 0);
 
@@ -1156,9 +1171,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, DecodeError) {
 
   // replay_flush
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_allocate_tag(mock_local_journal, 0);
 
@@ -1226,9 +1244,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, DelayedReplay) {
 
   // replay_flush
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_allocate_tag(mock_local_journal, 0);
 
@@ -1651,6 +1672,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushShutDownError) {
 
   expect_try_pop_front(mock_remote_journaler, 1, true);
   expect_shut_down(mock_local_journal_replay, false, -EINVAL);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_notification(mock_threads, mock_replayer_listener);
   remote_replay_handler->handle_entries_available();
@@ -1658,7 +1680,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushShutDownError) {
   wait_for_notification();
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
-  EXPECT_CALL(mock_local_journal, remove_listener(_));
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   expect_stop_replay(mock_remote_journaler, 0);
@@ -1705,6 +1726,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushStartError) {
 
   expect_try_pop_front(mock_remote_journaler, 1, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, nullptr, -EINVAL);
   expect_notification(mock_threads, mock_replayer_listener);
@@ -1713,7 +1735,6 @@ TEST_F(TestMockImageReplayerJournalReplayer, ReplayFlushStartError) {
   wait_for_notification();
   ASSERT_EQ(-EINVAL, mock_replayer.get_error_code());
 
-  EXPECT_CALL(mock_local_journal, remove_listener(_));
   MockCloseImageRequest mock_close_image_request;
   expect_send(mock_close_image_request, 0);
   expect_stop_replay(mock_remote_journaler, 0);
@@ -1764,9 +1785,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, GetTagError) {
                             true, 0, 0})};
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, -EINVAL);
   expect_notification(mock_threads, mock_replayer_listener);
   remote_replay_handler->handle_entries_available();
@@ -1824,9 +1848,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, AllocateTagDemotion) {
 
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_get_tag_data(mock_local_journal, {});
   expect_allocate_tag(mock_local_journal, 0);
@@ -1887,9 +1914,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, AllocateTagError) {
 
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_allocate_tag(mock_local_journal, -EINVAL);
   expect_notification(mock_threads, mock_replayer_listener);
@@ -1947,9 +1977,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, PreprocessError) {
 
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_allocate_tag(mock_local_journal, 0);
   EXPECT_CALL(mock_replay_entry, get_data());
@@ -2012,9 +2045,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, ProcessError) {
 
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_allocate_tag(mock_local_journal, 0);
   EXPECT_CALL(mock_replay_entry, get_data());
@@ -2086,9 +2122,12 @@ TEST_F(TestMockImageReplayerJournalReplayer, ImageNameUpdated) {
 
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   expect_shut_down(mock_local_journal_replay, false, 0);
+  EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
   expect_start_external_replay(mock_local_journal, &mock_local_journal_replay,
                                0);
+  expect_local_journal_add_listener(mock_local_journal,
+                                    &local_journal_listener);
   expect_get_tag(mock_remote_journaler, tag, 0);
   expect_allocate_tag(mock_local_journal, 0);
   EXPECT_CALL(mock_local_journal_replay, decode(_, _)).WillOnce(Return(0));
