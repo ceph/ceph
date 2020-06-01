@@ -3,7 +3,7 @@ meta:
    Run ceph on two nodes, using one of them as a client,
    with a separate client-only node.
    Use xfs beneath the osds.
-   install ceph/octopus v15.2.1 point version
+   install ceph/octopus v15.2.3 and the v15.2.x point versions
    run workload and upgrade-sequence in parallel
    (every point release should be tested)
    run workload and upgrade-sequence in parallel
@@ -83,18 +83,17 @@ tasks:
 - print: "**** done workload v15.2.1"
 
 
-#######  upgrade to v15.2.?? PLACEHOLDER
-#- install.upgrade:
-#    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
-#    mon.a:
-#      tag: v15.2.??
-#    mon.b:
-#      tag: v15.2.??
-#    # Note that client.a IS NOT upgraded at this point
-#- parallel:
-#   - workload_octopus
-#   - upgrade-sequence_octopus
-#- print: "**** done parallel octopus v15.2.??"
+#######  upgrade to v15.2.3
+- install.upgrade:
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    mon.a:
+      tag: v15.2.3
+    mon.b:
+      tag: v15.2.3
+- parallel:
+   - workload_octopus
+   - upgrade-sequence_octopus
+- print: "**** done parallel octopus v15.2.3"
 
 ####  upgrade to latest octopus
 - install.upgrade:
