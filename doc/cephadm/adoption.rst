@@ -142,3 +142,5 @@ Adoption process
 
 #. Check the ``ceph health detail`` output for cephadm warnings about
    stray cluster daemons or hosts that are not yet managed.
+   
+     # ceph health detail
