@@ -104,6 +104,7 @@ class CephFSMount(object):
             self.run_shell_payload(f"""
                 set -e
                 sudo ip link add name ceph-brx type bridge
+                sudo ip addr flush dev ceph-brx
                 sudo ip link set ceph-brx up
                 sudo ip addr add {ip}/{mask} brd {brd} dev ceph-brx
             """, timeout=(5*60), omit_sudo=False, cwd='/')
