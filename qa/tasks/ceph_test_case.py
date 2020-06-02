@@ -157,6 +157,7 @@ class CephTestCase(unittest.TestCase):
         """
         def is_clear():
             health = self.ceph_cluster.mon_manager.get_mon_health()
+            log.info(health)
             return len(health['checks']) == 0
 
         self.wait_until_true(is_clear, timeout)

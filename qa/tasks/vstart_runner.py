@@ -144,7 +144,10 @@ except ImportError:
 # Must import after teuthology because of gevent monkey patching
 import subprocess
 
-if os.path.exists("./CMakeCache.txt"):
+if os.getenv("CEPH_BUILD_ROOT"):
+    BIN_PREFIX = os.path.join(os.getenv("CEPH_BUILD_ROOT"), "bin")
+    SRC_PREFIX = "../src"
+elif os.path.exists("./CMakeCache.txt"):
     # Running in build dir of a cmake build
     BIN_PREFIX = "./bin/"
     SRC_PREFIX = "../src"
@@ -1250,11 +1253,11 @@ def exec_test():
                 log.error("--brxnet=<ip/mask> option needs one argument: '{0}'".format(f))
                 sys.exit(-1)
             opt_brxnet=f.split('=')[1]
-            try:  
-                IP(opt_brxnet)  
+            try:
+                IP(opt_brxnet)
                 if IP(opt_brxnet).iptype() is 'PUBLIC':
                     raise RuntimeError('is public')
-            except Exception as  e:  
+            except Exception as  e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
         else:
