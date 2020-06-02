@@ -51,12 +51,6 @@ class Run(object):
         # caches package versions to minimize requests to gbs
         self.package_versions = dict()
 
-        if self.args.suite_dir:
-            self.suite_repo_path = self.args.suite_dir
-        else:
-            self.suite_repo_path = util.fetch_repos(
-                self.base_config.suite_branch, test_name=self.name)
-
         # Interpret any relative paths as being relative to ceph-qa-suite
         # (absolute paths are unchanged by this)
         self.base_yaml_paths = [os.path.join(self.suite_repo_path, b) for b in
@@ -94,9 +88,15 @@ class Run(object):
         # We don't store ceph_version because we don't use it yet outside of
         # logging.
         self.choose_ceph_version(ceph_hash)
-        teuthology_branch = self.choose_teuthology_branch()
         suite_branch = self.choose_suite_branch()
         suite_hash = self.choose_suite_hash(suite_branch)
+        if self.args.suite_dir:
+            self.suite_repo_path = self.args.suite_dir
+        else:
+            self.suite_repo_path = util.fetch_repos(
+                suite_branch, test_name=self.name)
+        teuthology_branch = self.choose_teuthology_branch()
+
 
         if self.args.distro_version:
             self.args.distro_version, _ = \
@@ -196,20 +196,48 @@ class Run(object):
             log.info('skipping ceph package verification')
 
     def choose_teuthology_branch(self):
+        """Select teuthology branch, check if it is present in repo and
+        return the branch name value.
+
+        The branch name value is determined in the following order:
+
+        Use ``--teuthology-branch`` argument value if supplied.
+
+        Use ``TEUTH_BRANCH`` environment variable value if declared.
+
+        If file ``qa/.teuthology_branch`` can be found in the suite repo
+        supplied with ``--suite-repo`` or ``--suite-dir`` and contains
+        non-empty string then use it as the branch name.
+
+        Use ``teuthology_branch`` value if it is set in the one
+        of the teuthology config files ``$HOME/teuthology.yaml``
+        or ``/etc/teuthology.yaml`` correspondingly.
+
+        Use ``master``.
+
+        Generate exception if the branch is not present in the repo.
+        """
         teuthology_branch = self.args.teuthology_branch
-        if teuthology_branch and teuthology_branch != 'master':
-            if not util.git_branch_exists('teuthology', teuthology_branch):
-                exc = BranchNotFoundError(teuthology_branch, 'teuthology.git')
-                util.schedule_fail(message=str(exc), name=self.name)
-        elif not teuthology_branch:
-            # Decide what branch of teuthology to use
-            if util.git_branch_exists('teuthology', self.args.ceph_branch):
-                teuthology_branch = self.args.ceph_branch
-            else:
-                log.info(
-                    "branch {0} not in teuthology.git; will use master for"
-                    " teuthology".format(self.args.ceph_branch))
-                teuthology_branch = 'master'
+        if not teuthology_branch:
+            teuthology_branch = os.environ.get('TEUTH_BRANCH', None)
+        if not teuthology_branch:
+            branch_file_path = self.suite_repo_path + '/qa/.teuthology_branch'
+            log.debug('Check file %s exists', branch_file_path)
+            if os.path.exists(branch_file_path):
+                log.debug('Found teuthology branch config file %s',
+                                                        branch_file_path)
+                with open(branch_file_path) as f:
+                    teuthology_branch = f.read().strip()
+                    if teuthology_branch:
+                        log.debug(
+                            'The teuthology branch is overridden with %s',
+                                                                teuthology_branch)
+                    else:
+                        log.warning(
+                            'The teuthology branch config is empty, skipping')
+        if not teuthology_branch:
+            teuthology_branch = config.get('teuthology_branch', 'master')
+
         teuthology_hash = util.git_ls_remote(
             'teuthology',
             teuthology_branch

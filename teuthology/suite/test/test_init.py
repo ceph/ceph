@@ -156,6 +156,9 @@ class TestSuiteMain(object):
         def fake_bool(*args, **kwargs):
             return True
 
+        def fake_false(*args, **kwargs):
+            return False
+
         with patch.multiple(
                 'teuthology.suite.run.util',
                 fetch_repos=DEFAULT,
@@ -166,6 +169,9 @@ class TestSuiteMain(object):
             with patch.multiple(
                 'teuthology.suite.run.Run',
                 prepare_and_schedule=prepare_and_schedule,
+            ), patch.multiple(
+                'teuthology.suite.run.os.path',
+                exists=fake_false,
             ):
                 main([
                     '--ceph', 'master',
