@@ -40,7 +40,7 @@ Initial Troubleshooting
   If ``ceph -s`` blocked however, without obtaining a reply from the cluster
   or showing a lot of ``fault`` messages, then it is likely that your monitors
   are either down completely or just a portion is up -- a portion that is not
-  enough to form a quorum (keep in mind that a quorum if formed by a majority
+  enough to form a quorum (keep in mind that a quorum is formed by a majority
   of monitors).
 
 **What if ceph -s doesn't finish?**
