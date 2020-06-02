@@ -8,24 +8,9 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      sha1: 12.0.0.0b2
+      sha1: 17.0.0.0rc2
       force-branch: master
-      tenants:
-        - name: admin
-          description:  Admin Tenant
-      users:
-        - name: admin
-          password: ADMIN
-          project: admin
-      roles: [ name: admin, name: Member ]
-      role-mappings:
-        - name: admin
-          user: admin
-          project: admin
       services:
-        - name: keystone
-          type: identity
-          description: Keystone Identity Service
         - name: swift
           type: object-store
           description: Swift Service
@@ -35,7 +20,7 @@ tasks:
       use-keystone-role: client.0
 - tempest:
     client.0:
-      sha1: d3fa46495a78160989120ba39793f7ba2e22d81c
+      sha1: d43223773d75d2e82fb33a1281038e611c41d0f3
       force-branch: master
       use-keystone-role: client.0
       auth:
@@ -43,25 +28,27 @@ tasks:
         admin_project_name: admin
         admin_password: ADMIN
         admin_domain_name: Default
+        tempest_roles: admin
       identity:
         uri: http://{keystone_public_host}:{keystone_public_port}/v2.0/
         uri_v3: http://{keystone_public_host}:{keystone_public_port}/v3/
+        auth_version: v3
         admin_role: admin
+        default_domain_name: Default
       object-storage:
         reseller_admin_role: admin
       object-storage-feature-enabled:
         container_sync: false
-        discoverability: false
+        discoverability: true
       blacklist:
-        # TODO(rzarzynski): we really need to update the list after
-        # merging PRs #15369 and #12704. Additionally, we would be
-        # able to enable the discoverability API testing above.
-        - .*test_list_containers_reverse_order.*
-        - .*test_list_container_contents_with_end_marker.*
-        - .*test_delete_non_empty_container.*
+        - .*test_account_quotas_negative.AccountQuotasNegativeTest.test_user_modify_quota
+        - .*test_container_acl_negative.ObjectACLsNegativeTest.*
+        - .*test_container_services_negative.ContainerNegativeTest.test_create_container_metadata_.*
+        - .*test_container_staticweb.StaticWebTest.test_web_index
+        - .*test_container_staticweb.StaticWebTest.test_web_listing_css
         - .*test_container_synchronization.*
-        - .*test_get_object_after_expiration_time.*
-        - .*test_create_object_with_transfer_encoding.*
+        - .*test_object_services.PublicObjectTest.test_access_public_container_object_without_using_creds
+
 overrides:
   ceph:
     conf:
@@ -69,10 +56,14 @@ overrides:
         osd_min_pg_log_entries: 10
         osd_max_pg_log_entries: 10
       client:
-        rgw keystone admin token: ADMIN
+        rgw keystone api version: 3
         rgw keystone accepted roles: admin,Member
         rgw keystone implicit tenants: true
         rgw keystone accepted admin roles: admin
         rgw swift enforce content length: true
         rgw swift account in url: true
         rgw swift versioning enabled: true
+        rgw keystone admin domain: Default
+        rgw keystone admin user: admin
+        rgw keystone admin password: ADMIN
+        rgw keystone admin project: admin
