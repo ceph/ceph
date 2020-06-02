@@ -75,6 +75,9 @@ class BacktraceWorkload(Workload):
         self._filesystem.mds_asok(["flush", "journal"])
         self._filesystem._write_data_xattr(st['st_ino'], "parent", "")
 
+    def create_files(self, nfiles=1000):
+        self._mount.create_n_files("scrub-new-files/file", nfiles)
+
 
 class DupInodeWorkload(Workload):
     """
@@ -143,6 +146,27 @@ class TestScrub(CephFSTestCase):
             raise AssertionError("Validation failed, first error: {0}\n{1}".format(
                 errors[0].exception, errors[0].backtrace
             ))
+
+    def _get_damage_count(self, damage_type='backtrace'):
+        out_json = self.fs.rank_tell(["damage", "ls"])
+        self.assertNotEqual(out_json, None)
+
+        damage_count = 0
+        for it in out_json:
+            if it['damage_type'] == damage_type:
+                damage_count += 1
+        return damage_count
+
+    def _scrub_new_files(self, workload):
+        """
+        That scrubbing new files does not lead to errors
+        """
+        workload.create_files(1000)
+        self._wait_until_scrub_complete()
+        self.assertEqual(self._get_damage_count(), 0)
+
+    def test_scrub_backtrace_for_new_files(self):
+        self._scrub_new_files(BacktraceWorkload(self.fs, self.mount_a))
 
     def test_scrub_backtrace(self):
         self._scrub(BacktraceWorkload(self.fs, self.mount_a))

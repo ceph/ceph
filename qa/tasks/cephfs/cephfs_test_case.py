@@ -9,6 +9,7 @@ from tasks.cephfs.fuse_mount import FuseMount
 
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
+from teuthology.contextutil import safe_while
 
 
 log = logging.getLogger(__name__)
@@ -302,3 +303,12 @@ class CephFSTestCase(CephTestCase):
                 return subtrees
             time.sleep(pause)
         raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank))
+
+    def _wait_until_scrub_complete(self, path="/", recursive=True):
+        out_json = self.fs.rank_tell(["scrub", "start", path] + ["recursive"] if recursive else [])
+        with safe_while(sleep=10, tries=10) as proceed:
+            while proceed():
+                out_json = self.fs.rank_tell(["scrub", "status"])
+                if out_json['status'] == "no active scrubs running":
+                    break;
+
