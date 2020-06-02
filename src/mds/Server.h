@@ -40,6 +40,7 @@ class EMetaBlob;
 class EUpdate;
 class MDLog;
 struct SnapInfo;
+class MetricsHandler;
 
 enum {
   l_mdss_first = 1000,
@@ -92,7 +93,7 @@ public:
     TRIM = (1<<2),
     ENFORCE_LIVENESS = (1<<3),
   };
-  explicit Server(MDSRank *m);
+  explicit Server(MDSRank *m, MetricsHandler *metrics_handler);
   ~Server() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
     delete logger;
@@ -350,6 +351,8 @@ private:
 
   DecayCounter recall_throttle;
   time last_recall_state;
+
+  MetricsHandler *metrics_handler;
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
