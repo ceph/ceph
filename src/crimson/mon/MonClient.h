@@ -154,6 +154,7 @@ private:
   seastar::future<> handle_log_ack(Ref<MLogAck> m);
   seastar::future<> handle_config(Ref<MConfig> m);
 
+  void send_pendings();
 private:
   seastar::future<> load_keyring();
   seastar::future<> authenticate();
@@ -163,6 +164,14 @@ private:
   std::vector<unsigned> get_random_mons(unsigned n) const;
   seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
   crimson::common::Gated gate;
+
+  // messages that are waiting for the active_con to be available
+  struct pending_msg_t {
+    pending_msg_t(MessageRef& m) : msg(m) {}
+    MessageRef msg;
+    seastar::promise<> pr;
+  };
+  std::deque<pending_msg_t> pending_messages;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Client& client) {
