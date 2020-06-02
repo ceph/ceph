@@ -855,24 +855,25 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def apply(self, specs: List[ServiceSpec]) -> Completion:
+    def apply(self, specs: List["GenericSpec"]) -> Completion:
         """
         Applies any spec
         """
-        fns: Dict[str, Callable[[ServiceSpec], Completion]] = {
+        fns: Dict[str, function] = {
             'alertmanager': self.apply_alertmanager,
             'crash': self.apply_crash,
             'grafana': self.apply_grafana,
-            'iscsi': cast(Callable[[ServiceSpec], Completion], self.apply_iscsi),
+            'iscsi': self.apply_iscsi,
             'mds': self.apply_mds,
             'mgr': self.apply_mgr,
             'mon': self.apply_mon,
-            'nfs': cast(Callable[[ServiceSpec], Completion], self.apply_nfs),
+            'nfs': self.apply_nfs,
             'node-exporter': self.apply_node_exporter,
-            'osd': cast(Callable[[ServiceSpec], Completion], lambda dg: self.apply_drivegroups([dg])),
+            'osd': lambda dg: self.apply_drivegroups([dg]),
             'prometheus': self.apply_prometheus,
             'rbd-mirror': self.apply_rbd_mirror,
-            'rgw': cast(Callable[[ServiceSpec], Completion], self.apply_rgw),
+            'rgw': self.apply_rgw,
+            'host': self.add_host,
         }
 
         def merge(ls, r):
@@ -882,10 +883,12 @@ class Orchestrator(object):
 
         spec, *specs = specs
 
-        completion = fns[spec.service_type](spec)
+        fn = cast(Callable[["GenericSpec"], Completion], fns[spec.service_type])
+        completion = fn(spec)
         for s in specs:
             def next(ls):
-                return fns[s.service_type](s).then(lambda r: merge(ls, r))
+                fn = cast(Callable[["GenericSpec"], Completion], fns[spec.service_type])
+                return fn(s).then(lambda r: merge(ls, r))
             completion = completion.then(next)
         return completion
 
@@ -1169,6 +1172,8 @@ class HostSpec(object):
                  labels=None,  # type: Optional[List[str]]
                  status=None,  # type: Optional[str]
                  ):
+        self.service_type = 'host'
+
         #: the bare hostname on the host. Not the FQDN.
         self.hostname = hostname  # type: str
 
@@ -1189,6 +1194,13 @@ class HostSpec(object):
             'status': self.status,
         }
 
+    @classmethod
+    def from_json(cls, host_spec):
+        _cls = cls(host_spec['hostname'],
+                   host_spec['addr'] if 'addr' in host_spec else None,
+                   host_spec['labels'] if 'labels' in host_spec else None)
+        return _cls
+
     def __repr__(self):
         args = [self.hostname]  # type: List[Any]
         if self.addr is not None:
@@ -1206,6 +1218,14 @@ class HostSpec(object):
                self.addr == other.addr and \
                self.labels == other.labels
 
+GenericSpec = Union[ServiceSpec, HostSpec]
+
+def json_to_generic_spec(spec):
+    # type: (dict) -> GenericSpec
+    if 'service_type' in spec and spec['service_type'] == 'host':
+        return HostSpec.from_json(spec)
+    else:
+        return ServiceSpec.from_json(spec)
 
 class UpgradeStatusSpec(object):
     # Orchestrator's report on what's going on with any ongoing upgrade
