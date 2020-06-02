@@ -599,7 +599,11 @@ class LocalKernelMount(KernelMount):
 
     def mount(self, mount_path=None, mount_fs_name=None, mount_options=[], **kwargs):
         self.setupfs(name=mount_fs_name)
-        self.setup_netns()
+        if opt_use_ns:
+            self.using_namespace = True
+            self.setup_netns()
+        else:
+            self.using_namespace = False
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
@@ -625,26 +629,24 @@ class LocalKernelMount(KernelMount):
         for mount_opt in mount_options:
             opts += ",{0}".format(mount_opt)
 
-        self.client_remote.run(
-            args=[
-                'sudo',
-                'nsenter',
-                '--net=/var/run/netns/{0}'.format(self.netns_name),
-                './bin/mount.ceph',
-                ':{mount_path}'.format(mount_path=mount_path),
-                self.mountpoint,
-                '-v',
-                '-o',
-                opts
-            ],
-            timeout=(30*60),
-            omit_sudo=False,
-        )
+        mount_cmd_args = ['sudo']
+        if self.using_namespace:
+            mount_cmd_args += ['nsenter',
+                               '--net=/var/run/netns/{0}'.format(self.netns_name)]
+        mount_cmd_args += ['./bin/mount.ceph',
+                           ':{mount_path}'.format(mount_path=mount_path),
+                           self.mountpoint, '-v', '-o', opts]
+        self.client_remote.run(args=mount_cmd_args, timeout=(30*60),
+                               omit_sudo=False)
 
         self.client_remote.run(
             args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
 
         self.mounted = True
+
+    def cleanup_netns(self):
+        if self.using_namespace:
+            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
@@ -704,7 +706,11 @@ class LocalFuseMount(FuseMount):
         if mountpoint is not None:
             self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
-        self.setup_netns()
+        if opt_use_ns:
+            self.using_namespace = True
+            self.setup_netns()
+        else:
+            self.using_namespace = False
 
         self.client_remote.run(args=['mkdir', '-p', self.mountpoint])
 
@@ -732,10 +738,12 @@ class LocalFuseMount(FuseMount):
         pre_mount_conns = list_connections()
         log.info("Pre-mount connections: {0}".format(pre_mount_conns))
 
-        prefix = ['sudo', 'nsenter',
-                  '--net=/var/run/netns/{0}'.format(self.netns_name),
-                  '--setuid', str(os.getuid()),
-                  os.path.join(BIN_PREFIX, "ceph-fuse")]
+        prefix = []
+        if self.using_namespace:
+            prefix += ['sudo', 'nsenter',
+                       '--net=/var/run/netns/{0}'.format(self.netns_name),
+                       '--setuid', str(os.getuid())]
+        prefix += [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
             prefix += ["--client_die_on_failed_dentry_invalidate=false"]
         if mount_path is not None:
@@ -798,6 +806,10 @@ class LocalFuseMount(FuseMount):
                 self.fuse_daemon.fuse_pid = int(re.match(".*\.(\d+)\.asok$",
                                                          sock).group(1))
                 break
+
+    def cleanup_netns(self):
+        if self.using_namespace:
+            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
@@ -1207,6 +1219,8 @@ def exec_test():
     global opt_log_ps_output
     opt_log_ps_output = False
     use_kernel_client = False
+    global opt_use_ns
+    opt_use_ns = False
     opt_brxnet= None
 
     args = sys.argv[1:]
@@ -1229,6 +1243,8 @@ def exec_test():
             clear_old_log()
         elif f == "--kclient":
             use_kernel_client = True
+        elif f == '--usens':
+            opt_use_ns = True
         elif '--brxnet' in f:
             if re.search(r'=[0-9./]+', f) is None:
                 log.error("--brxnet=<ip/mask> option needs one argument: '{0}'".format(f))
