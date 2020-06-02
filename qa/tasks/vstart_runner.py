@@ -53,6 +53,7 @@ from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
 from teuthology.config import config as teuth_config
+from teuthology.contextutil import safe_while
 import six
 import logging
 
@@ -164,6 +165,11 @@ class LocalRemoteProcess(object):
         self.subproc = subproc
         self.stdout = stdout or BytesIO()
         self.stderr = stderr or BytesIO()
+        # this variable is meant for instance of this class named fuse_daemon.
+        # child process of the command launched with sudo must be killed,
+        # since killing parent process alone has no impact on the child
+        # process.
+        self.fuse_pid = -1
 
         self.check_status = check_status
         self.exitstatus = self.returncode = None
@@ -222,7 +228,10 @@ class LocalRemoteProcess(object):
         if self.subproc.pid and not self.finished:
             log.info("kill: killing pid {0} ({1})".format(
                 self.subproc.pid, self.args))
-            safe_kill(self.subproc.pid)
+            if self.fuse_pid != -1:
+                safe_kill(self.fuse_pid)
+            else:
+                safe_kill(self.subproc.pid)
         else:
             log.info("kill: already terminated ({0})".format(self.args))
 
@@ -585,13 +594,16 @@ class LocalKernelMount(KernelMount):
                 if asok_conf:
                     d = asok_conf.groups(1)[0]
                     break
-        path = "{0}/client.{1}.{2}.asok".format(d, self.client_id, self.fuse_daemon.subproc.pid)
-        log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
+        path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
     def mount(self, mount_path=None, mount_fs_name=None, mount_options=[], **kwargs):
         self.setupfs(name=mount_fs_name)
-        self.setup_netns()
+        if opt_use_ns:
+            self.using_namespace = True
+            self.setup_netns()
+        else:
+            self.using_namespace = False
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
@@ -617,26 +629,24 @@ class LocalKernelMount(KernelMount):
         for mount_opt in mount_options:
             opts += ",{0}".format(mount_opt)
 
-        self.client_remote.run(
-            args=[
-                'sudo',
-                'nsenter',
-                '--net=/var/run/netns/{0}'.format(self.netns_name),
-                './bin/mount.ceph',
-                ':{mount_path}'.format(mount_path=mount_path),
-                self.mountpoint,
-                '-v',
-                '-o',
-                opts
-            ],
-            timeout=(30*60),
-            omit_sudo=False,
-        )
+        mount_cmd_args = ['sudo']
+        if self.using_namespace:
+            mount_cmd_args += ['nsenter',
+                               '--net=/var/run/netns/{0}'.format(self.netns_name)]
+        mount_cmd_args += ['./bin/mount.ceph',
+                           ':{mount_path}'.format(mount_path=mount_path),
+                           self.mountpoint, '-v', '-o', opts]
+        self.client_remote.run(args=mount_cmd_args, timeout=(30*60),
+                               omit_sudo=False)
 
         self.client_remote.run(
             args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
 
         self.mounted = True
+
+    def cleanup_netns(self):
+        if self.using_namespace:
+            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
@@ -689,15 +699,18 @@ class LocalFuseMount(FuseMount):
                 if asok_conf:
                     d = asok_conf.groups(1)[0]
                     break
-        path = "{0}/client.{1}.{2}.asok".format(d, self.client_id, self.fuse_daemon.subproc.pid)
-        log.info("I think my launching pid was {0}".format(self.fuse_daemon.subproc.pid))
+        path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         if mountpoint is not None:
             self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
-        self.setup_netns()
+        if opt_use_ns:
+            self.using_namespace = True
+            self.setup_netns()
+        else:
+            self.using_namespace = False
 
         self.client_remote.run(args=['mkdir', '-p', self.mountpoint])
 
@@ -725,29 +738,28 @@ class LocalFuseMount(FuseMount):
         pre_mount_conns = list_connections()
         log.info("Pre-mount connections: {0}".format(pre_mount_conns))
 
-        prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
+        prefix = []
+        if self.using_namespace:
+            prefix += ['sudo', 'nsenter',
+                       '--net=/var/run/netns/{0}'.format(self.netns_name),
+                       '--setuid', str(os.getuid())]
+        prefix += [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
             prefix += ["--client_die_on_failed_dentry_invalidate=false"]
-
         if mount_path is not None:
             prefix += ["--client_mountpoint={0}".format(mount_path)]
-
         if mount_fs_name is not None:
             prefix += ["--client_fs={0}".format(mount_fs_name)]
-
         prefix += mount_options;
+        fuse_cmd_args = prefix + ["-f", "--name",
+                                  "client.{0}".format(self.client_id),
+                                  self.mountpoint]
 
-        self.fuse_daemon = self.client_remote.run(args=
-                                            ['nsenter',
-                                             '--net=/var/run/netns/{0}'.format(self.netns_name),
-                                            ] + prefix + [
-                                                "-f",
-                                                "--name",
-                                                "client.{0}".format(self.client_id),
-                                                self.mountpoint
-                                            ], wait=False)
-
-        log.info("Mounting client.{0} with pid {1}".format(self.client_id, self.fuse_daemon.subproc.pid))
+        self.fuse_daemon = self.client_remote.run(args=fuse_cmd_args,
+                                                  wait=False)
+        self._set_fuse_daemon_pid()
+        log.info("Mounting client.{0} with pid "
+                 "{1}".format(self.client_id, self.fuse_daemon.subproc.pid))
 
         # Wait for the connection reference to appear in /sys
         waited = 0
@@ -780,6 +792,24 @@ class LocalFuseMount(FuseMount):
         self.gather_mount_info()
 
         self.mounted = True
+    def _set_fuse_daemon_pid(self):
+        # NOTE: When a command <args> is launched with sudo, two processes are
+        # launched, one with sudo in <args> and other without. Make sure we
+        # get the PID of latter one.
+        with safe_while(sleep=1, tries=15) as proceed:
+            while proceed():
+                try:
+                    sock = self.find_admin_socket()
+                except (RuntimeError, CommandFailedError):
+                    continue
+
+                self.fuse_daemon.fuse_pid = int(re.match(".*\.(\d+)\.asok$",
+                                                         sock).group(1))
+                break
+
+    def cleanup_netns(self):
+        if self.using_namespace:
+            super(type(self), self).cleanup_netns()
 
     def _run_python(self, pyscript, py_version='python'):
         """
@@ -1189,6 +1219,8 @@ def exec_test():
     global opt_log_ps_output
     opt_log_ps_output = False
     use_kernel_client = False
+    global opt_use_ns
+    opt_use_ns = False
     opt_brxnet= None
 
     args = sys.argv[1:]
@@ -1211,6 +1243,8 @@ def exec_test():
             clear_old_log()
         elif f == "--kclient":
             use_kernel_client = True
+        elif f == '--usens':
+            opt_use_ns = True
         elif '--brxnet' in f:
             if re.search(r'=[0-9./]+', f) is None:
                 log.error("--brxnet=<ip/mask> option needs one argument: '{0}'".format(f))
