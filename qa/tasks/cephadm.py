@@ -6,6 +6,7 @@ from io import BytesIO
 import argparse
 import configobj
 import contextlib
+import errno
 import logging
 import os
 import json
@@ -1186,6 +1187,9 @@ def add_mirror_to_cluster(ctx, mirror):
                 path=registries_conf,
                 data=six.ensure_str(new_config),
             )
-        except FileNotFoundError as e:
+        except IOError as e:  # py3: use FileNotFoundError instead.
+            if e.errno != errno.ENOENT:
+                raise
+
             # Docker doesn't ship a registries.conf
             log.info('Failed to add mirror: %s' % str(e))
