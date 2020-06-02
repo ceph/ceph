@@ -254,27 +254,35 @@ def create_secrets(ctx, config):
     token_req = http_client.HTTPConnection(keystone_host, keystone_port, timeout=30)
     token_req.request(
         'POST',
-        '/v2.0/tokens',
+        '/v3/auth/tokens',
         headers={'Content-Type':'application/json'},
-        body=json.dumps(
-            {"auth":
-             {"passwordCredentials":
-              {"username": rgw_user["username"],
-               "password": rgw_user["password"]
-              },
-              "tenantName": rgw_user["tenantName"]
-             }
+        body=json.dumps({
+            "auth": {
+                "identity": {
+                    "methods": ["password"],
+                    "password": {
+                        "user": {
+                            "domain": {"id": "default"},
+                            "name": rgw_user["username"],
+                            "password": rgw_user["password"]
+                        }
+                    }
+                },
+                "scope": {
+                    "project": {
+                        "domain": {"id": "default"},
+                        "name": rgw_user["tenantName"]
+                    }
+                }
             }
-        )
-    )
+        }))
     rgw_access_user_resp = token_req.getresponse()
     if not (rgw_access_user_resp.status >= 200 and
             rgw_access_user_resp.status < 300):
         raise Exception("Cannot authenticate user "+rgw_user["username"]+" for secret creation")
     #    baru_resp = json.loads(baru_req.data)
     rgw_access_user_data = json.loads(six.ensure_str(rgw_access_user_resp.read()))
-    rgw_user_id = rgw_access_user_data['access']['user']['id']
-
+    rgw_user_id = rgw_access_user_data['token']['user']['id']
     if 'secrets' in cconfig:
         for secret in cconfig['secrets']:
             if 'name' not in secret:
@@ -291,27 +299,34 @@ def create_secrets(ctx, config):
             token_req = http_client.HTTPConnection(keystone_host, keystone_port, timeout=30)
             token_req.request(
                 'POST',
-                '/v2.0/tokens',
+                '/v3/auth/tokens',
                 headers={'Content-Type':'application/json'},
-                body=json.dumps(
-                    {
-                        "auth": {
-                            "passwordCredentials": {
-                                "username": secret["username"],
-                                "password": secret["password"]
-                            },
-                            "tenantName":secret["tenantName"]
+                body=json.dumps({
+                    "auth": {
+                        "identity": {
+                            "methods": ["password"],
+                            "password": {
+                                "user": {
+                                    "domain": {"id": "default"},
+                                    "name": secret["username"],
+                                    "password": secret["password"]
+                                }
+                            }
+                        },
+                        "scope": {
+                            "project": {
+                                "domain": {"id": "default"},
+                                "name": secret["tenantName"]
+                            }
                         }
                     }
-                )
-            )
+                }))
             token_resp = token_req.getresponse()
             if not (token_resp.status >= 200 and
                     token_resp.status < 300):
                 raise Exception("Cannot authenticate user "+secret["username"]+" for secret creation")
 
-            token_data = json.loads(six.ensure_str(token_resp.read()))
-            token_id = token_data['access']['token']['id']
+            token_id = token_resp.getheader('x-subject-token')
 
             key1_json = json.dumps(
                 {
@@ -394,11 +409,9 @@ def task(ctx, config):
       - tox: [ client.0 ]
       - keystone:
           client.0:
-            sha1: 12.0.0.0b2
+            sha1: 17.0.0.0rc2
             force-branch: master
-            tenants:
-              - name: admin
-                description:  Admin Tenant
+            projects:
               - name: rgwcrypt
                 description: Encryption Tenant
               - name: barbican
@@ -406,9 +419,6 @@ def task(ctx, config):
               - name: s3
                 description: S3 project
             users:
-              - name: admin
-                password: ADMIN
-                project: admin
               - name: rgwcrypt-user
                 password: rgwcrypt-pass
                 project: rgwcrypt
@@ -418,11 +428,8 @@ def task(ctx, config):
               - name: s3-user
                 password: s3-pass
                 project: s3
-            roles: [ name: admin, name: Member, name: creator ]
+            roles: [ name: Member, name: creator ]
             role-mappings:
-              - name: admin
-                user: admin
-                project: admin
               - name: Member
                 user: rgwcrypt-user
                 project: rgwcrypt
