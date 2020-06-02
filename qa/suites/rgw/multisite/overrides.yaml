@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+    - \(PG_AVAILABILITY\)
     wait-for-scrub: false
     conf:
       client:
