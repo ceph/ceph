@@ -53,6 +53,12 @@ class TestNFS(MgrTestCase):
     def _check_nfs_status(self):
         return self._orch_cmd('ls', 'nfs')
 
+    def _test_idempotency(self, cmd_func, cmd_args):
+        cmd_func()
+        ret = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd_args)
+        if ret != 0:
+            raise RuntimeError("Idempotency test failed")
+
     def _test_create_cluster(self):
         self._check_nfs_server_status()
         self._nfs_cmd('cluster', 'create', self.export_type, self.cluster_id)
@@ -99,11 +105,23 @@ class TestNFS(MgrTestCase):
         self._test_create_cluster()
         self._test_delete_cluster()
 
+    def test_create_delete_cluster_idempotency(self):
+        self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.export_type,
+                                                           self.cluster_id])
+        self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'delete', self.cluster_id])
+
     def test_export_create_and_delete(self):
         self._create_default_export()
         self._delete_export()
         self._check_export_obj_deleted()
         self._test_delete_cluster()
+
+    def test_create_delete_export_idempotency(self):
+        self._test_idempotency(self._create_default_export, ['nfs', 'export', 'create', 'cephfs',
+                                                             self.fs_name, self.cluster_id,
+                                                             self.pseudo_path])
+        self._test_idempotency(self._delete_export, ['nfs', 'export', 'delete', self.cluster_id,
+                                                     self.pseudo_path])
 
     def test_create_multiple_exports(self):
         #Export-1 with default values
