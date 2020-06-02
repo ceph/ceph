@@ -3696,7 +3696,7 @@ def check_time_sync(enabler=None):
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
     ]
-    if not check_units(units, enabler=None):
+    if not check_units(units, enabler):
         logger.warning('No time sync service is running; checked for %s' % units)
         return False
     return True
