@@ -3,6 +3,7 @@ import errno
 import json
 from typing import List, Set, Optional, Iterator
 import re
+import ast
 
 import yaml
 import six
@@ -452,9 +453,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
             return HandleCommandResult(stdout=table.get_string())
 
-    def set_unmanaged_flag(self, service_name: str, unmanaged_flag: bool) -> HandleCommandResult:
+    def set_unmanaged_flag(self,
+                           unmanaged_flag: bool,
+                           service_type: str = 'osd',
+                           service_name=None
+                           ) -> HandleCommandResult:
         # setting unmanaged for $service_name
-        completion = self.describe_service(service_name=service_name)
+        completion = self.describe_service(service_name=service_name, service_type=service_type)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         services: List[ServiceDescription] = completion.result
@@ -473,32 +478,65 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout=f"No specs found with the <service_name> -> {service_name}")
 
     @_cli_write_command(
-        'orch apply osd',
-        'name=all_available_devices,type=CephBool,req=false '
-        'name=preview,type=CephBool,req=false '
+        'orch osd spec',
         'name=service_name,type=CephString,req=false '
+        'name=preview,type=CephBool,req=false '
         'name=unmanaged,type=CephBool,req=false '
         "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false",
-        'Create OSD daemon(s) using a drive group spec')
-    def _apply_osd(self,
-                   all_available_devices: bool = False,
-                   preview: bool = False,
-                   service_name: Optional[str] = None,
-                   unmanaged: Optional[bool] = None,
-                   format: Optional[str] = 'plain',
-                   inbuf: Optional[str] = None) -> HandleCommandResult:
-        """Apply DriveGroupSpecs to create OSDs"""
+        'Common operations on an OSDSpec. Allows previewing and changing the unmanaged flag.')
+    def _misc_osd(self,
+                  preview: bool = False,
+                  service_name: Optional[str] = None,
+                  unmanaged=None,
+                  format: Optional[str] = 'plain',
+                  ) -> HandleCommandResult:
         usage = """
-Usage:
-  ceph orch apply osd -i <json_file/yaml_file>
-  ceph orch apply osd --all-available-devices
-  ceph orch apply osd --service-name <service_name> --preview
-  ceph orch apply osd --service-name <service_name> --unmanaged=True|False
+usage:
+  ceph orch osd spec --preview
+  ceph orch osd spec --unmanaged=true|false 
+  ceph orch osd spec --service-name <service_name> --preview
+  ceph orch osd spec --service-name <service_name> --unmanaged=true|false (defaults to false)
+  
+Restrictions:
+
+    Mutexes:
+    * --preview ,--unmanaged 
+
+    Although it it's possible to set these at the same time, we will lack a proper response to each
+    action, possibly shadowing any failures.
+
+Description:
+
+    * --service-name
+        If flag is omitted, assume to target all existing OSDSpecs.
+        Needs either --unamanged or --preview.
+
+    * --unmanaged
+        Applies <unamanged> flag to targeted --service-name.
+        If --service-name is omitted, target all OSDSpecs
+        
+Examples:
+
+    # ceph orch osd spec --preview
+    
+    Queries all available OSDSpecs for previews
+    
+    # ceph orch osd spec --service-name my-osdspec-name --preview
+    
+    Queries only the specified <my-osdspec-name> for previews
+    
+    # ceph orch osd spec --unmanaged=true
+    
+    # Changes flags of all available OSDSpecs to true
+    
+    # ceph orch osd spec --service-name my-osdspec-name --unmanaged=true
+    
+    Changes the unmanaged flag of <my-osdspec-name> to true
 """
 
-        def print_preview(prev, format):
+        def print_preview(previews, format_to):
             if format != 'plain':
-                return to_format(prev, format)
+                return to_format(previews, format_to)
             else:
                 table = PrettyTable(
                     ['NAME', 'HOST', 'DATA', 'DB', 'WAL'],
@@ -506,70 +544,148 @@ Usage:
                 table.align = 'l'
                 table.left_padding_width = 0
                 table.right_padding_width = 1
-                for data in prev:
-                    dg_name = data.get('drivegroup')
-                    hostname = data.get('host')
-                    for osd in data.get('data', {}).get('osds', []):
-                        db_path = '-'
-                        wal_path = '-'
-                        block_db = osd.get('block.db', {}).get('path')
-                        block_wal = osd.get('block.wal', {}).get('path')
-                        block_data = osd.get('data', {}).get('path', '')
-                        if not block_data:
-                            continue
-                        if block_db:
-                            db_path = data.get('data', {}).get('vg', {}).get('devices', [])
-                        if block_wal:
-                            wal_path = data.get('data', {}).get('wal_vg', {}).get('devices', [])
-                        table.add_row((dg_name, hostname, block_data, db_path, wal_path))
-                out = table.get_string()
-                if not out:
-                    out = "No pending deployments."
-                return out
+                for host, data in previews.items():
+                    for spec in data:
+                        if spec.get('error'):
+                            return spec.get('message')
+                        dg_name = spec.get('osdspec')
+                        for osd in spec.get('data', {}).get('osds', []):
+                            db_path = '-'
+                            wal_path = '-'
+                            block_db = osd.get('block.db', {}).get('path')
+                            block_wal = osd.get('block.wal', {}).get('path')
+                            block_data = osd.get('data', {}).get('path', '')
+                            if not block_data:
+                                continue
+                            if block_db:
+                                db_path = spec.get('data', {}).get('vg', {}).get('devices', [])
+                            if block_wal:
+                                wal_path = spec.get('data', {}).get('wal_vg', {}).get('devices', [])
+                            table.add_row((dg_name, host, block_data, db_path, wal_path))
+                ret = table.get_string()
+                if not ret:
+                    ret = "Couldn't draw any conclusion.. This is likely a bug and should be reported"
+                return ret
 
-        if (inbuf or all_available_devices) and service_name:
+        if preview and (unmanaged is not None):
+            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+
+        if service_name:
+            if preview:
+                completion = self.preview_osdspecs(osdspec_name=service_name)
+                self._orchestrator_wait([completion])
+                raise_if_exception(completion)
+                out = completion.result_str()
+                return HandleCommandResult(stdout=print_preview(ast.literal_eval(out), format))
+            if unmanaged is not None:
+                return self.set_unmanaged_flag(service_name=service_name, unmanaged_flag=unmanaged)
+
+            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+
+        if preview:
+            completion = self.preview_osdspecs()
+            self._orchestrator_wait([completion])
+            raise_if_exception(completion)
+            out = completion.result_str()
+            return HandleCommandResult(stdout=print_preview(ast.literal_eval(out), format))
+
+        if unmanaged is not None:
+            return self.set_unmanaged_flag(unmanaged_flag=unmanaged)
+
+        return HandleCommandResult(-errno.EINVAL, stderr=usage)
+
+    @_cli_write_command(
+        'orch apply osd',
+        'name=all_available_devices,type=CephBool,req=false '
+        'name=unmanaged,type=CephBool,req=false '
+        "name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false",
+        'Create OSD daemon(s) using a drive group spec')
+    def _apply_osd(self,
+                   all_available_devices: bool = False,
+                   format: Optional[str] = 'plain',
+                   unmanaged=None,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Apply DriveGroupSpecs to create OSDs"""
+        usage = """
+usage:
+  ceph orch apply osd -i <json_file/yaml_file>
+  ceph orch apply osd --all-available-devices
+  ceph orch apply osd --all-available-devices --unmanaged=true|false 
+  
+Restrictions:
+  
+  Mutexes:
+  * -i, --all-available-devices
+  * -i, --unmanaged (this would overwrite the osdspec loaded from a file)
+  
+  Parameters:
+  
+  * --unmanaged
+     Only works with --all-available-devices.
+  
+Description:
+  
+  * -i
+    An inbuf object like a file or a json/yaml blob containing a valid OSDSpec
+    
+  * --all-available-devices
+    The most simple OSDSpec there is. Takes all as 'available' marked devices
+    and creates standalone OSDs on them.
+    
+  * --unmanaged
+    Set a the unmanaged flag for all--available-devices (default is False)
+    
+Examples:
+
+   # ceph orch apply osd -i <file.yml|json>
+   
+   Applies one or more OSDSpecs found in <file>
+   
+   # ceph orch osd apply --all-available-devices --unmanaged=true
+   
+   Creates and applies simple OSDSpec with the unmanaged flag set to <true>
+"""
+
+        if inbuf and all_available_devices:
             # mutually exclusive
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
-        if preview and not (service_name or all_available_devices or inbuf):
-            # get all stored drivegroups and print
-            prev = self.preview_drivegroups()
-            return HandleCommandResult(stdout=print_preview(prev, format))
-
-        if service_name and preview:
-            # get specified drivegroup and print
-            prev = self.preview_drivegroups(service_name)
-            return HandleCommandResult(stdout=print_preview(prev, format))
-
-        if service_name and unmanaged is not None:
-            return self.set_unmanaged_flag(service_name, unmanaged)
-
         if not inbuf and not all_available_devices:
+            # one parameter must be present
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
+
         if inbuf:
-            if all_available_devices:
-                raise OrchestratorError('--all-available-devices cannot be combined with an osd spec')
+            if unmanaged is not None:
+                return HandleCommandResult(-errno.EINVAL, stderr=usage)
             try:
                 drivegroups = yaml.load_all(inbuf)
                 dg_specs = [DriveGroupSpec.from_json(dg) for dg in drivegroups]
+                # This acts weird when abstracted to a function
+                completion = self.apply_drivegroups(dg_specs)
+                self._orchestrator_wait([completion])
+                raise_if_exception(completion)
+                return HandleCommandResult(stdout=completion.result_str())
             except ValueError as e:
                 msg = 'Failed to read JSON/YAML input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        else:
+        if all_available_devices:
+            if unmanaged is None:
+                unmanaged = False
             dg_specs = [
                 DriveGroupSpec(
                     service_id='all-available-devices',
                     placement=PlacementSpec(host_pattern='*'),
                     data_devices=DeviceSelection(all=True),
+                    unmanaged=unmanaged
                 )
             ]
-
-        if not preview:
+            # This acts weird when abstracted to a function
             completion = self.apply_drivegroups(dg_specs)
             self._orchestrator_wait([completion])
             raise_if_exception(completion)
-        ret = self.preview_drivegroups(dg_specs=dg_specs)
-        return HandleCommandResult(stdout=print_preview(ret, format))
+            return HandleCommandResult(stdout=completion.result_str())
+
+        return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
     @_cli_write_command(
         'orch daemon add osd',
@@ -640,7 +756,10 @@ Usage:
         'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
         'name=placement,type=CephString,req=false',
         'Add daemon(s)')
-    def _daemon_add_misc(self, daemon_type=None, placement=None, inbuf=None):
+    def _daemon_add_misc(self,
+                         daemon_type: Optional[str] = None,
+                         placement: Optional[str] = None,
+                         inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = f"""Usage:
     ceph orch daemon add -i <json_file>
     ceph orch daemon add {daemon_type or '<daemon_type>'} <placement>"""
@@ -649,10 +768,11 @@ Usage:
                 raise OrchestratorValidationError(usage)
             spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
         else:
-            placement = PlacementSpec.from_string(placement)
-            placement.validate()
+            spec = PlacementSpec.from_string(placement)
+            assert daemon_type
+            spec = ServiceSpec(daemon_type, placement=spec)
 
-            spec = ServiceSpec(daemon_type, placement=placement)
+        daemon_type = spec.service_type
 
         if daemon_type == 'mon':
             completion = self.add_mon(spec)
@@ -670,6 +790,12 @@ Usage:
             completion = self.add_node_exporter(spec)
         elif daemon_type == 'prometheus':
             completion = self.add_prometheus(spec)
+        elif daemon_type == 'mds':
+            completion = self.add_mds(spec)
+        elif daemon_type == 'rgw':
+            completion = self.add_rgw(spec)
+        elif daemon_type == 'nfs':
+            completion = self.add_nfs(spec)
         elif daemon_type == 'iscsi':
             completion = self.add_iscsi(spec)
         else:
@@ -684,11 +810,18 @@ Usage:
         'name=fs_name,type=CephString '
         'name=placement,type=CephString,req=false',
         'Start MDS daemon(s)')
-    def _mds_add(self, fs_name, placement=None):
+    def _mds_add(self,
+                 fs_name: str,
+                 placement: Optional[str] = None,
+                 inbuf: Optional[str] = None) -> HandleCommandResult:
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = ServiceSpec(
             'mds', fs_name,
             placement=PlacementSpec.from_string(placement),
         )
+
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -696,31 +829,63 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add rgw',
-        'name=realm_name,type=CephString,req=false '
-        'name=zone_name,type=CephString,req=false '
+        'name=realm_name,type=CephString '
+        'name=zone_name,type=CephString '
+        'name=subcluster,type=CephString,req=false '
+        'name=port,type=CephInt,req=false '
+        'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false',
         'Start RGW daemon(s)')
-    def _rgw_add(self, realm_name=None, zone_name=None, placement=None, inbuf=None):
-        usage = """
-Usage:
-  ceph orch daemon rgw add -i <json_file>
-  ceph orch daemon rgw add <realm_name> <zone_name>
-        """
+    def _rgw_add(self,
+                 realm_name: str,
+                 zone_name: str,
+                 subcluster: Optional[str] = None,
+                 port: Optional[int] = None,
+                 ssl: bool = False,
+                 placement: Optional[str] = None,
+                 inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
-            try:
-                rgw_spec = RGWSpec.from_json(json.loads(inbuf))
-            except ValueError as e:
-                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        elif realm_name and zone_name:
-            rgw_spec = RGWSpec(
-                rgw_realm=realm_name,
-                rgw_zone=zone_name,
-                placement=PlacementSpec.from_string(placement))
-        else:
-            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
-        completion = self.add_rgw(rgw_spec)
+        spec = RGWSpec(
+            rgw_realm=realm_name,
+            rgw_zone=zone_name,
+            subcluster=subcluster,
+            rgw_frontend_port=port,
+            ssl=ssl,
+            placement=PlacementSpec.from_string(placement),
+        )
+
+        completion = self.add_rgw(spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch daemon add nfs',
+        "name=svc_id,type=CephString "
+        "name=pool,type=CephString "
+        "name=namespace,type=CephString,req=false "
+        'name=placement,type=CephString,req=false',
+        'Start NFS daemon(s)')
+    def _nfs_add(self,
+                 svc_id: str,
+                 pool: str,
+                 namespace: Optional[str] = None,
+                 placement: Optional[str] = None,
+                 inbuf: Optional[str] = None) -> HandleCommandResult:
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = NFSServiceSpec(
+            svc_id,
+            pool=pool,
+            namespace=namespace,
+            placement=PlacementSpec.from_string(placement),
+        )
+
+        spec.validate_add()
+        completion = self.add_nfs(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -731,47 +896,22 @@ Usage:
         'name=trusted_ip_list,type=CephString,req=false '
         'name=placement,type=CephString,req=false',
         'Start iscsi daemon(s)')
-    def _iscsi_add(self, pool, trusted_ip_list=None, placement=None, inbuf=None):
-        usage = """
-        Usage:
-          ceph orch daemon add iscsi -i <json_file>
-          ceph orch daemon add iscsi <pool>
-                """
+    def _iscsi_add(self,
+                   pool: str,
+                   trusted_ip_list: Optional[str] = None,
+                   placement: Optional[str] = None,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
         if inbuf:
-            try:
-                iscsi_spec = IscsiServiceSpec.from_json(json.loads(inbuf))
-            except ValueError as e:
-                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        else:
-            iscsi_spec = IscsiServiceSpec(
-                service_id='iscsi',
-                pool=pool,
-                trusted_ip_list=trusted_ip_list,
-                placement=PlacementSpec.from_string(placement),
-            )
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
-        completion = self.add_iscsi(iscsi_spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
-    @_cli_write_command(
-        'orch daemon add nfs',
-        "name=svc_arg,type=CephString "
-        "name=pool,type=CephString "
-        "name=namespace,type=CephString,req=false "
-        'name=placement,type=CephString,req=false',
-        'Start NFS daemon(s)')
-    def _nfs_add(self, svc_arg, pool, namespace=None, placement=None):
-        spec = NFSServiceSpec(
-            svc_arg,
+        spec = IscsiServiceSpec(
+            service_id='iscsi',
             pool=pool,
-            namespace=namespace,
+            trusted_ip_list=trusted_ip_list,
             placement=PlacementSpec.from_string(placement),
         )
-        spec.validate_add()
-        completion = self.add_nfs(spec)
+
+        completion = self.add_iscsi(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
@@ -837,7 +977,11 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the size or placement for a service or apply a large yaml spec')
-    def _apply_misc(self, service_type=None, placement=None, unmanaged=False, inbuf=None):
+    def _apply_misc(self,
+                    service_type: Optional[str] = None,
+                    placement: Optional[str] = None,
+                    unmanaged: bool = False,
+                    inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = """Usage:
   ceph orch apply -i <yaml spec>
   ceph orch apply <service_type> <placement> [--unmanaged]
@@ -848,10 +992,9 @@ Usage:
             content: Iterator = yaml.load_all(inbuf)
             specs = [ServiceSpec.from_json(s) for s in content]
         else:
-            placement = PlacementSpec.from_string(placement)
-            placement.validate()
-
-            specs = [ServiceSpec(service_type, placement=placement, unmanaged=unmanaged)]
+            spec = PlacementSpec.from_string(placement)
+            assert service_type
+            specs = [ServiceSpec(service_type, placement=spec, unmanaged=unmanaged)]
 
         completion = self.apply(specs)
         self._orchestrator_wait([completion])
@@ -864,13 +1007,19 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of MDS instances for the given fs_name')
-    def _apply_mds(self, fs_name, placement=None, unmanaged=False):
-        placement = PlacementSpec.from_string(placement)
-        placement.validate()
+    def _apply_mds(self,
+                   fs_name: str,
+                   placement: Optional[str] = None,
+                   unmanaged: bool = False,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = ServiceSpec(
             'mds', fs_name,
-            placement=placement,
+            placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged)
+
         completion = self.apply_mds(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -886,21 +1035,28 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Update the number of RGW instances for the given zone')
-    def _apply_rgw(self, zone_name, realm_name,
-                   subcluster=None,
-                   port=None,
-                   ssl=False,
-                   placement=None,
-                   unmanaged=False):
+    def _apply_rgw(self,
+                   realm_name: str,
+                   zone_name: str,
+                   subcluster: Optional[str] = None,
+                   port: Optional[int] = None,
+                   ssl: bool = False,
+                   placement: Optional[str] = None,
+                   unmanaged: bool = False,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
             subcluster=subcluster,
-            placement=PlacementSpec.from_string(placement),
-            unmanaged=unmanaged,
             rgw_frontend_port=port,
             ssl=ssl,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
         )
+
         completion = self.apply_rgw(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
@@ -914,7 +1070,16 @@ Usage:
         'name=placement,type=CephString,req=false '
         'name=unmanaged,type=CephBool,req=false',
         'Scale an NFS service')
-    def _apply_nfs(self, svc_id, pool, namespace=None, placement=None, unmanaged=False):
+    def _apply_nfs(self,
+                   svc_id: str,
+                   pool: str,
+                   namespace: Optional[str] = None,
+                   placement: Optional[str] = None,
+                   unmanaged: bool = False,
+                   inbuf: Optional[str] = None) -> HandleCommandResult:
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
         spec = NFSServiceSpec(
             svc_id,
             pool=pool,
@@ -922,8 +1087,39 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
         )
+
         completion = self.apply_nfs(spec)
         self._orchestrator_wait([completion])
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command(
+        'orch apply iscsi',
+        'name=pool,type=CephString '
+        'name=trusted_ip_list,type=CephString,req=false '
+        'name=placement,type=CephString,req=false '
+        'name=unmanaged,type=CephBool,req=false',
+        'Scale an iSCSI service')
+    def _apply_iscsi(self,
+                     pool: str,
+                     trusted_ip_list: Optional[str] = None,
+                     placement: Optional[str] = None,
+                     unmanaged: bool = False,
+                     inbuf: Optional[str] = None) -> HandleCommandResult:
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = IscsiServiceSpec(
+            service_id='iscsi',
+            pool=pool,
+            trusted_ip_list=trusted_ip_list,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+        )
+
+        completion = self.apply_iscsi(spec)
+        self._orchestrator_wait([completion])
+        raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command(

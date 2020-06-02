@@ -101,6 +101,22 @@ Example::
     node2   /dev/vdc  hdd   8192M  228094  False  LVM detected, Insufficient space (<5GB) on vgs, locked
 
 
+
+
+Erase Devices (Zap Devices)
+---------------------------
+
+Erase (zap) a device so that it can be resued. ``zap`` calls ``ceph-volume zap`` on the remote host.
+
+::
+
+     orch device zap <hostname> <path>
+
+Example command::
+
+     ceph orch device zap my_hostname /dev/sdx
+
+
 Create OSDs
 -----------
 
@@ -568,7 +584,7 @@ This is an overview of the current implementation status of the orchestrators.
 =================================== ====== =========
  Command                             Rook   Cephadm
 =================================== ====== =========
- apply iscsi                         ⚪      ⚪
+ apply iscsi                         ⚪     ✔
  apply mds                           ✔      ✔
  apply mgr                           ⚪      ✔
  apply mon                           ✔      ✔
@@ -583,7 +599,7 @@ This is an overview of the current implementation status of the orchestrators.
  daemon {stop,start,...}             ⚪      ✔
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
- iscsi add                           ⚪      ⚪
+ iscsi add                           ⚪     ✔
  mds add                             ✔      ✔
  nfs add                             ✔      ✔
  rbd-mirror add                      ⚪      ✔
