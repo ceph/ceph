@@ -546,3 +546,45 @@ class TestCephadm(object):
             assert cephadm_module._check_host('test') is None
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test').to_json()
+
+    def test_stale_connections(self, cephadm_module):
+        class Connection(object):
+            """
+            A mocked connection class that only allows the use of the connection
+            once. If you attempt to use it again via a _check, it'll explode (go
+            boom!).
+
+            The old code triggers the boom. The new code checks the has_connection
+            and will recreate the connection.
+            """
+            fuse = False
+
+            @staticmethod
+            def has_connection():
+                return False
+
+            def import_module(self, *args, **kargs):
+                return mock.Mock()
+
+            @staticmethod
+            def exit():
+                pass
+
+        def _check(conn, *args, **kargs):
+            if conn.fuse:
+                raise Exception("boom: connection is dead")
+            else:
+                conn.fuse = True
+            return '{}', None, 0
+        with mock.patch("remoto.Connection", side_effect=[Connection(), Connection(), Connection()]):
+            with mock.patch("remoto.process.check", _check):
+                with self._with_host(cephadm_module, 'test'):
+                    code, out, err = cephadm_module.check_host('test')
+                    # First should succeed.
+                    assert err is None
+
+                    # On second it should attempt to reuse the connection, where the
+                    # connection is "down" so will recreate the connection. The old
+                    # code will blow up here triggering the BOOM!
+                    code, out, err = cephadm_module.check_host('test')
+                    assert err is None
