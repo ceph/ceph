@@ -1,6 +1,0 @@
-overrides:
-        deepsea:
-                alternative_defaults:
-                      tuned_mgr_init: default-off
-                      tuned_mon_init: default-off
-                      tuned_osd_init: default-off

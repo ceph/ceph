@@ -1,3 +1,0 @@
-roles:
-- [client.salt_master]
-- [node.1]

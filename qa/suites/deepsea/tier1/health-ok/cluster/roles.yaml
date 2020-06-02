@@ -1,2 +1,0 @@
-roles:
-  - [client.salt_master, mon.a, mgr.x, osd.0, prometheus.p, grafana.g]
