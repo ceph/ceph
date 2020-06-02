@@ -103,6 +103,8 @@ class CephFSMount(object):
 
             args = ['sudo', 'ip', 'link', 'add', 'name', 'ceph-brx', 'type', 'bridge']
             self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
+            args = ['sudo', 'ip', 'addr', 'flush', 'dev', 'ceph-brx']
+            self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
             args = ['sudo', 'ip', 'link', 'set', 'ceph-brx', 'up']
             self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
             args = ['sudo', 'ip', 'addr', 'add', '{0}/{1}'.format(ip, mask), 'brd', '{0}'.format(brd), 'dev', 'ceph-brx']
