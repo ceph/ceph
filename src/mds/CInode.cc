@@ -4811,7 +4811,12 @@ next:
     }
 
     bool check_dirfrag_rstats() {
-      return immediate(DIRFRAGS, 0);
+      if (in->has_subtree_root_dirfrag()) {
+	in->mdcache->rdlock_dirfrags_stats(in, get_internal_callback(DIRFRAGS));
+	return false;
+      } else {
+	return immediate(DIRFRAGS, 0);
+      }
     }
 
     bool _dirfrags(int rval) {
