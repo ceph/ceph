@@ -70,3 +70,8 @@
 [submodule "s3select"]
 	path = src/s3select
 	url = https://github.com/ceph/s3select.git
+[submodule "src/aws-sdk-cpp"]
+	path = src/aws-sdk-cpp
+	url = https://github.com/ceph/aws-sdk-cpp
+	depth = 1
+	shallow = true

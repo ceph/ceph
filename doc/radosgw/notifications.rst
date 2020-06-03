@@ -7,7 +7,7 @@ Bucket Notifications
 .. contents::
 
 Bucket notifications provide a mechanism for sending information out of the radosgw when certain events are happening on the bucket.
-Currently, notifications could be sent to: HTTP, AMQP0.9.1 and Kafka endpoints.
+Currently, notifications could be sent to: HTTP, AMQP0.9.1, Kafka, AWS lambda and AWS SNS endpoints.
 
 Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint,
 the `PubSub Module`_ should be used instead of the bucket notification mechanism.
@@ -121,6 +121,11 @@ To update a topic, use the same command used for topic creation, with the topic 
    [&Attributes.entry.7.key=OpaqueData&Attributes.entry.7.value=<opaque data>]
    [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
    [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
+   [&Attributes.entry.10.key=aws-ack-level&Attributes.entry.9.value=<none|server>]
+   [&Attributes.entry.11.key=AwsArn&Attributes.entry.10.value=<AWS ARN of resource to push to>]
+   [&Attributes.entry.12.key=AccessKey&Attributes.entry.11.value=<Access key>]
+   [&Attributes.entry.13.key=SecretKey&Attributes.entry.12.value=<Access Secret>]
+
 
 Request parameters:
 
@@ -162,6 +167,20 @@ Request parameters:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
+
+- AWS Endpoint
+
+ - push-endpoint: ``aws://sns.<region>.amazonaws.com`` for AWS SNS and ``aws://lambda.<region>amazonaws.com`` for AWS lambda. E.g. ``aws://sns.us-east-1.amazonaws.com``
+ - use-ssl: if "true" then secure connection will be used for connecting with the server
+ - AccessKey: Access Key for access to AWS services
+ - SecretKey: Secret Access Key for access to AWS services
+ - AwsArn: ARN of the resource to push notification to. The ARN is expected to be in the format based on: ``arn:aws:<sns|lambda>:[region]:<account-id>:<topic name|function name>``. E.g. ``arn:aws:sns:us-east-1:123456789012:gsoc20-ceph``
+ - verify-ssl: indicate whether the server certificate is validated by the client or not ("false" by default)
+ - aws-ack-level: In case of SNS message is considered delivered when pushed into SNS and does not have to be notified to the end recipients. In case of lambda, we ignore the success/fail of the execution of the function, and consider the message delivered when the function is successfully triggered. Two ack methods exist:
+
+  - "none": message is considered "delivered" if sent to server
+  - "server": message is considered "delivered" if acked by server (default)
+
 
 .. note::
 
