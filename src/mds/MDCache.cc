@@ -12246,6 +12246,12 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& 
   }
 }
 
+void MDCache::wait_for_uncommitted_fragments(MDSGather *gather)
+{
+  for (auto& p : uncommitted_fragments)
+    p.second.waiters.push_back(gather->new_sub());
+}
+
 void MDCache::rollback_uncommitted_fragments()
 {
   dout(10) << "rollback_uncommitted_fragments: " << uncommitted_fragments.size() << " pending" << dendl;
