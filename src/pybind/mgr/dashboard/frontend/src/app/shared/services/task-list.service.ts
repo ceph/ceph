@@ -56,12 +56,10 @@ export class TaskListService implements OnDestroy {
     this.itemFilter = itemFilter;
     this.builders = builders || {};
 
-    this.summaryDataSubscription = this.summaryService.subscribe((tasks: any) => {
-      if (tasks) {
-        this.getUpdate().subscribe((resp: any) => {
-          this.updateData(resp, tasks.executing_tasks.filter(this.taskFilter));
-        }, this.onFetchError);
-      }
+    this.summaryDataSubscription = this.summaryService.subscribe((summary) => {
+      this.getUpdate().subscribe((resp: any) => {
+        this.updateData(resp, summary['executing_tasks'].filter(this.taskFilter));
+      }, this.onFetchError);
     }, this.onFetchError);
   }
 

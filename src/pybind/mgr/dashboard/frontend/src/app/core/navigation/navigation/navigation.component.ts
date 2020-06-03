@@ -46,11 +46,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.subs.add(
-      this.summaryService.subscribe((data: any) => {
-        if (!data) {
-          return;
-        }
-        this.summaryData = data;
+      this.summaryService.subscribe((summary) => {
+        this.summaryData = summary;
       })
     );
     this.subs.add(

@@ -24,19 +24,11 @@ export class Nfs501Component implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
+    this.summaryService.subscribeOnce((summary) => {
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
       this.docsUrl =
         `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/` +
         `#configuring-nfs-ganesha-in-the-dashboard`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
     });
 
     this.routeParamsSubscribe = this.route.params.subscribe((params: { message: string }) => {
