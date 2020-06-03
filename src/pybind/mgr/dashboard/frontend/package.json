@@ -75,6 +75,7 @@
     "@angular/platform-browser-dynamic": "9.1.6",
     "@angular/router": "9.1.6",
     "@auth0/angular-jwt": "2.1.1",
+    "@ng-bootstrap/ng-bootstrap": "6.1.0",
     "@ngx-translate/i18n-polyfill": "1.0.0",
     "@swimlane/ngx-datatable": "17.0.0",
     "@types/file-saver": "2.0.1",

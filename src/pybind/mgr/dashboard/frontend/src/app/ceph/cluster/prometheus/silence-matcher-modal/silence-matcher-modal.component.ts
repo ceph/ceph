@@ -3,6 +3,8 @@ import { FormControl, Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
+import { Observable } from 'rxjs';
+import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
 
 import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
@@ -76,4 +78,16 @@ export class SilenceMatcherModalComponent {
     this.submitAction.emit(this.form.value);
     this.bsModalRef.hide();
   }
+
+  search = (text$: Observable<string>) => {
+    return text$.pipe(
+      debounceTime(200),
+      distinctUntilChanged(),
+      map((term) =>
+        this.possibleValues
+          .filter((v) => v.toLowerCase().indexOf(term.toLowerCase()) > -1)
+          .slice(0, 10)
+      )
+    );
+  };
 }

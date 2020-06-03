@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
+import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -30,7 +30,7 @@ describe('NfsFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      TypeaheadModule.forRoot()
+      NgbTypeaheadModule
     ],
     providers: [
       {
