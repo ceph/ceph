@@ -1,8 +1,6 @@
 import sys
 import logging
 import signal
-import time
-import errno
 from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -244,7 +242,7 @@ class TestSnapshots(CephFSTestCase):
         def _check_snapclient_cache(snaps_dump, cache_dump=None, rank=0):
             if cache_dump is None:
                 cache_dump = self._get_snapclient_dump(rank=rank)
-            for key, value in cache_dump.iteritems():
+            for key, value in cache_dump.items():
                 if value != snaps_dump[key]:
                     return False
             return True;
@@ -477,7 +475,6 @@ class TestSnapshots(CephFSTestCase):
                 # failing at the last mkdir beyond the limit is expected
                 if sno == snaps:
                     log.info("failed while creating snap #{}: {}".format(sno, repr(e)))
-                    sys.exc_clear()
                     raise TestSnapshots.SnapLimitViolationException(sno)
 
     def test_mds_max_snaps_per_dir_default_limit(self):
@@ -503,7 +500,6 @@ class TestSnapshots(CephFSTestCase):
             self.create_dir_and_snaps("accounts", new_limit + 1)
         except TestSnapshots.SnapLimitViolationException as e:
             if e.failed_snapshot_number == (new_limit + 1):
-                sys.exc_clear()
                 pass
         # then increase the limit by one and test
         new_limit = new_limit + 1
@@ -528,7 +524,7 @@ class TestSnapshots(CephFSTestCase):
         self.fs.rank_asok(['config', 'set', 'mds_max_snaps_per_dir', repr(new_limit)])
         try:
             self.create_snap_dir(sname)
-        except CommandFailedError as e:
+        except CommandFailedError:
             # after reducing limit we expect the new snapshot creation to fail
             pass
         self.delete_dir_and_snaps("accounts", new_limit + 1)

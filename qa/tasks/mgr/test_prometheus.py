@@ -1,11 +1,8 @@
-
-
-from mgr_test_case import MgrTestCase
-
 import json
 import logging
 import requests
 
+from .mgr_test_case import MgrTestCase
 
 log = logging.getLogger(__name__)
 

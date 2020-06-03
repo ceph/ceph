@@ -1,11 +1,13 @@
 # see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
-os_type: centos
+#os_type: centos
+# ubuntu and no valgrind until we migrate test to py3
+os_type: ubuntu
 
 overrides:
   install:
     ceph:
-      flavor: notcmalloc
-      debuginfo: true
+#      flavor: notcmalloc
+      #debuginfo: true
   ceph:
     conf:
       global:
@@ -14,9 +16,9 @@ overrides:
         mon osd crush smoke test: false
       osd:
         osd fast shutdown: false
-    valgrind:
-      mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
-      osd: [--tool=memcheck]
-      mds: [--tool=memcheck]
-# https://tracker.ceph.com/issues/38621
-#      mgr: [--tool=memcheck]
+#    valgrind:
+#      mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
+#      osd: [--tool=memcheck]
+#      mds: [--tool=memcheck]
+## https://tracker.ceph.com/issues/38621
+##      mgr: [--tool=memcheck]

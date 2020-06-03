@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase
+from .helper import DashboardTestCase, JList, JObj
 
 
 class HostControllerTest(DashboardTestCase):

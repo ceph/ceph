@@ -3,9 +3,10 @@ test_stress_watch task
 """
 import contextlib
 import logging
-import proc_thrasher
 
+import six
 from teuthology.orchestra import run
+from teuthology.task import proc_thrasher
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def task(ctx, config):
     remotes = []
 
     for role in config.get('clients', ['client.0']):
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -65,5 +66,5 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining watch_notify_stress')
-        for i in testwatch.itervalues():
+        for i in testwatch.values():
             i.join()

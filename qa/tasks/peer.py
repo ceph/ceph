@@ -5,9 +5,9 @@ import logging
 import json
 import time
 
-import ceph_manager
+from tasks import ceph_manager
+from tasks.util.rados import rados
 from teuthology import misc as teuthology
-from util.rados import rados
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def task(ctx, config):
     pgs = manager.get_pg_stats()
     for pg in pgs:
         out = manager.raw_cluster_cmd('pg', pg['pgid'], 'query')
-	log.debug("out string %s",out)
+        log.debug("out string %s",out)
         j = json.loads(out)
         log.info("pg is %s, query json is %s", pg, j)
 

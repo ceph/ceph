@@ -1,12 +1,12 @@
 import logging
-import httplib
 import ssl
 import urllib
-import urlparse
 import hmac
 import hashlib
 import base64
 import xmltodict
+from six.moves import http_client
+from six.moves.urllib import parse as urlparse
 from time import gmtime, strftime
 from .multisite import Zone
 import boto3
@@ -76,7 +76,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     """
     url_params = ''
     if parameters is not None:
-        url_params = urllib.urlencode(parameters)
+        url_params = urlparse.urlencode(parameters)
         # remove 'None' from keys with no values
         url_params = url_params.replace('=None', '')
         url_params = '?' + url_params
@@ -86,13 +86,13 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     string_to_sign = method + '\n\n\n' + string_date + '\n' + resource
     if sign_parameters:
         string_to_sign += url_params
-    signature = base64.b64encode(hmac.new(conn.aws_secret_access_key,
+    signature = base64.b64encode(hmac.new(conn.aws_secret_access_key.encode('utf-8'),
                                           string_to_sign.encode('utf-8'),
-                                          hashlib.sha1).digest())
+                                          hashlib.sha1).digest()).decode('ascii')
     headers = {'Authorization': 'AWS '+conn.aws_access_key_id+':'+signature,
                'Date': string_date,
                'Host': conn.host+':'+str(conn.port)}
-    http_conn = httplib.HTTPConnection(conn.host, conn.port)
+    http_conn = http_client.HTTPConnection(conn.host, conn.port)
     if log.getEffectiveLevel() <= 10:
         http_conn.set_debuglevel(5)
     http_conn.request(method, resource+url_params, NO_HTTP_BODY, headers)
@@ -100,7 +100,7 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     data = response.read()
     status = response.status
     http_conn.close()
-    return data, status
+    return data.decode('utf-8'), status
 
 
 def print_connection_info(conn):
@@ -165,10 +165,10 @@ def delete_all_s3_topics(zone, region):
 
         topics = client.list_topics()['Topics']
         for topic in topics:
-            print 'topic cleanup, deleting: ' + topic['TopicArn']
+            print('topic cleanup, deleting: ' + topic['TopicArn'])
             assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
     except Exception as err:
-        print 'failed to do topic cleanup: ' + str(err)
+        print('failed to do topic cleanup: ' + str(err))
     
 
 def delete_all_objects(conn, bucket_name):
@@ -216,25 +216,25 @@ class PSTopicS3:
     def get_config(self):
         """get topic info"""
         parameters = {'Action': 'GetTopic', 'TopicArn': self.topic_arn}
-        body = urllib.urlencode(parameters)
+        body = urlparse.urlencode(parameters)
         string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
         content_type = 'application/x-www-form-urlencoded; charset=utf-8'
         resource = '/'
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
         log.debug('StringTosign: %s', string_to_sign) 
-        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
-                                     hashlib.sha1).digest())
+                                     hashlib.sha1).digest()).decode('ascii')
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
                    'Date': string_date,
                    'Host': self.conn.host+':'+str(self.conn.port),
                    'Content-Type': content_type}
         if self.conn.is_secure:
-            http_conn = httplib.HTTPSConnection(self.conn.host, self.conn.port, 
+            http_conn = http_client.HTTPSConnection(self.conn.host, self.conn.port,
                     context=ssl.create_default_context(cafile='./cert.pem'))
         else:
-            http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
+            http_conn = http_client.HTTPConnection(self.conn.host, self.conn.port)
         http_conn.request(method, resource, body, headers)
         response = http_conn.getresponse()
         data = response.read()
@@ -258,25 +258,25 @@ class PSTopicS3:
         """list all topics"""
         # note that boto3 supports list_topics(), however, the result only show ARNs
         parameters = {'Action': 'ListTopics'}
-        body = urllib.urlencode(parameters)
+        body = urlparse.urlencode(parameters)
         string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
         content_type = 'application/x-www-form-urlencoded; charset=utf-8'
         resource = '/'
         method = 'POST'
         string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
         log.debug('StringTosign: %s', string_to_sign) 
-        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key.encode('utf-8'),
                                      string_to_sign.encode('utf-8'),
-                                     hashlib.sha1).digest())
+                                     hashlib.sha1).digest()).decode('ascii')
         headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
                    'Date': string_date,
                    'Host': self.conn.host+':'+str(self.conn.port),
                    'Content-Type': content_type}
         if self.conn.is_secure:
-            http_conn = httplib.HTTPSConnection(self.conn.host, self.conn.port, 
+            http_conn = http_client.HTTPSConnection(self.conn.host, self.conn.port,
                     context=ssl.create_default_context(cafile='./cert.pem'))
         else:
-            http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
+            http_conn = http_client.HTTPConnection(self.conn.host, self.conn.port)
         http_conn.request(method, resource, body, headers)
         response = http_conn.getresponse()
         data = response.read()

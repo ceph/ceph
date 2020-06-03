@@ -5,11 +5,13 @@ import contextlib
 import logging
 import re
 
-from cStringIO import StringIO
+from io import BytesIO
 from itertools import product
 
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
+
+import six
 
 log = logging.getLogger(__name__)
 
@@ -167,7 +169,7 @@ def run_radosbench(ctx, config, f, num_osds, size, replica, rep):
     log.info('  repetition =' + str(rep))
 
     for role in config.get('clients', ['client.0']):
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -187,7 +189,7 @@ def run_radosbench(ctx, config, f, num_osds, size, replica, rep):
             ],
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             stdin=run.PIPE,
-            stdout=StringIO(),
+            stdout=BytesIO(),
             wait=False
         )
 

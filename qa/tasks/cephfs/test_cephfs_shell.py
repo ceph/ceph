@@ -1,10 +1,8 @@
 import os
 import crypt
 import logging
-from StringIO import StringIO
+from six import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from tasks.cephfs.fuse_mount import FuseMount
-from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -18,8 +16,7 @@ class TestCephFSShell(CephFSTestCase):
             args.extend(opts)
         args.extend(("--", cmd))
         log.info("Running command: {}".format(" ".join(args)))
-        status = self.mount_a.client_remote.run(args=args,
-                                                stdout=StringIO(),
+        status = self.mount_a.client_remote.run(args=args, stdout=StringIO(),
                                                 stdin=stdin)
         return status.stdout.getvalue().strip()
 

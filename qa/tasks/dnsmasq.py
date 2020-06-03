@@ -8,7 +8,7 @@ from teuthology import misc
 from teuthology.exceptions import ConfigError
 from teuthology import contextutil
 from teuthology import packaging
-from util import get_remote_for_role
+from tasks.util import get_remote_for_role
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def setup_dnsmasq(remote, testdir, cnames):
     # add address entries for each cname
     dnsmasq = "server=8.8.8.8\nserver=8.8.4.4\n"
     address_template = "address=/{cname}/{ip_address}\n"
-    for cname, ip_address in cnames.iteritems():
+    for cname, ip_address in cnames.items():
         dnsmasq += address_template.format(cname=cname, ip_address=ip_address)
 
     # write to temporary dnsmasq file
@@ -83,7 +83,7 @@ def setup_dnsmasq(remote, testdir, cnames):
     # restart dnsmasq
     remote.run(args=['sudo', 'systemctl', 'restart', 'dnsmasq'])
     # verify dns name is set
-    remote.run(args=['ping', '-c', '4', cnames.keys()[0]])
+    remote.run(args=['ping', '-c', '4', next(iter(cnames.keys()))])
 
     try:
         yield
@@ -129,7 +129,7 @@ def task(ctx, config):
 
     # multiple roles may map to the same remote, so collect names by remote
     remote_names = {}
-    for role, cnames in config.iteritems():
+    for role, cnames in config.items():
         remote = get_remote_for_role(ctx, role)
         if remote is None:
             raise ConfigError('no remote for role %s' % role)
@@ -144,7 +144,7 @@ def task(ctx, config):
                 names[cname] = remote.ip_address
         elif isinstance(cnames, dict):
             # when given a dict, look up the remote ip for each
-            for cname, client in cnames.iteritems():
+            for cname, client in cnames.items():
                 r = get_remote_for_role(ctx, client)
                 if r is None:
                     raise ConfigError('no remote for role %s' % client)
@@ -160,7 +160,7 @@ def task(ctx, config):
 
     # run subtasks for each unique remote
     subtasks = []
-    for remote, cnames in remote_names.iteritems():
+    for remote, cnames in remote_names.items():
         subtasks.extend([ lambda r=remote: install_dnsmasq(r) ])
         subtasks.extend([ lambda r=remote: backup_resolv(r, resolv_bak) ])
         subtasks.extend([ lambda r=remote: replace_resolv(r, resolv_tmp) ])

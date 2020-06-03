@@ -1,10 +1,9 @@
-
-
-from mgr_test_case import MgrTestCase
-
 import json
 import logging
 import datetime
+
+from .mgr_test_case import MgrTestCase
+
 
 log = logging.getLogger(__name__)
 UUID = 'd5775432-0742-44a3-a435-45095e32e6b1'
@@ -45,13 +44,13 @@ class TestCrash(MgrTestCase):
         self.oldest_crashid = crash_id
 
     def tearDown(self):
-        for crash in self.crashes.itervalues():
+        for crash in self.crashes.values():
             self.mgr_cluster.mon_manager.raw_cluster_cmd_result(
                 'crash', 'rm', crash['crash_id']
             )
 
     def test_info(self):
-        for crash in self.crashes.itervalues():
+        for crash in self.crashes.values():
             log.warning('test_info: crash %s' % crash)
             retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
                 'crash', 'ls'
@@ -69,11 +68,11 @@ class TestCrash(MgrTestCase):
         retstr = self.mgr_cluster.mon_manager.raw_cluster_cmd(
             'crash', 'ls',
         )
-        for crash in self.crashes.itervalues():
+        for crash in self.crashes.values():
             self.assertIn(crash['crash_id'], retstr)
 
     def test_rm(self):
-        crashid = self.crashes.keys()[0]
+        crashid = next(iter(self.crashes.keys()))
         self.assertEqual(
             0,
             self.mgr_cluster.mon_manager.raw_cluster_cmd_result(

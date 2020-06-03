@@ -1,14 +1,9 @@
-from cStringIO import StringIO
 import logging
 import json
-import requests
 import time
 
-from requests.packages.urllib3 import PoolManager
-from requests.packages.urllib3.util import Retry
-from urlparse import urlparse
+from six import StringIO
 
-from teuthology.orchestra.connection import split_user
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)

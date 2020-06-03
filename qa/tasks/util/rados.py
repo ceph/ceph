@@ -84,4 +84,4 @@ def cmd_erasure_code_profile(profile_name, profile):
     return [
         'osd', 'erasure-code-profile', 'set',
         profile_name
-        ] + [ str(key) + '=' + str(value) for key, value in profile.iteritems() ]
+        ] + [ str(key) + '=' + str(value) for key, value in profile.items() ]

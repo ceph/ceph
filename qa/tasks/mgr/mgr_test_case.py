@@ -101,9 +101,9 @@ class MgrTestCase(CephTestCase):
         assert cls.mgr_cluster is not None
 
         if len(cls.mgr_cluster.mgr_ids) < cls.MGRS_REQUIRED:
-            raise case.SkipTest("Only have {0} manager daemons, "
-                                "{1} are required".format(
-                len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
+            cls.skipTest(
+                "Only have {0} manager daemons, {1} are required".format(
+                    len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
 
         cls.setup_mgrs()
 

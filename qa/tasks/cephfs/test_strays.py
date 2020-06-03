@@ -4,7 +4,6 @@ import logging
 from textwrap import dedent
 import datetime
 import gevent
-import datetime
 
 from teuthology.orchestra.run import CommandFailedError, Raw
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
@@ -137,7 +136,7 @@ class TestStrays(CephFSTestCase):
             size_unit = 1024  # small, numerous files
             file_multiplier = 200
         else:
-            raise NotImplemented(throttle_type)
+            raise NotImplementedError(throttle_type)
 
         # Pick up config changes
         self.fs.mds_fail_restart()
@@ -153,7 +152,7 @@ class TestStrays(CephFSTestCase):
             os.mkdir(os.path.join(mount_path, subdir))
             for i in range(0, file_multiplier):
                 for size in range(0, {size_range}*size_unit, size_unit):
-                    filename = "{{0}}_{{1}}.bin".format(i, size / size_unit)
+                    filename = "{{0}}_{{1}}.bin".format(i, size // size_unit)
                     with open(os.path.join(mount_path, subdir, filename), 'w') as f:
                         f.write(size * 'x')
         """.format(
@@ -222,7 +221,7 @@ class TestStrays(CephFSTestCase):
                             num_strays_purging, mds_max_purge_files
                         ))
                 else:
-                    raise NotImplemented(throttle_type)
+                    raise NotImplementedError(throttle_type)
 
                 log.info("Waiting for purge to complete {0}/{1}, {2}/{3}".format(
                     num_strays_purging, num_strays,
@@ -238,7 +237,7 @@ class TestStrays(CephFSTestCase):
         # insanely fast such that the deletions all pass before we have polled the
         # statistics.
         if throttle_type == self.OPS_THROTTLE:
-            if ops_high_water < mds_max_purge_ops / 2:
+            if ops_high_water < mds_max_purge_ops // 2:
                 raise RuntimeError("Ops in flight high water is unexpectedly low ({0} / {1})".format(
                     ops_high_water, mds_max_purge_ops
                 ))
@@ -249,7 +248,7 @@ class TestStrays(CephFSTestCase):
             # particularly large file/directory.
             self.assertLessEqual(ops_high_water, mds_max_purge_ops+64)
         elif throttle_type == self.FILES_THROTTLE:
-            if files_high_water < mds_max_purge_files / 2:
+            if files_high_water < mds_max_purge_files // 2:
                 raise RuntimeError("Files in flight high water is unexpectedly low ({0} / {1})".format(
                     files_high_water, mds_max_purge_files
                 ))

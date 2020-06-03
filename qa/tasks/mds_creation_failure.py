@@ -1,8 +1,9 @@
-
+# FIXME: this file has many undefined vars which are accessed!
+# flake8: noqa
 import logging
 import contextlib
 import time
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc
 from teuthology.orchestra.run import CommandFailedError, Raw
 
