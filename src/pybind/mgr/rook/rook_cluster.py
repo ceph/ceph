@@ -521,7 +521,7 @@ class RookCluster(object):
             return new
         return self._patch(cnfs.CephNFS, 'cephnfses',svc_id, _update_nfs_count)
 
-    def add_osds(self, drive_group, all_hosts):
+    def add_osds(self, drive_group, matching_hosts):
         # type: (DriveGroupSpec, List[str]) -> str
         """
         Rook currently (0.8) can only do single-drive OSDs, so we
@@ -543,7 +543,7 @@ class RookCluster(object):
                 new_cluster.spec.storage.nodes = ccl.NodesList()
 
             current_nodes = getattr(current_cluster.spec.storage, 'nodes', ccl.NodesList())
-            matching_host = drive_group.placement.pattern_matches_hosts(all_hosts)[0]
+            matching_host = matching_hosts[0]
 
             if matching_host not in [n.name for n in current_nodes]:
                 pd = ccl.NodesItem(
