@@ -429,7 +429,11 @@ class TestCephadm(object):
     def test_nfs(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            spec = NFSServiceSpec('name', pool='pool', namespace='namespace', placement=ps)
+            spec = NFSServiceSpec(
+                    service_id='name',
+                    pool='pool',
+                    namespace='namespace',
+                    placement=ps)
             c = cephadm_module.add_nfs(spec)
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed nfs.name.* on host 'test'")
@@ -446,8 +450,12 @@ class TestCephadm(object):
     def test_iscsi(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            spec = IscsiServiceSpec('name', pool='pool', api_user='user',
-                                    api_password='password', placement=ps)
+            spec = IscsiServiceSpec(
+                    service_id='name',
+                    pool='pool',
+                    api_user='user',
+                    api_password='password',
+                    placement=ps)
             c = cephadm_module.add_iscsi(spec)
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed iscsi.name.* on host 'test'")
@@ -497,9 +505,17 @@ class TestCephadm(object):
                     )]
                 )
             ), CephadmOrchestrator.apply_rgw),
-            (NFSServiceSpec('name', pool='pool', namespace='namespace'), CephadmOrchestrator.apply_nfs),
-            (IscsiServiceSpec('name', pool='pool', api_user='user', api_password='password'),
-             CephadmOrchestrator.apply_iscsi),
+            (NFSServiceSpec(
+                service_id='name',
+                pool='pool',
+                namespace='namespace'
+            ), CephadmOrchestrator.apply_nfs),
+            (IscsiServiceSpec(
+                service_id='name',
+                pool='pool',
+                api_user='user',
+                api_password='password'
+            ), CephadmOrchestrator.apply_iscsi),
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
