@@ -118,94 +118,88 @@ S3 Documentation reference : http://docs.aws.amazon.com/AmazonS3/latest/API/REST
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | Type   | Operation              | Supported? | Code links                                                                                                 | Tests links |
 +========+========================+============+============================================================================================================+=============+
-| DELETE | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1728    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/e91042171939b6bf82a56a1015c5cae792d228ad/src/rgw/rgw_rest_bucket.cc#L250 |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/e91042171939b6bf82a56a1015c5cae792d228ad/src/rgw/rgw_rest_bucket.cc#L212 |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/25948319c4d256c4aeb0137eb88947e54d14cc79/src/rgw/rgw_bucket.cc#L856      |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/25948319c4d256c4aeb0137eb88947e54d14cc79/src/rgw/rgw_bucket.cc#L513      |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/25948319c4d256c4aeb0137eb88947e54d14cc79/src/rgw/rgw_bucket.cc#L286      |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L461     |             |
+| DELETE | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L3477         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L2239    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| DELETE | Bucket cors            | ?          | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1731    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1916         |             |
+| DELETE | Bucket cors            | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L5723         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3526    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| DELETE | Bucket lifecycle       | No         |                                                                                                            |             |
+| DELETE | Bucket lifecycle       | Yes        | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3414    |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L5651         |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| DELETE | Bucket policy          | ?          |                                                                                                            |             |
+| DELETE | Bucket policy          | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L7779         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L7761         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4405    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| DELETE | Bucket tagging         | ?          |                                                                                                            |             |
+| DELETE | Bucket tagging         | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L1247         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L597     |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| DELETE | Bucket website         | No         |                                                                                                            |             |
+| DELETE | Bucket website         | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L2807         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L2029    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1676    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L185     |             |
+| GET    | Bucket acl             | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L5337         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3303    |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4317    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket acl             | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1697    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1728         |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1344    |             |
+| GET    | Bucket cors            | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L5674         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3426    |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4319    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket cors            | ?          | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1698    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1845         |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/76040d90f7eb9f9921a3b8dcd0f821ac2cd9c492/src/rgw/rgw_main.cc#L345        |             |
+| GET    | Bucket lifecycle       | Yes        | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3365    |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3385    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket lifecycle       | No         |                                                                                                            |             |
+| GET    | Bucket location        | Yes        | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L1802    |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4300    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket location        | No         |                                                                                                            |             |
+| GET    | Bucket policy          | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L7738         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L7719         |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket policy          | ?          | https://github.com/ceph/ceph/blob/e91042171939b6bf82a56a1015c5cae792d228ad/src/rgw/rgw_rest_bucket.cc#L232 |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/e91042171939b6bf82a56a1015c5cae792d228ad/src/rgw/rgw_rest_bucket.cc#L58  |             |
-+--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket logging         | ?          | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1695    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L287     |             |
+| GET    | Bucket logging         | Yes        | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L1791    |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4297    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | GET    | Bucket notification    | No         |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket tagging         | No         |                                                                                                            |             |
+| GET    | Bucket tagging         | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L1200         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L512     |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4329    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket Object versions | No         |                                                                                                            |             |
+| GET    | Bucket Object versions | Yes        | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L1424    |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L1454    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | GET    | Bucket requestPayment  | No         |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket versioning      | No         |                                                                                                            |             |
+| GET    | Bucket versioning      | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L2644         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L1825    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | Bucket website         | No         |                                                                                                            |             |
+| GET    | Bucket website         | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L2750         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L2039    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| GET    | List Multipart uploads | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1701    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest.cc#L877        |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L2355         |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L2363         |             |
+| GET    | List Multipart uploads | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L6421         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4323    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| HEAD   | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1713    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1689    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L826          |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L834          |             |
+| HEAD   | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L2848         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L2065    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1725    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L382     |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L437     |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L901          |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L945          |             |
+| PUT    | Bucket                 | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L3191         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L2215    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket acl             | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1721    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1354    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1373    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1739         |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1753         |             |
+| PUT    | Bucket acl             | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L5421         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3356    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket cors            | ?          | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1723    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_rest_s3.cc#L1398    |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1858         |             |
-|        |                        |            | https://github.com/ceph/ceph/blob/b139a7cd34b4e203ab164ada7a8fa590b50d8b13/src/rgw/rgw_op.cc#L1866         |             |
+| PUT    | Bucket cors            | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L5692         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L3517    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | PUT    | Bucket lifecycle       | No         |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket policy          | ?          |                                                                                                            |             |
+| PUT    | Bucket policy          | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L7680         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L4377    |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket logging         | ?          |                                                                                                            |             |
+| PUT    | Bucket logging         | No         |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | PUT    | Bucket notification    | No         |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
-| PUT    | Bucket tagging         | ?          |                                                                                                            |             |
+| PUT    | Bucket tagging         | Yes        | https://github.com/ceph/ceph/blob/45e8438b9950158f26e629e2ffa37e19e7abf592/src/rgw/rgw_op.cc#L1216         |             |
+|        |                        |            | https://github.com/ceph/ceph/blob/b1be4bdf2cc968afb13448023d81a46e2eaa691f/src/rgw/rgw_rest_s3.cc#L588     |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
 | PUT    | Bucket requestPayment  | No         |                                                                                                            |             |
 +--------+------------------------+------------+------------------------------------------------------------------------------------------------------------+-------------+
