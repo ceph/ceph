@@ -152,6 +152,10 @@ set(librgw_common_srcs
   rgw_kms.cc
   rgw_url.cc)
 
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  list(APPEND librgw_common_srcs rgw_aws.cc)
+endif()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
@@ -249,6 +253,10 @@ if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_a PUBLIC spawn)
 endif()
 
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  target_link_libraries(rgw_a PRIVATE aws-cpp-sdk-core aws-cpp-sdk-lambda aws-cpp-sdk-sns)
+endif()
+
 set(rgw_libs rgw_a)
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # used by rgw_amqp.cc
@@ -257,6 +265,10 @@ endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   list(APPEND rgw_libs RDKafka::RDKafka)
+endif()
+
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  list(APPEND rgw_libs aws-cpp-sdk-lambda aws-cpp-sdk-sns)
 endif()
 
 set(rgw_schedulers_srcs

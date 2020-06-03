@@ -205,3 +205,11 @@ install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_ceph_test(test-ceph-diff-sorted.sh
   ${CMAKE_CURRENT_SOURCE_DIR}/test-ceph-diff-sorted.sh)
+
+
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  # unittest_rgw_aws
+  add_executable(unittest_rgw_aws test_rgw_aws.cc)
+  add_ceph_unittest(unittest_rgw_aws)
+  target_link_libraries(unittest_rgw_aws ${rgw_libs})
+endif()

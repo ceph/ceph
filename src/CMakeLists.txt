@@ -279,6 +279,18 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+if(WITH_RADOSGW AND WITH_RADOSGW_AWS_ENDPOINT)
+  set(BUILD_ONLY "lambda" "sns")
+  set(BUILD_DEPS ON)
+  set(AWS_DEPS_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/aws-sdk-cpp/.deps" )
+
+  add_subdirectory(aws-sdk-cpp)
+
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-lambda/include")
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-sns/include")
+  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-core/include")
+endif()
+
 find_package(fmt 5.2.1 QUIET)
 if(fmt_FOUND)
   include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
@@ -294,6 +306,7 @@ if(WITH_SEASTAR)
     message(STATUS "Could not find c-ares, will build it")
     include(Buildc-ares)
     build_c_ares()
+
   endif()
   macro(find_package name)
     if(NOT TARGET ${name})
