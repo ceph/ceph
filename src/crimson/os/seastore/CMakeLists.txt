@@ -3,8 +3,12 @@ add_library(crimson-seastore
   seastore_types.cc
   segment_manager/ephemeral.cc
   segment_manager.cc
+  transaction_manager.cc
   journal.cc
   cache.cc
+  lba_manager.cc
+  lba_manager/btree/btree_lba_manager.cc
+  lba_manager/btree/lba_btree_node_impl.cc
   root_block.cc
 	)
 target_link_libraries(crimson-seastore

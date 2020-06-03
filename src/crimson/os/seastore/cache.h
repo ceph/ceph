@@ -50,8 +50,12 @@ class Transaction {
   }
 
   void add_to_retired_set(CachedExtentRef ref) {
-    ceph_assert(retired_set.count(ref->get_paddr()) == 0);
-    retired_set.insert(ref);
+    if (!ref->is_initial_pending()) {
+      // && retired_set.count(ref->get_paddr()) == 0
+      // If it's already in the set, insert here will be a noop,
+      // which is what we want.
+      retired_set.insert(ref);
+    }
   }
 
   void add_to_read_set(CachedExtentRef ref) {
@@ -61,7 +65,7 @@ class Transaction {
 
   void add_fresh_extent(CachedExtentRef ref) {
     fresh_block_list.push_back(ref);
-    ref->set_paddr(make_relative_paddr(offset));
+    ref->set_paddr(make_record_relative_paddr(offset));
     offset += ref->get_length();
     write_set.insert(*ref);
   }
@@ -191,8 +195,10 @@ public:
 	offset,
 	length,
 	ref->get_bptr()).safe_then(
-	  [ref=std::move(ref)]() mutable {
+	  [this, ref=std::move(ref)]() mutable {
+	    ref->on_clean_read();
 	    ref->complete_io();
+	    add_extent(ref);
 	    return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	      std::move(ref));
 	  },
@@ -220,7 +226,7 @@ public:
 	TCachedExtentRef<T>(static_cast<T*>(&*i)));
     } else {
       return get_extent<T>(offset, length).safe_then(
-	[this, &t](auto ref) mutable {
+	[&t](auto ref) mutable {
 	  t.add_to_read_set(ref);
 	  return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(std::move(ref));
 	});
