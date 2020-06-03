@@ -1185,7 +1185,10 @@ class LocalContext(object):
                     self.daemons.daemons[prefixed_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
     def __del__(self):
-        shutil.rmtree(self.teuthology_config['test_path'])
+        test_path = self.teuthology_config['test_path']
+        # opt_create_cluster_only does not create the test path
+        if test_path:
+            shutil.rmtree(test_path)
 
 def teardown_cluster():
     log.info('\ntearing down the cluster...')
