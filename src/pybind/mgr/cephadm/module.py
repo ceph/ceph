@@ -1064,9 +1064,8 @@ you may want to run:
             self.log.exception(ex)
             raise
 
-    def _get_hosts(self, label=None):
-        # type: (Optional[str]) -> List[str]
-        return list(self.inventory.filter_by_label(label))
+    def _get_hosts(self, label: Optional[str] = '', as_hostspec: bool = False) -> List:
+        return list(self.inventory.filter_by_label(label=label, as_hostspec=as_hostspec))
 
     def _add_host(self, spec):
         # type: (HostSpec) -> str
@@ -1244,18 +1243,6 @@ you may want to run:
         self.cache.save_host(host)
         return None
 
-    def _get_spec_size(self, spec):
-        if spec.placement.count:
-            return spec.placement.count
-        elif spec.placement.host_pattern:
-            return len(spec.placement.pattern_matches_hosts(self.inventory.keys()))
-        elif spec.placement.label:
-            return len(self._get_hosts(spec.placement.label))
-        elif spec.placement.hosts:
-            return len(spec.placement.hosts)
-        # hmm!
-        return 0
-
     @trivial_completion
     def describe_service(self, service_type=None, service_name=None,
                          refresh=False):
@@ -1306,7 +1293,7 @@ you may want to run:
                         osd_count += 1
                         sm[n].size = osd_count
                     else:
-                        sm[n].size = self._get_spec_size(spec)
+                        sm[n].size = spec.placement.get_host_selection_size(self._get_hosts)
 
                     sm[n].created = self.spec_store.spec_created[n]
                     if service_type == 'nfs':
@@ -1331,7 +1318,7 @@ you may want to run:
                 continue
             sm[n] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=self._get_spec_size(spec),
+                size=spec.placement.get_host_selection_size(self._get_hosts),
                 running=0,
             )
             if service_type == 'nfs':
@@ -1539,14 +1526,13 @@ you may want to run:
         if not osdspecs:
             self.log.debug("No OSDSpecs found")
             return []
-        # TODO: adapt this when we change patter_matches_hosts with https://github.com/ceph/ceph/pull/34860
-        return sum([spec.placement.pattern_matches_hosts(self.cache.get_hosts()) for spec in osdspecs], [])
+        return sum([spec.placement.filter_matching_hosts(self._get_hosts) for spec in osdspecs], [])
 
     def resolve_osdspecs_for_host(self, host):
         matching_specs = []
         self.log.debug(f"Finding OSDSpecs for host: <{host}>")
         for spec in self.spec_store.find('osd'):
-            if host in spec.placement.pattern_matches_hosts(self.cache.get_hosts()):
+            if host in spec.placement.filter_matching_hosts(self._get_hosts):
                 self.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
                 matching_specs.append(spec)
         return matching_specs

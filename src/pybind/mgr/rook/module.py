@@ -460,7 +460,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self._service_add_decorate('RGW', spec,
                                           self.rook_cluster.apply_objectstore)
 
-
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> RookCompletion
         num = spec.placement.count
@@ -495,7 +494,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         def execute(all_hosts_):
             # type: (List[orchestrator.HostSpec]) -> orchestrator.Completion
             all_hosts = [h.hostname for h in all_hosts_]
-            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+            matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts)
 
             assert len(matching_hosts) == 1
 
@@ -514,13 +513,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                         matching_hosts,
                         targets),
                 mgr=self,
-                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, all_hosts),
-                calc_percent=lambda: has_osds(all_hosts)
+                on_complete=lambda _:self.rook_cluster.add_osds(drive_group, matching_hosts),
+                calc_percent=lambda: has_osds(matching_hosts)
             )
 
         @deferred_read
-        def has_osds(all_hosts):
-            matching_hosts = drive_group.placement.pattern_matches_hosts(all_hosts)
+        def has_osds(matching_hosts):
 
             # Find OSD pods on this host
             pod_osd_ids = set()
