@@ -214,7 +214,7 @@ void Replayer<I>::shut_down(Context* on_finish) {
 
   cancel_delayed_preprocess_task();
   cancel_flush_local_replay_task();
-  wait_for_event_replay();
+  shut_down_local_journal_replay();
 }
 
 template <typename I>
@@ -422,30 +422,11 @@ bool Replayer<I>::notify_init_complete(std::unique_lock<ceph::mutex>& locker) {
 }
 
 template <typename I>
-void Replayer<I>::wait_for_event_replay() {
-  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
-
-  dout(10) << dendl;
-  auto ctx = create_async_context_callback(
-    m_threads->work_queue, create_context_callback<
-      Replayer<I>, &Replayer<I>::handle_wait_for_event_replay>(this));
-  m_event_replay_tracker.wait_for_ops(ctx);
-}
-
-template <typename I>
-void Replayer<I>::handle_wait_for_event_replay(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  std::unique_lock locker{m_lock};
-  shut_down_local_journal_replay();
-}
-
-template <typename I>
 void Replayer<I>::shut_down_local_journal_replay() {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
 
   if (m_local_journal_replay == nullptr) {
-    close_local_image();
+    wait_for_event_replay();
     return;
   }
 
@@ -465,6 +446,25 @@ void Replayer<I>::handle_shut_down_local_journal_replay(int r) {
     handle_replay_error(r, "failed to shut down local journal replay");
   }
 
+  wait_for_event_replay();
+}
+
+template <typename I>
+void Replayer<I>::wait_for_event_replay() {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  dout(10) << dendl;
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      Replayer<I>, &Replayer<I>::handle_wait_for_event_replay>(this));
+  m_event_replay_tracker.wait_for_ops(ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_wait_for_event_replay(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  std::unique_lock locker{m_lock};
   close_local_image();
 }
 
