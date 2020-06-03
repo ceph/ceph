@@ -529,6 +529,7 @@ class NFSServiceSpec(ServiceSpec):
 
     def rados_config_location(self):
         # type: () -> str
+        assert self.pool
         url = 'rados://' + self.pool + '/'
         if self.namespace:
             url += self.namespace + '/'
