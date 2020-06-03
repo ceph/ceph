@@ -152,12 +152,12 @@ Create OSDs on a group of devices on a single host::
 
 or::
 
-    ceph orch apply osd -i <json_file/yaml_file> [--preview]
+    ceph orch apply osd -i <json_file/yaml_file>
 
 
 or::
 
-    ceph orch apply osd --use-all-devices [--preview]
+    ceph orch apply osd --all-available-devices
 
 
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
