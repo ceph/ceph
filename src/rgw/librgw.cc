@@ -61,6 +61,9 @@
 #endif
 
 #include "services/svc_zone.h"
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+#include "rgw_notify_aws.h"
+#endif
 
 #include <errno.h>
 #include <thread>
@@ -631,6 +634,11 @@ namespace rgw {
       derr << "ERROR: failed to initialize Kafka manager" << dendl;
     }
 #endif
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+    if (!rgw::aws::init(cct.get())) {
+      derr << "ERROR: failed to initialize AWS manager" << dendl;
+    }
+#endif
 
     return 0;
   } /* RGWLib::init() */
@@ -665,6 +673,9 @@ namespace rgw {
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
     rgw::kafka::shutdown();
+#endif
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+    rgw::aws::shutdown();
 #endif
 
     rgw_perf_stop(g_ceph_context);
