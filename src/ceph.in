@@ -305,7 +305,7 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--cluster', help='cluster name')
 
     parser.add_argument('--admin-daemon', dest='admin_socket',
-                        help='submit admin-socket commands (\"help\" for help')
+                        help='submit admin-socket commands (\"help\" for help)')
 
     parser.add_argument('-s', '--status', action='store_true',
                         help='show cluster status')
