@@ -869,12 +869,16 @@ class MDCache {
   void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr);
 
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSContext *c) {
-    ceph_assert(uncommitted_fragments.count(dirfrag));
-    uncommitted_fragments[dirfrag].waiters.push_back(c);
+    uncommitted_fragments.at(dirfrag).waiters.push_back(c);
   }
+  bool is_any_uncommitted_fragment() const {
+    return !uncommitted_fragments.empty();
+  }
+  void wait_for_uncommitted_fragments(MDSGather *gather);
+  void rollback_uncommitted_fragments();
+
   void split_dir(CDir *dir, int byn);
   void merge_dir(CInode *diri, frag_t fg);
-  void rollback_uncommitted_fragments();
 
   void find_stale_fragment_freeze();
   void fragment_freeze_inc_num_waiters(CDir *dir);
