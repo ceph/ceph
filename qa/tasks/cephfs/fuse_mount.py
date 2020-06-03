@@ -100,13 +100,18 @@ class FuseMount(CephFSMount):
         run_cmd.extend(fuse_cmd)
 
         def list_connections():
+            from teuthology.misc import get_system_type
+
+            conn_dir = "/sys/fs/fuse/connections"
+
+            self.client_remote.run(args=['sudo', 'modprobe', 'fuse'],
+                                   check_status=False)
             self.client_remote.run(
-                args=["sudo", "mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
-                check_status=False,
-                timeout=(15*60)
-            )
+                args=["sudo", "mount", "-t", "fusectl", conn_dir, conn_dir],
+                check_status=False, timeout=(30))
+
             try:
-                ls_str = self.client_remote.sh("ls /sys/fs/fuse/connections",
+                ls_str = self.client_remote.sh("ls " + conn_dir,
                                                stdout=StringIO(),
                                                timeout=(15*60)).strip()
             except CommandFailedError:
