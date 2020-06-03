@@ -2,8 +2,9 @@ import json
 import errno
 import logging
 from collections import defaultdict
-from threading import Event
 from functools import wraps
+from tempfile import TemporaryDirectory
+from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -80,27 +81,6 @@ DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
-
-
-# for py2 compat
-try:
-    from tempfile import TemporaryDirectory # py3
-except ImportError:
-    # define a minimal (but sufficient) equivalent for <= py 3.2
-    class TemporaryDirectory(object): # type: ignore
-        def __init__(self):
-            self.name = tempfile.mkdtemp()
-
-        def __enter__(self):
-            if not self.name:
-                self.name = tempfile.mkdtemp()
-            return self.name
-
-        def cleanup(self):
-            shutil.rmtree(self.name)
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.cleanup()
 
 
 def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
