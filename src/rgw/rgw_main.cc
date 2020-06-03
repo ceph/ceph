@@ -54,6 +54,7 @@
 #endif
 
 #include "services/svc_zone.h"
+#include "rgw_aws.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -406,6 +407,11 @@ int radosgw_Main(int argc, const char **argv)
         dout(1) << "ERROR: failed to initialize Kafka manager" << dendl;
     }
 #endif
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+  if (!rgw::aws::init(cct.get())) {
+        dout(1) << "ERROR: failed to initialize AWS manager" << dendl;
+    }
+#endif
   }
 
   const auto& luarocks_path = g_conf().get_val<std::string>("rgw_luarocks_location");
@@ -687,6 +693,9 @@ int radosgw_Main(int argc, const char **argv)
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   rgw::kafka::shutdown();
+#endif
+#ifdef WITH_RADOSGW_AWS_ENDPOINT
+  rgw::aws::shutdown();
 #endif
 
   rgw_perf_stop(g_ceph_context);

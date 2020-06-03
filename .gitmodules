@@ -77,3 +77,8 @@
 	path = src/jaegertracing/thrift
 	url = https://github.com/apache/thrift.git
 	branch = 0.13.0
+[submodule "src/aws-sdk-cpp"]
+	path = src/aws-sdk-cpp
+	url = https://github.com/ceph/aws-sdk-cpp
+	depth = 1
+	shallow = true

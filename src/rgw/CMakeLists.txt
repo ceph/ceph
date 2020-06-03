@@ -164,6 +164,10 @@ set(librgw_common_srcs
   rgw_lua.cc
   rgw_lua_request.cc)
 
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  list(APPEND librgw_common_srcs rgw_aws.cc)
+endif()
+
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
 endif()
@@ -268,6 +272,14 @@ endif()
 target_link_libraries(rgw_a PRIVATE ${LUA_LIBRARIES})
 target_link_libraries(rgw_a PUBLIC spawn)
 
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-lambda/include")
+  target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-sns/include")
+  target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-core/include")
+  target_include_directories(rgw_common PRIVATE "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-iam/include")
+  target_link_libraries(rgw_a PRIVATE aws-cpp-sdk-core aws-cpp-sdk-lambda aws-cpp-sdk-sns)
+endif()
+
 set(rgw_libs rgw_a)
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   # used by rgw_amqp.cc
@@ -282,6 +294,10 @@ list(APPEND rgw_libs ${LUA_LIBRARIES})
 
 if(WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND rgw_libs Boost::filesystem)
+endif()
+
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  list(APPEND rgw_libs aws-cpp-sdk-lambda aws-cpp-sdk-sns)
 endif()
 
 set(rgw_schedulers_srcs

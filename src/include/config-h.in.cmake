@@ -348,6 +348,9 @@
 /* Defined if lua packages can be installed by radosgw */
 #cmakedefine WITH_RADOSGW_LUA_PACKAGES
 
+/* Defined if aws-sdk-cpp is available for rgw aws push endpoint */
+#cmakedefine WITH_RADOSGW_AWS_ENDPOINT
+
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 

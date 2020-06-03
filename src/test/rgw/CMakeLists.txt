@@ -217,3 +217,13 @@ add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
 target_link_libraries(unittest_rgw_lua ${rgw_libs} ${LUA_LIBRARIES})
 
+if(WITH_RADOSGW_AWS_ENDPOINT)
+  # unittest_rgw_aws
+  add_executable(unittest_rgw_aws test_rgw_aws.cc)
+  target_include_directories(unittest_rgw_aws PRIVATE "${CMAKE_SOURCE_DIR}/src/aws-sdk-cpp/aws-cpp-sdk-core/include")
+  target_link_libraries(unittest_rgw_aws ${rgw_libs} ${UNITTEST_LIBS})
+  install(TARGETS
+          unittest_rgw_aws
+          DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+endif()

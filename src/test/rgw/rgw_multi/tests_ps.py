@@ -4779,3 +4779,159 @@ def test_ps_s3_multiple_topics_notification():
     master_zone.delete_bucket(bucket_name)
     http_server.close()
     clean_rabbitmq(rabbit_proc)
+
+def init_aws():
+    import boto3
+    from botocore.client import Config
+    sns_proc = subprocess.Popen(["moto_server", "sns", "-p4444"], stderr=subprocess.PIPE)
+    lambda_proc = subprocess.Popen(["moto_server", "lambda", "-p5555"], stderr=subprocess.PIPE)
+    # readline starting server line
+    sns_proc.stderr.readline()
+    lambda_proc.stderr.readline()
+
+    sns_client = boto3.client('sns',endpoint_url="http://localhost:4444",config=Config(signature_version='s3'))
+    out = sns_client.create_topic(Name='sns_topic')
+    # read line from stderr for topic creation
+    sns_proc.stderr.readline()
+    sns_arn = out['TopicArn']
+    lambda_client = boto3.client('lambda', endpoint_url="http://localhost:5555", region_name='us-east-1')
+    # create zip file
+    import zipfile
+    zf = zipfile.ZipFile('lambda_func.zip', 'w',zipfile.ZIP_DEFLATED)
+    zf.writestr('/lambda_func.py','def handler(event, context):\n    print(\"function invoked successfully\")')
+    zf.close()
+    file = open('lambda_func.zip', 'rb')
+    out = lambda_client.create_function(FunctionName='lambda_func',
+                                        Runtime='python3.7', Role='',
+                                        Handler='lambda_func.handler',
+                                        Code = {'ZipFile': file.read()})
+    file.close()
+    # delete file after usage
+    import os
+    os.remove('lambda_func.zip')
+    # read line from stderr for function creation
+    lambda_proc.stderr.readline()
+    lambda_arn = out['FunctionArn']
+    print(lambda_arn)
+    print(sns_arn)
+    return {
+        'sns_arn' : sns_arn,
+        'lambda_arn' : lambda_arn,
+        'lambda_server' : 'localhost:5555',
+        'sns_server' : 'localhost:4444',
+        'sns_proc' : sns_proc,
+        'lambda_proc' : lambda_proc
+    }
+
+def test_ps_s3_notification_push_aws_on_master():
+    """ test pushing aws s3 notification on master """
+    if skip_push_tests:
+        return SkipTest("only used in manual testing")
+    aws_conf = init_aws()
+    lambda_arn = aws_conf['lambda_arn']
+    sns_arn = aws_conf['sns_arn']
+    sns_server = aws_conf['sns_server']
+    lambda_server = aws_conf['lambda_server']
+    master_zone, _ = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = master_zone.create_bucket(bucket_name)
+    topic_name1 = bucket_name + TOPIC_SUFFIX + '_1'
+    topic_name2 = bucket_name + TOPIC_SUFFIX + '_2'
+
+    # topic for publishing to lambda
+    endpoint_address = 'aws://' + lambda_server
+    endpoint_args = 'push-endpoint='+endpoint_address+'&verify-ssl=' +'false'+'&SecretKey='+'&AccessKey=' +'&AwsArn=' + lambda_arn + '&aws-ack-level=none'
+    print(endpoint_args)
+    topic_conf1 = PSTopicS3(master_zone.conn, topic_name1, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+
+    # topic for publishing to sns
+    endpoint_address = 'aws://' + sns_server
+    endpoint_args = 'push-endpoint='+endpoint_address+'&verify-ssl=' +'false'+'&SecretKey='+'&AccessKey=' +'&AwsArn=' + sns_arn
+    print(endpoint_args)
+    topic_conf2 = PSTopicS3(master_zone.conn, topic_name2, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1', 'TopicArn': topic_arn1,
+                        'Events': ['s3:ObjectCreated:*']
+                        },
+                       {'Id': notification_name+'_2', 'TopicArn': topic_arn2,
+                        'Events': ['s3:ObjectRemoved:*']
+                        }]
+
+    s3_notification_conf = PSNotificationS3(master_zone.conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 100
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for creation + AWS notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    keys = list(bucket.list())
+    print('total number of objects: ' + str(len(keys)))
+
+
+    for i in range(number_of_objects):
+        # carve out status code from mock server's output
+        output = aws_conf['lambda_proc'].stderr.readline()
+        stripped = output.decode("utf-8").rstrip()[-3:-6:-1][::-1]
+        try:
+            status = int(stripped, 10)
+            assert_equal(status//100, 2)
+        except:
+            print("ERROR: ", output)
+            break
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for deletion + AWS notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    for i in range(number_of_objects):
+        # carve out status code from mock server's output
+        output = aws_conf['sns_proc'].stderr.readline()
+        stripped = output.decode("utf-8").rstrip()[-3:-6:-1][::-1]
+        try:
+            status = int(stripped, 10)
+            assert_equal(status//100, 2)
+        except:
+            print("ERROR: ", output)
+            break
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    topic_conf2.del_config()
+    # delete the bucket
+    master_zone.delete_bucket(bucket_name)
+    aws_conf['sns_proc'].terminate()
+    aws_conf['lambda_proc'].terminate()
