@@ -45,10 +45,7 @@ export class DaemonListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
-      if (!data) {
-        return;
-      }
+    this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       this.data = data.content_data.daemons;
     });
   }

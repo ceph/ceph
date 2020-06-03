@@ -179,20 +179,13 @@ export class GrafanaComponent implements OnInit, OnChanges {
       three: 'grafana_three'
     };
 
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
+    this.summaryService.subscribeOnce((summary) => {
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
       this.docsUrl =
         `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/` +
         `#enabling-the-embedding-of-grafana-dashboards`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
     });
+
     this.settingsService.ifSettingConfigured('api/grafana/url', (url) => {
       this.grafanaExist = true;
       this.loading = false;

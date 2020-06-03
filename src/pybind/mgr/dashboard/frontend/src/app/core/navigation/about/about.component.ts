@@ -40,10 +40,7 @@ export class AboutComponent implements OnInit, OnDestroy {
     this.projectConstants = AppConstants;
     this.hostAddr = window.location.hostname;
     this.modalVariables = this.setVariables();
-    this.subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
+    this.subs = this.summaryService.subscribe((summary) => {
       const version = summary.version.replace('ceph version ', '').split(' ');
       this.hostAddr = summary.mgr_host.replace(/(^\w+:|^)\/\//, '').replace(/\/$/, '');
       this.versionNumber = version[0];

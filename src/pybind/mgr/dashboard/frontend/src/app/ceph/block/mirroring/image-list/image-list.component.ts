@@ -77,10 +77,7 @@ export class ImageListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.subs = this.rbdMirroringService.subscribeSummary((data: any) => {
-      if (!data) {
-        return;
-      }
+    this.subs = this.rbdMirroringService.subscribeSummary((data) => {
       this.image_error.data = data.content_data.image_error;
       this.image_syncing.data = data.content_data.image_syncing;
       this.image_ready.data = data.content_data.image_ready;
