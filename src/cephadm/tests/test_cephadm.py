@@ -1,3 +1,4 @@
+# type: ignore
 import argparse
 import mock
 import os
