@@ -4630,6 +4630,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     }
 
     bool _start(int rval) {
+      ceph_assert(in->can_auth_pin());
+      in->auth_pin(this);
+
       if (in->is_dirty()) {
 	MDCache *mdcache = in->mdcache;  // For the benefit of dout
 	auto ino = [this]() { return in->ino(); }; // For the benefit of dout
@@ -4879,6 +4882,8 @@ next:
 	in->scrub_infop->header->set_repaired();
       if (fin)
 	fin->complete(get_rval());
+
+      in->auth_unpin(this);
     }
   };
 
