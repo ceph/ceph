@@ -22,8 +22,8 @@ struct ImageCtx;
 
 namespace io {
 
-template <typename> struct QueueImageDispatch;
 template <typename> struct QosImageDispatch;
+template <typename> struct WriteBlockImageDispatch;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageDispatcher : public Dispatcher<ImageCtxT, ImageDispatcherInterface> {
@@ -56,8 +56,8 @@ private:
 
   std::atomic<uint64_t> m_next_tid{0};
 
-  QueueImageDispatch<ImageCtxT>* m_queue_image_dispatch = nullptr;
   QosImageDispatch<ImageCtxT>* m_qos_image_dispatch = nullptr;
+  WriteBlockImageDispatch<ImageCtxT>* m_write_block_dispatch = nullptr;
 
 };
 
