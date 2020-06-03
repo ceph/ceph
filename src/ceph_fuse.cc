@@ -44,6 +44,7 @@
 
 #include <fuse.h>
 #include <fuse_lowlevel.h>
+#include "include/ceph_fuse.h"
 
 #define dout_context g_ceph_context
 
