@@ -946,6 +946,7 @@ class Volume(object):
                 'type': type_,
                 'osd_fsid': self.tags['ceph.osd_fsid'],
                 'cluster_fsid': self.tags['ceph.cluster_fsid'],
+                'osdspec_affinity': self.tags.get('ceph.osdspec_affinity', ''),
             }
             type_uuid = '{}_uuid'.format(type_)
             report[type_uuid] = self.tags['ceph.{}'.format(type_uuid)]
