@@ -81,6 +81,16 @@ public:
   virtual void on_initial_write() {}
 
   /**
+   * on_clean_read
+   *
+   * Called after read of initially written extent.
+   *  State will be CLEAN. Implentation may use this
+   * call to fixup the buffer with the newly available
+   * absolute get_paddr().
+   */
+  virtual void on_clean_read() {}
+
+  /**
    * on_delta_write
    *
    * Called after commit of delta.  State will be DIRTY.
@@ -98,14 +108,16 @@ public:
   virtual extent_types_t get_type() const = 0;
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
+  virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
-    return out << "CachedExtent(addr=" << this
-	       << ", type=" << get_type()
-	       << ", version=" << version
-	       << ", paddr=" << get_paddr()
-	       << ", state=" << state
-	       << ", refcount=" << use_count()
-	       << ")";
+    out << "CachedExtent(addr=" << this
+	<< ", type=" << get_type()
+	<< ", version=" << version
+	<< ", paddr=" << get_paddr()
+	<< ", state=" << state
+	<< ", refcount=" << use_count();
+    print_detail(out);
+    return out << ")";
   }
 
   /**
@@ -196,6 +208,14 @@ public:
     return version;
   }
 
+  /// Returns crc32c of buffer
+  uint32_t get_crc32c(uint32_t crc) {
+    return ceph_crc32c(
+      crc,
+      reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
+      get_length());
+  }
+
   /// Get ref to raw buffer
   bufferptr &get_bptr() { return ptr; }
   const bufferptr &get_bptr() const { return ptr; }
@@ -270,6 +290,7 @@ private:
   }
 
 protected:
+  CachedExtent(CachedExtent &&other) = default;
   CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
   CachedExtent(const CachedExtent &other)
     : state(other.state),
@@ -277,10 +298,18 @@ protected:
       version(other.version),
       poffset(other.poffset) {}
 
+  struct share_buffer_t {};
+  CachedExtent(const CachedExtent &other, share_buffer_t) :
+    state(other.state),
+    ptr(other.ptr),
+    version(other.version),
+    poffset(other.poffset) {}
+
+
   friend class Cache;
-  template <typename T, typename... Args>
-  static TCachedExtentRef<T> make_cached_extent_ref(Args&&... args) {
-    return new T(std::forward<Args>(args)...);
+  template <typename T>
+  static TCachedExtentRef<T> make_cached_extent_ref(bufferptr &&ptr) {
+    return new T(std::move(ptr));
   }
 
   void set_paddr(paddr_t offset) { poffset = offset; }
@@ -309,7 +338,8 @@ protected:
     } else if (is_mutation_pending()) {
       return addr;
     } else {
-      ceph_assert(get_paddr().is_relative());
+      ceph_assert(is_initial_pending());
+      ceph_assert(get_paddr().is_record_relative());
       return addr - get_paddr();
     }
   }
@@ -380,7 +410,7 @@ public:
 	bottom->get_paddr().add_offset(bottom->get_length()) <= addr)
       ++bottom;
 
-    auto top = extent_index.upper_bound(addr.add_offset(len), paddr_cmp());
+    auto top = extent_index.lower_bound(addr.add_offset(len), paddr_cmp());
     return std::make_pair(
       bottom,
       top
