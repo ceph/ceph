@@ -164,7 +164,14 @@ int main(int argc, char* argv[])
         });
         local_conf().parse_config_files(conf_file_list).get();
         local_conf().parse_argv(ceph_args).get();
-        pidfile_write(local_conf()->pid_file);
+        if (const auto ret = pidfile_write(local_conf()->pid_file);
+            ret == -EACCES || ret == -EAGAIN) {
+          ceph_abort_msg(
+            "likely there is another crimson-osd instance with the same id");
+        } else if (ret < 0) {
+          ceph_abort_msg(fmt::format("pidfile_write failed with {} {}",
+                                     ret, cpp_strerror(-ret)));
+        }
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = get_nonce();
         crimson::net::MessengerRef cluster_msgr, client_msgr;
