@@ -145,10 +145,10 @@ private:
    * REPLAY_COMPLETE  < * * * * * * * * * * * * * * * * * * *   *
    *    |                                                       *
    *    v                                                       *
-   * WAIT_FOR_REPLAY                                            *
+   * SHUT_DOWN_LOCAL_JOURNAL_REPLAY                             *
    *    |                                                       *
    *    v                                                       *
-   * SHUT_DOWN_LOCAL_JOURNAL_REPLAY                             *
+   * WAIT_FOR_REPLAY                                            *
    *    |                                                       *
    *    v                                                       *
    * CLOSE_LOCAL_IMAGE  < * * * * * * * * * * * * * * * * * * * *
