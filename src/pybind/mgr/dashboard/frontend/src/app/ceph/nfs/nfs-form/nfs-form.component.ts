@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
 
 import { NfsService } from '../../../shared/api/nfs.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -68,16 +68,22 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.i18n
   );
 
-  pathDataSource: Observable<any> = Observable.create((observer: any) => {
-    observer.next(this.nfsForm.getValue('path'));
-  }).pipe(
-    mergeMap((token: string) => this.getPathTypeahead(token)),
-    map((val: any) => val.paths)
-  );
+  pathDataSource = (text$: Observable<string>) => {
+    return text$.pipe(
+      debounceTime(200),
+      distinctUntilChanged(),
+      mergeMap((token: string) => this.getPathTypeahead(token)),
+      map((val: any) => val.paths)
+    );
+  };
 
-  bucketDataSource: Observable<any> = Observable.create((observer: any) => {
-    observer.next(this.nfsForm.getValue('path'));
-  }).pipe(mergeMap((token: string) => this.getBucketTypeahead(token)));
+  bucketDataSource = (text$: Observable<string>) => {
+    return text$.pipe(
+      debounceTime(200),
+      distinctUntilChanged(),
+      mergeMap((token: string) => this.getBucketTypeahead(token))
+    );
+  };
 
   constructor(
     private authStorageService: AuthStorageService,

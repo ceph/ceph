@@ -246,8 +246,8 @@
                    name="path"
                    id="path"
                    formControlName="path"
-                   [typeahead]="pathDataSource"
-                   (typeaheadOnSelect)="pathChangeHandler()"
+                   [ngbTypeahead]="pathDataSource"
+                   (selectItem)="pathChangeHandler()"
                    (blur)="pathChangeHandler()">
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'required')"
@@ -274,8 +274,8 @@
                    name="path"
                    id="path"
                    formControlName="path"
-                   [typeahead]="bucketDataSource"
-                   (typeaheadOnSelect)="bucketChangeHandler()"
+                   [ngbTypeahead]="bucketDataSource"
+                   (selectItem)="bucketChangeHandler()"
                    (blur)="bucketChangeHandler()">
 
             <span class="invalid-feedback"
