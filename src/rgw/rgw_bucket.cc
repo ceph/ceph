@@ -1662,6 +1662,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
     bool is_truncated = false;
 
     do {
+      buckets.clear();
       ret = rgw_read_user_buckets(store, op_state.get_user_id(), buckets,
 				  marker, string(), max_entries, false,
 				  &is_truncated);
