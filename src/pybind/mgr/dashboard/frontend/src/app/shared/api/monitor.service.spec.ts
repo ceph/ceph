@@ -14,8 +14,8 @@ describe('MonitorService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(MonitorService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(MonitorService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

@@ -37,8 +37,8 @@ describe('PwdExpirationNotificationComponent', () => {
 
   describe('password expiration date has been set', () => {
     beforeEach(() => {
-      authStorageService = TestBed.get(AuthStorageService);
-      settingsService = TestBed.get(SettingsService);
+      authStorageService = TestBed.inject(AuthStorageService);
+      settingsService = TestBed.inject(SettingsService);
       spyOn(authStorageService, 'getPwdExpirationDate').and.returnValue(1645488000);
       spyOn(settingsService, 'getStandardSettings').and.returnValue(
         observableOf({
@@ -105,7 +105,7 @@ describe('PwdExpirationNotificationComponent', () => {
 
   describe('password expiration date has not been set', () => {
     beforeEach(() => {
-      authStorageService = TestBed.get(AuthStorageService);
+      authStorageService = TestBed.inject(AuthStorageService);
       spyOn(authStorageService, 'getPwdExpirationDate').and.returnValue(null);
       fixture = TestBed.createComponent(PwdExpirationNotificationComponent);
       component = fixture.componentInstance;

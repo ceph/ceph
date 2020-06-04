@@ -14,8 +14,8 @@ describe('HostService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(HostService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(HostService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

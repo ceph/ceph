@@ -46,17 +46,17 @@ describe('PrometheusNotificationService', () => {
   beforeEach(() => {
     prometheus = new PrometheusHelper();
 
-    service = TestBed.get(PrometheusNotificationService);
+    service = TestBed.inject(PrometheusNotificationService);
     service['notifications'] = [];
 
-    notificationService = TestBed.get(NotificationService);
+    notificationService = TestBed.inject(NotificationService);
     shown = [];
     spyOn(notificationService, 'show').and.callThrough();
     spyOn(notificationService, 'save').and.callFake((n) => shown.push(n));
 
     spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
-    prometheusService = TestBed.get(PrometheusService);
+    prometheusService = TestBed.inject(PrometheusService);
     getNotificationSinceMock = () => of(notifications);
     spyOn(prometheusService, 'getNotifications').and.callFake(() => getNotificationSinceMock());
 

@@ -68,7 +68,7 @@ describe('HealthComponent', () => {
   });
 
   beforeEach(() => {
-    fakeFeatureTogglesService = spyOn(TestBed.get(FeatureTogglesService), 'get').and.returnValue(
+    fakeFeatureTogglesService = spyOn(TestBed.inject(FeatureTogglesService), 'get').and.returnValue(
       of({
         rbd: true,
         mirroring: true,
@@ -79,7 +79,7 @@ describe('HealthComponent', () => {
     );
     fixture = TestBed.createComponent(HealthComponent);
     component = fixture.componentInstance;
-    getHealthSpy = spyOn(TestBed.get(HealthService), 'getMinimalHealth');
+    getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
     getHealthSpy.and.returnValue(of(healthPayload));
   });
 

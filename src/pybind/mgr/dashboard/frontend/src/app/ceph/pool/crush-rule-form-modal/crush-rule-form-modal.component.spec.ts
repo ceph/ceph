@@ -87,7 +87,7 @@ describe('CrushRuleFormComponent', () => {
     fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     formHelper = new FormHelper(component.form);
-    crushRuleService = TestBed.get(CrushRuleService);
+    crushRuleService = TestBed.inject(CrushRuleService);
     data = {
       names: ['rule1', 'rule2'],
       /**
@@ -206,7 +206,7 @@ describe('CrushRuleFormComponent', () => {
 
   describe('submission', () => {
     beforeEach(() => {
-      const taskWrapper = TestBed.get(TaskWrapperService);
+      const taskWrapper = TestBed.inject(TaskWrapperService);
       spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
       spyOn(crushRuleService, 'create').and.stub();
     });

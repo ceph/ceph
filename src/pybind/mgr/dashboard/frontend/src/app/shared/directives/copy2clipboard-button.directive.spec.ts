@@ -11,7 +11,7 @@ describe('Copy2clipboardButtonDirective', () => {
   });
 
   it('should create an instance', () => {
-    const i18n = TestBed.get(I18n);
+    const i18n = TestBed.inject(I18n);
     const directive = new Copy2ClipboardButtonDirective(null, null, null, i18n);
     expect(directive).toBeTruthy();
   });

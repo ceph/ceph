@@ -42,7 +42,7 @@ describe('RgwUserFormComponent', () => {
     fixture = TestBed.createComponent(RgwUserFormComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    rgwUserService = TestBed.get(RgwUserService);
+    rgwUserService = TestBed.inject(RgwUserService);
     formHelper = new FormHelper(component.userForm);
   });
 
@@ -271,8 +271,8 @@ describe('RgwUserFormComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      notificationService = TestBed.get(NotificationService);
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
     });
 

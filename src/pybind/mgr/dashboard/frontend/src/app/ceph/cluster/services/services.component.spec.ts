@@ -67,8 +67,8 @@ describe('ServicesComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(ServicesComponent);
     component = fixture.componentInstance;
-    const orchService = TestBed.get(OrchestratorService);
-    const cephServiceService = TestBed.get(CephServiceService);
+    const orchService = TestBed.inject(OrchestratorService);
+    const cephServiceService = TestBed.inject(CephServiceService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
     spyOn(cephServiceService, 'list').and.returnValue(of(services));
     fixture.detectChanges();

@@ -17,8 +17,8 @@ describe('ErasureCodeProfileService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(ErasureCodeProfileService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(ErasureCodeProfileService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
