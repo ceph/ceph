@@ -49,11 +49,10 @@
     <a class="service-link"
        [routerLink]="[service.cdLink]"
        [queryParams]="cdParams"
-       *ngIf="service.canRead">{{ service.type }}.{{ service.id }}
-    </a>
+       *ngIf="service.canRead">{{ service.type }}.{{ service.id }}</a>
     <span *ngIf="!service.canRead">
       {{ service.type }}.{{ service.id }}
     </span>
-    {{ !isLast ? ", " : "" }}
+    <ng-container *ngIf="!isLast">, </ng-container>
   </span>
 </ng-template>
