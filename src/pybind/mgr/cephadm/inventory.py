@@ -83,8 +83,9 @@ class Inventory:
         for h, hostspec in self._inventory.items():
             if not label or label in hostspec.get('labels', []):
                 if as_hostspec:
-                    yield hostspec
-                yield h
+                    yield self.spec_from_dict(hostspec)
+                else:
+                    yield h
 
     def spec_from_dict(self, info):
         hostname = info['hostname']
