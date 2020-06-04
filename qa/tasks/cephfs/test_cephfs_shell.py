@@ -2,7 +2,7 @@
 Before running this testsuite, add path to cephfs-shell module to $PATH and
 export $PATH.
 """
-from io import BytesIO
+from io import StringIO
 from os import path
 from os import getcwd as os_getcwd
 import crypt
@@ -35,7 +35,9 @@ class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
     def run_cephfs_shell_cmd(self, cmd, mount_x=None, shell_conf_path=None,
-                             opts=None, stdin=None):
+                             opts=None, stdout=None, stderr=None, stdin=None):
+        stdout = stdout or StringIO()
+        stderr = stderr or StringIO()
         if mount_x is None:
             mount_x = self.mount_a
 
@@ -50,33 +52,35 @@ class TestCephFSShell(CephFSTestCase):
         args.extend(("--", cmd))
 
         log.info("Running command: {}".format(" ".join(args)))
-        return mount_x.client_remote.run(args=args, stdout=BytesIO(),
-                                         stderr=BytesIO(), stdin=stdin)
+        return mount_x.client_remote.run(args=args, stdout=stdout,
+                                         stderr=stderr, stdin=stdin)
 
     def get_cephfs_shell_cmd_error(self, cmd, mount_x=None,
                                    shell_conf_path=None, opts=None,
-                                   stdin=None):
+                                   stderr=None, stdin=None):
         return ensure_str(self.run_cephfs_shell_cmd(
             cmd=cmd, mount_x=mount_x, shell_conf_path=shell_conf_path,
-            opts=opts, stdin=stdin).stderr.getvalue().strip())
+            opts=opts, stderr=stderr, stdin=stdin).stderr.getvalue().strip())
 
     def get_cephfs_shell_cmd_output(self, cmd, mount_x=None,
                                     shell_conf_path=None, opts=None,
-                                    stdin=None):
+                                    stdout=None, stdin=None):
         return ensure_str(self.run_cephfs_shell_cmd(
             cmd=cmd, mount_x=mount_x, shell_conf_path=shell_conf_path,
-            opts=opts, stdin=stdin).stdout.getvalue().strip())
+            opts=opts, stdout=stdout, stdin=stdin).stdout.getvalue().strip())
 
     def get_cephfs_shell_script_output(self, script, mount_x=None,
                                        shell_conf_path=None, opts=None,
-                                       stdin=None):
+                                       stdout=None, stdin=None):
         return ensure_str(self.run_cephfs_shell_script(
             script=script, mount_x=mount_x, shell_conf_path=shell_conf_path,
-            opts=opts, stdin=stdin).stdout.getvalue().strip())
+            opts=opts, stdout=stdout, stdin=stdin).stdout.getvalue().strip())
 
     def run_cephfs_shell_script(self, script, mount_x=None,
-                                shell_conf_path=None, opts=None,
-                                stdin=None):
+                                shell_conf_path=None, opts=None, stdout=None,
+                                stderr=None, stdin=None):
+        stdout = stdout or StringIO()
+        stderr = stderr or StringIO()
         if mount_x is None:
             mount_x = self.mount_a
 
@@ -91,8 +95,9 @@ class TestCephFSShell(CephFSTestCase):
         if shell_conf_path:
             args[1:1] = ["-c", shell_conf_path]
         log.info('Running script \"' + scriptpath + '\"')
-        return mount_x.client_remote.run(args=args, stdout=BytesIO(),
-                                         stderr=BytesIO(), stdin=stdin)
+        return mount_x.client_remote.run(args=args, stdout=stdout,
+                                         stderr=stderr, stdin=stdin)
+
 
 class TestMkdir(TestCephFSShell):
     def test_mkdir(self):
@@ -736,7 +741,7 @@ class TestDF(TestCephFSShell):
     def test_df_for_invalid_directory(self):
         dir_abspath = path.join(self.mount_a.mountpoint, 'non-existent-dir')
         proc = self.run_cephfs_shell_cmd('df ' + dir_abspath)
-        assert proc.stderr.getvalue().find(b'error in stat') != -1
+        assert proc.stderr.getvalue().find('error in stat') != -1
 
     def test_df_for_valid_file(self):
         s = 'df test' * 14145016
