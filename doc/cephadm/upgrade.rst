@@ -4,7 +4,7 @@ Upgrading Ceph
 
 Cephadm is capable of safely upgrading Ceph from one bugfix release to
 another.  For example, you can upgrade from v15.2.0 (the first Octopus
-release) to the next point release v15.2.1.
+release) to the next point release v15.2.3.
 
 The automated upgrade process follows Ceph best practices.  For example:
 
@@ -30,9 +30,9 @@ To upgrade (or downgrade) to a specific release::
 
   # ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v15.2.1::
+For example, to upgrade to v15.2.3::
 
-  # ceph orch upgrade start --ceph-version 15.2.1
+  # ceph orch upgrade start --ceph-version 15.2.3
 
 
 Monitoring the upgrade
@@ -49,7 +49,7 @@ status output.  For example::
   # ceph -s
   [...]
     progress:
-      Upgrade to docker.io/ceph/ceph:v15.2.1 (00h 20m 12s)
+      Upgrade to docker.io/ceph/ceph:v15.2.3 (00h 20m 12s)
         [=======.....................] (time remaining: 01h 43m 31s)
 
 You can also watch the cephadm log with::
