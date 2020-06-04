@@ -1400,22 +1400,30 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdmin
   return bucket.sync(op_state, &attrs, err_msg);
 }
 
-static int bucket_stats(rgw::sal::RGWRadosStore *store, const std::string& tenant_name, std::string&  bucket_name, Formatter *formatter)
+static int bucket_stats(rgw::sal::RGWRadosStore *store,
+			const std::string& tenant_name,
+			const std::string& bucket_name,
+			Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
   map<RGWObjCategory, RGWStorageStats> stats;
   map<string, bufferlist> attrs;
 
   real_time mtime;
-  int r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, &mtime, null_yield, &attrs);
-  if (r < 0)
+  int r = store->getRados()->get_bucket_info(store->svc(),
+					     tenant_name, bucket_name, bucket_info,
+					     &mtime, null_yield, &attrs);
+  if (r < 0) {
     return r;
+  }
 
   rgw_bucket& bucket = bucket_info.bucket;
 
   string bucket_ver, master_ver;
   string max_marker;
-  int ret = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD,
+						&bucket_ver, &master_ver, stats,
+						&max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats ret=" << ret << std::endl;
     return ret;
@@ -1426,7 +1434,8 @@ static int bucket_stats(rgw::sal::RGWRadosStore *store, const std::string& tenan
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  formatter->dump_int("num_shards", bucket_info.layout.current_index.layout.normal.num_shards);
+  formatter->dump_int("num_shards",
+		      bucket_info.layout.current_index.layout.normal.num_shards);
   formatter->dump_string("tenant", bucket.tenant);
   formatter->dump_string("zonegroup", bucket_info.zonegroup);
   formatter->dump_string("placement_rule", bucket_info.placement_rule.to_str());
@@ -1584,11 +1593,12 @@ int RGWBucketAdminOp::limit_check(rgw::sal::RGWRadosStore *store,
   return ret;
 } /* RGWBucketAdminOp::limit_check */
 
-int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store,
+			   RGWBucketAdminOpState& op_state,
+			   RGWFormatterFlusher& flusher)
 {
   int ret = 0;
-  string bucket_name = op_state.get_bucket_name();
+  const std::string& bucket_name = op_state.get_bucket_name();
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
@@ -1596,36 +1606,44 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState
 
   const size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
 
-  bool show_stats = op_state.will_fetch_stats();
-  rgw_user user_id = op_state.get_user_id();
+  const bool show_stats = op_state.will_fetch_stats();
+  const rgw_user& user_id = op_state.get_user_id();
   if (op_state.is_user_op()) {
     formatter->open_array_section("buckets");
 
     rgw::sal::RGWBucketList buckets;
     rgw::sal::RGWRadosUser user(store, op_state.get_user_id());
-    string marker;
+    std::string marker;
+    const std::string empty_end_marker;
+    constexpr bool no_need_stats = false; // set need_stats to false
 
     do {
       buckets.clear();
-      ret = user.list_buckets(marker, string(), max_entries, false, buckets);
-      if (ret < 0)
+      ret = user.list_buckets(marker, empty_end_marker, max_entries,
+			      no_need_stats, buckets);
+      if (ret < 0) {
         return ret;
+      }
 
+      const std::string* marker_cursor = nullptr;
       map<string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
-      map<string, rgw::sal::RGWBucket*>::iterator iter;
 
-      for (iter = m.begin(); iter != m.end(); ++iter) {
-        std::string obj_name = iter->first;
+      for (const auto& i : m) {
+        const std::string& obj_name = i.first;
         if (!bucket_name.empty() && bucket_name != obj_name) {
           continue;
         }
 
-        if (show_stats)
+        if (show_stats) {
           bucket_stats(store, user_id.tenant, obj_name, formatter);
-        else
+	} else {
           formatter->dump_string("bucket", obj_name);
+	}
 
-        marker = obj_name;
+        marker_cursor = &obj_name;
+      } // for loop
+      if (marker_cursor) {
+	marker = *marker_cursor;
       }
 
       flusher.flush();
@@ -1645,14 +1663,15 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState
     ret = store->ctl()->meta.mgr->list_keys_init("bucket", &handle);
     while (ret == 0 && truncated) {
       std::list<std::string> buckets;
-      const int max_keys = 1000;
+      constexpr int max_keys = 1000;
       ret = store->ctl()->meta.mgr->list_keys_next(handle, max_keys, buckets,
-                                            &truncated);
+						   &truncated);
       for (auto& bucket_name : buckets) {
-        if (show_stats)
+        if (show_stats) {
           bucket_stats(store, user_id.tenant, bucket_name, formatter);
-        else
+	} else {
           formatter->dump_string("bucket", bucket_name);
+	}
       }
     }
     store->ctl()->meta.mgr->list_keys_complete(handle);
