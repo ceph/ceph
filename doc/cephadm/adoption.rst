@@ -95,6 +95,7 @@ Adoption process
      # ceph orch ps
 
 #. Adopt all OSDs in the cluster::
+   
    This needs to be done on ALL the OSD's in the cluster before proceeding with the steps below to adopt mds
 
      # cephadm adopt --style legacy --name <name>
@@ -107,6 +108,7 @@ Adoption process
 #. Redeploy MDS daemons by telling cephadm how many daemons to run for
    each file system.  You can list file systems by name with ``ceph fs
    ls``.  For each file system::
+   
    This needs to be run on the master nodes.
 
      # ceph orch apply mds <fs-name> <num-daemons>
