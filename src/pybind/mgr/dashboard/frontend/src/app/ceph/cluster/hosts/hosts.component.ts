@@ -7,8 +7,12 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { HostService } from '../../../shared/api/host.service';
 import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FormModalComponent } from '../../../shared/components/form-modal/form-modal.component';
+import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { Icons } from '../../../shared/enum/icons.enum';
+import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
@@ -19,6 +23,7 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
 import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { DepCheckerService } from '../../../shared/services/dep-checker.service';
+import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 
@@ -31,6 +36,11 @@ const BASE_URL = 'hosts';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class HostsComponent extends ListWithDetails implements OnInit {
+  @ViewChild(TableComponent, { static: true })
+  table: TableComponent;
+  @ViewChild('servicesTpl', { static: true })
+  public servicesTpl: TemplateRef<any>;
+
   permissions: Permissions;
   columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];
@@ -39,9 +49,6 @@ export class HostsComponent extends ListWithDetails implements OnInit {
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   modalRef: BsModalRef;
-
-  @ViewChild('servicesTpl', { static: true })
-  public servicesTpl: TemplateRef<any>;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -54,7 +61,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private modalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private router: Router,
-    private depCheckerService: DepCheckerService
+    private depCheckerService: DepCheckerService,
+    private notificationService: NotificationService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -96,7 +104,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
           this.depCheckerService.checkOrchestratorOrModal(
             this.actionLabels.DELETE,
             this.i18n('Host'),
-            () => this.deleteHostModal()
+            () => this.deleteAction()
           );
         },
         disable: () => !this.selection.hasSelection
