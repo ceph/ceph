@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
@@ -36,6 +37,7 @@ describe('TableComponent', () => {
   configureTestBed({
     declarations: [TableComponent],
     imports: [
+      BrowserAnimationsModule,
       NgxDatatableModule,
       FormsModule,
       ComponentsModule,
@@ -421,6 +423,13 @@ describe('TableComponent', () => {
       expect(component.rows.length).toBe(1);
       component.onClearSearch();
       expect(component.rows.length).toBe(10);
+    });
+
+    it('should work with undefined data', () => {
+      component.data = undefined;
+      component.search = '3';
+      component.updateFilter();
+      expect(component.rows).toBeUndefined();
     });
   });
 

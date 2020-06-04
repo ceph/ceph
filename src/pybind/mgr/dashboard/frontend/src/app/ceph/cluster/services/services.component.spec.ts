@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
@@ -51,7 +52,14 @@ describe('ServicesComponent', () => {
   ];
 
   configureTestBed({
-    imports: [CephModule, CoreModule, SharedModule, HttpClientTestingModule, RouterTestingModule],
+    imports: [
+      BrowserAnimationsModule,
+      CephModule,
+      CoreModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule
+    ],
     providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }, i18nProviders],
     declarations: []
   });

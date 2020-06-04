@@ -112,18 +112,12 @@ export class ConfigurationFormComponent implements OnInit {
         } else {
           sectionValue = value.value;
         }
-        this.configForm
-          .get('values')
-          .get(value.section)
-          .setValue(sectionValue);
+        this.configForm.get('values').get(value.section).setValue(sectionValue);
       });
     }
 
     this.availSections.forEach((section) => {
-      this.configForm
-        .get('values')
-        .get(section)
-        .setValidators(validators);
+      this.configForm.get('values').get(section).setValidators(validators);
     });
 
     const currentType = ConfigOptionTypes.getType(response.type);

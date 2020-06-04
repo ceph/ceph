@@ -139,30 +139,47 @@ There are a few ways how you can try to resolve this:
 Running End-to-End (E2E) Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We use `Protractor <http://www.protractortest.org/>`__ to run our frontend E2E
-tests.
+We use `Cypress <https://www.cypress.io/>`__ to run our frontend E2E tests.
 
-Our ``run-frontend-e2e-tests.sh`` script will check if Chrome or Docker is
-installed and run the tests if either is found.
+E2E Prerequisites
+.................
+
+You need to previously build the frontend.
+
+In some environments, depending on your user permissions and the CYPRESS_CACHE_FOLDER,
+you might need to run ``npm ci`` with the ``--unsafe-perm`` flag.
+
+You might need to install additional packages to be able to run Cypress.
+Please run ``npx cypress verify`` to verify it.
+
+run-frontend-e2e-tests.sh
+.........................
+
+Our ``run-frontend-e2e-tests.sh`` script is the go to solution when you wish to
+do a full scale e2e run.
+It will verify if everything needed is installed, start a new vstart cluster
+and run the full test suite.
 
 Start all frontend E2E tests by running::
 
   $ ./run-frontend-e2e-tests.sh
 
 Report:
-  After running the tests you can find the corresponding report as well as screenshots
-  of failed test cases by opening the following file in your browser:
+  You can follow the e2e report on the terminal and you can find the screenshots
+  of failed test cases by opening the following directory::
 
-    src/pybind/mgr/dashboard/frontend/.protractor-report/index.html
+    src/pybind/mgr/dashboard/frontend/cypress/screenshots/
 
 Device:
   You can force the script to use a specific device with the ``-d`` flag::
 
-    $ ./run-frontend-e2e-tests.sh -d <chrome|docker>
+    $ ./run-frontend-e2e-tests.sh -d <chrome|chromium|electron|docker>
 
 Remote:
+  By default this script will stop and start a new vstart cluster.
   If you want to run the tests outside the ceph environment, you will need to
-  manually define the dashboard url using ``-r`` and, optionally, credentials (``-u``, ``-p``)::
+  manually define the dashboard url using ``-r`` and, optionally, credentials
+  (``-u``, ``-p``)::
 
     $ ./run-frontend-e2e-tests.sh -r <DASHBOARD_URL> -u <E2E_LOGIN_USER> -p <E2E_LOGIN_PWD>
 
@@ -170,29 +187,56 @@ Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
 
-When developing E2E tests, it is not necessary to compile the frontend code
-on each change of the test files. When your development environment is
-running (``npm start``), you can point Protractor to just use this
-environment. To attach `Protractor <http://www.protractortest.org/>`__ to
-this process, run ``npm run e2e:ci``.
+Other running options
+.....................
 
-Note::
+During active development, it is not recommended to run the previous script,
+as it is not prepared for constant file changes.
+Instead you should use one of the following commands:
 
-   In case you have a somewhat particular environment, you might need to adapt
-   `protractor.conf.js` to point to the appropriate destination.
+- ``npm run e2e`` - This will run ``ng serve`` and open the Cypress Test Runner.
+- ``npm run e2e:ci`` - This will run ``ng serve`` and run the Cypress Test Runner once.
+- ``npx cypress run`` - This calls cypress directly and will run the Cypress Test Runner.
+  You need to have a running frontend server.
+- ``npx cypress open`` - This calls cypress directly and will open the Cypress Test Runner.
+  You need to have a running frontend server.
+
+Calling Cypress directly has the advantage that you can use any of the available
+`flags <https://docs.cypress.io/guides/guides/command-line.html#cypress-run>`__
+to customize your test run and you don't need to start a frontend server each time.
+
+Using one of the ``open`` commands, will open a cypress application where you
+can see all the test files you have and run each individually.
+This is going to be run in watch mode, so if you make any changes to test files,
+it will retrigger the test run.
+This cannot be used inside docker, as it requires X11 environment to be able to open.
+
+By default Cypress will look for the web page at ``https://localhost:4200/``.
+If you are serving it in a different URL you will need to configure it by
+exporting the environment variable CYPRESS_BASE_URL with the new value.
+E.g.: ``CYPRESS_BASE_URL=https://localhost:41076/ npx cypress open``
+
+CYPRESS_CACHE_FOLDER
+.....................
+
+When installing cypress via npm, a binary of the cypress app will also be
+downloaded and stored in a cache folder.
+This removes the need to download it every time you run ``npm ci`` or even when
+using cypress in a separate project.
+
+By default Cypress uses ~/.cache to store the binary.
+To prevent changes to the user home directory, we have changed this folder to
+``/ceph/build/src/pybind/mgr/dashboard/cypress``, so when you build ceph or run
+``run-frontend-e2e-tests.sh`` this is the directory Cypress will use.
+
+When using any other command to install or run cypress,
+it will go back to the default directory. It is recommended that you export the
+CYPRESS_CACHE_FOLDER environment variable with a fixed directory, so you always
+use the same directory no matter which command you use.
+
 
 Writing End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
-
-To be used methods
-..................
-
-For clicking checkboxes, the ``clickCheckbox`` method is supposed to be used.
-Due an adaption of the ``<input type="checkbox">`` tag, the original checkbox
-is hidden and unclickable. Instead, a fancier replacement is shown. When the
-developer tries to use `ElementFinder::click()` on such a checkbox, it will
-raise an error. The ``clickCheckbox`` method prevents that by clicking the
-label of the checkbox, like a regular user would do.
 
 The PagerHelper class
 .....................
@@ -202,9 +246,11 @@ can be used on various pages or suites.
 
 Examples are
 
-- ``getTableCellByContent()`` - returns a table cell by its content
+- ``navigateTo()`` - Navigates to a specific page and waits for it to load
+- ``getFirstTableCell()`` - returns the first table cell. You can also pass a
+  string with the desired content and it will return the first cell that
+  contains it.
 - ``getTabsCount()`` - returns the amount of tabs
-- ``clickCheckbox()`` - clicks a checkbox
 
 Every method that could be useful on several pages belongs there. Also, methods
 which enhance the derived classes of the PageHelper belong there. A good
@@ -224,113 +270,102 @@ talking about the pool suite, such methods would be ``create()``, ``exist()``
 and ``delete()``. These methods are specific to a pool but are useful for other
 suites.
 
-Methods that return HTML elements (for instance of type ``ElementFinder`` or
-``ElementArrayFinder``, but also ``Promise<ElementFinder>``) which can only
-be found on a specific page, should be either implemented in the helper
-methods of the subclass of PageHelper or as own methods of the subclass of
-PageHelper.
-
-Registering a new PageHelper
-""""""""""""""""""""""""""""
-
-If you have to create a new Helper class derived from the ``PageHelper``,
-please also ensure that it is instantiated in the constructor of the
-``Helper`` class. That way it can automatically be used by all other suites.
-
-.. code:: TypeScript
-
-  class Helper {
-     // ...
-     pools: PoolPageHelper;
-
-     constructor() {
-        this.pools = new PoolPageHelper();
-     }
-
-     // ...
-  }
+Methods that return HTML elements which can only be found on a specific page,
+should be either implemented in the helper methods of the subclass of PageHelper
+or as own methods of the subclass of PageHelper.
 
 Using PageHelpers
 """""""""""""""""
 
-In any suite, an instance of the ``Helper`` class should be used to call
-various ``PageHelper`` objects and their methods. This makes all methods of all
-PageHelpers available to all suites.
+In any suite, an instance of the specific ``Helper`` class should be
+instantiated and called directly.
 
 .. code:: TypeScript
 
+  const pools = new PoolPageHelper();
+
   it('should create a pool', () => {
-    helper.pools.exist(poolName, false).then(() => {
-      helper.pools.navigateTo('create');
-      helper.pools.create(poolName).then(() => {
-        helper.pools.navigateTo();
-        helper.pools.exist(poolName, true);
-      });
-    });
+    pools.exist(poolName, false);
+    pools.navigateTo('create');
+    pools.create(poolName, 8);
+    pools.exist(poolName, true);
   });
 
 Code Style
 ..........
 
-Please refer to the official `Protractor style-guide
-<https://www.protractortest.org/#/style-guide>`__ for a better insight on how
-to write and structure tests as well as what exactly should be covered by
-end-to-end tests.
+Please refer to the official `Cypress Core Concepts
+<https://docs.cypress.io/guides/core-concepts/introduction-to-cypress.html#Cypress-Can-Be-Simple-Sometimes>`__
+for a better insight on how to write and structure tests.
 
 ``describe()`` vs ``it()``
 """"""""""""""""""""""""""
 
-Both ``describe()`` and ``it()`` are function blocks, meaning that any executable
-code necessary for the test can be contained in either block. However, Typescript
-scoping rules still apply, therefore any variables declared in a ``describe`` are available
-to the ``it()`` blocks inside of it.
+Both ``describe()`` and ``it()`` are function blocks, meaning that any
+executable code necessary for the test can be contained in either block.
+However, Typescript scoping rules still apply, therefore any variables declared
+in a ``describe`` are available to the ``it()`` blocks inside of it.
 
-``describe()`` typically are containers for tests, allowing you to break tests into
-multiple parts. Likewise, any setup that must be made before your tests are run can be
-initialized within the ``describe()`` block. Here is an example:
+``describe()`` typically are containers for tests, allowing you to break tests
+into multiple parts. Likewise, any setup that must be made before your tests are
+run can be initialized within the ``describe()`` block. Here is an example:
 
 .. code:: TypeScript
 
   describe('create, edit & delete image test', () => {
     const poolName = 'e2e_images_pool';
 
-    beforeAll(() => {
-      pools.navigateTo('create'); // Need pool for image testing
-      pools.create(poolName, 8, 'rbd').then(() => {
-        pools.navigateTo();
-        pools.exist(poolName, true);
-      });
+    before(() => {
+      cy.login();
+      pools.navigateTo('create');
+      pools.create(poolName, 8, 'rbd');
+      pools.exist(poolName, true);
+    });
+
+    beforeEach(() => {
+      cy.login();
       images.navigateTo();
     });
 
-As shown, we can initiate the variable ``poolName`` as well as run commands
-before our test suite begins (creating a pool). ``describe()`` block messages should
-include what the test suite is.
+    //...
 
-``it()`` blocks typically are parts of an overarching test. They contain the functionality of
-the test suite, each performing individual roles. Here is an example:
+  });
+
+As shown, we can initiate the variable ``poolName`` as well as run commands
+before our test suite begins (creating a pool). ``describe()`` block messages
+should include what the test suite is.
+
+``it()`` blocks typically are parts of an overarching test. They contain the
+functionality of the test suite, each performing individual roles.
+Here is an example:
 
 .. code:: TypeScript
 
- describe('create, edit & delete image test', () => {
-  it('should create image', () => {
-    images.createImage(imageName, poolName, '1');
-    expect(images.getTableCell(imageName).isPresent()).toBe(true);
-  });
-  it('should edit image', () => {
-    images.editImage(imageName, poolName, newImageName, '2');
-    expect(images.getTableCell(newImageName).isPresent()).toBe(true);
-  });
-  //...
- });
+  describe('create, edit & delete image test', () => {
+    //...
 
-As shown from the previous example, our ``describe()`` test suite is to create, edit
-and delete an image. Therefore, each ``it()`` completes one of these steps, one for creating,
-one for editing, and so on. Likewise, every ``it()`` blocks message should be in lowercase
-and written so long as "it" can be the prefix of the message. For example, ``it('edits the test image' () => ...)``
-vs. ``it('image edit test' () => ...)``. As shown, the first example makes grammatical sense with ``it()`` as the
-prefix whereas the second message does not.``it()`` should describe what the individual test is doing and
-what it expects to happen.
+    it('should create image', () => {
+      images.createImage(imageName, poolName, '1');
+      images.getFirstTableCell(imageName).should('exist');
+    });
+
+    it('should edit image', () => {
+      images.editImage(imageName, poolName, newImageName, '2');
+      images.getFirstTableCell(newImageName).should('exist');
+    });
+
+    //...
+  });
+
+As shown from the previous example, our ``describe()`` test suite is to create,
+edit and delete an image. Therefore, each ``it()`` completes one of these steps,
+one for creating, one for editing, and so on. Likewise, every ``it()`` blocks
+message should be in lowercase and written so long as "it" can be the prefix of
+the message. For example, ``it('edits the test image' () => ...)`` vs.
+``it('image edit test' () => ...)``. As shown, the first example makes
+grammatical sense with ``it()`` as the prefix whereas the second message does
+not. ``it()`` should describe what the individual test is doing and what it
+expects to happen.
 
 Differences between Frontend Unit Tests and End-to-End (E2E) Tests / FAQ
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -342,10 +377,6 @@ What are E2E/unit tests designed for?
 .....................................
 
 E2E test:
-
-"Protractor is an end-to-end test framework for Angular and AngularJS applications.
-Protractor runs tests against your application running in a real browser,
-interacting with it as a user would." `(src) <http://www.protractortest.org/#/>`__
 
 It requires a fully functional system and tests the interaction of all components
 of the application (Ceph, back-end, front-end).

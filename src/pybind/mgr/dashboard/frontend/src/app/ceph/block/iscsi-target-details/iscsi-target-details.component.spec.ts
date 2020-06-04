@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TreeModel, TreeModule } from 'angular-tree-component';
 import * as _ from 'lodash';
 
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
@@ -14,7 +15,7 @@ describe('IscsiTargetDetailsComponent', () => {
 
   configureTestBed({
     declarations: [IscsiTargetDetailsComponent],
-    imports: [TreeModule.forRoot(), SharedModule],
+    imports: [BrowserAnimationsModule, TreeModule.forRoot(), SharedModule],
     providers: [i18nProviders]
   });
 

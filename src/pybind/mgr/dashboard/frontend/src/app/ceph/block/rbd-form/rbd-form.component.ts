@@ -464,10 +464,7 @@ export class RbdFormComponent implements OnInit {
         // becoming disabled when manually unchecked.  This is because it
         // triggers an update on `object-map` and if `object-map` doesn't emit,
         // `fast-diff` will not be automatically disabled.
-        this.rbdForm
-          .get('features')
-          .get(feature.interlockedWith)
-          .setValue(false);
+        this.rbdForm.get('features').get(feature.interlockedWith).setValue(false);
       }
     }
   }

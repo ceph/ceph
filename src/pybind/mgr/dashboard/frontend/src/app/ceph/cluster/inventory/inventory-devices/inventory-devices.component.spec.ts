@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import * as _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
@@ -14,7 +15,13 @@ describe('InventoryDevicesComponent', () => {
   let fixture: ComponentFixture<InventoryDevicesComponent>;
 
   configureTestBed({
-    imports: [FormsModule, HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
+    imports: [
+      BrowserAnimationsModule,
+      FormsModule,
+      HttpClientTestingModule,
+      SharedModule,
+      ToastrModule.forRoot()
+    ],
     providers: [i18nProviders],
     declarations: [InventoryDevicesComponent]
   });

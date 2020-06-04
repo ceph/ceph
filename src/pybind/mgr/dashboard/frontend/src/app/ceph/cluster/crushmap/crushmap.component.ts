@@ -2,10 +2,10 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 
 import {
   ITreeOptions,
-  TREE_ACTIONS,
   TreeComponent,
   TreeModel,
-  TreeNode
+  TreeNode,
+  TREE_ACTIONS
 } from 'angular-tree-component';
 
 import { HealthService } from '../../../shared/api/health.service';
