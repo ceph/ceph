@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "common/ceph_crypto.h"
+#include "common/split.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
@@ -418,6 +419,45 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   }
   return res;
 }
+int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry) 
+{
+  int ret = -EINVAL;
+  ret = RGWOp::verify_requester(auth_registry);
+  if(!s->user->get_caps().check_cap("amz-cache", RGW_CAP_READ) && !ret && s->info.env->exists("HTTP_X_AMZ_CACHE"))
+    ret = override_range_hdr(auth_registry);
+  return ret;
+}
+int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry)
+{
+  int ret = -EINVAL;
+  ldpp_dout(this, 10) << "cache override headers" << dendl;
+  RGWEnv* rgw_env = const_cast<RGWEnv *>(s->info.env);
+  const char* backup_range = rgw_env->get("HTTP_RANGE");
+  const char hdrs_split[2] = {(char)178,'\0'};
+  const char kv_split[2] = {(char)177,'\0'};
+  const char* cache_hdr = rgw_env->get("HTTP_X_AMZ_CACHE");
+  for (std::string_view hdr : ceph::split(cache_hdr, hdrs_split)) {
+    auto kv = ceph::split(hdr, kv_split);
+    auto k = kv.begin();
+    if (std::distance(k, kv.end()) != 2) {
+      return -EINVAL;
+    }
+    auto v = std::next(k);
+    std::string key = "HTTP_";
+    key.append(*k);
+    boost::replace_all(key, "-", "_");
+    rgw_env->set(std::move(key), std::string(*v));
+    ldpp_dout(this, 10) << "after splitting cache kv key: " << key  << " " << rgw_env->get(key.c_str())  << dendl;
+  }
+  ret = RGWOp::verify_requester(auth_registry);
+  if(!ret && backup_range) {
+    rgw_env->set("HTTP_RANGE",backup_range);
+  } else {
+    rgw_env->remove("HTTP_RANGE");
+  }
+  return ret;
+}
+
 
 void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 {

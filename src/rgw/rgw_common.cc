@@ -1841,7 +1841,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "mdlog",
                                     "datalog",
                                     "roles",
-                                    "user-policy"};
+                                    "user-policy",
+                                    "amz-cache"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
