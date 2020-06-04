@@ -37,7 +37,7 @@ describe('OsdPgScrubModalComponent', () => {
     fixture = TestBed.createComponent(OsdPgScrubModalComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    configurationService = TestBed.get(ConfigurationService);
+    configurationService = TestBed.inject(ConfigurationService);
   });
 
   it('should create', () => {
@@ -48,8 +48,8 @@ describe('OsdPgScrubModalComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      notificationService = TestBed.get(NotificationService);
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
     });
 

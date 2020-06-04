@@ -25,10 +25,10 @@ describe('NoSsoGuardService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(NoSsoGuardService);
-    authStorageService = TestBed.get(AuthStorageService);
-    ngZone = TestBed.get(NgZone);
-    router = TestBed.get(Router);
+    service = TestBed.inject(NoSsoGuardService);
+    authStorageService = TestBed.inject(AuthStorageService);
+    ngZone = TestBed.inject(NgZone);
+    router = TestBed.inject(Router);
   });
 
   it('should be created', () => {

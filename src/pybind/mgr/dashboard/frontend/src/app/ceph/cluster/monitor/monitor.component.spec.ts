@@ -59,7 +59,7 @@ describe('MonitorComponent', () => {
       mon_status: null,
       out_quorum: []
     };
-    getMonitorSpy = spyOn(TestBed.get(MonitorService), 'getMonitor').and.returnValue(
+    getMonitorSpy = spyOn(TestBed.inject(MonitorService), 'getMonitor').and.returnValue(
       of(getMonitorPayload)
     );
   });

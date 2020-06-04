@@ -14,8 +14,8 @@ describe('CephfsService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(CephfsService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(CephfsService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

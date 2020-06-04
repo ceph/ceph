@@ -27,7 +27,7 @@ describe('PrometheusSilenceMatcherService', () => {
 
   beforeEach(() => {
     prometheus = new PrometheusHelper();
-    service = TestBed.get(PrometheusSilenceMatcherService);
+    service = TestBed.inject(PrometheusSilenceMatcherService);
     rules = [
       prometheus.createRule('alert0', 'someSeverity', [prometheus.createAlert('alert0')]),
       prometheus.createRule('alert1', 'someSeverity', []),

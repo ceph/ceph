@@ -43,10 +43,10 @@ describe('RgwBucketFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwBucketFormComponent);
     component = fixture.componentInstance;
-    rgwBucketService = TestBed.get(RgwBucketService);
+    rgwBucketService = TestBed.inject(RgwBucketService);
     rgwBucketServiceGetSpy = spyOn(rgwBucketService, 'get');
-    getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'get');
-    enumerateSpy = spyOn(TestBed.get(RgwUserService), 'enumerate');
+    getPlacementTargetsSpy = spyOn(TestBed.inject(RgwSiteService), 'get');
+    enumerateSpy = spyOn(TestBed.inject(RgwUserService), 'enumerate');
     formHelper = new FormHelper(component.bucketForm);
   });
 
@@ -178,8 +178,8 @@ describe('RgwBucketFormComponent', () => {
     let notificationService: NotificationService;
 
     beforeEach(() => {
-      spyOn(TestBed.get(Router), 'navigate').and.stub();
-      notificationService = TestBed.get(NotificationService);
+      spyOn(TestBed.inject(Router), 'navigate').and.stub();
+      notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show');
     });
 

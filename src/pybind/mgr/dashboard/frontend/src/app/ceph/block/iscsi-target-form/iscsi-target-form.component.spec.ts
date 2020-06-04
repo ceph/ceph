@@ -162,8 +162,8 @@ describe('IscsiTargetFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiTargetFormComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
-    activatedRoute = TestBed.get(ActivatedRoute);
+    httpTesting = TestBed.inject(HttpTestingController);
+    activatedRoute = <ActivatedRouteStub>TestBed.inject(ActivatedRoute);
     fixture.detectChanges();
 
     httpTesting.expectOne('ui-api/iscsi/settings').flush(SETTINGS);

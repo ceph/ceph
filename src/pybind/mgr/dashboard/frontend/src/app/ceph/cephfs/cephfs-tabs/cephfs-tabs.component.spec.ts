@@ -110,7 +110,7 @@ describe('CephfsTabsComponent', () => {
         data: [{}, {}, {}, {}]
       }
     };
-    service = TestBed.get(CephfsService);
+    service = TestBed.inject(CephfsService);
     spyOn(service, 'getTabs').and.callFake(() => of(data));
 
     fixture.detectChanges();

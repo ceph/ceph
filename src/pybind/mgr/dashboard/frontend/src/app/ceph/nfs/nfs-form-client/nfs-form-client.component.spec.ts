@@ -20,7 +20,7 @@ describe('NfsFormClientComponent', () => {
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsFormClientComponent);
-    const formBuilder = TestBed.get(CdFormBuilder);
+    const formBuilder = TestBed.inject(CdFormBuilder);
     component = fixture.componentInstance;
 
     component.form = new CdFormGroup({

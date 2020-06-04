@@ -43,7 +43,9 @@ describe('OsdReweightModalComponent', () => {
     component.osdId = 1;
     component.reweightForm.get('weight').setValue(0.5);
 
-    const osdServiceSpy = spyOn(TestBed.get(OsdService), 'reweight').and.callFake(() => of(true));
+    const osdServiceSpy = spyOn(TestBed.inject(OsdService), 'reweight').and.callFake(() =>
+      of(true)
+    );
     component.reweight();
 
     expect(osdServiceSpy.calls.count()).toBe(1);

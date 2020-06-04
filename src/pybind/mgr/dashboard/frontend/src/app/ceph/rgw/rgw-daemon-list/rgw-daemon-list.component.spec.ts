@@ -42,9 +42,9 @@ describe('RgwDaemonListComponent', () => {
   });
 
   beforeEach(() => {
-    getPermissionsSpy = spyOn(TestBed.get(AuthStorageService), 'getPermissions');
+    getPermissionsSpy = spyOn(TestBed.inject(AuthStorageService), 'getPermissions');
     getPermissionsSpy.and.returnValue(new Permissions({}));
-    getRealmsSpy = spyOn(TestBed.get(RgwSiteService), 'get');
+    getRealmsSpy = spyOn(TestBed.inject(RgwSiteService), 'get');
     getRealmsSpy.and.returnValue(of([]));
     fixture = TestBed.createComponent(RgwDaemonListComponent);
     component = fixture.componentInstance;

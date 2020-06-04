@@ -63,7 +63,7 @@ describe('TelemetryComponent', () => {
     beforeEach(() => {
       fixture = TestBed.createComponent(TelemetryComponent);
       component = fixture.componentInstance;
-      mgrModuleService = TestBed.get(MgrModuleService);
+      mgrModuleService = TestBed.inject(MgrModuleService);
       options = {};
       configs = {};
       optionsNames.forEach((name) => (options[name] = { name }));
@@ -71,8 +71,8 @@ describe('TelemetryComponent', () => {
       spyOn(mgrModuleService, 'getOptions').and.callFake(() => observableOf(options));
       spyOn(mgrModuleService, 'getConfig').and.callFake(() => observableOf(configs));
       fixture.detectChanges();
-      httpTesting = TestBed.get(HttpTestingController);
-      router = TestBed.get(Router);
+      httpTesting = TestBed.inject(HttpTestingController);
+      router = TestBed.inject(Router);
       spyOn(router, 'navigate');
     });
 
@@ -142,9 +142,9 @@ describe('TelemetryComponent', () => {
       fixture = TestBed.createComponent(TelemetryComponent);
       component = fixture.componentInstance;
       fixture.detectChanges();
-      telemetryService = TestBed.get(TelemetryService);
-      httpTesting = TestBed.get(HttpTestingController);
-      router = TestBed.get(Router);
+      telemetryService = TestBed.inject(TelemetryService);
+      httpTesting = TestBed.inject(HttpTestingController);
+      router = TestBed.inject(Router);
       spyOn(router, 'navigate');
     });
 
@@ -156,7 +156,7 @@ describe('TelemetryComponent', () => {
       spyOn(telemetryService, 'getReport').and.returnValue(observableOf(reportText));
       component.ngOnInit();
 
-      const downloadSpy = spyOn(TestBed.get(TextToDownloadService), 'download');
+      const downloadSpy = spyOn(TestBed.inject(TextToDownloadService), 'download');
       const filename = 'reportText.json';
       component.download(reportText, filename);
       expect(downloadSpy).toHaveBeenCalledWith(JSON.stringify(reportText, null, 2), filename);
