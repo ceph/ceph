@@ -81,11 +81,6 @@ class CephFSMount(object):
         self.fs.wait_for_daemons()
         log.info('Ready to start {}...'.format(type(self).__name__))
 
-    def _bringup_network_manager_service(self):
-        args = ["sudo", "bash", "-c",
-                "systemctl start NetworkManager"]
-        self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-
     def _setup_brx_and_nat(self):
         # The ip for ceph-brx should be
         ip = IP(self.ceph_brx_net)[-2]
