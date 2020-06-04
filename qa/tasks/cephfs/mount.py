@@ -101,12 +101,11 @@ class CephFSMount(object):
         if not brx:
             log.info("Setuping the 'ceph-brx' with {0}/{1}".format(ip, mask))
 
-            args = ["sudo", "bash", "-c", "ip link add name ceph-brx type bridge"]
+            args = ['sudo', 'ip', 'link', 'add', 'name', 'ceph-brx', 'type', 'bridge']
             self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-            args = ["sudo", "bash", "-c", "ip link set ceph-brx up"]
+            args = ['sudo', 'ip', 'link', 'set', 'ceph-brx', 'up']
             self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-            args = ["sudo", "bash", "-c",
-                    "ip addr add {0}/{1} brd {2} dev ceph-brx".format(ip, mask, brd)]
+            args = ['sudo', 'ip', 'addr', 'add', '{0}/{1}'.format(ip, mask), 'brd', '{0}'.format(brd), 'dev', 'ceph-brx']
             self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
         
         args = "echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward"
@@ -119,14 +118,11 @@ class CephFSMount(object):
         if p == False:
             raise RuntimeError("No default gw found")
         gw = p[0].split()[7]
-        args = ["sudo", "bash", "-c",
-                "iptables -A FORWARD -o {0} -i ceph-brx -j ACCEPT".format(gw)]
+        args = ['sudo', 'iptables', '-A', 'FORWARD', '-o', '{0}'.format(gw), '-i', 'ceph-brx', '-j', 'ACCEPT']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "iptables -A FORWARD -i {0} -o ceph-brx -j ACCEPT".format(gw)]
+        args = ['sudo', 'iptables', '-A', 'FORWARD', '-i', '{0}'.format(gw), '-o', 'ceph-brx', '-j', 'ACCEPT']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "iptables -t nat -A POSTROUTING -s {0}/{1} -o {2} -j MASQUERADE".format(ip, mask, gw)]
+        args = ['sudo', 'iptables', '-t', 'nat', '-A', 'POSTROUTING', '-s', '{0}/{1}'.format(ip, mask), '-o', '{0}'.format(gw), '-j', 'MASQUERADE']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
     def _setup_netns(self):
@@ -155,11 +151,9 @@ class CephFSMount(object):
         self.nsid = nsid;
 
         # Add one new netns and set it id
-        args = ["sudo", "bash", "-c",
-                "ip netns add {0}".format(self.netns_name)]
+        args = ['sudo', 'ip', 'netns', 'add', '{0}'.format(self.netns_name)]
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "ip netns set {0} {1}".format(self.netns_name, nsid)]
+        args = ['sudo', 'ip', 'netns', 'set', '{0}'.format(self.netns_name), '{0}'.format(nsid)]
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
         # Get one ip address for netns
@@ -173,8 +167,7 @@ class CephFSMount(object):
 
             for ns in netns_list:
                 ns_name = ns.split()[0]
-                args = ["sudo", "bash", "-c",
-                        "ip netns exec {0} ip addr".format(ns_name)]
+                args = ['sudo', 'ip', 'netns', 'exec', '{0}'.format(ns_name), 'ip', 'addr']
                 p = self.client_remote.run(args=args, stderr=StringIO(),
                                            stdout=StringIO(), timeout=(5*60),
                                            omit_sudo=False)
@@ -192,30 +185,23 @@ class CephFSMount(object):
         log.info("Setuping the netns '{0}' with {1}/{2}".format(self.netns_name, ip, mask))
 
         # Setup the veth interfaces
-        args = ["sudo", "bash", "-c",
-                "ip link add veth0 netns {0} type veth peer name brx.{1}".format(self.netns_name, nsid)]
+        args = ['sudo', 'ip', 'link', 'add', 'veth0', 'netns', '{0}'.format(self.netns_name), 'type', 'veth', 'peer', 'name', 'brx.{0}'.format(nsid)]
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "ip netns exec {0} ip addr add {1}/{2} brd {3} dev veth0".format(self.netns_name, ip, mask, brd)]
+        args = ['sudo', 'ip', 'netns', 'exec', '{0}'.format(self.netns_name), 'ip', 'addr', 'add', '{0}/{1}'.format(ip, mask), 'brd', '{0}'.format(brd), 'dev', 'veth0']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "ip netns exec {0} ip link set veth0 up".format(self.netns_name)]
+        args = ['sudo', 'ip', 'netns', 'exec', '{0}'.format(self.netns_name), 'ip', 'link', 'set', 'veth0', 'up']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "ip netns exec {0} ip link set lo up".format(self.netns_name)]
+        args = ['sudo', 'ip', 'netns', 'exec', '{0}'.format(self.netns_name), 'ip', 'link', 'set', 'lo', 'up']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
         brxip = IP(self.ceph_brx_net)[-2]
-        args = ["sudo", "bash", "-c",
-                "ip netns exec {0} ip route add default via {1}".format(self.netns_name, brxip)]
+        args = ['sudo', 'ip', 'netns', 'exec', '{0}'.format(self.netns_name), 'ip', 'route', 'add', 'default', 'via', '{0}'.format(brxip)]
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
         # Bring up the brx interface and join it to 'ceph-brx'
-        args = ["sudo", "bash", "-c",
-                "ip link set brx.{0} up".format(nsid)]
+        args = ['sudo', 'ip', 'link', 'set', 'brx.{0}'.format(nsid), 'up']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "ip link set dev brx.{0} master ceph-brx".format(nsid)]
+        args = ['sudo', 'ip', 'link', 'set', 'dev', 'brx.{0}'.format(nsid), 'master', 'ceph-brx']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
     def _cleanup_netns(self):
@@ -224,15 +210,12 @@ class CephFSMount(object):
         log.info("Removing the netns '{0}'".format(self.netns_name))
 
         # Delete the netns and the peer veth interface
-        args = ["sudo", "bash", "-c",
-                "ip link set brx.{0} down".format(self.nsid)]
+        args = ['sudo', 'ip', 'link', 'set', 'brx.{0}'.format(self.nsid), 'down']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "ip link delete brx.{0}".format(self.nsid)]
+        args = ['sudo', 'ip', 'link', 'delete', 'brx.{0}'.format(self.nsid)]
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
-        args = ["sudo", "bash", "-c",
-                "ip netns delete {0}".format(self.netns_name)]
+        args = ['sudo', 'ip', 'netns', 'delete', '{0}'.format(self.netns_name)]
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
         self.nsid = -1
@@ -245,7 +228,7 @@ class CephFSMount(object):
             return
 
         # If we are the last netns, will delete the ceph-brx
-        args = ["sudo", "bash", "-c", "ip link show"]
+        args = ['sudo', 'ip', 'link', 'show']
         p = self.client_remote.run(args=args, stdout=StringIO(),
                                    timeout=(5*60), omit_sudo=False)
         _list = re.findall(r'brx\.', p.stdout.getvalue().strip())
@@ -254,11 +237,9 @@ class CephFSMount(object):
 
         log.info("Removing the 'ceph-brx'")
 
-        args = ["sudo", "bash", "-c",
-                "ip link set ceph-brx down"]
+        args = ['sudo', 'ip', 'link', 'set', 'ceph-brx', 'down']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "ip link delete ceph-brx"]
+        args = ['sudo', 'ip', 'link', 'delete', 'ceph-brx']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
         # Drop the iptables NAT rules
@@ -271,14 +252,11 @@ class CephFSMount(object):
         if p == False:
             raise RuntimeError("No default gw found")
         gw = p[0].split()[7]
-        args = ["sudo", "bash", "-c",
-                "iptables -D FORWARD -o {0} -i ceph-brx -j ACCEPT".format(gw)]
+        args = ['sudo', 'iptables', '-D', 'FORWARD', '-o', '{0}'.format(gw), '-i', 'ceph-brx', '-j', 'ACCEPT']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "iptables -D FORWARD -i {0} -o ceph-brx -j ACCEPT".format(gw)]
+        args = ['sudo', 'iptables', '-D', 'FORWARD', '-i', '{0}'.format(gw), '-o', 'ceph-brx', '-j', 'ACCEPT']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        args = ["sudo", "bash", "-c",
-                "iptables -t nat -D POSTROUTING -s {0}/{1} -o {2} -j MASQUERADE".format(ip, mask, gw)]
+        args = ['sudo', 'iptables', '-t', 'nat', '-D', 'POSTROUTING', '-s', '{0}/{1}'.format(ip, mask), '-o', '{0}'.format(gw), '-j', 'MASQUERADE']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
     def setup_netns(self):
@@ -306,8 +284,7 @@ class CephFSMount(object):
 
         log.info("Suspending the '{0}' netns for '{1}'".format(self._netns_name, self.mountpoint))
 
-        args = ["sudo", "bash", "-c",
-                "ip link set brx.{0} down".format(self.nsid)]
+        args = ['sudo', 'ip', 'link', 'set', 'brx.{0}'.format(self.nsid), 'down']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
     def resume_netns(self):
@@ -319,8 +296,7 @@ class CephFSMount(object):
 
         log.info("Resuming the '{0}' netns for '{1}'".format(self._netns_name, self.mountpoint))
 
-        args = ["sudo", "bash", "-c",
-                "ip link set brx.{0} up".format(self.nsid)]
+        args = ['sudo', 'ip', 'link', 'set', 'brx.{0}'.format(self.nsid), 'up']
         self.client_remote.run(args=args, timeout=(5*60), omit_sudo=False)
 
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
