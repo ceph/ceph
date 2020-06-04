@@ -30,29 +30,52 @@ def merge_hosts_by_hostname(ceph_hosts, orch_hosts):
     :type orch_hosts: list of HostSpec
     :return list of dict
     """
-    _ceph_hosts = copy.deepcopy(ceph_hosts)
-    orch_hostnames = {host.hostname for host in orch_hosts}
+    hosts = copy.deepcopy(ceph_hosts)
+    orch_hosts_map = {
+        host.hostname: {
+            'labels': host.labels
+        }
+        for host in orch_hosts
+    }
 
-    # hosts in both Ceph and Orchestrator
-    for ceph_host in _ceph_hosts:
-        if ceph_host['hostname'] in orch_hostnames:
-            ceph_host['sources']['orchestrator'] = True
-            orch_hostnames.remove(ceph_host['hostname'])
+    # Hosts in both Ceph and Orchestrator
+    for host in hosts:
+        hostname = host['hostname']
+        if hostname in orch_hosts_map:
+            host['labels'] = orch_hosts_map[hostname]['labels']
+            host['sources']['orchestrator'] = True
+            orch_hosts_map.pop(hostname)
 
     # Hosts only in Orchestrator
-    orch_sources = {'ceph': False, 'orchestrator': True}
-    _orch_hosts = [dict(hostname=hostname, ceph_version='', services=[], sources=orch_sources)
-                   for hostname in orch_hostnames]
-    _ceph_hosts.extend(_orch_hosts)
-    return _ceph_hosts
+    orch_hosts_only = [
+        dict(hostname=hostname,
+             ceph_version='',
+             labels=orch_hosts_map[hostname]['labels'],
+             services=[],
+             sources={
+                 'ceph': False,
+                 'orchestrator': True
+             }) for hostname in orch_hosts_map
+    ]
+    hosts.extend(orch_hosts_only)
+    return hosts
 
 
 def get_hosts(from_ceph=True, from_orchestrator=True):
-    """get hosts from various sources"""
+    """
+    Get hosts from various sources.
+    """
     ceph_hosts = []
     if from_ceph:
-        ceph_hosts = [merge_dicts(server, {'sources': {'ceph': True, 'orchestrator': False}})
-                      for server in mgr.list_servers()]
+        ceph_hosts = [
+            merge_dicts(server, {
+                'labels': [],
+                'sources': {
+                    'ceph': True,
+                    'orchestrator': False
+                }
+            }) for server in mgr.list_servers()
+        ]
     if from_orchestrator:
         orch = OrchClient.instance()
         if orch.available():
@@ -62,7 +85,6 @@ def get_hosts(from_ceph=True, from_orchestrator=True):
 
 @ApiController('/host', Scope.HOSTS)
 class Host(RESTController):
-
     def list(self, sources=None):
         if sources is None:
             return get_hosts()
