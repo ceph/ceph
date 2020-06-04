@@ -27,9 +27,7 @@
       <a ngbNavLink
          i18n>Directories</a>
       <ng-template ngbNavContent>
-        <cd-cephfs-directories *ngIf="directoriesSelected"
-                               [id]="id">
-        </cd-cephfs-directories>
+        <cd-cephfs-directories [id]="id"></cd-cephfs-directories>
       </ng-template>
     </li>
     <li ngbNavItem>
