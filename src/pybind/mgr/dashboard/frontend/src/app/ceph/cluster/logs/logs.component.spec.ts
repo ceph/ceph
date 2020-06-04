@@ -2,8 +2,8 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
@@ -17,7 +17,7 @@ describe('LogsComponent', () => {
   configureTestBed({
     imports: [
       HttpClientTestingModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       SharedModule,
       BsDatepickerModule.forRoot(),
       TimepickerModule.forRoot(),

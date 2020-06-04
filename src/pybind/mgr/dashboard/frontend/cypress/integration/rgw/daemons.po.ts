@@ -5,12 +5,12 @@ export class DaemonsPageHelper extends PageHelper {
     index: { url: '#/rgw/daemon', id: 'cd-rgw-daemon-list' }
   };
 
-  getTableCell(tableIndex: number) {
+  getTableCell() {
     return cy
-      .get('.tab-container')
+      .get('.tab-content')
       .its(1)
       .find('cd-table')
-      .its(tableIndex)
+      .should('have.length', 1) // Only 1 table should be renderer
       .find('datatable-body-cell');
   }
 
@@ -20,23 +20,15 @@ export class DaemonsPageHelper extends PageHelper {
 
     // check details table is visible
     // check at least one field is present
-    this.getTableCell(0).should('visible').should('contain.text', 'ceph_version');
-    // check performance counters table is not currently visible
-    this.getTableCell(1).should('not.be.visible');
+    this.getTableCell().should('visible').should('contain.text', 'ceph_version');
 
     // click on performance counters tab and check table is loaded
     cy.contains('.nav-link', 'Performance Counters').click();
 
     // check at least one field is present
-    this.getTableCell(1).should('be.visible').should('contain.text', 'objecter.op_r');
-    // check details table is not currently visible
-    this.getTableCell(0).should('not.be.visible');
+    this.getTableCell().should('be.visible').should('contain.text', 'objecter.op_r');
 
     // click on performance details tab
     cy.contains('.nav-link', 'Performance Details').click();
-
-    // checks the other tabs' content isn't visible
-    this.getTableCell(0).should('not.be.visible');
-    this.getTableCell(1).should('not.be.visible');
   }
 }

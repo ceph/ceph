@@ -1,33 +1,54 @@
-<tabset *ngIf="selection">
-  <tab i18n-heading
-       heading="Devices">
-    <cd-device-list [hostname]="selection['hostname']"></cd-device-list>
-  </tab>
-  <tab i18n-heading
-       heading="Inventory"
-       *ngIf="permissions.hosts.read">
-    <cd-inventory [hostname]="selectedHostname"></cd-inventory>
-  </tab>
-  <tab i18n-heading
-       heading="Daemons"
-       *ngIf="permissions.hosts.read">
-    <cd-service-daemon-list [hostname]="selectedHostname">
-    </cd-service-daemon-list>
-  </tab>
-  <tab i18n-heading
-       heading="Performance Details"
-       *ngIf="permissions.grafana.read">
-    <cd-grafana [grafanaPath]="'host-details?var-ceph_hosts=' + selectedHostname"
-                uid="rtOg0AiWz"
-                grafanaStyle="three">
-    </cd-grafana>
-  </tab>
-  <tab heading="Device health"
-       i18n-heading>
-    <cd-smart-list *ngIf="selectedHostname; else noHostname"
-                   [hostname]="selectedHostname"></cd-smart-list>
-  </tab>
-</tabset>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Devices</a>
+      <ng-template ngbNavContent>
+        <cd-device-list [hostname]="selection['hostname']"></cd-device-list>
+      </ng-template>
+    </li>
+    <li ngbNavItem
+        *ngIf="permissions.hosts.read">
+      <a ngbNavLink
+         i18n>Inventory</a>
+      <ng-template ngbNavContent>
+        <cd-inventory [hostname]="selectedHostname"></cd-inventory>
+      </ng-template>
+    </li>
+    <li ngbNavItem
+        *ngIf="permissions.hosts.read">
+      <a ngbNavLink
+         i18n>Daemons</a>
+      <ng-template ngbNavContent>
+        <cd-service-daemon-list [hostname]="selectedHostname">
+        </cd-service-daemon-list>
+      </ng-template>
+    </li>
+    <li ngbNavItem
+        *ngIf="permissions.grafana.read">
+      <a ngbNavLink
+         i18n>Performance Details</a>
+      <ng-template ngbNavContent>
+        <cd-grafana [grafanaPath]="'host-details?var-ceph_hosts=' + selectedHostname"
+                    uid="rtOg0AiWz"
+                    grafanaStyle="three">
+        </cd-grafana>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Device health</a>
+      <ng-template ngbNavContent>
+        <cd-smart-list *ngIf="selectedHostname; else noHostname"
+                       [hostname]="selectedHostname"></cd-smart-list>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>
 
 <ng-template #noHostname>
   <cd-alert-panel type="error"

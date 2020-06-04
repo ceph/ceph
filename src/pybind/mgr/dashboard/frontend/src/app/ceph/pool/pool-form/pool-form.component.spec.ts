@@ -2,17 +2,17 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
-import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import {
   configureTestBed,
   FixtureHelper,
@@ -137,7 +137,7 @@ describe('PoolFormComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
       ToastrModule.forRoot(),
-      TabsModule.forRoot(),
+      NgbNavModule,
       PoolModule,
       NgBootstrapFormValidationModule.forRoot()
     ],
@@ -888,7 +888,6 @@ describe('PoolFormComponent', () => {
       describe('rule in use', () => {
         beforeEach(() => {
           spyOn(global, 'setTimeout').and.callFake((fn: Function) => fn());
-          component.crushInfoTabs = { tabs: [{}, {}, {}] } as TabsetComponent; // Mock it
           deleteSpy.calls.reset();
           selectRuleByIndex(2);
           component.deleteCrushRule();
@@ -898,12 +897,6 @@ describe('PoolFormComponent', () => {
           expect(crushRuleService.delete).not.toHaveBeenCalled();
           expect(component.crushDeletionBtn.isOpen).toBe(true);
           expect(component.data.crushInfo).toBe(true);
-        });
-
-        it('should open the third crush info tab', () => {
-          expect(component.crushInfoTabs).toEqual({
-            tabs: [{}, {}, { active: true }]
-          } as TabsetComponent);
         });
 
         it('should hide the tooltip when clicking on delete again', () => {
@@ -1051,7 +1044,6 @@ describe('PoolFormComponent', () => {
       describe('rule in use', () => {
         beforeEach(() => {
           spyOn(global, 'setTimeout').and.callFake((fn: Function) => fn());
-          component.ecpInfoTabs = { tabs: [{}, {}] } as TabsetComponent; // Mock it
           deleteSpy.calls.reset();
           setSelectedEcp('ecp1');
           component.deleteErasureCodeProfile();
@@ -1065,12 +1057,6 @@ describe('PoolFormComponent', () => {
           expect(ecpService.delete).not.toHaveBeenCalled();
           expect(component.ecpDeletionBtn.isOpen).toBe(true);
           expect(component.data.erasureInfo).toBe(true);
-        });
-
-        it('should open the third crush info tab', () => {
-          expect(component.ecpInfoTabs).toEqual({
-            tabs: [{}, { active: true }]
-          } as TabsetComponent);
         });
 
         it('should hide the tooltip when clicking on delete again', () => {
