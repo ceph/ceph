@@ -2604,6 +2604,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       iter->second.oid = tgt_soid;
       // add data op
       ceph_osd_op osd_op;
+      memset(&osd_op, 0, sizeof(osd_op));
       osd_op.extent.offset = 0;
       osd_op.extent.length = chunk_data.length();
       encode(osd_op, in);
