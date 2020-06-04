@@ -143,6 +143,6 @@ Adoption process
      # rm -rf /var/lib/ceph/radosgw/ceph-*
 
 #. Check the ``ceph health detail`` output for cephadm warnings about
-   stray cluster daemons or hosts that are not yet managed.
+   stray cluster daemons or hosts that are not yet managed::
    
      # ceph health detail
