@@ -117,10 +117,10 @@ namespace PriorityCache {
     uint64_t target_mem = 0;
     uint64_t tuned_mem = 0;
     bool reserve_extra;
-
+    std::string name;
   public:
     Manager(CephContext *c, uint64_t min, uint64_t max, uint64_t target,
-            bool reserve_extra);
+            bool reserve_extra, const std::string& name = std::string());
     ~Manager();
     void set_min_memory(uint64_t min) {
       min_mem = min;
