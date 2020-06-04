@@ -1604,9 +1604,9 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState
     rgw::sal::RGWBucketList buckets;
     rgw::sal::RGWRadosUser user(store, op_state.get_user_id());
     string marker;
-    bool is_truncated = false;
 
     do {
+      buckets.clear();
       ret = user.list_buckets(marker, string(), max_entries, false, buckets);
       if (ret < 0)
         return ret;
@@ -1629,7 +1629,7 @@ int RGWBucketAdminOp::info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState
       }
 
       flusher.flush();
-    } while (is_truncated);
+    } while (buckets.is_truncated());
 
     formatter->close_section();
   } else if (!bucket_name.empty()) {
