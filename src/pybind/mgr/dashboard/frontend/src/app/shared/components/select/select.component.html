@@ -63,16 +63,16 @@
 <a class="select-menu-edit float-left"
    [ngClass]="elemClass"
    [ngbPopover]="popTemplate"
-   *ngIf="options.length > 0">
+   *ngIf="customBadges || options.length > 0">
   <ng-content></ng-content>
 </a>
 
 <span class="form-text text-muted float-left"
-      *ngIf="data.length === 0 && options.length > 0">
+      *ngIf="data.length === 0 && !(!customBadges && options.length === 0)">
   {{ messages.empty }}
 </span>
 
 <span class="form-text text-muted  float-left"
-      *ngIf="options.length === 0">
+      *ngIf="!customBadges && options.length === 0">
   {{ messages.noOptions }}
 </span>
