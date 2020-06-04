@@ -88,4 +88,32 @@ describe('HostsComponent', () => {
       expect(spans[0].textContent).toBe(hostname);
     });
   }));
+
+  describe('getEditDisableDesc', () => {
+    it('should return message (not managed by Orchestrator)', () => {
+      component.selection.add({
+        sources: {
+          ceph: true,
+          orchestrator: false
+        }
+      });
+      expect(component.getEditDisableDesc(component.selection)).toBe(
+        'Host editing is disabled because the host is not managed by Orchestrator.'
+      );
+    });
+
+    it('should return undefined (no selection)', () => {
+      expect(component.getEditDisableDesc()).toBeUndefined();
+    });
+
+    it('should return undefined (managed by Orchestrator)', () => {
+      component.selection.add({
+        sources: {
+          ceph: false,
+          orchestrator: true
+        }
+      });
+      expect(component.getEditDisableDesc()).toBeUndefined();
+    });
+  });
 });
