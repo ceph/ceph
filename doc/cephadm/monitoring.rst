@@ -1,9 +1,9 @@
 Monitoring Stack with Cephadm
 =============================
 
-The Ceph dashboard makes use of prometheus, grafana, and related tools
-to store and visualize detailed metrics on cluster utilization and
-performance.  Ceph users have three options:
+Ceph Dashboard uses `Prometheus <https://prometheus.io/>`_, `Grafana
+<https://grafana.com/>`_, and related tools to store and visualize detailed
+metrics on cluster utilization and performance.  Ceph users have three options:
 
 #. Have cephadm deploy and configure these services.  This is the default
    when bootstrapping a new cluster unless the ``--skip-monitoring-stack``
@@ -14,8 +14,27 @@ performance.  Ceph users have three options:
 #. Skip the monitoring stack completely.  Some Ceph dashboard graphs will
    not be available.
 
-Deploying monitoring with cephadm
----------------------------------
+The monitoring stack consists of `Prometheus <https://prometheus.io/>`_,
+Prometheus exporters (:ref:`mgr-prometheus`, `Node exporter
+<https://prometheus.io/docs/guides/node-exporter/>`_), `Prometheus Alert
+Manager <https://prometheus.io/docs/alerting/alertmanager/>`_ and `Grafana
+<https://grafana.com/>`_.
+
+.. note::
+
+  Prometheus' security model presumes that untrusted users have access to the
+  Prometheus HTTP endpoint and logs. Untrusted users have access to all the
+  (meta)data Prometheus collects that is contained in the database, plus a
+  variety of operational and debugging information.
+
+  However, Prometheus' HTTP API is limited to read-only operations.
+  Configurations can *not* be changed using the API and secrets are not
+  exposed. Moreover, Prometheus has some built-in measures to mitigate the
+  impact of denial of service attacks.
+
+  Please see `Prometheus' Security model
+  <https://prometheus.io/docs/operating/security/>` for more detailed
+  information.
 
 By default, bootstrap will deploy a basic monitoring stack.  If you
 did not do this (by passing ``--skip-monitoring-stack``, or if you
@@ -56,6 +75,45 @@ completed, you should see something like this from ``ceph orch ls``::
   grafana            1/1  0s ago     docker.io/pcuzner/ceph-grafana-el8:latest       f77afcf0bcf6   absent
   node-exporter      2/2  6s ago     docker.io/prom/node-exporter:latest             e5a616e4b9cf  present
   prometheus         1/1  6s ago     docker.io/prom/prometheus:latest                e935122ab143  present
+
+Using custom images
+~~~~~~~~~~~~~~~~~~~
+
+It is possible to install or upgrade monitoring components based on other
+images.  To do so, the name of the image to be used needs to be stored in the
+configuration first.  The following configuration options are available.
+
+- ``container_image_prometheus``
+- ``container_image_grafana``
+- ``container_image_alertmanager``
+- ``container_image_node_exporter``
+
+Custom images can be set with the ``ceph config`` command::
+
+     ceph config set mgr mgr/cephadm/<option_name> <value>
+
+For example::
+
+     ceph config set mgr mgr/cephadm/container_image_prometheus prom/prometheus:v1.4.1
+
+.. note::
+
+     By setting a custom image, the default value will be overridden (but not
+     overwritten).  The default value changes when updates become available.
+     By setting a custom image, you will not be able to update the component
+     you have set the custom image for automatically.  You will need to
+     manually update the configuration (image name and tag) to be able to
+     install updates.
+     
+     If you choose to go with the recommendations instead, you can reset the
+     custom image you have set before.  After that, the default value will be
+     used again.  Use ``ceph config rm`` to reset the configuration option::
+
+          ceph config rm mgr mgr/cephadm/<option_name>
+
+     For example::
+
+          ceph config rm mgr mgr/cephadm/container_image_prometheus
 
 Disabling monitoring
 --------------------

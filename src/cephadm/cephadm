@@ -484,7 +484,7 @@ def attempt_bind(s, address, port):
 def port_in_use(port_num):
     # type (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
-    logger.info('Verifying port %d ...' % (port_num))
+    logger.info('Verifying port %d ...' % port_num)
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         attempt_bind(s, '0.0.0.0', port_num)
@@ -2562,31 +2562,47 @@ def command_bootstrap():
         logger.info('Setting orchestrator backend to cephadm...')
         cli(['orch', 'set', 'backend', 'cephadm'])
 
-        logger.info('Generating ssh key...')
-        cli(['cephadm', 'generate-key'])
-        ssh_pub = cli(['cephadm', 'get-pub-key'])
+        if args.ssh_config:
+            logger.info('Using provided ssh config...')
+            mounts = {
+                pathify(args.ssh_config.name): '/tmp/cephadm-ssh-config:z',
+            }
+            cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
 
-        with open(args.output_pub_ssh_key, 'w') as f:
-            f.write(ssh_pub)
-        logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
+        if args.ssh_private_key and args.ssh_public_key:
+            logger.info('Using provided ssh keys...')
+            mounts = {
+                pathify(args.ssh_private_key.name): '/tmp/cephadm-ssh-key:z',
+                pathify(args.ssh_public_key.name): '/tmp/cephadm-ssh-key.pub:z'
+            }
+            cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
+            cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
+        else:
+            logger.info('Generating ssh key...')
+            cli(['cephadm', 'generate-key'])
+            ssh_pub = cli(['cephadm', 'get-pub-key'])
 
-        logger.info('Adding key to root@localhost\'s authorized_keys...')
-        if not os.path.exists('/root/.ssh'):
-            os.mkdir('/root/.ssh', 0o700)
-        auth_keys_file = '/root/.ssh/authorized_keys'
-        add_newline = False
-        if os.path.exists(auth_keys_file):
-            with open(auth_keys_file, 'r') as f:
-                f.seek(0, os.SEEK_END)
-                if f.tell() > 0:
-                    f.seek(f.tell()-1, os.SEEK_SET) # go to last char
-                    if f.read() != '\n':
-                        add_newline = True
-        with open(auth_keys_file, 'a') as f:
-            os.fchmod(f.fileno(), 0o600)  # just in case we created it
-            if add_newline:
-                f.write('\n')
-            f.write(ssh_pub.strip() + '\n')
+            with open(args.output_pub_ssh_key, 'w') as f:
+                f.write(ssh_pub)
+            logger.info('Wrote public SSH key to to %s' % args.output_pub_ssh_key)
+
+            logger.info('Adding key to root@localhost\'s authorized_keys...')
+            if not os.path.exists('/root/.ssh'):
+                os.mkdir('/root/.ssh', 0o700)
+            auth_keys_file = '/root/.ssh/authorized_keys'
+            add_newline = False
+            if os.path.exists(auth_keys_file):
+                with open(auth_keys_file, 'r') as f:
+                    f.seek(0, os.SEEK_END)
+                    if f.tell() > 0:
+                        f.seek(f.tell()-1, os.SEEK_SET) # go to last char
+                        if f.read() != '\n':
+                            add_newline = True
+            with open(auth_keys_file, 'a') as f:
+                os.fchmod(f.fileno(), 0o600)  # just in case we created it
+                if add_newline:
+                    f.write('\n')
+                f.write(ssh_pub.strip() + '\n')
 
         host = get_hostname()
         logger.info('Adding host %s...' % host)
@@ -2612,9 +2628,10 @@ def command_bootstrap():
         # dashboard crt and key
         if args.dashboard_key and args.dashboard_crt:
             logger.info('Using provided dashboard certificate...')
-            mounts = {}
-            mounts[pathify(args.dashboard_crt)] = '/tmp/dashboard.crt:z'
-            mounts[pathify(args.dashboard_key)] = '/tmp/dashboard.key:z'
+            mounts = {
+                pathify(args.dashboard_crt.name): '/tmp/dashboard.crt:z',
+                pathify(args.dashboard_key.name): '/tmp/dashboard.key:z'
+            }
             cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
             cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
         else:
@@ -2673,7 +2690,7 @@ def extract_uid_gid_monitoring(daemon_type):
 @default_image
 def command_deploy():
     # type: () -> None
-    (daemon_type, daemon_id) = args.name.split('.', 1)
+    daemon_type, daemon_id = args.name.split('.', 1)
 
     l = FileLock(args.fsid)
     l.acquire()
@@ -2695,8 +2712,8 @@ def command_deploy():
         logger.info('%s daemon %s ...' % ('Deploy', args.name))
 
     if daemon_type in Ceph.daemons:
-        (config, keyring) = get_config_and_keyring()
-        (uid, gid) = extract_uid_gid()
+        config, keyring = get_config_and_keyring()
+        uid, gid = extract_uid_gid()
         make_var_run(args.fsid, uid, gid)
         c = get_container(args.fsid, daemon_type, daemon_id,
                           ptrace=args.allow_ptrace)
@@ -2707,8 +2724,6 @@ def command_deploy():
 
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
-        monitoring_args = []  # type: List[str]
-
         # Default Checks
         if not args.reconfig and not redeploy:
             daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
@@ -2728,7 +2743,6 @@ def command_deploy():
                 raise Error("{} deployment requires config-json which must "
                             "contain arg for {}".format(daemon_type.capitalize(), ', '.join(required_args)))
 
-
         uid, gid = extract_uid_gid_monitoring(daemon_type)
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
@@ -2737,17 +2751,17 @@ def command_deploy():
     elif daemon_type == NFSGanesha.daemon_type:
         if not args.reconfig and not redeploy:
             NFSGanesha.port_in_use()
-        (config, keyring) = get_config_and_keyring()
+        config, keyring = get_config_and_keyring()
         # TODO: extract ganesha uid/gid (997, 994) ?
-        (uid, gid) = extract_uid_gid()
+        uid, gid = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       reconfig=args.reconfig)
 
     elif daemon_type == CephIscsi.daemon_type:
-        (config, keyring) = get_config_and_keyring()
-        (uid, gid) = extract_uid_gid()
+        config, keyring = get_config_and_keyring()
+        uid, gid = extract_uid_gid()
         c = get_container(args.fsid, daemon_type, daemon_id)
         deploy_daemon(args.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
@@ -4459,10 +4473,25 @@ def _get_parser():
 
     parser_bootstrap.add_argument(
         '--dashboard-key',
+        type=argparse.FileType('r'),
         help='Dashboard key')
     parser_bootstrap.add_argument(
         '--dashboard-crt',
+        type=argparse.FileType('r'),
         help='Dashboard certificate')
+
+    parser_bootstrap.add_argument(
+        '--ssh-config',
+        type=argparse.FileType('r'),
+        help='SSH config')
+    parser_bootstrap.add_argument(
+        '--ssh-private-key',
+        type=argparse.FileType('r'),
+        help='SSH private key')
+    parser_bootstrap.add_argument(
+        '--ssh-public-key',
+        type=argparse.FileType('r'),
+        help='SSH public key')
 
     parser_bootstrap.add_argument(
         '--skip-mon-network',

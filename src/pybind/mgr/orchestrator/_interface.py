@@ -1306,16 +1306,37 @@ class DaemonDescription(object):
 
     def service_id(self):
         def _match():
-            if self.hostname:
+            err = OrchestratorError("DaemonDescription: Cannot calculate service_id: " \
+                    f"daemon_id='{self.daemon_id}' hostname='{self.hostname}'")
+
+            if not self.hostname:
+                # TODO: can a DaemonDescription exist without a hostname?
+                raise err
+
+            if self.hostname == self.daemon_id:
+                # daemon_id == "hostname"
+                return self.daemon_id
+
+            elif self.hostname in self.daemon_id:
                 # daemon_id == "service_id.hostname"
                 # daemon_id == "service_id.hostname.random"
-                p = re.compile(r'(.*)\.%s(\.{1}\w+)?$' % (self.hostname))
-                m = p.match(self.daemon_id)
-                if m:
-                    return m.group(1)
+                pre, post = self.daemon_id.rsplit(self.hostname, 1)
+                if not pre.endswith('.'):
+                    # '.' sep missing at front of hostname
+                    raise err
+                elif post and not post.startswith('.'):
+                    # '.' sep missing at end of hostname
+                    raise err
+                return pre[:-1]
 
-            raise OrchestratorError("DaemonDescription: Cannot calculate service_id: " \
-                    f"daemon_id='{self.daemon_id}' hostname='{self.hostname}'")
+            # daemon_id == "service_id.random"
+            if self.daemon_type == 'rgw':
+                v = self.daemon_id.split('.')
+                if len(v) in [3, 4]:
+                    return '.'.join(v[0:2])
+
+            # daemon_id == "service_id"
+            return self.daemon_id
 
         if self.daemon_type in ['mds', 'nfs', 'iscsi', 'rgw']:
             return _match()

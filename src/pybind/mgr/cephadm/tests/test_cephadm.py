@@ -15,7 +15,7 @@ except ImportError:
 from execnet.gateway_bootstrap import HostNotFound
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec
+    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
@@ -453,7 +453,8 @@ class TestCephadm(object):
     def test_iscsi(self, cephadm_module):
         with self._with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test'], count=1)
-            spec = IscsiServiceSpec('name', pool='pool', placement=ps)
+            spec = IscsiServiceSpec('name', pool='pool', api_user='user',
+                                    api_password='password', placement=ps)
             c = cephadm_module.add_iscsi(spec)
             [out] = wait(cephadm_module, c)
             match_glob(out, "Deployed iscsi.name.* on host 'test'")
@@ -482,18 +483,47 @@ class TestCephadm(object):
             (ServiceSpec('alertmanager'), CephadmOrchestrator.apply_alertmanager),
             (ServiceSpec('rbd-mirror'), CephadmOrchestrator.apply_rbd_mirror),
             (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.apply_mds),
+            (ServiceSpec(
+                'mds', service_id='fsname',
+                placement=PlacementSpec(
+                    hosts=[HostPlacementSpec(
+                        hostname='test',
+                        name='fsname',
+                        network=''
+                    )]
+                )
+            ), CephadmOrchestrator.apply_mds),
             (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.apply_rgw),
+            (RGWSpec(
+                rgw_realm='realm', rgw_zone='zone',
+                placement=PlacementSpec(
+                    hosts=[HostPlacementSpec(
+                        hostname='test',
+                        name='realm.zone.a',
+                        network=''
+                    )]
+                )
+            ), CephadmOrchestrator.apply_rgw),
             (NFSServiceSpec('name', pool='pool', namespace='namespace'), CephadmOrchestrator.apply_nfs),
-            (IscsiServiceSpec('name', pool='pool'), CephadmOrchestrator.apply_iscsi),
+            (IscsiServiceSpec('name', pool='pool', api_user='user', api_password='password'),
+             CephadmOrchestrator.apply_iscsi),
         ]
     )
     @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
-    def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module):
+    def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with self._with_host(cephadm_module, 'test'):
-            spec.placement = PlacementSpec(hosts=['test'], count=1)
+            if not spec.placement:
+                spec.placement = PlacementSpec(hosts=['test'], count=1)
             c = meth(cephadm_module, spec)
             assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
             assert [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())] == [spec]
+
+            cephadm_module._apply_all_services()
+
+            dds = wait(cephadm_module, cephadm_module.list_daemons())
+            for dd in dds:
+                assert dd.service_name() == spec.service_name()
+
 
             assert_rm_service(cephadm_module, spec.service_name())
 
@@ -516,3 +546,45 @@ class TestCephadm(object):
             assert cephadm_module._check_host('test') is None
             out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
             assert out == HostSpec('test', 'test').to_json()
+
+    def test_stale_connections(self, cephadm_module):
+        class Connection(object):
+            """
+            A mocked connection class that only allows the use of the connection
+            once. If you attempt to use it again via a _check, it'll explode (go
+            boom!).
+
+            The old code triggers the boom. The new code checks the has_connection
+            and will recreate the connection.
+            """
+            fuse = False
+
+            @staticmethod
+            def has_connection():
+                return False
+
+            def import_module(self, *args, **kargs):
+                return mock.Mock()
+
+            @staticmethod
+            def exit():
+                pass
+
+        def _check(conn, *args, **kargs):
+            if conn.fuse:
+                raise Exception("boom: connection is dead")
+            else:
+                conn.fuse = True
+            return '{}', None, 0
+        with mock.patch("remoto.Connection", side_effect=[Connection(), Connection(), Connection()]):
+            with mock.patch("remoto.process.check", _check):
+                with self._with_host(cephadm_module, 'test'):
+                    code, out, err = cephadm_module.check_host('test')
+                    # First should succeed.
+                    assert err is None
+
+                    # On second it should attempt to reuse the connection, where the
+                    # connection is "down" so will recreate the connection. The old
+                    # code will blow up here triggering the BOOM!
+                    code, out, err = cephadm_module.check_host('test')
+                    assert err is None

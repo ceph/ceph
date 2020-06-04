@@ -1,13 +1,13 @@
 import json
 import errno
 import logging
-import time
+from collections import defaultdict
 from threading import Event
 from functools import wraps
 
 import string
-from typing import List, Dict, Optional, Callable, Tuple, TypeVar, Type, \
-    Any, NamedTuple, Iterator, Set, Sequence, TYPE_CHECKING, cast, Union
+from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
+    Any, Set, TYPE_CHECKING, cast
 
 import datetime
 import six
@@ -31,7 +31,7 @@ from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpe
 from . import remotes
 from . import utils
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService
+    RbdMirrorService, CrashService, CephadmService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
 from .services.osd import RemoveUtil, OSDRemoval, OSDService
@@ -43,6 +43,15 @@ from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 
 try:
     import remoto
+    # NOTE(mattoliverau) Patch remoto until remoto PR
+    # (https://github.com/alfredodeza/remoto/pull/56) lands
+    from distutils.version import StrictVersion
+    if StrictVersion(remoto.__version__) <= StrictVersion('1.2'):
+        def remoto_has_connection(self):
+            return self.gateway.hasreceiver()
+
+        from remoto.backends import BaseConnection
+        BaseConnection.has_connection = remoto_has_connection
     import remoto.process
     import execnet.gateway_bootstrap
 except ImportError as e:
@@ -187,6 +196,26 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'runtime': True,
         },
         {
+            'name': 'container_image_prometheus',
+            'default': 'prom/prometheus:v2.18.1',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_grafana',
+            'default': 'ceph/ceph-grafana:latest',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_alertmanager',
+            'default': 'prom/alertmanager:v0.20.0',
+            'desc': 'Prometheus container image',
+        },
+        {
+            'name': 'container_image_node_exporter',
+            'default': 'prom/node-exporter:v0.18.1',
+            'desc': 'Prometheus container image',
+        },
+        {
             'name': 'warn_on_stray_hosts',
             'type': 'bool',
             'default': True,
@@ -251,6 +280,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.host_check_interval = 0
             self.mode = ''
             self.container_image_base = ''
+            self.container_image_prometheus = ''
+            self.container_image_grafana = ''
+            self.container_image_alertmanager = ''
+            self.container_image_node_exporter = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -315,6 +348,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.node_exporter_service = NodeExporterService(self)
         self.crash_service = CrashService(self)
         self.iscsi_service = IscsiService(self)
+        self.cephadm_services = {
+            'mon': self.mon_service,
+            'mgr': self.mgr_service,
+            'osd': self.osd_service,
+            'mds': self.mds_service,
+            'rgw': self.rgw_service,
+            'rbd-mirror': self.rbd_mirror_service,
+            'nfs': self.nfs_service,
+            'grafana': self.grafana_service,
+            'alertmanager': self.alertmanager_service,
+            'prometheus': self.prometheus_service,
+            'node-exporter': self.node_exporter_service,
+            'crash': self.crash_service,
+            'iscsi': self.iscsi_service,
+        }
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -322,6 +370,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self._worker_pool.join()
         self.run = False
         self.event.set()
+
+    def _get_cephadm_service(self, service_type: str) -> CephadmService:
+        assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES
+        return self.cephadm_services[service_type]
 
     def _kick_serve_loop(self):
         self.log.debug('_kick_serve_loop')
@@ -748,6 +800,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         return 0, '', ''
 
     @orchestrator._cli_write_command(
+        'cephadm set-priv-key',
+        desc='Set cluster SSH private key (use -i <private_key>)')
+    def _set_priv_key(self, inbuf=None):
+        if inbuf is None or len(inbuf) == 0:
+            return -errno.EINVAL, "", "empty private ssh key provided"
+        self.set_store("ssh_identity_key", inbuf)
+        self.log.info('Set ssh private key')
+        self._reconfig_ssh()
+        return 0, "", ""
+
+    @orchestrator._cli_write_command(
+        'cephadm set-pub-key',
+        desc='Set cluster SSH public key (use -i <public_key>)')
+    def _set_pub_key(self, inbuf=None):
+        if inbuf is None or len(inbuf) == 0:
+            return -errno.EINVAL, "", "empty public ssh key provided"
+        self.set_store("ssh_identity_pub", inbuf)
+        self.log.info('Set ssh public key')
+        self._reconfig_ssh()
+        return 0, "", ""
+
+    @orchestrator._cli_write_command(
         'cephadm clear-key',
         desc='Clear cluster SSH key')
     def _clear_key(self):
@@ -816,10 +890,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         Setup a connection for running commands on remote host.
         """
-        conn_and_r = self._cons.get(host)
-        if conn_and_r:
-            self.log.debug('Have connection to %s' % host)
-            return conn_and_r
+        conn, r = self._cons.get(host, (None, None))
+        if conn:
+            if conn.has_connection():
+                self.log.debug('Have connection to %s' % host)
+                return conn, r
+            else:
+                self._reset_con(host)
         n = self.ssh_user + '@' + host
         self.log.debug("Opening connection to {} with ssh options '{}'".format(
             n, self._ssh_options))
@@ -851,14 +928,18 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             executable_path))
         return executable_path
 
-    def _run_cephadm(self, host, entity, command, args,
-                     addr=None,
-                     stdin=None,
+    def _run_cephadm(self,
+                     host: str,
+                     entity: Optional[str],
+                     command: str,
+                     args: List[str],
+                     addr: Optional[str] = None,
+                     stdin: Optional[str] = None,
                      no_fsid=False,
                      error_ok=False,
-                     image=None,
-                     env_vars=None):
-        # type: (str, Optional[str], str, List[str], Optional[str], Optional[str], bool, bool, Optional[str], Optional[List[str]]) -> Tuple[List[str], List[str], int]
+                     image: Optional[str] = None,
+                     env_vars: Optional[List[str]] = None,
+                     ) -> Tuple[List[str], List[str], int]:
         """
         Run cephadm on the remote host with the given command + args
 
@@ -880,7 +961,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
             assert image or entity
             if not image:
-                daemon_type = entity.split('.', 1)[0] # type: ignore
+                daemon_type = entity.split('.', 1)[0]  # type: ignore
                 if daemon_type in CEPH_TYPES or \
                         daemon_type == 'nfs' or \
                         daemon_type == 'iscsi':
@@ -890,7 +971,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         'who': utils.name_to_config_section(entity),
                         'key': 'container_image',
                     })
-                    image = image.strip() # type: ignore
+                    image = image.strip()  # type: ignore
+                elif daemon_type == 'prometheus':
+                    image = self.container_image_prometheus
+                elif daemon_type == 'grafana':
+                    image = self.container_image_grafana
+                elif daemon_type == 'alertmanager':
+                    image = self.container_image_alertmanager
+                elif daemon_type == 'node-exporter':
+                    image = self.container_image_node_exporter
+
             self.log.debug('%s container image %s' % (entity, image))
 
             final_args = []
@@ -907,8 +997,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 final_args += ['--fsid', self._cluster_fsid]
             final_args += args
 
+            self.log.debug('args: %s' % (' '.join(final_args)))
             if self.mode == 'root':
-                self.log.debug('args: %s' % (' '.join(final_args)))
                 if stdin:
                     self.log.debug('stdin: %s' % stdin)
                 script = 'injected_argv = ' + json.dumps(final_args) + '\n'
@@ -1052,9 +1142,8 @@ you may want to run:
         self.cache.loading_osdspec_preview.add(search_host)
         previews = []
         # query OSDSpecs for host <search host> and generate/get the preview
-        for preview in self.osd_service.get_previews(search_host):
-            # There can be multiple previews for one host due to multiple OSDSpecs.
-            previews.append(preview)
+        # There can be multiple previews for one host due to multiple OSDSpecs.
+        previews.extend(self.osd_service.get_previews(search_host))
         self.log.debug(f"Loading OSDSpec previews to HostCache")
         self.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
@@ -1530,11 +1619,18 @@ you may want to run:
             'keyring': keyring,
         }
 
-    def _create_daemon(self, daemon_type, daemon_id, host,
-                       keyring=None,
-                       extra_args=None, extra_config=None,
+    def _create_daemon(self,
+                       daemon_type: str,
+                       daemon_id: str,
+                       host: str,
+                       keyring: Optional[str] = None,
+                       extra_args: Optional[List[str]] = None,
+                       extra_config: Optional[Dict[str, Any]] = None,
                        reconfig=False,
-                       osd_uuid_map=None) -> str:
+                       osd_uuid_map: Optional[Dict[str, Any]] = None,
+                       redeploy=False,
+                       ) -> str:
+
         if not extra_args:
             extra_args = []
         if not extra_config:
@@ -1543,7 +1639,7 @@ you may want to run:
 
         start_time = datetime.datetime.utcnow()
         deps = []  # type: List[str]
-        cephadm_config = {} # type: Dict[str, Any]
+        cephadm_config = {}  # type: Dict[str, Any]
         if daemon_type == 'prometheus':
             cephadm_config, deps = self.prometheus_service.generate_config()
             extra_args.extend(['--config-json', '-'])
@@ -1576,7 +1672,7 @@ you may want to run:
                     osd_uuid_map = self.get_osd_uuid_map()
                 osd_uuid = osd_uuid_map.get(daemon_id)
                 if not osd_uuid:
-                    raise OrchestratorError('osd.%d not in osdmap' % daemon_id)
+                    raise OrchestratorError('osd.%s not in osdmap' % daemon_id)
                 extra_args.extend(['--osd-fsid', osd_uuid])
 
         if reconfig:
@@ -1794,8 +1890,7 @@ you may want to run:
             last_monmap = None   # just in case clocks are skewed
 
         daemons = self.cache.get_daemons()
-        grafanas = []  # type: List[orchestrator.DaemonDescription]
-        iscsi_daemons = []
+        daemons_post = defaultdict(list)
         for dd in daemons:
             # orphan?
             spec = self.spec_store.specs.get(dd.service_name(), None)
@@ -1809,12 +1904,10 @@ you may want to run:
             if spec and spec.unmanaged:
                 continue
 
-            # dependencies?
-            if dd.daemon_type == 'grafana':
-                # put running instances at the front of the list
-                grafanas.insert(0, dd)
-            elif dd.daemon_type == 'iscsi':
-                iscsi_daemons.append(dd)
+            # These daemon types require additional configs after creation
+            if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
+                daemons_post[dd.daemon_type].append(dd)
+
             deps = self._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
             last_deps, last_config = self.cache.get_daemon_last_config_deps(
                 dd.hostname, dd.name())
@@ -1840,10 +1933,9 @@ you may want to run:
                 self._create_daemon(dd.daemon_type, dd.daemon_id,
                                     dd.hostname, reconfig=True)
 
-        if grafanas:
-            self.grafana_service.daemon_check_post(grafanas)
-        if iscsi_daemons:
-            self.iscsi_service.daemon_check_post(iscsi_daemons)
+        # do daemon post actions
+        for daemon_type, daemon_descs in daemons_post.items():
+            self._get_cephadm_service(daemon_type).daemon_check_post(daemon_descs)
 
     def _add_daemon(self, daemon_type, spec,
                     create_func: Callable[..., T], config_func=None) -> List[T]:

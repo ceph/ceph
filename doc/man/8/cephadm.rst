@@ -61,7 +61,10 @@ Synopsis
 |                           [--initial-dashboard-user INITIAL_DASHBOARD_USER]
 |                           [--initial-dashboard-password INITIAL_DASHBOARD_PASSWORD]
 |                           [--dashboard-key DASHBOARD_KEY]
-|                           [--dashboard-crt DASHBOARD_CRT] [--skip-mon-network]
+|                           [--dashboard-crt DASHBOARD_CRT]
+|                           [--ssh-config SSH_CONFIG]
+|                           [--ssh-private-key SSH_PRIVATE_KEY]
+|                           [--ssh-public-key SSH_PUBLIC_KEY] [--skip-mon-network]
 |                           [--skip-dashboard] [--dashboard-password-noupdate]
 |                           [--no-minimize-config] [--skip-ping-check]
 |                           [--skip-pull] [--skip-firewalld] [--allow-overwrite]
@@ -198,6 +201,9 @@ Arguments:
 * [--initial-dashboard-password INITIAL_DASHBOARD_PASSWORD] Initial password for the initial dashboard user
 * [--dashboard-key DASHBOARD_KEY] Dashboard key
 * [--dashboard-crt DASHBOARD_CRT] Dashboard certificate
+* [--ssh-config SSH_CONFIG] SSH config
+* [--ssh-private-key SSH_PRIVATE_KEY] SSH private key
+* [--ssh-public-key SSH_PUBLIC_KEY] SSH public key
 * [--skip-mon-network]            set mon public_network based on bootstrap mon ip
 * [--skip-dashboard]              do not enable the Ceph Dashboard
 * [--dashboard-password-noupdate] stop forced dashboard password change
