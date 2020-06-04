@@ -30,9 +30,7 @@ class OSDService(CephadmService):
             if not cmd:
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(drive_group.service_id))
                 continue
-            # env_vars = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
-            # disable this until https://github.com/ceph/ceph/pull/34835 is merged
-            env_vars: List[str] = []
+            env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = self.create_single_host(
                 host, cmd, replace_osd_ids=drive_group.osd_id_claims.get(host, []), env_vars=env_vars
             )
