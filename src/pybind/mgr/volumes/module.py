@@ -273,7 +273,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'nfs cluster create '
                    'name=type,type=CephString '
-                   'name=clusterid,type=CephString '
+                   'name=clusterid,type=CephString,goodchars=[A-Za-z0-9-_.] '
                    'name=placement,type=CephString,req=false ',
             'desc': "Create an NFS Cluster",
             'perm': 'rw'
