@@ -235,8 +235,10 @@ private:
   void init_remote_journaler();
   void handle_init_remote_journaler(int r);
 
-  void start_external_replay();
+  void start_external_replay(std::unique_lock<ceph::mutex>& locker);
   void handle_start_external_replay(int r);
+
+  bool add_local_journal_listener(std::unique_lock<ceph::mutex>& locker);
 
   bool notify_init_complete(std::unique_lock<ceph::mutex>& locker);
 
