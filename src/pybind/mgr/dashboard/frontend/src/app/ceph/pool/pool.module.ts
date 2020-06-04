@@ -6,7 +6,6 @@ import { RouterModule, Routes } from '@angular/router';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
@@ -24,7 +23,6 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     CephSharedModule,
     CommonModule,
     NgbNavModule,
-    PopoverModule.forRoot(),
     SharedModule,
     RouterModule,
     ReactiveFormsModule,

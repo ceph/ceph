@@ -6,9 +6,6 @@
 </ng-template>
 <i [ngClass]="[icons.questionCircle]"
    aria-hidden="true"
-   [popover]="popoverTpl"
-   placement="bottom"
-   container="body"
-   (click)="$event.preventDefault();"
-   [outsideClick]="true">
+   [ngbPopover]="popoverTpl"
+   (click)="$event.preventDefault();">
 </i>

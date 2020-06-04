@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
 
-import { PopoverModule } from 'ngx-bootstrap/popover';
+import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -20,7 +20,7 @@ describe('SelectComponent', () => {
 
   configureTestBed({
     declarations: [SelectComponent],
-    imports: [PopoverModule.forRoot(), TooltipModule, ReactiveFormsModule],
+    imports: [NgbPopoverModule, TooltipModule, ReactiveFormsModule],
     providers: i18nProviders
   });
 
