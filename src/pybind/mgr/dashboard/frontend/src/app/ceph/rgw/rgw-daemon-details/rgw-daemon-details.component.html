@@ -1,22 +1,37 @@
-<tabset *ngIf="selection">
-  <tab i18n-heading
-       heading="Details">
-    <cd-table-key-value [data]="metadata"
-                        (fetchData)="getMetaData()">
-    </cd-table-key-value>
-  </tab>
-  <tab i18n-heading
-       heading="Performance Counters">
-    <cd-table-performance-counter serviceType="rgw"
-                                  [serviceId]="serviceId">
-    </cd-table-performance-counter>
-  </tab>
-  <tab i18n-heading
-       *ngIf="grafanaPermission.read"
-       heading="Performance Details">
-    <cd-grafana [grafanaPath]="'rgw-instance-detail?var-rgw_servers=rgw.' + this.serviceId"
-                uid="x5ARzZtmk"
-                grafanaStyle="one">
-    </cd-grafana>
-  </tab>
-</tabset>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <cd-table-key-value [data]="metadata"
+                            (fetchData)="getMetaData()">
+        </cd-table-key-value>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Performance Counters</a>
+      <ng-template ngbNavContent>
+        <cd-table-performance-counter serviceType="rgw"
+                                      [serviceId]="serviceId">
+        </cd-table-performance-counter>
+      </ng-template>
+    </li>
+    <li ngbNavItem
+        *ngIf="grafanaPermission.read">
+      <a ngbNavLink
+         i18n>Performance Details</a>
+      <ng-template ngbNavContent>
+        <cd-grafana [grafanaPath]="'rgw-instance-detail?var-rgw_servers=rgw.' + this.serviceId"
+                    uid="x5ARzZtmk"
+                    grafanaStyle="one">
+        </cd-grafana>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

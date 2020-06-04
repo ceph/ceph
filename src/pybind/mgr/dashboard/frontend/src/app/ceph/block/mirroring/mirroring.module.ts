@@ -3,12 +3,12 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../../shared/shared.module';
@@ -35,8 +35,8 @@ import { PoolListComponent } from './pool-list/pool-list.component';
   ],
   imports: [
     CommonModule,
-    TabsModule.forRoot(),
     SharedModule,
+    NgbNavModule,
     RouterModule,
     FormsModule,
     ReactiveFormsModule,

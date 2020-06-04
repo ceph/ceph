@@ -1,108 +1,117 @@
-<tabset *ngIf="selection">
-  <tab i18n-heading
-       heading="Details">
-    <table class="table table-striped table-bordered">
-      <tbody>
-        <tr>
-          <td i18n
-              class="bold w-25">Name</td>
-          <td class="w-75">{{ selection.name }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Description</td>
-          <td>{{ selection.desc }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Long description</td>
-          <td>{{ selection.long_desc }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Current values</td>
-          <td>
-            <span *ngFor="let conf of selection.value; last as isLast">
-              {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br />
-            </span>
-          </td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Default</td>
-          <td>{{ selection.default }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Daemon default</td>
-          <td>{{ selection.daemon_default }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Type</td>
-          <td>{{ selection.type }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Min</td>
-          <td>{{ selection.min }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Max</td>
-          <td>{{ selection.max }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Flags</td>
-          <td>
-            <span *ngFor="let flag of selection.flags">
-              <span title="{{ flags[flag] }}">
-                <span class="badge badge-dark mr-2">{{ flag | uppercase }}</span>
-              </span>
-            </span>
-          </td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Services</td>
-          <td>
-            <span *ngFor="let service of selection.services">
-              <span class="badge badge-dark mr-2">{{ service }}</span>
-            </span>
-          </td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Source</td>
-          <td>{{ selection.source }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Level</td>
-          <td>{{ selection.level }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Can be updated at runtime (editable)</td>
-          <td>{{ selection.can_update_at_runtime | booleanText }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Tags</td>
-          <td>{{ selection.tags }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Enum values</td>
-          <td>{{ selection.enum_values }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">See also</td>
-          <td>{{ selection.see_also }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </tab>
-</tabset>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold w-25">Name</td>
+              <td class="w-75">{{ selection.name }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Description</td>
+              <td>{{ selection.desc }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Long description</td>
+              <td>{{ selection.long_desc }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Current values</td>
+              <td>
+                <span *ngFor="let conf of selection.value; last as isLast">
+                  {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br />
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Default</td>
+              <td>{{ selection.default }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Daemon default</td>
+              <td>{{ selection.daemon_default }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Type</td>
+              <td>{{ selection.type }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Min</td>
+              <td>{{ selection.min }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Max</td>
+              <td>{{ selection.max }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Flags</td>
+              <td>
+                <span *ngFor="let flag of selection.flags">
+                  <span title="{{ flags[flag] }}">
+                    <span class="badge badge-dark mr-2">{{ flag | uppercase }}</span>
+                  </span>
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Services</td>
+              <td>
+                <span *ngFor="let service of selection.services">
+                  <span class="badge badge-dark mr-2">{{ service }}</span>
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Source</td>
+              <td>{{ selection.source }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Level</td>
+              <td>{{ selection.level }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Can be updated at runtime (editable)</td>
+              <td>{{ selection.can_update_at_runtime | booleanText }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Tags</td>
+              <td>{{ selection.tags }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Enum values</td>
+              <td>{{ selection.enum_values }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">See also</td>
+              <td>{{ selection.see_also }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

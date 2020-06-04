@@ -2,8 +2,8 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { AppRoutingModule } from '../../../app-routing.module';
 import { SharedModule } from '../../../shared/shared.module';
@@ -17,7 +17,7 @@ import { MgrModuleListComponent } from './mgr-module-list/mgr-module-list.compon
     CommonModule,
     ReactiveFormsModule,
     SharedModule,
-    TabsModule.forRoot(),
+    NgbNavModule,
     NgBootstrapFormValidationModule
   ],
   declarations: [MgrModuleListComponent, MgrModuleFormComponent, MgrModuleDetailsComponent]

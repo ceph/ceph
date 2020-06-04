@@ -246,29 +246,37 @@
               <span class="form-text text-muted"
                     id="ecp-info-block"
                     *ngIf="data.erasureInfo && form.getValue('erasureProfile')">
-                <tabset #ecpInfoTabs>
-                  <tab i18n-heading
-                       heading="Profile"
-                       class="ecp-info">
-                    <cd-table-key-value [renderObjects]="true"
-                                        [hideKeys]="['name']"
-                                        [data]="form.getValue('erasureProfile')"
-                                        [autoReload]="false">
-                    </cd-table-key-value>
-                  </tab>
-                  <tab i18n-heading
-                       heading="Used by pools"
-                       class="used-by-pools">
-                    <ng-template #ecpIsNotUsed>
-                      <span i18n>Profile is not in use.</span>
+                <ul ngbNav
+                    #ecpInfoTabs="ngbNav"
+                    class="nav-tabs">
+                  <li ngbNavItem="ecp-info">
+                    <a ngbNavLink
+                       i18n>Profile</a>
+                    <ng-template ngbNavContent>
+                      <cd-table-key-value [renderObjects]="true"
+                                          [hideKeys]="['name']"
+                                          [data]="form.getValue('erasureProfile')"
+                                          [autoReload]="false">
+                      </cd-table-key-value>
                     </ng-template>
-                    <ul *ngIf="ecpUsage; else ecpIsNotUsed">
-                      <li *ngFor="let pool of ecpUsage">
-                        {{ pool }}
-                      </li>
-                    </ul>
-                  </tab>
-                </tabset>
+                  </li>
+                  <li ngbNavItem="used-by-pools">
+                    <a ngbNavLink
+                       i18n>Used by pools</a>
+                    <ng-template ngbNavContent>
+                      <ng-template #ecpIsNotUsed>
+                        <span i18n>Profile is not in use.</span>
+                      </ng-template>
+                      <ul *ngIf="ecpUsage; else ecpIsNotUsed">
+                        <li *ngFor="let pool of ecpUsage">
+                          {{ pool }}
+                        </li>
+                      </ul>
+                    </ng-template>
+                  </li>
+                </ul>
+
+                <div [ngbNavOutlet]="ecpInfoTabs"></div>
               </span>
             </div>
           </div>
@@ -337,42 +345,54 @@
                     </button>
                   </span>
                 </div>
-                <span class="form-text text-muted"
-                      id="crush-info-block"
-                      *ngIf="data.crushInfo && form.getValue('crushRule')">
-                  <tabset #crushInfoTabs>
-                    <tab i18n-heading
-                         heading="Crush rule"
-                         class="crush-rule-info">
-                      <cd-table-key-value [renderObjects]="false"
-                                          [hideKeys]="['steps', 'ruleset', 'type', 'rule_name']"
-                                          [data]="form.getValue('crushRule')"
-                                          [autoReload]="false">
-                      </cd-table-key-value>
-                    </tab>
-                    <tab i18n-heading
-                         heading="Crush steps"
-                         class="crush-rule-steps">
-                      <ol>
-                        <li *ngFor="let step of form.get('crushRule').value.steps">
-                          {{ describeCrushStep(step) }}
-                        </li>
-                      </ol>
-                    </tab>
-                    <tab i18n-heading
-                         heading="Used by pools"
-                         class="used-by-pools">
-                      <ng-template #ruleIsNotUsed>
-                        <span i18n>Rule is not in use.</span>
+
+                <div class="form-text text-muted"
+                     id="crush-info-block"
+                     *ngIf="data.crushInfo && form.getValue('crushRule')">
+                  <ul ngbNav
+                      #crushInfoTabs="ngbNav"
+                      class="nav-tabs">
+                    <li ngbNavItem="crush-rule-info">
+                      <a ngbNavLink
+                         i18n>Crush rule</a>
+                      <ng-template ngbNavContent>
+                        <cd-table-key-value [renderObjects]="false"
+                                            [hideKeys]="['steps', 'ruleset', 'type', 'rule_name']"
+                                            [data]="form.getValue('crushRule')"
+                                            [autoReload]="false">
+                        </cd-table-key-value>
                       </ng-template>
-                      <ul *ngIf="crushUsage; else ruleIsNotUsed">
-                        <li *ngFor="let pool of crushUsage">
-                          {{ pool }}
-                        </li>
-                      </ul>
-                    </tab>
-                  </tabset>
-                </span>
+                    </li>
+                    <li ngbNavItem="crush-rule-steps">
+                      <a ngbNavLink
+                         i18n>Crush steps</a>
+                      <ng-template ngbNavContent>
+                        <ol>
+                          <li *ngFor="let step of form.get('crushRule').value.steps">
+                            {{ describeCrushStep(step) }}
+                          </li>
+                        </ol>
+                      </ng-template>
+                    </li>
+                    <li ngbNavItem="used-by-pools">
+                      <a ngbNavLink
+                         i18n>Used by pools</a>
+                      <ng-template ngbNavContent>
+
+                        <ng-template #ruleIsNotUsed>
+                          <span i18n>Rule is not in use.</span>
+                        </ng-template>
+                        <ul *ngIf="crushUsage; else ruleIsNotUsed">
+                          <li *ngFor="let pool of crushUsage">
+                            {{ pool }}
+                          </li>
+                        </ul>
+                      </ng-template>
+                    </li>
+                  </ul>
+
+                  <div [ngbNavOutlet]="crushInfoTabs"></div>
+                </div>
                 <span class="invalid-feedback"
                       *ngIf="form.showError('crushRule', formDir, 'required')"
                       i18n>This field is required!</span>
