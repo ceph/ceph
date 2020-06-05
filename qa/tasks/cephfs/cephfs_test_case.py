@@ -7,6 +7,7 @@ import re
 
 from tasks.cephfs.fuse_mount import FuseMount
 
+from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.contextutil import safe_while
@@ -287,22 +288,41 @@ class CephFSTestCase(CephTestCase):
         else:
             log.info("No core_pattern directory set, nothing to clear (internal.coredump not enabled?)")
 
-    def _wait_subtrees(self, status, rank, test):
-        timeout = 30
-        pause = 2
+    def _get_subtrees(self, status=None, rank=None):
+        try:
+            with contextutil.safe_while(sleep=1, tries=3) as proceed:
+                while proceed():
+                    try:
+                        subtrees = self.fs.rank_asok(["get", "subtrees"], status=status, rank=rank)
+                        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+                        return list(subtrees)
+                    except CommandFailedError as e:
+                        # Sometimes we get transient errors
+                        if e.exitstatus == 22:
+                            pass
+                        else:
+                            raise
+        except contextutil.MaxWhileTries as e:
+            raise RuntimeError(f"could not get subtree state from rank {rank}") from e
+
+    def _wait_subtrees(self, test, status=None, rank=None, timeout=30, sleep=2, action=None):
         test = sorted(test)
-        for i in range(timeout // pause):
-            subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
-            subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
-            filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])
-            log.info("%s =?= %s", filtered, test)
-            if filtered == test:
-                # Confirm export_pin in output is correct:
-                for s in subtrees:
-                    self.assertTrue(s['export_pin'] == s['auth_first'])
-                return subtrees
-            time.sleep(pause)
-        raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank))
+        try:
+            with contextutil.safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
+                while proceed():
+                    subtrees = self._get_subtrees(status=status, rank=rank)
+                    filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])
+                    log.info("%s =?= %s", filtered, test)
+                    if filtered == test:
+                        # Confirm export_pin in output is correct:
+                        for s in subtrees:
+                            if s['export_pin'] >= 0:
+                                self.assertTrue(s['export_pin'] == s['auth_first'])
+                        return subtrees
+                    if action is not None:
+                        action()
+        except contextutil.MaxWhileTries as e:
+            raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
 
     def _wait_until_scrub_complete(self, path="/", recursive=True):
         out_json = self.fs.rank_tell(["scrub", "start", path] + ["recursive"] if recursive else [])
@@ -311,4 +331,3 @@ class CephFSTestCase(CephTestCase):
                 out_json = self.fs.rank_tell(["scrub", "status"])
                 if out_json['status'] == "no active scrubs running":
                     break;
-

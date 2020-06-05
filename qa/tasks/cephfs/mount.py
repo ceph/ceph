@@ -10,7 +10,7 @@ import os
 import re
 from IPy import IP
 from teuthology.orchestra import run
-from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
+from teuthology.orchestra.run import CommandFailedError, ConnectionLostError, Raw
 from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
@@ -512,6 +512,9 @@ class CephFSMount(object):
         return self.client_remote.run(args=args, stdin=stdin, wait=wait,
                                       stdout=StringIO(), stderr=StringIO(),
                                       cwd=cwd, check_status=check_status)
+
+    def run_shell_payload(self, payload, **kwargs):
+        return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
 
     def run_as_user(self, **kwargs):
         """
