@@ -1283,14 +1283,16 @@ CDir *MDCache::get_projected_subtree_root(CDir *dir)
 void MDCache::remove_subtree(CDir *dir)
 {
   dout(10) << "remove_subtree " << *dir << dendl;
-  ceph_assert(subtrees.count(dir));
-  ceph_assert(subtrees[dir].empty());
-  subtrees.erase(dir);
+  auto it = subtrees.find(dir);
+  ceph_assert(it != subtrees.end());
+  subtrees.erase(it);
   dir->put(CDir::PIN_SUBTREE);
   if (dir->get_parent_dir()) {
     CDir *p = get_subtree_root(dir->get_parent_dir());
-    ceph_assert(subtrees[p].count(dir));
-    subtrees[p].erase(dir);
+    auto it = subtrees.find(p);
+    ceph_assert(it != subtrees.end());
+    auto count = it->second.erase(dir);
+    ceph_assert(count == 1);
   }
 }
 
