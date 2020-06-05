@@ -9,7 +9,7 @@ from mgr_util import CephfsClient
 from .fs_util import listdir
 
 from .operations.volume import create_volume, \
-    delete_volume, list_volumes, open_volume
+    delete_volume, list_volumes, open_volume, get_pool_names
 from .operations.group import open_group, create_group, remove_group
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
@@ -98,9 +98,12 @@ class VolumeClient(CephfsClient):
                 "that is what you want, re-issue the command followed by " \
                 "--yes-i-really-mean-it.".format(volname)
 
+        metadata_pool, data_pools = get_pool_names(self.mgr, volname)
+        if not metadata_pool:
+            return -errno.ENOENT, "", "volume {0} doesn't exist".format(volname)
         self.purge_queue.cancel_jobs(volname)
         self.connection_pool.del_fs_handle(volname, wait=True)
-        return delete_volume(self.mgr, volname)
+        return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
         if self.stopping.is_set():
