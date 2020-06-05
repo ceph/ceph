@@ -138,5 +138,8 @@ Adoption process
      # systemctl stop ceph-rgw.target
      # rm -rf /var/lib/ceph/radosgw/ceph-*
 
+   For adopting single-site systems without a realm, see also
+   :ref:`rgw-multisite-migrate-from-single-site`.
+
 #. Check the ``ceph health detail`` output for cephadm warnings about
    stray cluster daemons or hosts that are not yet managed.
