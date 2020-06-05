@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <array>
+#include <string>
 
 #include "rgw_common.h"
 #include "rgw_auth.h"
@@ -346,15 +347,7 @@ void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
 string rgw::auth::WebIdentityApplier::get_idp_url() const
 {
   string idp_url = token_claims.iss;
-  auto pos = idp_url.find("http://");
-  if (pos == std::string::npos) {
-      pos = idp_url.find("https://");
-      if (pos != std::string::npos) {
-        idp_url.erase(pos, 8);
-    }
-  } else {
-    idp_url.erase(pos, 7);
-  }
+  idp_url = url_remove_prefix(idp_url);
   return idp_url;
 }
 
@@ -363,10 +356,16 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
   s->info.args.append("sub", token_claims.sub);
   s->info.args.append("aud", token_claims.aud);
   s->info.args.append("provider_id", token_claims.iss);
+  s->info.args.append("client_id", token_claims.client_id);
 
   string idp_url = get_idp_url();
   string condition = idp_url + ":app_id";
+
   s->env.emplace(condition, token_claims.aud);
+
+  condition.clear();
+  condition = idp_url + ":sub";
+  s->env.emplace(condition, token_claims.sub);
 }
 
 bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
@@ -664,26 +663,35 @@ void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWU
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
-  out << "rgw::auth::LocalApplier(role name =" << role_name;
-  for (auto policy : role_policies) {
+  out << "rgw::auth::LocalApplier(role name =" << role.name;
+  for (auto& policy: role.role_policies) {
     out << ", role policy =" << policy;
   }
+  out << ", token policy =" << token_policy;
   out << ")";
 }
 
 bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
   for (auto& p : ids) {
-    string name;
-    string tenant = p.get_tenant();
-    if (tenant.empty()) {
-      name = p.get_id();
-    } else {
-      name = tenant + "$" + p.get_id();
-    }
     if (p.is_wildcard()) {
       return true;
-    } else if (p.is_role() && name == role_name) {
-      return true;
+    } else if (p.is_role()) {
+      string name = p.get_id();
+      string tenant = p.get_tenant();
+      if (name == role.name && tenant == role.tenant) {
+        return true;
+      }
+    } else if (p.is_assumed_role()) {
+      string tenant = p.get_tenant();
+      string role_session = role.name + "/" + role_session_name; //role/role-session
+      if (role.tenant == tenant && role_session == p.get_role_session()) {
+        return true;
+      }
+    } else {
+      string id = p.get_id();
+      if (user_id.id == id) {
+        return true;
+      }
     }
   }
   return false;
@@ -693,21 +701,38 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
 {
   /* Load the user id */
   user_info.user_id = this->user_id;
+
+  user_info.user_id.tenant = role.tenant;
 }
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
-  for (auto it : role_policies) {
+  for (auto it: role.role_policies) {
     try {
       bufferlist bl = bufferlist::static_from_string(it);
-      const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
+      const rgw::IAM::Policy p(s->cct, role.tenant, bl);
       s->iam_user_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
       //verified earlier
-      ldpp_dout(dpp, 20) << "failed to parse policy: " << e.what() << dendl;
+      ldpp_dout(dpp, 20) << "failed to parse role policy: " << e.what() << dendl;
     }
   }
+
+  try {
+    string policy = this->token_policy;
+    bufferlist bl = bufferlist::static_from_string(policy);
+    const rgw::IAM::Policy p(s->cct, role.tenant, bl);
+    s->iam_user_policies.push_back(std::move(p));
+  } catch (rgw::IAM::PolicyParseException& e) {
+    //Control shouldn't reach here as the policy has already been
+    //verified earlier
+    ldpp_dout(dpp, 20) << "failed to parse token policy: " << e.what() << dendl;
+  }
+
+  string condition = "aws:userid";
+  string value = role.id + ":" + role_session_name;
+  s->env.emplace(condition, value);
 }
 
 rgw::auth::Engine::result_t
