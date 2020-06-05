@@ -39,8 +39,8 @@ public:
 private:
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				Ref<Message> m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
-  seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) final;
+  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
+  void ms_handle_connect(crimson::net::ConnectionRef conn) final;
   seastar::future<> handle_mgr_map(crimson::net::Connection* conn,
 				   Ref<MMgrMap> m);
   seastar::future<> handle_mgr_conf(crimson::net::Connection* conn,
@@ -48,13 +48,20 @@ private:
   seastar::future<> reconnect();
   void report();
 
+  void print(std::ostream&) const;
+  friend std::ostream& operator<<(std::ostream& out, const Client& client);
 private:
   MgrMap mgrmap;
   crimson::net::Messenger& msgr;
   WithStats& with_stats;
   crimson::net::ConnectionRef conn;
   seastar::timer<seastar::lowres_clock> report_timer;
-  seastar::gate gate;
+  crimson::common::Gated gate;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Client& client) {
+  client.print(out);
+  return out;
+}
 
 }

@@ -62,6 +62,13 @@ public:
   void on_peering_interval_change(ceph::os::Transaction& t) {
     clean_up(t, "new peering interval");
   }
+
+  seastar::future<> stop() {
+    for (auto& [soid, recovery_waiter] : recovering) {
+      recovery_waiter.stop();
+    }
+    return on_stop();
+  }
 protected:
   crimson::osd::PG& pg;
   crimson::osd::ShardServices& shard_services;
@@ -135,6 +142,7 @@ protected:
 	      std::make_error_code(std::errc::interrupted), why));
       }
     }
+    void stop();
     void dump_detail(Formatter* f) const {
     }
   };
@@ -152,4 +160,5 @@ protected:
     temp_contents.erase(oid);
   }
   void clean_up(ceph::os::Transaction& t, const std::string& why);
+  virtual seastar::future<> on_stop() = 0;
 };

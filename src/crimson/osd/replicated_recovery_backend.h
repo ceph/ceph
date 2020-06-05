@@ -105,4 +105,7 @@ protected:
     const hobject_t& soid,
     eversion_t need,
     epoch_t epoch_frozen);
+  seastar::future<> on_stop() final {
+    return seastar::now();
+  }
 };

@@ -6,6 +6,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_future.hh>
 
+#include "crimson/common/gated.h"
 #include "crimson/common/log.h"
 #include "Fwd.h"
 #include "SocketConnection.h"
@@ -46,9 +47,10 @@ class Protocol {
   virtual void start_accept(SocketRef&& socket,
                             const entity_addr_t& peer_addr) = 0;
 
+  virtual void print(std::ostream&) const = 0;
  protected:
   Protocol(proto_t type,
-           Dispatcher& dispatcher,
+           ChainedDispatchersRef& dispatcher,
            SocketConnection& conn);
 
   virtual void trigger_close() = 0;
@@ -67,17 +69,7 @@ class Protocol {
   SocketRef socket;
 
  protected:
-  template <typename Func>
-  void gated_dispatch(const char* what, Func&& func) {
-    (void) seastar::with_gate(pending_dispatch, std::forward<Func>(func)
-    ).handle_exception([this, what] (std::exception_ptr eptr) {
-      crimson::get_logger(ceph_subsys_ms).error(
-          "{} gated_dispatch() {} caught exception: {}", conn, what, eptr);
-      ceph_abort("unexpected exception from gated_dispatch()");
-    });
-  }
-
-  Dispatcher &dispatcher;
+  ChainedDispatchersRef dispatcher;
   SocketConnection &conn;
 
   AuthConnectionMetaRef auth_meta;
@@ -86,7 +78,6 @@ class Protocol {
   bool closed = false;
   // become valid only after closed == true
   seastar::shared_future<> close_ready;
-  seastar::gate pending_dispatch;
 
 // the write state-machine
  public:
@@ -150,6 +141,7 @@ class Protocol {
   }
 
   void ack_writes(seq_num_t seq);
+  crimson::common::Gated gate;
 
  private:
   write_state_t write_state = write_state_t::none;
@@ -169,5 +161,11 @@ class Protocol {
   seastar::future<> do_write_dispatch_sweep();
   void write_event();
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Protocol& proto) {
+  proto.print(out);
+  return out;
+}
+
 
 } // namespace crimson::net

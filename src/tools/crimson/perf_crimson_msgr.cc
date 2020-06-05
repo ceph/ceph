@@ -181,7 +181,9 @@ static seastar::future<> run(
             msgr->set_crc_data();
           }
           return msgr->bind(entity_addrvec_t{addr}).then([this] {
-            return msgr->start(this);
+	    auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
+	    chained_dispatchers->push_back(*this);
+            return msgr->start(chained_dispatchers);
           });
         });
       }
@@ -297,9 +299,8 @@ static seastar::future<> run(
         return nr_depth - depth.current();
       }
 
-      seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) override {
+      void ms_handle_connect(crimson::net::ConnectionRef conn) override {
         conn_stats.connected_time = mono_clock::now();
-        return seastar::now();
       }
       seastar::future<> ms_dispatch(crimson::net::Connection* c,
                                     MessageRef m) override {
@@ -331,7 +332,9 @@ static seastar::future<> run(
       }
 
       seastar::future<> init(bool v1_crc_enabled) {
-        return container().invoke_on_all([v1_crc_enabled] (auto& client) {
+	auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
+	chained_dispatchers->push_back(*this);
+        return container().invoke_on_all([v1_crc_enabled, chained_dispatchers] (auto& client) mutable {
           if (client.is_active()) {
             client.msgr = crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid);
             client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
@@ -342,7 +345,7 @@ static seastar::future<> run(
               client.msgr->set_crc_header();
               client.msgr->set_crc_data();
             }
-            return client.msgr->start(&client);
+            return client.msgr->start(chained_dispatchers);
           }
           return seastar::now();
         });

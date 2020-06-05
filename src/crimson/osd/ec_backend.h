@@ -17,6 +17,9 @@ public:
 	    crimson::osd::ShardServices& shard_services,
 	    const ec_profile_t& ec_profile,
 	    uint64_t stripe_width);
+  seastar::future<> stop() final {
+    return seastar::now();
+  }
 private:
   ll_read_errorator::future<ceph::bufferlist> _read(const hobject_t& hoid,
                                                     uint64_t off,

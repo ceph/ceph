@@ -54,8 +54,14 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
                          SocketPolicy::stateless_server(0));
   back_msgr->set_policy(entity_name_t::TYPE_OSD,
                         SocketPolicy::stateless_server(0));
-  return seastar::when_all_succeed(start_messenger(*front_msgr, front_addrs),
-                                   start_messenger(*back_msgr, back_addrs))
+  auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
+  chained_dispatchers->push_back(*this);
+  return seastar::when_all_succeed(start_messenger(*front_msgr,
+						   front_addrs,
+						   chained_dispatchers),
+                                   start_messenger(*back_msgr,
+						   back_addrs,
+						   chained_dispatchers))
     .then([this] {
       timer.arm_periodic(
         std::chrono::seconds(local_conf()->osd_heartbeat_interval));
@@ -64,19 +70,29 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
 
 seastar::future<>
 Heartbeat::start_messenger(crimson::net::Messenger& msgr,
-                           const entity_addrvec_t& addrs)
+                           const entity_addrvec_t& addrs,
+			   ChainedDispatchersRef chained_dispatchers)
 {
   return msgr.try_bind(addrs,
                        local_conf()->ms_bind_port_min,
-                       local_conf()->ms_bind_port_max).then([&msgr, this] {
-    return msgr.start(this);
+                       local_conf()->ms_bind_port_max)
+  .then([&msgr, chained_dispatchers]() mutable {
+    return msgr.start(chained_dispatchers);
   });
 }
 
 seastar::future<> Heartbeat::stop()
 {
-  return seastar::when_all_succeed(front_msgr->shutdown(),
-                                   back_msgr->shutdown());
+  logger().info("{}", __func__);
+  timer.cancel();
+  if (!front_msgr->dispatcher_chain_empty())
+    front_msgr->remove_dispatcher(*this);
+  if (!back_msgr->dispatcher_chain_empty())
+    back_msgr->remove_dispatcher(*this);
+  return gate.close().then([this] {
+    return seastar::when_all_succeed(front_msgr->shutdown(),
+				     back_msgr->shutdown());
+  });
 }
 
 const entity_addrvec_t& Heartbeat::get_front_addrs() const
@@ -187,15 +203,17 @@ void Heartbeat::remove_peer(osd_id_t peer)
 seastar::future<> Heartbeat::ms_dispatch(crimson::net::Connection* conn,
                                          MessageRef m)
 {
-  switch (m->get_type()) {
-  case MSG_OSD_PING:
-    return handle_osd_ping(conn, boost::static_pointer_cast<MOSDPing>(m));
-  default:
-    return seastar::now();
-  }
+  return gate.dispatch(__func__, *this, [this, conn, &m] {
+    switch (m->get_type()) {
+    case MSG_OSD_PING:
+      return handle_osd_ping(conn, boost::static_pointer_cast<MOSDPing>(m));
+    default:
+      return seastar::now();
+    }
+  });
 }
 
-seastar::future<> Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
+void Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
   auto found = std::find_if(peers.begin(), peers.end(),
                             [conn](const peers_map_t::value_type& peer) {
@@ -203,13 +221,12 @@ seastar::future<> Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, b
                                       peer.second.con_back == conn);
                             });
   if (found == peers.end()) {
-    return seastar::now();
+    return;
   }
   const auto peer = found->first;
   const auto epoch = found->second.epoch;
   remove_peer(peer);
   add_peer(peer, epoch);
-  return seastar::now();
 }
 
 seastar::future<> Heartbeat::handle_osd_ping(crimson::net::Connection* conn,
@@ -427,4 +444,9 @@ bool Heartbeat::PeerInfo::is_healthy(clock::time_point now) const
   // only declare to be healthy until we have received the first
   // replies from both front/back connections
   return !is_unhealthy(now);
+}
+
+void Heartbeat::print(std::ostream& out) const
+{
+  out << "heartbeat";
 }

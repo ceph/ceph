@@ -12,13 +12,14 @@
 
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/auth_handler.h"
+#include "crimson/common/gated.h"
+#include "crimson/net/chained_dispatchers.h"
 #include "crimson/admin/admin_socket.h"
 #include "crimson/admin/osd_admin.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
 #include "crimson/net/Dispatcher.h"
-#include "crimson/osd/chained_dispatchers.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/state.h"
 #include "crimson/osd/shard_services.h"
@@ -63,7 +64,6 @@ class OSD final : public crimson::net::Dispatcher,
 		  private OSDMapService,
 		  private crimson::common::AuthHandler,
 		  private crimson::mgr::WithStats {
-  seastar::gate gate;
   const int whoami;
   const uint32_t nonce;
   seastar::timer<seastar::lowres_clock> beacon_timer;
@@ -71,7 +71,6 @@ class OSD final : public crimson::net::Dispatcher,
   crimson::net::MessengerRef cluster_msgr;
   // talk with client/mon/mgr
   crimson::net::MessengerRef public_msgr;
-  ChainedDispatchers dispatchers;
   std::unique_ptr<crimson::mon::Client> monc;
   std::unique_ptr<crimson::mgr::Client> mgrc;
 
@@ -99,9 +98,8 @@ class OSD final : public crimson::net::Dispatcher,
 
   // Dispatcher methods
   seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m) final;
-  seastar::future<> ms_handle_connect(crimson::net::ConnectionRef conn) final;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
-  seastar::future<> ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
+  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
+  void ms_handle_remote_reset(crimson::net::ConnectionRef conn) final;
 
   // mgr::WithStats methods
   MessageRef get_stats() final;
@@ -133,6 +131,7 @@ public:
 
   void dump_status(Formatter*) const;
 
+  void print(std::ostream&) const;
 private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
@@ -205,7 +204,7 @@ public:
 
 private:
   PGMap pg_map;
-
+  crimson::common::Gated gate;
 public:
   blocking_future<Ref<PG>> get_or_create_pg(
     spg_t pgid,
@@ -223,5 +222,10 @@ public:
 
   friend class PGAdvanceMap;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {
+  osd.print(out);
+  return out;
+}
 
 }
