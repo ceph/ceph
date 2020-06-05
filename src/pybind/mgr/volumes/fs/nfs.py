@@ -560,6 +560,19 @@ class FSExport(object):
 
         return 0, json.dumps(result, indent=2), ''
 
+    def get_export(self, cluster_id, pseudo_path):
+        if not f"ganesha-{cluster_id}" in available_clusters(self.mgr):
+            return -errno.ENOENT, "", f"NFS cluster '{cluster_id}' not found"
+        export_dict = {}
+        for export in self.exports[cluster_id]:
+            if export.pseudo == pseudo_path:
+                export_dict = export.to_dict()
+                break
+        if not export_dict:
+            return (-errno.ENOENT, "",
+                    f"export with pseudo path '{pseudo_path}' not found in NFS cluster '{cluster_id}'")
+        return 0, json.dumps(export_dict, indent=2), ''
+
     def make_rados_url(self, obj):
         if self.rados_namespace:
             return "rados://{}/{}/{}".format(self.rados_pool, self.rados_namespace, obj)
