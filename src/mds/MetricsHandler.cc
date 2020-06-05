@@ -123,6 +123,7 @@ void MetricsHandler::remove_session(Session *session) {
   metrics.read_latency_metric = { };
   metrics.write_latency_metric = { };
   metrics.metadata_latency_metric = { };
+  metrics.dentry_lease_metric = { };
   metrics.update_type = UPDATE_TYPE_REMOVE;
 }
 
@@ -201,6 +202,23 @@ void MetricsHandler::handle_payload(Session *session, const MetadataLatencyPaylo
   metrics.update_type = UPDATE_TYPE_REFRESH;
   metrics.metadata_latency_metric.lat = payload.lat;
   metrics.metadata_latency_metric.updated = true;
+}
+
+void MetricsHandler::handle_payload(Session *session, const DentryLeasePayload &payload) {
+  dout(20) << ": type=" << static_cast<ClientMetricType>(DentryLeasePayload::METRIC_TYPE)
+	   << ", session=" << session << ", hits=" << payload.dlease_hits << ", misses="
+	   << payload.dlease_misses << dendl;
+
+  auto it = client_metrics_map.find(session->info.inst);
+  if (it == client_metrics_map.end()) {
+    return;
+  }
+
+  auto &metrics = it->second.second;
+  metrics.update_type = UPDATE_TYPE_REFRESH;
+  metrics.dentry_lease_metric.hits = payload.dlease_hits;
+  metrics.dentry_lease_metric.misses = payload.dlease_misses;
+  metrics.dentry_lease_metric.updated = true;
 }
 
 void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payload) {

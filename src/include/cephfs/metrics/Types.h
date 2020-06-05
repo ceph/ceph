@@ -21,6 +21,7 @@ enum ClientMetricType {
   CLIENT_METRIC_TYPE_READ_LATENCY,
   CLIENT_METRIC_TYPE_WRITE_LATENCY,
   CLIENT_METRIC_TYPE_METADATA_LATENCY,
+  CLIENT_METRIC_TYPE_DENTRY_LEASE,
 };
 inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) {
   switch(type) {
@@ -35,6 +36,9 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     break;
   case ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY:
     os << "METADATA_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE:
+    os << "DENTRY_LEASE";
     break;
   default:
     ceph_abort();
@@ -185,6 +189,49 @@ struct MetadataLatencyPayload {
   }
 };
 
+struct DentryLeasePayload {
+  static const ClientMetricType METRIC_TYPE = ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE;
+
+  uint64_t dlease_hits = 0;
+  uint64_t dlease_misses = 0;
+  uint64_t nr_dentries = 0;
+
+  DentryLeasePayload() { }
+  DentryLeasePayload(uint64_t dlease_hits, uint64_t dlease_misses, uint64_t nr_dentries)
+    : dlease_hits(dlease_hits), dlease_misses(dlease_misses), nr_dentries(nr_dentries) {
+  }
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(dlease_hits, bl);
+    encode(dlease_misses, bl);
+    encode(nr_dentries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter);
+    decode(dlease_hits, iter);
+    decode(dlease_misses, iter);
+    decode(nr_dentries, iter);
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_int("dlease_hits", dlease_hits);
+    f->dump_int("dlease_misses", dlease_misses);
+    f->dump_int("num_dentries", nr_dentries);
+  }
+
+  void print(ostream *out) const {
+    *out << "dlease_hits: " << dlease_hits << " "
+	 << "dlease_misses: " << dlease_misses << " "
+	 << "num_dentries: " << nr_dentries;
+  }
+};
+
 struct UnknownPayload {
   static const ClientMetricType METRIC_TYPE = static_cast<ClientMetricType>(-1);
 
@@ -207,6 +254,7 @@ typedef boost::variant<CapInfoPayload,
                        ReadLatencyPayload,
                        WriteLatencyPayload,
                        MetadataLatencyPayload,
+		       DentryLeasePayload,
                        UnknownPayload> ClientMetricPayload;
 
 // metric update message sent by clients
@@ -302,6 +350,9 @@ public:
       break;
     case ClientMetricType::CLIENT_METRIC_TYPE_METADATA_LATENCY:
       payload = MetadataLatencyPayload();
+      break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_DENTRY_LEASE:
+      payload = DentryLeasePayload();
       break;
     default:
       payload = UnknownPayload();

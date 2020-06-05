@@ -132,6 +132,12 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
         c->second = metrics.metadata_latency_metric.lat.tv.tv_nsec;
       }
       break;
+    case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
+      if (metrics.dentry_lease_metric.updated) {
+        c->first = metrics.dentry_lease_metric.hits;
+        c->second = metrics.dentry_lease_metric.misses;
+      }
+      break;
     default:
       ceph_abort_msg("unknown counter type");
     }
