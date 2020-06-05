@@ -818,7 +818,8 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = ServiceSpec(
-            'mds', fs_name,
+            service_type='mds',
+            service_id=fs_name,
             placement=PlacementSpec.from_string(placement),
         )
 
@@ -878,7 +879,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NFSServiceSpec(
-            svc_id,
+            service_id=svc_id,
             pool=pool,
             namespace=namespace,
             placement=PlacementSpec.from_string(placement),
@@ -1023,7 +1024,8 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = ServiceSpec(
-            'mds', fs_name,
+            service_type='mds',
+            service_id=fs_name,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged)
 
@@ -1088,7 +1090,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = NFSServiceSpec(
-            svc_id,
+            service_id=svc_id,
             pool=pool,
             namespace=namespace,
             placement=PlacementSpec.from_string(placement),
