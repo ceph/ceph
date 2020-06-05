@@ -364,20 +364,33 @@ double cond_ping_pong()
 // probably pick worse values.
 double div32()
 {
-#if defined(__i386__) || defined(__x86_64__)
+#if defined(__i386__) || defined(__86_64__) || defined(__aarch64__) // || defined(__arm__)
   int count = 1000000;
-  uint64_t start = Cycles::rdtsc();
-  // NB: Expect an x86 processor exception is there's overflow.
-  uint32_t numeratorHi = 0xa5a5a5a5U;
   uint32_t numeratorLo = 0x55aa55aaU;
   uint32_t divisor = 0xaa55aa55U;
   uint32_t quotient;
+#endif
+
+#if defined(__i386__) || defined(__x86_64__)
+  uint32_t numeratorHi = 0xa5a5a5a5U;
   uint32_t remainder;
+  uint64_t start = Cycles::rdtsc();
+  // NB: Expect an x86 processor exception is there's overflow.
   for (int i = 0; i < count; i++) {
     __asm__ __volatile__("div %4" :
                          "=a"(quotient), "=d"(remainder) :
                          "a"(numeratorLo), "d"(numeratorHi), "r"(divisor) :
                          "cc");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__) // || defined(__arm__)
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    __asm__ __volatile__("udiv %[q], %[n], %[d]" : 
+                          [q]"=r"(quotient) : 
+                          [n]"r"(numeratorLo), [d]"r"(divisor) :
+                          "cc");
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -392,15 +405,18 @@ double div32()
 // probably pick worse values.
 double div64()
 {
-#if defined(__x86_64__) || defined(__amd64__)
+#if defined(__x86_64__) || defined(__amd64__) || defined(__aarch64__) // || defined(__arm__)
   int count = 1000000;
-  // NB: Expect an x86 processor exception is there's overflow.
-  uint64_t start = Cycles::rdtsc();
-  uint64_t numeratorHi = 0x5a5a5a5a5a5UL;
   uint64_t numeratorLo = 0x55aa55aa55aa55aaUL;
   uint64_t divisor = 0xaa55aa55aa55aa55UL;
   uint64_t quotient;
-  uint64_t remainder;
+#endif
+
+#if defined(__x86_64__) || defined(__amd64__)
+  // NB: Expect an x86 processor exception is there's overflow.
+  uint64_t numeratorHi = 0x5a5a5a5a5a5UL;
+  uint64_t reminder;
+  uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     __asm__ __volatile__("divq %4" :
                          "=a"(quotient), "=d"(remainder) :
@@ -409,11 +425,20 @@ double div64()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__) // || defined(__arm__)
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    __asm__ __volatile__("udiv %[q], %[n], %[d]" : 
+                        [q]"=r"(quotient) : 
+                        [n]"r"(numeratorLo), [d]"r"(divisor) : 
+                        "cc");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
 #else
   return -1;
 #endif
 }
-
 // Measure the cost of calling a non-inlined function.
 double function_call()
 {
@@ -612,10 +637,20 @@ static inline void prefetch(const void *object, uint64_t num_bytes)
 }
 #endif
 
+#if defined(__aarch64__) // || defined(__arm__)
+static inline void prefetch(const void *object, uint64_t num_bytes) {
+  uint64_t offset = reinterpret_cast<uint64_t>(object) & 0x3fUL;
+  const char *p = reinterpret_cast<const char*>(object) - offset;
+  for (uint64_t i = 0; i < offset + num_bytes; i += 64) {
+    __asm__("PRFM PLDL1KEEP, [%x[v],%[c]]"::[v]"r"(p), [c]"r"(i));
+  }
+}
+#endif
+
 // Measure the cost of the prefetch instruction.
 double perf_prefetch()
 {
-#ifdef HAVE_SSE
+#if defined(HAVE_SSE) || defined(__aarch64__)
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
@@ -666,9 +701,16 @@ static inline void serialize() {
 }
 #endif
 
+
+#if defined(__aarch64__)
+static inline void serialize() {
+  __asm__ __volatile__("isb sy" ::: "memory");
+}
+#endif
+
 // Measure the cost of cpuid
 double perf_serialize() {
-#if defined(__x86_64__)
+#if defined(__x86_64__) || defined(__aarch64__)
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -705,6 +747,36 @@ double sfence()
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     __asm__ __volatile__("sfence" ::: "memory");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
+}
+
+// Measure the cost of a 'dmb st' instruction.
+double dmb() {
+#if defined(__arm__) || defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    __asm__ __volatile__("dmb st" ::: "memory");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
+}
+
+// Measure the cost of a 'dsb st' instruction
+double dsb() {
+#if defined(__arm__) || defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    __asm__ __volatile__("dsb st" ::: "memory");
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -950,6 +1022,10 @@ TestInfo tests[] = {
     "Lfence instruction"},
   {"sfence", sfence,
     "Sfence instruction"},
+  {"dmb", dmb,
+    "DMB instruction"},
+  {"dsb", dsb,
+    "DSB instruction"},
   {"spin_lock", test_spinlock,
     "Acquire/release SpinLock"},
   {"spawn_thread", spawn_thread,
