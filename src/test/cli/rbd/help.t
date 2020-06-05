@@ -602,7 +602,7 @@
     --snap arg               snapshot name
     --read-only              map read-only
     --exclusive              disable automatic exclusive lock transitions
-    --quiesce                use quiesce callbacks
+    --quiesce                use quiesce hooks
     --quiesce-hook arg       quiesce hook path
     -o [ --options ] arg     device specific options
   
@@ -1603,19 +1603,22 @@
   
   rbd help mirror image snapshot
   usage: rbd mirror image snapshot [--pool <pool>] [--namespace <namespace>] 
-                                   [--image <image>] 
+                                   [--image <image>] [--skip-quiesce] 
+                                   [--ignore-quiesce-error] 
                                    <image-spec> 
   
   Create RBD mirroring image snapshot.
   
   Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <image-spec>            image specification
+                            (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --image arg          image name
+    -p [ --pool ] arg       pool name
+    --namespace arg         namespace name
+    --image arg             image name
+    --skip-quiesce          do not run quiesce hooks
+    --ignore-quiesce-error  ignore quiesce hook error
   
   rbd help mirror image status
   usage: rbd mirror image status [--pool <pool>] [--namespace <namespace>] 
@@ -2102,21 +2105,26 @@
   
   rbd help snap create
   usage: rbd snap create [--pool <pool>] [--namespace <namespace>] 
-                         [--image <image>] [--snap <snap>] 
+                         [--image <image>] [--snap <snap>] [--skip-quiesce] 
+                         [--ignore-quiesce-error] [--no-progress] 
                          <snap-spec> 
   
   Create a snapshot.
   
   Positional arguments
-    <snap-spec>          snapshot specification
-                         (example:
-                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
+    <snap-spec>             snapshot specification
+                            (example:
+                            [<pool-name>/[<namespace>/]]<image-name>@<snapshot-nam
+                            e>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --image arg          image name
-    --snap arg           snapshot name
+    -p [ --pool ] arg       pool name
+    --namespace arg         namespace name
+    --image arg             image name
+    --snap arg              snapshot name
+    --skip-quiesce          do not run quiesce hooks
+    --ignore-quiesce-error  ignore quiesce hook error
+    --no-progress           disable progress output
   
   rbd help snap limit clear
   usage: rbd snap limit clear [--pool <pool>] [--namespace <namespace>] 

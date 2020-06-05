@@ -137,7 +137,7 @@ void get_map_arguments(po::options_description *positional,
   options->add_options()
     ("read-only", po::bool_switch(), "map read-only")
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions")
-    ("quiesce", po::bool_switch(), "use quiesce callbacks")
+    ("quiesce", po::bool_switch(), "use quiesce hooks")
     ("quiesce-hook", po::value<std::string>(), "quiesce hook path");
   add_device_specific_options(options);
 }
