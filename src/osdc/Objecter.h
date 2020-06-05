@@ -2372,7 +2372,12 @@ public:
     std::map<uint64_t,OSDBackoff*> backoffs_by_id;
 
     int osd;
-    ceph::shared_mutex lock;
+    // NB locking two sessions at the same time is only safe because
+    // it is only done in _recalc_linger_op_target with s and
+    // linger_op->session, and it holds rwlock for write.  We disable
+    // lockdep (using std::sharedMutex) because lockdep doesn't know
+    // that.
+    std::shared_mutex lock;
 
     int incarnation;
     ConnectionRef con;
@@ -2380,9 +2385,7 @@ public:
     std::unique_ptr<std::mutex[]> completion_locks;
 
     OSDSession(CephContext *cct, int o) :
-      osd(o), lock(ceph::make_shared_mutex(
-		     fmt::format("OSDSession::lock #{}", o))),
-      incarnation(0), con(NULL),
+      osd(o), incarnation(0), con(NULL),
       num_locks(cct->_conf->objecter_completion_locks_per_session),
       completion_locks(new std::mutex[num_locks]) {}
 
@@ -2502,7 +2505,7 @@ public:
   }
 
 private:
-  void _check_op_pool_dne(Op *op, std::unique_lock<ceph::shared_mutex> *sl);
+  void _check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *sl);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
