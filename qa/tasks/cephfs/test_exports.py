@@ -98,9 +98,7 @@ class TestExports(CephFSTestCase):
 
     def test_export_pin_getfattr(self):
         self.fs.set_max_mds(2)
-        self.fs.wait_for_daemons()
-
-        status = self.fs.status()
+        status = self.fs.wait_for_daemons()
 
         self.mount_a.run_shell(["mkdir", "-p", "1/2/3"])
         self._wait_subtrees(status, 0, [])
