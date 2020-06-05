@@ -316,7 +316,7 @@ class FSExport(object):
     def __init__(self, mgr, namespace=None):
         self.mgr = mgr
         self.rados_pool = 'nfs-ganesha'
-        self.rados_namespace = namespace #TODO check if cluster exists
+        self.rados_namespace = namespace
         self.exports = {}
 
         try:
@@ -443,9 +443,12 @@ class FSExport(object):
     def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
         try:
             if not self.check_fs(fs_name):
-                return -errno.EINVAL,"", "Invalid CephFS name"
+                raise Exception("Invalid CephFS name")
 
-            #TODO Check if valid cluster
+            cluster_check = f"ganesha-{cluster_id}" in available_clusters(self.mgr)
+            if not cluster_check:
+                raise Exception("Cluster does not exists")
+
             if cluster_id not in self.exports:
                 self.exports[cluster_id] = []
 
@@ -547,7 +550,7 @@ class NFSCluster:
             log.info(f"Deleted object:{common_conf}")
 
     def _set_cluster_id(self, cluster_id):
-        self.cluster_id = "ganesha-%s" % cluster_id
+        self.cluster_id = f"ganesha-{cluster_id}"
 
     def _set_pool_namespace(self, cluster_id):
         self.pool_ns = cluster_id
