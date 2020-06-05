@@ -3195,6 +3195,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     }
 
     dn->link(in);
+    inc_dentry_nr();
     ldout(cct, 20) << "link  inode " << in << " parents now " << in->dentries << dendl;
   }
   
@@ -3210,6 +3211,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
   // unlink from inode
   if (dn->inode) {
     dn->unlink();
+    dec_dentry_nr();
     ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
 
@@ -6540,6 +6542,11 @@ void Client::collect_and_send_global_metrics() {
   metric = ClientMetricMessage(CapInfoPayload(cap_hits, cap_misses, 0));
   message.push_back(metric);
 
+  // dentry lease hit ratio
+  auto [dlease_hits, dlease_misses, nr] = get_dlease_hit_rates();
+  metric = ClientMetricMessage(DentryLeasePayload(dlease_hits, dlease_misses, nr));
+  message.push_back(metric);
+
   session->con->send_message2(make_message<MClientMetrics>(std::move(message)));
 }
 
@@ -6597,13 +6604,16 @@ bool Client::_dentry_valid(const Dentry *dn)
   if (dn->lease_mds >= 0 && dn->lease_ttl > now &&
       mds_sessions.count(dn->lease_mds)) {
     MetaSession &s = mds_sessions.at(dn->lease_mds);
-    if (s.cap_ttl > now && s.cap_gen == dn->lease_gen)
+    if (s.cap_ttl > now && s.cap_gen == dn->lease_gen) {
+      dlease_hit();
       return true;
+    }
 
     ldout(cct, 20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
                    << " vs lease_gen " << dn->lease_gen << dendl;
   }
 
+  dlease_miss();
   return false;
 }
 

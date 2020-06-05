@@ -27,9 +27,10 @@ MDS_PERF_QUERY_REGEX_MATCH_CLIENTS = '^(client.{0}\s+{1}):.*'
 MDS_PERF_QUERY_COUNTERS_MAP = OrderedDict({'cap_hit': 0,
                                            'read_latency': 1,
                                            'write_latency': 2,
-                                           'metadata_latency': 3})
+                                           'metadata_latency': 3,
+                                           'dentry_lease': 4})
 MDS_PERF_QUERY_COUNTERS = [] # type: List[str]
-MDS_GLOBAL_PERF_QUERY_COUNTERS = ['cap_hit', 'read_latency', 'write_latency', 'metadata_latency'] # type: List[str]
+MDS_GLOBAL_PERF_QUERY_COUNTERS = ['cap_hit', 'read_latency', 'write_latency', 'metadata_latency', 'dentry_lease'] # type: List[str]
 
 QUERY_EXPIRE_INTERVAL = timedelta(minutes=1)
 
