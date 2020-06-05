@@ -550,8 +550,13 @@ class RGWDataChangesLog {
   };
 
   ChangesRenewThread* renew_thread;
+  friend ChangesRenewThread;
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y)> bucket_filter;
+  int choose_oid(const rgw_bucket_shard& bs);
+  bool going_down() const;
+  bool filter_bucket(const rgw_bucket& bucket, optional_yield y) const;
+  int renew_entries();
 
 public:
 
@@ -560,11 +565,8 @@ public:
 
   void init(const RGWZone* _zone, RGWSI_Cls *cls_svc, R::RADOS* rados);
 
-  int choose_oid(const rgw_bucket_shard& bs);
-  std::string get_oid(int shard_id) const;
   int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
-  int renew_entries();
   int list_entries(int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::optional<std::string_view> marker,
@@ -587,13 +589,12 @@ public:
     this->observer = observer;
   }
 
-  bool going_down();
-
   void set_bucket_filter(decltype(bucket_filter)&& f) {
     bucket_filter = std::move(f);
   }
-
-  bool filter_bucket(const rgw_bucket& bucket, optional_yield y) const;
+  // a marker that compares greater than any other
+  std::string_view max_marker() const;
+  std::string get_oid(int shard_id) const;
 };
 
 struct rgw_ep_info {

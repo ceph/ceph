@@ -3,13 +3,16 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 class RGWCoroutine;
 class RGWRados;
 class RGWHTTPManager;
 class utime_t;
-namespace rgw { namespace sal {
+namespace rgw::sal {
   class RGWRadosStore;
-} }
+}
 
 // DataLogTrimCR factory function
 extern RGWCoroutine* create_data_log_trim_cr(rgw::sal::RGWRadosStore *store,

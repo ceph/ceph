@@ -2471,7 +2471,7 @@ int RGWDataChangesLog::trim_entries(int shard_id, std::string_view marker,
 			       {}, std::string(marker), c, null_yield);
 }
 
-bool RGWDataChangesLog::going_down()
+bool RGWDataChangesLog::going_down() const
 {
   return down_flag;
 }
@@ -2529,6 +2529,10 @@ void RGWDataChangesLog::read_clear_modified(map<int, set<string> > &modified)
   std::unique_lock wl{modified_lock};
   modified.swap(modified_shards);
   modified_shards.clear();
+}
+
+std::string_view RGWDataChangesLog::max_marker() const {
+  return "99999999"sv;
 }
 
 void RGWBucketCompleteInfo::dump(Formatter *f) const {
