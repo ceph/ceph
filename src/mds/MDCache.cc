@@ -6754,32 +6754,38 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
     ++p;
     CInode *diri = dir->get_inode();
     if (dir->is_auth()) {
-      if (!diri->is_auth() && !diri->is_base() &&
-	  dir->get_num_head_items() == 0) {
-	if (dir->state_test(CDir::STATE_EXPORTING) ||
-	    !(mds->is_active() || mds->is_stopping()) ||
-	    dir->is_freezing() || dir->is_frozen())
-	  continue;
+      if (diri->is_auth() && !diri->is_base()) {
+        /* this situation should correspond to an export pin */
+        if (dir->get_num_head_items() == 0 && dir->get_num_ref() == 1) {
+          /* pinned empty subtree, try to drop */
+          if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
+            dout(20) << "trimming empty pinned subtree " << *dir << dendl;
+            dir->state_clear(CDir::STATE_AUXSUBTREE);
+            remove_subtree(dir);
+            diri->close_dirfrag(dir->dirfrag().frag);
+          }
+        }
+      } else if (!diri->is_auth() && !diri->is_base() && dir->get_num_head_items() == 0) {
+        if (dir->state_test(CDir::STATE_EXPORTING) ||
+           !(mds->is_active() || mds->is_stopping()) ||
+           dir->is_freezing() || dir->is_frozen())
+          continue;
 
-	migrator->export_empty_import(dir);
+        migrator->export_empty_import(dir);
         ++trimmed;
       }
-    } else {
-      if (!diri->is_auth()) {
-	if (dir->get_num_ref() > 1)  // only subtree pin
-	  continue;
-	auto&& ls = diri->get_subtree_dirfrags();
-	if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
-	  continue;
+    } else if (!diri->is_auth() && dir->get_num_ref() <= 1) {
+      // only subtree pin
+      auto&& ls = diri->get_subtree_dirfrags();
+      if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
+        continue;
 
-	// don't trim subtree root if its auth MDS is recovering.
-	// This simplify the cache rejoin code.
-	if (dir->is_subtree_root() &&
-	    rejoin_ack_gather.count(dir->get_dir_auth().first))
-	  continue;
-	trim_dirfrag(dir, 0, expiremap);
-        ++trimmed;
-      }
+      // don't trim subtree root if its auth MDS is recovering.
+      // This simplify the cache rejoin code.
+      if (dir->is_subtree_root() && rejoin_ack_gather.count(dir->get_dir_auth().first))
+        continue;
+      trim_dirfrag(dir, 0, expiremap);
+      ++trimmed;
     }
   }
 

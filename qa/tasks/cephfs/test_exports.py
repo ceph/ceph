@@ -137,6 +137,23 @@ class TestExports(CephFSTestCase):
         if (len(self.fs.get_active_names()) > 2):
             self.assertEqual(self.mount_a.getfattr("1/2/3", "ceph.dir.pin"), '2')
 
+    def test_export_pin_cache_drop(self):
+        """
+        That the export pin does not prevent empty (nothing in cache) subtree merging.
+        """
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        self.mount_a.run_shell(f"mkdir -p foo")
+        self.mount_a.setfattr(f"foo", "ceph.dir.pin", "0")
+        self.mount_a.run_shell(["bash", "-c", Raw(f"'mkdir -p foo/bar/baz && setfattr -n ceph.dir.pin -v 1 foo/bar'")])
+        self._wait_subtrees([('/foo/bar', 1), ('/foo', 0)], status=status)
+        self.mount_a.umount_wait() # release all caps
+        def _drop():
+            self.fs.ranks_tell(["cache", "drop"], status=status)
+        # drop cache multiple times to clear replica pins
+        self._wait_subtrees([], status=status, action=_drop)
+
     def test_session_race(self):
         """
         Test session creation race.
