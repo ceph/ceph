@@ -831,7 +831,6 @@ Usage:
         'orch daemon add rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        'name=subcluster,type=CephString,req=false '
         'name=port,type=CephInt,req=false '
         'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false',
@@ -839,7 +838,6 @@ Usage:
     def _rgw_add(self,
                  realm_name: str,
                  zone_name: str,
-                 subcluster: Optional[str] = None,
                  port: Optional[int] = None,
                  ssl: bool = False,
                  placement: Optional[str] = None,
@@ -850,7 +848,6 @@ Usage:
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
-            subcluster=subcluster,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
@@ -1036,7 +1033,6 @@ Usage:
         'orch apply rgw',
         'name=realm_name,type=CephString '
         'name=zone_name,type=CephString '
-        'name=subcluster,type=CephString,req=false '
         'name=port,type=CephInt,req=false '
         'name=ssl,type=CephBool,req=false '
         'name=placement,type=CephString,req=false '
@@ -1045,7 +1041,6 @@ Usage:
     def _apply_rgw(self,
                    realm_name: str,
                    zone_name: str,
-                   subcluster: Optional[str] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
                    placement: Optional[str] = None,
@@ -1057,7 +1052,6 @@ Usage:
         spec = RGWSpec(
             rgw_realm=realm_name,
             rgw_zone=zone_name,
-            subcluster=subcluster,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
