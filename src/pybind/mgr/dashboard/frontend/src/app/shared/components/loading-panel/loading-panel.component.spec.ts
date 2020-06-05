@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { LoadingPanelComponent } from './loading-panel.component';
@@ -11,7 +11,7 @@ describe('LoadingPanelComponent', () => {
 
   configureTestBed({
     declarations: [LoadingPanelComponent],
-    imports: [AlertModule.forRoot()]
+    imports: [NgbAlertModule]
   });
 
   beforeEach(() => {
