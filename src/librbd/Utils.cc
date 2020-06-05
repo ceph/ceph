@@ -11,6 +11,8 @@
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Features.h"
+
+#include <bitset>
 #include <random>
 
 #define dout_subsys ceph_subsys_rbd
@@ -138,6 +140,27 @@ int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
 
   dst_io_ctx->set_namespace(
     pool_namespace ? *pool_namespace : src_io_ctx.get_namespace());
+  return 0;
+}
+
+int snap_create_flags_api_to_internal(CephContext *cct, uint32_t api_flags,
+                                      uint64_t *internal_flags) {
+  *internal_flags = 0;
+
+  if (api_flags & RBD_SNAP_CREATE_SKIP_QUIESCE) {
+    *internal_flags |= SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE;
+    api_flags &= ~RBD_SNAP_CREATE_SKIP_QUIESCE;
+  } else if (api_flags & RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR) {
+    *internal_flags |= SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR;
+    api_flags &= ~RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR;
+  }
+
+  if (api_flags != 0) {
+    lderr(cct) << "invalid snap create flags: "
+                     << std::bitset<32>(api_flags) << dendl;
+    return -EINVAL;
+  }
+
   return 0;
 }
 

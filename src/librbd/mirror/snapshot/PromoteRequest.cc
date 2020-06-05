@@ -296,6 +296,7 @@ void PromoteRequest<I>::create_promote_snapshot() {
 
   auto req = CreatePrimaryRequest<I>::create(
     m_image_ctx, m_global_image_id, CEPH_NOSNAP,
+    SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
     (snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS |
      snapshot::CREATE_PRIMARY_FLAG_FORCE), nullptr, ctx);
   req->send();

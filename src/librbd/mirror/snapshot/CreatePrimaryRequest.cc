@@ -28,11 +28,12 @@ using librbd::util::create_rados_callback;
 template <typename I>
 CreatePrimaryRequest<I>::CreatePrimaryRequest(
     I *image_ctx, const std::string& global_image_id,
-    uint64_t clean_since_snap_id, uint32_t flags, uint64_t *snap_id,
-    Context *on_finish)
+    uint64_t clean_since_snap_id, uint64_t snap_create_flags, uint32_t flags,
+    uint64_t *snap_id, Context *on_finish)
   : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
-    m_clean_since_snap_id(clean_since_snap_id), m_flags(flags),
-    m_snap_id(snap_id), m_on_finish(on_finish) {
+    m_clean_since_snap_id(clean_since_snap_id),
+    m_snap_create_flags(snap_create_flags), m_flags(flags), m_snap_id(snap_id),
+    m_on_finish(on_finish) {
   m_default_ns_ctx.dup(m_image_ctx->md_ctx);
   m_default_ns_ctx.set_namespace("");
 }
@@ -121,7 +122,8 @@ void CreatePrimaryRequest<I>::create_snapshot() {
   auto ctx = create_context_callback<
     CreatePrimaryRequest<I>,
     &CreatePrimaryRequest<I>::handle_create_snapshot>(this);
-  m_image_ctx->operations->snap_create(ns, m_snap_name, 0, m_prog_ctx, ctx);
+  m_image_ctx->operations->snap_create(ns, m_snap_name, m_snap_create_flags,
+                                       m_prog_ctx, ctx);
 }
 
 template <typename I>
