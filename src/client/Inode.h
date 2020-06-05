@@ -40,12 +40,16 @@ public:
     s->caps.push_back(&cap_item);
   }
   ~Cap() {
-    cap_item.remove_myself();
+    remove_cap_item();
   }
 
   void touch(void) {
     // move to back of LRU
     session->caps.push_back(&cap_item);
+  }
+
+  void remove_cap_item(void) {
+    cap_item.remove_myself();
   }
 
   void dump(Formatter *f) const;

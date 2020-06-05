@@ -4150,6 +4150,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   }
   size_t n = in.caps.erase(mds);
   ceph_assert(n == 1);
+  cap->remove_cap_item();
   cap = nullptr;
 
   if (!in.is_any_caps()) {
