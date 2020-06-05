@@ -94,9 +94,7 @@ Adoption process
 
      # ceph orch ps
 
-#. Adopt all OSDs in the cluster::
-   
-   This needs to be done on ALL the OSD's in the cluster before proceeding with the steps below to adopt mds
+#. Adopt all OSDs in the cluster.  This needs to be done on ALL the OSD's in the cluster before proceeding with the steps below to adopt mds::
 
      # cephadm adopt --style legacy --name <name>
 
