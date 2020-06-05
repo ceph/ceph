@@ -873,7 +873,7 @@ describe('PoolFormComponent', () => {
         });
 
         it('should not open the tooltip nor the crush info', () => {
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
           expect(component.data.crushInfo).toBe(false);
         });
 
@@ -895,13 +895,13 @@ describe('PoolFormComponent', () => {
 
         it('should not have called delete and opened the tooltip', () => {
           expect(crushRuleService.delete).not.toHaveBeenCalled();
-          expect(component.crushDeletionBtn.isOpen).toBe(true);
+          expect(component.crushDeletionBtn.isOpen()).toBe(true);
           expect(component.data.crushInfo).toBe(true);
         });
 
         it('should hide the tooltip when clicking on delete again', () => {
           component.deleteCrushRule();
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when clicking on add', () => {
@@ -911,12 +911,12 @@ describe('PoolFormComponent', () => {
             }
           }));
           component.addCrushRule();
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when changing the crush rule', () => {
           selectRuleByIndex(0);
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
         });
       });
     });
@@ -1029,7 +1029,7 @@ describe('PoolFormComponent', () => {
         });
 
         it('should not open the tooltip nor the crush info', () => {
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
           expect(component.data.erasureInfo).toBe(false);
         });
 
@@ -1055,13 +1055,13 @@ describe('PoolFormComponent', () => {
 
         it('should not have called delete and opened the tooltip', () => {
           expect(ecpService.delete).not.toHaveBeenCalled();
-          expect(component.ecpDeletionBtn.isOpen).toBe(true);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(true);
           expect(component.data.erasureInfo).toBe(true);
         });
 
         it('should hide the tooltip when clicking on delete again', () => {
           component.deleteErasureCodeProfile();
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when clicking on add', () => {
@@ -1071,12 +1071,12 @@ describe('PoolFormComponent', () => {
             }
           }));
           component.addErasureCodeProfile();
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when changing the crush rule', () => {
           setSelectedEcp('someEcpName');
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
         });
       });
     });

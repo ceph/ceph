@@ -2,12 +2,10 @@ import { Component, EventEmitter, OnInit, Type, ViewChild } from '@angular/core'
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
-
+import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TooltipDirective } from 'ngx-bootstrap/tooltip';
 import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
@@ -56,9 +54,9 @@ interface FormFieldDescription {
 })
 export class PoolFormComponent extends CdForm implements OnInit {
   @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
-  @ViewChild('crushDeletionBtn') crushDeletionBtn: TooltipDirective;
+  @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
   @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
-  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: TooltipDirective;
+  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: NgbTooltip;
 
   permission: Permission;
   form: CdFormGroup;
@@ -336,8 +334,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('crushRule').valueChanges.subscribe((rule) => {
       // The crush rule can only be changed if type 'replicated' is set.
-      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen) {
-        this.crushDeletionBtn.hide();
+      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen()) {
+        this.crushDeletionBtn.close();
       }
       if (!rule) {
         return;
@@ -353,8 +351,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('erasureProfile').valueChanges.subscribe((profile) => {
       // The ec profile can only be changed if type 'erasure' is set.
-      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen) {
-        this.ecpDeletionBtn.hide();
+      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen()) {
+        this.ecpDeletionBtn.close();
       }
       if (!profile) {
         return;
@@ -583,7 +581,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private hideOpenTooltips() {
-    const hideTooltip = (btn: TooltipDirective) => btn && btn.isOpen && btn.hide();
+    const hideTooltip = (btn: NgbTooltip) => btn && btn.isOpen() && btn.close();
     hideTooltip(this.ecpDeletionBtn);
     hideTooltip(this.crushDeletionBtn);
   }
@@ -657,7 +655,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }: {
     value: any;
     usage: string[];
-    deletionBtn: TooltipDirective;
+    deletionBtn: NgbTooltip;
     dataName: string;
     getTabs: () => NgbNav;
     tabPosition: string;

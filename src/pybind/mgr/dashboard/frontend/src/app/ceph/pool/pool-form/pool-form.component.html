@@ -233,10 +233,10 @@
                   <button class="btn btn-light"
                           type="button"
                           *ngIf="!editing"
-                          tooltip="This profile can't be deleted as it is in use."
-                          i18n-tooltip
-                          triggers=""
-                          #ecpDeletionBtn="bs-tooltip"
+                          ngbTooltip="This profile can't be deleted as it is in use."
+                          i18n-ngbTooltip
+                          triggers="manual"
+                          #ecpDeletionBtn="ngbTooltip"
                           (click)="deleteErasureCodeProfile()">
                     <i [ngClass]="[icons.trash]"
                        aria-hidden="true"></i>
@@ -335,10 +335,10 @@
                     <button class="btn btn-light"
                             *ngIf="isReplicated && !editing"
                             type="button"
-                            tooltip="This rule can't be deleted as it is in use."
-                            i18n-tooltip
-                            triggers=""
-                            #crushDeletionBtn="bs-tooltip"
+                            ngbTooltip="This rule can't be deleted as it is in use."
+                            i18n-ngbTooltip
+                            triggers="manual"
+                            #crushDeletionBtn="ngbTooltip"
                             (click)="deleteCrushRule()">
                       <i [ngClass]="[icons.trash]"
                          aria-hidden="true"></i>

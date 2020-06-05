@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { NgbNavModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -21,7 +21,8 @@ import { NfsListComponent } from './nfs-list/nfs-list.component';
     NgbNavModule,
     CommonModule,
     NgbTypeaheadModule,
-    NgBootstrapFormValidationModule
+    NgBootstrapFormValidationModule,
+    NgbTooltipModule
   ],
   declarations: [
     NfsListComponent,
