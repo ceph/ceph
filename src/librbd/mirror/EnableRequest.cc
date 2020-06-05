@@ -186,13 +186,17 @@ void EnableRequest<I>::create_primary_snapshot() {
   ldout(m_cct, 10) << dendl;
 
   ceph_assert(m_image_ctx != nullptr);
+  uint64_t snap_create_flags;
+  int r = util::snap_create_flags_api_to_internal(
+      m_cct, util::get_default_snap_create_flags(m_image_ctx),
+      &snap_create_flags);
+  ceph_assert(r == 0);
   auto ctx = create_context_callback<
     EnableRequest<I>,
     &EnableRequest<I>::handle_create_primary_snapshot>(this);
   auto req = snapshot::CreatePrimaryRequest<I>::create(
     m_image_ctx, m_mirror_image.global_image_id,
-    (m_image_clean ? 0 : CEPH_NOSNAP),
-    SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR,
+    (m_image_clean ? 0 : CEPH_NOSNAP), snap_create_flags,
     snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS, &m_snap_id, ctx);
   req->send();
 }

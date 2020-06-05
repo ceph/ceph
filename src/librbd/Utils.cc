@@ -164,5 +164,20 @@ int snap_create_flags_api_to_internal(CephContext *cct, uint32_t api_flags,
   return 0;
 }
 
+uint32_t get_default_snap_create_flags(ImageCtx *ictx) {
+  auto mode = ictx->config.get_val<std::string>(
+      "rbd_default_snapshot_quiesce_mode");
+
+  if (mode == "required") {
+    return 0;
+  } else if (mode == "ignore-error") {
+    return RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR;
+  } else if (mode == "skip") {
+    return RBD_SNAP_CREATE_SKIP_QUIESCE;
+  } else {
+    ceph_abort_msg("invalid rbd_default_snapshot_quiesce_mode");
+  }
+}
+
 } // namespace util
 } // namespace librbd
