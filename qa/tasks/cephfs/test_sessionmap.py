@@ -202,7 +202,7 @@ class TestSessionMap(CephFSTestCase):
         self.mount_a.run_shell(["mkdir", "d0", "d1"])
         self.mount_a.setfattr("d0", "ceph.dir.pin", "0")
         self.mount_a.setfattr("d1", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 0, [('/d0', 0), ('/d1', 1)])
+        self._wait_subtrees([('/d0', 0), ('/d1', 1)], status=status)
 
         self.mount_a.run_shell(["touch", "d0/f0"])
         self.mount_a.run_shell(["touch", "d1/f0"])

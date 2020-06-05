@@ -2,6 +2,7 @@ import logging
 import time
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.orchestra.run import CommandFailedError, Raw
 
 log = logging.getLogger(__name__)
 
@@ -16,19 +17,19 @@ class TestExports(CephFSTestCase):
         status = self.fs.status()
 
         self.mount_a.run_shell(["mkdir", "-p", "1/2/3"])
-        self._wait_subtrees(status, 0, [])
+        self._wait_subtrees([], status=status)
 
         # NOP
         self.mount_a.setfattr("1", "ceph.dir.pin", "-1")
-        self._wait_subtrees(status, 0, [])
+        self._wait_subtrees([], status=status)
 
         # NOP (rank < -1)
         self.mount_a.setfattr("1", "ceph.dir.pin", "-2341")
-        self._wait_subtrees(status, 0, [])
+        self._wait_subtrees([], status=status)
 
         # pin /1 to rank 1
         self.mount_a.setfattr("1", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 1, [('/1', 1)])
+        self._wait_subtrees([('/1', 1)], status=status, rank=1)
 
         # Check export_targets is set properly
         status = self.fs.status()
@@ -38,39 +39,39 @@ class TestExports(CephFSTestCase):
 
         # redundant pin /1/2 to rank 1
         self.mount_a.setfattr("1/2", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 1)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 1)], status=status, rank=1)
 
         # change pin /1/2 to rank 0
         self.mount_a.setfattr("1/2", "ceph.dir.pin", "0")
-        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 0)])
-        self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 0)], status=status, rank=1)
+        self._wait_subtrees([('/1', 1), ('/1/2', 0)], status=status)
 
         # change pin /1/2/3 to (presently) non-existent rank 2
         self.mount_a.setfattr("1/2/3", "ceph.dir.pin", "2")
-        self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0)])
-        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 0)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 0)], status=status)
+        self._wait_subtrees([('/1', 1), ('/1/2', 0)], status=status, rank=1)
 
         # change pin /1/2 back to rank 1
         self.mount_a.setfattr("1/2", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 1)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 1)], status=status, rank=1)
 
         # add another directory pinned to 1
         self.mount_a.run_shell(["mkdir", "-p", "1/4/5"])
         self.mount_a.setfattr("1/4/5", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 1), ('/1/4/5', 1)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 1), ('/1/4/5', 1)], status=status, rank=1)
 
         # change pin /1 to 0
         self.mount_a.setfattr("1", "ceph.dir.pin", "0")
-        self._wait_subtrees(status, 0, [('/1', 0), ('/1/2', 1), ('/1/4/5', 1)])
+        self._wait_subtrees([('/1', 0), ('/1/2', 1), ('/1/4/5', 1)], status=status)
 
         # change pin /1/2 to default (-1); does the subtree root properly respect it's parent pin?
         self.mount_a.setfattr("1/2", "ceph.dir.pin", "-1")
-        self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1)])
+        self._wait_subtrees([('/1', 0), ('/1/4/5', 1)], status=status)
 
         if len(list(status.get_standbys())):
             self.fs.set_max_mds(3)
             self.fs.wait_for_state('up:active', rank=2)
-            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2)])
+            self._wait_subtrees([('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2)], status=status)
 
             # Check export_targets is set properly
             status = self.fs.status()
@@ -87,43 +88,43 @@ class TestExports(CephFSTestCase):
         self.mount_a.setfattr("a", "ceph.dir.pin", "1")
         self.mount_a.setfattr("aa/bb", "ceph.dir.pin", "0")
         if (len(self.fs.get_active_names()) > 2):
-            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/aa/bb', 0)])
+            self._wait_subtrees([('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/aa/bb', 0)], status=status)
         else:
-            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/a', 1), ('/aa/bb', 0)])
+            self._wait_subtrees([('/1', 0), ('/1/4/5', 1), ('/a', 1), ('/aa/bb', 0)], status=status)
         self.mount_a.run_shell(["mv", "aa", "a/b/"])
         if (len(self.fs.get_active_names()) > 2):
-            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/a/b/aa/bb', 0)])
+            self._wait_subtrees([('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/a/b/aa/bb', 0)], status=status)
         else:
-            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/a', 1), ('/a/b/aa/bb', 0)])
+            self._wait_subtrees([('/1', 0), ('/1/4/5', 1), ('/a', 1), ('/a/b/aa/bb', 0)], status=status)
 
     def test_export_pin_getfattr(self):
         self.fs.set_max_mds(2)
         status = self.fs.wait_for_daemons()
 
         self.mount_a.run_shell(["mkdir", "-p", "1/2/3"])
-        self._wait_subtrees(status, 0, [])
+        self._wait_subtrees([], status=status)
 
         # pin /1 to rank 0
         self.mount_a.setfattr("1", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 1, [('/1', 1)])
+        self._wait_subtrees([('/1', 1)], status=status, rank=1)
 
         # pin /1/2 to rank 1
         self.mount_a.setfattr("1/2", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 1)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 1)], status=status, rank=1)
 
         # change pin /1/2 to rank 0
         self.mount_a.setfattr("1/2", "ceph.dir.pin", "0")
-        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 0)])
-        self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 0)], status=status, rank=1)
+        self._wait_subtrees([('/1', 1), ('/1/2', 0)], status=status)
 
          # change pin /1/2/3 to (presently) non-existent rank 2
         self.mount_a.setfattr("1/2/3", "ceph.dir.pin", "2")
-        self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0)])
+        self._wait_subtrees([('/1', 1), ('/1/2', 0)], status=status)
 
         if len(list(status.get_standbys())):
             self.fs.set_max_mds(3)
             self.fs.wait_for_state('up:active', rank=2)
-            self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0), ('/1/2/3', 2)])
+            self._wait_subtrees([('/1', 1), ('/1/2', 0), ('/1/2/3', 2)], status=status)
 
         if not isinstance(self.mount_a, FuseMount):
             p = self.mount_a.client_remote.sh('uname -r', wait=True)
@@ -151,7 +152,7 @@ class TestExports(CephFSTestCase):
         # Create a directory that is pre-exported to rank 1
         self.mount_a.run_shell(["mkdir", "-p", "a/aa"])
         self.mount_a.setfattr("a", "ceph.dir.pin", "1")
-        self._wait_subtrees(status, 1, [('/a', 1)])
+        self._wait_subtrees([('/a', 1)], status=status, rank=1)
 
         # Now set the mds config to allow the race
         self.fs.rank_asok(["config", "set", "mds_inject_migrator_session_race", "true"], rank=1)
