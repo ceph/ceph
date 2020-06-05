@@ -150,6 +150,9 @@ int get_path(const boost::program_options::variables_map &vm,
 int get_formatter(const boost::program_options::variables_map &vm,
                   argument_types::Format::Formatter *formatter);
 
+int get_snap_create_flags(const boost::program_options::variables_map &vm,
+                          uint32_t *flags);
+
 void init_context();
 
 int init_rados(librados::Rados *rados);

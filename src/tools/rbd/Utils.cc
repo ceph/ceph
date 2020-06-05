@@ -656,6 +656,24 @@ int get_formatter(const po::variables_map &vm,
   return 0;
 }
 
+int get_snap_create_flags(const po::variables_map &vm, uint32_t *flags) {
+  if (vm[at::SKIP_QUIESCE].as<bool>() &&
+      vm[at::IGNORE_QUIESCE_ERROR].as<bool>()) {
+    std::cerr << "rbd: " << at::IGNORE_QUIESCE_ERROR
+              << " cannot be used together with " << at::SKIP_QUIESCE
+              << std::endl;
+    return -EINVAL;
+  }
+
+  *flags = 0;
+  if (vm[at::SKIP_QUIESCE].as<bool>()) {
+    *flags |= RBD_SNAP_CREATE_SKIP_QUIESCE;
+  } else if (vm[at::IGNORE_QUIESCE_ERROR].as<bool>()) {
+    *flags |= RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR;
+  }
+  return 0;
+}
+
 void init_context() {
   g_conf().set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   g_conf().apply_changes(nullptr);
