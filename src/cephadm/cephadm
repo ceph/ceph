@@ -1357,6 +1357,13 @@ def get_unit_name(fsid, daemon_type, daemon_id=None):
     else:
         return 'ceph-%s@%s' % (fsid, daemon_type)
 
+def get_unit_name_by_daemon_name(fsid, name):
+    daemon = get_daemon_description(fsid, name)
+    try:
+        return daemon['systemd_unit']
+    except KeyError:
+        raise Error('Failed to get unit name for {}'.format(daemon))
+
 def check_unit(unit_name):
     # type: (str) -> Tuple[bool, str, bool]
     # NOTE: we ignore the exit code here because systemctl outputs
@@ -2986,8 +2993,9 @@ def command_unit():
     # type: () -> None
     if not args.fsid:
         raise Error('must pass --fsid to specify cluster')
-    (daemon_type, daemon_id) = args.name.split('.', 1)
-    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+
+    unit_name = get_unit_name_by_daemon_name(args.fsid, args.name)
+
     call_throws([
         'systemctl',
         args.command,
@@ -3001,8 +3009,7 @@ def command_logs():
     if not args.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    (daemon_type, daemon_id) = args.name.split('.', 1)
-    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+    unit_name = get_unit_name_by_daemon_name(args.fsid, args.name)
 
     cmd = [find_program('journalctl')]
     cmd.extend(['-u', unit_name])
@@ -3112,6 +3119,7 @@ def list_daemons(detail=True, legacy_dir=None):
                         'style': 'cephadm:v1',
                         'name': name,
                         'fsid': fsid,
+                        'systemd_unit': unit_name,
                     }
                     if detail:
                         # get container id
@@ -3195,13 +3203,22 @@ def list_daemons(detail=True, legacy_dir=None):
                             os.path.join(data_dir, fsid, j, 'unit.image'))
                         i['configured'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.configured'))
-                        i['systemd_unit'] = unit_name
 
                     ls.append(i)
 
-    # /var/lib/rook
-    # WRITE ME
     return ls
+
+
+def get_daemon_description(fsid, name, detail=False, legacy_dir=None):
+    # type: (str, str, bool, Optional[str]) -> Dict[str, str]
+
+    for d in list_daemons(detail=detail, legacy_dir=legacy_dir):
+        if d['fsid'] != fsid:
+            continue
+        if d['name'] != name:
+            continue
+        return d
+    raise Error('Daemon not found: {}. See `cephadm ls`'.format(name))
 
 
 ##################################
@@ -3602,11 +3619,13 @@ def command_rm_daemon():
     l = FileLock(args.fsid)
     l.acquire()
 
+    unit_name = get_unit_name_by_daemon_name(args.fsid, args.name)
+
     (daemon_type, daemon_id) = args.name.split('.', 1)
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise Error('must pass --force to proceed: '
                       'this command may destroy precious data!')
-    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+
     call(['systemctl', 'stop', unit_name],
          verbose_on_failure=False)
     call(['systemctl', 'reset-failed', unit_name],
