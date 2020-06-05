@@ -11,6 +11,7 @@
 
 #include "rgw_rest_role.h"
 #include "rgw_rest_user_policy.h"
+#include "rgw_rest_oidc_provider.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -68,6 +69,14 @@ RGWOp *RGWHandler_REST_IAM::op_post()
       return new RGWListUserPolicies;
     if (action.compare("DeleteUserPolicy") == 0)
       return new RGWDeleteUserPolicy;
+    if (action.compare("CreateOpenIDConnectProvider") == 0)
+      return new RGWCreateOIDCProvider;
+    if (action.compare("ListOpenIDConnectProviders") == 0)
+      return new RGWListOIDCProviders;
+    if (action.compare("GetOpenIDConnectProvider") == 0)
+      return new RGWGetOIDCProvider;
+    if (action.compare("DeleteOpenIDConnectProvider") == 0)
+      return new RGWDeleteOIDCProvider;
   }
 
   return nullptr;
