@@ -153,7 +153,7 @@ void get_unmap_arguments(po::options_description *positional,
   positional->add_options()
     ("image-or-snap-or-device-spec",
      "image, snapshot, or device specification\n"
-     "[<pool-name>/]<image-name>[@<snapshot-name>] or <device-path>");
+     "[<pool-name>/]<image-name>[@<snap-name>] or <device-path>");
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);

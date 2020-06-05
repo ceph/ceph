@@ -229,8 +229,8 @@
   Positional arguments
     <source-snap-spec>        source snapshot specification
                               (example:
-                              [<pool-name>/[<namespace>/]]<image-name>@<snapshot-n
-                              ame>)
+                              [<pool-name>/[<namespace>/]]<image-name>@<snap-name>
+                              )
     <dest-image-spec>         destination image specification
                               (example: [<pool-name>/[<namespace>/]]<image-name>)
   
@@ -615,8 +615,8 @@
   
   Positional arguments
     <image-or-snap-or-device-spec>  image, snapshot, or device specification
-                                    [<pool-name>/]<image-name>[@<snapshot-name>]
-                                    or <device-path>
+                                    [<pool-name>/]<image-name>[@<snap-name>] or
+                                    <device-path>
   
   Optional arguments
     -t [ --device-type ] arg        device type [ggate, krbd (default), nbd]
@@ -993,7 +993,7 @@
                          (example:
                          [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
     <dest-snap>          destination snapshot name
-                         (example: <snapshot-name>)
+                         (example: <snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2114,8 +2114,7 @@
   Positional arguments
     <snap-spec>             snapshot specification
                             (example:
-                            [<pool-name>/[<namespace>/]]<image-name>@<snapshot-nam
-                            e>)
+                            [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg       pool name
@@ -2190,7 +2189,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2228,7 +2227,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2253,10 +2252,10 @@
   Positional arguments
     <source-snap-spec>   source snapshot specification
                          (example:
-                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)
     <dest-snap-spec>     destination snapshot specification
                          (example:
-                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    source pool name
@@ -2278,7 +2277,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2298,7 +2297,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
