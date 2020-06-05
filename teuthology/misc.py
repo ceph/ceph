@@ -1075,6 +1075,9 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
             '--vgdb=yes',
+            # at least Valgrind 3.14 is required
+            '--exit-on-first-error=yes',
+            '--error-exitcode=42',
         ]
     else:
         extra_args = [
@@ -1085,6 +1088,8 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
             '--vgdb=yes',
+            '--exit-on-first-error=yes',
+            '--error-exitcode=42',
         ]
     args = [
         'cd', testdir,
