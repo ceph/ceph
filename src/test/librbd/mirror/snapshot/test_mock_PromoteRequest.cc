@@ -123,6 +123,7 @@ struct CreatePrimaryRequest<MockTestImageCtx> {
   static CreatePrimaryRequest *create(MockTestImageCtx *image_ctx,
                                       const std::string& global_image_id,
                                       uint64_t clean_since_snap_id,
+                                      uint64_t snap_create_flags,
                                       uint32_t flags, uint64_t *snap_id,
                                       Context *on_finish) {
     ceph_assert(s_instance != nullptr);

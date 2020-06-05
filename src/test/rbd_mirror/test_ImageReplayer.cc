@@ -536,7 +536,7 @@ public:
     } else {
       uint64_t snap_id = CEPH_NOSNAP;
       ASSERT_EQ(0, librbd::api::Mirror<>::image_snapshot_create(
-                     ictx, &snap_id));
+                  ictx, 0, &snap_id));
     }
 
     printf("flushed\n");

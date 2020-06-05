@@ -113,7 +113,8 @@ struct Mirror {
                                       Context *on_finish);
   static int image_get_instance_id(ImageCtxT *ictx, std::string *instance_id);
 
-  static int image_snapshot_create(ImageCtxT *ictx, uint64_t *snap_id);
+  static int image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
+                                   uint64_t *snap_id);
 };
 
 } // namespace api

@@ -13,7 +13,6 @@
 #include "include/Context.h"
 #include "common/Cond.h"
 
-#include <bitset>
 #include <boost/variant.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -318,19 +317,10 @@ int Snapshot<I>::create(I *ictx, const char *snap_name, uint32_t flags,
                        << " flags: " << flags << dendl;
 
   uint64_t internal_flags = 0;
-
-  if (flags & RBD_SNAP_CREATE_SKIP_QUIESCE) {
-    internal_flags |= SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE;
-    flags &= ~RBD_SNAP_CREATE_SKIP_QUIESCE;
-  } else if (flags & RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR) {
-    internal_flags |= SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR;
-    flags &= ~RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR;
-  }
-
-  if (flags != 0) {
-    lderr(ictx->cct) << "invalid snap create flags: " << std::bitset<32>(flags)
-                     << dendl;
-    return -EINVAL;
+  int r = util::snap_create_flags_api_to_internal(ictx->cct, flags,
+                                                  &internal_flags);
+  if (r < 0) {
+    return r;
   }
 
   return ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
