@@ -6,6 +6,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
+#include "crimson/common/exception.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd.h"
 #include "common/Formatter.h"
@@ -56,7 +57,9 @@ seastar::future<> ClientRequest::start()
   logger().debug("{}: start", *this);
 
   IRef opref = this;
-  return with_blocking_future(handle.enter(cp().await_map))
+  return crimson::common::handle_system_shutdown(
+    [this, opref=std::move(opref)]() mutable {
+    return with_blocking_future(handle.enter(cp().await_map))
     .then([this]() {
       return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_min_epoch()));
     }).then([this](epoch_t epoch) {
@@ -89,6 +92,7 @@ seastar::future<> ClientRequest::start()
 	  });
 	});
     });
+  });
 }
 
 seastar::future<> ClientRequest::process_pg_op(

@@ -111,10 +111,10 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
   });
 }
 
-seastar::future<> SocketMessenger::start(Dispatcher *disp) {
+seastar::future<> SocketMessenger::start(ChainedDispatchersRef chained_dispatchers) {
   assert(seastar::this_shard_id() == master_sid);
 
-  dispatcher = disp;
+  dispatchers = chained_dispatchers;
   if (listener) {
     // make sure we have already bound to a valid address
     ceph_assert(get_myaddr().is_legacy() || get_myaddr().is_msgr2());
@@ -123,7 +123,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp) {
     return listener->accept([this] (SocketRef socket, entity_addr_t peer_addr) {
       assert(seastar::this_shard_id() == master_sid);
       SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
-          *this, *dispatcher, get_myaddr().is_msgr2());
+          *this, dispatchers, get_myaddr().is_msgr2());
       conn->start_accept(std::move(socket), peer_addr);
       return seastar::now();
     });
@@ -145,7 +145,7 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
     return found->shared_from_this();
   }
   SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
-      *this, *dispatcher, peer_addr.is_msgr2());
+      *this, dispatchers, peer_addr.is_msgr2());
   conn->start_connect(peer_addr, peer_name);
   return conn->shared_from_this();
 }
@@ -154,6 +154,9 @@ seastar::future<> SocketMessenger::shutdown()
 {
   assert(seastar::this_shard_id() == master_sid);
   return seastar::futurize_invoke([this] {
+    if (dispatchers) {
+      assert(dispatchers->empty());
+    }
     if (listener) {
       auto d_listener = listener;
       listener = nullptr;

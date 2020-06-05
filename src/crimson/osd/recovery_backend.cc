@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "crimson/common/exception.h"
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/osd/pg.h"
 
@@ -42,3 +43,15 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   recovering.clear();
 }
 
+void RecoveryBackend::WaitForObjectRecovery::stop() {
+  readable.set_exception(
+      crimson::common::system_shutdown_exception());
+  recovered.set_exception(
+      crimson::common::system_shutdown_exception());
+  pulled.set_exception(
+      crimson::common::system_shutdown_exception());
+  for (auto& [pg_shard, pr] : pushes) {
+    pr.set_exception(
+	crimson::common::system_shutdown_exception());
+  }
+}

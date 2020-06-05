@@ -26,7 +26,7 @@ using namespace crimson::net;
 using crimson::common::local_conf;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   Dispatcher& dispatcher,
+                                   ChainedDispatchersRef& dispatcher,
                                    bool is_msgr2)
   : messenger(messenger)
 {

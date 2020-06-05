@@ -27,6 +27,7 @@
 
 #include "os/Transaction.h"
 
+#include "crimson/common/exception.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyanstore/cyan_store.h"
@@ -149,7 +150,7 @@ void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
   // handle the peering event in the background
   check_readable_timer.cancel();
   check_readable_timer.set_callback([last_peering_reset, this] {
-    shard_services.start_operation<LocalPeeringEvent>(
+    (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
       pg_whoami,
@@ -237,7 +238,7 @@ void PG::on_activate_complete()
   wait_for_active_blocker.on_active();
 
   if (peering_state.needs_recovery()) {
-    shard_services.start_operation<LocalPeeringEvent>(
+    (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
       pg_whoami,
@@ -246,7 +247,7 @@ void PG::on_activate_complete()
       get_osdmap_epoch(),
       PeeringState::DoRecovery{});
   } else if (peering_state.needs_backfill()) {
-    shard_services.start_operation<LocalPeeringEvent>(
+    (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
       pg_whoami,
@@ -257,7 +258,7 @@ void PG::on_activate_complete()
   } else {
     logger().debug("{}: no need to recover or backfill, AllReplicasRecovered",
 		   " for pg: {}", __func__, pgid);
-    shard_services.start_operation<LocalPeeringEvent>(
+    (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
       pg_whoami,
@@ -342,7 +343,7 @@ void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
   // handle the peering event in the background
   renew_lease_timer.cancel();
   renew_lease_timer.set_callback([last_peering_reset, this] {
-    shard_services.start_operation<LocalPeeringEvent>(
+    (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       shard_services,
       pg_whoami,
@@ -372,6 +373,11 @@ void PG::init(
 
 seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
 {
+  if (__builtin_expect(stopping, false)) {
+    return seastar::make_exception_future<>(
+	crimson::common::system_shutdown_exception());
+  }
+
   return seastar::do_with(PGMeta(store, pgid), [] (auto& pg_meta) {
     return pg_meta.load();
   }).then([this, store](auto&& ret) {
@@ -400,7 +406,7 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore* store)
     peering_state.set_role(rr);
 
     epoch_t epoch = get_osdmap_epoch();
-    shard_services.start_operation<LocalPeeringEvent>(
+    (void) shard_services.start_operation<LocalPeeringEvent>(
 	this,
 	shard_services,
 	pg_whoami,
@@ -499,12 +505,23 @@ blocking_future<> PG::WaitForActiveBlocker::wait()
   }
 }
 
+seastar::future<> PG::WaitForActiveBlocker::stop()
+{
+  p.set_exception(crimson::common::system_shutdown_exception());
+  return seastar::now();
+}
+
 seastar::future<> PG::submit_transaction(const OpInfo& op_info,
 					 const std::vector<OSDOp>& ops,
 					 ObjectContextRef&& obc,
 					 ceph::os::Transaction&& txn,
 					 const osd_op_params_t& osd_op_p)
 {
+  if (__builtin_expect(stopping, false)) {
+    return seastar::make_exception_future<>(
+	crimson::common::system_shutdown_exception());
+  }
+
   epoch_t map_epoch = get_osdmap_epoch();
 
   std::vector<pg_log_entry_t> log_entries;
@@ -548,6 +565,10 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   ObjectContextRef obc,
   const OpInfo &op_info)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   using osd_op_errorator = OpsExecuter::osd_op_errorator;
   const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
                                                    : m->get_hobj();
@@ -636,6 +657,10 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
 
 seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   auto ox = std::make_unique<OpsExecuter>(*this/* as const& */, m);
   return seastar::do_for_each(m->ops, [ox = ox.get()](OSDOp& osd_op) {
     logger().debug("will be handling pg op {}", ceph_osd_op_name(osd_op.op.op));
@@ -709,6 +734,10 @@ PG::load_obc_ertr::future<
   std::pair<crimson::osd::ObjectContextRef, bool>>
 PG::get_or_load_clone_obc(hobject_t oid, ObjectContextRef head)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   ceph_assert(!oid.is_head());
   using ObjectContextRef = crimson::osd::ObjectContextRef;
   auto coid = resolve_oid(head->get_ro_ss(), oid);
@@ -742,6 +771,10 @@ PG::load_obc_ertr::future<
   std::pair<crimson::osd::ObjectContextRef, bool>>
 PG::get_or_load_head_obc(hobject_t oid)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   ceph_assert(oid.is_head());
   auto [obc, existed] = shard_services.obc_registry.get_cached_obc(oid);
   if (existed) {
@@ -795,6 +828,10 @@ PG::load_obc_ertr::future<crimson::osd::ObjectContextRef>
 PG::get_locked_obc(
   Operation *op, const hobject_t &oid, RWState::State type)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   return get_or_load_head_obc(oid.get_head()).safe_then(
     [this, op, oid, type](auto p) -> load_obc_ertr::future<ObjectContextRef>{
       auto &[head_obc, head_existed] = p;
@@ -835,6 +872,11 @@ PG::get_locked_obc(
 
 seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 {
+  if (__builtin_expect(stopping, false)) {
+    return seastar::make_exception_future<>(
+	crimson::common::system_shutdown_exception());
+  }
+
   ceph::os::Transaction txn;
   auto encoded_txn = req->get_data().cbegin();
   decode(txn, encoded_txn);
@@ -859,6 +901,21 @@ void PG::handle_rep_op_reply(crimson::net::Connection* conn,
 			     const MOSDRepOpReply& m)
 {
   backend->got_rep_op_reply(m);
+}
+
+seastar::future<> PG::stop()
+{
+  logger().info("PG {} {}", pgid, __func__);
+  stopping = true;
+  return osdmap_gate.stop().then([this] {
+    return wait_for_active_blocker.stop();
+  }).then([this] {
+    return recovery_handler->stop();
+  }).then([this] {
+    return recovery_backend->stop();
+  }).then([this] {
+    return backend->stop();
+  });
 }
 
 }
