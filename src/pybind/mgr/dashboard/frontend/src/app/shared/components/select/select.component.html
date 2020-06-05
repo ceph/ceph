@@ -53,7 +53,7 @@
   <div class="is-invalid"
        *ngIf="data.length === selectionLimit">
     <span class="form-text text-muted text-center text-warning"
-          [tooltip]="messages.selectionLimit.tooltip"
+          [ngbTooltip]="messages.selectionLimit.tooltip"
           *ngIf="data.length === selectionLimit">
       {{ messages.selectionLimit.text }}
     </span>

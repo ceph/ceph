@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { NgbPopoverConfig } from '@ng-bootstrap/ng-bootstrap';
+import { NgbPopoverConfig, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'cd-root',
@@ -8,9 +8,11 @@ import { NgbPopoverConfig } from '@ng-bootstrap/ng-bootstrap';
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent {
-  constructor(config: NgbPopoverConfig) {
-    config.autoClose = 'outside';
-    config.container = 'body';
-    config.placement = 'bottom';
+  constructor(popoverConfig: NgbPopoverConfig, tooltipConfig: NgbTooltipConfig) {
+    popoverConfig.autoClose = 'outside';
+    popoverConfig.container = 'body';
+    popoverConfig.placement = 'bottom';
+
+    tooltipConfig.container = 'body';
   }
 }
