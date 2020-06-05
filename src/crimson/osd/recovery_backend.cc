@@ -34,7 +34,7 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   temp_contents.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if (recovery_waiter.obc) {
+    if (recovery_waiter.obc && recovery_waiter.obc->obs.exists) {
       recovery_waiter.obc->drop_recovery_read();
       recovery_waiter.interrupt(why);
     }
