@@ -263,6 +263,8 @@ int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
 int snap_create_flags_api_to_internal(CephContext *cct, uint32_t api_flags,
                                       uint64_t *internal_flags);
 
+uint32_t get_default_snap_create_flags(ImageCtx *ictx);
+
 } // namespace util
 } // namespace librbd
 
