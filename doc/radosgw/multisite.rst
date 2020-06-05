@@ -641,6 +641,8 @@ If the former master zone recovers, revert the operation.
 
        # systemctl restart ceph-radosgw@rgw.`hostname -s`
 
+.. _rgw-multisite-migrate-from-single-site:
+
 Migrating a Single Site System to Multi-Site
 ============================================
 
