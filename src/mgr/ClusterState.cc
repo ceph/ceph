@@ -62,6 +62,7 @@ void ClusterState::set_service_map(ServiceMap const &new_service_map)
 
 void ClusterState::load_digest(MMgrDigest *m)
 {
+  std::lock_guard l(lock);
   health_json = std::move(m->health_json);
   mon_status_json = std::move(m->mon_status_json);
 }
