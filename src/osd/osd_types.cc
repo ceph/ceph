@@ -394,6 +394,12 @@ void osd_stat_t::dump(Formatter *f, bool with_net) const
   ::dump(f, os_alerts);
   f->close_section();
   if (with_net) {
+    dump_ping_time(f);
+  }
+}
+
+void osd_stat_t::dump_ping_time(Formatter *f) const
+{
   f->open_array_section("network_ping_times");
   for (auto &i : hb_pingtime) {
     f->open_object_section("entry");
@@ -407,49 +413,48 @@ void osd_stat_t::dump(Formatter *f, bool with_net) const
     f->open_object_section("interface");
     f->dump_string("interface", "back");
     f->open_object_section("average");
-    f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.back_pingtime[0],3).c_str());
-    f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.back_pingtime[1],3).c_str());
-    f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.back_pingtime[2],3).c_str());
+    f->dump_float("1min", i.second.back_pingtime[0]/1000.0);
+    f->dump_float("5min", i.second.back_pingtime[1]/1000.0);
+    f->dump_float("15min", i.second.back_pingtime[2]/1000.0);
     f->close_section(); // average
     f->open_object_section("min");
-    f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.back_min[0],3).c_str());
-    f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.back_min[1],3).c_str());
-    f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.back_min[2],3).c_str());
+    f->dump_float("1min", i.second.back_min[0]/1000.0);
+    f->dump_float("5min", i.second.back_min[1]/1000.0);
+    f->dump_float("15min", i.second.back_min[2]/1000.0);
     f->close_section(); // min
     f->open_object_section("max");
-    f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.back_max[0],3).c_str());
-    f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.back_max[1],3).c_str());
-    f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.back_max[2],3).c_str());
+    f->dump_float("1min", i.second.back_max[0]/1000.0);
+    f->dump_float("5min", i.second.back_max[1]/1000.0);
+    f->dump_float("15min", i.second.back_max[2]/1000.0);
     f->close_section(); // max
-    f->dump_format_unquoted("last", "%s", fixed_u_to_string(i.second.back_last,3).c_str());
+    f->dump_float("last", i.second.back_last/1000.0);
     f->close_section(); // interface
 
     if (i.second.front_pingtime[0] != 0) {
       f->open_object_section("interface");
       f->dump_string("interface", "front");
       f->open_object_section("average");
-      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.front_pingtime[0],3).c_str());
-      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.front_pingtime[1],3).c_str());
-      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.front_pingtime[2],3).c_str());
+      f->dump_float("1min", i.second.front_pingtime[0]/1000.0);
+      f->dump_float("5min", i.second.front_pingtime[1]/1000.0);
+      f->dump_float("15min", i.second.front_pingtime[2]/1000.0);
       f->close_section(); // average
       f->open_object_section("min");
-      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.front_min[0],3).c_str());
-      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.front_min[1],3).c_str());
-      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.front_min[2],3).c_str());
+      f->dump_float("1min", i.second.front_min[0]/1000.0);
+      f->dump_float("5min", i.second.front_min[1]/1000.0);
+      f->dump_float("15min", i.second.front_min[2]/1000.0);
       f->close_section(); // min
       f->open_object_section("max");
-      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.front_max[0],3).c_str());
-      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.front_max[1],3).c_str());
-      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.front_max[2],3).c_str());
+      f->dump_float("1min", i.second.front_max[0]/1000.0);
+      f->dump_float("5min", i.second.front_max[1]/1000.0);
+      f->dump_float("15min", i.second.front_max[2]/1000.0);
       f->close_section(); // max
-      f->dump_format_unquoted("last", "%s", fixed_u_to_string(i.second.front_last,3).c_str());
+      f->dump_float("last", i.second.front_last/1000.0);
       f->close_section(); // interface
     }
     f->close_section(); // interfaces
     f->close_section(); // entry
   }
   f->close_section(); // network_ping_time
-  }
 }
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const

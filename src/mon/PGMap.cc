@@ -1495,12 +1495,12 @@ void PGMap::decode(bufferlist::const_iterator &bl)
   calc_stats();
 }
 
-void PGMap::dump(ceph::Formatter *f) const
+void PGMap::dump(ceph::Formatter *f, bool with_net) const
 {
   dump_basic(f);
   dump_pg_stats(f, false);
   dump_pool_stats(f);
-  dump_osd_stats(f);
+  dump_osd_stats(f, with_net);
 }
 
 void PGMap::dump_basic(ceph::Formatter *f) const
@@ -1572,6 +1572,18 @@ void PGMap::dump_osd_stats(ceph::Formatter *f, bool with_net) const
     f->open_object_section("osd_stat");
     f->dump_int("osd", q->first);
     q->second.dump(f, with_net);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void PGMap::dump_osd_ping_times(ceph::Formatter *f) const
+{
+  f->open_array_section("osd_ping_times");
+  for (auto& [osd, stat] : osd_stat) {
+    f->open_object_section("osd_ping_time");
+    f->dump_int("osd", osd);
+    stat.dump_ping_time(f);
     f->close_section();
   }
   f->close_section();

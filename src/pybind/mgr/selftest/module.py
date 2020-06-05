@@ -236,8 +236,12 @@ class Module(MgrModule):
                 "pg_summary",
                 "pg_status",
                 "pg_dump",
+                "pg_ready",
                 "df",
+                "pg_stats",
+                "pool_stats",
                 "osd_stats",
+                "osd_ping_times",
                 "health",
                 "mon_status",
                 "mgr_map"
