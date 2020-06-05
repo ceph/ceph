@@ -143,7 +143,7 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
   });
 }
 
-ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
+ProtocolV2::ProtocolV2(ChainedDispatchersRef& dispatcher,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
   : Protocol(proto_t::v2, dispatcher, conn),
@@ -444,10 +444,8 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
     reset_write();
-    gated_dispatch("ms_handle_remote_reset", [this] {
-      return dispatcher.ms_handle_remote_reset(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatcher->ms_handle_remote_reset(
+	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 }
 
@@ -881,7 +879,7 @@ void ProtocolV2::execute_connecting()
             abort_protocol();
           }
           if (socket) {
-            gated_dispatch("close_sockect_connecting",
+            gate.dispatch_in_background("close_sockect_connecting", *this,
                            [sock = std::move(socket)] () mutable {
               return sock->close().then([sock = std::move(sock)] {});
             });
@@ -1526,7 +1524,7 @@ ProtocolV2::server_reconnect()
 void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
-  gated_dispatch("execute_accepting", [this] {
+  gate.dispatch_in_background("execute_accepting", *this, [this] {
       return seastar::futurize_invoke([this] {
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
@@ -1653,10 +1651,8 @@ void ProtocolV2::execute_establishing(
     accept_me();
   }
 
-  gated_dispatch("ms_handle_accept_establishing", [this] {
-    return dispatcher.ms_handle_accept(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  });
+  dispatcher->ms_handle_accept(
+      seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
 
   gated_execute("execute_establishing", [this] {
     return seastar::futurize_invoke([this] {
@@ -1751,11 +1747,9 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   if (socket) {
     socket->shutdown();
   }
-  gated_dispatch("ms_handle_accept_replacing", [this] {
-    return dispatcher.ms_handle_accept(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  });
-  gated_dispatch("trigger_replacing",
+  dispatcher->ms_handle_accept(
+      seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  gate.dispatch_in_background("trigger_replacing", *this,
                  [this,
                   reconnect,
                   do_reset,
@@ -1786,7 +1780,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       }
 
       if (socket) {
-        gated_dispatch("close_socket_replacing",
+        gate.dispatch_in_background("close_socket_replacing", *this,
                        [sock = std::move(socket)] () mutable {
           return sock->close().then([sock = std::move(sock)] {});
         });
@@ -1982,9 +1976,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    gated_dispatch("ms_dispatch", [this, msg = std::move(msg_ref)] {
-      return dispatcher.ms_dispatch(&conn, std::move(msg));
-    });
+    std::ignore = dispatcher->ms_dispatch(&conn, std::move(msg_ref));
   });
 }
 
@@ -1993,10 +1985,8 @@ void ProtocolV2::execute_ready(bool dispatch_connect)
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
   if (dispatch_connect) {
-    gated_dispatch("ms_handle_connect", [this] {
-      return dispatcher.ms_handle_connect(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatcher->ms_handle_connect(
+	seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 #ifdef UNIT_TESTS_BUILT
   if (conn.interceptor) {
@@ -2172,6 +2162,11 @@ void ProtocolV2::trigger_close()
   protocol_timer.cancel();
 
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
+}
+
+void ProtocolV2::print(std::ostream& out) const
+{
+  out << conn;
 }
 
 } // namespace crimson::net

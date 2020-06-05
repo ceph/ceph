@@ -12,11 +12,11 @@ namespace crimson::net {
 
 class ProtocolV1 final : public Protocol {
  public:
-  ProtocolV1(Dispatcher& dispatcher,
+  ProtocolV1(ChainedDispatchersRef& dispatcher,
              SocketConnection& conn,
              SocketMessenger& messenger);
   ~ProtocolV1() override;
-
+  void print(std::ostream&) const final;
  private:
   bool is_connected() const override;
 

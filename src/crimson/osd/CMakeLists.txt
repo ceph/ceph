@@ -1,5 +1,4 @@
 add_executable(crimson-osd
-  chained_dispatchers.cc
   ec_backend.cc
   heartbeat.cc
   main.cc
