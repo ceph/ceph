@@ -1278,14 +1278,14 @@ Usage:
             raise_if_exception(e1)
             assert False
         except ZeroDivisionError as e:
-            assert e.args == ('hello', 'world')
+            assert e.args == ('hello, world',)
 
         e2 = self.remote('selftest', 'remote_from_orchestrator_cli_self_test', "OrchestratorError")
         try:
             raise_if_exception(e2)
             assert False
         except OrchestratorError as e:
-            assert e.args == ('hello', 'world')
+            assert e.args == ('hello, world',)
 
         c = TrivialReadCompletion(result=True)
         assert c.has_result
