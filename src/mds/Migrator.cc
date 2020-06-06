@@ -1483,7 +1483,7 @@ void Migrator::handle_export_prep_ack(const cref_t<MExportDirPrepAck> &m)
 
   if (!m->is_success()) {
     dout(7) << "peer couldn't acquire all needed locks or wasn't active, canceling" << dendl;
-    export_try_cancel(dir, false);
+    export_try_cancel(dir);
     return;
   }
 
