@@ -473,6 +473,7 @@ public:
     WorkPool* workpool{nullptr};
 
   public:
+
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
