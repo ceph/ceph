@@ -1,4 +1,4 @@
->=15.2.1
+>=15.2.4
 --------
 
 * Cephadm: There were a lot of small usability improvements and bug fixes:
@@ -27,9 +27,6 @@
 * Cephadm: ``ceph orch apply osd`` supports a ``--preview`` flag that prints a preview of
   the OSD specification before deploying OSDs. This makes it possible to
   verify that the specification is correct, before applying it.
-
->=15.2.3
---------
 
 * RGW: The ``radosgw-admin`` sub-commands dealing with orphans --
   ``radosgw-admin orphans find``, ``radosgw-admin orphans find``,
