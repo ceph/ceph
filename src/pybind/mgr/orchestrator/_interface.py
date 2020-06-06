@@ -15,6 +15,7 @@ import time
 import uuid
 
 from collections import namedtuple, OrderedDict
+from contextlib import contextmanager
 from functools import wraps
 
 import yaml
@@ -46,6 +47,10 @@ class OrchestratorError(Exception):
 
     It's not intended for programming errors or orchestrator internal errors.
     """
+    def __init__(self, msg, event_kind_subject: Optional[Tuple[str, str]]=None):
+        super(Exception, self).__init__(msg)
+        # See OrchestratorEvent.subject
+        self.event_subject = event_kind_subject
 
 
 class NoOrchestrator(OrchestratorError):
@@ -60,6 +65,16 @@ class OrchestratorValidationError(OrchestratorError):
     """
     Raised when an orchestrator doesn't support a specific feature.
     """
+
+
+@contextmanager
+def set_exception_subject(kind, subject, overwrite=False):
+    try:
+        yield
+    except OrchestratorError as e:
+        if overwrite or hasattr(e, 'event_subject'):
+            e.event_subject = (kind, subject)
+        raise
 
 
 def handle_exception(prefix, cmd_args, desc, perm, func):

@@ -14,6 +14,6 @@ from ._interface import \
     OrchestratorValidationError, OrchestratorError, NoOrchestrator, \
     ServiceDescription, InventoryFilter, HostSpec, \
     DaemonDescription, \
-    OrchestratorEvent, \
+    OrchestratorEvent, set_exception_subject, \
     InventoryHost, DeviceLightLoc, \
     UpgradeStatusSpec
