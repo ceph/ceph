@@ -133,9 +133,12 @@ class TestCephadm(object):
                     'service_id': 'r.z',
                     'service_name': 'rgw.r.z',
                     'service_type': 'rgw',
-                    'status': {'running': 0, 'size': 1}
+                    'status': {'running': 0, 'size': 1},
                 }
             ]
+            for o in out:
+                if 'events' in o:
+                    del o['events']  # delete it, as it contains a timestamp
             assert out == expected
             assert [ServiceDescription.from_json(o).to_json() for o in expected] == expected
 

@@ -136,6 +136,7 @@ class SpecStore():
                 'created': self.spec_created[spec.service_name()].strftime(DATEFMT),
             }, sort_keys=True),
         )
+        self.mgr.events.for_service(spec, OrchestratorEvent.INFO, 'service was created')
 
     def rm(self, service_name):
         # type: (str) -> bool
