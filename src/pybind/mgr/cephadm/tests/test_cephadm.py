@@ -92,12 +92,13 @@ class TestCephadm(object):
 
             c = cephadm_module.list_daemons()
 
-            def remove_id(dd):
+            def remove_id_events(dd):
                 out = dd.to_json()
                 del out['daemon_id']
+                del out['events']
                 return out
 
-            assert [remove_id(dd) for dd in wait(cephadm_module, c)] == [
+            assert [remove_id_events(dd) for dd in wait(cephadm_module, c)] == [
                 {
                     'daemon_type': 'mds',
                     'hostname': 'test',

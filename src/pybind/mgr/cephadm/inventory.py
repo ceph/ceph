@@ -345,16 +345,16 @@ class HostCache():
         return r
 
     def get_daemons_with_volatile_status(self) -> Iterator[Tuple[str, Dict[str, orchestrator.DaemonDescription]]]:
-        for host, dm in self.daemons.items():
+        def alter(host, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
+            dd = copy(dd_orig)
             if host in self.mgr.offline_hosts:
-                def set_offline(dd: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
-                    ret = copy(dd)
-                    ret.status = -1
-                    ret.status_desc = 'host is offline'
-                    return ret
-                yield host, {name: set_offline(d) for name, d in dm.items()}
-            else:
-                yield host, dm
+                dd.status = -1
+                dd.status_desc = 'host is offline'
+            dd.events = self.mgr.events.get_for_daemon(dd.name())
+            return dd
+
+        for host, dm in self.daemons.items():
+            yield host, {name: alter(host, d) for name, d in dm.items()}
 
     def get_daemons_by_service(self, service_name):
         # type: (str) -> List[orchestrator.DaemonDescription]
@@ -497,7 +497,7 @@ class EventStore():
         unknowns: List[str] = []
         daemons = self.mgr.cache.get_daemon_names()
         specs = self.mgr.spec_store.specs.keys()
-        for k_s, v in self.events.keys():
+        for k_s, v in self.events.items():
             kind, subject = k_s.split(':')
             if kind == 'service':
                 if subject not in specs:
