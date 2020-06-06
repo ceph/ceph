@@ -125,7 +125,8 @@ void RGWOp_User_Create::execute()
   bool exclusive;
 
   int32_t max_buckets;
-  int32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
+  const int32_t default_max_buckets =
+    s->cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
 
   RGWUserAdminOpState op_state;
 

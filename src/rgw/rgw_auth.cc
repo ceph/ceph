@@ -524,7 +524,8 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   user_info.user_id = new_acct_user;
   user_info.display_name = info.acct_name;
 
-  user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
+  user_info.max_buckets =
+    cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
   rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
 
