@@ -1000,7 +1000,9 @@ Usage:
 
         else:
             placmentspec = PlacementSpec.from_string(placement)
-            assert service_type
+            if not service_type:
+                raise OrchestratorValidationError(f'Error: Empty service_type\n{usage}')
+
             specs = [ServiceSpec(service_type, placement=placmentspec, unmanaged=unmanaged)]
  
         completion = self.apply(specs)
