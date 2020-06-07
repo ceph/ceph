@@ -644,11 +644,12 @@ static seastar::future<> run(
     };
   };
 
-  return seastar::when_all_succeed(
+  return seastar::when_all(
       test_state::Server::create(server_conf.core, server_conf.block_size),
       create_sharded<test_state::Client>(client_conf.jobs, client_conf.block_size, client_conf.depth)
-  ).then([=](test_state::ServerFRef fp_server,
-             test_state::Client *client) {
+  ).then([=](auto&& ret) {
+    auto fp_server = std::move(std::get<0>(ret).get0());
+    auto client = std::move(std::get<1>(ret).get0());
     test_state::Server* server = fp_server.get();
     if (mode == perf_mode_t::both) {
       logger().info("\nperf settings:\n  {}\n  {}\n",
