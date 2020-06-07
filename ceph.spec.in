@@ -1198,6 +1198,7 @@ ${CMAKE} .. \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
+    -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=%{_unitdir} \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
