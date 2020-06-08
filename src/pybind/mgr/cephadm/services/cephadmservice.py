@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, Any
+from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic
 
 from mgr_module import MonCommandFailed
 
@@ -14,6 +14,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
+
+
+class CephadmDaemonSpec(Generic[ServiceSpecs]):
+    # typing.NamedTuple + Generic is broken in py36
+    def __init__(self, host, daemon_id, spec: ServiceSpecs, network):
+        self.host = host
+        self.daemon_id = daemon_id
+        self.spec: ServiceSpecs = spec
+        self.network = network  # mons
 
 class CephadmService(metaclass=ABCMeta):
     """
@@ -27,6 +37,17 @@ class CephadmService(metaclass=ABCMeta):
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
+
+    def make_daemon_spec(self, host, daemon_id, netowrk, spec: ServiceSpecs) -> CephadmDaemonSpec:
+        return CephadmDaemonSpec(
+            host=host,
+            daemon_id=daemon_id,
+            spec=spec,
+            network=netowrk
+        )
+
+    def create(self, daemon_spec: CephadmDaemonSpec):
+        raise NotImplementedError()
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
@@ -149,10 +170,12 @@ class CephadmService(metaclass=ABCMeta):
 class MonService(CephadmService):
     TYPE = 'mon'
 
-    def create(self, name, host, network):
+    def create(self, daemon_spec: CephadmDaemonSpec):
         """
         Create a new monitor on the given host.
         """
+        name, host, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
+
         # get mon. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get',
@@ -225,10 +248,11 @@ class MonService(CephadmService):
 class MgrService(CephadmService):
     TYPE = 'mgr'
 
-    def create(self, mgr_id, host):
+    def create(self, daemon_spec: CephadmDaemonSpec):
         """
         Create a new manager instance on a host.
         """
+        mgr_id, host = daemon_spec.daemon_id, daemon_spec.host
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -254,7 +278,9 @@ class MdsService(CephadmService):
             'value': spec.service_id,
         })
 
-    def create(self, mds_id, host) -> str:
+    def create(self, daemon_spec: CephadmDaemonSpec):
+        mds_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -324,7 +350,8 @@ class RgwService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, rgw_id, host) -> str:
+    def create(self, daemon_spec: CephadmDaemonSpec):
+        rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': f"{utils.name_to_config_section('rgw')}.{rgw_id}",
@@ -338,7 +365,9 @@ class RgwService(CephadmService):
 class RbdMirrorService(CephadmService):
     TYPE = 'rbd-mirror'
 
-    def create(self, daemon_id, host) -> str:
+    def create(self, daemon_spec: CephadmDaemonSpec):
+        daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.rbd-mirror.' + daemon_id,
@@ -352,7 +381,9 @@ class RbdMirrorService(CephadmService):
 class CrashService(CephadmService):
     TYPE = 'crash'
 
-    def create(self, daemon_id, host) -> str:
+    def create(self, daemon_spec: CephadmDaemonSpec):
+        daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
+
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.crash.' + host,
