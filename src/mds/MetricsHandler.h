@@ -10,6 +10,7 @@
 
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 #include "include/cephfs/metrics/Types.h"
 
 #include "messages/MMDSPing.h"
@@ -19,7 +20,6 @@
 
 class MDSRank;
 class Session;
-class CephContext;
 
 class MetricsHandler : public Dispatcher {
 public:
