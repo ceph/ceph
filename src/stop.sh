@@ -28,6 +28,7 @@ else
   CEPH_CONF_PATH="$PWD"
 fi
 conf_fn="$CEPH_CONF_PATH/ceph.conf"
+CEPHADM_DIR_PATH="$CEPH_CONF_PATH/../src/cephadm"
 
 MYUID=$(id -u)
 MYNAME=$(id -nu)
@@ -40,6 +41,11 @@ do_killall() {
     pg=`pgrep -u $MYUID -f $pname`
     [ -n "$pg" ] && kill $pg
     $SUDO killall -u $MYNAME $1
+}
+
+do_killcephadm() {
+    FSID=$($CEPH_BIN/ceph -c $conf_fn fsid)
+    sudo $CEPHADM_DIR_PATH/cephadm rm-cluster --fsid $FSID --force
 }
 
 do_umountall() {
@@ -72,7 +78,7 @@ do_umountall() {
     [ -n "$CEPH_FUSE_MNTS" ] && sudo umount -f $CEPH_FUSE_MNTS
 }
 
-usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [nfs] [--crimson]\n"
+usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [nfs] [--crimson] [--cephadm]\n"
 
 stop_all=1
 stop_mon=0
@@ -82,6 +88,7 @@ stop_mgr=0
 stop_rgw=0
 stop_ganesha=0
 ceph_osd=ceph-osd
+stop_cephadm=0
 
 while [ $# -ge 1 ]; do
     case $1 in
@@ -115,6 +122,10 @@ while [ $# -ge 1 ]; do
         --crimson)
             ceph_osd=crimson-osd
             ;;
+        --cephadm)
+            stop_cephadm=1
+            stop_all=0
+            ;;
         * )
             printf "$usage"
             exit
@@ -145,6 +156,10 @@ if [ $stop_all -eq 1 ]; then
         fi
     fi
 
+    if [ "$($CEPHADM_DIR_PATH/cephadm ls)" != "[]" ]; then
+        do_killcephadm
+    fi
+
     for p in ceph-mon ceph-mds $ceph_osd ceph-mgr radosgw lt-radosgw apache2 ganesha.nfsd ; do
         for try in 0 1 1 1 1 ; do
             if ! pkill -u $MYUID $p ; then
@@ -166,4 +181,5 @@ else
     [ $stop_mgr -eq 1 ] && do_killall ceph-mgr
     [ $stop_ganesha -eq 1 ] && do_killall ganesha.nfsd
     [ $stop_rgw -eq 1 ] && do_killall radosgw lt-radosgw apache2
+    [ $stop_cephadm -eq 1 ] && do_killcephadm
 fi
