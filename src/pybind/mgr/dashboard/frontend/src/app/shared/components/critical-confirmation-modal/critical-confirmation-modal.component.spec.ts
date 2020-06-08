@@ -12,9 +12,7 @@ import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
 
-@NgModule({
-  entryComponents: [CriticalConfirmationModalComponent]
-})
+@NgModule({})
 export class MockModule {}
 
 @Component({

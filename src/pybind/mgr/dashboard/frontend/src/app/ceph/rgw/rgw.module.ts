@@ -27,15 +27,6 @@ import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal/rgw-user-
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 
 @NgModule({
-  entryComponents: [
-    RgwDaemonDetailsComponent,
-    RgwBucketDetailsComponent,
-    RgwUserDetailsComponent,
-    RgwUserSwiftKeyModalComponent,
-    RgwUserS3KeyModalComponent,
-    RgwUserCapabilityModalComponent,
-    RgwUserSubuserModalComponent
-  ],
   imports: [
     CommonModule,
     SharedModule,

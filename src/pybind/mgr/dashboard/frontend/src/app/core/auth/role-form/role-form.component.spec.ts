@@ -11,6 +11,7 @@ import { of } from 'rxjs';
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
+import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -31,17 +32,20 @@ describe('RoleFormComponent', () => {
 
   const routes: Routes = [{ path: 'roles', component: FakeComponent }];
 
-  configureTestBed({
-    imports: [
-      RouterTestingModule.withRoutes(routes),
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      ToastrModule.forRoot(),
-      SharedModule
-    ],
-    declarations: [RoleFormComponent, FakeComponent],
-    providers: i18nProviders
-  });
+  configureTestBed(
+    {
+      imports: [
+        RouterTestingModule.withRoutes(routes),
+        HttpClientTestingModule,
+        ReactiveFormsModule,
+        ToastrModule.forRoot(),
+        SharedModule
+      ],
+      declarations: [RoleFormComponent, FakeComponent],
+      providers: i18nProviders
+    },
+    [LoadingPanelComponent]
+  );
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RoleFormComponent);
