@@ -1952,6 +1952,7 @@ int64_t BlueFS::_read_random(
       s_lock.unlock();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(off, &x_off);
+      ceph_assert(p != h->file->fnode.extents.end());
       uint64_t l = std::min(p->length - x_off, len);
       //hard cap to 1GB
       l = std::min(l, uint64_t(1) << 30);
@@ -2052,6 +2053,7 @@ int64_t BlueFS::_read(
         buf->bl_off = off & super.block_mask();
         uint64_t x_off = 0;
         auto p = h->file->fnode.seek(buf->bl_off, &x_off);
+	ceph_assert(p != h->file->fnode.extents.end());
         uint64_t want = round_up_to(len + (off & ~super.block_mask()),
 				    super.block_size);
         want = std::max(want, buf->max_prefetch);
