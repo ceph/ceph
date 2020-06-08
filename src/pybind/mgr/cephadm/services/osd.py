@@ -11,8 +11,7 @@ import orchestrator
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmService
-
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonSpec
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +84,13 @@ class OSDService(CephadmService):
                     continue
 
                 created.append(osd_id)
+                daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
+                    daemon_id=osd_id,
+                    host=host,
+                    daemon_type='osd',
+                )
                 self.mgr._create_daemon(
-                    'osd', osd_id, host,
+                    daemon_spec,
                     osd_uuid_map=osd_uuid_map)
 
         if created:
