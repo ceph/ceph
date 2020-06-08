@@ -88,7 +88,7 @@ def task(ctx, config):
         if osize == 0:
             objectsize = []
         else:
-            objectsize = ['-O', str(osize)]
+            objectsize = ['--object-size', str(osize)]
         size = ['-b', str(config.get('size', 65536))]
         # If doing a reading run then populate data
         if runtype != "write":
