@@ -69,6 +69,7 @@ private:
   void _committed_pushed_object(epoch_t epoch,
 				eversion_t last_complete);
   friend class ReplicatedRecoveryBackend;
+  friend class crimson::osd::UrgentRecovery;
   seastar::future<> handle_pull(Ref<MOSDPGPull> m);
   seastar::future<> handle_push(Ref<MOSDPGPush> m);
   seastar::future<> handle_push_reply(Ref<MOSDPGPushReply> m);

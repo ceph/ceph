@@ -332,7 +332,7 @@ void PGRecovery::on_local_recover(
       obc->obs.oi = recovery_info.oi;
       // obc is loaded the excl lock
       obc->put_lock_type(RWState::RWEXCL);
-      assert(obc->get_recovery_read());
+      assert(obc->get_recovery_read().get0());
     }
     if (!pg->is_unreadable_object(soid)) {
       pg->get_recovery_backend()->get_recovering(soid).set_readable();

@@ -13,7 +13,7 @@ namespace crimson::osd {
 class PG;
 class ShardServices;
 
-class BackgroundRecovery final : public OperationT<BackgroundRecovery> {
+class BackgroundRecovery : public OperationT<BackgroundRecovery> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::background_recovery;
 
@@ -23,24 +23,42 @@ public:
     epoch_t epoch_started,
     crimson::osd::scheduler::scheduler_class_t scheduler_class);
 
-  void print(std::ostream &) const final;
-  void dump_detail(Formatter *f) const final;
+  virtual void print(std::ostream &) const;
+  virtual void dump_detail(Formatter *f) const;
   seastar::future<> start();
-private:
+protected:
   Ref<PG> pg;
   ShardServices &ss;
   epoch_t epoch_started;
   crimson::osd::scheduler::scheduler_class_t scheduler_class;
-
-  auto get_scheduler_params() const {
+  auto get_scheduler_params(crimson::osd::scheduler::cost_t cost = 1,
+			    crimson::osd::scheduler::client_t owner = 0) const {
     return crimson::osd::scheduler::params_t{
-      1, // cost
-      0, // owner
+      cost, // cost
+      owner, // owner
       scheduler_class
     };
   }
+  virtual seastar::future<bool> do_recovery();
+};
 
-  seastar::future<bool> do_recovery();
+class UrgentRecovery final : public BackgroundRecovery {
+public:
+  UrgentRecovery(
+    const hobject_t& soid,
+    const eversion_t& need,
+    Ref<PG> pg,
+    ShardServices& ss,
+    epoch_t epoch_started,
+    crimson::osd::scheduler::scheduler_class_t scheduler_class)
+  : BackgroundRecovery{pg, ss, epoch_started, scheduler_class},
+    soid{soid}, need(need) {}
+  void print(std::ostream&) const final;
+  void dump_detail(Formatter* f) const final;
+private:
+  const hobject_t soid;
+  const eversion_t need;
+  seastar::future<bool> do_recovery() override;
 };
 
 }
