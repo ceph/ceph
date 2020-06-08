@@ -33,7 +33,7 @@
 #endif
 
 #if defined(HAVE_LIBZBC)
-#include "zns/HMSMRDevice.h"
+#include "zoned/HMSMRDevice.h"
 extern "C" {
 #include <libzbc/zbc.h>
 }
