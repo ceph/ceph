@@ -88,8 +88,6 @@
 %if 0%{?rhel} == 7
 %define __python %{__python3}
 %endif
-# unify libexec for all targets
-%global _libexecdir %{_exec_prefix}/lib
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
