@@ -7,7 +7,7 @@ usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/ceph-kvstore-tool
-usr/lib/ceph/ceph_common.sh
+usr/libexec/ceph/ceph_common.sh
 usr/lib/ceph/erasure-code/*
 usr/lib/rados-classes/*
 usr/sbin/ceph-create-keys
