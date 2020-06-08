@@ -20,8 +20,11 @@ logger = logging.getLogger(__name__)
 class NFSService(CephadmService):
     TYPE = 'nfs'
 
-    def _generate_nfs_config(self, daemon_type, daemon_id, host):
-        # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_type = daemon_spec.daemon_type
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+
         deps = []  # type: List[str]
 
         # find the matching NFSServiceSpec
@@ -70,9 +73,12 @@ class NFSService(CephadmService):
         self.mgr.spec_store.save(spec)
 
     def create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]):
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+        spec = daemon_spec.spec
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
-        return self.mgr._create_daemon('nfs', daemon_spec.daemon_id, daemon_spec.host)
+        return self.mgr._create_daemon(daemon_spec)
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         

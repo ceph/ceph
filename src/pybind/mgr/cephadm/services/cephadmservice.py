@@ -1,7 +1,7 @@
 import json
 import logging
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic
+from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic,  Optional, Dict, Any, Tuple
 
 from mgr_module import MonCommandFailed
 
@@ -19,11 +19,43 @@ ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
     # typing.NamedTuple + Generic is broken in py36
-    def __init__(self, host, daemon_id, spec: ServiceSpecs, network):
+    def __init__(self, host, daemon_id,
+                 spec: Optional[ServiceSpecs]=None,
+                 network: Optional[str]=None,
+                 keyring: Optional[str]=None,
+                 extra_args: Optional[List[str]]=None,
+                 extra_config: Optional[Dict[str, Any]]=None,
+                 daemon_type: Optional[str]=None):
+        """
+        Used for
+        * deploying new daemons. then everything is set
+        * redeploying existing daemons, then only the first three attrs are set.
+
+        Would be great to have a consistent usage where all properties are set.
+        """
         self.host = host
         self.daemon_id = daemon_id
-        self.spec: ServiceSpecs = spec
-        self.network = network  # mons
+        daemon_type = daemon_type or (spec.service_type if spec else None)
+        assert daemon_type is not None
+        self.daemon_type: str = daemon_type
+
+        # would be great to have the spec always available:
+        self.spec: Optional[ServiceSpecs] = spec
+
+        # mons
+        self.network = network
+
+        # for run_cephadm.
+        self.keyring: Optional[str] = keyring
+
+        # For run_cephadm. Would be great to have more expressive names.
+        self.extra_args: List[str] = extra_args or []
+        self.extra_config: Dict[str, Any] = extra_config or {}
+
+
+    def name(self) -> str:
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
 
 class CephadmService(metaclass=ABCMeta):
     """
@@ -48,6 +80,22 @@ class CephadmService(metaclass=ABCMeta):
 
     def create(self, daemon_spec: CephadmDaemonSpec):
         raise NotImplementedError()
+
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        # Ceph.daemons (mon, mgr, mds, osd, etc)
+        cephadm_config = self.mgr._get_config_and_keyring(
+            daemon_spec.daemon_type,
+            daemon_spec.daemon_id,
+            host=daemon_spec.host,
+            keyring=daemon_spec.keyring,
+            extra_ceph_config=daemon_spec.extra_config.pop('config', ''))
+
+
+        if daemon_spec.extra_config:
+            cephadm_config.update({'files': daemon_spec.extra_config})
+
+        return cephadm_config, []
+
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
         """The post actions needed to be done after daemons are checked"""
@@ -207,9 +255,10 @@ class MonService(CephadmService):
                 raise OrchestratorError('public_network is set but does not look like a CIDR network: \'%s\'' % network)
             extra_config += 'public network = %s\n' % network
 
-        return self.mgr._create_daemon('mon', name, host,
-                                       keyring=keyring,
-                                       extra_config={'config': extra_config})
+        daemon_spec.extra_config={'config': extra_config}
+        daemon_spec.keyring=keyring
+
+        return self.mgr._create_daemon(daemon_spec)
 
     def _check_safe_to_destroy(self, mon_id):
         # type: (str) -> None
@@ -262,7 +311,9 @@ class MgrService(CephadmService):
                      'mds', 'allow *'],
         })
 
-        return self.mgr._create_daemon('mgr', mgr_id, host, keyring=keyring)
+        daemon_spec.keyring = keyring
+
+        return self.mgr._create_daemon(daemon_spec)
 
 
 class MdsService(CephadmService):
@@ -289,7 +340,9 @@ class MdsService(CephadmService):
                      'osd', 'allow rw tag cephfs *=*',
                      'mds', 'allow'],
         })
-        return self.mgr._create_daemon('mds', mds_id, host, keyring=keyring)
+        daemon_spec.keyring = keyring
+
+        return self.mgr._create_daemon(daemon_spec)
 
 
 class RgwService(CephadmService):
@@ -359,7 +412,10 @@ class RgwService(CephadmService):
                      'mgr', 'allow rw',
                      'osd', 'allow rwx'],
         })
-        return self.mgr._create_daemon('rgw', rgw_id, host, keyring=keyring)
+
+        daemon_spec.keyring = keyring
+
+        return self.mgr._create_daemon(daemon_spec)
 
 
 class RbdMirrorService(CephadmService):
@@ -374,8 +430,10 @@ class RbdMirrorService(CephadmService):
             'caps': ['mon', 'profile rbd-mirror',
                      'osd', 'profile rbd'],
         })
-        return self.mgr._create_daemon('rbd-mirror', daemon_id, host,
-                                       keyring=keyring)
+
+        daemon_spec.keyring = keyring
+
+        return self.mgr._create_daemon(daemon_spec)
 
 
 class CrashService(CephadmService):
@@ -390,4 +448,7 @@ class CrashService(CephadmService):
             'caps': ['mon', 'profile crash',
                      'mgr', 'profile crash'],
         })
-        return self.mgr._create_daemon('crash', daemon_id, host, keyring=keyring)
+
+        daemon_spec.keyring = keyring
+
+        return self.mgr._create_daemon(daemon_spec)
