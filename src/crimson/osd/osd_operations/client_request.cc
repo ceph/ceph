@@ -68,7 +68,7 @@ seastar::future<> ClientRequest::start()
       return with_blocking_future(osd.wait_for_pg(m->get_spg()));
     }).then([this, opref=std::move(opref)](Ref<PG> pgref) {
       return seastar::do_with(
-	std::move(pgref), std::move(opref), [this](auto pgref, auto opref) {
+	std::move(pgref), std::move(opref), [this](auto& pgref, auto& opref) {
 	  PG &pg = *pgref;
 	  return with_blocking_future(
 	    handle.enter(pp(pg).await_map)
@@ -80,14 +80,14 @@ seastar::future<> ClientRequest::start()
 	      handle.enter(pp(pg).wait_for_active));
 	  }).then([this, &pg]() mutable {
 	    return with_blocking_future(pg.wait_for_active_blocker.wait());
-	  }).then([this, &pg]() mutable {
+	  }).then([this, &pgref]() mutable {
 	    if (m->finish_decode()) {
 	      m->clear_payload();
 	    }
 	    if (is_pg_op()) {
-	      return process_pg_op(pg);
+	      return process_pg_op(pgref);
 	    } else {
-	      return process_op(pg);
+	      return process_op(pgref);
 	    }
 	  });
 	});
@@ -96,20 +96,33 @@ seastar::future<> ClientRequest::start()
 }
 
 seastar::future<> ClientRequest::process_pg_op(
-  PG &pg)
+  Ref<PG> &pg)
 {
-  return pg.do_pg_ops(m)
+  return pg->do_pg_ops(m)
     .then([this](Ref<MOSDOpReply> reply) {
       return conn->send(reply);
     });
 }
 
 seastar::future<> ClientRequest::process_op(
-  PG &pg)
+  Ref<PG> &pgref)
 {
+  PG& pg = *pgref;
   return with_blocking_future(
-    handle.enter(pp(pg).get_obc)
-  ).then([this, &pg]() {
+    handle.enter(pp(pg).recover_missing)
+  ).then([this, &pg, pgref=std::move(pgref)] {
+    eversion_t ver;
+    const hobject_t& soid = m->get_hobj();
+    if (pg.is_unreadable_object(soid, &ver)) {
+      auto [op, fut] = osd.get_shard_services().start_operation<UrgentRecovery>(
+			  soid, ver, pgref, osd.get_shard_services(), m->get_min_epoch(),
+			  crimson::osd::scheduler::scheduler_class_t::immediate);
+      return std::move(fut);
+    }
+    return seastar::now();
+  }).then([this, &pg] {
+    return with_blocking_future(handle.enter(pp(pg).get_obc));
+  }).then([this, &pg]() {
     op_info.set_from_op(&*m, *pg.get_osdmap());
     return pg.with_locked_obc(
       m,
@@ -130,4 +143,5 @@ seastar::future<> ClientRequest::process_op(
     return seastar::now();
   }));
 }
+
 }

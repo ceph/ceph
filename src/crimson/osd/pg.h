@@ -661,10 +661,11 @@ private:
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }
-  bool is_unreadable_object(const hobject_t &oid) const final {
+  bool is_unreadable_object(const hobject_t &oid,
+			    eversion_t* v = 0) const final {
     return is_missing_object(oid) ||
       !peering_state.get_missing_loc().readable_with_acting(
-	oid, get_actingset());
+	oid, get_actingset(), v);
   }
   const set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();

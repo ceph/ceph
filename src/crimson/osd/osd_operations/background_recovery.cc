@@ -68,4 +68,33 @@ seastar::future<> BackgroundRecovery::start()
     });
 }
 
+seastar::future<bool> UrgentRecovery::do_recovery()
+{
+  if (!pg->has_reset_since(epoch_started)) {
+    auto futopt = pg->get_recovery_handler()->recover_missing(soid, need);
+    assert(futopt);
+    return with_blocking_future(std::move(*futopt)).then([] {
+      return seastar::make_ready_future<bool>(false);
+    });
+  }
+  return seastar::make_ready_future<bool>(false);
+}
+
+void UrgentRecovery::print(std::ostream &lhs) const
+{
+  lhs << "UrgentRecovery(" << pg->get_pgid() << ", "
+    << soid << ", v" << need << ")";
+}
+
+void UrgentRecovery::dump_detail(Formatter *f) const
+{
+  f->dump_stream("pgid") << pg->get_pgid();
+  f->open_object_section("recovery_detail");
+  {
+    f->dump_stream("oid") << soid;
+    f->dump_stream("version") << need;
+  }
+  f->close_section();
+}
+
 }
