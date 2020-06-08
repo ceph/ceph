@@ -82,7 +82,7 @@ export class CephfsClientsComponent implements OnInit {
         this.modalRef.hide();
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Evicted client "{{clientId}}"', { clientId: clientId })
+          this.i18n(`Evicted client '{{clientId}}'`, { clientId: clientId })
         );
       },
       () => {

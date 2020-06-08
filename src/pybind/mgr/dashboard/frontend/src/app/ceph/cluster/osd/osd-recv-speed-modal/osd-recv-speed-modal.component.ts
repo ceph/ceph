@@ -224,7 +224,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Updated OSD recovery speed priority "{{value}}"', {
+          this.i18n(`Updated OSD recovery speed priority '{{value}}'`, {
             value: this.osdRecvSpeedForm.getValue('priority')
           })
         );
