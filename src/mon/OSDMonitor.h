@@ -653,6 +653,10 @@ protected:
 
   int32_t _allocate_osd_id(int32_t* existing_id);
 
+  int get_grace_interval_threshold();
+  bool grace_interval_threshold_exceeded(int last_failed);
+  void set_default_laggy_params(int target_osd);
+
 public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
