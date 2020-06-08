@@ -14,12 +14,11 @@
           <div class="card-body p-0">
             <h6 class="card-title bold">{{ executingTask.description }}</h6>
 
-            <div class="progress mb-1">
-              <progressbar class="progress-striped active"
-                           max="100"
-                           [value]="executingTask.progress"
-                           [striped]="true"
-                           [animate]="true"></progressbar>
+            <div class="mb-1">
+              <ngb-progressbar type="info"
+                               [value]="executingTask?.progress"
+                               [striped]="true"
+                               [animated]="true"></ngb-progressbar>
             </div>
 
             <p class="card-text text-muted">
