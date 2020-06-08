@@ -267,6 +267,7 @@ void PG::on_activate_complete()
       get_osdmap_epoch(),
       PeeringState::AllReplicasRecovered{});
   }
+  backend->on_activate_complete();
 }
 
 void PG::prepare_write(pg_info_t &info,
@@ -916,6 +917,11 @@ seastar::future<> PG::stop()
   }).then([this] {
     return backend->stop();
   });
+}
+
+void PG::on_change(ceph::os::Transaction &t) {
+  recovery_backend->on_peering_interval_change(t);
+  backend->on_actingset_changed({ is_primary() });
 }
 
 }
