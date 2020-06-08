@@ -56,7 +56,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   reweightBodyTpl: TemplateRef<any>;
   @ViewChild('safeToDestroyBodyTpl', { static: false })
   safeToDestroyBodyTpl: TemplateRef<any>;
-  @ViewChild('deleteOsdExtraTpl')
+  @ViewChild('deleteOsdExtraTpl', { static: false })
   deleteOsdExtraTpl: TemplateRef<any>;
 
   permissions: Permissions;
@@ -518,7 +518,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           bodyContext: {
             safeToPerform: result[checkKey],
             message: result.message,
-            actionDescription: templateItemDescription
+            actionDescription: templateItemDescription,
+            osdIds: this.getSelectedOsdIds()
           },
           childFormGroup: childFormGroup,
           childFormGroupTemplate: childFormGroupTemplate,
