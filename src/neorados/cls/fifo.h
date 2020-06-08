@@ -132,6 +132,10 @@ struct marker {
 
   marker() = default;
   marker(std::int64_t num, std::uint64_t ofs) : num(num), ofs(ofs) {}
+  static marker max() {
+    return { std::numeric_limits<decltype(num)>::max(),
+	     std::numeric_limits<decltype(ofs)>::max() };
+  }
 
   std::string to_string() {
     return fmt::format("{}:{}", num, ofs);
