@@ -1556,7 +1556,10 @@ int BlueFS::_read_random(
       s_lock.unlock();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(off, &x_off);
-      uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
+      ceph_assert(p != h->file->fnode.extents.end());
+      uint64_t l = std::min(p->length - x_off, len);
+      //hard cap to 1GB
+      l = std::min(l, uint64_t(1) << 30);
       dout(20) << __func__ << " read random 0x"
 	       << std::hex << x_off << "~" << l << std::dec
 	       << " of " << *p << dendl;
@@ -1655,12 +1658,7 @@ int BlueFS::_read(
         buf->bl_off = off & super.block_mask();
         uint64_t x_off = 0;
         auto p = h->file->fnode.seek(buf->bl_off, &x_off);
-	if (p == h->file->fnode.extents.end()) {
-	  dout(5) << __func__ << " reading less then required "
-		  << ret << "<" << ret + len << dendl;
-	  break;
-	}
-
+	ceph_assert(p != h->file->fnode.extents.end());
         uint64_t want = round_up_to(len + (off & ~super.block_mask()),
 				    super.block_size);
         want = std::max(want, buf->max_prefetch);
