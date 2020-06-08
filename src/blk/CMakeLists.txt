@@ -37,7 +37,7 @@ if(WITH_SPDK)
 endif()
 
 if(HAVE_LIBZBC)
-  target_link_libraries(blk ${ZBC_LIBRARIES})
+  target_link_libraries(blk PRIVATE ${ZBC_LIBRARIES})
 endif()
 
 if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
