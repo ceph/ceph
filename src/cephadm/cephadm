@@ -2699,7 +2699,7 @@ def command_bootstrap():
                         get_fqdn(), port,
                         args.initial_dashboard_user,
                         password))
-    
+
     if args.apply_spec:
         logger.info('Applying %s to cluster' % args.apply_spec)
 
@@ -3106,6 +3106,27 @@ def list_daemons(detail=True, legacy_dir=None):
                     ls.append(i)
             elif is_fsid(i):
                 fsid = str(i)  # convince mypy that fsid is a str here
+
+                # command: podman/docker ps -a --format=json
+                # used to get container id, container name, start timestamp and image name
+                ps_out, err, code = call(
+                    [
+                        container_path, 'ps', '-a', "--format='{{.ID}},{{.Image}},{{.Names}},{{.CreatedAt}}'"
+                    ],
+                    verbose_on_failure=False)
+
+                # command: podman/docker image ls -a --format=json
+                # Used to get the id of the images used for the containers
+                image_list_out, err, code = call(
+                    [
+                        container_path, 'image', 'ls', "--format='{{.Repository}},{{.ID}}'"
+                    ],
+                    verbose_on_failure=False)
+
+                parsed_ps_out = parse_go_output(ps_out, 4)
+                parsed_image_list_out = parse_go_output(image_list_out, 2)
+
+                # loop through every directory found within the data directory. Each should correspond to a container
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '.' in j:
                         name = j
@@ -3121,33 +3142,22 @@ def list_daemons(detail=True, legacy_dir=None):
                         'fsid': fsid,
                         'systemd_unit': unit_name,
                     }
+
+                    # name in docker/podman ps command has a "-" where the unit name generated from
+                    # the get_unit_name function has an "@". Replacing the @ with a - so it matches
+                    char_index = unit_name.find(daemon_type) - 1;
+                    adjusted_unit_name = unit_name[:char_index] + "-" + unit_name[char_index+1:]
+
                     if detail:
                         # get container id
                         (i['enabled'], i['state'], _) = check_unit(unit_name)
-                        container_id = None
-                        image_name = None
-                        image_id = None
                         version = None
-                        start_stamp = None
+                        container_id, image_name, image_id, start_stamp = get_list_daemons_data(
+                            adjusted_unit_name, parsed_ps_out, parsed_image_list_out
+                        )
 
-                        if 'podman' in container_path and get_podman_version() < (1, 6, 2):
-                            image_field = '.ImageID'
-                        else:
-                            image_field = '.Image'
-
-                        out, err, code = call(
-                            [
-                                container_path, 'inspect',
-                                '--format', '{{.Id}},{{.Config.Image}},{{%s}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}' % image_field,
-                                'ceph-%s-%s' % (fsid, j)
-                            ],
-                            verbose_on_failure=False)
-                        if not code:
-                            (container_id, image_name, image_id, start,
-                             version) = out.strip().split(',')
-                            image_id = normalize_container_id(image_id)
-                            daemon_type = name.split('.', 1)[0]
-                            start_stamp = try_convert_datetime(start)
+                        # if container id was found, can use it to try and find version
+                        if container_id and image_id:
                             if not version or '.' not in version:
                                 version = seen_versions.get(image_id, None)
                             if daemon_type == NFSGanesha.daemon_type:
@@ -3184,6 +3194,7 @@ def list_daemons(detail=True, legacy_dir=None):
                                         seen_versions[image_id] = version
                                 else:
                                     logging.warning('version for unknown daemon type %s' % daemon_type)
+                        # if no container id was found, try another method
                         else:
                             vfile = os.path.join(data_dir, fsid, j, 'unit.image') # type: ignore
                             try:
@@ -3191,6 +3202,22 @@ def list_daemons(detail=True, legacy_dir=None):
                                     image_name = f.read().strip() or None
                             except IOError:
                                 pass
+
+                        if not version:
+                            # last resort. Inspect container to try and get version
+                            version_out, err, code = call(
+                            [
+                                container_path, 'inspect',
+                                '--format', '{{index .Config.Labels "io.ceph.version"}}',
+                                'ceph-%s-%s' % (fsid, j)
+                            ],
+                            verbose_on_failure=False)
+                            if not code:
+                                version = version_out.strip()
+                                if not version or '.' not in version:
+                                    logging.warning('No version could be found for %s daemon' % daemon_type)
+
+                        # place all data found inside dict object
                         i['container_id'] = container_id
                         i['container_image_name'] = image_name
                         i['container_image_id'] = image_id
@@ -3204,9 +3231,57 @@ def list_daemons(detail=True, legacy_dir=None):
                         i['configured'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.configured'))
 
+                    #add the dict object for this container to list
                     ls.append(i)
 
     return ls
+
+# turns go template output into 2d array
+# out parameter is go template string output from command
+# n paramater is number of arguments in format of command
+# Ex: --format='{{.ID}},{{.Image}},{{.Names}}' would require n = 3
+def parse_go_output(out, n):
+    # command outputs as a single string. Converting it into a 2d
+    # array of strings by splitting on newlines and commas
+    out_lines = out.strip().split('\n')
+    # initialize 2d array to have # of rows equal to rows in output and
+    # n columns: one for each data item it provides.
+    parsed_out = [["a" for placeholder in range(n)] for placeholder in range(len(out_lines))]
+    for i in range(0, len(out_lines)):
+        single_line = out_lines[i].split(',')
+        for j in range(0, n):
+            parsed_out[i][j] = single_line[j].replace("'", "")
+    return parsed_out
+
+# helper function for list_daemons that takes parsed ps output and parsed image ls output
+# and returns container id, image id, image name and start timestamp.
+# Assumes parsed output is 2d array formatted a specific way
+def get_list_daemons_data(unit_name, parsed_ps_out, parsed_image_list_out):
+    container_id = None
+    image_name = None
+    image_id = None
+    start_stamp = None
+    for k in range(0, len(parsed_ps_out)):
+        # match container name from get_unit_name with name in docker ps command to
+        # find that container's info
+        if unit_name in parsed_ps_out[k][2]:
+            # grab container id, image name and start timestamp from corresponding row in ps output
+            container_id = parsed_ps_out[k][0]
+            image_name = parsed_ps_out[k][1]
+            start_stamp = parsed_ps_out[k][3]
+    # if an image name was found, can use it to find that image's id
+    if image_name:
+        # image names from docker image list command do not include extra
+        # info sometimes found after a colon. Ex: "latest-master-devel" in
+        # "docker.io/ceph/daemon-base:latest-master-devel". Adjusted version removes any
+        # possible info after a colon so strings match
+        adjusted_image_name = image_name.split(':')[0]
+        # match found image name with image name in podman image list output
+        for k in range(0, len(parsed_image_list_out)):
+            if adjusted_image_name in parsed_image_list_out[k][0]:
+                image_id = parsed_image_list_out[k][1]
+
+    return container_id, image_name, image_id, start_stamp
 
 
 def get_daemon_description(fsid, name, detail=False, legacy_dir=None):
