@@ -6,7 +6,7 @@ from mgr_module import MonCommandFailed
 from ceph.deployment.service_spec import IscsiServiceSpec
 
 from orchestrator import DaemonDescription
-from .cephadmservice import CephadmService
+from .cephadmservice import CephadmService, CephadmDaemonSpec
 from .. import utils
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,10 @@ class IscsiService(CephadmService):
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
-    def create(self, igw_id, host, spec) -> str:
+    def create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> str:
+        spec = daemon_spec.spec
+        igw_id = daemon_spec.daemon_id
+        host = daemon_spec.host
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': utils.name_to_auth_entity('iscsi', igw_id),
