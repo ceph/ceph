@@ -63,6 +63,7 @@ set(librgw_common_srcs
   rgw_cache.cc
   rgw_common.cc
   rgw_compression.cc
+  rgw_etag_verifier.cc
   rgw_cors.cc
   rgw_cors_s3.cc
   rgw_dencoder.cc
