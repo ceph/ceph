@@ -250,12 +250,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         const args = this._getUpdateArgs();
         this.submitObservables.push(this.rgwUserService.update(uid, args));
       }
-      notificationTitle = this.i18n('Updated Object Gateway user "{{uid}}"', { uid: uid });
+      notificationTitle = this.i18n(`Updated Object Gateway user '{{uid}}'`, { uid: uid });
     } else {
       // Add
       const args = this._getCreateArgs();
       this.submitObservables.push(this.rgwUserService.create(args));
-      notificationTitle = this.i18n('Created Object Gateway user "{{uid}}"', { uid: uid });
+      notificationTitle = this.i18n(`Created Object Gateway user '{{uid}}'`, { uid: uid });
     }
     // Check if user quota has been modified.
     if (this._isUserQuotaDirty()) {
