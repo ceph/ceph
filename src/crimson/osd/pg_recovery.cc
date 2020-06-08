@@ -259,8 +259,8 @@ size_t PGRecovery::start_backfill_ops(
   size_t max_to_start,
   std::vector<crimson::osd::blocking_future<>> *out)
 {
-  assert(!pg->get_peering_state().get_backfill_targets().empty());
-
+  if (pg->get_peering_state().get_backfill_targets().empty())
+    return 0;
   ceph_abort("not implemented!");
 }
 
