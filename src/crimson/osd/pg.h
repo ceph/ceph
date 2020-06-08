@@ -302,9 +302,7 @@ public:
   void on_role_change() final {
     // Not needed yet
   }
-  void on_change(ceph::os::Transaction &t) final {
-    recovery_backend->on_peering_interval_change(t);
-  }
+  void on_change(ceph::os::Transaction &t) final;
   void on_activate(interval_set<snapid_t> to_trim) final;
   void on_activate_complete() final;
   void on_new_interval() final {
