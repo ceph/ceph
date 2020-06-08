@@ -2596,6 +2596,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   // allocate some more space (before we run out)?
   int64_t runway = log_writer->file->fnode.get_allocated() -
     log_writer->get_effective_write_pos();
+  bool just_expanded_log = false;
   if (runway < (int64_t)cct->_conf->bluefs_min_log_runway) {
     dout(10) << __func__ << " allocating more log runway (0x"
 	     << std::hex << runway << std::dec  << " remaining)" << dendl;
@@ -2611,6 +2612,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
     ceph_assert(r == 0);
     vselector->add_usage(log_writer->file->vselector_hint, log_writer->file->fnode);
     log_t.op_file_update(log_writer->file->fnode);
+    just_expanded_log = true;
   }
 
   bufferlist bl;
@@ -2622,6 +2624,10 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
     bl.append_zero(realign);
 
   logger->inc(l_bluefs_logged_bytes, bl.length());
+
+  if (just_expanded_log) {
+    ceph_assert(bl.length() <= runway); // if we write this, we will have an unrecoverable data loss
+  }
 
   log_writer->append(bl);
 
