@@ -22,7 +22,7 @@ endif()
 
 if(HAVE_LIBZBC)
   list(APPEND libblk_srcs
-    zns/HMSMRDevice.cc)
+    zoned/HMSMRDevice.cc)
 endif()
 
 add_library(blk ${libblk_srcs})
