@@ -11,6 +11,7 @@
 #include "msg/msg_types.h"
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 #include "messages/MMDSMetrics.h"
 
 #include "mgr/MetricTypes.h"
@@ -22,7 +23,6 @@
 
 class MDSRank;
 class MgrClient;
-class CephContext;
 
 class MetricAggregator : public Dispatcher {
 public:
