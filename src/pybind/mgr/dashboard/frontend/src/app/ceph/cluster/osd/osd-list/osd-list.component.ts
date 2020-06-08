@@ -518,7 +518,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           bodyContext: {
             safeToPerform: result[checkKey],
             message: result.message,
-            actionDescription: templateItemDescription
+            actionDescription: templateItemDescription,
+            osdIds: this.getSelectedOsdIds()
           },
           childFormGroup: childFormGroup,
           childFormGroupTemplate: childFormGroupTemplate,
