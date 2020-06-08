@@ -280,7 +280,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       const tempData = this.metadata[node.data.cdId] || {};
 
       if (node.data.cdId === 'root') {
-        this.columns[2].isHidden = false;
+        this.detailTable?.toggleColumn({ target: { name: 'default', checked: true } });
         this.data = _.map(this.settings.target_default_controls, (value, key) => {
           value = this.format(value);
           return {
@@ -300,7 +300,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
           });
         }
       } else if (node.data.cdId.toString().startsWith('disk_')) {
-        this.columns[2].isHidden = false;
+        this.detailTable?.toggleColumn({ target: { name: 'default', checked: true } });
         this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
           value = this.format(value);
           return {
@@ -326,7 +326,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
           }
         });
       } else {
-        this.columns[2].isHidden = true;
+        this.detailTable?.toggleColumn({ target: { name: 'default', checked: false } });
         this.data = _.map(tempData, (value, key) => {
           return {
             displayName: key,
@@ -339,9 +339,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
       this.data = undefined;
     }
 
-    if (this.detailTable) {
-      this.detailTable.updateColumns();
-    }
+    this.detailTable?.updateColumns();
   }
 
   onUpdateData() {

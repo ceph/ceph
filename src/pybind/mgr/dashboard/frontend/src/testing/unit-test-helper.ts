@@ -1,4 +1,4 @@
-import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
+import { DebugElement, LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
@@ -7,6 +7,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { configureTestSuite } from 'ng-bullet';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
+import { NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
@@ -540,5 +541,27 @@ export class Mocks {
       }
     ];
     return rule;
+  }
+}
+
+export class TabHelper {
+  static getNgbNav(fixture: ComponentFixture<any>) {
+    const debugElem: DebugElement = fixture.debugElement;
+    return debugElem.query(By.directive(NgbNav)).injector.get(NgbNav);
+  }
+
+  static getNgbNavItems(fixture: ComponentFixture<any>) {
+    const debugElems = this.getNgbNavItemsDebugElems(fixture);
+    return debugElems.map((de) => de.injector.get(NgbNavItem));
+  }
+
+  static getTextContents(fixture: ComponentFixture<any>) {
+    const debugElems = this.getNgbNavItemsDebugElems(fixture);
+    return debugElems.map((de) => de.nativeElement.textContent);
+  }
+
+  private static getNgbNavItemsDebugElems(fixture: ComponentFixture<any>) {
+    const debugElem: DebugElement = fixture.debugElement;
+    return debugElem.queryAll(By.directive(NgbNavItem));
   }
 }

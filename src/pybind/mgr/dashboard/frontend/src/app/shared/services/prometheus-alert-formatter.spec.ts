@@ -27,8 +27,8 @@ describe('PrometheusAlertFormatter', () => {
 
   beforeEach(() => {
     prometheus = new PrometheusHelper();
-    service = TestBed.get(PrometheusAlertFormatter);
-    notificationService = TestBed.get(NotificationService);
+    service = TestBed.inject(PrometheusAlertFormatter);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
   });
 

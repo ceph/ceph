@@ -1,7 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { TooltipConfig } from 'ngx-bootstrap/tooltip';
 import { Subscription } from 'rxjs';
 
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -10,16 +9,7 @@ import { TaskManagerService } from '../../../shared/services/task-manager.servic
 @Component({
   selector: 'cd-workbench-layout',
   templateUrl: './workbench-layout.component.html',
-  styleUrls: ['./workbench-layout.component.scss'],
-  providers: [
-    {
-      provide: TooltipConfig,
-      useFactory: (): TooltipConfig =>
-        Object.assign(new TooltipConfig(), {
-          container: 'body'
-        })
-    }
-  ]
+  styleUrls: ['./workbench-layout.component.scss']
 })
 export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   private subs = new Subscription();

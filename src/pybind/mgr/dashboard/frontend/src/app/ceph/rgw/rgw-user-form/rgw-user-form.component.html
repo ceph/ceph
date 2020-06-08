@@ -231,15 +231,15 @@
                   <span class="input-group-append">
                     <button type="button"
                             class="btn btn-light tc_showSubuserButton"
-                            i18n-tooltip
-                            tooltip="Edit"
+                            i18n-ngbTooltip
+                            ngbTooltip="Edit"
                             (click)="showSubuserModal(i)">
                       <i [ngClass]="[icons.edit]"></i>
                     </button>
                     <button type="button"
                             class="btn btn-light tc_deleteSubuserButton"
-                            i18n-tooltip
-                            tooltip="Delete"
+                            i18n-ngbTooltip
+                            ngbTooltip="Delete"
                             (click)="deleteSubuser(i)">
                       <i [ngClass]="[icons.destroy]"></i>
                     </button>
@@ -293,15 +293,15 @@
                   <span class="input-group-append">
                     <button type="button"
                             class="btn btn-light tc_showS3KeyButton"
-                            i18n-tooltip
-                            tooltip="Show"
+                            i18n-ngbTooltip
+                            ngbTooltip="Show"
                             (click)="showS3KeyModal(i)">
                       <i [ngClass]="[icons.show]"></i>
                     </button>
                     <button type="button"
                             class="btn btn-light tc_deleteS3KeyButton"
-                            i18n-tooltip
-                            tooltip="Delete"
+                            i18n-ngbTooltip
+                            ngbTooltip="Delete"
                             (click)="deleteS3Key(i)">
                       <i [ngClass]="[icons.destroy]"></i>
                     </button>
@@ -354,8 +354,8 @@
                   <span class="input-group-append">
                     <button type="button"
                             class="btn btn-light tc_showSwiftKeyButton"
-                            i18n-tooltip
-                            tooltip="Show"
+                            i18n-ngbTooltip
+                            ngbTooltip="Show"
                             (click)="showSwiftKeyModal(i)">
                       <i [ngClass]="[icons.show]"></i>
                     </button>
@@ -393,15 +393,15 @@
                   <span class="input-group-append">
                     <button type="button"
                             class="btn btn-light tc_editCapButton"
-                            i18n-tooltip
-                            tooltip="Edit"
+                            i18n-ngbTooltip
+                            ngbTooltip="Edit"
                             (click)="showCapabilityModal(i)">
                       <i [ngClass]="[icons.edit]"></i>
                     </button>
                     <button type="button"
                             class="btn btn-light tc_deleteCapButton"
-                            i18n-tooltip
-                            tooltip="Delete"
+                            i18n-ngbTooltip
+                            ngbTooltip="Delete"
                             (click)="deleteCapability(i)">
                       <i [ngClass]="[icons.destroy]"></i>
                     </button>
@@ -415,10 +415,10 @@
                   <button type="button"
                           class="btn btn-light float-right tc_addCapButton"
                           [disabled]="hasAllCapabilities()"
-                          i18n-tooltip
-                          tooltip="All capabilities are already added."
-                          [isDisabled]="!hasAllCapabilities()"
-                          triggers="pointerenter pointerleave"
+                          i18n-ngbTooltip
+                          ngbTooltip="All capabilities are already added."
+                          [disableTooltip]="!hasAllCapabilities()"
+                          triggers="pointerenter:pointerleave"
                           (click)="showCapabilityModal()">
                     <i [ngClass]="[icons.add]"></i>
                     <ng-container i18n>{{ actionLabels.ADD | titlecase }}

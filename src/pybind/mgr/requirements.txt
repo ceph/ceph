@@ -7,3 +7,6 @@ prettytable
 pyOpenSSL
 execnet
 remoto
+Jinja2
+pyfakefs
+

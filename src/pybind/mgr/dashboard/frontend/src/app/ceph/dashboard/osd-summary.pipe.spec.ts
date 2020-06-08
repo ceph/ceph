@@ -10,7 +10,7 @@ describe('OsdSummaryPipe', () => {
   });
 
   beforeEach(() => {
-    pipe = TestBed.get(OsdSummaryPipe);
+    pipe = TestBed.inject(OsdSummaryPipe);
   });
 
   it('create an instance', () => {

@@ -1,14 +1,13 @@
-<alert class="no-margin-bottom"
-       type="{{ alertType }}"
-       *ngIf="expirationDays != null && expirationDays <= pwdExpirationSettings.pwdExpirationWarning1"
-       [dismissible]="true"
-       (onClose)="close($event)">
+<ngb-alert class="no-margin-bottom"
+           type="{{ alertType }}"
+           *ngIf="expirationDays != null && expirationDays <= pwdExpirationSettings.pwdExpirationWarning1"
+           (close)="close($event)">
   <div *ngIf="expirationDays === 0"
        i18n>Your password will expire in <strong>less than 1</strong> day. Click
-  <a routerLink="/user-profile/edit"
-     class="alert-link">here</a> to change it now.</div>
+    <a routerLink="/user-profile/edit"
+       class="alert-link">here</a> to change it now.</div>
   <div *ngIf="expirationDays > 0"
        i18n>Your password will expire in <strong>{{ expirationDays }}</strong> day(s). Click
   <a routerLink="/user-profile/edit"
      class="alert-link">here</a> to change it now.</div>
-</alert>
+</ngb-alert>

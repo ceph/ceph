@@ -5,7 +5,7 @@
     <ng-container *ngFor="let config of matcherConfig">
       <div class="input-group-prepend">
         <span class="input-group-text"
-              [tooltip]="config.tooltip">
+              [ngbTooltip]="config.tooltip">
           <i [ngClass]="[config.icon]"></i>
         </span>
       </div>
@@ -37,16 +37,16 @@
       <button type="button"
               class="btn btn-light"
               id="matcher-edit-{{index}}"
-              i18n-tooltip
-              tooltip="Edit"
+              i18n-ngbTooltip
+              ngbTooltip="Edit"
               (click)="showMatcherModal(index)">
         <i [ngClass]="[icons.edit]"></i>
       </button>
       <button type="button"
               class="btn btn-light"
               id="matcher-delete-{{index}}"
-              i18n-tooltip
-              tooltip="Delete"
+              i18n-ngbTooltip
+              ngbTooltip="Delete"
               (click)="deleteMatcher(index)">
         <i [ngClass]="[icons.trash]"></i>
       </button>

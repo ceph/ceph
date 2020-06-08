@@ -14,8 +14,8 @@ describe('MgrModuleService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(MgrModuleService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(MgrModuleService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

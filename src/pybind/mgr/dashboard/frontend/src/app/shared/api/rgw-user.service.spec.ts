@@ -16,8 +16,8 @@ describe('RgwUserService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(RgwUserService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(RgwUserService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

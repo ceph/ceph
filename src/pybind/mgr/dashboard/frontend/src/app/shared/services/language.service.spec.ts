@@ -14,8 +14,8 @@ describe('LanguageService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(LanguageService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(LanguageService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

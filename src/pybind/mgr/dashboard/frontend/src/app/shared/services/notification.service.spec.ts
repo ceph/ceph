@@ -34,7 +34,7 @@ describe('NotificationService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(NotificationService);
+    service = TestBed.inject(NotificationService);
     service.removeAll();
   });
 
@@ -233,7 +233,7 @@ describe('NotificationService', () => {
       spyOn(global, 'Date').and.returnValue(baseTime);
       spyOn(window, 'setTimeout').and.callFake((fn) => fn());
 
-      toastr = TestBed.get(ToastrService);
+      toastr = TestBed.inject(ToastrService);
       // spyOn needs to know the methods before spying and can't read the array for clarification
       ['error', 'info', 'success'].forEach((method: 'error' | 'info' | 'success') =>
         spyOn(toastr, method).and.stub()

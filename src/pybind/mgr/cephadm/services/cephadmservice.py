@@ -163,8 +163,12 @@ class RgwService(CephadmService):
         if spec.rgw_frontend_ssl_certificate:
             if isinstance(spec.rgw_frontend_ssl_certificate, list):
                 cert_data = '\n'.join(spec.rgw_frontend_ssl_certificate)
-            else:
+            elif isinstance(spec.rgw_frontend_ssl_certificate, str):
                 cert_data = spec.rgw_frontend_ssl_certificate
+            else:
+                raise OrchestratorError(
+                        'Invalid rgw_frontend_ssl_certificate: %s'
+                        % spec.rgw_frontend_ssl_certificate)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.crt',
@@ -174,8 +178,12 @@ class RgwService(CephadmService):
         if spec.rgw_frontend_ssl_key:
             if isinstance(spec.rgw_frontend_ssl_key, list):
                 key_data = '\n'.join(spec.rgw_frontend_ssl_key)
+            elif isinstance(spec.rgw_frontend_ssl_certificate, str):
+                key_data = spec.rgw_frontend_ssl_key
             else:
-                key_data = spec.rgw_frontend_ssl_key  # type: ignore
+                raise OrchestratorError(
+                        'Invalid rgw_frontend_ssl_key: %s'
+                        % spec.rgw_frontend_ssl_key)
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'rgw/cert/{spec.rgw_realm}/{spec.rgw_zone}.key',

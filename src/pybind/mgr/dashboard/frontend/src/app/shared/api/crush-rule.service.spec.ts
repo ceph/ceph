@@ -15,8 +15,8 @@ describe('CrushRuleService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(CrushRuleService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(CrushRuleService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

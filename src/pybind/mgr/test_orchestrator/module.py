@@ -162,7 +162,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _get_ceph_daemons(self):
         # type: () -> List[orchestrator.DaemonDescription]
         """ Return ceph daemons on the running host."""
-        types = ("mds", "osd", "mon", "rgw", "mgr")
+        types = ("mds", "osd", "mon", "rgw", "mgr", "nfs")
         out = map(str, check_output(['ps', 'aux']).splitlines())
         processes = [p for p in out if any(
             [('ceph-{} '.format(t) in p) for t in types])]
@@ -225,7 +225,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         it returns the mgr we're running in.
         """
         if daemon_type:
-            daemon_types = ("mds", "osd", "mon", "rgw", "mgr", "iscsi", "crash")
+            daemon_types = ("mds", "osd", "mon", "rgw", "mgr", "iscsi", "crash", "nfs")
             assert daemon_type in daemon_types, daemon_type + " unsupported"
 
         daemons = self._daemons if self._daemons else self._get_ceph_daemons()

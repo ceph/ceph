@@ -1,71 +1,91 @@
-<tabset *ngIf="selection"
-        id="tabset-osd-details">
-  <tab heading="Devices"
-       i18n-heading>
-    <cd-device-list *ngIf="osd.loaded && osd.id !== null"
-                    [osdId]="osd.id"></cd-device-list>
-  </tab>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      id="tabset-osd-details"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Devices</a>
+      <ng-template ngbNavContent>
+        <cd-device-list *ngIf="osd.loaded && osd.id !== null"
+                        [osdId]="osd.id"></cd-device-list>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Attributes (OSD map)</a>
+      <ng-template ngbNavContent>
+        <cd-table-key-value *ngIf="osd.loaded"
+                            [data]="osd.details.osd_map">
+        </cd-table-key-value>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Metadata</a>
+      <ng-template ngbNavContent>
+        <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
+                            (fetchData)="refresh()"
+                            [data]="osd.details.osd_metadata">
+        </cd-table-key-value>
+        <ng-template #noMetaData>
+          <cd-alert-panel type="warning"
+                          i18n>Metadata not available</cd-alert-panel>
+        </ng-template>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Device health</a>
+      <ng-template ngbNavContent>
+        <cd-smart-list [osdId]="osd.id"></cd-smart-list>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Performance counter</a>
+      <ng-template ngbNavContent>
+        <cd-table-performance-counter *ngIf="osd.loaded"
+                                      serviceType="osd"
+                                      [serviceId]="osd.id">
+        </cd-table-performance-counter>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Histogram</a>
+      <ng-template ngbNavContent>
+        <cd-alert-panel *ngIf="osd.loaded && osd.histogram_failed"
+                        type="warning"
+                        i18n>Histogram not available: {{ osd.histogram_failed }}</cd-alert-panel>
 
-  <tab heading="Attributes (OSD map)"
-       i18n-heading>
-    <cd-table-key-value *ngIf="osd.loaded"
-                        [data]="osd.details.osd_map">
-    </cd-table-key-value>
-  </tab>
+        <div class="row"
+             *ngIf="osd.loaded && osd.details.histogram">
+          <div class="col-md-6">
+            <h4 i18n>Writes</h4>
+            <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_w_latency_in_bytes_histogram">
+            </cd-osd-performance-histogram>
+          </div>
+          <div class="col-md-6">
+            <h4 i18n>Reads</h4>
+            <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_r_latency_out_bytes_histogram">
+            </cd-osd-performance-histogram>
+          </div>
+        </div>
+      </ng-template>
+    </li>
+    <li ngbNavItem
+        *ngIf="grafanaPermission.read">
+      <a ngbNavLink
+         i18n>Performance Details</a>
+      <ng-template ngbNavContent>
+        <cd-grafana [grafanaPath]="'osd-device-details?var-osd=osd.' + osd['id']"
+                    uid="CrAHE0iZz"
+                    grafanaStyle="GrafanaStyles.two">
+        </cd-grafana>
+      </ng-template>
+    </li>
+  </ul>
 
-  <tab heading="Metadata"
-       i18n-heading>
-    <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
-                        (fetchData)="refresh()"
-                        [data]="osd.details.osd_metadata">
-    </cd-table-key-value>
-    <ng-template #noMetaData>
-      <cd-alert-panel type="warning"
-                      i18n>Metadata not available</cd-alert-panel>
-    </ng-template>
-  </tab>
-
-  <tab heading="Device health"
-       i18n-heading>
-    <cd-smart-list [osdId]="osd.id"></cd-smart-list>
-  </tab>
-
-  <tab heading="Performance counter"
-       i18n-heading>
-    <cd-table-performance-counter *ngIf="osd.loaded"
-                                  serviceType="osd"
-                                  [serviceId]="osd.id">
-    </cd-table-performance-counter>
-  </tab>
-
-  <tab heading="Histogram"
-       i18n-heading>
-    <cd-alert-panel *ngIf="osd.loaded && osd.histogram_failed"
-                    type="warning"
-                    i18n>Histogram not available: {{ osd.histogram_failed }}</cd-alert-panel>
-
-    <div class="row"
-         *ngIf="osd.loaded && osd.details.histogram">
-      <div class="col-md-6">
-        <h4 i18n>Writes</h4>
-        <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_w_latency_in_bytes_histogram">
-        </cd-osd-performance-histogram>
-      </div>
-      <div class="col-md-6">
-        <h4 i18n>Reads</h4>
-        <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_r_latency_out_bytes_histogram">
-        </cd-osd-performance-histogram>
-      </div>
-    </div>
-  </tab>
-
-  <tab i18n-heading
-       *ngIf="grafanaPermission.read"
-       heading="Performance Details">
-    <cd-grafana [grafanaPath]="'osd-device-details?var-osd=osd.' + osd['id']"
-                uid="CrAHE0iZz"
-                grafanaStyle="GrafanaStyles.two">
-    </cd-grafana>
-  </tab>
-
-</tabset>
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

@@ -38,8 +38,8 @@ describe('PasswordPolicyService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(PasswordPolicyService);
-    settingsService = TestBed.get(SettingsService);
+    service = TestBed.inject(PasswordPolicyService);
+    settingsService = TestBed.inject(SettingsService);
     settingsService['settings'] = {};
   });
 

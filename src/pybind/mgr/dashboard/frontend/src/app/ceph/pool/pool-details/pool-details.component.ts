@@ -1,8 +1,7 @@
-import { Component, Input, OnChanges, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { TabsetComponent } from 'ngx-bootstrap/tabs';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -23,8 +22,6 @@ export class PoolDetailsComponent implements OnChanges {
   permissions: Permissions;
   @Input()
   cacheTiers: any[];
-  @ViewChild(TabsetComponent)
-  tabsetChild: TabsetComponent;
   selectedPoolConfiguration: RbdConfigurationEntry[];
 
   constructor(private i18n: I18n, private poolService: PoolService) {

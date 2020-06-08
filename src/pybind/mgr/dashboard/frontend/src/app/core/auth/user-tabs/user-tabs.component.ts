@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 
 import { Router } from '@angular/router';
 
@@ -7,16 +7,8 @@ import { Router } from '@angular/router';
   templateUrl: './user-tabs.component.html',
   styleUrls: ['./user-tabs.component.scss']
 })
-export class UserTabsComponent implements OnInit {
+export class UserTabsComponent {
   url: string;
 
-  constructor(private router: Router) {}
-
-  ngOnInit() {
-    this.url = this.router.url;
-  }
-
-  navigateTo(url: string) {
-    this.router.navigate([url]);
-  }
+  constructor(public router: Router) {}
 }

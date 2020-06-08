@@ -36,10 +36,10 @@ describe('FeatureTogglesGuardService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(FeatureTogglesGuardService);
-    fakeFeatureTogglesService = TestBed.get(FeatureTogglesService);
-    ngZone = TestBed.get(NgZone);
-    router = TestBed.get(Router);
+    service = TestBed.inject(FeatureTogglesGuardService);
+    fakeFeatureTogglesService = TestBed.inject(FeatureTogglesService);
+    ngZone = TestBed.inject(NgZone);
+    router = TestBed.inject(Router);
   });
 
   it('should be created', () => {

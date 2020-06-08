@@ -3,7 +3,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -41,8 +41,8 @@ describe('NfsListComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
-      TabsModule.forRoot()
+      NgbNavModule,
+      ToastrModule.forRoot()
     ],
     providers: [TaskListService, i18nProviders]
   });
@@ -50,9 +50,9 @@ describe('NfsListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsListComponent);
     component = fixture.componentInstance;
-    summaryService = TestBed.get(SummaryService);
-    nfsService = TestBed.get(NfsService);
-    httpTesting = TestBed.get(HttpTestingController);
+    summaryService = TestBed.inject(SummaryService);
+    nfsService = TestBed.inject(NfsService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   it('should create', () => {

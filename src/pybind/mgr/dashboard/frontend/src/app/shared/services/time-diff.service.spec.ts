@@ -12,7 +12,7 @@ describe('TimeDiffService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(TimeDiffService);
+    service = TestBed.inject(TimeDiffService);
   });
 
   it('should be created', () => {

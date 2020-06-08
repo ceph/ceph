@@ -656,9 +656,11 @@ Requires:       python%{python3_pkgversion}-remoto
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires:       openssh
+Requires:       python%{python3_pkgversion}-Jinja2
 %endif
 %if 0%{?rhel} || 0%{?fedora}
 Requires:       openssh-clients
+Requires:       python%{python3_pkgversion}-jinja2
 %endif
 %description mgr-cephadm
 ceph-mgr-cephadm is a ceph-mgr module for orchestration functions using

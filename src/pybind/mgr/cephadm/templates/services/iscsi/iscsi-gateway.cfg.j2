@@ -1,0 +1,13 @@
+# {{ cephadm_managed }}
+[config]
+cluster_client_name = {{ client_name }}
+pool = {{ spec.pool }}
+trusted_ip_list = {{ spec.trusted_ip_list|default("''", true) }}
+minimum_gateways = 1
+api_port = {{ spec.api_port|default("''", true) }}
+api_user = {{ spec.api_user|default("''", true) }}
+api_password = {{ spec.api_password|default("''", true) }}
+api_secure = {{ spec.api_secure|default('False', true) }}
+log_to_stderr = True
+log_to_stderr_prefix = debug
+log_to_file = False

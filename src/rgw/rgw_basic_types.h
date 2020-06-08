@@ -486,7 +486,7 @@ void decode_json_obj(rgw_zone_id& zid, JSONObj *obj);
 namespace rgw {
 namespace auth {
 class Principal {
-  enum types { User, Role, Tenant, Wildcard, OidcProvider };
+  enum types { User, Role, Tenant, Wildcard, OidcProvider, AssumedRole };
   types t;
   rgw_user u;
   std::string idp_url;
@@ -522,6 +522,10 @@ public:
     return Principal(std::move(idp_url));
   }
 
+  static Principal assumed_role(std::string&& t, std::string&& u) {
+    return Principal(AssumedRole, std::move(t), std::move(u));
+  }
+
   bool is_wildcard() const {
     return t == Wildcard;
   }
@@ -542,6 +546,10 @@ public:
     return t == OidcProvider;
   }
 
+  bool is_assumed_role() const {
+    return t == AssumedRole;
+  }
+
   const std::string& get_tenant() const {
     return u.tenant;
   }
@@ -552,6 +560,14 @@ public:
 
   const std::string& get_idp_url() const {
     return idp_url;
+  }
+
+  const string& get_role_session() const {
+    return u.id;
+  }
+
+  const string& get_role() const {
+    return u.id;
   }
 
   bool operator ==(const Principal& o) const {

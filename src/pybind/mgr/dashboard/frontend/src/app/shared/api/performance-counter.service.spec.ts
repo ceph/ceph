@@ -14,8 +14,8 @@ describe('PerformanceCounterService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(PerformanceCounterService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(PerformanceCounterService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
@@ -12,7 +12,7 @@ describe('ViewCacheComponent', () => {
 
   configureTestBed({
     declarations: [ViewCacheComponent, AlertPanelComponent],
-    imports: [AlertModule.forRoot()]
+    imports: [NgbAlertModule]
   });
 
   beforeEach(() => {

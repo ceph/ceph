@@ -40,8 +40,8 @@ describe('TaskManagerService', () => {
   });
 
   beforeEach(() => {
-    taskManagerService = TestBed.get(TaskManagerService);
-    summaryService = TestBed.get(SummaryService);
+    taskManagerService = TestBed.inject(TaskManagerService);
+    summaryService = TestBed.inject(SummaryService);
     called = false;
     taskManagerService.subscribe('foo', {}, () => (called = true));
   });

@@ -2,17 +2,17 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
-import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import {
   configureTestBed,
   FixtureHelper,
@@ -71,7 +71,7 @@ describe('PoolFormComponent', () => {
     poolServiceMethod: 'create' | 'update' = 'create'
   ) => {
     spyOn(poolService, poolServiceMethod).and.stub();
-    const taskWrapper = TestBed.get(TaskWrapperService);
+    const taskWrapper = TestBed.inject(TaskWrapperService);
     spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
     component.submit();
     expect(poolService[poolServiceMethod]).toHaveBeenCalledWith(pool);
@@ -137,7 +137,7 @@ describe('PoolFormComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
       ToastrModule.forRoot(),
-      TabsModule.forRoot(),
+      NgbNavModule,
       PoolModule,
       NgBootstrapFormValidationModule.forRoot()
     ],
@@ -153,14 +153,14 @@ describe('PoolFormComponent', () => {
   let navigationSpy: jasmine.Spy;
 
   beforeEach(() => {
-    poolService = TestBed.get(PoolService);
+    poolService = TestBed.inject(PoolService);
     setInfo();
     spyOn(poolService, 'getInfo').and.callFake(() => of(infoReturn));
 
-    ecpService = TestBed.get(ErasureCodeProfileService);
-    crushRuleService = TestBed.get(CrushRuleService);
+    ecpService = TestBed.inject(ErasureCodeProfileService);
+    crushRuleService = TestBed.inject(CrushRuleService);
 
-    router = TestBed.get(Router);
+    router = TestBed.inject(Router);
     navigationSpy = spyOn(router, 'navigate').and.stub();
 
     setUpPoolComponent();
@@ -189,7 +189,7 @@ describe('PoolFormComponent', () => {
         read: false,
         delete: false
       };
-      authStorageService = TestBed.get(AuthStorageService);
+      authStorageService = TestBed.inject(AuthStorageService);
       spyOn(authStorageService, 'getPermissions').and.callFake(() => ({
         pool: poolPermissions
       }));
@@ -782,7 +782,7 @@ describe('PoolFormComponent', () => {
     it('should select the newly created rule', () => {
       expect(form.getValue('crushRule').rule_name).toBe('rep1');
       const name = 'awesomeRule';
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(BsModalService), 'show').and.callFake(() => {
         return {
           content: {
             submitAction: of({ name })
@@ -845,7 +845,7 @@ describe('PoolFormComponent', () => {
       };
 
       beforeEach(() => {
-        modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(BsModalService), 'show').and.callFake(
           (deletionClass: any, config: any) => {
             deletion = Object.assign(new deletionClass(), config.initialState);
             return {
@@ -859,7 +859,7 @@ describe('PoolFormComponent', () => {
           rules.splice(index, 1);
           return of(undefined);
         });
-        taskWrapper = TestBed.get(TaskWrapperService);
+        taskWrapper = TestBed.inject(TaskWrapperService);
         spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
       });
 
@@ -873,7 +873,7 @@ describe('PoolFormComponent', () => {
         });
 
         it('should not open the tooltip nor the crush info', () => {
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
           expect(component.data.crushInfo).toBe(false);
         });
 
@@ -888,7 +888,6 @@ describe('PoolFormComponent', () => {
       describe('rule in use', () => {
         beforeEach(() => {
           spyOn(global, 'setTimeout').and.callFake((fn: Function) => fn());
-          component.crushInfoTabs = { tabs: [{}, {}, {}] } as TabsetComponent; // Mock it
           deleteSpy.calls.reset();
           selectRuleByIndex(2);
           component.deleteCrushRule();
@@ -896,19 +895,13 @@ describe('PoolFormComponent', () => {
 
         it('should not have called delete and opened the tooltip', () => {
           expect(crushRuleService.delete).not.toHaveBeenCalled();
-          expect(component.crushDeletionBtn.isOpen).toBe(true);
+          expect(component.crushDeletionBtn.isOpen()).toBe(true);
           expect(component.data.crushInfo).toBe(true);
-        });
-
-        it('should open the third crush info tab', () => {
-          expect(component.crushInfoTabs).toEqual({
-            tabs: [{}, {}, { active: true }]
-          } as TabsetComponent);
         });
 
         it('should hide the tooltip when clicking on delete again', () => {
           component.deleteCrushRule();
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when clicking on add', () => {
@@ -918,12 +911,12 @@ describe('PoolFormComponent', () => {
             }
           }));
           component.addCrushRule();
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when changing the crush rule', () => {
           selectRuleByIndex(0);
-          expect(component.crushDeletionBtn.isOpen).toBe(false);
+          expect(component.crushDeletionBtn.isOpen()).toBe(false);
         });
       });
     });
@@ -957,7 +950,7 @@ describe('PoolFormComponent', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile').name).toBe('ecp1');
       const name = 'awesomeProfile';
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(BsModalService), 'show').and.callFake(() => {
         return {
           content: {
             submitAction: of({ name })
@@ -1001,7 +994,7 @@ describe('PoolFormComponent', () => {
 
       beforeEach(() => {
         deletion = undefined;
-        modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(BsModalService), 'show').and.callFake(
           (comp: any, init: any) => {
             modal = modalServiceShow(comp, init);
             return modal.ref;
@@ -1013,7 +1006,7 @@ describe('PoolFormComponent', () => {
           profiles.splice(index, 1);
           return of({ status: 202 });
         });
-        taskWrapper = TestBed.get(TaskWrapperService);
+        taskWrapper = TestBed.inject(TaskWrapperService);
         spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
 
         const ecp2 = new ErasureCodeProfile();
@@ -1036,7 +1029,7 @@ describe('PoolFormComponent', () => {
         });
 
         it('should not open the tooltip nor the crush info', () => {
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
           expect(component.data.erasureInfo).toBe(false);
         });
 
@@ -1051,7 +1044,6 @@ describe('PoolFormComponent', () => {
       describe('rule in use', () => {
         beforeEach(() => {
           spyOn(global, 'setTimeout').and.callFake((fn: Function) => fn());
-          component.ecpInfoTabs = { tabs: [{}, {}] } as TabsetComponent; // Mock it
           deleteSpy.calls.reset();
           setSelectedEcp('ecp1');
           component.deleteErasureCodeProfile();
@@ -1063,19 +1055,13 @@ describe('PoolFormComponent', () => {
 
         it('should not have called delete and opened the tooltip', () => {
           expect(ecpService.delete).not.toHaveBeenCalled();
-          expect(component.ecpDeletionBtn.isOpen).toBe(true);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(true);
           expect(component.data.erasureInfo).toBe(true);
-        });
-
-        it('should open the third crush info tab', () => {
-          expect(component.ecpInfoTabs).toEqual({
-            tabs: [{}, { active: true }]
-          } as TabsetComponent);
         });
 
         it('should hide the tooltip when clicking on delete again', () => {
           component.deleteErasureCodeProfile();
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when clicking on add', () => {
@@ -1085,12 +1071,12 @@ describe('PoolFormComponent', () => {
             }
           }));
           component.addErasureCodeProfile();
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
         });
 
         it('should hide the tooltip when changing the crush rule', () => {
           setSelectedEcp('someEcpName');
-          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.ecpDeletionBtn.isOpen()).toBe(false);
         });
       });
     });

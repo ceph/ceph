@@ -11,7 +11,7 @@ describe('MdsSummaryPipe', () => {
   });
 
   beforeEach(() => {
-    pipe = TestBed.get(MdsSummaryPipe);
+    pipe = TestBed.inject(MdsSummaryPipe);
   });
 
   it('create an instance', () => {

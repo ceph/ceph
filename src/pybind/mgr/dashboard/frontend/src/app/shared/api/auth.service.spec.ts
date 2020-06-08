@@ -19,8 +19,8 @@ describe('AuthService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(AuthService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(AuthService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
@@ -45,7 +45,7 @@ describe('AuthService', () => {
   }));
 
   it('should logout and remove the user', () => {
-    const router = TestBed.get(Router);
+    const router = TestBed.inject(Router);
     spyOn(router, 'navigate').and.stub();
 
     service.logout();

@@ -3,9 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -54,7 +54,7 @@ describe('PoolListComponent', () => {
       SharedModule,
       ToastrModule.forRoot(),
       RouterTestingModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       HttpClientTestingModule
     ],
     providers: [i18nProviders, PgCategoryService]
@@ -64,7 +64,7 @@ describe('PoolListComponent', () => {
     fixture = TestBed.createComponent(PoolListComponent);
     component = fixture.componentInstance;
     component.permissions.pool.read = true;
-    poolService = TestBed.get(PoolService);
+    poolService = TestBed.inject(PoolService);
     spyOn(poolService, 'getList').and.callFake(() => of(getPoolList()));
     fixture.detectChanges();
   });
@@ -87,10 +87,10 @@ describe('PoolListComponent', () => {
 
     beforeEach(() => {
       configOptRead = true;
-      spyOn(TestBed.get(AuthStorageService), 'getPermissions').and.callFake(() => ({
+      spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(() => ({
         configOpt: { read: configOptRead }
       }));
-      configurationService = TestBed.get(ConfigurationService);
+      configurationService = TestBed.inject(ConfigurationService);
     });
 
     it('should set value correctly if mon_allow_pool_delete flag is set to true', () => {
@@ -171,13 +171,13 @@ describe('PoolListComponent', () => {
     };
 
     beforeEach(() => {
-      spyOn(TestBed.get(BsModalService), 'show').and.callFake((deletionClass, config) => {
+      spyOn(TestBed.inject(BsModalService), 'show').and.callFake((deletionClass, config) => {
         return {
           content: Object.assign(new deletionClass(), config.initialState)
         };
       });
       spyOn(poolService, 'delete').and.stub();
-      taskWrapper = TestBed.get(TaskWrapperService);
+      taskWrapper = TestBed.inject(TaskWrapperService);
       spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
     });
 
@@ -198,7 +198,7 @@ describe('PoolListComponent', () => {
     };
 
     beforeEach(() => {
-      summaryService = TestBed.get(SummaryService);
+      summaryService = TestBed.inject(SummaryService);
       summaryService['summaryDataSource'].next({
         executing_tasks: [],
         finished_tasks: []

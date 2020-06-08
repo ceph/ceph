@@ -10,7 +10,7 @@ describe('DeviceService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
-    service = TestBed.get(DeviceService);
+    service = TestBed.inject(DeviceService);
   });
 
   it('should be created', () => {

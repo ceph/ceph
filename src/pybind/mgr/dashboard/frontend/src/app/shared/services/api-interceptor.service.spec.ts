@@ -76,19 +76,19 @@ describe('ApiInterceptorService', () => {
     const baseTime = new Date('2022-02-22');
     spyOn(global, 'Date').and.returnValue(baseTime);
 
-    httpClient = TestBed.get(HttpClient);
-    httpTesting = TestBed.get(HttpTestingController);
+    httpClient = TestBed.inject(HttpClient);
+    httpTesting = TestBed.inject(HttpTestingController);
 
-    notificationService = TestBed.get(NotificationService);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.callThrough();
     spyOn(notificationService, 'save');
 
-    router = TestBed.get(Router);
+    router = TestBed.inject(Router);
     spyOn(router, 'navigate');
   });
 
   it('should be created', () => {
-    const service = TestBed.get(ApiInterceptorService);
+    const service = TestBed.inject(ApiInterceptorService);
     expect(service).toBeTruthy();
   });
 

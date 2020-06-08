@@ -1,0 +1,32 @@
+# {{ cephadm_managed }}
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+rule_files:
+  - /etc/prometheus/alerting/*
+{% if alertmgr_targets %}
+alerting:
+  alertmanagers:
+    - scheme: http
+      path_prefix: /alertmanager
+      static_configs:
+        - targets: [{{ alertmgr_targets|join(', ') }}]
+{% endif %}
+scrape_configs:
+  - job_name: 'ceph'
+    static_configs:
+    - targets:
+{% for mgr in mgr_scrape_list %}
+      - '{{ mgr }}'
+{% endfor %}
+      labels:
+        instance: 'ceph_cluster'
+{% if nodes %}
+  - job_name: 'node'
+    static_configs:
+{% for node in nodes %}
+    - targets: ['{{ node.url }}']
+      labels:
+        instance: '{{ node.hostname }}'
+{% endfor %}
+{% endif %}

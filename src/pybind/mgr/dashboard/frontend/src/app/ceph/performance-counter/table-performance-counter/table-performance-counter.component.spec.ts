@@ -19,7 +19,7 @@ describe('TablePerformanceCounterComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(TablePerformanceCounterComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
+    httpTesting = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
   });
 

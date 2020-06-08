@@ -2,11 +2,10 @@ import { Component, EventEmitter, OnInit, Type, ViewChild } from '@angular/core'
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TabsetComponent } from 'ngx-bootstrap/tabs';
-import { TooltipDirective } from 'ngx-bootstrap/tooltip';
 import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
@@ -54,10 +53,10 @@ interface FormFieldDescription {
   styleUrls: ['./pool-form.component.scss']
 })
 export class PoolFormComponent extends CdForm implements OnInit {
-  @ViewChild('crushInfoTabs') crushInfoTabs: TabsetComponent;
-  @ViewChild('crushDeletionBtn') crushDeletionBtn: TooltipDirective;
-  @ViewChild('ecpInfoTabs') ecpInfoTabs: TabsetComponent;
-  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: TooltipDirective;
+  @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
+  @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
+  @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
+  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: NgbTooltip;
 
   permission: Permission;
   form: CdFormGroup;
@@ -335,8 +334,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('crushRule').valueChanges.subscribe((rule) => {
       // The crush rule can only be changed if type 'replicated' is set.
-      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen) {
-        this.crushDeletionBtn.hide();
+      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen()) {
+        this.crushDeletionBtn.close();
       }
       if (!rule) {
         return;
@@ -352,8 +351,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
     });
     this.form.get('erasureProfile').valueChanges.subscribe((profile) => {
       // The ec profile can only be changed if type 'erasure' is set.
-      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen) {
-        this.ecpDeletionBtn.hide();
+      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen()) {
+        this.ecpDeletionBtn.close();
       }
       if (!profile) {
         return;
@@ -582,7 +581,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }
 
   private hideOpenTooltips() {
-    const hideTooltip = (btn: TooltipDirective) => btn && btn.isOpen && btn.hide();
+    const hideTooltip = (btn: NgbTooltip) => btn && btn.isOpen() && btn.close();
     hideTooltip(this.ecpDeletionBtn);
     hideTooltip(this.crushDeletionBtn);
   }
@@ -632,7 +631,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       deletionBtn: this.ecpDeletionBtn,
       dataName: 'erasureInfo',
       getTabs: () => this.ecpInfoTabs,
-      tabPosition: 1,
+      tabPosition: 'used-by-pools',
       nameAttribute: 'name',
       itemDescription: this.i18n('erasure code profile'),
       reloadFn: () => this.reloadECPs(),
@@ -656,10 +655,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
   }: {
     value: any;
     usage: string[];
-    deletionBtn: TooltipDirective;
+    deletionBtn: NgbTooltip;
     dataName: string;
-    getTabs: () => TabsetComponent;
-    tabPosition: number;
+    getTabs: () => NgbNav;
+    tabPosition: string;
     nameAttribute: string;
     itemDescription: string;
     reloadFn: Function;
@@ -675,7 +674,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       setTimeout(() => {
         const tabs = getTabs();
         if (tabs) {
-          tabs.tabs[tabPosition].active = true;
+          tabs.select(tabPosition);
         }
       }, 50);
       return;
@@ -722,7 +721,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       deletionBtn: this.crushDeletionBtn,
       dataName: 'crushInfo',
       getTabs: () => this.crushInfoTabs,
-      tabPosition: 2,
+      tabPosition: 'used-by-pools',
       nameAttribute: 'rule_name',
       itemDescription: this.i18n('crush rule'),
       reloadFn: () => this.reloadCrushRules(),

@@ -12,7 +12,7 @@ describe('RbdConfigurationService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(RbdConfigurationService);
+    service = TestBed.inject(RbdConfigurationService);
   });
 
   it('should be created', () => {

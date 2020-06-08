@@ -13,7 +13,7 @@ describe('RefreshIntervalService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(RefreshIntervalService);
+    service = TestBed.inject(RefreshIntervalService);
   });
 
   it('should be created', () => {
@@ -22,7 +22,7 @@ describe('RefreshIntervalService', () => {
 
   it('should initial private interval time right', () => {
     sessionStorage.setItem('dashboard_interval', '10000');
-    const ngZone = TestBed.get(NgZone);
+    const ngZone = TestBed.inject(NgZone);
     service = new RefreshIntervalService(ngZone);
     expect(service.getRefreshInterval()).toBe(10000);
   });

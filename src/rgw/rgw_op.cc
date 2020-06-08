@@ -2143,7 +2143,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 bool RGWGetObj::prefetch_data()
 {
   /* HEAD request, stop prefetch*/
-  if (!get_data) {
+  if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
     return false;
   }
 
@@ -2245,7 +2245,10 @@ void RGWGetObj::execute()
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
-
+  if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
+    op_ret = 0;
+    goto done_err;
+  }
   /* start gettorrent */
   if (torrent.get_flag())
   {
@@ -2589,16 +2592,18 @@ void RGWStatAccount::execute()
   string marker;
   rgw::sal::RGWBucketList buckets;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  const string *lastmarker;
 
   do {
 
+    lastmarker = nullptr;
     op_ret = rgw_read_user_buckets(store, s->user->get_id(), buckets, marker,
 				   string(), max_buckets, true);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
-      ldpp_dout(this, 10) << "WARNING: failed on rgw_get_user_buckets uid="
-			<< s->user->get_id() << dendl;
+      ldpp_dout(this, 10) << "WARNING: failed on rgw_read_user_buckets uid="
+			<< s->user->get_id() << " ret=" << op_ret << dendl;
       break;
     } else {
       /* We need to have stats for all our policies - even if a given policy
@@ -2612,6 +2617,7 @@ void RGWStatAccount::execute()
       std::map<std::string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
       for (const auto& kv : m) {
         const auto& bucket = kv.second;
+	lastmarker = &kv.first;
 
         global_stats.bytes_used += bucket->get_size();
         global_stats.bytes_used_rounded += bucket->get_size_rounded();
@@ -2628,6 +2634,12 @@ void RGWStatAccount::execute()
       global_stats.buckets_count += m.size();
 
     }
+    if (!lastmarker) {
+	lderr(s->cct) << "ERROR: rgw_read_user_buckets, stasis at marker="
+	      << marker << " uid=" << s->user->get_id() << dendl;
+	break;
+    }
+    marker = *lastmarker;
   } while (buckets.is_truncated());
 }
 
@@ -5244,6 +5256,24 @@ void RGWCopyObj::execute()
   obj_ctx.set_atomic(dst_obj);
 
   encode_delete_at_attr(delete_at, attrs);
+
+  if (!s->system_request) { // no quota enforcement for system requests
+    // get src object size (cached in obj_ctx from verify_permission())
+    RGWObjState* astate = nullptr;
+    op_ret = store->getRados()->get_obj_state(s->obj_ctx, src_bucket_info, src_obj,
+                                              &astate, true, s->yield, false);
+    if (op_ret < 0) {
+      return;
+    }
+    // enforce quota against the destination bucket owner
+    op_ret = store->getRados()->check_quota(dest_bucket_info.owner,
+                                            dest_bucket_info.bucket,
+                                            user_quota, bucket_quota,
+                                            astate->accounted_size);
+    if (op_ret < 0) {
+      return;
+    }
+  }
 
   bool high_precision_time = (s->system_request);
 

@@ -366,6 +366,31 @@ def test_spec_octopus():
         True
     ),
 
+    # https://tracker.ceph.com/issues/45399
+    (
+        # daemon_id only contains hostname
+        ServiceSpec(
+            service_type='mds',
+            service_id="a",
+        ),
+        DaemonDescription(
+            daemon_type='mds',
+            daemon_id="a.host1.abc123",
+            hostname="host1.site",
+        ),
+        True
+    ),
+    (
+        NFSServiceSpec(
+            service_id="a",
+        ),
+        DaemonDescription(
+            daemon_type='nfs',
+            daemon_id="a.host1",
+            hostname="host1.site",
+        ),
+        True
+    ),
 
     # https://tracker.ceph.com/issues/45293
     (

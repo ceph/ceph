@@ -156,6 +156,10 @@ If you see this error::
 
    ERROR: Failed to infer CIDR network for mon ip ***; pass --skip-mon-network to configure it later
 
+Or this error::
+
+   Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP
+
 This means that you must run a command of this form::
 
   ceph config set mon public_network <mon_network>

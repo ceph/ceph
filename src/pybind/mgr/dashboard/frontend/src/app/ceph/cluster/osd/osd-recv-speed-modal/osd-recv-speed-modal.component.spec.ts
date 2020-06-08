@@ -37,7 +37,7 @@ describe('OsdRecvSpeedModalComponent', () => {
     fixture = TestBed.createComponent(OsdRecvSpeedModalComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    configurationService = TestBed.get(ConfigurationService);
+    configurationService = TestBed.inject(ConfigurationService);
     configOptions = [
       {
         name: 'osd_max_backfills',

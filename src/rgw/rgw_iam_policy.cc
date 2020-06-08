@@ -145,6 +145,10 @@ static const actpair actpairs[] =
  { "iam:GetRolePolicy", iamGetRolePolicy},
  { "iam:ListRolePolicies", iamListRolePolicies},
  { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
+ { "iam:CreateOIDCProvider", iamCreateOIDCProvider},
+ { "iam:DeleteOIDCProvider", iamDeleteOIDCProvider},
+ { "iam:GetOIDCProvider", iamGetOIDCProvider},
+ { "iam:ListOIDCProviders", iamListOIDCProviders},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -462,6 +466,9 @@ static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
         if (match[1] == "oidc-provider") {
                 return Principal::oidc_provider(std::move(match[2]));
         }
+   if (match[1] == "assumed-role") {
+     return Principal::assumed_role(std::move(a->account), match[2]);
+   }
       }
     } else {
       if (std::none_of(s.begin(), s.end(),
@@ -1254,6 +1261,18 @@ const char* action_bit_string(uint64_t action) {
 
   case iamDeleteRolePolicy:
     return "iam:DeleteRolePolicy";
+
+  case iamCreateOIDCProvider:
+    return "iam:CreateOIDCProvider";
+
+  case iamDeleteOIDCProvider:
+    return "iam:DeleteOIDCProvider";
+
+  case iamGetOIDCProvider:
+    return "iam:GetOIDCProvider";
+
+  case iamListOIDCProviders:
+    return "iam:ListOIDCProviders";
 
   case stsAssumeRole:
     return "sts:AssumeRole";

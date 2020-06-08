@@ -1,0 +1,36 @@
+# {{ cephadm_managed }}
+NFS_CORE_PARAM {
+        Enable_NLM = false;
+        Enable_RQUOTA = false;
+        Protocols = 4;
+}
+
+MDCACHE {
+        Dir_Chunk = 0;
+        NParts = 1;
+        Cache_Size = 1;
+}
+
+EXPORT_DEFAULTS {
+        Attr_Expiration_Time = 0;
+}
+
+NFSv4 {
+        Delegations = false;
+        RecoveryBackend = 'rados_cluster';
+        Minor_Versions = 1, 2;
+}
+
+RADOS_KV {
+        UserId = "{{ user }}";
+        nodeid = "{{ nodeid}}";
+        pool = "{{ pool }}";
+        namespace = "{{ namespace }}";
+}
+
+RADOS_URLS {
+        UserId = "{{ user }}";
+        watch_url = "{{ url }}";
+}
+
+%url    {{ url }}

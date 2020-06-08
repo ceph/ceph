@@ -1,7 +1,16 @@
-<tabset *ngIf="selection">
-  <tab i18n-heading
-       heading="Daemons">
-    <cd-service-daemon-list [serviceName]="selection['service_name']">
-    </cd-service-daemon-list>
-  </tab>
-</tabset>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Daemons</a>
+      <ng-template ngbNavContent>
+        <cd-service-daemon-list [serviceName]="selection['service_name']">
+        </cd-service-daemon-list>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

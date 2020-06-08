@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -35,7 +34,6 @@ describe('HostsComponent', () => {
       CephSharedModule,
       SharedModule,
       HttpClientTestingModule,
-      TabsModule.forRoot(),
       BsDropdownModule.forRoot(),
       RouterTestingModule,
       ToastrModule.forRoot(),
@@ -49,7 +47,7 @@ describe('HostsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HostsComponent);
     component = fixture.componentInstance;
-    hostListSpy = spyOn(TestBed.get(HostService), 'list');
+    hostListSpy = spyOn(TestBed.inject(HostService), 'list');
     fixture.detectChanges();
   });
 
@@ -76,7 +74,8 @@ describe('HostsComponent', () => {
           }
         ],
         hostname: hostname,
-        ceph_version: 'ceph version Development'
+        ceph_version: 'ceph version Development',
+        labels: ['foo', 'bar']
       }
     ];
 
