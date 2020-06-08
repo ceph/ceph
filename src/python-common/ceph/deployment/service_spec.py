@@ -485,6 +485,9 @@ class ServiceSpec(object):
         if not self.service_type:
             raise ServiceSpecValidationError('Cannot add Service: type required')
 
+        if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
+            raise ServiceSpecValidationError('Cannot add Service: id required')
+
         if self.placement is not None:
             self.placement.validate()
 
@@ -493,14 +496,6 @@ class ServiceSpec(object):
 
     def one_line_str(self):
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
-
-
-def servicespec_validate_add(self: ServiceSpec):
-    # This must not be a method of ServiceSpec, otherwise you'll hunt
-    # sub-interpreter affinity bugs.
-    ServiceSpec.validate(self)
-    if self.service_type in ['mds', 'rgw', 'nfs', 'iscsi'] and not self.service_id:
-        raise ServiceSpecValidationError('Cannot add Service: id required')
 
 
 class NFSServiceSpec(ServiceSpec):

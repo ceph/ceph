@@ -5,8 +5,7 @@ import yaml
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    RGWSpec, NFSServiceSpec, IscsiServiceSpec, \
-    servicespec_validate_add, ServiceSpec, ServiceSpecValidationError
+    ServiceSpec, ServiceSpecValidationError, RGWSpec, NFSServiceSpec, IscsiServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 
 
@@ -107,6 +106,6 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     assert spec.placement.hosts[0].hostname == 'host1'
     assert spec.placement.hosts[0].network == '1.1.1.1'
     assert spec.placement.hosts[0].name == ''
-    assert servicespec_validate_add(spec) is None
+    assert spec.validate() is None
     ServiceSpec.from_json(spec.to_json())
 
