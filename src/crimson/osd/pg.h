@@ -554,7 +554,7 @@ private:
 public:
   cached_map_t get_osdmap() { return osdmap; }
   eversion_t next_version() {
-    return eversion_t(projected_last_update.epoch,
+    return eversion_t(get_osdmap_epoch(),
 		      ++projected_last_update.version);
   }
   ShardServices& get_shard_services() final {
