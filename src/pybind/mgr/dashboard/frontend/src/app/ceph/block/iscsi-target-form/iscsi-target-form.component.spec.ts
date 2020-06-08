@@ -13,6 +13,7 @@ import {
   i18nProviders,
   IscsiHelper
 } from '../../../../testing/unit-test-helper';
+import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetFormComponent } from './iscsi-target-form.component';
@@ -141,23 +142,26 @@ describe('IscsiTargetFormComponent', () => {
     }
   ];
 
-  configureTestBed({
-    declarations: [IscsiTargetFormComponent],
-    imports: [
-      SharedModule,
-      ReactiveFormsModule,
-      HttpClientTestingModule,
-      RouterTestingModule,
-      ToastrModule.forRoot()
-    ],
-    providers: [
-      i18nProviders,
-      {
-        provide: ActivatedRoute,
-        useValue: new ActivatedRouteStub({ target_iqn: undefined })
-      }
-    ]
-  });
+  configureTestBed(
+    {
+      declarations: [IscsiTargetFormComponent],
+      imports: [
+        SharedModule,
+        ReactiveFormsModule,
+        HttpClientTestingModule,
+        RouterTestingModule,
+        ToastrModule.forRoot()
+      ],
+      providers: [
+        i18nProviders,
+        {
+          provide: ActivatedRoute,
+          useValue: new ActivatedRouteStub({ target_iqn: undefined })
+        }
+      ]
+    },
+    [LoadingPanelComponent]
+  );
 
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiTargetFormComponent);

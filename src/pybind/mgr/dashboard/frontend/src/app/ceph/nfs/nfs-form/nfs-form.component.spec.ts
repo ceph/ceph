@@ -10,6 +10,7 @@ import { of } from 'rxjs';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -22,26 +23,29 @@ describe('NfsFormComponent', () => {
   let httpTesting: HttpTestingController;
   let activatedRoute: ActivatedRouteStub;
 
-  configureTestBed({
-    declarations: [NfsFormComponent, NfsFormClientComponent],
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      SharedModule,
-      ToastrModule.forRoot(),
-      NgbTypeaheadModule
-    ],
-    providers: [
-      {
-        provide: ActivatedRoute,
-        useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
-      },
-      i18nProviders,
-      SummaryService,
-      CephReleaseNamePipe
-    ]
-  });
+  configureTestBed(
+    {
+      declarations: [NfsFormComponent, NfsFormClientComponent],
+      imports: [
+        HttpClientTestingModule,
+        ReactiveFormsModule,
+        RouterTestingModule,
+        SharedModule,
+        ToastrModule.forRoot(),
+        NgbTypeaheadModule
+      ],
+      providers: [
+        {
+          provide: ActivatedRoute,
+          useValue: new ActivatedRouteStub({ cluster_id: undefined, export_id: undefined })
+        },
+        i18nProviders,
+        SummaryService,
+        CephReleaseNamePipe
+      ]
+    },
+    [LoadingPanelComponent]
+  );
 
   beforeEach(() => {
     const summaryService = TestBed.inject(SummaryService);

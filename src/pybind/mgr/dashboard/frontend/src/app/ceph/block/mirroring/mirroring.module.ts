@@ -22,14 +22,6 @@ import { PoolEditPeerModalComponent } from './pool-edit-peer-modal/pool-edit-pee
 import { PoolListComponent } from './pool-list/pool-list.component';
 
 @NgModule({
-  entryComponents: [
-    BootstrapCreateModalComponent,
-    BootstrapImportModalComponent,
-    EditSiteNameModalComponent,
-    OverviewComponent,
-    PoolEditModeModalComponent,
-    PoolEditPeerModalComponent
-  ],
   imports: [
     CommonModule,
     SharedModule,

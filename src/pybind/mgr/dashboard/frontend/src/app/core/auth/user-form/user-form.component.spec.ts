@@ -16,6 +16,7 @@ import { RoleService } from '../../../shared/api/role.service';
 import { SettingsService } from '../../../shared/api/settings.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
+import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -44,20 +45,23 @@ describe('UserFormComponent', () => {
     { path: 'users', component: FakeComponent }
   ];
 
-  configureTestBed({
-    imports: [
-      RouterTestingModule.withRoutes(routes),
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      ComponentsModule,
-      ToastrModule.forRoot(),
-      SharedModule,
-      ButtonsModule.forRoot(),
-      BsDatepickerModule.forRoot()
-    ],
-    declarations: [UserFormComponent, FakeComponent],
-    providers: i18nProviders
-  });
+  configureTestBed(
+    {
+      imports: [
+        RouterTestingModule.withRoutes(routes),
+        HttpClientTestingModule,
+        ReactiveFormsModule,
+        ComponentsModule,
+        ToastrModule.forRoot(),
+        SharedModule,
+        ButtonsModule.forRoot(),
+        BsDatepickerModule.forRoot()
+      ],
+      declarations: [UserFormComponent, FakeComponent],
+      providers: i18nProviders
+    },
+    [LoadingPanelComponent]
+  );
 
   beforeEach(() => {
     spyOn(TestBed.inject(PasswordPolicyService), 'getHelpText').and.callFake(() => of(''));

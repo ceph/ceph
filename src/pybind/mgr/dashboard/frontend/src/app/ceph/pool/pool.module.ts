@@ -37,8 +37,7 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     ErasureCodeProfileFormModalComponent,
     CrushRuleFormModalComponent,
     PoolDetailsComponent
-  ],
-  entryComponents: [CrushRuleFormModalComponent, ErasureCodeProfileFormModalComponent]
+  ]
 })
 export class PoolModule {}
 

@@ -17,9 +17,7 @@ import { ModalComponent } from '../modal/modal.component';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { ConfirmationModalComponent } from './confirmation-modal.component';
 
-@NgModule({
-  entryComponents: [ConfirmationModalComponent]
-})
+@NgModule({})
 export class MockModule {}
 
 @Component({
