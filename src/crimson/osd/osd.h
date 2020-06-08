@@ -132,6 +132,9 @@ public:
   void dump_status(Formatter*) const;
 
   void print(std::ostream&) const;
+
+  seastar::future<> send_incremental_map(crimson::net::Connection* conn,
+					 epoch_t first);
 private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
@@ -155,6 +158,8 @@ private:
   cached_map_t get_map() const final;
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
+  seastar::future<std::map<epoch_t, bufferlist>>
+  load_map_bls(epoch_t first, epoch_t last);
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,

@@ -735,6 +735,25 @@ seastar::future<bufferlist> OSD::load_map_bl(epoch_t e)
   }
 }
 
+seastar::future<std::map<epoch_t, bufferlist>> OSD::load_map_bls(
+  epoch_t first,
+  epoch_t last)
+{
+  return seastar::map_reduce(boost::make_counting_iterator<epoch_t>(first),
+			     boost::make_counting_iterator<epoch_t>(last + 1),
+			     [this](epoch_t e) {
+    return load_map_bl(e).then([e](auto&& bl) {
+	return seastar::make_ready_future<pair<epoch_t, bufferlist>>(
+	    std::make_pair(e, std::move(bl)));
+    });
+  },
+  std::map<epoch_t, bufferlist>{},
+  [](auto&& bls, auto&& epoch_bl) {
+    bls.emplace(std::move(epoch_bl));
+    return std::move(bls);
+  });
+}
+
 seastar::future<std::unique_ptr<OSDMap>> OSD::load_map(epoch_t e)
 {
   auto o = std::make_unique<OSDMap>();
@@ -1021,6 +1040,32 @@ seastar::future<> OSD::handle_osd_op(crimson::net::Connection* conn,
     conn->get_shared(),
     std::move(m));
   return seastar::now();
+}
+
+seastar::future<> OSD::send_incremental_map(crimson::net::Connection* conn,
+					    epoch_t first)
+{
+  if (first >= superblock.oldest_map) {
+    return load_map_bls(first, superblock.newest_map)
+    .then([this, conn, first](auto&& bls) {
+      auto m = make_message<MOSDMap>(monc->get_fsid(),
+	  osdmap->get_encoding_features());
+      m->oldest_map = first;
+      m->newest_map = superblock.newest_map;
+      m->maps = std::move(bls);
+      return conn->send(m);
+    });
+  } else {
+    return load_map_bl(osdmap->get_epoch())
+    .then([this, conn, first](auto&& bl) mutable {
+      auto m = make_message<MOSDMap>(monc->get_fsid(),
+	  osdmap->get_encoding_features());
+      m->oldest_map = superblock.oldest_map;
+      m->newest_map = superblock.newest_map;
+      m->maps.emplace(osdmap->get_epoch(), std::move(bl));
+      return conn->send(m);
+    });
+  }
 }
 
 seastar::future<> OSD::handle_rep_op(crimson::net::Connection* conn,
