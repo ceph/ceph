@@ -6401,6 +6401,15 @@ std::vector<Option> get_rgw_options() {
     .set_default(1_M)
     .set_description("Send copy-object progress info after these many bytes"),
 
+    Option("rgw_sync_obj_etag_verify", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Verify if the object copied from remote is identical to its source")
+    .set_long_description(
+        "If true, this option computes the MD5 checksum of the data which is written at the "
+	"destination and checks if it is identical to the ETAG stored in the source. "
+        "It ensures integrity of the objects fetched from a remote server over HTTP including "
+        "multisite sync."),
+
     Option("rgw_obj_tombstone_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description("Max number of entries to keep in tombstone cache")
