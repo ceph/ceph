@@ -99,7 +99,7 @@ Build-Depends: cmake (>= 3.5),
 # Make-Check   xmlstarlet,
                yasm [amd64],
                zlib1g-dev,
-Standards-Version: 3.9.3
+Standards-Version: 4.4.0
 
 Package: ceph
 Architecture: linux-any
