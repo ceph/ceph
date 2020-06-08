@@ -1941,8 +1941,17 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
        i != pending_inc.new_state.end();
        ++i) {
     int s = i->second ? i->second : CEPH_OSD_UP;
-    if (s & CEPH_OSD_UP)
+    if (s & CEPH_OSD_UP) {
       dout(2) << " osd." << i->first << " DOWN" << dendl;
+      // Reset laggy parameters if failure interval exceeds a threshold.
+      const osd_xinfo_t& xi = osdmap.get_xinfo(i->first);
+      if ((xi.laggy_probability || xi.laggy_interval) && xi.down_stamp.sec()) {
+        int last_failure_interval = pending_inc.modified.sec() - xi.down_stamp.sec();
+        if (grace_interval_threshold_exceeded(last_failure_interval)) {
+          set_default_laggy_params(i->first);
+        }
+      }
+    }
     if (s & CEPH_OSD_EXISTS)
       dout(2) << " osd." << i->first << " DNE" << dendl;
   }
@@ -3343,6 +3352,39 @@ void OSDMonitor::take_all_failures(list<MonOpRequestRef>& ls)
     p->second.take_report_messages(ls);
   }
   failure_info.clear();
+}
+
+int OSDMonitor::get_grace_interval_threshold()
+{
+  int halflife = g_conf()->mon_osd_laggy_halflife;
+  // Scale the halflife period (default: 1_hr) by
+  // a factor (48) to calculate the threshold.
+  int grace_threshold_factor = 48;
+  return halflife * grace_threshold_factor;
+}
+
+bool OSDMonitor::grace_interval_threshold_exceeded(int last_failed_interval)
+{
+  int grace_interval_threshold_secs = get_grace_interval_threshold();
+  if (last_failed_interval > grace_interval_threshold_secs) {
+    dout(1) << " last_failed_interval " << last_failed_interval
+            << " > grace_interval_threshold_secs " << grace_interval_threshold_secs
+            << dendl;
+    return true;
+  }
+  return false;
+}
+
+void OSDMonitor::set_default_laggy_params(int target_osd)
+{
+  if (pending_inc.new_xinfo.count(target_osd) == 0) {
+    pending_inc.new_xinfo[target_osd] = osdmap.osd_xinfo[target_osd];
+  }
+  osd_xinfo_t& xi = pending_inc.new_xinfo[target_osd];
+  xi.down_stamp = pending_inc.modified;
+  xi.laggy_probability = 0.0;
+  xi.laggy_interval = 0;
+  dout(20) << __func__ << " reset laggy, now xi " << xi << dendl;
 }
 
 
