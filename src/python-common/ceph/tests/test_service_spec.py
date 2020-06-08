@@ -4,7 +4,8 @@ import yaml
 
 import pytest
 
-from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, RGWSpec, NFSServiceSpec, \
+from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
+    RGWSpec, NFSServiceSpec, IscsiServiceSpec, \
     servicespec_validate_add, ServiceSpec, ServiceSpecValidationError
 from ceph.deployment.drive_group import DriveGroupSpec
 
@@ -83,6 +84,7 @@ def test_parse_host_placement_specs_raises_wrong_format(test_input):
         ("mds", ServiceSpec, 'test'),
         ("rgw", RGWSpec, 'realm.zone'),
         ("nfs", NFSServiceSpec, 'test'),
+        ("iscsi", IscsiServiceSpec, 'test'),
         ("osd", DriveGroupSpec, 'test'),
     ])
 def test_servicespec_map_test(s_type, o_spec, s_id):
@@ -94,6 +96,10 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     }
     if s_type == 'nfs':
         dict_spec['pool'] = 'pool'
+    elif s_type == 'iscsi':
+        dict_spec['pool'] = 'pool'
+        dict_spec['api_user'] = 'api_user'
+        dict_spec['api_password'] = 'api_password'
     spec = ServiceSpec.from_json(dict_spec)
     assert isinstance(spec, o_spec)
     assert isinstance(spec.placement, PlacementSpec)
