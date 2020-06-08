@@ -41,6 +41,7 @@ struct RGWProcessEnv {
 };
 
 class RGWFrontendConfig;
+class RGWRequest;
 
 class RGWProcess {
   deque<RGWRequest*> m_req_queue;

@@ -173,6 +173,9 @@
     subscription rm            remove a pubsub subscription
     subscription pull          show events in a pubsub subscription
     subscription ack           ack (remove) an events in a pubsub subscription
+    script put                 upload a lua script to a context
+    script get                 get the lua script of a context
+    script rm                  remove the lua scripts of a context
   options:
      --tenant=<tenant>         tenant name
      --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)
@@ -328,6 +331,9 @@
      --topic                   bucket notifications/pubsub topic name
      --subscription            pubsub subscription name
      --event-id                event id in a pubsub subscription
+  
+  Script options:
+     --context                 context in which the script runs. one of: preRequest, postRequest
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name
