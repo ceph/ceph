@@ -1,19 +1,31 @@
-<tabset *ngIf="selection">
-  <tab heading="Details"
-       i18n-heading>
-    <cd-table-key-value [data]="data">
-    </cd-table-key-value>
-  </tab>
+<ng-container *ngIf="selection">
+  <ul ngbNav
+      #nav="ngbNav"
+      class="nav-tabs">
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <cd-table-key-value [data]="data">
+        </cd-table-key-value>
+      </ng-template>
+    </li>
+    <li ngbNavItem>
+      <a ngbNavLink
+         i18n>Clients ({{ clients.length }})</a>
+      <ng-template ngbNavContent>
 
-  <tab heading="Clients ({{ clients.length }})"
-       i18n-heading>
-    <cd-table #table
-              [data]="clients"
-              columnMode="flex"
-              [columns]="clientsColumns"
-              identifier="addresses"
-              forceIdentifier="true"
-              selectionType="">
-    </cd-table>
-  </tab>
-</tabset>
+        <cd-table #table
+                  [data]="clients"
+                  columnMode="flex"
+                  [columns]="clientsColumns"
+                  identifier="addresses"
+                  forceIdentifier="true"
+                  selectionType="">
+        </cd-table>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

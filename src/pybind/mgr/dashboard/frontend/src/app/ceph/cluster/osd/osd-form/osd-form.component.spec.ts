@@ -114,8 +114,8 @@ describe('OsdFormComponent', () => {
     component = fixture.componentInstance;
     form = component.form;
     formHelper = new FormHelper(form);
-    orchService = TestBed.get(OrchestratorService);
-    summaryService = TestBed.get(SummaryService);
+    orchService = TestBed.inject(OrchestratorService);
+    summaryService = TestBed.inject(SummaryService);
     summaryService['summaryDataSource'] = new BehaviorSubject(null);
     summaryService['summaryData$'] = summaryService['summaryDataSource'].asObservable();
     summaryService['summaryDataSource'].next({ version: 'master' });

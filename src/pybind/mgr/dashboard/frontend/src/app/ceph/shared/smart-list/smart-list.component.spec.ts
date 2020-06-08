@@ -4,8 +4,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
-import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -81,8 +81,8 @@ describe('OsdSmartListComponent', () => {
 
   configureTestBed({
     declarations: [SmartListComponent],
-    imports: [BrowserAnimationsModule, TabsModule, SharedModule, HttpClientTestingModule],
-    providers: [i18nProviders, TabsetComponent, TabsetConfig]
+    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule],
+    providers: [i18nProviders]
   });
 
   beforeEach(() => {
@@ -90,7 +90,7 @@ describe('OsdSmartListComponent', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
 
-    osdService = TestBed.get(OsdService);
+    osdService = TestBed.inject(OsdService);
   });
 
   it('should create', () => {

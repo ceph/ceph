@@ -1,8 +1,9 @@
-<alert type="info">
+<ngb-alert type="info"
+           [dismissible]="false">
   <strong>
     <i [ngClass]="[icons.spinner, icons.spin]"
        aria-hidden="true"
        class="mr-2"></i>
   </strong>
   <ng-content></ng-content>
-</alert>
+</ngb-alert>

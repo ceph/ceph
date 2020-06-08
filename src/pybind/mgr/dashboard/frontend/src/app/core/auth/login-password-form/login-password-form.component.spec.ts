@@ -40,10 +40,10 @@ describe('LoginPasswordFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(LoginPasswordFormComponent);
     component = fixture.componentInstance;
-    httpTesting = TestBed.get(HttpTestingController);
-    router = TestBed.get(Router);
-    authStorageService = TestBed.get(AuthStorageService);
-    authService = TestBed.get(AuthService);
+    httpTesting = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
+    authStorageService = TestBed.inject(AuthStorageService);
+    authService = TestBed.inject(AuthService);
     spyOn(router, 'navigate');
     fixture.detectChanges();
     form = component.userForm;

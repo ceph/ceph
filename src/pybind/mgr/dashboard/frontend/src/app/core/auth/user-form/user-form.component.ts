@@ -63,7 +63,7 @@ export class UserFormComponent extends CdForm implements OnInit {
     private authService: AuthService,
     private authStorageService: AuthStorageService,
     private route: ActivatedRoute,
-    private router: Router,
+    public router: Router,
     private modalService: BsModalService,
     private roleService: RoleService,
     private userService: UserService,

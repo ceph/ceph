@@ -14,8 +14,8 @@ describe('OsdService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(OsdService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(OsdService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

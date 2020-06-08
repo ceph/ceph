@@ -14,8 +14,8 @@ describe('NfsService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(NfsService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(NfsService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

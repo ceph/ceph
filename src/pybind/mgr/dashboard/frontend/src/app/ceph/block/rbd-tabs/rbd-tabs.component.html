@@ -1,23 +1,23 @@
-<tabset>
-  <tab heading="Images"
-       i18n-heading
-       [active]="url === '/block/rbd'"
-       (selectTab)="navigateTo('/block/rbd')">
-  </tab>
-  <tab heading="Namespaces"
-       i18n-heading
-       [active]="url === '/block/rbd/namespaces'"
-       (selectTab)="navigateTo('/block/rbd/namespaces')">
-  </tab>
-  <tab heading="Trash"
-       i18n-heading
-       [active]="url === '/block/rbd/trash'"
-       (selectTab)="navigateTo('/block/rbd/trash')">
-  </tab>
-  <tab heading="Overall Performance"
-       i18n-heading
-       *ngIf="grafanaPermission.read"
-       [active]="url === '/block/rbd/performance'"
-       (selectTab)="navigateTo('/block/rbd/performance')">
-  </tab>
-</tabset>
+<ul ngbNav
+    #nav="ngbNav"
+    [activeId]="router.url"
+    (navChange)="router.navigate([$event.nextId])"
+    class="nav-tabs">
+  <li ngbNavItem="/block/rbd">
+    <a ngbNavLink
+       i18n>Images</a>
+  </li>
+  <li ngbNavItem="/block/rbd/namespaces">
+    <a ngbNavLink
+       i18n>Namespaces</a>
+  </li>
+  <li ngbNavItem="/block/rbd/trash">
+    <a ngbNavLink
+       i18n>Trash</a>
+  </li>
+  <li ngbNavItem="/block/rbd/performance"
+      *ngIf="grafanaPermission.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+  </li>
+</ul>

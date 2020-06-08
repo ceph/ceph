@@ -152,12 +152,12 @@ Create OSDs on a group of devices on a single host::
 
 or::
 
-    ceph orch apply osd -i <json_file/yaml_file> [--preview]
+    ceph orch apply osd -i <json_file/yaml_file>
 
 
 or::
 
-    ceph orch apply osd --use-all-devices [--preview]
+    ceph orch apply osd --all-available-devices
 
 
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
@@ -406,6 +406,7 @@ to specify the deployment of services. For example:
         - host2
         - host3
     spec: ...
+    unmanaged: false
         
 Where the properties of a service specification are the following:
 
@@ -417,6 +418,10 @@ Where the properties of a service specification are the following:
 * ``service_id`` is the name of the service. Omit the service time
 * ``placement`` is a :ref:`orchestrator-cli-placement-spec`
 * ``spec``: additional specifications for a specific service.
+* ``unmanaged``: If set to ``true``, the orchestrator will not deploy nor
+   remove any daemon associated with this service. Placement and all other
+   properties will be ignored. This is useful, if this service should not
+   be managed temporarily.
 
 Each service type can have different requirements for the spec.
 

@@ -544,6 +544,12 @@ enum RGWOpType {
   RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK,
   RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK,
   RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK,
+
+  /*OIDC provider specific*/
+  RGW_OP_CREATE_OIDC_PROVIDER,
+  RGW_OP_DELETE_OIDC_PROVIDER,
+  RGW_OP_GET_OIDC_PROVIDER,
+  RGW_OP_LIST_OIDC_PROVIDERS,
 };
 
 class RGWAccessControlPolicy;
@@ -2255,6 +2261,7 @@ extern std::string url_decode(const boost::string_view& src_str,
 extern void url_encode(const std::string& src, string& dst,
                        bool encode_slash = true);
 extern std::string url_encode(const std::string& src, bool encode_slash = true);
+extern std::string url_remove_prefix(const std::string& url); // Removes hhtp, https and www from url
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);

@@ -85,8 +85,8 @@ describe('ServiceDaemonListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(ServiceDaemonListComponent);
     component = fixture.componentInstance;
-    const hostService = TestBed.get(HostService);
-    const cephServiceService = TestBed.get(CephServiceService);
+    const hostService = TestBed.inject(HostService);
+    const cephServiceService = TestBed.inject(CephServiceService);
     spyOn(hostService, 'getDaemons').and.callFake(() =>
       of(getDaemonsByHostname(component.hostname))
     );

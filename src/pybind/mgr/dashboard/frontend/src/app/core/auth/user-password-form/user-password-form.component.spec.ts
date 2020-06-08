@@ -39,9 +39,9 @@ describe('UserPasswordFormComponent', () => {
     fixture = TestBed.createComponent(UserPasswordFormComponent);
     component = fixture.componentInstance;
     form = component.userForm;
-    httpTesting = TestBed.get(HttpTestingController);
-    router = TestBed.get(Router);
-    authStorageService = TestBed.get(AuthStorageService);
+    httpTesting = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
+    authStorageService = TestBed.inject(AuthStorageService);
     spyOn(router, 'navigate');
     fixture.detectChanges();
     formHelper = new FormHelper(form);

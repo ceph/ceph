@@ -4,12 +4,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { of as observableOf } from 'rxjs';
 
-import { AlertModule } from 'ngx-bootstrap/alert';
-
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-
 import { SettingsService } from '../../api/settings.service';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification.component';
@@ -27,18 +25,14 @@ describe('PwdExpirationNotificationComponent', () => {
 
   configureTestBed({
     declarations: [PwdExpirationNotificationComponent, FakeComponent],
-    imports: [
-      AlertModule.forRoot(),
-      HttpClientTestingModule,
-      RouterTestingModule.withRoutes(routes)
-    ],
+    imports: [NgbAlertModule, HttpClientTestingModule, RouterTestingModule.withRoutes(routes)],
     providers: [SettingsService, AuthStorageService]
   });
 
   describe('password expiration date has been set', () => {
     beforeEach(() => {
-      authStorageService = TestBed.get(AuthStorageService);
-      settingsService = TestBed.get(SettingsService);
+      authStorageService = TestBed.inject(AuthStorageService);
+      settingsService = TestBed.inject(SettingsService);
       spyOn(authStorageService, 'getPwdExpirationDate').and.returnValue(1645488000);
       spyOn(settingsService, 'getStandardSettings').and.returnValue(
         observableOf({
@@ -105,7 +99,7 @@ describe('PwdExpirationNotificationComponent', () => {
 
   describe('password expiration date has not been set', () => {
     beforeEach(() => {
-      authStorageService = TestBed.get(AuthStorageService);
+      authStorageService = TestBed.inject(AuthStorageService);
       spyOn(authStorageService, 'getPwdExpirationDate').and.returnValue(null);
       fixture = TestBed.createComponent(PwdExpirationNotificationComponent);
       component = fixture.componentInstance;

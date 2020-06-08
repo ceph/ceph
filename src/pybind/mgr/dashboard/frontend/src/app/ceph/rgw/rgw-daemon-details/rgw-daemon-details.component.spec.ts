@@ -1,7 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
@@ -14,7 +14,7 @@ describe('RgwDaemonDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwDaemonDetailsComponent],
-    imports: [SharedModule, PerformanceCounterModule, TabsModule.forRoot(), HttpClientTestingModule]
+    imports: [SharedModule, PerformanceCounterModule, HttpClientTestingModule, NgbNavModule]
   });
 
   beforeEach(() => {

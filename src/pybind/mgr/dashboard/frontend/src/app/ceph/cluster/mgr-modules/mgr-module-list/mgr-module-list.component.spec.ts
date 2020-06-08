@@ -3,7 +3,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
@@ -33,7 +33,7 @@ describe('MgrModuleListComponent', () => {
       RouterTestingModule,
       SharedModule,
       HttpClientTestingModule,
-      TabsModule.forRoot(),
+      NgbNavModule,
       ToastrModule.forRoot()
     ],
     providers: [MgrModuleService, NotificationService, i18nProviders]
@@ -42,8 +42,8 @@ describe('MgrModuleListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(MgrModuleListComponent);
     component = fixture.componentInstance;
-    mgrModuleService = TestBed.get(MgrModuleService);
-    notificationService = TestBed.get(NotificationService);
+    mgrModuleService = TestBed.inject(MgrModuleService);
+    notificationService = TestBed.inject(NotificationService);
   });
 
   it('should create', () => {

@@ -5,10 +5,10 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { BsDatepickerDirective, BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
@@ -62,7 +62,7 @@ describe('SilenceFormComponent', () => {
       BsDatepickerModule.forRoot(),
       SharedModule,
       ToastrModule.forRoot(),
-      TooltipModule.forRoot(),
+      NgbTooltipModule,
       ReactiveFormsModule
     ],
     providers: [
@@ -102,7 +102,7 @@ describe('SilenceFormComponent', () => {
     spyOn(global, 'Date').and.callFake((arg) => (arg ? new originalDate(arg) : beginningDate));
 
     prometheus = new PrometheusHelper();
-    prometheusService = TestBed.get(PrometheusService);
+    prometheusService = TestBed.inject(PrometheusService);
     spyOn(prometheusService, 'getAlerts').and.callFake(() =>
       of([prometheus.createAlert('alert0')])
     );
@@ -126,12 +126,12 @@ describe('SilenceFormComponent', () => {
       })
     );
 
-    router = TestBed.get(Router);
+    router = TestBed.inject(Router);
 
-    notificationService = TestBed.get(NotificationService);
+    notificationService = TestBed.inject(NotificationService);
     spyOn(notificationService, 'show').and.stub();
 
-    authStorageService = TestBed.get(AuthStorageService);
+    authStorageService = TestBed.inject(AuthStorageService);
     spyOn(authStorageService, 'getUsername').and.returnValue('someUser');
 
     fixture = TestBed.createComponent(SilenceFormComponent);
@@ -460,7 +460,7 @@ describe('SilenceFormComponent', () => {
       addMatcher('alertname', 'alert.*', true);
       expectMatch(null);
 
-      const modalService = TestBed.get(BsModalService);
+      const modalService = TestBed.inject(BsModalService);
       spyOn(modalService, 'show').and.callFake(() => {
         return {
           content: {
