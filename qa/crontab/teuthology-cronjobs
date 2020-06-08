@@ -90,7 +90,6 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 05 05 * * 5    CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s rgw -k distro -t py2 -e $CEPH_QA_EMAIL
 15 05 * * 3    CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s krbd -k testing -t py2 -e $CEPH_QA_EMAIL
 20 05 * * 1  CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s kcephfs -k testing -t py2 -e $CEPH_QA_EMAIL
-55 05 * * 5    CEPH_BRANCH=mimic; MACHINE_NAME=mira;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -t py2 -e $CEPH_QA_EMAIL
 10 05 * * 3  CEPH_BRANCH=mimic; MACHINE_NAME=mira;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-disk -k distro -t py2 -e $CEPH_QA_EMAIL
 15 05 * * 4  CEPH_BRANCH=mimic; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -t py2 -e $CEPH_QA_EMAIL
 07 05 * * 6    CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s powercycle -k distro -t py2 -e $CEPH_QA_EMAIL
