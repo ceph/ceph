@@ -16,6 +16,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
+import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { DepCheckerService } from '../../../shared/services/dep-checker.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -46,6 +47,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private hostService: HostService,
     private cephShortVersionPipe: CephShortVersionPipe,
+    private joinPipe: JoinPipe,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
@@ -99,6 +101,12 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         prop: 'services',
         flexGrow: 3,
         cellTemplate: this.servicesTpl
+      },
+      {
+        name: this.i18n('Labels'),
+        prop: 'labels',
+        flexGrow: 1,
+        pipe: this.joinPipe
       },
       {
         name: this.i18n('Version'),

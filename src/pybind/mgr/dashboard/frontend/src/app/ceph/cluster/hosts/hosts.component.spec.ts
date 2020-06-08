@@ -74,7 +74,8 @@ describe('HostsComponent', () => {
           }
         ],
         hostname: hostname,
-        ceph_version: 'ceph version Development'
+        ceph_version: 'ceph version Development',
+        labels: ['foo', 'bar']
       }
     ];
 
