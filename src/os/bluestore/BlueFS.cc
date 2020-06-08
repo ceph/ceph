@@ -1558,6 +1558,7 @@ int BlueFS::_read_random(
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(off, &x_off);
       uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
+      ceph_assert(p != h->file->fnode.extents.end());
       dout(20) << __func__ << " read random 0x"
 	       << std::hex << x_off << "~" << l << std::dec
 	       << " of " << *p << dendl;
