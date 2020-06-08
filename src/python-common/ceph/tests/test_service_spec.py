@@ -92,6 +92,8 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
         "placement":
             dict(hosts=["host1:1.1.1.1"])
     }
+    if s_type == 'nfs':
+        dict_spec['pool'] = 'pool'
     spec = ServiceSpec.from_json(dict_spec)
     assert isinstance(spec, o_spec)
     assert isinstance(spec.placement, PlacementSpec)
