@@ -523,11 +523,12 @@ class NFSServiceSpec(ServiceSpec):
         #: RADOS namespace where NFS client recovery data is stored in the pool.
         self.namespace = namespace
 
-    def validate_add(self):
-        servicespec_validate_add(self)
+    def validate(self):
+        super(NFSServiceSpec, self).validate()
 
         if not self.pool:
-            raise ServiceSpecValidationError('Cannot add NFS: No Pool specified')
+            raise ServiceSpecValidationError(
+                'Cannot add NFS: No Pool specified')
 
     def rados_config_name(self):
         # type: () -> str
