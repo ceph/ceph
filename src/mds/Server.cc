@@ -6011,7 +6011,7 @@ public:
     } else if (newi->inode.is_dir()) {
       // We do this now so that the linkages on the new directory are stable.
       newi->maybe_ephemeral_dist();
-      newi->maybe_ephemeral_rand();
+      newi->maybe_ephemeral_rand(true);
     }
 
     // hit pop
