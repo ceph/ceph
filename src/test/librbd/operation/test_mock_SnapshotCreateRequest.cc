@@ -63,10 +63,9 @@ public:
   typedef mirror::snapshot::SetImageStateRequest<MockImageCtx> MockSetImageStateRequest;
 
   void expect_notify_quiesce(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.image_watcher, notify_quiesce(_, _))
-      .WillOnce(DoAll(WithArg<1>(CompleteContext(
-                                   r, mock_image_ctx.image_ctx->op_work_queue)),
-                      Return(0)));
+    EXPECT_CALL(*mock_image_ctx.image_watcher, notify_quiesce(_, _, _))
+      .WillOnce(WithArg<2>(CompleteContext(
+                             r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
   void expect_block_writes(MockImageCtx &mock_image_ctx) {
