@@ -924,22 +924,58 @@ ostream& operator<<(ostream& out, const RGWCoroutine& cr)
   return out;
 }
 
-bool RGWCoroutine::drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack)
+bool RGWCoroutine::drain_children(int num_cr_left,
+                                  RGWCoroutinesStack *skip_stack,
+                                  std::optional<std::function<void(int ret)> > err_cb)
 {
   bool done = false;
   ceph_assert(num_cr_left >= 0);
   if (num_cr_left == 0 && skip_stack) {
     num_cr_left = 1;
   }
-  reenter(&drain_cr) {
+  reenter(&drain_status.cr) {
     while (num_spawned() > (size_t)num_cr_left) {
       yield wait_for_child();
       int ret;
       while (collect(&ret, skip_stack)) {
         if (ret < 0) {
+          if (!err_cb) {
+            ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
+            /* we should have reported this error */
+            log_error() << "ERROR: collect() returned error (ret=" << ret << ")";
+          } else {
+            (*err_cb)(ret);
+          }
+        }
+      }
+    }
+    done = true;
+  }
+  return done;
+}
+
+bool RGWCoroutine::drain_children(int num_cr_left,
+                                  std::optional<std::function<int(int ret)> > err_cb)
+{
+  bool done = false;
+  ceph_assert(num_cr_left >= 0);
+
+  reenter(&drain_status.cr) {
+    while (num_spawned() > (size_t)num_cr_left) {
+      yield wait_for_child();
+      int ret;
+      while (collect(&ret, nullptr)) {
+        if (ret < 0) {
           ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
           /* we should have reported this error */
           log_error() << "ERROR: collect() returned error (ret=" << ret << ")";
+          if (err_cb && !drain_status.should_exit) {
+            int r = (*err_cb)(ret);
+            if (r < 0) {
+              drain_status.ret = r;
+              num_cr_left = 0; /* need to drain all */
+            }
+          }
         }
       }
     }
