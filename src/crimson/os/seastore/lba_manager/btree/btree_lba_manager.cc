@@ -194,9 +194,11 @@ BtreeLBAManager::insert_mapping_ret BtreeLBAManager::insert_mapping(
 	}
 	auto nroot = cache.alloc_new_extent<LBAInternalNode>(t, LBA_BLOCK_SIZE);
 	nroot->set_depth(root->depth + 1);
-	nroot->begin()->set_key(L_ADDR_MIN);
-	nroot->begin()->set_val(root->get_paddr());
-	nroot->set_size(1);
+	nroot->journal_insert(
+	  nroot->begin(),
+	  L_ADDR_MIN,
+	  root->get_paddr(),
+	  nullptr);
 	croot->get_lba_root().lba_root_addr = nroot->get_paddr();
 	croot->get_lba_root().lba_depth = root->depth + 1;
 	return nroot->split_entry(cache, t, laddr, nroot->begin(), root);
