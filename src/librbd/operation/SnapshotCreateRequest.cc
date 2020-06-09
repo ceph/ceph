@@ -65,8 +65,8 @@ void SnapshotCreateRequest<I>::send_notify_quiesce() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  m_request_id = image_ctx.image_watcher->notify_quiesce(
-    m_prog_ctx, create_async_context_callback(
+  image_ctx.image_watcher->notify_quiesce(
+      &m_request_id, m_prog_ctx, create_async_context_callback(
       image_ctx, create_context_callback<SnapshotCreateRequest<I>,
       &SnapshotCreateRequest<I>::handle_notify_quiesce>(this)));
 }
