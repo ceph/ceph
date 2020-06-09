@@ -1021,8 +1021,18 @@ class Filesystem(MDSCluster):
     def ranks_tell(self, command, status=None):
         if status is None:
             status = self.status()
+        out = []
         for r in status.get_ranks(self.id):
-            self.rank_tell(command, rank=r['rank'], status=status)
+            result = self.rank_tell(command, rank=r['rank'], status=status)
+            out.append((r['rank'], result))
+        return sorted(out)
+
+    def ranks_perf(self, f, status=None):
+        perf = self.ranks_tell(["perf", "dump"], status=status)
+        out = []
+        for rank, perf in perf:
+            out.append((rank, f(perf)))
+        return out
 
     def read_cache(self, path, depth=None):
         cmd = ["dump", "tree", path]
