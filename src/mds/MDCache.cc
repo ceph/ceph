@@ -155,6 +155,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
 
   export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
   export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
+  export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
 
   lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
 
@@ -242,6 +243,9 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
       in->maybe_ephemeral_rand();
     }
     mds->balancer->handle_export_pins();
+  }
+  if (changed.count("mds_export_ephemeral_random_max")) {
+    export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
   }
   if (changed.count("mds_health_cache_threshold"))
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
