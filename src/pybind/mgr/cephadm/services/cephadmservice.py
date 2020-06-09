@@ -1,4 +1,5 @@
 import logging
+from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any
 
 from mgr_module import MonCommandFailed
@@ -13,10 +14,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class CephadmService:
+class CephadmService(metaclass=ABCMeta):
     """
     Base class for service types. Often providing a create() and config() fn.
     """
+
+    @property
+    @abstractmethod
+    def TYPE(self):
+        pass
+
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
@@ -113,7 +120,29 @@ class CephadmService:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 
 
+
+    def ok_to_stop(self, daemon_ids: List[str]) -> bool:
+        names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
+
+        if self.TYPE not in ['mon', 'osd', 'mds']:
+            logger.info('Upgrade: It is presumed safe to stop %s' % names)
+            return True
+
+        ret, out, err = self.mgr.mon_command({
+            'prefix': f'{self.TYPE} ok-to-stop',
+            'ids': daemon_ids,
+        })
+
+        if ret:
+            logger.info(f'It is NOT safe to stop {names}: {err}')
+            return False
+
+        return True
+
+
 class MonService(CephadmService):
+    TYPE = 'mon'
+
     def create(self, name, host, network):
         """
         Create a new monitor on the given host.
@@ -155,6 +184,8 @@ class MonService(CephadmService):
 
 
 class MgrService(CephadmService):
+    TYPE = 'mgr'
+
     def create(self, mgr_id, host):
         """
         Create a new manager instance on a host.
@@ -172,6 +203,8 @@ class MgrService(CephadmService):
 
 
 class MdsService(CephadmService):
+    TYPE = 'mds'
+
     def config(self, spec: ServiceSpec):
         # ensure mds_join_fs is set for these daemons
         assert spec.service_id
@@ -195,6 +228,8 @@ class MdsService(CephadmService):
 
 
 class RgwService(CephadmService):
+    TYPE = 'rgw'
+
     def config(self, spec: RGWSpec):
         # ensure rgw_realm and rgw_zone is set for these daemons
         ret, out, err = self.mgr.check_mon_command({
@@ -262,6 +297,8 @@ class RgwService(CephadmService):
 
 
 class RbdMirrorService(CephadmService):
+    TYPE = 'rbd-mirror'
+
     def create(self, daemon_id, host) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -274,6 +311,8 @@ class RbdMirrorService(CephadmService):
 
 
 class CrashService(CephadmService):
+    TYPE = 'crash'
+
     def create(self, daemon_id, host) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',

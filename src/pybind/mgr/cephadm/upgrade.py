@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 
 import orchestrator
 from cephadm.utils import name_to_config_section
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -119,29 +119,23 @@ class CephadmUpgrade:
             return True
         return False
 
-    def _wait_for_ok_to_stop(self, s) -> bool:
+    def _wait_for_ok_to_stop(self, s: DaemonDescription) -> bool:
         # only wait a little bit; the service might go away for something
         tries = 4
         while tries > 0:
-            if s.daemon_type not in ['mon', 'osd', 'mds']:
+            if not self.upgrade_state or self.upgrade_state.get('paused'):
+                return False
+
+            ok = self.mgr.cephadm_services[s.daemon_type].ok_to_stop([s.daemon_id])
+
+            if ok:
                 logger.info('Upgrade: It is presumed safe to stop %s.%s' %
                               (s.daemon_type, s.daemon_id))
                 return True
-            ret, out, err = self.mgr.mon_command({
-                'prefix': '%s ok-to-stop' % s.daemon_type,
-                'ids': [s.daemon_id],
-            })
-            if not self.upgrade_state or self.upgrade_state.get('paused'):
-                return False
-            if ret:
-                logger.info('Upgrade: It is NOT safe to stop %s.%s' %
-                              (s.daemon_type, s.daemon_id))
-                time.sleep(15)
-                tries -= 1
-            else:
-                logger.info('Upgrade: It is safe to stop %s.%s' %
-                              (s.daemon_type, s.daemon_id))
-                return True
+            logger.info('Upgrade: It is NOT safe to stop %s.%s' %
+                          (s.daemon_type, s.daemon_id))
+            time.sleep(15)
+            tries -= 1
         return False
 
     def _clear_upgrade_health_checks(self) -> None:
