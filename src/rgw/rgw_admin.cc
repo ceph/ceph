@@ -1066,9 +1066,6 @@ static void show_reshard_status(
   for (const auto& entry : status) {
     formatter->open_object_section("entry");
     formatter->dump_string("reshard_status", to_string(entry.reshard_status));
-    formatter->dump_string("bucket_instance_id",
-			   entry.bucket_instance_id);
-    formatter->dump_int("num_shards", entry.num_shards);
     formatter->close_section();
   }
   formatter->close_section();
@@ -2728,7 +2725,7 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
     return ret;
   }
 
-  if (bucket_info.reshard_status != rgw::BucketReshardState::NOT_RESHARDING) {
+  if (bucket_info.reshard_status != rgw::BucketReshardState::NONE) {
     // if in_progress or done then we have an old BucketInfo
     cerr << "ERROR: the bucket is currently undergoing resharding and "
       "cannot be added to the reshard list at this time" << std::endl;

@@ -9,7 +9,6 @@
 #include "common/Formatter.h"
 
 #include "rgw/rgw_basic_types.h"
-#include "rgw/rgw_bucket_layout.h"
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
@@ -719,16 +718,22 @@ struct rgw_bucket_category_stats {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 
-inline std::string to_string(const rgw::BucketReshardState status)
+enum class cls_rgw_reshard_status : uint8_t {
+  NOT_RESHARDING  = 0,
+  IN_PROGRESS     = 1,
+  DONE            = 2
+};
+
+inline std::string to_string(const cls_rgw_reshard_status status)
 {
   switch (status) {
-  case rgw::BucketReshardState::NOT_RESHARDING:
+  case cls_rgw_reshard_status::NOT_RESHARDING:
     return "not-resharding";
     break;
-  case rgw::BucketReshardState::IN_PROGRESS:
+  case cls_rgw_reshard_status::IN_PROGRESS:
     return "in-progress";
     break;
-  case rgw::BucketReshardState::DONE:
+  case cls_rgw_reshard_status::DONE:
     return "done";
     break;
   };
@@ -736,17 +741,13 @@ inline std::string to_string(const rgw::BucketReshardState status)
 }
 
 struct cls_rgw_bucket_instance_entry {
-  using RESHARD_STATUS = rgw::BucketReshardState;
+  using RESHARD_STATUS = cls_rgw_reshard_status;
   
-  rgw::BucketReshardState reshard_status{RESHARD_STATUS::NOT_RESHARDING};
-  std::string bucket_instance_id;
-  int32_t num_shards{-1};
+  cls_rgw_reshard_status reshard_status{RESHARD_STATUS::NOT_RESHARDING};
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode((uint8_t)reshard_status, bl);
-    encode(bucket_instance_id, bl);
-    encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -754,9 +755,7 @@ struct cls_rgw_bucket_instance_entry {
     DECODE_START(1, bl);
     uint8_t s;
     decode(s, bl);
-    reshard_status = (rgw::BucketReshardState)s;
-    decode(bucket_instance_id, bl);
-    decode(num_shards, bl);
+    reshard_status = (cls_rgw_reshard_status)s;
     DECODE_FINISH(bl);
   }
 
@@ -767,12 +766,8 @@ struct cls_rgw_bucket_instance_entry {
     reshard_status = RESHARD_STATUS::NOT_RESHARDING;
   }
 
-  void set_status(const std::string& instance_id,
-                 int32_t new_num_shards, 
-                 rgw::BucketReshardState s) {
+  void set_status(cls_rgw_reshard_status s) {
     reshard_status = s;
-    bucket_instance_id = instance_id;
-    num_shards = new_num_shards;
   }
 
   bool resharding() const {

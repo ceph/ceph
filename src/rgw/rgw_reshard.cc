@@ -259,12 +259,10 @@ RGWBucketReshard::RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
 
 int RGWBucketReshard::set_resharding_status(rgw::sal::RGWRadosStore* store,
 					    const RGWBucketInfo& bucket_info,
-					    const string& instance_id,
-					    int32_t num_shards,
-					    rgw::BucketReshardState status)
+					    cls_rgw_reshard_status status)
 {
   cls_rgw_bucket_instance_entry instance_entry;
-  instance_entry.set_status(instance_id, num_shards, status);
+  instance_entry.set_status(status);
 
   int ret = store->getRados()->bucket_set_reshard(bucket_info, instance_entry);
   if (ret < 0) {
@@ -306,9 +304,7 @@ int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* 
 
   if (num_shards < std::numeric_limits<uint32_t>::max()) {
     int ret = set_resharding_status(store, bucket_info,
-				    bucket_info.bucket.bucket_id,
-				    (num_shards < 1 ? 1 : num_shards),
-				    rgw::BucketReshardState::NOT_RESHARDING);
+				    cls_rgw_reshard_status::NOT_RESHARDING);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
 	" ERROR: error clearing reshard status from index shard " <<
@@ -328,7 +324,7 @@ static int update_num_shards(rgw::sal::RGWRadosStore *store,
 
   bucket_info.layout.target_index.layout.normal.num_shards = new_num_shards;
 
-  bucket_info.reshard_status = rgw::BucketReshardState::NOT_RESHARDING;
+  bucket_info.reshard_status = rgw::BucketReshardState::NONE;
 
   int ret = store->getRados()->put_bucket_instance_info(bucket_info, true, real_time(), &attrs);
   if (ret < 0) {
@@ -394,9 +390,6 @@ public:
 	lderr(store->ctx()) << "Error: " << __func__ <<
 	  " clear_index_shard_status returned " << ret << dendl;
       }
-
-      // clears new_bucket_instance as well
-      set_status(rgw::BucketReshardState::NOT_RESHARDING);
     }
   }
 
@@ -410,7 +403,7 @@ public:
   }
 
   int complete() {
-    int ret = set_status(rgw::BucketReshardState::DONE);
+    int ret = set_status(rgw::BucketReshardState::NONE);
     if (ret < 0) {
       return ret;
     }
@@ -689,8 +682,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   // set resharding status of current bucket_info & shards with
   // information about planned resharding
-  ret = set_resharding_status(bucket_info.bucket.bucket_id,
-			      num_shards, rgw::BucketReshardState::IN_PROGRESS);
+  ret = set_resharding_status(cls_rgw_reshard_status::IN_PROGRESS);
   if (ret < 0) {
     return ret;
     goto error_out;

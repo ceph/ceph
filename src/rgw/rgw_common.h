@@ -1133,7 +1133,7 @@ struct RGWBucketInfo {
   map<string, uint32_t> mdsearch_config;
 
   // resharding
-  rgw::BucketReshardState reshard_status{rgw::BucketReshardState::NOT_RESHARDING};
+  rgw::BucketReshardState reshard_status{rgw::BucketReshardState::NONE};
   string bucket_instance_id;
 
   RGWObjectLock obj_lock;
