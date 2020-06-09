@@ -11,6 +11,19 @@
 
 namespace crimson::common {
 
+template <typename T, bool is_const>
+struct maybe_const_t {
+};
+template<typename T>
+struct maybe_const_t<T, true> {
+  using type = const T*;
+};
+template<typename T>
+struct maybe_const_t<T, false> {
+  using type = T*;
+};
+
+
 /**
  * FixedKVNodeLayout
  *
@@ -19,7 +32,7 @@ namespace crimson::common {
  *
  * Uses absl::container_internal::Layout for the actual memory layout.
  *
- * The primary interface exposed is centered on the fixed_node_iter_t
+ * The primary interface exposed is centered on the iterator
  * and related methods.
  *
  * Also included are helpers for doing splits and merges as for a btree.
@@ -29,7 +42,8 @@ template <
   typename K,
   typename KINT,
   typename V,
-  typename VINT>
+  typename VINT,
+  bool VALIDATE_INVARIANTS=true>
 class FixedKVNodeLayout {
   char *buf = nullptr;
 
@@ -37,68 +51,70 @@ class FixedKVNodeLayout {
   static constexpr L layout{1, CAPACITY, CAPACITY};
 
 public:
-  struct fixed_node_iter_t {
+  template <bool is_const>
+  struct iter_t {
     friend class FixedKVNodeLayout;
-    FixedKVNodeLayout *node;
+    using parent_t = typename maybe_const_t<FixedKVNodeLayout, is_const>::type;
+
+    parent_t node;
     uint16_t offset;
 
-    fixed_node_iter_t(
-      FixedKVNodeLayout *parent,
+    iter_t(
+      parent_t parent,
       uint16_t offset) : node(parent), offset(offset) {}
 
-    fixed_node_iter_t(const fixed_node_iter_t &) = default;
-    fixed_node_iter_t(fixed_node_iter_t &&) = default;
-    fixed_node_iter_t &operator=(const fixed_node_iter_t &) = default;
-    fixed_node_iter_t &operator=(fixed_node_iter_t &&) = default;
+    iter_t(const iter_t &) = default;
+    iter_t(iter_t &&) = default;
+    iter_t &operator=(const iter_t &) = default;
+    iter_t &operator=(iter_t &&) = default;
+
+    operator iter_t<!is_const>() const {
+      static_assert(!is_const);
+      return iter_t<!is_const>(node, offset);
+    }
 
     // Work nicely with for loops without requiring a nested type.
-    fixed_node_iter_t &operator*() { return *this; }
-    fixed_node_iter_t *operator->() { return this; }
+    iter_t &operator*() { return *this; }
+    iter_t *operator->() { return this; }
 
-    fixed_node_iter_t operator++(int) {
+    iter_t operator++(int) {
       auto ret = *this;
       ++offset;
       return ret;
     }
 
-    fixed_node_iter_t &operator++() {
+    iter_t &operator++() {
       ++offset;
       return *this;
     }
 
-    uint16_t operator-(const fixed_node_iter_t &rhs) const {
+    uint16_t operator-(const iter_t &rhs) const {
       assert(rhs.node == node);
       return offset - rhs.offset;
     }
 
-    fixed_node_iter_t operator+(uint16_t off) const {
-      return fixed_node_iter_t(
+    iter_t operator+(uint16_t off) const {
+      return iter_t(
 	node,
 	offset + off);
     }
-    fixed_node_iter_t operator-(uint16_t off) const {
-      return fixed_node_iter_t(
+    iter_t operator-(uint16_t off) const {
+      return iter_t(
 	node,
 	offset - off);
     }
 
-    bool operator==(const fixed_node_iter_t &rhs) const {
+    bool operator==(const iter_t &rhs) const {
       assert(node == rhs.node);
       return rhs.offset == offset;
     }
 
-    bool operator!=(const fixed_node_iter_t &rhs) const {
+    bool operator!=(const iter_t &rhs) const {
       return !(*this == rhs);
     }
 
     K get_key() const {
       return K(node->get_key_ptr()[offset]);
-    }
-
-    void set_key(K _lb) {
-      KINT lb;
-      lb = _lb;
-      node->get_key_ptr()[offset] = lb;
     }
 
     K get_next_key_or_max() const {
@@ -113,11 +129,7 @@ public:
       return V(node->get_val_ptr()[offset]);
     };
 
-    void set_val(V val) {
-      node->get_val_ptr()[offset] = VINT(val);
-    }
-
-    bool contains(K addr) {
+    bool contains(K addr) const {
       return (get_key() <= addr) && (get_next_key_or_max() > addr);
     }
 
@@ -126,38 +138,223 @@ public:
     }
 
   private:
-    char *get_key_ptr() {
-      return reinterpret_cast<char *>(node->get_key_ptr() + offset);
+    void set_key(K _lb) const {
+      static_assert(!is_const);
+      KINT lb;
+      lb = _lb;
+      node->get_key_ptr()[offset] = lb;
     }
 
-    char *get_val_ptr() {
-      return reinterpret_cast<char *>(node->get_val_ptr() + offset);
+    void set_val(V val) const {
+      static_assert(!is_const);
+      node->get_val_ptr()[offset] = VINT(val);
+    }
+
+    typename maybe_const_t<char, is_const>::type get_key_ptr() const {
+      return reinterpret_cast<
+	typename maybe_const_t<char, is_const>::type>(
+	  node->get_key_ptr() + offset);
+    }
+
+    typename maybe_const_t<char, is_const>::type get_val_ptr() const {
+      return reinterpret_cast<
+	typename maybe_const_t<char, is_const>::type>(
+	  node->get_val_ptr() + offset);
+    }
+  };
+  using const_iterator = iter_t<true>;
+  using iterator = iter_t<false>;
+
+  struct delta_t {
+    enum class op_t : uint8_t {
+      INSERT,
+      REMOVE,
+      UPDATE,
+    } op;
+    KINT key;
+    VINT val;
+
+    void replay(FixedKVNodeLayout &l) {
+      switch (op) {
+      case op_t::INSERT: {
+	l.insert(l.lower_bound(key), key, val);
+	break;
+      }
+      case op_t::REMOVE: {
+	auto iter = l.find(key);
+	assert(iter != l.end());
+	l.remove(iter);
+	break;
+      }
+      case op_t::UPDATE: {
+	auto iter = l.find(key);
+	assert(iter != l.end());
+	l.update(iter, val);
+	break;
+      }
+      default:
+	assert(0 == "Impossible");
+      }
+    }
+
+    bool operator==(const delta_t &rhs) const {
+      return op == rhs.op &&
+	key == rhs.key &&
+	val == rhs.val;
     }
   };
 
 public:
+  class delta_buffer_t {
+    friend class FixedKVNode;
+    std::vector<delta_t> buffer;
+  public:
+    bool empty() const {
+      return buffer.empty();
+    }
+    void insert(
+      const K &key,
+      const V &val) {
+      KINT k;
+      k = key;
+      buffer.push_back(
+	delta_t{
+	  delta_t::op_t::INSERT,
+	  k,
+	  VINT(val)
+	});
+    }
+    void update(
+      const K &key,
+      const V &val) {
+      KINT k;
+      k = key;
+      buffer.push_back(
+	delta_t{
+	  delta_t::op_t::UPDATE,
+	  k,
+	  VINT(val)
+	});
+    }
+    void remove(const K &key) {
+      KINT k;
+      k = key;
+      buffer.push_back(
+	delta_t{
+	  delta_t::op_t::REMOVE,
+	  k,
+	  VINT()
+	});
+    }
+    void replay(FixedKVNodeLayout &node) {
+      for (auto &i: buffer) {
+	i.replay(node);
+      }
+    }
+    size_t get_bytes() const {
+      return buffer.size() * sizeof(delta_t);
+    }
+    void copy_out(char *out, size_t len) {
+      assert(len == get_bytes());
+      ::memcpy(out, reinterpret_cast<const void *>(buffer.data()), get_bytes());
+      buffer.clear();
+    }
+    void copy_in(const char *out, size_t len) {
+      assert(empty());
+      assert(len % sizeof(delta_t) == 0);
+      buffer = std::vector(
+	reinterpret_cast<const delta_t*>(out),
+	reinterpret_cast<const delta_t*>(out + len));
+    }
+    bool operator==(const delta_buffer_t &rhs) const {
+      return buffer == rhs.buffer;
+    }
+  };
+
+  void journal_insert(
+    const_iterator _iter,
+    const K &key,
+    const V &val,
+    delta_buffer_t *recorder) {
+    auto iter = iterator(this, _iter.offset);
+    if (recorder) {
+      recorder->insert(
+	key,
+	val);
+    }
+    insert(iter, key, val);
+  }
+
+  void journal_update(
+    const_iterator _iter,
+    const V &val,
+    delta_buffer_t *recorder) {
+    auto iter = iterator(this, _iter.offset);
+    if (recorder) {
+      recorder->update(iter->get_key(), val);
+    }
+    update(iter, val);
+  }
+
+  void journal_replace(
+    const_iterator _iter,
+    const K &key,
+    const V &val,
+    delta_buffer_t *recorder) {
+    auto iter = iterator(this, _iter.offset);
+    if (recorder) {
+      recorder->remove(iter->get_key());
+      recorder->insert(key, val);
+    }
+    replace(iter, key, val);
+  }
+
+
+  void journal_remove(
+    const_iterator _iter,
+    delta_buffer_t *recorder) {
+    auto iter = iterator(this, _iter.offset);
+    if (recorder) {
+      recorder->remove(iter->get_key());
+    }
+    remove(iter);
+  }
+
+
   FixedKVNodeLayout(char *buf) :
     buf(buf) {}
 
-  fixed_node_iter_t begin() {
-    return fixed_node_iter_t(
+  const_iterator begin() const {
+    return const_iterator(
       this,
       0);
   }
 
-  fixed_node_iter_t end() {
-    return fixed_node_iter_t(
+  const_iterator end() const {
+    return const_iterator(
       this,
       get_size());
   }
 
-  fixed_node_iter_t iter_idx(uint16_t off) {
-    return fixed_node_iter_t(
+  iterator begin() {
+    return iterator(
+      this,
+      0);
+  }
+
+  iterator end() {
+    return iterator(
+      this,
+      get_size());
+  }
+
+  const_iterator iter_idx(uint16_t off) const {
+    return const_iterator(
       this,
       off);
   }
 
-  fixed_node_iter_t find(K l) {
+  const_iterator find(K l) const {
     auto ret = begin();
     for (; ret != end(); ++ret) {
       if (ret->get_key() == l)
@@ -165,74 +362,65 @@ public:
     }
     return ret;
   }
+  iterator find(K l) {
+    const auto &tref = *this;
+    return iterator(this, tref.find(l).offset);
+  }
 
-  fixed_node_iter_t get_split_pivot() {
+  const_iterator lower_bound(K l) const {
+    auto ret = begin();
+    for (; ret != end(); ++ret) {
+      if (ret->get_key() > l)
+	break;
+    }
+    return ret;
+  }
+  iterator lower_bound(K l) {
+    const auto &tref = *this;
+    return iterator(this, tref.lower_bound(l).offset);
+  }
+
+  const_iterator upper_bound(K l) const {
+    auto ret = begin();
+    for (; ret != end(); ++ret) {
+      if (ret->get_key() > l)
+	break;
+    }
+    return ret;
+  }
+  iterator upper_bound(K l) {
+    const auto &tref = *this;
+    return iterator(this, tref.upper_bound(l).offset);
+  }
+
+  const_iterator get_split_pivot() const {
     return iter_idx(get_size() / 2);
   }
 
-private:
-  KINT *get_key_ptr() {
-    return layout.template Pointer<1>(buf);
-  }
-
-  VINT *get_val_ptr() {
-    return layout.template Pointer<2>(buf);
-  }
-
-public:
   uint16_t get_size() const {
     return *layout.template Pointer<0>(buf);
-  }
-
-  void set_size(uint16_t size) {
-    *layout.template Pointer<0>(buf) = size;
   }
 
   constexpr static size_t get_capacity() {
     return CAPACITY;
   }
 
-  /**
-   * copy_from_foreign
-   *
-   * Copies entries from [from_src, to_src) to tgt.
-   *
-   * tgt and from_src must be from different nodes.
-   * from_src and to_src must be from the same node.
-   */
-  static void copy_from_foreign(
-    fixed_node_iter_t tgt,
-    fixed_node_iter_t from_src,
-    fixed_node_iter_t to_src) {
-    assert(tgt->node != from_src->node);
-    assert(to_src->node == from_src->node);
-    memcpy(
-      tgt->get_val_ptr(), from_src->get_val_ptr(),
-      to_src->get_val_ptr() - from_src->get_val_ptr());
-    memcpy(
-      tgt->get_key_ptr(), from_src->get_key_ptr(),
-      to_src->get_key_ptr() - from_src->get_key_ptr());
-  }
+  bool operator==(const FixedKVNodeLayout &rhs) const {
+    if (get_size() != rhs.get_size()) {
+      return false;
+    }
 
-  /**
-   * copy_from_local
-   *
-   * Copies entries from [from_src, to_src) to tgt.
-   *
-   * tgt, from_src, and to_src must be from the same node.
-   */
-  static void copy_from_local(
-    fixed_node_iter_t tgt,
-    fixed_node_iter_t from_src,
-    fixed_node_iter_t to_src) {
-    assert(tgt->node == from_src->node);
-    assert(to_src->node == from_src->node);
-    memmove(
-      tgt->get_val_ptr(), from_src->get_val_ptr(),
-      to_src->get_val_ptr() - from_src->get_val_ptr());
-    memmove(
-      tgt->get_key_ptr(), from_src->get_key_ptr(),
-      to_src->get_key_ptr() - from_src->get_key_ptr());
+    auto iter = begin();
+    auto iter2 = rhs.begin();
+    while (iter != end()) {
+      if (iter->get_key() != iter2->get_key() ||
+	  iter->get_val() != iter2->get_val()) {
+	return false;
+      }
+      iter++;
+      iter2++;
+    }
+    return true;
   }
 
   /**
@@ -242,7 +430,7 @@ public:
    */
   K split_into(
     FixedKVNodeLayout &left,
-    FixedKVNodeLayout &right) {
+    FixedKVNodeLayout &right) const {
     auto piviter = get_split_pivot();
 
     left.copy_from_foreign(left.begin(), begin(), piviter);
@@ -262,8 +450,8 @@ public:
    * precondition: left.size() + right.size() < CAPACITY
    */
   void merge_from(
-    FixedKVNodeLayout &left,
-    FixedKVNodeLayout &right)
+    const FixedKVNodeLayout &left,
+    const FixedKVNodeLayout &right)
   {
     copy_from_foreign(
       end(),
@@ -286,8 +474,8 @@ public:
    * the left side iff prefer_left.
    */
   static K balance_into_new_nodes(
-    FixedKVNodeLayout &left,
-    FixedKVNodeLayout &right,
+    const FixedKVNodeLayout &left,
+    const FixedKVNodeLayout &right,
     bool prefer_left,
     FixedKVNodeLayout &replacement_left,
     FixedKVNodeLayout &replacement_right)
@@ -340,6 +528,133 @@ public:
     }
 
     return replacement_pivot;
+  }
+
+private:
+  void insert(
+    iterator iter,
+    const K &key,
+    const V &val) {
+    if (VALIDATE_INVARIANTS) {
+      if (iter != begin()) {
+	assert((iter - 1)->get_key() < key);
+      }
+      if (iter != end()) {
+	assert(iter->get_key() > key);
+      }
+      assert(get_size() < CAPACITY);
+    }
+    copy_from_local(iter + 1, iter, end());
+    iter->set_key(key);
+    iter->set_val(val);
+    set_size(get_size() + 1);
+  }
+
+  void update(
+    iterator iter,
+    V val) {
+    assert(iter != end());
+    iter->set_val(val);
+  }
+
+  void replace(
+    iterator iter,
+    const K &key,
+    const V &val) {
+    assert(iter != end());
+    if (VALIDATE_INVARIANTS) {
+      if (iter != begin()) {
+	assert((iter - 1)->get_key() < key);
+      }
+      if ((iter + 1) != end()) {
+	assert((iter + 1)->get_key() > key);
+      }
+    }
+    iter->set_key(key);
+    iter->set_val(val);
+  }
+
+  void remove(iterator iter) {
+    assert(iter != end());
+    copy_from_local(iter, iter + 1, end());
+    set_size(get_size() - 1);
+  }
+
+  /**
+   * get_key_ptr
+   *
+   * Get pointer to start of key array
+   */
+  KINT *get_key_ptr() {
+    return layout.template Pointer<1>(buf);
+  }
+  const KINT *get_key_ptr() const {
+    return layout.template Pointer<1>(buf);
+  }
+
+  /**
+   * get_val_ptr
+   *
+   * Get pointer to start of val array
+   */
+  VINT *get_val_ptr() {
+    return layout.template Pointer<2>(buf);
+  }
+  const VINT *get_val_ptr() const {
+    return layout.template Pointer<2>(buf);
+  }
+
+  /**
+   * set_size
+   *
+   * Set size representation to match size
+   */
+  void set_size(uint16_t size) {
+    *layout.template Pointer<0>(buf) = size;
+  }
+
+
+  /**
+   * copy_from_foreign
+   *
+   * Copies entries from [from_src, to_src) to tgt.
+   *
+   * tgt and from_src must be from different nodes.
+   * from_src and to_src must be from the same node.
+   */
+  static void copy_from_foreign(
+    iterator tgt,
+    const_iterator from_src,
+    const_iterator to_src) {
+    assert(tgt->node != from_src->node);
+    assert(to_src->node == from_src->node);
+    memcpy(
+      tgt->get_val_ptr(), from_src->get_val_ptr(),
+      to_src->get_val_ptr() - from_src->get_val_ptr());
+    memcpy(
+      tgt->get_key_ptr(), from_src->get_key_ptr(),
+      to_src->get_key_ptr() - from_src->get_key_ptr());
+  }
+
+  /**
+   * copy_from_local
+   *
+   * Copies entries from [from_src, to_src) to tgt.
+   *
+   * tgt, from_src, and to_src must be from the same node.
+   */
+  static void copy_from_local(
+    iterator tgt,
+    iterator from_src,
+    iterator to_src) {
+    assert(tgt->node == from_src->node);
+    assert(to_src->node == from_src->node);
+    memmove(
+      tgt->get_val_ptr(), from_src->get_val_ptr(),
+      to_src->get_val_ptr() - from_src->get_val_ptr());
+    memmove(
+      tgt->get_key_ptr(), from_src->get_key_ptr(),
+      to_src->get_key_ptr() - from_src->get_key_ptr());
   }
 };
 

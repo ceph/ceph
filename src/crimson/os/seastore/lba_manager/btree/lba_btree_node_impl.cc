@@ -206,16 +206,8 @@ LBAInternalNode::split_entry(
   ceph_assert(!at_max_capacity());
   auto [left, right, pivot] = entry->make_split_children(c, t);
 
-  journal_remove(iter->get_key());
-  journal_insert(iter->get_key(), left->get_paddr());
-  journal_insert(pivot, right->get_paddr());
-
-  copy_from_local(iter + 1, iter, end());
-  iter->set_val(maybe_generate_relative(left->get_paddr()));
-  iter++;
-  iter->set_key(pivot);
-  iter->set_val(maybe_generate_relative(right->get_paddr()));
-  set_size(get_size() + 1);
+  journal_update(iter, left->get_paddr(), maybe_get_delta_buffer());
+  journal_insert(iter + 1, pivot, right->get_paddr(), maybe_get_delta_buffer());
 
   c.retire_extent(t, entry);
 
@@ -228,19 +220,6 @@ LBAInternalNode::split_entry(
   return split_ertr::make_ready_future<LBANodeRef>(
     pivot > addr ? left : right
   );
-}
-
-void LBAInternalNode::journal_remove(
-  laddr_t to_remove)
-{
-  // TODO
-}
-
-void LBAInternalNode::journal_insert(
-  laddr_t to_insert,
-  paddr_t val)
-{
-  // TODO
 }
 
 LBAInternalNode::merge_ret
@@ -272,13 +251,8 @@ LBAInternalNode::merge_entry(
 	t,
 	r);
 
-      journal_remove(riter->get_key());
-      journal_remove(liter->get_key());
-      journal_insert(liter->get_key(), replacement->get_paddr());
-
-      liter->set_val(maybe_generate_relative(replacement->get_paddr()));
-      copy_from_local(riter, riter + 1, end());
-      set_size(get_size() - 1);
+      journal_update(liter, replacement->get_paddr(), maybe_get_delta_buffer());
+      journal_remove(riter, maybe_get_delta_buffer());
 
       c.retire_extent(t, l);
       c.retire_extent(t, r);
@@ -295,16 +269,15 @@ LBAInternalNode::merge_entry(
 	  r,
 	  !donor_is_left);
 
-      journal_remove(liter->get_key());
-      journal_remove(riter->get_key());
-      journal_insert(liter->get_key(), replacement_l->get_paddr());
-      journal_insert(pivot, replacement_r->get_paddr());
-
-      liter->set_val(
-	maybe_generate_relative(replacement_l->get_paddr()));
-      riter->set_key(pivot);
-      riter->set_val(
-	maybe_generate_relative(replacement_r->get_paddr()));
+      journal_update(
+	liter,
+	replacement_l->get_paddr(),
+	maybe_get_delta_buffer());
+      journal_replace(
+	riter,
+	pivot,
+	replacement_r->get_paddr(),
+	maybe_get_delta_buffer());
 
       c.retire_extent(t, l);
       c.retire_extent(t, r);
@@ -365,25 +338,22 @@ LBALeafNode::insert_ret LBALeafNode::insert(
   lba_map_val_t val)
 {
   ceph_assert(!at_max_capacity());
-  auto insert_pt = upper_bound(laddr);
-  if (insert_pt != end()) {
-    copy_from_local(insert_pt + 1, insert_pt, end());
-  }
-  set_size(get_size() + 1);
-  insert_pt.set_key(laddr);
+
   val.paddr = maybe_generate_relative(val.paddr);
   logger().debug(
     "LBALeafNode::insert: inserting {}~{} -> {}",
     laddr,
     val.len,
     val.paddr);
-  insert_pt.set_val(val);
+
+  auto insert_pt = lower_bound(laddr);
+  journal_insert(insert_pt, laddr, val, maybe_get_delta_buffer());
+
   logger().debug(
     "LBALeafNode::insert: inserted {}~{} -> {}",
     insert_pt.get_key(),
     insert_pt.get_val().len,
     insert_pt.get_val().paddr);
-  journal_insertion(laddr, val);
   return insert_ret(
     insert_ertr::ready_future_marker{},
     std::make_unique<BtreeLBAPin>(
@@ -409,39 +379,16 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
 
   auto mutated = f(mutation_pt.get_val());
   if (mutated) {
-    mutation_pt.set_val(*mutated);
-    journal_mutated(laddr, *mutated);
+    journal_update(mutation_pt, *mutated, maybe_get_delta_buffer());
     return mutate_mapping_ret(
       mutate_mapping_ertr::ready_future_marker{},
       mutated);
   } else {
-    journal_removal(laddr);
-    copy_from_local(mutation_pt, mutation_pt + 1, end());
-    set_size(get_size() - 1);
+    journal_remove(mutation_pt, maybe_get_delta_buffer());
     return mutate_mapping_ret(
       mutate_mapping_ertr::ready_future_marker{},
       mutated);
   }
-}
-
-void LBALeafNode::journal_mutated(
-  laddr_t laddr,
-  lba_map_val_t val)
-{
-  // TODO
-}
-
-void LBALeafNode::journal_insertion(
-  laddr_t laddr,
-  lba_map_val_t val)
-{
-  // TODO
-}
-
-void LBALeafNode::journal_removal(
-  laddr_t laddr)
-{
-  // TODO
 }
 
 LBALeafNode::find_hole_ret LBALeafNode::find_hole(
