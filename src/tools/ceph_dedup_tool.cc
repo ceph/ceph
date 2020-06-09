@@ -44,6 +44,7 @@
 
 #include "tools/RadosDump.h"
 #include "cls/cas/cls_cas_client.h"
+#include "cls/cas/cls_cas_internal.h"
 #include "include/stringify.h"
 #include "global/signal_handler.h"
 #include "common/CDC.h"
@@ -130,7 +131,7 @@ ceph::mutex glock = ceph::make_mutex("glock");
 
 void usage()
 {
-  cout << " usage: [--op <estimate|chunk_scrub|add_chunk_ref|get_chunk_ref>] [--pool <pool_name> ] " << std::endl;
+  cout << " usage: [--op <estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|dump-chunk-refs>] [--pool <pool_name> ] " << std::endl;
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
   cout << "   --chunk-algorithm <fixed|fastcdc> " << std::endl;
@@ -228,7 +229,7 @@ public:
 class ChunkScrub: public CrawlerThread
 {
   IoCtx chunk_io_ctx;
-  int fixed_objects = 0;
+  int damaged_objects = 0;
 
 public:
   ChunkScrub(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
@@ -240,7 +241,7 @@ public:
     return NULL;
   }
   void chunk_scrub_common();
-  int get_fixed_objects() { return fixed_objects; }
+  int get_damaged_objects() { return damaged_objects; }
   void print_status(Formatter *f, ostream &out);
 };
 
@@ -428,48 +429,60 @@ void ChunkScrub::chunk_scrub_common()
 	return;
       }
       auto oid = i.oid;
-      set<hobject_t> refs;
-      set<hobject_t> real_refs;
-      ret = cls_chunk_refcount_read(chunk_io_ctx, oid, &refs);
-      if (ret < 0) {
+      cout << oid << std::endl;
+      chunk_refs_t refs;
+      {
+	bufferlist t;
+	ret = chunk_io_ctx.getxattr(oid, CHUNK_REFCOUNT_ATTR, t);
+	if (ret < 0) {
+	  continue;
+	}
+	auto p = t.cbegin();
+	decode(refs, p);
+      }
+
+      examined_objects++;
+      if (refs.get_type() != chunk_refs_t::TYPE_BY_OBJECT) {
+	// we can't do anything here
 	continue;
       }
 
-      for (auto pp : refs) {
+      // check all objects
+      chunk_refs_by_object_t *byo =
+	static_cast<chunk_refs_by_object_t*>(refs.r.get());
+      set<hobject_t> real_refs;
+
+      uint64_t pool_missing = 0;
+      uint64_t object_missing = 0;
+      uint64_t does_not_ref = 0;
+      for (auto& pp : byo->by_object) {
 	IoCtx target_io_ctx;
 	ret = rados.ioctx_create2(pp.pool, target_io_ctx);
 	if (ret < 0) {
-	  cerr << "error opening pool "
-	       << pp.pool << ": "
-	       << cpp_strerror(ret) << std::endl;
+	  cerr << oid << " ref " << pp
+	       << ": referencing pool does not exist" << std::endl;
+	  ++pool_missing;
 	  continue;
 	}
 
-	ret = cls_chunk_has_chunk(target_io_ctx, pp.oid.name, oid);
-	if (ret != -ENOENT) {
-	  real_refs.insert(pp);
-	} 
-      }
-
-      if (refs.size() != real_refs.size()) {
-	ObjectWriteOperation op;
-	cls_chunk_refcount_set(op, real_refs);
-	ret = chunk_io_ctx.operate(oid, &op);
-	if (ret < 0) {
-	  continue;
+	ret = cls_cas_references_chunk(target_io_ctx, pp.oid.name, oid);
+	if (ret == -ENOENT) {
+	  cerr << oid << " ref " << pp
+	       << ": referencing object missing" << std::endl;
+	  ++object_missing;
+	} else if (ret == -ENOLINK) {
+	  cerr << oid << " ref " << pp
+	       << ": referencing object does not reference chunk"
+	       << std::endl;
+	  ++does_not_ref;
 	}
-	fixed_objects++;
       }
-      examined_objects++;
-      m_cond.wait_for(l, std::chrono::nanoseconds(COND_WAIT_INTERVAL));
-      if (cur_time + utime_t(report_period, 0) < ceph_clock_now()) {
-	Formatter *formatter = Formatter::create("json-pretty");
-	print_status(formatter, cout);
-	delete formatter;
-	cur_time = ceph_clock_now();
+      if (pool_missing || object_missing || does_not_ref) {
+	++damaged_objects;
       }
     }
   }
+  cout << "--done--" << std::endl;
 }
 
 void ChunkScrub::print_status(Formatter *f, ostream &out)
@@ -479,8 +492,8 @@ void ChunkScrub::print_status(Formatter *f, ostream &out)
     f->dump_string("PID", stringify(get_pid()));
     f->open_object_section("Status");
     f->dump_string("Total object", stringify(total_objects));
-    f->dump_string("Examined objectes", stringify(examined_objects));
-    f->dump_string("Fixed objectes", stringify(fixed_objects));
+    f->dump_string("Examined objects", stringify(examined_objects));
+    f->dump_string("damaged objects", stringify(damaged_objects));
     f->close_section();
     f->flush(out);
     cout << std::endl;
@@ -668,7 +681,7 @@ static void print_chunk_scrub()
 {
   uint64_t total_objects = 0;
   uint64_t examined_objects = 0;
-  int fixed_objects = 0;
+  int damaged_objects = 0;
 
   for (auto &et : estimate_threads) {
     if (!total_objects) {
@@ -676,12 +689,12 @@ static void print_chunk_scrub()
     }
     examined_objects += et->get_examined_objects();
     ChunkScrub *ptr = static_cast<ChunkScrub*>(et.get());
-    fixed_objects += ptr->get_fixed_objects();
+    damaged_objects += ptr->get_damaged_objects();
   }
 
   cout << " Total object : " << total_objects << std::endl;
   cout << " Examined object : " << examined_objects << std::endl;
-  cout << " Fixed object : " << fixed_objects << std::endl;
+  cout << " Damaged object : " << damaged_objects << std::endl;
 }
 
 int chunk_scrub_common(const std::map < std::string, std::string > &opts,
@@ -713,7 +726,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     chunk_pool_name = i->second.c_str();
   } else {
-    cerr << "must specify pool" << std::endl;
+    cerr << "must specify --chunk-pool" << std::endl;
     exit(1);
   }
   i = opts.find("max-thread");
@@ -750,7 +763,8 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
     goto out;
   }
 
-  if (op_name == "add-chunk-ref") {
+  if (op_name == "chunk-get-ref" ||
+      op_name == "chunk-put-ref") {
     string target_object_name;
     uint64_t pool_id;
     i = opts.find("object");
@@ -777,26 +791,19 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
       exit(1);
     }
 
-    set<hobject_t> refs;
-    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
-    if (ret < 0) {
-      cerr << " cls_chunk_refcount_read fail : " << cpp_strerror(ret) << std::endl;
-      return ret;
-    }
-    for (auto p : refs) {
-      cout << " " << p.oid.name << " ";
-    }
-
     uint32_t hash;
     ret = chunk_io_ctx.get_object_hash_position2(object_name, &hash);
     if (ret < 0) {
       return ret;
     }
     hobject_t oid(sobject_t(target_object_name, CEPH_NOSNAP), "", hash, pool_id, "");
-    refs.insert(oid);
 
     ObjectWriteOperation op;
-    cls_chunk_refcount_set(op, refs);
+    if (op_name == "chunk-get-ref") {
+      cls_cas_chunk_get_ref(op, oid);
+    } else {
+      cls_cas_chunk_put_ref(op, oid);
+    }
     ret = chunk_io_ctx.operate(object_name, &op);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
@@ -804,7 +811,7 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
 
     return ret;
 
-  } else if (op_name == "get-chunk-ref") {
+  } else if (op_name == "dump-chunk-refs") {
     i = opts.find("object");
     if (i != opts.end()) {
       object_name = i->second.c_str();
@@ -812,16 +819,20 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
       cerr << "must specify object" << std::endl;
       exit(1);
     }
-    set<hobject_t> refs;
-    cout << " refs: " << std::endl;
-    ret = cls_chunk_refcount_read(chunk_io_ctx, object_name, &refs);
-    for (auto p : refs) {
-      cout << " " << p.oid.name << " ";
+    bufferlist t;
+    ret = chunk_io_ctx.getxattr(object_name, CHUNK_REFCOUNT_ATTR, t);
+    if (ret < 0) {
+      return ret;
     }
-    cout << std::endl;
-    return ret;
+    chunk_refs_t refs;
+    auto p = t.cbegin();
+    decode(refs, p);
+    auto f = Formatter::create("json-pretty");
+    f->dump_object("refs", refs);
+    f->flush(cout);
+    return 0;
   }
-  
+
   glock.lock();
   begin = chunk_io_ctx.object_list_begin();
   end = chunk_io_ctx.object_list_end();
@@ -849,7 +860,9 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   glock.unlock();
 
   for (auto &p : estimate_threads) {
+    cout << "join " << std::endl;
     p->join();
+    cout << "joined " << std::endl;
   }
 
   print_chunk_scrub();
@@ -932,13 +945,14 @@ int main(int argc, const char **argv)
     return estimate_dedup_ratio(opts, args);
   } else if (op_name == "chunk-scrub") {
     return chunk_scrub_common(opts, args);
-  } else if (op_name == "add-chunk-ref") {
+  } else if (op_name == "chunk-get-ref" ||
+	     op_name == "chunk-put-ref") {
     return chunk_scrub_common(opts, args);
-  } else if (op_name == "get-chunk-ref") {
+  } else if (op_name == "dump-chunk-refs") {
     return chunk_scrub_common(opts, args);
   } else {
-    usage();
-    exit(0);
+    cerr << "unrecognized op " << op_name << std::endl;
+    exit(1);
   }
 
   unregister_async_signal_handler(SIGINT, handle_signal);
