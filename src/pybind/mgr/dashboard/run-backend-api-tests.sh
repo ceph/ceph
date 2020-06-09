@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x
+
 # cross shell: Are we sourced?
 # Source: https://stackoverflow.com/a/28776166/3185053
 ([[ -n $ZSH_EVAL_CONTEXT && $ZSH_EVAL_CONTEXT =~ :file$ ]] ||
@@ -56,7 +58,7 @@ setup_coverage() {
     # In CI environment we cannot install coverage in system, so we install it in a dedicated venv
     # so only coverage is available when adding this path.
     cd $TEMP_DIR
-    virtualenv --python=/usr/bin/python3 coverage-venv
+    virtualenv --verbose --python=/usr/bin/python3 coverage-venv
     source coverage-venv/bin/activate
     cd $CURR_DIR
     pip install coverage==4.5.2
@@ -151,6 +153,7 @@ cleanup_teuthology() {
 
 setup_teuthology
 setup_coverage
+exit 0
 run_teuthology_tests --create-cluster-only
 
 # End sourced section. Do not exit shell when the script has been sourced.
