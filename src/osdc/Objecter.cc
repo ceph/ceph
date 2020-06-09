@@ -1506,7 +1506,7 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
 }
 
 // sl may be unlocked.
-void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<ceph::shared_mutex> *sl)
+void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *sl)
 {
   // rwlock is locked unique
 
@@ -3031,8 +3031,9 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op,
     if (linger_op->session != s) {
       // NB locking two sessions (s and linger_op->session) at the
       // same time here is only safe because we are the only one that
-      // takes two, and we are holding rwlock for write.  Disable
-      // lockdep because it doesn't know that.
+      // takes two, and we are holding rwlock for write.  We use
+      // std::shared_mutex in OSDSession because lockdep doesn't know
+      // that.
       unique_lock sl(s->lock);
       _session_linger_op_remove(linger_op->session, linger_op);
       _session_linger_op_assign(s, linger_op);
