@@ -14,6 +14,7 @@ from collections import defaultdict, namedtuple
 import rados
 import re
 import time
+from mgr_util import profile_method
 
 PG_STATES = [
     "active",
@@ -1376,6 +1377,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0, 0
 
+    @profile_method()
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
                                         "rbd-mirror", "rgw", "tcmu-runner")):
