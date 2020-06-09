@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from cephadm.services.cephadmservice import CephadmService
+from cephadm.services.monitoring import GrafanaService
 
 
 class FakeMgr:
@@ -23,7 +23,7 @@ class TestCephadmService:
         # pylint: disable=protected-access
         mgr = FakeMgr()
         service_url = 'http://svc:1000'
-        service = CephadmService(mgr)
+        service = GrafanaService(mgr)
         service._set_service_url_on_dashboard('svc', 'get-cmd', 'set-cmd', service_url)
         assert mgr.config == service_url
 
