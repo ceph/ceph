@@ -140,3 +140,12 @@ class TestNFS(MgrTestCase):
         self._create_export(export_id='4', extra_cmd=[self.pseudo_path+'3', fs_path.strip()])
         self._test_delete_cluster()
         self._check_export_obj_deleted(conf_obj=True)
+
+    def test_exports_on_mgr_restart(self):
+        self._create_default_export()
+        # This will restart the mgr
+        self._unload_module("cephadm")
+        self._load_module("cephadm")
+        self._orch_cmd("set", "backend", "cephadm")
+        #Add list export command
+        self._delete_export()
