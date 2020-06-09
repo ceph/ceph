@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class NFSService(CephadmService):
+    TYPE = 'nfs'
+
     def _generate_nfs_config(self, daemon_type, daemon_id, host):
         # type: (str, str, str) -> Tuple[Dict[str, Any], List[str]]
         deps = []  # type: List[str]

@@ -9,6 +9,7 @@ from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
 logger = logging.getLogger(__name__)
 
 class GrafanaService(CephadmService):
+    TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
 
     def create(self, daemon_id, host):
@@ -73,6 +74,7 @@ class GrafanaService(CephadmService):
         )
 
 class AlertmanagerService(CephadmService):
+    TYPE = 'alertmanager'
     DEFAULT_SERVICE_PORT = 9093
 
     def create(self, daemon_id, host) -> str:
@@ -140,6 +142,7 @@ class AlertmanagerService(CephadmService):
 
 
 class PrometheusService(CephadmService):
+    TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
 
     def create(self, daemon_id, host) -> str:
@@ -228,6 +231,8 @@ class PrometheusService(CephadmService):
         )
 
 class NodeExporterService(CephadmService):
+    TYPE = 'node-exporter'
+
     def create(self, daemon_id, host) -> str:
         return self.mgr._create_daemon('node-exporter', daemon_id, host)
 
