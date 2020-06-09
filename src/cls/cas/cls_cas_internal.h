@@ -228,7 +228,7 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
     for (auto& i : by_hash) {
       denc_signed_varint(i.first.first, p);
       // this may write some bytes past where we move cursor too; harmless!
-      *(__le32*)p.get_pos_add(hash_bytes) = i.first.second;
+      *(ceph_le32*)p.get_pos_add(hash_bytes) = i.first.second;
       denc_varint(i.second, p);
     }
     DENC_FINISH(p);
@@ -242,7 +242,7 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
     int hash_bytes = (hash_bits + 7) / 8;
     while (n--) {
       int64_t poolid;
-      __le32 hash;
+      ceph_le32 hash;
       uint64_t count;
       denc_signed_varint(poolid, p);
       memcpy(&hash, p.get_pos_add(hash_bytes), hash_bytes);
