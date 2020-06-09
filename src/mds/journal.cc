@@ -530,7 +530,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
     if (is_export_ephemeral_random()) {
       dout(15) << "random ephemeral pin on " << *in << dendl;
       in->set_ephemeral_rand(true);
-      in->maybe_ephemeral_rand();
+      in->maybe_ephemeral_rand(true);
     }
     in->maybe_ephemeral_dist();
     in->maybe_export_pin();
