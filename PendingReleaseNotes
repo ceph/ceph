@@ -1,6 +1,11 @@
 >=15.2.5
 --------
 
+* CephFS: Automatic static subtree partitioning policies may now be configured
+  using the new distributed and random ephemeral pinning extended attributes on
+  directories. See the documentation for more information:
+  https://docs.ceph.com/docs/master/cephfs/multimds/
+
 * Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
   If any OSD has repaired more than this many I/O errors in stored data a
  ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
