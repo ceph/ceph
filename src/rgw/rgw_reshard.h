@@ -120,15 +120,9 @@ public:
   static int set_resharding_status(const DoutPrefixProvider *dpp,
                                    rgw::sal::RadosStore* store,
 				   const RGWBucketInfo& bucket_info,
-				   const std::string& instance_id,
-				   int32_t num_shards,
-				   cls_rgw_reshard_status status);
-  int set_resharding_status(const DoutPrefixProvider *dpp,
-			    const std::string& instance_id,
-			    int32_t num_shards,
-                            cls_rgw_reshard_status status) {
-    return set_resharding_status(dpp, store, bucket_info,
-				 instance_id, num_shards, status);
+                                   cls_rgw_reshard_status status);
+  int set_resharding_status(const DoutPrefixProvider *dpp, cls_rgw_reshard_status status) {
+    return set_resharding_status(dpp, store, bucket_info, status);
   }
 
   static uint32_t get_max_prime_shards() {
