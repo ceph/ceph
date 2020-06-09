@@ -2515,7 +2515,7 @@ def command_bootstrap():
     # wait for the service to become available
     def is_mon_available():
         # type: () -> bool
-        timeout=args.timeout if args.timeout else 30 # seconds
+        timeout=args.timeout if args.timeout else 60 # seconds
         out, err, ret = call(c.run_cmd(),
                              desc=c.entrypoint,
                              timeout=timeout)
@@ -2574,7 +2574,7 @@ def command_bootstrap():
     logger.info('Waiting for mgr to start...')
     def is_mgr_available():
         # type: () -> bool
-        timeout=args.timeout if args.timeout else 30 # seconds
+        timeout=args.timeout if args.timeout else 60 # seconds
         try:
             out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
             j = json.loads(out)
