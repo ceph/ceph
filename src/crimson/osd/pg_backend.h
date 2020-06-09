@@ -136,10 +136,12 @@ public:
     const ghobject_t& oid);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
+  virtual seastar::future<> stop() = 0;
 protected:
   const shard_id_t shard;
   CollectionRef coll;
   crimson::os::FuturizedStore* store;
+  bool stopping = false;
 public:
   struct loaded_object_md_t {
     ObjectState os;

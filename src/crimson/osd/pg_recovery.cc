@@ -24,7 +24,7 @@ void PGRecovery::start_background_recovery(
   crimson::osd::scheduler::scheduler_class_t klass)
 {
   using BackgroundRecovery = crimson::osd::BackgroundRecovery;
-  pg->get_shard_services().start_operation<BackgroundRecovery>(
+  (void) pg->get_shard_services().start_operation<BackgroundRecovery>(
     static_cast<crimson::osd::PG*>(pg),
     pg->get_shard_services(),
     pg->get_osdmap_epoch(),
@@ -58,7 +58,7 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
       crimson::get_logger(ceph_subsys_osd).debug("start_recovery_ops: AllReplicasRecovered for pg: {}",
 		     pg->get_pgid());
       using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
-      pg->get_shard_services().start_operation<LocalPeeringEvent>(
+      (void) pg->get_shard_services().start_operation<LocalPeeringEvent>(
 	static_cast<crimson::osd::PG*>(pg),
 	pg->get_shard_services(),
 	pg->get_pg_whoami(),
@@ -345,6 +345,7 @@ void PGRecovery::on_global_recover (
   const object_stat_sum_t& stat_diff,
   const bool is_delete)
 {
+  crimson::get_logger(ceph_subsys_osd).info("{} {}", __func__, soid);
   pg->get_peering_state().object_recovered(soid, stat_diff);
   auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
   if (!is_delete)

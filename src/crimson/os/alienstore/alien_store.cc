@@ -96,7 +96,7 @@ seastar::future<> AlienStore::mount()
 
 seastar::future<> AlienStore::umount()
 {
-  logger().debug("{}", __func__);
+  logger().info("{}", __func__);
   return transaction_gate.close().then([this] {
     return tp->submit([this] {
       return store->umount();

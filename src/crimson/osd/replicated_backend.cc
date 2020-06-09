@@ -5,6 +5,7 @@
 
 #include "messages/MOSDRepOpReply.h"
 
+#include "crimson/common/exception.h"
 #include "crimson/common/log.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/shard_services.h"
@@ -32,6 +33,9 @@ ReplicatedBackend::_read(const hobject_t& hoid,
                          const uint64_t len,
                          const uint32_t flags)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
   return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
@@ -43,6 +47,10 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        epoch_t min_epoch, epoch_t map_epoch,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {
+  if (__builtin_expect(stopping, false)) {
+    throw crimson::common::system_shutdown_exception();
+  }
+
   const ceph_tid_t tid = next_txn_id++;
   auto req_id = osd_op_p.req->get_reqid();
   auto pending_txn =
@@ -100,4 +108,15 @@ void ReplicatedBackend::got_rep_op_reply(const MOSDRepOpReply& reply)
       return;
     }
   }
+}
+
+seastar::future<> ReplicatedBackend::stop()
+{
+  logger().info("ReplicatedBackend::stop {}", coll->get_cid());
+  stopping = true;
+  for (auto& [tid, pending_on] : pending_trans) {
+    pending_on.all_committed.set_exception(
+	crimson::common::system_shutdown_exception());
+  }
+  return seastar::now();
 }

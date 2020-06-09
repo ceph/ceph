@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <seastar/core/future.hh>
+
 #include "common/hobject.h"
 #include "include/types.h"
 #include "osd/osd_types.h"
@@ -30,4 +32,5 @@ public:
   virtual bool is_unreadable_object(const hobject_t&) const = 0;
   virtual bool has_reset_since(epoch_t) const = 0;
   virtual std::vector<pg_shard_t> get_replica_recovery_order() const = 0;
+  virtual seastar::future<> stop() = 0;
 };

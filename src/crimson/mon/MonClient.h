@@ -17,6 +17,7 @@
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/auth_handler.h"
+#include "crimson/common/gated.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 
@@ -54,7 +55,6 @@ class Client : public crimson::net::Dispatcher,
   std::unique_ptr<Connection> active_con;
   std::vector<std::unique_ptr<Connection>> pending_conns;
   seastar::timer<seastar::lowres_clock> timer;
-  seastar::gate tick_gate;
 
   crimson::net::Messenger& msgr;
 
@@ -91,6 +91,7 @@ public:
   bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
   seastar::future<> renew_subs();
 
+  void print(std::ostream&) const;
 private:
   // AuthServer methods
   std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
@@ -141,7 +142,7 @@ private:
 
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				MessageRef m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
+  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
   seastar::future<> handle_monmap(crimson::net::Connection* conn,
 				  Ref<MMonMap> m);
@@ -161,6 +162,12 @@ private:
   seastar::future<> reopen_session(int rank);
   std::vector<unsigned> get_random_mons(unsigned n) const;
   seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
+  crimson::common::Gated gate;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Client& client) {
+  client.print(out);
+  return out;
+}
 
 } // namespace crimson::mon

@@ -125,7 +125,7 @@ void discard_up_to(std::deque<MessageRef>* queue,
 
 namespace crimson::net {
 
-ProtocolV1::ProtocolV1(Dispatcher& dispatcher,
+ProtocolV1::ProtocolV1(ChainedDispatchersRef& dispatcher,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
   : Protocol(proto_t::v1, dispatcher, conn), messenger{messenger} {}
@@ -322,7 +322,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   conn.policy = messenger.get_policy(_peer_name.type());
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  gated_dispatch("start_connect", [this] {
+  gate.dispatch_in_background("start_connect", *this, [this] {
       return Socket::connect(conn.peer_addr)
         .then([this](SocketRef sock) {
           socket = std::move(sock);
@@ -624,7 +624,7 @@ void ProtocolV1::start_accept(SocketRef&& sock,
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  gated_dispatch("start_accept", [this] {
+  gate.dispatch_in_background("start_accept", *this, [this] {
       // stop learning my_addr before sending it out, so it won't change
       return messenger.learned_addr(messenger.get_myaddr(), conn).then([this] {
           // encode/send server's handshake header
@@ -850,10 +850,10 @@ seastar::future<> ProtocolV1::read_message()
       }
 
       // start dispatch, ignoring exceptions from the application layer
-      gated_dispatch("ms_dispatch", [this, msg = std::move(msg_ref)] {
+      gate.dispatch_in_background("ms_dispatch", *this, [this, msg = std::move(msg_ref)] {
         logger().debug("{} <== #{} === {} ({})",
                        conn, msg->get_seq(), *msg, msg->get_type());
-        return dispatcher.ms_dispatch(&conn, std::move(msg));
+        return dispatcher->ms_dispatch(&conn, std::move(msg));
       });
     });
 }
@@ -894,18 +894,18 @@ void ProtocolV1::execute_open(open_t type)
   set_write_state(write_state_t::open);
 
   if (type == open_t::connected) {
-    gated_dispatch("ms_handle_connect", [this] {
-      return dispatcher.ms_handle_connect(
+    gate.dispatch_in_background("ms_handle_connect", *this, [this] {
+      return dispatcher->ms_handle_connect(
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
     });
   } else { // type == open_t::accepted
-    gated_dispatch("ms_handle_accept", [this] {
-      return dispatcher.ms_handle_accept(
+    gate.dispatch_in_background("ms_handle_accept", *this, [this] {
+      return dispatcher->ms_handle_accept(
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
     });
   }
 
-  gated_dispatch("execute_open", [this] {
+  gate.dispatch_in_background("execute_open", *this, [this] {
       // start background processing of tags
       return handle_tags()
         .handle_exception_type([this] (const std::system_error& e) {
@@ -964,6 +964,11 @@ seastar::future<> ProtocolV1::fault()
   // will all be performed using v2 protocol.
   ceph_abort("lossless policy not supported for v1");
   return seastar::now();
+}
+
+void ProtocolV1::print(std::ostream& out) const
+{
+  out << conn;
 }
 
 } // namespace crimson::net

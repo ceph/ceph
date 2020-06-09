@@ -12,6 +12,8 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <seastar/core/shared_mutex.hh>
 #include <seastar/core/future.hh>
+#include <seastar/core/timer.hh>
+#include <seastar/core/lowres_clock.hh>
 
 #include "include/ceph_assert.h"
 #include "crimson/osd/scheduler/scheduler.h"
@@ -73,6 +75,9 @@ class blocking_future_detail {
 
   template <typename... V, typename... U>
   friend blocking_future_detail<seastar::future<V...>> make_ready_blocking_future(U&&... args);
+  template <typename... V, typename Exception>
+  friend blocking_future_detail<seastar::future<V...>>
+  make_exception_blocking_future(Exception&& e);
 
   template <typename U>
   friend blocking_future_detail<seastar::future<>> join_blocking_futures(U &&u);
@@ -98,6 +103,14 @@ blocking_future_detail<seastar::future<V...>> make_ready_blocking_future(U&&... 
   return blocking_future<V...>(
     nullptr,
     seastar::make_ready_future<V...>(std::forward<U>(args)...));
+}
+
+template <typename... V, typename Exception>
+blocking_future_detail<seastar::future<V...>>
+make_exception_blocking_future(Exception&& e) {
+  return blocking_future<V...>(
+    nullptr,
+    seastar::make_exception_future<V...>(e));
 }
 
 /**
@@ -269,6 +282,8 @@ class OperationRegistry {
     static_cast<int>(OperationTypeCode::last_op)
   > op_id_counters = {};
 
+  seastar::timer<seastar::lowres_clock> shutdown_timer;
+  seastar::promise<> shutdown;
 public:
   template <typename T, typename... Args>
   typename T::IRef create_operation(Args&&... args) {
@@ -276,6 +291,21 @@ public:
     registries[static_cast<int>(T::type)].push_back(*op);
     op->set_id(op_id_counters[static_cast<int>(T::type)]++);
     return op;
+  }
+
+  seastar::future<> stop() {
+    shutdown_timer.set_callback([this] {
+	if (std::all_of(registries.begin(),
+			registries.end(),
+			[](auto& opl) {
+			  return opl.empty();
+			})) {
+	  shutdown.set_value();
+	  shutdown_timer.cancel();
+	}
+      });
+    shutdown_timer.arm_periodic(std::chrono::milliseconds(100/*TODO: use option instead*/));
+    return shutdown.get_future();
   }
 };
 
