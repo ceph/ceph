@@ -301,7 +301,7 @@ function cephfs_mount_and_sanity_test {
 set -ex
 trap 'echo "Result: NOT_OK"' ERR
 echo "cephfs mount test script running as $(whoami) on $(hostname --fqdn)"
-TESTMONS=$(ceph-conf --lookup 'mon_initial_members' | tr -d '[:space:]')
+TESTMONS=$(ceph-conf --name mon.0  -c /etc/ceph/ceph.conf 'mon_host' |   tr -d '[:space:]')
 TESTSECR=$(grep 'key =' /etc/ceph/ceph.client.admin.keyring | awk '{print $NF}')
 echo "MONs: $TESTMONS"
 echo "admin secret: $TESTSECR"
