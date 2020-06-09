@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <seastar/core/future.hh>
 #include "common/ceph_time.h"
+#include "crimson/net/chained_dispatchers.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 
@@ -46,8 +47,9 @@ public:
   // Dispatcher methods
   seastar::future<> ms_dispatch(crimson::net::Connection* conn,
 				MessageRef m) override;
-  seastar::future<> ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
+  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
 
+  void print(std::ostream&) const;
 private:
   seastar::future<> handle_osd_ping(crimson::net::Connection* conn,
 				    Ref<MOSDPing> m);
@@ -67,7 +69,8 @@ private:
   void add_reporter_peers(int whoami);
 
   seastar::future<> start_messenger(crimson::net::Messenger& msgr,
-				    const entity_addrvec_t& addrs);
+				    const entity_addrvec_t& addrs,
+				    ChainedDispatchersRef);
 private:
   const crimson::osd::ShardServices& service;
   crimson::mon::Client& monc;
@@ -121,4 +124,10 @@ private:
   // osds we've reported to monior as failed ones, but they are not marked down
   // yet
   std::map<osd_id_t, failure_info_t> failure_pending;
+  crimson::common::Gated gate;
 };
+
+inline std::ostream& operator<<(std::ostream& out, const Heartbeat& hb) {
+  hb.print(out);
+  return out;
+}

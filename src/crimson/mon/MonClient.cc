@@ -496,7 +496,7 @@ seastar::future<> Client::load_keyring()
 
 void Client::tick()
 {
-  (void) seastar::with_gate(tick_gate, [this] {
+  gate.dispatch_in_background(__func__, *this, [this] {
     if (active_con) {
       return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),
@@ -514,50 +514,54 @@ bool Client::is_hunting() const {
 seastar::future<>
 Client::ms_dispatch(crimson::net::Connection* conn, MessageRef m)
 {
-  // we only care about these message types
-  switch (m->get_type()) {
-  case CEPH_MSG_MON_MAP:
-    return handle_monmap(conn, boost::static_pointer_cast<MMonMap>(m));
-  case CEPH_MSG_AUTH_REPLY:
-    return handle_auth_reply(
-      conn, boost::static_pointer_cast<MAuthReply>(m));
-  case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    return handle_subscribe_ack(
-      boost::static_pointer_cast<MMonSubscribeAck>(m));
-  case CEPH_MSG_MON_GET_VERSION_REPLY:
-    return handle_get_version_reply(
-      boost::static_pointer_cast<MMonGetVersionReply>(m));
-  case MSG_MON_COMMAND_ACK:
-    return handle_mon_command_ack(
-      boost::static_pointer_cast<MMonCommandAck>(m));
-  case MSG_LOGACK:
-    return handle_log_ack(
-      boost::static_pointer_cast<MLogAck>(m));
-  case MSG_CONFIG:
-    return handle_config(
-      boost::static_pointer_cast<MConfig>(m));
-  default:
-    return seastar::now();
-  }
+  return gate.dispatch(__func__, *this, [this, conn, &m] {
+    // we only care about these message types
+    switch (m->get_type()) {
+    case CEPH_MSG_MON_MAP:
+      return handle_monmap(conn, boost::static_pointer_cast<MMonMap>(m));
+    case CEPH_MSG_AUTH_REPLY:
+      return handle_auth_reply(
+	conn, boost::static_pointer_cast<MAuthReply>(m));
+    case CEPH_MSG_MON_SUBSCRIBE_ACK:
+      return handle_subscribe_ack(
+	boost::static_pointer_cast<MMonSubscribeAck>(m));
+    case CEPH_MSG_MON_GET_VERSION_REPLY:
+      return handle_get_version_reply(
+	boost::static_pointer_cast<MMonGetVersionReply>(m));
+    case MSG_MON_COMMAND_ACK:
+      return handle_mon_command_ack(
+	boost::static_pointer_cast<MMonCommandAck>(m));
+    case MSG_LOGACK:
+      return handle_log_ack(
+	boost::static_pointer_cast<MLogAck>(m));
+    case MSG_CONFIG:
+      return handle_config(
+	boost::static_pointer_cast<MConfig>(m));
+    default:
+      return seastar::now();
+    }
+  });
 }
 
-seastar::future<> Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
+void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
-  auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                            [peer_addr = conn->get_peer_addr()](auto& mc) {
-                              return mc->is_my_peer(peer_addr);
-                            });
-  if (found != pending_conns.end()) {
-    logger().warn("pending conn reset by {}", conn->get_peer_addr());
-    (*found)->close();
-    return seastar::now();
-  } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
-    logger().warn("active conn reset {}", conn->get_peer_addr());
-    active_con.reset();
-    return reopen_session(-1);
-  } else {
-    return seastar::now();
-  }
+  gate.dispatch_in_background(__func__, *this, [this, conn, is_replace] {
+    auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
+			      [peer_addr = conn->get_peer_addr()](auto& mc) {
+				return mc->is_my_peer(peer_addr);
+			      });
+    if (found != pending_conns.end()) {
+      logger().warn("pending conn reset by {}", conn->get_peer_addr());
+      (*found)->close();
+      return seastar::now();
+    } else if (active_con && active_con->is_my_peer(conn->get_peer_addr())) {
+      logger().warn("active conn reset {}", conn->get_peer_addr());
+      active_con.reset();
+      return reopen_session(-1);
+    } else {
+      return seastar::now();
+    }
+  });
 }
 
 std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
@@ -613,7 +617,10 @@ int Client::handle_auth_request(crimson::net::ConnectionRef con,
     return -EOPNOTSUPP;
   }
   auto authorizer_challenge = &auth_meta->authorizer_challenge;
-  ceph_assert(active_con);
+  if (!active_con) {
+    logger().error("connection to monitors is down, abort connection for now");
+    return -EBUSY;
+  }
   if (!HAVE_FEATURE(active_con->get_conn()->get_features(), CEPHX_V2)) {
     if (local_conf().get_val<uint64_t>("cephx_service_require_version") >= 2) {
       return -EACCES;
@@ -915,12 +922,16 @@ seastar::future<> Client::authenticate()
 
 seastar::future<> Client::stop()
 {
-  return tick_gate.close().then([this] {
-    timer.cancel();
-    if (active_con) {
-      active_con->close();
-    }
-  });
+  logger().info("{}", __func__);
+  auto fut = gate.close();
+  timer.cancel();
+  for (auto& pending_con : pending_conns) {
+    pending_con->close();
+  }
+  if (active_con) {
+    active_con->close();
+  }
+  return fut;
 }
 
 seastar::future<> Client::reopen_session(int rank)
@@ -995,7 +1006,10 @@ seastar::future<> Client::reopen_session(int rank)
       return seastar::make_exception_future(ep);
     });
   }).then([this] {
-    ceph_assert_always(active_con);
+    if (!active_con) {
+      return seastar::make_exception_future(
+	  crimson::common::system_shutdown_exception());
+    }
     return active_con->renew_rotating_keyring();
   });
 }
@@ -1056,6 +1070,11 @@ seastar::future<> Client::renew_subs()
   return active_con->get_conn()->send(m).then([this] {
     sub.renewed();
   });
+}
+
+void Client::print(std::ostream& out) const
+{
+  out << "mon." << entity_name;
 }
 
 } // namespace crimson::mon

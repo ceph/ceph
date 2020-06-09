@@ -22,6 +22,7 @@ public:
 		    CollectionRef coll,
 		    crimson::osd::ShardServices& shard_services);
   void got_rep_op_reply(const MOSDRepOpReply& reply) final;
+  seastar::future<> stop() final;
 private:
   ll_read_errorator::future<ceph::bufferlist> _read(const hobject_t& hoid,
 					            uint64_t off,

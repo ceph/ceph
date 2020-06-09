@@ -13,12 +13,13 @@ namespace crimson::net {
 
 class ProtocolV2 final : public Protocol {
  public:
-  ProtocolV2(Dispatcher& dispatcher,
+  ProtocolV2(ChainedDispatchersRef& dispatcher,
              SocketConnection& conn,
              SocketMessenger& messenger);
   ~ProtocolV2() override;
-
+  void print(std::ostream&) const final;
  private:
+  void on_closed() override;
   bool is_connected() const override;
 
   void start_connect(const entity_addr_t& peer_addr,
@@ -84,7 +85,7 @@ class ProtocolV2 final : public Protocol {
 
   template <typename Func>
   void gated_execute(const char* what, Func&& func) {
-    gated_dispatch(what, [this, &func] {
+    gate.dispatch_in_background(what, *this, [this, &func] {
       execution_done = seastar::futurize_invoke(std::forward<Func>(func));
       return execution_done.get_future();
     });
