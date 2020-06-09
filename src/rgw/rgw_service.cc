@@ -375,7 +375,10 @@ int RGWCtlDef::init(RGWServices& svc)
                                 svc.bucket_sync,
                                 svc.bi));
   otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
-  account.reset(new RGWAccountCtl(svc.zone, svc.account));
+
+  meta.account = std::make_unique<RGWAccountMetadataHandler>(svc.account);
+  account = std::make_unique<RGWAccountCtl>(svc.zone, svc.account,
+					    (RGWAccountMetadataHandler *)meta.account.get());
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
@@ -413,7 +416,7 @@ int RGWCtl::init(RGWServices *_svc)
   meta.bucket = _ctl.meta.bucket.get();
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
   meta.otp = _ctl.meta.otp.get();
-  //meta.account = _ctl.meta.account.get();
+  meta.account = _ctl.meta.account.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
@@ -444,11 +447,11 @@ int RGWCtl::init(RGWServices *_svc)
     return r;
   }
 
-  // r = meta.account->attach(meta.mgr);
-  // if (r < 0) {
-  //   ldout(cct, 0) << "ERROR: failed to start init account ctl (" << cpp_strerror(-r) << dendl;
-  //   return r;
-  // }
+  r = meta.account->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init account ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
 
   return 0;
 }
