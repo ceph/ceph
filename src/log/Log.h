@@ -33,7 +33,6 @@ class Log : private Thread
   static const std::size_t DEFAULT_MAX_RECENT = 10000;
 
   Log **m_indirect_this;
-  log_clock clock;
 
   const SubsystemMap *m_subs;
 
