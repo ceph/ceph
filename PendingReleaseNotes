@@ -40,6 +40,11 @@
   the commands ``orch ps`` and ``orch ls`` now support ``--format yaml`` and
   ``--format json-pretty``.
 
+* CephFS: Automatic static subtree partitioning policies may now be configured
+  using the new distributed and random ephemeral pinning extended attributes on
+  directories. See the documentation for more information:
+  https://docs.ceph.com/docs/master/cephfs/multimds/
+
 * Cephadm: ``ceph orch apply osd`` supports a ``--preview`` flag that prints a preview of
   the OSD specification before deploying OSDs. This makes it possible to
   verify that the specification is correct, before applying it.
