@@ -77,13 +77,17 @@ class Device(object):
         'vendor',
     ]
 
+    # define some class variables; mostly to enable the use of autospec in
+    # unittests
+    lvs = []
+
     def __init__(self, path):
         self.path = path
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
-        self.vgs = []
         self.lvs = []
+        self.vgs = []
         self.vg_name = None
         self.lv_name = None
         self.disk_api = {}

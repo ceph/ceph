@@ -45,13 +45,13 @@ def get_physical_osds(devices, args):
     data_slots = args.osds_per_device
     if args.data_slots:
         data_slots = max(args.data_slots, args.osds_per_device)
-    rel_data_size = 100 / data_slots
+    rel_data_size = 1.0 / data_slots
     mlogger.debug('relative data size: {}'.format(rel_data_size))
     ret = []
     for dev in devices:
         if dev.available_lvm:
             dev_size = dev.vg_size[0]
-            abs_size = disk.Size(b=int(dev_size * rel_data_size / 100))
+            abs_size = disk.Size(b=int(dev_size * rel_data_size))
             free_size = dev.vg_free[0]
             if abs_size < 419430400:
                 mlogger.error('Data LV on {} would be too small (<400M)'.format(dev.path))
@@ -68,6 +68,52 @@ def get_physical_osds(devices, args):
                                     abs_size,
                                     args.osds_per_device,
                                     osd_id))
+    return ret
+
+
+def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, args):
+    requested_slots = getattr(args, '{}_slots'.format(type_))
+    if not requested_slots or requested_slots < fast_slots_per_device:
+        if requested_slots:
+            mlogger.info('{}_slots argument is to small, ignoring'.format(type_))
+        requested_slots = fast_slots_per_device
+
+    requested_size = getattr(args, '{}_size'.format(type_), 0)
+    if requested_size == 0:
+        # no size argument was specified, check ceph.conf
+        get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
+        requested_size = get_size_fct(lv_format=False)
+
+    ret = []
+    for dev in devices:
+        if not dev.available_lvm:
+            continue
+        # any LV present is considered a taken slot
+        occupied_slots = len(dev.lvs)
+        # TODO this only looks at the first vg on device
+        dev_size = dev.vg_size[0]
+        abs_size = disk.Size(b=int(dev_size / requested_slots))
+        free_size = dev.vg_free[0]
+        # if abs_size < 419430400:
+        #     mlogger.error('{} LV on {} would be too small (<400M)'.format(
+        #         type_, dev.path))
+        #     continue
+        relative_size = int(abs_size) / dev_size
+        if requested_size:
+            if requested_size <= abs_size:
+                abs_size = requested_size
+            else:
+                mlogger.error(
+                    '{} was requested for {}, but only {} can be fulfilled'.format(
+                        requested_size,
+                        '{}_size'.format(type_),
+                        abs_size,
+                    ))
+                exit(1)
+        while abs_size <= free_size and len(ret) < new_osds and occupied_slots < fast_slots_per_device:
+            free_size -= abs_size.b
+            occupied_slots += 1
+            ret.append((dev.path, relative_size, abs_size, requested_slots))
     return ret
 
 
@@ -384,7 +430,9 @@ class Batch(object):
         requested_osds = args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
         fast_type = 'block_db' if args.bluestore else 'journal'
-        fast_allocations = self.fast_allocations(fast_devices, requested_osds,
+        fast_allocations = self.fast_allocations(fast_devices,
+                                                 requested_osds,
+                                                 num_osds,
                                                  fast_type)
         if fast_devices and not fast_allocations:
             mlogger.info('{} fast devices were passed, but none are available'.format(len(fast_devices)))
@@ -395,7 +443,9 @@ class Batch(object):
             exit(1)
 
         very_fast_allocations = self.fast_allocations(very_fast_devices,
-                                                      requested_osds, 'block_wal')
+                                                      requested_osds,
+                                                      num_osds,
+                                                      'block_wal')
         if very_fast_devices and not very_fast_allocations:
             mlogger.info('{} very fast devices were passed, but none are available'.format(len(very_fast_devices)))
             exit(0)
@@ -413,56 +463,12 @@ class Batch(object):
                                         type_='block.wal')
         return plan
 
-    def get_physical_fast_allocs(self, devices, type_, used_slots, args):
-        requested_slots = getattr(args, '{}_slots'.format(type_))
-        if not requested_slots or requested_slots < used_slots:
-            if requested_slots:
-                mlogger.info('{}_slots argument is to small, ignoring'.format(type_))
-            requested_slots = used_slots
-        requested_size = getattr(args, '{}_size'.format(type_), 0)
-
-        if requested_size == 0:
-            # no size argument was specified, check ceph.conf
-            get_size_fct = getattr(prepare, 'get_{}_size'.format(type_))
-            requested_size = get_size_fct(lv_format=False)
-
-        ret = []
-        for dev in devices:
-            if not dev.available_lvm:
-                continue
-            # TODO this only looks at the first vg on device
-            dev_size = dev.vg_size[0]
-            abs_size = disk.Size(b=int(dev_size / requested_slots))
-            free_size = dev.vg_free[0]
-            if abs_size < 419430400:
-                mlogger.error('{} LV on {} would be too small (<400M)'.format(
-                    type_, dev.path))
-                continue
-            relative_size = int(abs_size) / dev_size * 100
-            if requested_size:
-                if requested_size <= abs_size:
-                    abs_size = requested_size
-                else:
-                    mlogger.error(
-                        '{} was requested for {}, but only {} can be fulfilled'.format(
-                            requested_size,
-                            '{}_size'.format(type_),
-                            abs_size,
-                        ))
-                    exit(1)
-            for _ in range(used_slots):
-                if abs_size > free_size:
-                    break
-                free_size -= abs_size.b
-                ret.append((dev.path, relative_size, abs_size, requested_slots))
-        return ret
-
     def get_lvm_fast_allocs(self, lvs):
         return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
                  disk.Size(b=int(d.lv_size)), 1) for d in lvs if not
                 d.used_by_ceph]
 
-    def fast_allocations(self, devices, num_osds, type_):
+    def fast_allocations(self, devices, requested_osds, new_osds, type_):
         ret = []
         if not devices:
             return ret
@@ -472,16 +478,17 @@ class Batch(object):
 
         ret.extend(self.get_lvm_fast_allocs(lvm_devs))
 
-        if (num_osds - len(lvm_devs)) % len(phys_devs):
-            used_slots = int((num_osds - len(lvm_devs)) / len(phys_devs)) + 1
+        if (requested_osds - len(lvm_devs)) % len(phys_devs):
+            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / len(phys_devs)) + 1
         else:
-            used_slots = int((num_osds - len(lvm_devs)) / len(phys_devs))
+            fast_slots_per_device = int((requested_osds - len(lvm_devs)) / len(phys_devs))
 
 
-        ret.extend(self.get_physical_fast_allocs(phys_devs,
-                                                 type_,
-                                                 used_slots,
-                                                 self.args))
+        ret.extend(get_physical_fast_allocs(phys_devs,
+                                            type_,
+                                            fast_slots_per_device,
+                                            new_osds,
+                                            self.args))
         return ret
 
     class OSD(object):

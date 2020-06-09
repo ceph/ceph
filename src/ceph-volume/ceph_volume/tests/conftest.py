@@ -50,6 +50,23 @@ def mock_devices_available():
     dev.vg_free = dev.vg_size
     return [dev]
 
+@pytest.fixture
+def mock_device_generator():
+    def mock_device():
+        dev = create_autospec(device.Device)
+        dev.path = '/dev/foo'
+        dev.available_lvm = True
+        dev.vg_size = [21474836480]
+        dev.vg_free = dev.vg_size
+        dev.lvs = []
+        return dev
+    return mock_device
+
+
+@pytest.fixture(params=range(1,11))
+def osds_per_device(request):
+    return request.param
+
 
 @pytest.fixture
 def fake_run(monkeypatch):
