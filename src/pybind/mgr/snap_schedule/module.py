@@ -88,7 +88,6 @@ class Module(MgrModule):
     @CLIWriteCommand('fs snap-schedule add',
                      'name=path,type=CephString '
                      'name=snap-schedule,type=CephString '
-                     'name=retention-policy,type=CephString,req=false '
                      'name=start,type=CephString,req=false '
                      'name=fs,type=CephString,req=false '
                      'name=subvol,type=CephString,req=false',
@@ -96,15 +95,16 @@ class Module(MgrModule):
     def snap_schedule_add(self,
                           path,
                           snap_schedule,
-                          retention_policy='',
                           start=None,
                           fs=None,
                           subvol=None):
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
-            self.client.store_snap_schedule(use_fs, abs_path, (abs_path, snap_schedule,
-                                                     retention_policy, use_fs, path, start, subvol))
+            self.client.store_snap_schedule(use_fs,
+                                            abs_path,
+                                            (abs_path, snap_schedule,
+                                             use_fs, path, start, subvol))
             suc_msg = f'Schedule set for path {path}'
         except sqlite3.IntegrityError:
             existing_scheds = self.client.get_snap_schedules(use_fs, path)
@@ -112,6 +112,8 @@ class Module(MgrModule):
             error_msg = f'Found existing schedule {report}'
             self.log.error(error_msg)
             return -errno.EEXIST, '', error_msg
+        except ValueError as e:
+            return -errno.ENOENT, '', str(e)
         except CephfsConnectionException as e:
             return e.to_tuple()
         return 0, suc_msg, ''
@@ -138,6 +140,56 @@ class Module(MgrModule):
         except ValueError as e:
             return -errno.ENOENT, '', str(e)
         return 0, 'Schedule removed for path {}'.format(path), ''
+
+    @CLIWriteCommand('fs snap-schedule retention add',
+                     'name=path,type=CephString '
+                     'name=retention-spec-or-period,type=CephString '
+                     'name=retention-count,type=CephString,req=false '
+                     'name=fs,type=CephString,req=false '
+                     'name=subvol,type=CephString,req=false',
+                     'Set a retention specification for <path>')
+    def snap_schedule_retention_add(self,
+                                    path,
+                                    retention_spec_or_period,
+                                    retention_count=None,
+                                    fs=None,
+                                    subvol=None):
+        try:
+            use_fs = fs if fs else self.default_fs
+            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            self.client.add_retention_spec(use_fs, abs_path,
+                                          retention_spec_or_period,
+                                          retention_count)
+        except CephfsConnectionException as e:
+            return e.to_tuple()
+        except ValueError as e:
+            return -errno.ENOENT, '', str(e)
+        return 0, 'Retention added to path {}'.format(path), ''
+
+    @CLIWriteCommand('fs snap-schedule retention remove',
+                     'name=path,type=CephString '
+                     'name=retention-spec-or-period,type=CephString '
+                     'name=retention-count,type=CephString,req=false '
+                     'name=fs,type=CephString,req=false '
+                     'name=subvol,type=CephString,req=false',
+                     'Remove a retention specification for <path>')
+    def snap_schedule_retention_rm(self,
+                                   path,
+                                   retention_spec_or_period,
+                                   retention_count=None,
+                                   fs=None,
+                                   subvol=None):
+        try:
+            use_fs = fs if fs else self.default_fs
+            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            self.client.rm_retention_spec(use_fs, abs_path,
+                                          retention_spec_or_period,
+                                          retention_count)
+        except CephfsConnectionException as e:
+            return e.to_tuple()
+        except ValueError as e:
+            return -errno.ENOENT, '', str(e)
+        return 0, 'Retention removed from path {}'.format(path), ''
 
     @CLIWriteCommand('fs snap-schedule activate',
                      'name=path,type=CephString '
