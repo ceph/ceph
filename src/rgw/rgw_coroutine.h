@@ -219,7 +219,18 @@ class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
 
 protected:
   bool _yield_ret;
-  boost::asio::coroutine drain_cr;
+
+  struct {
+    boost::asio::coroutine cr;
+    bool should_exit{false};
+    int ret{0};
+
+    void init() {
+      cr = boost::asio::coroutine();
+      should_exit = false;
+      ret = 0;
+    }
+  } drain_status;
 
   CephContext *cct;
 
@@ -292,7 +303,14 @@ public:
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
   int wait(const utime_t& interval);
-  bool drain_children(int num_cr_left, RGWCoroutinesStack *skip_stack = NULL); /* returns true if needed to be called again */
+  bool drain_children(int num_cr_left,
+                      RGWCoroutinesStack *skip_stack = nullptr,
+                      std::optional<std::function<void(int ret)> > err_cb = std::nullopt); /* returns true if needed to be called again,
+                                                                                              err_cb is just for reporting error */
+  bool drain_children(int num_cr_left,
+                      std::optional<std::function<int(int ret)> > err_cb); /* returns true if needed to be called again,
+                                                                               err_cb is for filtering error. A negative return
+                                                                               value means that we need to exit current cr */
   void wakeup();
   void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
 
@@ -336,16 +354,38 @@ do {                            \
 } while (0)
 
 #define drain_all() \
-  drain_cr = boost::asio::coroutine(); \
+  drain_status.init(); \
   yield_until_true(drain_children(0))
 
 #define drain_all_but(n) \
-  drain_cr = boost::asio::coroutine(); \
+  drain_status.init(); \
   yield_until_true(drain_children(n))
 
 #define drain_all_but_stack(stack) \
-  drain_cr = boost::asio::coroutine(); \
+  drain_status.init(); \
   yield_until_true(drain_children(1, stack))
+
+#define drain_all_but_stack_cb(stack, cb) \
+  drain_status.init(); \
+  yield_until_true(drain_children(1, stack, cb))
+
+#define drain_with_cb(n, err_cb) \
+  drain_status.init(); \
+  yield_until_true(drain_children(n, err_cb)); \
+  if (drain_status.should_exit) { \
+    return set_cr_error(drain_status.ret); \
+  }
+
+#define drain_all_cb(cb) \
+  drain_with_cb(0, cb)
+
+#define yield_spawn_window(cr, n, err_cb) \
+  do { \
+    spawn(cr, false); \
+    drain_with_cb(n, err_cb); /* this is guaranteed to yield */ \
+  } while (0)
+
+
 
 template <class T>
 class RGWConsumerCR : public RGWCoroutine {
