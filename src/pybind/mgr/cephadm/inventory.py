@@ -428,3 +428,14 @@ class HostCache():
         if host in self.daemons:
             if name in self.daemons[host]:
                 del self.daemons[host][name]
+
+    def daemon_cache_filled(self):
+        """
+        i.e. we have checked the daemons for each hosts at least once.
+        excluding offline hosts.
+
+        We're not checking for `host_needs_daemon_refresh`, as this might never be
+        False for all hosts.
+        """
+        return all((h in self.last_daemon_update or h in self.mgr.offline_hosts)
+                   for h in self.get_hosts())
