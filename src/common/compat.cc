@@ -148,6 +148,9 @@ int socketpair_cloexec(int domain, int type, int protocol, int sv[2])
 {
 #ifdef SOCK_CLOEXEC
   return socketpair(domain, type|SOCK_CLOEXEC, protocol, sv);
+#elif _WIN32
+  /* TODO */
+  return -ENOTSUP;
 #else
   int rc = socketpair(domain, type, protocol, sv);
   if (rc == -1)
@@ -207,3 +210,21 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen)
   return buf;
 #endif
 }
+
+#ifdef _WIN32
+
+// chown is not available on Windows. Plus, changing file owners is not
+// a common practice on Windows.
+int chown(const char *path, uid_t owner, gid_t group) {
+  return 0;
+}
+
+int fchown(int fd, uid_t owner, gid_t group) {
+  return 0;
+}
+
+int lchown(const char *path, uid_t owner, gid_t group) {
+  return 0;
+}
+
+#endif /* _WIN32 */

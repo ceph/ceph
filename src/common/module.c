@@ -20,6 +20,7 @@
 #include <sys/wait.h>
 #endif 
 
+#ifndef _WIN32
 /*
  * TODO: Switch to libkmod when we abandon older platforms.  The APIs
  * we want are:
@@ -77,3 +78,23 @@ int module_load(const char *module, const char *options)
 
 	return run_command(command);
 }
+
+#else
+
+// We're stubbing out those functions, for now.
+static int run_command(const char *command)
+{
+	return -1;
+}
+
+int module_has_param(const char *module, const char *param)
+{
+	return -1;
+}
+
+int module_load(const char *module, const char *options)
+{
+	return -1;
+}
+
+#endif /* _WIN32 */

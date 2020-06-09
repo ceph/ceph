@@ -10,7 +10,9 @@
 #include <ostream>
 
 #include <signal.h>
+#ifndef _WIN32
 #include <sys/wait.h>
+#endif
 #include <sys/types.h>
 
 #include "include/ceph_assert.h"
@@ -22,6 +24,7 @@ static void _fork_function_dummy_sighandler(int sig) {}
 // int8_t only due to unix exit code limitations.  Returns -ETIMEDOUT
 // if timeout is reached.
 
+#ifndef _WIN32
 static inline int fork_function(
   int timeout,
   std::ostream& errstr,
@@ -162,3 +165,13 @@ static inline int fork_function(
 fail_exit:
   _exit(EXIT_FAILURE);
 }
+#else
+static inline int fork_function(
+  int timeout,
+  std::ostream& errstr,
+  std::function<int8_t(void)> f)
+{
+  errstr << "Forking is not available on Windows.\n";
+  return -1;
+}
+#endif

@@ -125,6 +125,8 @@ int Thread::try_create(size_t stacksize)
   // the set of signals we want to block.  (It's ok to block signals more
   // signals than usual for a little while-- they will just be delivered to
   // another thread or delieverd to this thread later.)
+
+  #ifndef _WIN32
   sigset_t old_sigset;
   if (g_code_env == CODE_ENVIRONMENT_LIBRARY) {
     block_signals(NULL, &old_sigset);
@@ -135,6 +137,9 @@ int Thread::try_create(size_t stacksize)
   }
   r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
   restore_sigset(&old_sigset);
+  #else
+  r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+  #endif
 
   if (thread_attr) {
     pthread_attr_destroy(thread_attr);	

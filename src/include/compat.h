@@ -103,15 +103,15 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 #define XATTR_CREATE 1
 #endif
 
+#endif /* __APPLE__ */
+
 #ifndef HOST_NAME_MAX
 #ifdef MAXHOSTNAMELEN 
 #define HOST_NAME_MAX MAXHOSTNAMELEN 
 #else
 #define HOST_NAME_MAX 255
 #endif
-#endif
-
-#endif /* __APPLE__ */
+#endif /* HOST_NAME_MAX */
 
 /* O_LARGEFILE is not defined/required on OSX/FreeBSD */
 #ifndef O_LARGEFILE
@@ -193,16 +193,78 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 
 int ceph_posix_fallocate(int fd, off_t offset, off_t len);
 
-int pipe_cloexec(int pipefd[2], int flags);
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+int pipe_cloexec(int pipefd[2], int flags);
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 
 #ifdef __cplusplus
 }
 #endif
+
+#if defined(_WIN32)
+
+#include "include/win32/winsock_compat.h"
+
+typedef _sigset_t sigset_t;
+
+typedef int uid_t;
+typedef int gid_t;
+
+typedef long blksize_t;
+typedef long blkcnt_t;
+typedef long nlink_t;
+
+typedef long long loff_t;
+
+#define CPU_SETSIZE (sizeof(size_t)*8)
+
+typedef union
+{
+  char cpuset[CPU_SETSIZE/8];
+  size_t _align;
+} cpu_set_t;
+
+#define SHUT_RD SD_RECEIVE
+#define SHUT_WR SD_SEND
+#define SHUT_RDWR SD_BOTH
+
+#ifndef SIGINT
+#define SIGINT 2
+#endif
+
+#ifndef SIGKILL
+#define SIGKILL 9
+#endif
+
+#ifndef ENODATA
+// mingw doesn't define this, the Windows SDK does.
+#define ENODATA 120
+#endif
+
+#define ESHUTDOWN ECONNABORTED
+#define ESTALE 256
+#define EREMOTEIO 257
+
+// O_CLOEXEC is not defined on Windows. Since handles aren't inherited
+// with subprocesses unless explicitly requested, we'll define this
+// flag as a no-op.
+#define O_CLOEXEC 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int chown(const char *path, uid_t owner, gid_t group);
+int fchown(int fd, uid_t owner, gid_t group);
+int lchown(const char *path, uid_t owner, gid_t group);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* WIN32 */
 
 #endif /* !CEPH_COMPAT_H */

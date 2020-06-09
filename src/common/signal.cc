@@ -30,6 +30,7 @@
 
 using namespace std::literals;
 
+#ifndef _WIN32
 std::string signal_mask_to_str()
 {
   sigset_t old_sigset;
@@ -83,3 +84,14 @@ void unblock_all_signals(sigset_t *old_sigset)
   int ret = pthread_sigmask(SIG_UNBLOCK, &sigset, old_sigset);
   ceph_assert(ret == 0);
 }
+#else
+std::string signal_mask_to_str()
+{
+  return "(unsupported signal)";
+}
+
+// Windows provides limited signal functionality.
+void block_signals(const int *siglist, sigset_t *old_sigset) {}
+void restore_sigset(const sigset_t *old_sigset) {}
+void unblock_all_signals(sigset_t *old_sigset) {}
+#endif /* _WIN32 */

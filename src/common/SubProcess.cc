@@ -102,6 +102,7 @@ void SubProcess::close_stderr() {
   close(stderr_pipe_in_fd);
 }
 
+#ifndef _WIN32
 void SubProcess::kill(int signo) const {
   ceph_assert(is_spawned());
 
@@ -273,6 +274,7 @@ int SubProcess::join() {
   errstr << cmd << ": waitpid: unknown status returned\n";
   return EXIT_FAILURE;
 }
+#endif /* _WIN32 */
 
 SubProcessTimed::SubProcessTimed(const char *cmd, std_fd_op stdin_op,
 				 std_fd_op stdout_op, std_fd_op stderr_op,
@@ -288,6 +290,7 @@ void timeout_sighandler(int sig) {
 }
 static void dummy_sighandler(int sig) {}
 
+#ifndef _WIN32
 void SubProcessTimed::exec() {
   ceph_assert(is_child());
 
@@ -392,3 +395,22 @@ void SubProcessTimed::exec() {
 fail_exit:
   _exit(EXIT_FAILURE);
 }
+
+#else
+int SubProcess::join() {
+  return EXIT_FAILURE;
+}
+
+void SubProcess::kill(int signo) const {
+}
+
+int SubProcess::spawn() {
+  return EXIT_FAILURE;
+}
+
+void SubProcess::exec() {
+}
+
+void SubProcessTimed::exec() {
+}
+#endif /* _WIN32 */
