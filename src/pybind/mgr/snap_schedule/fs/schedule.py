@@ -6,10 +6,32 @@ LGPL2.1.  See file COPYING.
 from datetime import datetime, timezone
 import json
 import logging
+import re
 import sqlite3
 
 log = logging.getLogger(__name__)
 
+
+def parse_retention(retention):
+    ret = {}
+    log.debug(f'parse_retention({retention})')
+    matches = re.findall(r'\d+[a-z]', retention)
+    for m in matches:
+        ret[m[-1]] = int(m[0:-1])
+    matches = re.findall(r'\d+[A-Z]', retention)
+    for m in matches:
+        ret[m[-1]] = int(m[0:-1])
+    log.debug(f'parse_retention({retention}) -> {ret}')
+    return ret
+
+RETENTION_MULTIPLIERS = ['n', 'M', 'h', 'd', 'w', 'm', 'y']
+
+def dump_retention(retention):
+    ret = ''
+    for mult in RETENTION_MULTIPLIERS:
+        if mult in retention:
+            ret += str(retention[mult]) + mult
+    return ret
 
 class Schedule(object):
     '''
@@ -18,11 +40,11 @@ class Schedule(object):
     def __init__(self,
                  path,
                  schedule,
-                 retention_policy,
                  fs_name,
                  rel_path,
                  start=None,
                  subvol=None,
+                 retention_policy='{}',
                  created=None,
                  first=None,
                  last=None,
@@ -36,7 +58,7 @@ class Schedule(object):
         self.path = path
         self.rel_path = rel_path
         self.schedule = schedule
-        self.retention = retention_policy
+        self.retention = json.loads(retention_policy)
         if start is None:
             now = datetime.now(timezone.utc)
             self.start = datetime(now.year,
@@ -63,17 +85,17 @@ class Schedule(object):
             self.last_pruned = last_pruned
         self.created_count = created_count
         self.pruned_count = pruned_count
-        self.active = active
+        self.active = bool(active)
 
     @classmethod
-    def _from_get_query(cls, table_row, fs):
+    def _from_db_row(cls, table_row, fs):
         return cls(table_row['path'],
                    table_row['schedule'],
-                   table_row['retention'],
                    fs,
                    table_row['rel_path'],
                    table_row['start'],
                    table_row['subvol'],
+                   table_row['retention'],
                    table_row['created'],
                    table_row['first'],
                    table_row['last'],
@@ -83,16 +105,17 @@ class Schedule(object):
                    table_row['active'])
 
     def __str__(self):
-        return f'''{self.path} {self.schedule} {self.retention}'''
+        return f'''{self.path} {self.schedule} {dump_retention(self.retention)}'''
 
     def json_list(self):
         return json.dumps({'path': self.path, 'schedule': self.schedule,
-                           'retention': self.retention})
+                           'retention': dump_retention(self.retention)})
 
     CREATE_TABLES = '''CREATE TABLE schedules(
         id INTEGER PRIMARY KEY ASC,
         path TEXT NOT NULL UNIQUE,
         subvol TEXT,
+        retention TEXT DEFAULT '{}',
         rel_path TEXT NOT NULL
     );
     CREATE TABLE schedules_meta(
@@ -107,14 +130,13 @@ class Schedule(object):
         schedule TEXT NOT NULL,
         created_count INT DEFAULT 0,
         pruned_count INT DEFAULT 0,
-        retention TEXT,
         active INT NOT NULL,
         FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON DELETE CASCADE,
         UNIQUE (schedule_id, start, repeat)
     );'''
 
     EXEC_QUERY = '''SELECT
-        sm.retention,
+        s.retention,
         sm.repeat - (strftime("%s", "now") - strftime("%s", sm.start)) %
         sm.repeat "until",
         sm.start, sm.repeat
@@ -128,7 +150,7 @@ class Schedule(object):
 
     PROTO_GET_SCHEDULES = '''SELECT
           s.path, s.subvol, s.rel_path, sm.active,
-          sm.schedule, sm.retention, sm.start, sm.first, sm.last,
+          sm.schedule, s.retention, sm.start, sm.first, sm.last,
           sm.last_pruned, sm.created, sm.created_count, sm.pruned_count
           FROM schedules s
               INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
@@ -148,7 +170,7 @@ class Schedule(object):
             data += (start,)
         with db:
             c = db.execute(query, data)
-        return [cls._from_get_query(row, fs) for row in c.fetchall()]
+        return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     @classmethod
     def list_schedules(cls, path, db, fs, recursive):
@@ -159,23 +181,25 @@ class Schedule(object):
             else:
                 c = db.execute(cls.PROTO_GET_SCHEDULES + ' path = ?',
                                (f'{path}',))
-        return [cls._from_get_query(row, fs) for row in c.fetchall()]
+        return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     INSERT_SCHEDULE = '''INSERT INTO
-        schedules(path, subvol, rel_path)
-        Values(?, ?, ?);'''
+        schedules(path, subvol, retention, rel_path)
+        Values(?, ?, ?, ?);'''
     INSERT_SCHEDULE_META = '''INSERT INTO
         schedules_meta(schedule_id, start, created, repeat, schedule,
-        retention, active)
-        SELECT ?, ?, ?, ?, ?, ?, ?'''
+        active)
+        SELECT ?, ?, ?, ?, ?, ?'''
 
     def store_schedule(self, db):
         sched_id = None
         with db:
             try:
+                log.debug(f'schedule with retention {self.retention}')
                 c = db.execute(self.INSERT_SCHEDULE,
                                (self.path,
                                 self.subvol,
+                                json.dumps(self.retention),
                                 self.rel_path,))
                 sched_id = c.lastrowid
             except sqlite3.IntegrityError:
@@ -191,7 +215,6 @@ class Schedule(object):
                         self.created.isoformat(),
                         self.repeat,
                         self.schedule,
-                        self.retention,
                         1))
 
     @classmethod
@@ -236,6 +259,45 @@ class Schedule(object):
                 # rest
                 db.execute('DELETE FROM schedules WHERE id = ?;', id_)
 
+    GET_RETENTION = '''SELECT retention FROM schedules
+    WHERE path = ?'''
+    UPDATE_RETENTION = '''UPDATE schedules
+    SET retention = ?
+    WHERE path = ?'''
+
+    @classmethod
+    def add_retention(cls, db, path, retention_spec):
+        with db:
+            row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
+            if not row:
+                raise ValueError(f'No schedule found for {path}')
+            retention = parse_retention(retention_spec)
+            log.debug(f'db result is {tuple(row)}')
+            current = row['retention']
+            current_retention = json.loads(current)
+            for r, v in retention.items():
+                if r in current_retention:
+                    raise ValueError((f'Retention for {r} is already present '
+                                     'with value {current_retention[r]}. Please remove first'))
+            current_retention.update(retention)
+            db.execute(cls.UPDATE_RETENTION, (json.dumps(current_retention), path))
+
+    @classmethod
+    def rm_retention(cls, db, path, retention_spec):
+        with db:
+            row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
+            if not row:
+                raise ValueError(f'No schedule found for {path}')
+            retention = parse_retention(retention_spec)
+            current = row['retention']
+            current_retention = json.loads(current)
+            for r, v in retention.items():
+                if r not in current_retention or current_retention[r] != v:
+                    raise ValueError((f'Retention for {r}: {v} was not set for {path} '
+                                     'can\'t remove'))
+                current_retention.pop(r)
+            db.execute(cls.UPDATE_RETENTION, (json.dumps(current_retention), path))
+
     def report(self):
         return self.report_json()
 
@@ -246,7 +308,7 @@ class Schedule(object):
     def repeat(self):
         mult = self.schedule[-1]
         period = int(self.schedule[0:-1])
-        if mult == 'm':
+        if mult == 'M':
             return period * 60
         elif mult == 'h':
             return period * 60 * 60
@@ -255,7 +317,7 @@ class Schedule(object):
         elif mult == 'w':
             return period * 60 * 60 * 24 * 7
         else:
-            raise Exception('schedule multiplier not recognized')
+            raise ValueError(f'schedule multiplier "{mult}" not recognized')
 
     UPDATE_LAST = '''UPDATE schedules_meta AS sm
     SET
@@ -279,6 +341,8 @@ class Schedule(object):
                                           self.repeat))
         self.created_count += 1
         self.last = time
+        if not self.first:
+            self.first = time
 
     UPDATE_INACTIVE = '''UPDATE schedules_meta AS sm
     SET
@@ -297,6 +361,7 @@ class Schedule(object):
             db.execute(self.UPDATE_INACTIVE, (self.path,
                                               self.start.isoformat(),
                                               self.repeat))
+        self.active = False
 
     UPDATE_ACTIVE = '''UPDATE schedules_meta AS sm
     SET
@@ -315,6 +380,7 @@ class Schedule(object):
             db.execute(self.UPDATE_ACTIVE, (self.path,
                                             self.start.isoformat(),
                                             self.repeat))
+        self.active = True
 
     UPDATE_PRUNED = '''UPDATE schedules_meta AS sm
     SET

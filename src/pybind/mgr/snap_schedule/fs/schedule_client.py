@@ -7,7 +7,6 @@ import cephfs
 import errno
 import rados
 from contextlib import contextmanager
-import re
 from mgr_util import CephfsClient, CephfsConnectionException, \
         open_filesystem
 from collections import OrderedDict
@@ -15,7 +14,7 @@ from datetime import datetime, timezone
 import logging
 from threading import Timer
 import sqlite3
-from .schedule import Schedule
+from .schedule import Schedule, parse_retention
 import traceback
 
 
@@ -55,17 +54,6 @@ def updates_schedule_db(func):
             path = schedule_or_path.path
         self.refresh_snap_timers(fs, path)
     return f
-
-
-def parse_retention(retention):
-    ret = {}
-    matches = re.findall(r'\d+[a-z]', retention)
-    for m in matches:
-        ret[m[-1]] = int(m[0:-1])
-    matches = re.findall(r'\d+[A-Z]', retention)
-    for m in matches:
-        ret[m[-1]] = int(m[0:-1])
-    return ret
 
 
 class SnapSchedClient(CephfsClient):
@@ -170,21 +158,18 @@ class SnapSchedClient(CephfsClient):
     def prune_snapshots(self, sched):
         try:
             log.debug('Pruning snapshots')
-            ret = parse_retention(sched.retention)
+            ret = sched.retention
             path = sched.path
-            if not ret or "n" not in ret or ret["n"] > MAX_SNAPS_PER_PATH:
-                log.debug(f'Adding n: { MAX_SNAPS_PER_PATH} limit to {path}')
-                ret["n"] = MAX_SNAPS_PER_PATH
             prune_candidates = set()
             time = datetime.now(timezone.utc)
             with open_filesystem(self, sched.fs) as fs_handle:
                 with fs_handle.opendir(f'{path}/.snap') as d_handle:
                     dir_ = fs_handle.readdir(d_handle)
                     while dir_:
-                        if dir_.d_name.startswith(b'{SNAPSHOT_PREFIX}-'):
+                        if dir_.d_name.decode('utf-8').startswith(f'{SNAPSHOT_PREFIX}-'):
                             log.debug(f'add {dir_.d_name} to pruning')
                             ts = datetime.strptime(
-                                dir_.d_name.lstrip(b'{SNAPSHOT_PREFIX}-').decode('utf-8'),
+                                dir_.d_name.decode('utf-8').lstrip(f'{SNAPSHOT_PREFIX}-'),
                                 SNAPSHOT_TS_FORMAT)
                             prune_candidates.add((dir_, ts))
                         else:
@@ -205,7 +190,7 @@ class SnapSchedClient(CephfsClient):
         PRUNING_PATTERNS = OrderedDict([
             # n is for keep last n snapshots, uses the snapshot name timestamp
             # format for lowest granularity
-            ("n", SNAPSHOT_TS_FORMAT)
+            ("n", SNAPSHOT_TS_FORMAT),
             # TODO remove M for release
             ("M", '%Y-%m-%d-%H_%M'),
             ("h", '%Y-%m-%d-%H'),
@@ -214,8 +199,9 @@ class SnapSchedClient(CephfsClient):
             ("m", '%Y-%m'),
             ("y", '%Y'),
         ])
-        keep = set()
+        keep = []
         for period, date_pattern in PRUNING_PATTERNS.items():
+            log.debug(f'compiling keep set for period {period}')
             period_count = retention.get(period, 0)
             if not period_count:
                 continue
@@ -227,11 +213,14 @@ class SnapSchedClient(CephfsClient):
                     last = snap_ts
                     if snap not in keep:
                         log.debug(f'keeping {snap[0].d_name} due to {period_count}{period}')
-                        keep.add(snap)
+                        keep.append(snap)
                         if len(keep) == period_count:
                             log.debug(f'found enough snapshots for {period_count}{period}')
                             break
-        return candidates - keep
+        if len(keep) > MAX_SNAPS_PER_PATH:
+            log.info(f'Would keep more then {MAX_SNAPS_PER_PATH}, pruning keep set')
+            keep = keep[:MAX_SNAPS_PER_PATH]
+        return candidates - set(keep)
 
     def get_snap_schedules(self, fs, path):
         db = self.get_schedule_db(fs)
@@ -254,6 +243,30 @@ class SnapSchedClient(CephfsClient):
     def rm_snap_schedule(self, fs, path, repeat, start):
         db = self.get_schedule_db(fs)
         Schedule.rm_schedule(db, path, repeat, start)
+
+    @updates_schedule_db
+    def add_retention_spec(self,
+                           fs,
+                           path,
+                           retention_spec_or_period,
+                           retention_count):
+        retention_spec = retention_spec_or_period
+        if retention_count:
+            retention_spec = retention_count + retention_spec
+        db = self.get_schedule_db(fs)
+        Schedule.add_retention(db, path, retention_spec)
+
+    @updates_schedule_db
+    def rm_retention_spec(self,
+                          fs,
+                          path,
+                          retention_spec_or_period,
+                          retention_count):
+        retention_spec = retention_spec_or_period
+        if retention_count:
+            retention_spec = retention_count + retention_spec
+        db = self.get_schedule_db(fs)
+        Schedule.rm_retention(db, path, retention_spec)
 
     @updates_schedule_db
     def activate_snap_schedule(self, fs, path, repeat, start):
