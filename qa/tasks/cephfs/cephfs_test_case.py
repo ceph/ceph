@@ -288,13 +288,22 @@ class CephFSTestCase(CephTestCase):
         else:
             log.info("No core_pattern directory set, nothing to clear (internal.coredump not enabled?)")
 
-    def _get_subtrees(self, status=None, rank=None):
+    def _get_subtrees(self, status=None, rank=None, path=None):
+        if path is None:
+            path = "/"
         try:
             with contextutil.safe_while(sleep=1, tries=3) as proceed:
                 while proceed():
                     try:
-                        subtrees = self.fs.rank_asok(["get", "subtrees"], status=status, rank=rank)
-                        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+                        if rank == "all":
+                            subtrees = []
+                            for r in self.fs.get_ranks(status=status):
+                                s = self.fs.rank_asok(["get", "subtrees"], status=status, rank=r['rank'])
+                                s = filter(lambda s: s['auth_first'] == r['rank'] and s['auth_second'] == -2, s)
+                                subtrees += s
+                        else:
+                            subtrees = self.fs.rank_asok(["get", "subtrees"], status=status, rank=rank)
+                        subtrees = filter(lambda s: s['dir']['path'].startswith(path), subtrees)
                         return list(subtrees)
                     except CommandFailedError as e:
                         # Sometimes we get transient errors
@@ -305,12 +314,12 @@ class CephFSTestCase(CephTestCase):
         except contextutil.MaxWhileTries as e:
             raise RuntimeError(f"could not get subtree state from rank {rank}") from e
 
-    def _wait_subtrees(self, test, status=None, rank=None, timeout=30, sleep=2, action=None):
+    def _wait_subtrees(self, test, status=None, rank=None, timeout=30, sleep=2, action=None, path=None):
         test = sorted(test)
         try:
             with contextutil.safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
                 while proceed():
-                    subtrees = self._get_subtrees(status=status, rank=rank)
+                    subtrees = self._get_subtrees(status=status, rank=rank, path=path)
                     filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])
                     log.info("%s =?= %s", filtered, test)
                     if filtered == test:
@@ -332,42 +341,26 @@ class CephFSTestCase(CephTestCase):
                 if out_json['status'] == "no active scrubs running":
                     break;
 
-    def _wait_distributed_subtrees(self, status, rank, count):
-        timeout = 30
-        pause = 2
-        for i in range(timeout//pause):
-            subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
-            subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
-            subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == 1, subtrees))
-            if (len(subtrees) == count):
-                return subtrees
-            time.sleep(pause)
-        raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank))
+    def _wait_distributed_subtrees(self, count, status=None, rank=None, path=None):
+        try:
+            with contextutil.safe_while(sleep=5, tries=20) as proceed:
+                while proceed():
+                    subtrees = self._get_subtrees(status=status, rank=rank, path=path)
+                    subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == True, subtrees))
+                    log.info(f"len={len(subtrees)} {subtrees}")
+                    if len(subtrees) >= count:
+                        return subtrees
+        except contextutil.MaxWhileTries as e:
+            raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
 
-    def get_auth_subtrees(self, status, rank):
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
-        subtrees = filter(lambda s: s['auth_first'] == rank, subtrees)
-
-        return list(subtrees)
-
-    def get_ephemerally_pinned_auth_subtrees(self, status, rank):
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
-        subtrees = filter(lambda s: (s['distributed_ephemeral_pin'] == 1 or s['random_ephemeral_pin'] == 1) and (s['auth_first'] == rank), subtrees)
-
-        return list(subtrees)
-
-    def get_distributed_auth_subtrees(self, status, rank):
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
-        subtrees = filter(lambda s: (s['distributed_ephemeral_pin'] == 1) and (s['auth_first'] == rank), subtrees)
-
-        return list(subtrees)
-
-    def get_random_auth_subtrees(self, status, rank):
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
-        subtrees = filter(lambda s: (s['random_ephemeral_pin'] == 1) and (s['auth_first'] == rank), subtrees)
-
-        return list(subtrees)
+    def _wait_random_subtrees(self, count, status=None, rank=None, path=None):
+        try:
+            with contextutil.safe_while(sleep=5, tries=20) as proceed:
+                while proceed():
+                    subtrees = self._get_subtrees(status=status, rank=rank, path=path)
+                    subtrees = list(filter(lambda s: s['random_ephemeral_pin'] == True, subtrees))
+                    log.info(f"len={len(subtrees)} {subtrees}")
+                    if len(subtrees) >= count:
+                        return subtrees
+        except contextutil.MaxWhileTries as e:
+            raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
