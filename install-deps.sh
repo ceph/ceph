@@ -319,11 +319,11 @@ else
 	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
     centos|fedora|rhel|ol|virtuozzo)
-        yumdnf="yum"
-        builddepcmd="yum-builddep -y --setopt=*.skip_if_unavailable=true"
-        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
-            yumdnf="dnf"
-            builddepcmd="dnf -y builddep --allowerasing"
+        yumdnf="dnf"
+        builddepcmd="dnf -y builddep --allowerasing"
+        if [[ $ID =~ centos|rhel ]] && version_lt $VERSION_ID 8; then
+            yumdnf="yum"
+            builddepcmd="yum-builddep -y --setopt=*.skip_if_unavailable=true"
         fi
         echo "Using $yumdnf to install dependencies"
 	if [ "$ID" = "centos" -a "$ARCH" = "aarch64" ]; then
@@ -333,29 +333,27 @@ else
 	fi
         case "$ID" in
             fedora)
-                if test $yumdnf = yum; then
-                    $SUDO $yumdnf install -y yum-utils
-                fi
+                $SUDO $yumdnf install -y $yumdnf-utils
                 ;;
             centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
-                $SUDO yum install -y yum-utils
+                $SUDO $yumdnf install -y $yumdnf-utils
                 if test $ID = rhel ; then
                     $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
                 rpm --quiet --query epel-release || \
-		    $SUDO yum -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
+		    $SUDO $yumdnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 7 ; then
 		    $SUDO $yumdnf install -y python36-devel
 		    case "$ARCH" in
 			x86_64)
-			    $SUDO yum -y install centos-release-scl
+			    $SUDO $yumdnf -y install centos-release-scl
 			    dts_ver=8
 			    ;;
 			aarch64)
-			    $SUDO yum -y install centos-release-scl-rh
+			    $SUDO $yumdnf -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
 			    dts_ver=8
