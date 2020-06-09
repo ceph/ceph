@@ -13,7 +13,7 @@ from mgr_util import get_default_addr
 from rbd import RBD
 
 try:
-    from typing import Optional
+    from typing import Optional, Dict, Any, Set
 except:
     pass
 
@@ -161,8 +161,8 @@ class Metric(object):
 
         for labelvalues, value in self.value.items():
             if self.labelnames:
-                labels = zip(self.labelnames, labelvalues)
-                labels = ','.join('%s="%s"' % (k, v) for k, v in labels)
+                labels_list = zip(self.labelnames, labelvalues)
+                labels = ','.join('%s="%s"' % (k, v) for k, v in labels_list)
             else:
                 labels = ''
             if labels:
@@ -178,41 +178,44 @@ class Metric(object):
 
 
 class MetricCollectionThread(threading.Thread):
-    def __init__(self):
+    def __init__(self, module):
+        # type: (Module) -> None
+        self.mod = module
         super(MetricCollectionThread, self).__init__(target=self.collect)
 
-    @staticmethod
-    def collect():
-        inst = _global_instance
-        inst.log.info('starting metric collection thread')
+    def collect(self):
+        self.mod.log.info('starting metric collection thread')
         while True:
-            if inst.have_mon_connection():
+            self.mod.log.debug('collecting cache in thread')
+            if self.mod.have_mon_connection():
                 start_time = time.time()
-                data = inst.collect()
+                data = self.mod.collect()
                 duration = time.time() - start_time
+
+                self.mod.log.debug('collecting cache in thread done')
                 
-                sleep_time = inst.scrape_interval - duration
+                sleep_time = self.mod.scrape_interval - duration
                 if sleep_time < 0:
-                    inst.log.warning(
+                    self.mod.log.warning(
                         'Collecting data took more time than configured scrape interval. '
                         'This possibly results in stale data. Please check the '
                         '`stale_cache_strategy` configuration option. '
                         'Collecting data took {:.2f} seconds but scrape interval is configured '
                         'to be {:.0f} seconds.'.format(
                             duration,
-                            inst.scrape_interval,
+                            self.mod.scrape_interval,
                         )
                     )
                     sleep_time = 0
 
-                with inst.collect_lock:
-                    inst.collect_cache = data
-                    inst.collect_time = duration
+                with self.mod.collect_lock:
+                    self.mod.collect_cache = data
+                    self.mod.collect_time = duration
 
                 time.sleep(sleep_time)
             else:
-                inst.log.error('No MON connection')
-                time.sleep(inst.scrape_interval)
+                self.mod.log.error('No MON connection')
+                time.sleep(self.mod.scrape_interval)
 
 
 class Module(MgrModule):
@@ -241,7 +244,7 @@ class Module(MgrModule):
         self.metrics = self._setup_static_metrics()
         self.shutdown_event = threading.Event()
         self.collect_lock = threading.Lock()
-        self.collect_time = 0
+        self.collect_time = 0.0
         self.scrape_interval = 15.0
         self.stale_cache_strategy = self.STALE_CACHE_FAIL
         self.collect_cache = None
@@ -262,10 +265,10 @@ class Module(MgrModule):
                 'read_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
                                  'desc': 'RBD image reads latency (msec)'},
             },
-        }
+        }  # type: Dict[str, Any]
         global _global_instance
         _global_instance = self
-        MetricCollectionThread().start()
+        MetricCollectionThread(_global_instance).start()
 
     def _setup_static_metrics(self):
         metrics = {}
@@ -741,11 +744,32 @@ class Module(MgrModule):
         # list of pool[/namespace] entries. If no namespace is specifed the
         # stats are collected for every namespace in the pool.
         pools_string = self.get_localized_module_option('rbd_stats_pools', '')
-        pools = {}
-        for p in [x for x in re.split('[\s,]+', pools_string) if x]:
-            s = p.split('/', 2)
+        pool_keys = []
+        for x in re.split('[\s,]+', pools_string):
+            if not x:
+                continue
+
+            s = x.split('/', 2)
             pool_name = s[0]
-            if len(s) == 1:
+            namespace_name = None
+            if len(s) == 2:
+                namespace_name = s[1]
+
+            if pool_name == "*":
+                # collect for all pools
+                osd_map = self.get('osd_map')
+                for pool in osd_map['pools']:
+                    if 'rbd' not in pool.get('application_metadata', {}):
+                        continue
+                    pool_keys.append((pool['pool_name'], namespace_name))
+            else:
+                pool_keys.append((pool_name, namespace_name))
+
+        pools = {}  # type: Dict[str, Set[str]]
+        for pool_key in pool_keys:
+            pool_name = pool_key[0]
+            namespace_name = pool_key[1]
+            if not namespace_name or namespace_name == "*":
                 # empty set means collect for all namespaces
                 pools[pool_name] = set()
                 continue
@@ -756,7 +780,7 @@ class Module(MgrModule):
             pools[pool_name].add(s[1])
 
         rbd_stats_pools = {}
-        for pool_id in list(self.rbd_stats['pools']):
+        for pool_id in self.rbd_stats['pools'].keys():
             name = self.rbd_stats['pools'][pool_id]['name']
             if name not in pools:
                 del self.rbd_stats['pools'][pool_id]
@@ -1057,6 +1081,7 @@ class Module(MgrModule):
                 # TODO use get_config_prefix or get_config here once
                 # https://github.com/ceph/ceph/pull/20458 is merged
                 result = CommandResult("")
+                assert isinstance(_global_instance, Module)
                 _global_instance.send_command(
                     result, "mon", '',
                     json.dumps({
@@ -1114,16 +1139,19 @@ class Module(MgrModule):
             @cherrypy.expose
             def metrics(self):
                 # Lock the function execution
+                assert isinstance(_global_instance, Module)
                 with _global_instance.collect_lock:
                     return self._metrics(_global_instance)
 
             @staticmethod
             def _metrics(instance):
+                # type: (Module) -> Any
                 # Return cached data if available
                 if not instance.collect_cache:
                     raise cherrypy.HTTPError(503, 'No cached data available yet')
 
                 def respond():
+                    assert isinstance(instance, Module)
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
                     return instance.collect_cache
 
