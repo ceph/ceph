@@ -118,14 +118,9 @@ public:
   }
   static int set_resharding_status(rgw::sal::RGWRadosStore* store,
 				   const RGWBucketInfo& bucket_info,
-				   const string& instance_id,
-				   int32_t num_shards,
                                    cls_rgw_reshard_status status);
-  int set_resharding_status(const string& instance_id,
-			    int32_t num_shards,
-                            cls_rgw_reshard_status status) {
-    return set_resharding_status(store, bucket_info,
-			instance_id, num_shards, status);
+  int set_resharding_status(cls_rgw_reshard_status status) {
+    return set_resharding_status(store, bucket_info, status);
   }
 
   static uint32_t get_max_prime_shards() {
