@@ -5675,6 +5675,14 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       return;
     }
 
+    if (val < 0.0 || 1.0 < val) {
+      respond_to_request(mdr, -EDOM);
+      return;
+    } else if (mdcache->export_ephemeral_random_max < val) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
     if (!xlock_policylock(mdr, cur))
       return;
 

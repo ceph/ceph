@@ -1001,6 +1001,8 @@ class MDCache {
 
   OpenFileTable open_file_table;
 
+  double export_ephemeral_random_max = 0.0;
+
  protected:
   // track master requests whose slaves haven't acknowledged commit
   struct umaster {

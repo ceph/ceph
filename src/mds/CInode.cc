@@ -5514,6 +5514,7 @@ double CInode::get_ephemeral_rand(bool inherit) const
    * have a parent yet.
    */
   const CInode *in = this;
+  double max = mdcache->export_ephemeral_random_max;
   while (true) {
     if (in->is_system())
       break;
@@ -5525,7 +5526,7 @@ double CInode::get_ephemeral_rand(bool inherit) const
       break;
 
     if (in->get_inode().export_ephemeral_random_pin > 0.0)
-      return in->get_inode().export_ephemeral_random_pin;
+      return std::min(in->get_inode().export_ephemeral_random_pin, max);
 
     /* An export_pin overrides only if no closer parent (incl. this one) has a
      * random pin set.
