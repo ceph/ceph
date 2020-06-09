@@ -25,6 +25,7 @@
 #include "Session.h"
 #include "objclass/objclass.h"
 
+#include "cls/cas/cls_cas_ops.h"
 #include "common/ceph_crypto.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
@@ -2589,10 +2590,10 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       if (fp_oid != tgt_soid.oid) {
 	// decrement old chunk's reference count
 	ObjectOperation dec_op;
-	cls_chunk_refcount_put_op put_call;
+	cls_cas_chunk_put_ref_op put_call;
 	put_call.source = soid;
 	::encode(put_call, in);
-	dec_op.call("cas", "chunk_put", in);
+	dec_op.call("cas", "chunk_put_ref", in);
 	// we don't care dec_op's completion. scrub for dedup will fix this.
 	tid = osd->objecter->mutate(
 	  tgt_soid.oid, oloc, dec_op, snapc,
@@ -2602,14 +2603,14 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
       }
       tgt_soid.oid = fp_oid;
       iter->second.oid = tgt_soid;
-      // add data op
-      ceph_osd_op osd_op;
-      osd_op.extent.offset = 0;
-      osd_op.extent.length = chunk_data.length();
-      encode(osd_op, in);
-      encode(soid, in);
-      in.append(chunk_data);
-      obj_op.call("cas", "cas_write_or_get", in);
+      {
+	bufferlist t;
+	cls_cas_chunk_create_or_get_ref_op get_call;
+	get_call.source = soid;
+	get_call.data = chunk_data;
+	::encode(get_call, t);
+	obj_op.call("cas", "chunk_create_or_get_ref", t);
+      }
     } else {
       obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
     }
@@ -3467,15 +3468,15 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc
   ObjectOperation obj_op;
   bufferlist in;
   if (get) {             
-    cls_chunk_refcount_get_op call;
+    cls_cas_chunk_get_ref_op call;
     call.source = obc->obs.oi.soid;
     ::encode(call, in);                             
-    obj_op.call("cas", "chunk_get", in);         
+    obj_op.call("cas", "chunk_get_ref", in);
   } else {                    
-    cls_chunk_refcount_put_op call;                
+    cls_cas_chunk_put_ref_op call;
     call.source = obc->obs.oi.soid;
     ::encode(call, in);          
-    obj_op.call("cas", "chunk_put", in);         
+    obj_op.call("cas", "chunk_put_ref", in);
   }                                                     
   
   Context *c = nullptr;

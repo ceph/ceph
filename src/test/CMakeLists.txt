@@ -9,6 +9,7 @@ target_include_directories(unit-main PRIVATE
 
 add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
+add_subdirectory(cls_cas)
 add_subdirectory(cls_log)
 add_subdirectory(cls_numops)
 add_subdirectory(cls_sdk)
