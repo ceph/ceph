@@ -4,12 +4,12 @@
 #include <cstdlib>
 #include <string>
 
-#if defined(__linux__)
-#include <features.h>
-
 #ifndef __STRING
 # define __STRING(x) #x
 #endif
+
+#if defined(__linux__)
+#include <features.h>
 
 #elif defined(__FreeBSD__)
 #include <sys/cdefs.h>
