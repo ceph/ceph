@@ -47,10 +47,13 @@ def systemctl_remote(remote, subcommand, service_name):
 
 
 class SaltManager(object):
-
-    def __init__(self, ctx):
+    """
+    :param ctx:     Context from the main task
+    :param role:    role that will be used as Salt Master (default 'client.salt_master')
+    """
+    def __init__(self, ctx, role=master_role):
         self.ctx = ctx
-        self.master_remote = get_remote_for_role(self.ctx, master_role)
+        self.master_remote = get_remote_for_role(self.ctx, role)
 
     def __cat_file_cluster(self, filename=None):
         """
