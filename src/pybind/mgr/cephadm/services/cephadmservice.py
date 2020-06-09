@@ -1,3 +1,4 @@
+import json
 import logging
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any
@@ -139,6 +140,11 @@ class CephadmService(metaclass=ABCMeta):
 
         return True
 
+    def pre_remove(self, daemon_id: str) -> None:
+        """
+        Called before the daemon is removed.
+        """
+        pass
 
 class MonService(CephadmService):
     TYPE = 'mon'
@@ -181,6 +187,39 @@ class MonService(CephadmService):
         return self.mgr._create_daemon('mon', name, host,
                                        keyring=keyring,
                                        extra_config={'config': extra_config})
+
+    def _check_safe_to_destroy(self, mon_id):
+        # type: (str) -> None
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'quorum_status',
+        })
+        try:
+            j = json.loads(out)
+        except Exception as e:
+            raise OrchestratorError('failed to parse quorum status')
+
+        mons = [m['name'] for m in j['monmap']['mons']]
+        if mon_id not in mons:
+            logger.info('Safe to remove mon.%s: not in monmap (%s)' % (
+                mon_id, mons))
+            return
+        new_mons = [m for m in mons if m != mon_id]
+        new_quorum = [m for m in j['quorum_names'] if m != mon_id]
+        if len(new_quorum) > len(new_mons) / 2:
+            logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' % (mon_id, new_quorum, new_mons))
+            return
+        raise OrchestratorError('Removing %s would break mon quorum (new quorum %s, new mons %s)' % (mon_id, new_quorum, new_mons))
+
+
+    def pre_remove(self, daemon_id: str) -> None:
+        self._check_safe_to_destroy(daemon_id)
+
+        # remove mon from quorum before we destroy the daemon
+        logger.info('Removing monitor %s from monmap...' % daemon_id)
+        ret, out, err = self.mgr.check_mon_command({
+            'prefix': 'mon rm',
+            'name': daemon_id,
+        })
 
 
 class MgrService(CephadmService):
