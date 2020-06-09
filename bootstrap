@@ -44,13 +44,18 @@ Linux)
             fi
         fi
         ;;
-    RedHatEnterpriseWorkstation|RedHatEnterpriseServer|CentOS)
-        for package in python2-pip python-virtualenv mariadb-devel libev-devel libvirt-devel libffi-devel; do
-	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
-		missing="${missing:+$missing }$package"
-	    fi
+    RedHatEnterpriseWorkstation|RedHatEnterpriseServer|RedHatEnterprise|CentOS)
+        if [[ "$PYTHON" =~ "python2" ]]; then
+            deps=(python-pip python-devel python-virtualenv mariadb-devel libev-devel libvirt-devel libffi-devel)
+        else
+            deps=(python3-pip python3-devel python3-virtualenv mariadb-devel libev-devel libvirt-devel libffi-devel)
+        fi
+        for package in ${deps[@]}; do
+          if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
+              missing="${missing:+$missing }$package"
+          fi
         done
-	if [ -n "$missing" ]; then
+        if [ -n "$missing" ]; then
             echo "$0: missing required packages:" 1>&2
             echo "$missing"
             if [ "$install" = true ]; then
@@ -61,20 +66,25 @@ Linux)
                 echo "sudo yum -y install $missing"
                 exit 1
             fi
-	fi
-	;;
+        fi
+        ;;
     Fedora)
-        for package in python2-pip python2-virtualenv libev-devel libvirt-devel libffi-devel; do
-	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
-		missing="${missing:+$missing }$package"
-	    fi
-	done
-	fedora_release=$(lsb_release -rs)
-	package_manager=dnf
-	if [ $fedora_release -lt 23 ]; then
-	    package_manager=yum
-	fi
-	if [ -n "$missing" ]; then
+        if [[ "$PYTHON" =~ "python2" ]]; then
+            deps=(python-pip python-devel python-virtualenv libev-devel libvirt-devel libffi-devel)
+        else
+            deps=(python3-pip python3-devel python3-virtualenv libev-devel libvirt-devel libffi-devel)
+        fi
+        for package in ${deps[@]}; do
+          if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
+              missing="${missing:+$missing }$package"
+          fi
+        done
+        fedora_release=$(lsb_release -rs)
+        package_manager=dnf
+        if [ $fedora_release -lt 23 ]; then
+            package_manager=yum
+        fi
+        if [ -n "$missing" ]; then
             echo "$0: missing required packages:" 1>&2
             echo "$missing"
             if [ "$install" = true ]; then
@@ -85,8 +95,8 @@ Linux)
                 echo "sudo $package_manager -y install $missing"
                 exit 1
             fi
-	fi
-	;;
+        fi
+        ;;
     "openSUSE project"|"SUSE LINUX"|"openSUSE")
 
 	if [[ "$PYTHON" =~ "python2" ]]; then
