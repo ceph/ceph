@@ -18,6 +18,7 @@
 #include <atomic>
 
 #include "include/types.h"
+#include "rgw_metadata.h"
 
 class DoutPrefixProvider;
 class rgw_user;
@@ -93,6 +94,8 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
+class RGWAccountMetadataHandler;
+
 class RGWAccountCtl
 {
   struct Svc {
@@ -100,10 +103,12 @@ class RGWAccountCtl
     RGWSI_Account *account {nullptr};
   } svc;
 
+  RGWAccountMetadataHandler *am_handler{nullptr};
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:
   RGWAccountCtl(RGWSI_Zone *zone_svc,
-		RGWSI_Account *account_svc);
+		RGWSI_Account *account_svc,
+		RGWAccountMetadataHandler *_am_handler);
 
   ~RGWAccountCtl() = default;
 
@@ -137,4 +142,41 @@ public:
   int get_info_by_tenant(const std::string& tenant,
 			 RGWAccountInfo* info,
 			 optional_yield y);
+};
+
+class RGWAccountMetadataHandler: public RGWMetadataHandler_GenericMetaBE {
+public:
+  struct Svc {
+    RGWSI_Account *account {nullptr};
+  } svc;
+
+  explicit RGWAccountMetadataHandler(RGWSI_Account *account_svc);
+
+  std::string get_type() override { return "account"; }
+
+  int do_get(RGWSI_MetaBackend_Handler::Op *op,
+             std::string& entry,
+             RGWMetadataObject **obj,
+             optional_yield y, const DoutPrefixProvider* dpp) override
+  { return -ERR_NOT_IMPLEMENTED; }
+
+  int do_put(RGWSI_MetaBackend_Handler::Op *op,
+             std::string& entry,
+             RGWMetadataObject *obj,
+             RGWObjVersionTracker& objv_tracker,
+             optional_yield y, const DoutPrefixProvider* dpp,
+             RGWMDLogSyncType type, bool from_remote_zone) override
+  { return -ERR_NOT_IMPLEMENTED; }
+
+  int do_remove(RGWSI_MetaBackend_Handler::Op *op,
+                std::string& entry,
+                RGWObjVersionTracker& objv_tracker,
+                optional_yield y, const DoutPrefixProvider* dpp) override
+  { return -ERR_NOT_IMPLEMENTED; }
+
+  RGWMetadataObject *get_meta_obj(JSONObj *jo,
+				  const obj_version& objv,
+				  const ceph::real_time& mtime) override {
+    return nullptr;
+  }
 };

@@ -1,14 +1,22 @@
 #include "rgw_account.h"
+#include "rgw_metadata.h"
+
 #include "services/svc_account.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
 
 RGWAccountCtl::RGWAccountCtl(RGWSI_Zone *zone_svc,
-                             RGWSI_Account *account_svc)
+                             RGWSI_Account *account_svc,
+                             RGWAccountMetadataHandler *_am_handler) : am_handler(_am_handler)
 {
   svc.zone = zone_svc;
   svc.account = account_svc;
-  be_handler = account_svc->get_be_handler();
+  be_handler = am_handler->get_be_handler();
+}
+
+RGWAccountMetadataHandler::RGWAccountMetadataHandler(RGWSI_Account *account_svc) {
+  base_init(account_svc->ctx(), account_svc->get_be_handler());
+  svc.account = account_svc;
 }
 
 int RGWAccountCtl::store_info(const DoutPrefixProvider* dpp,
