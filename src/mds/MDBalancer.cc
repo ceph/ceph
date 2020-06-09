@@ -101,13 +101,15 @@ void MDBalancer::handle_export_pins(void)
     ceph_assert(in->is_dir());
     mds_rank_t export_pin = in->get_export_pin(false);
     if (export_pin >= mds->mdsmap->get_max_mds()) {
-      dout(20) << " delay export pin on " << *in << dendl;
+      dout(20) << " delay export_pin=" << export_pin << " on " << *in << dendl;
       in->state_clear(CInode::STATE_QUEUEDEXPORTPIN);
       q.erase(cur);
 
       in->state_set(CInode::STATE_DELAYEDEXPORTPIN);
       mds->mdcache->export_pin_delayed_queue.insert(in);
       continue;
+    } else {
+      dout(20) << " executing export_pin=" << export_pin << " on " << *in << dendl;
     }
 
     bool remove = true;
