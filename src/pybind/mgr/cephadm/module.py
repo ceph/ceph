@@ -1839,6 +1839,10 @@ you may want to run:
             r = True
 
         # remove any?
+        while remove_daemon_hosts and not self.cephadm_services[daemon_type].ok_to_stop(
+                [d.daemon_id for d in remove_daemon_hosts]):
+            # let's find a subset that is ok-to-stop
+            remove_daemon_hosts.pop()
         for d in remove_daemon_hosts:
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
