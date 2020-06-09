@@ -99,6 +99,8 @@ void MDBalancer::handle_export_pins(void)
     auto cur = it++;
     CInode *in = *cur;
     ceph_assert(in->is_dir());
+
+    in->check_pin_policy();
     mds_rank_t export_pin = in->get_export_pin(false);
     if (export_pin >= mds->mdsmap->get_max_mds()) {
       dout(20) << " delay export_pin=" << export_pin << " on " << *in << dendl;
@@ -179,9 +181,12 @@ void MDBalancer::handle_export_pins(void)
 		  dendl;
     }
 
-    if (export_pin >= 0 && export_pin < mds->mdsmap->get_max_mds() 
-	&& export_pin != mds->get_nodeid()) {
-      mds->mdcache->migrator->export_dir(cd, export_pin);
+    if (export_pin >= 0 && export_pin < mds->mdsmap->get_max_mds()) {
+      if (export_pin == mds->get_nodeid()) {
+        cd->get_inode()->check_pin_policy();
+      } else {
+        mds->mdcache->migrator->export_dir(cd, export_pin);
+      }
     }
   }
 }

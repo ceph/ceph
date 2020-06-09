@@ -331,11 +331,24 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
   static const int MASK_STATE_EXPORTED =
-    (STATE_DIRTY|STATE_NEEDSRECOVER|STATE_DIRTYPARENT|STATE_DIRTYPOOL);
+    (STATE_DIRTY|STATE_NEEDSRECOVER|STATE_DIRTYPARENT|STATE_DIRTYPOOL|
+    STATE_DISTEPHEMERALPIN|STATE_RANDEPHEMERALPIN);
   static const int MASK_STATE_EXPORT_KEPT =
     (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS|
      STATE_QUEUEDEXPORTPIN|STATE_TRACKEDBYOFT|STATE_DELAYEDEXPORTPIN|
      STATE_DISTEPHEMERALPIN|STATE_RANDEPHEMERALPIN);
+
+  /* These are for "permanent" state markers that are passed around between
+   * MDS. Nothing protects/updates it like a typical MDS lock.
+   *
+   * Currently, we just use this for REPLICATED inodes. The reason we need to
+   * replicate the random epin state is because the directory inode is still
+   * under the authority of the parent subtree. So it's not exported normally
+   * and we can't pass around the state that way. The importer of the dirfrags
+   * still needs to know that the inode is random pinned though otherwise it
+   * doesn't know that the dirfrags are pinned.
+   */
+  static const int MASK_STATE_REPLICATED = STATE_RANDEPHEMERALPIN;
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
@@ -917,6 +930,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void queue_export_pin(mds_rank_t target);
   void maybe_export_pin(bool update=false);
 
+  void check_pin_policy();
+
   void set_ephemeral_dist(bool yes);
   void maybe_ephemeral_dist(bool update=false);
   void maybe_ephemeral_dist_children(bool update=false);
@@ -927,17 +942,27 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   double get_ephemeral_rand(bool inherit=true) const;
   void set_ephemeral_rand(bool yes);
-  void maybe_ephemeral_rand();
+  void maybe_ephemeral_rand(bool fresh=false);
   void setxattr_ephemeral_rand(double prob=0.0);
   bool is_ephemeral_rand() const {
     return state_test(STATE_RANDEPHEMERALPIN);
   }
 
+  bool has_ephemeral_policy() const {
+    return get_inode().export_ephemeral_random_pin > 0.0 ||
+           get_inode().export_ephemeral_distributed_pin;
+  }
   bool is_ephemerally_pinned() const {
     return state_test(STATE_DISTEPHEMERALPIN) ||
            state_test(STATE_RANDEPHEMERALPIN);
   }
   bool is_exportable(mds_rank_t dest) const;
+
+  void maybe_pin() {
+    maybe_export_pin();
+    maybe_ephemeral_dist();
+    maybe_ephemeral_rand();
+  }
 
   void print(std::ostream& out) override;
   void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;
