@@ -99,7 +99,7 @@ class SubvolumeBase(object):
         else:
             self.metadata_mgr = MetadataManager(self.fs, self.config_path, 0o640)
 
-    def _set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
+    def set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
         # set size
         if size is not None:
             try:
@@ -130,7 +130,11 @@ class SubvolumeBase(object):
             # layout remains unset and will undesirably change with ancestor's
             # pool layout changes.
             xattr_key = 'ceph.dir.layout.pool'
-            xattr_val = get_ancestor_xattr(self.fs, path, "ceph.dir.layout.pool")
+            xattr_val = None
+            try:
+                self.fs.getxattr(path, 'ceph.dir.layout.pool').decode('utf-8')
+            except cephfs.NoData as e:
+                xattr_val = get_ancestor_xattr(self.fs, os.path.split(path)[0], "ceph.dir.layout.pool")
         if xattr_key and xattr_val:
             try:
                 self.fs.setxattr(path, xattr_key, xattr_val.encode('utf-8'), 0)
@@ -244,6 +248,7 @@ class SubvolumeBase(object):
 
         try:
             data_pool = self.fs.getxattr(subvolpath, 'ceph.dir.layout.pool').decode('utf-8')
+            pool_namespace = self.fs.getxattr(subvolpath, 'ceph.dir.layout.pool_namespace').decode('utf-8')
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
@@ -251,4 +256,5 @@ class SubvolumeBase(object):
             'atime': str(st["atime"]), 'mtime': str(st["mtime"]), 'ctime': str(st["ctime"]),
             'mode': int(st["mode"]), 'data_pool': data_pool, 'created_at': str(st["btime"]),
             'bytes_quota': "infinite" if nsize == 0 else nsize, 'bytes_used': int(usedbytes),
-            'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}
+            'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
+            'pool_namespace': pool_namespace}

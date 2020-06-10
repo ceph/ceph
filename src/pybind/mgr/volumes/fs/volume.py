@@ -116,11 +116,12 @@ class VolumeClient(object):
         uid        = kwargs['uid']
         gid        = kwargs['gid']
         mode       = kwargs['mode']
+        isolate_nspace = kwargs['namespace_isolated']
 
         oct_mode = octal_str_to_decimal_int(mode)
         try:
             create_subvol(
-                fs_handle, self.volspec, group, subvolname, size, False, pool, oct_mode, uid, gid)
+                fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -132,14 +133,21 @@ class VolumeClient(object):
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
+        size       = kwargs['size']
+        pool       = kwargs['pool_layout']
+        uid        = kwargs['uid']
+        gid        = kwargs['gid']
+        isolate_nspace = kwargs['namespace_isolated']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     try:
-                        with open_subvol(fs_handle, self.volspec, group, subvolname):
-                            # idempotent creation -- valid.
-                            pass
+                        with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                            # idempotent creation -- valid. Attributes set is supported.
+                            uid = uid if uid else subvolume.uid
+                            gid = gid if gid else subvolume.gid
+                            subvolume.set_attrs(subvolume.path, size, isolate_nspace, pool, uid, gid)
                     except VolumeException as ve:
                         if ve.errno == -errno.ENOENT:
                             self._create_subvolume(fs_handle, volname, group, subvolname, **kwargs)
