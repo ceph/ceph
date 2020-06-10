@@ -29,10 +29,11 @@
 
 #include "common/errno.h"
 
-#include "rgw_metadata.h"
-#include "rgw_user.h"
 #include "rgw_bucket.h"
+#include "rgw_datalog.h"
+#include "rgw_metadata.h"
 #include "rgw_otp.h"
+#include "rgw_user.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -89,7 +90,6 @@ int RGWServices_Def::init(CephContext *cct,
                          bucket_sobj.get());
   cls->init(zone.get(), rados.get());
   config_key_rados->init(rados.get());
-  datalog_rados->init(cls.get());
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
@@ -140,9 +140,11 @@ int RGWServices_Def::init(CephContext *cct,
       return r;
     }
 
-    r = datalog_rados->start(&zone->get_zone());
+    r = datalog_rados->start(&zone->get_zone(),
+			     zone->get_zone_params(), cls.get(),
+			     rados->get_rados_handle());
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: failed to start datalog service (" << cpp_strerror(-r) << dendl;
+      ldout(cct, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
 

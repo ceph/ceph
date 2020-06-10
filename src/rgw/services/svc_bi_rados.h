@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "rgw/rgw_datalog.h"
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_tools.h"
 
@@ -25,7 +26,6 @@
 struct rgw_bucket_dir_header;
 
 class RGWSI_BILog_RADOS;
-class RGWDataChangesLog;
 
 #define RGW_NO_SHARD -1
 
