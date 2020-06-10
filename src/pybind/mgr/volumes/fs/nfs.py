@@ -13,10 +13,19 @@ from .fs_util import create_pool
 log = logging.getLogger(__name__)
 
 def available_clusters(mgr):
+    '''
+    This method returns list of available cluster ids.
+    It removes 'ganesha-' prefixes from cluster service id returned by cephadm.
+    Example:
+    completion.result value:
+    <ServiceDescription of <NFSServiceSpec for service_name=nfs.ganesha-vstart>>
+    return value: ['ganesha-vstart'] -> ['vstart']
+    '''
+    # TODO check cephadm cluster list with rados pool conf objects
     completion = mgr.describe_service(service_type='nfs')
     mgr._orchestrator_wait([completion])
     orchestrator.raise_if_exception(completion)
-    return [cluster.spec.service_id for cluster in completion.result]
+    return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result]
 
 class GaneshaConfParser(object):
     def __init__(self, raw_config):
@@ -347,8 +356,6 @@ class FSExport(object):
         try:
             log.info("Begin export parsing")
             for cluster_id in available_clusters(self.mgr):
-                # Removes 'ganesha-' prefixes from cluster ids.
-                cluster_id = cluster_id[cluster_id.index('-')+1:]
                 self.export_conf_objs = []  # type: List[Export]
                 self._read_raw_config(cluster_id)
                 self.exports[cluster_id] = self.export_conf_objs
@@ -477,8 +484,7 @@ class FSExport(object):
             if not self.check_fs(fs_name):
                 return -errno.ENOENT, "", f"filesystem {fs_name} not found"
 
-            cluster_check = f"ganesha-{cluster_id}" in available_clusters(self.mgr)
-            if not cluster_check:
+            if cluster_id not in available_clusters(self.mgr):
                 return -errno.ENOENT, "", "Cluster does not exists"
 
             if cluster_id not in self.exports:
@@ -551,7 +557,7 @@ class FSExport(object):
             log.info("No exports to delete")
 
     def list_exports(self, cluster_id, detailed):
-        if not f"ganesha-{cluster_id}" in available_clusters(self.mgr):
+        if not cluster_id in available_clusters(self.mgr):
             return -errno.ENOENT, "", f"NFS cluster '{cluster_id}' not found"
         if detailed:
             result = [export.to_dict() for export in self.exports[cluster_id]]
@@ -561,7 +567,7 @@ class FSExport(object):
         return 0, json.dumps(result, indent=2), ''
 
     def get_export(self, cluster_id, pseudo_path):
-        if not f"ganesha-{cluster_id}" in available_clusters(self.mgr):
+        if not cluster_id in available_clusters(self.mgr):
             return -errno.ENOENT, "", f"NFS cluster '{cluster_id}' not found"
         export_dict = {}
         for export in self.exports[cluster_id]:
@@ -640,10 +646,10 @@ class NFSCluster:
             self._set_cluster_id(cluster_id)
             self.create_empty_rados_obj()
 
-            if self.cluster_id not in available_clusters(self.mgr):
+            if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(placement)
                 return 0, "NFS Cluster Created Successfully", ""
-            return 0, "", f"{self.cluster_id} cluster already exists"
+            return 0, "", f"{cluster_id} cluster already exists"
         except Exception as e:
             log.warning("NFS Cluster could not be created")
             return -errno.EINVAL, "", str(e)
@@ -652,7 +658,7 @@ class NFSCluster:
         try:
             self._set_pool_namespace(cluster_id)
             self._set_cluster_id(cluster_id)
-            if self.cluster_id in available_clusters(self.mgr):
+            if cluster_id in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(placement)
                 return 0, "NFS Cluster Updated Successfully", ""
             return -errno.ENOENT, "", "Cluster does not exist"
@@ -665,7 +671,7 @@ class NFSCluster:
             self._set_pool_namespace(cluster_id)
             self._set_cluster_id(cluster_id)
             cluster_list = available_clusters(self.mgr)
-            if self.cluster_id in cluster_list:
+            if cluster_id in cluster_list:
                 self.mgr.fs_export.delete_all_exports(cluster_id)
                 completion = self.mgr.remove_service('nfs.' + self.cluster_id)
                 self.mgr._orchestrator_wait([completion])
