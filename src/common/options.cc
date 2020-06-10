@@ -5532,20 +5532,34 @@ std::vector<Option> get_rgw_options() {
     .set_long_description("Local time window in which the lifecycle maintenance thread can work."),
 
     Option("rgw_lc_lock_max_time", Option::TYPE_INT, Option::LEVEL_DEV)
-    .set_default(60)
+    .set_default(90)
     .set_description(""),
 
     Option("rgw_lc_thread_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("Delay after processing of bucket listing chunks (i.e., per 1000 entries) in milliseconds"),
 
+    Option("rgw_lc_max_worker", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_description("Number of LCWorker tasks that will be run in parallel")
+    .set_long_description(
+      "Number of LCWorker tasks that will run in parallel--used to permit >1 "
+      "bucket/index shards to be processed simultaneously"),
+
+    Option("rgw_lc_max_wp_worker", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_description("Number of workpool threads per LCWorker")
+    .set_long_description(
+      "Number of threads in per-LCWorker workpools--used to accelerate "
+      "per-bucket processing"),
+
     Option("rgw_lc_max_objs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32)
     .set_description("Number of lifecycle data shards")
     .set_long_description(
-          "Number of RADOS objects to use for storing lifecycle index. This can affect "
-          "concurrency of lifecycle maintenance, but requires multiple RGW processes "
-          "running on the zone to be utilized."),
+          "Number of RADOS objects to use for storing lifecycle index. This "
+	  "affects concurrency of lifecycle maintenance, as shards can be "
+          "processed in parallel."),
 
     Option("rgw_lc_max_rules", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1000)

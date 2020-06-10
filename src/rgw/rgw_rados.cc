@@ -8051,7 +8051,7 @@ int RGWRados::list_lc_progress(const string& marker, uint32_t max_entries, map<s
 
 int RGWRados::process_lc()
 {
-  return lc->process();
+  return lc->process(nullptr);
 }
 
 bool RGWRados::process_expire_objects()
