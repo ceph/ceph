@@ -160,10 +160,14 @@ class MgrModules(RESTController):
                         option['default_value'])
             elif option['type'] == 'float':
                 for name in ['default_value', 'min', 'max']:
-                    if option[name]:  # Skip empty entries
+                    if option[name] == 'None':  # This is Python None
+                        option[name] = None
+                    elif option[name]:  # Skip empty entries
                         option[name] = float(option[name])
             elif option['type'] in ['uint', 'int', 'size', 'secs']:
                 for name in ['default_value', 'min', 'max']:
-                    if option[name]:  # Skip empty entries
+                    if option[name] == 'None':  # This is Python None
+                        option[name] = None
+                    elif option[name]:  # Skip empty entries
                         option[name] = int(option[name])
         return options
