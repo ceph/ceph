@@ -288,7 +288,7 @@ void ImageReplayer<I>::set_state_description(int r, const std::string &desc) {
 }
 
 template <typename I>
-void ImageReplayer<I>::start(Context *on_finish, bool manual)
+void ImageReplayer<I>::start(Context *on_finish, bool manual, bool restart)
 {
   dout(10) << "on_finish=" << on_finish << dendl;
 
@@ -302,12 +302,16 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
       dout(5) << "stopped manually, ignoring start without manual flag"
 	      << dendl;
       r = -EPERM;
+    } else if (restart && !m_restart_requested) {
+      dout(10) << "canceled restart" << dendl;
+      r = -ECANCELED;
     } else {
       m_state = STATE_STARTING;
       m_last_r = 0;
       m_state_desc.clear();
       m_manual_stop = false;
       m_delete_requested = false;
+      m_restart_requested = false;
 
       if (on_finish != nullptr) {
         ceph_assert(m_on_start_finish == nullptr);
@@ -509,11 +513,10 @@ bool ImageReplayer<I>::on_start_interrupted(ceph::mutex& lock) {
 }
 
 template <typename I>
-void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
-			    const std::string& desc)
+void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
 {
   dout(10) << "on_finish=" << on_finish << ", manual=" << manual
-	   << ", desc=" << desc << dendl;
+           << ", restart=" << restart << dendl;
 
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
@@ -521,8 +524,16 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
   {
     std::lock_guard locker{m_lock};
 
+    if (restart) {
+      m_restart_requested = true;
+    }
+
     if (!is_running_()) {
       running = false;
+      if (!restart && m_restart_requested) {
+        dout(10) << "canceling restart" << dendl;
+        m_restart_requested = false;
+      }
     } else {
       if (!is_stopped_()) {
 	if (m_state == STATE_STARTING) {
@@ -560,7 +571,7 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
   }
 
   if (shut_down_replay) {
-    on_stop_journal_replay(r, desc);
+    on_stop_journal_replay();
   } else if (on_finish != nullptr) {
     on_finish->complete(0);
   }
@@ -591,14 +602,19 @@ void ImageReplayer<I>::on_stop_journal_replay(int r, const std::string &desc)
 template <typename I>
 void ImageReplayer<I>::restart(Context *on_finish)
 {
+  {
+    std::lock_guard locker{m_lock};
+    m_restart_requested = true;
+  }
+
   auto ctx = new LambdaContext(
     [this, on_finish](int r) {
       if (r < 0) {
 	// Try start anyway.
       }
-      start(on_finish, true);
+      start(on_finish, true, true);
     });
-  stop(ctx);
+  stop(ctx, false, true);
 }
 
 template <typename I>
