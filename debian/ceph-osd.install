@@ -9,7 +9,7 @@ usr/bin/ceph-objectstore-tool
 usr/bin/ceph-osdomap-tool
 usr/bin/${CEPH_OSD_BASENAME} => /usr/bin/ceph-osd
 usr/bin/ceph_objectstore_bench
-usr/lib/ceph/ceph-osd-prestart.sh
+usr/libexec/ceph/ceph-osd-prestart.sh
 usr/lib/libos_tp.so*
 usr/lib/libosd_tp.so*
 usr/sbin/ceph-volume
