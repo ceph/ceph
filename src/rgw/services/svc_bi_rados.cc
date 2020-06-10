@@ -154,33 +154,6 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
   }
 }
 
-/*
-static void get_bucket_index_objects(const string& bucket_oid_base,
-                                     uint32_t num_shards,
-                                     map<int, string> *_bucket_objects,
-                                     int shard_id = -1)
-{
-  auto& bucket_objects = *_bucket_objects;
-  if (!num_shards) {
-    bucket_objects[0] = bucket_oid_base;
-  } else {
-    char buf[bucket_oid_base.size() + 32];
-    if (shard_id < 0) {
-      for (uint32_t i = 0; i < num_shards; ++i) {
-        snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
-        bucket_objects[i] = buf;
-      }
-    } else {
-      if ((uint32_t)shard_id > num_shards) {
-        return;
-      }
-      snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
-      bucket_objects[shard_id] = buf;
-    }
-  }
-}
-*/
-
 static void get_bucket_instance_ids(const RGWBucketInfo& bucket_info,
                                     int shard_id,
                                     map<int, string> *result)
