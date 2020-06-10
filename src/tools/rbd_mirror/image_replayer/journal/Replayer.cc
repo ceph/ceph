@@ -214,7 +214,7 @@ void Replayer<I>::shut_down(Context* on_finish) {
 
   cancel_delayed_preprocess_task();
   cancel_flush_local_replay_task();
-  shut_down_local_journal_replay();
+  wait_for_flush();
 }
 
 template <typename I>
@@ -422,14 +422,37 @@ bool Replayer<I>::notify_init_complete(std::unique_lock<ceph::mutex>& locker) {
 }
 
 template <typename I>
-void Replayer<I>::shut_down_local_journal_replay() {
+void Replayer<I>::wait_for_flush() {
   ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  // ensure that we don't have two concurrent local journal replay shut downs
+  dout(10) << dendl;
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      Replayer<I>, &Replayer<I>::handle_wait_for_flush>(this));
+  m_flush_tracker.wait_for_ops(ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_wait_for_flush(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  shut_down_local_journal_replay();
+}
+
+template <typename I>
+void Replayer<I>::shut_down_local_journal_replay() {
+  std::unique_lock locker{m_lock};
 
   if (m_local_journal_replay == nullptr) {
     wait_for_event_replay();
     return;
   }
 
+  // It's required to stop the local journal replay state machine prior to
+  // waiting for the events to complete. This is to ensure that IO is properly
+  // flushed (it might be batched), wait for any running ops to complete, and
+  // to cancel any ops waiting for their associated OnFinish events.
   dout(10) << dendl;
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_shut_down_local_journal_replay>(this);
@@ -816,6 +839,7 @@ void Replayer<I>::handle_replay_ready(
 template <typename I>
 void Replayer<I>::replay_flush() {
   dout(10) << dendl;
+  m_flush_tracker.start_op();
 
   // shut down the replay to flush all IO and ops and create a new
   // replayer to handle the new tag epoch
@@ -871,6 +895,8 @@ template <typename I>
 void Replayer<I>::handle_replay_flush(int r) {
   std::unique_lock locker{m_lock};
   dout(10) << "r=" << r << dendl;
+  m_flush_tracker.finish_op();
+
   if (r < 0) {
     derr << "replay flush encountered an error: " << cpp_strerror(r) << dendl;
     handle_replay_complete(locker, r, "replay flush encountered an error");

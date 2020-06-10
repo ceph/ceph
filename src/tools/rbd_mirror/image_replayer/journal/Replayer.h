@@ -145,6 +145,9 @@ private:
    * REPLAY_COMPLETE  < * * * * * * * * * * * * * * * * * * *   *
    *    |                                                       *
    *    v                                                       *
+   * WAIT_FOR_FLUSH                                             *
+   *    |                                                       *
+   *    v                                                       *
    * SHUT_DOWN_LOCAL_JOURNAL_REPLAY                             *
    *    |                                                       *
    *    v                                                       *
@@ -214,6 +217,8 @@ private:
   librbd::journal::TagData m_replay_tag_data;
   librbd::journal::EventEntry m_event_entry;
 
+  AsyncOpTracker m_flush_tracker;
+
   AsyncOpTracker m_event_replay_tracker;
   Context *m_delayed_preprocess_task = nullptr;
 
@@ -241,6 +246,9 @@ private:
   bool add_local_journal_listener(std::unique_lock<ceph::mutex>& locker);
 
   bool notify_init_complete(std::unique_lock<ceph::mutex>& locker);
+
+  void wait_for_flush();
+  void handle_wait_for_flush(int r);
 
   void shut_down_local_journal_replay();
   void handle_shut_down_local_journal_replay(int r);

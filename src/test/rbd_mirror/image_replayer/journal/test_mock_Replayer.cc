@@ -1103,12 +1103,14 @@ TEST_F(TestMockImageReplayerJournalReplayer, Replay) {
   EXPECT_CALL(mock_local_journal_replay, decode(_, _)).WillOnce(Return(0));
   expect_preprocess(mock_event_preprocessor, false, 0);
   expect_process(mock_local_journal_replay, 0, 0);
+  EXPECT_CALL(mock_replay_status_formatter, handle_entry_processed(_));
 
   // the next event with preprocess
   expect_try_pop_front(mock_remote_journaler, tag.tid, true);
   EXPECT_CALL(mock_local_journal_replay, decode(_, _)).WillOnce(Return(0));
   expect_preprocess(mock_event_preprocessor, true, 0);
   expect_process(mock_local_journal_replay, 0, 0);
+  EXPECT_CALL(mock_replay_status_formatter, handle_entry_processed(_));
 
   // attempt to process the next event
   C_SaferCond replay_ctx;
@@ -1270,6 +1272,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, DelayedReplay) {
             ReturnArg<1>()));
   expect_preprocess(mock_event_preprocessor, false, 0);
   expect_process(mock_local_journal_replay, 0, 0);
+  EXPECT_CALL(mock_replay_status_formatter, handle_entry_processed(_));
 
   // attempt to process the next event
   C_SaferCond replay_ctx;
@@ -1857,6 +1860,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, AllocateTagDemotion) {
   EXPECT_CALL(mock_local_journal_replay, decode(_, _)).WillOnce(Return(0));
   expect_preprocess(mock_event_preprocessor, false, 0);
   expect_process(mock_local_journal_replay, 0, 0);
+  EXPECT_CALL(mock_replay_status_formatter, handle_entry_processed(_));
 
   remote_replay_handler->handle_entries_available();
   wait_for_notification();
@@ -2053,6 +2057,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, ProcessError) {
   EXPECT_CALL(mock_local_journal_replay, decode(_, _)).WillOnce(Return(0));
   expect_preprocess(mock_event_preprocessor, false, 0);
   expect_process(mock_local_journal_replay, 0, -EINVAL);
+  EXPECT_CALL(mock_replay_status_formatter, handle_entry_processed(_));
 
   // attempt to process the next event
   C_SaferCond replay_ctx;
@@ -2128,6 +2133,7 @@ TEST_F(TestMockImageReplayerJournalReplayer, ImageNameUpdated) {
   EXPECT_CALL(mock_local_journal_replay, decode(_, _)).WillOnce(Return(0));
   expect_preprocess(mock_event_preprocessor, false, 0);
   expect_process(mock_local_journal_replay, 0, 0);
+  EXPECT_CALL(mock_replay_status_formatter, handle_entry_processed(_));
 
   // attempt to process the next event
   C_SaferCond replay_ctx;
