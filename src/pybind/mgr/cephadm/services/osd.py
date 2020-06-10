@@ -136,7 +136,7 @@ class OSDService(CephadmService):
 
     def get_previews(self, host) -> List[Dict[str, Any]]:
         # Find OSDSpecs that match host.
-        osdspecs = self.mgr.resolve_osdspecs_for_host(host)
+        osdspecs = self.resolve_osdspecs_for_host(host)
         return self.generate_previews(osdspecs, host)
 
     def generate_previews(self, osdspecs: List[DriveGroupSpec], for_host: str) -> List[Dict[str, Any]]:
@@ -189,6 +189,29 @@ class OSDService(CephadmService):
                                     'osdspec': osdspec.service_id,
                                     'host': host})
         return ret_all
+
+    def resolve_hosts_for_osdspecs(self,
+                                   specs: Optional[List[DriveGroupSpec]] = None
+                                   ) -> List[str]:
+        osdspecs = []
+        if specs:
+            osdspecs = [cast(DriveGroupSpec, spec) for spec in specs]
+        if not osdspecs:
+            self.mgr.log.debug("No OSDSpecs found")
+            return []
+        return sum([spec.placement.filter_matching_hosts(self.mgr._get_hosts) for spec in osdspecs], [])
+
+    def resolve_osdspecs_for_host(self, host: str, specs: Optional[List[DriveGroupSpec]] = None):
+        matching_specs = []
+        self.mgr.log.debug(f"Finding OSDSpecs for host: <{host}>")
+        if not specs:
+            specs = [cast(DriveGroupSpec, spec) for (sn, spec) in self.mgr.spec_store.spec_preview.items()
+                     if spec.service_type == 'osd']
+        for spec in specs:
+            if host in spec.placement.filter_matching_hosts(self.mgr._get_hosts):
+                self.mgr.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
+                matching_specs.append(spec)
+        return matching_specs
 
     def _run_ceph_volume_command(self, host: str,
                                  cmd: str, env_vars: Optional[List[str]] = None

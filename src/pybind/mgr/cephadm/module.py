@@ -1643,58 +1643,41 @@ you may want to run:
                 r[str(osd_id)] = o.get('uuid', '')
         return r
 
-    def resolve_hosts_for_osdspecs(self,
-                                   specs: Optional[List[DriveGroupSpec]] = None,
-                                   service_name: Optional[str] = None
-                                   ) -> List[str]:
-        osdspecs = []
-        if service_name:
-            self.log.debug(f"Looking for OSDSpec with service_name: {service_name}")
-            osdspecs = self.spec_store.find(service_name=service_name)
-            self.log.debug(f"Found OSDSpecs: {osdspecs}")
-        if specs:
-            osdspecs = [cast(DriveGroupSpec, spec) for spec in specs]
-        if not service_name and not specs:
-            # if neither parameters are fulfilled, search for all available osdspecs
-            osdspecs = self.spec_store.find(service_name='osd')
-            self.log.debug(f"Found OSDSpecs: {osdspecs}")
-        if not osdspecs:
-            self.log.debug("No OSDSpecs found")
-            return []
-        return sum([spec.placement.filter_matching_hosts(self._get_hosts) for spec in osdspecs], [])
-
-    def resolve_osdspecs_for_host(self, host):
-        matching_specs = []
-        self.log.debug(f"Finding OSDSpecs for host: <{host}>")
-        for spec in self.spec_store.find('osd'):
-            if host in spec.placement.filter_matching_hosts(self._get_hosts):
-                self.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
-                matching_specs.append(spec)
-        return matching_specs
-
     def _trigger_preview_refresh(self,
                                  specs: Optional[List[DriveGroupSpec]] = None,
-                                 service_name: Optional[str] = None):
-        refresh_hosts = self.resolve_hosts_for_osdspecs(specs=specs, service_name=service_name)
+                                 service_name: Optional[str] = None,
+                                 ) -> None:
+        # Only trigger a refresh when a spec has changed
+        trigger_specs = []
+        if specs:
+            for spec in specs:
+                preview_spec = self.spec_store.spec_preview.get(spec.service_name())
+                # the to-be-preview spec != the actual spec, this means we need to
+                # trigger a refresh, if the spec has been removed (==None) we need to
+                # refresh as well.
+                if not preview_spec or spec != preview_spec:
+                    trigger_specs.append(spec)
+        if service_name:
+            trigger_specs = [cast(DriveGroupSpec, self.spec_store.spec_preview.get(service_name))]
+        if not any(trigger_specs):
+            return None
+
+        refresh_hosts = self.osd_service.resolve_hosts_for_osdspecs(specs=trigger_specs)
         for host in refresh_hosts:
             self.log.info(f"Marking host: {host} for OSDSpec preview refresh.")
             self.cache.osdspec_previews_refresh_queue.append(host)
 
     @trivial_completion
-    def apply_drivegroups(self, specs: List[DriveGroupSpec]):
-        self._trigger_preview_refresh(specs=specs)
-        return [self._apply(spec) for spec in specs]
-
-    @trivial_completion
     def create_osds(self, drive_group: DriveGroupSpec):
         return self.osd_service.create_from_spec(drive_group)
 
-    @trivial_completion
-    def preview_osdspecs(self,
-                         osdspec_name: Optional[str] = None,
-                         osdspecs: Optional[List[DriveGroupSpec]] = None
-                         ):
-        matching_hosts = self.resolve_hosts_for_osdspecs(specs=osdspecs, service_name=osdspec_name)
+    def _preview_osdspecs(self,
+                          osdspecs: Optional[List[DriveGroupSpec]] = None
+                          ):
+        if not osdspecs:
+            return {'n/a': [{'error': True,
+                             'message': 'No OSDSpec or matching hosts found.'}]}
+        matching_hosts = self.osd_service.resolve_hosts_for_osdspecs(specs=osdspecs)
         if not matching_hosts:
             return {'n/a': [{'error': True,
                              'message': 'No OSDSpec or matching hosts found.'}]}
@@ -1704,9 +1687,18 @@ you may want to run:
             # Report 'pending' when any of the matching hosts is still loading previews (flag is True)
             return {'n/a': [{'error': True,
                              'message': 'Preview data is being generated.. '
-                                        'Please try again in a bit.'}]}
-        # drop all keys that are not in search_hosts and return preview struct
-        return {k: v for (k, v) in self.cache.osdspec_previews.items() if k in matching_hosts}
+                                        'Please re-run this command in a bit.'}]}
+        # drop all keys that are not in search_hosts and only select reports that match the requested osdspecs
+        previews_for_specs = {}
+        for host, raw_reports in self.cache.osdspec_previews.items():
+            if host not in matching_hosts:
+                continue
+            osd_reports = []
+            for osd_report in raw_reports:
+                if osd_report.get('osdspec') in [x.service_id for x in osdspecs]:
+                    osd_reports.append(osd_report)
+            previews_for_specs.update({host: osd_reports})
+        return previews_for_specs
 
     def _calc_daemon_deps(self, daemon_type, daemon_id):
         need = {
@@ -1857,7 +1849,10 @@ you may want to run:
         daemon_type = spec.service_type
         service_name = spec.service_name()
         if spec.unmanaged:
-            self.log.debug('Skipping unmanaged service %s spec' % service_name)
+            self.log.debug('Skipping unmanaged service %s' % service_name)
+            return False
+        if spec.preview_only:
+            self.log.debug('Skipping preview_only service %s' % service_name)
             return False
         self.log.debug('Applying service %s spec' % service_name)
 
@@ -2103,7 +2098,48 @@ you may want to run:
         if spec.service_type == 'host':
             return self._add_host(cast(HostSpec, spec))
 
+        if spec.service_type == 'osd':
+            # _trigger preview refresh needs to be smart and
+            # should only refresh if a change has been detected
+            self._trigger_preview_refresh(specs=[cast(DriveGroupSpec, spec)])
+
         return self._apply_service_spec(cast(ServiceSpec, spec))
+
+    def _plan(self, spec: ServiceSpec):
+        if spec.service_type == 'osd':
+            return {'service_name': spec.service_name(),
+                    'service_type': spec.service_type,
+                    'data': self._preview_osdspecs(osdspecs=[cast(DriveGroupSpec, spec)])}
+
+        ha = HostAssignment(
+            spec=spec,
+            get_hosts_func=self._get_hosts,
+            get_daemons_func=self.cache.get_daemons_by_service,
+        )
+        ha.validate()
+        hosts = ha.place()
+
+        add_daemon_hosts = ha.add_daemon_hosts(hosts)
+        remove_daemon_hosts = ha.remove_daemon_hosts(hosts)
+
+        return {
+            'service_name': spec.service_name(),
+            'service_type': spec.service_type,
+            'add': [hs.hostname for hs in add_daemon_hosts],
+            'remove': [d.hostname for d in remove_daemon_hosts]
+        }
+
+    @trivial_completion
+    def plan(self, specs: List[GenericSpec]):
+        results = [{'warning': 'WARNING! Dry-Runs are snapshots of a certain point in time and are bound \n'
+                               'to the current inventory setup. If any on these conditions changes, the \n'
+                               'preview will be invalid. Please make sure to have a minimal \n'
+                               'timeframe between planning and applying the specs.'}]
+        if any([spec.service_type == 'host' for spec in specs]):
+            return [{'error': 'Found <HostSpec>. Previews that include Host Specifications are not supported, yet.'}]
+        for spec in specs:
+            results.append(self._plan(cast(ServiceSpec, spec)))
+        return results
 
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
