@@ -253,7 +253,15 @@ class RbdService(object):
 
             stat = img.stat()
             stat['name'] = image_name
-            stat['id'] = img.id()
+            if img.old_format():
+                stat['unique_id'] = get_image_spec(pool_name, namespace, stat['block_name_prefix'])
+                stat['id'] = stat['unique_id']
+                stat['image_format'] = 1
+            else:
+                stat['unique_id'] = get_image_spec(pool_name, namespace, img.id())
+                stat['id'] = img.id()
+                stat['image_format'] = 2
+
             stat['pool_name'] = pool_name
             stat['namespace'] = namespace
             features = img.features()
