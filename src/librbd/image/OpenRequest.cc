@@ -544,8 +544,6 @@ Context* OpenRequest<I>::handle_init_plugin_registry(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to initialize plugin registry: "
                << cpp_strerror(*result) << dendl;
-    send_close_image(*result);
-    return nullptr;
   }
 
   return send_init_cache(result);

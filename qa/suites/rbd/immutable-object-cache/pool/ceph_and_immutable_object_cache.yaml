@@ -4,8 +4,9 @@ tasks:
 - ceph:
     conf:
       client:
-        rbd_parent_cache_enabled: true
-        immutable object cache path: /tmp/ceph-immutable-object-cache
-        immutable object cache max size: 10G
+        rbd parent cache enabled: true
+        rbd plugins: parent_cache
+        immutable_object_cache_path: /tmp/ceph-immutable-object-cache
+        immutable_object_cache_max_size: 10G
 - immutable_object_cache:
     client.0:

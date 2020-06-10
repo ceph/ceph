@@ -1,19 +1,12 @@
 """
 immutable object cache thrash task
 """
-from io import StringIO
-
 import contextlib
 import logging
-import os
-import yaml
-import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from tasks import rbd
 from teuthology.orchestra import run
-from teuthology.config import config as teuth_config
 
 DEFAULT_KILL_DAEMON_TIME = 2
 DEFAULT_DEAD_TIME = 30
