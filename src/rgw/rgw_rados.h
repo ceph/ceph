@@ -1277,28 +1277,27 @@ public:
 
   int guard_reshard(BucketShard *bs,
 		    const rgw_obj& obj_instance,
-		    const RGWBucketInfo& bucket_info,
+		    RGWBucketInfo& bucket_info,
 		    std::function<int(BucketShard *)> call);
   int block_while_resharding(RGWRados::BucketShard *bs,
-			     string *new_bucket_id,
-			     const RGWBucketInfo& bucket_info,
+			     RGWBucketInfo& bucket_info,
                              optional_yield y);
 
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
   int olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
-  int bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state,
+  int bucket_index_link_olh(RGWBucketInfo bucket_info, RGWObjState& olh_state,
                             const rgw_obj& obj_instance, bool delete_marker,
                             const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
                             ceph::real_time unmod_since, bool high_precision_time,
                             rgw_zone_set *zones_trace = nullptr,
                             bool log_data_change = false);
-  int bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
-  int bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
+  int bucket_index_unlink_instance(RGWBucketInfo bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
+  int bucket_index_read_olh_log(RGWBucketInfo bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
-  int bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
-  int bucket_index_clear_olh(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
+  int bucket_index_trim_olh_log(RGWBucketInfo bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
+  int bucket_index_clear_olh(RGWBucketInfo bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
   int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
