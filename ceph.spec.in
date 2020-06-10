@@ -88,8 +88,6 @@
 %if 0%{?rhel} == 7
 %define __python %{__python3}
 %endif
-# unify libexec for all targets
-%global _libexecdir %{_exec_prefix}/lib
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
@@ -1198,6 +1196,7 @@ ${CMAKE} .. \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
+    -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=%{_unitdir} \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
@@ -1280,7 +1279,7 @@ install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_fillupdir}/sysconfig.%{name}
 %endif
 install -m 0644 -D systemd/ceph.tmpfiles.d %{buildroot}%{_tmpfilesdir}/ceph-common.conf
-install -m 0644 -D systemd/50-ceph.preset %{buildroot}%{_libexecdir}/systemd/system-preset/50-ceph.preset
+install -m 0644 -D systemd/50-ceph.preset %{buildroot}%{_presetdir}/50-ceph.preset
 mkdir -p %{buildroot}%{_sbindir}
 install -m 0644 -D src/logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/ceph
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
@@ -1362,7 +1361,7 @@ rm -rf %{buildroot}
 %{_bindir}/osdmaptool
 %{_bindir}/ceph-kvstore-tool
 %{_bindir}/ceph-run
-%{_libexecdir}/systemd/system-preset/50-ceph.preset
+%{_presetdir}/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
