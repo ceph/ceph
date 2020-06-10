@@ -6017,22 +6017,15 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
       break;
     }
     ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
-    string new_bucket_id;
-    r = store->block_while_resharding(bs, &new_bucket_id,
-                                      target->bucket_info, null_yield);
+    r = store->block_while_resharding(bs, target->bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
     if (r < 0) {
       return r;
     }
-    ldout(store->ctx(), 20) << "reshard completion identified, new_bucket_id=" << new_bucket_id << dendl;
+    ldout(store->ctx(), 20) << "reshard completion identified" << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
-    r = target->update_bucket_id(new_bucket_id);
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: update_bucket_id() new_bucket_id=" << new_bucket_id << " returned r=" << r << dendl;
-      return r;
-    }
     invalidate_bs();
   } // for loop
 
@@ -6630,7 +6623,7 @@ int RGWRados::olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjStat
 
 int RGWRados::guard_reshard(BucketShard *bs,
 			    const rgw_obj& obj_instance,
-			    const RGWBucketInfo& bucket_info,
+			    RGWBucketInfo& bucket_info,
 			    std::function<int(BucketShard *)> call)
 {
   rgw_obj obj;
@@ -6648,20 +6641,15 @@ int RGWRados::guard_reshard(BucketShard *bs,
       break;
     }
     ldout(cct, 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
-    string new_bucket_id;
-    r = block_while_resharding(bs, &new_bucket_id, bucket_info, null_yield);
+    r = block_while_resharding(bs, bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
     if (r < 0) {
       return r;
     }
-    ldout(cct, 20) << "reshard completion identified, new_bucket_id=" << new_bucket_id << dendl;
+    ldout(cct, 20) << "reshard completion identified" << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
-
-    obj = *pobj;
-    obj.bucket.update_bucket_id(new_bucket_id);
-    pobj = &obj;
   } // for loop
 
   if (r < 0) {
@@ -6672,8 +6660,7 @@ int RGWRados::guard_reshard(BucketShard *bs,
 }
 
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
-				     string *new_bucket_id,
-                                     const RGWBucketInfo& bucket_info,
+                                     RGWBucketInfo& bucket_info,
                                      optional_yield y)
 {
   int ret = 0;
@@ -6684,18 +6671,15 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   // lambda successfully fetches a new bucket id, it sets
   // new_bucket_id and returns 0, otherwise it returns a negative
   // error code
-  auto fetch_new_bucket_id =
-    [this, &bucket_info](const std::string& log_tag,
-			 std::string* new_bucket_id) -> int {
-      RGWBucketInfo fresh_bucket_info = bucket_info;
-      int ret = try_refresh_bucket_info(fresh_bucket_info, nullptr);
+  auto fetch_new_bucket_info =
+    [this, &bucket_info](const std::string& log_tag) -> int {
+      int ret = try_refresh_bucket_info(bucket_info, nullptr);
       if (ret < 0) {
 	ldout(cct, 0) << __func__ <<
 	  " ERROR: failed to refresh bucket info after reshard at " <<
 	  log_tag << ": " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
-      *new_bucket_id = fresh_bucket_info.bucket.bucket_id;
       return 0;
     };
 
@@ -6704,7 +6688,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
     auto& ref = bs->bucket_obj.get_ref();
     ret = cls_rgw_get_bucket_resharding(ref.pool.ioctx(), ref.obj.oid, &entry);
     if (ret == -ENOENT) {
-      return fetch_new_bucket_id("get_bucket_resharding_failed", new_bucket_id);
+      return fetch_new_bucket_info("get_bucket_resharding_failed");
     } else if (ret < 0) {
       ldout(cct, 0) << __func__ <<
 	" ERROR: failed to get bucket resharding : " << cpp_strerror(-ret) <<
@@ -6713,8 +6697,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
     }
 
     if (!entry.resharding_in_progress()) {
-      return fetch_new_bucket_id("get_bucket_resharding_succeeded",
-				 new_bucket_id);
+      return fetch_new_bucket_info("get_bucket_resharding_succeeded");
     }
 
     ldout(cct, 20) << "NOTICE: reshard still in progress; " <<
@@ -6774,7 +6757,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   return -ERR_BUSY_RESHARDING;
 }
 
-int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state, const rgw_obj& obj_instance,
+int RGWRados::bucket_index_link_olh(RGWBucketInfo bucket_info, RGWObjState& olh_state, const rgw_obj& obj_instance,
                                     bool delete_marker,
                                     const string& op_tag,
                                     struct rgw_bucket_dir_entry_meta *meta,
@@ -6827,7 +6810,7 @@ void RGWRados::bucket_index_guard_olh_op(RGWObjState& olh_state, ObjectOperation
   op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_state.olh_tag);
 }
 
-int RGWRados::bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance,
+int RGWRados::bucket_index_unlink_instance(RGWBucketInfo bucket_info, const rgw_obj& obj_instance,
                                            const string& op_tag, const string& olh_tag, uint64_t olh_epoch, rgw_zone_set *_zones_trace)
 {
   rgw_rados_ref ref;
@@ -6862,7 +6845,7 @@ int RGWRados::bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, con
   return 0;
 }
 
-int RGWRados::bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state,
+int RGWRados::bucket_index_read_olh_log(RGWBucketInfo bucket_info, RGWObjState& state,
                                         const rgw_obj& obj_instance, uint64_t ver_marker,
                                         map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log,
                                         bool *is_truncated)
@@ -6970,7 +6953,7 @@ int RGWRados::repair_olh(RGWObjState* state, const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWRados::bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver)
+int RGWRados::bucket_index_trim_olh_log(RGWBucketInfo bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver)
 {
   rgw_rados_ref ref;
   int r = get_obj_head_ref(bucket_info, obj_instance, &ref);
@@ -7005,7 +6988,7 @@ int RGWRados::bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObj
   return 0;
 }
 
-int RGWRados::bucket_index_clear_olh(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance)
+int RGWRados::bucket_index_clear_olh(RGWBucketInfo bucket_info, RGWObjState& state, const rgw_obj& obj_instance)
 {
   rgw_rados_ref ref;
   int r = get_obj_head_ref(bucket_info, obj_instance, &ref);
@@ -7708,6 +7691,7 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 				      .set_mtime(pmtime)
 				      .set_attrs(pattrs)
 				      .set_refresh_version(rv));
+            
 }
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
