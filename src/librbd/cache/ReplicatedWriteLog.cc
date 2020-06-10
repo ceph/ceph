@@ -796,42 +796,38 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
       }
       update_image_cache_state(next_ctx);
     });
-  if (m_first_free_entry == m_first_valid_entry) { //if the log entries are free.
-    m_image_ctx.op_work_queue->queue(ctx, 0);
-  } else {
-    ctx = new LambdaContext(
-      [this, ctx](int r) {
-        Context *next_ctx = override_ctx(r, ctx);
-        {
-          /* Sync with process_writeback_dirty_entries() */
-          RWLock::WLocker entry_reader_wlocker(m_entry_reader_lock);
-          m_shutting_down = true;
-          /* Flush all writes to OSDs (unless disabled) and wait for all
-             in-progress flush writes to complete */
-          ldout(m_image_ctx.cct, 6) << "flushing" << dendl;
-          if (m_periodic_stats_enabled) {
-            periodic_stats();
-          }
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      Context *next_ctx = override_ctx(r, ctx);
+      {
+        /* Sync with process_writeback_dirty_entries() */
+        RWLock::WLocker entry_reader_wlocker(m_entry_reader_lock);
+        m_shutting_down = true;
+        /* Flush all writes to OSDs (unless disabled) and wait for all
+           in-progress flush writes to complete */
+        ldout(m_image_ctx.cct, 6) << "flushing" << dendl;
+        if (m_periodic_stats_enabled) {
+          periodic_stats();
         }
-        flush_dirty_entries(next_ctx);
-      });
-    ctx = new LambdaContext(
-      [this, ctx](int r) {
-        Context *next_ctx = override_ctx(r, ctx);
-        ldout(m_image_ctx.cct, 6) << "waiting for in flight operations" << dendl;
-        // Wait for in progress IOs to complete
-        next_ctx = util::create_async_context_callback(m_image_ctx, next_ctx);
-        m_async_op_tracker.wait_for_ops(next_ctx);
-      });
-    ctx = new LambdaContext(
-      [this, ctx](int r) {
-        ldout(m_image_ctx.cct, 6) << "Done internal_flush in shutdown" << dendl;
-        m_work_queue.queue(ctx, r);
-      });
-    /* Complete all in-flight writes before shutting down */
-    ldout(m_image_ctx.cct, 6) << "internal_flush in shutdown" << dendl;
-    internal_flush(false, ctx);
-  }
+      }
+      flush_dirty_entries(next_ctx);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      Context *next_ctx = override_ctx(r, ctx);
+      ldout(m_image_ctx.cct, 6) << "waiting for in flight operations" << dendl;
+      // Wait for in progress IOs to complete
+      next_ctx = util::create_async_context_callback(m_image_ctx, next_ctx);
+      m_async_op_tracker.wait_for_ops(next_ctx);
+    });
+  ctx = new LambdaContext(
+    [this, ctx](int r) {
+      ldout(m_image_ctx.cct, 6) << "Done internal_flush in shutdown" << dendl;
+      m_work_queue.queue(ctx, r);
+    });
+  /* Complete all in-flight writes before shutting down */
+  ldout(m_image_ctx.cct, 6) << "internal_flush in shutdown" << dendl;
+  internal_flush(false, ctx);
 }
 
 template <typename I>
