@@ -1180,7 +1180,7 @@ class RBD(object):
         rbd_version(&major, &minor, &extra)
         return (major, minor, extra)
 
-    def create(self, ioctx, name, size, order=None, old_format=True,
+    def create(self, ioctx, name, size, order=None, old_format=False,
                features=None, stripe_unit=None, stripe_count=None,
                data_pool=None):
         """
