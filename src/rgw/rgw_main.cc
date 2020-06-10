@@ -603,10 +603,11 @@ int radosgw_Main(int argc, const char **argv)
   // add a watcher to respond to realm configuration changes
   RGWPeriodPusher pusher(store);
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
-  RGWRealmReloader reloader(store, service_map_meta, &pauser);
+  std::optional<RGWRealmReloader> reloader(std::in_place, store,
+                                           service_map_meta, &pauser);
 
   RGWRealmWatcher realm_watcher(g_ceph_context, store->svc()->zone->get_realm());
-  realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
+  realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 
 #if defined(HAVE_SYS_PRCTL_H)
@@ -618,6 +619,8 @@ int radosgw_Main(int argc, const char **argv)
   wait_shutdown();
 
   derr << "shutting down" << dendl;
+
+  reloader.reset(); // stop the realm reloader
 
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end();
        ++liter) {
