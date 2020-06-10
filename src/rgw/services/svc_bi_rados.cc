@@ -7,6 +7,7 @@
 
 #include "rgw/rgw_bucket.h"
 #include "rgw/rgw_zone.h"
+#include "rgw/rgw_datalog.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 
