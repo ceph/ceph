@@ -6,6 +6,10 @@
 
 #include <string>
 #include <memory>
+#include <variant>
+
+#include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 
 #include "include/types.h"
 #include "include/neorados/RADOS.hpp"
@@ -28,6 +32,7 @@
 
 namespace R = neorados;
 namespace ca = ceph::async;
+namespace bc = boost::container;
 
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
@@ -38,7 +43,7 @@ class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
 class RGWZone;
-
+struct RGWZoneParams;
 namespace rgw { namespace sal {
   class RGWRadosStore;
   class RGWBucketList;
@@ -496,24 +501,65 @@ struct RGWDataChangesLogMarker {
   RGWDataChangesLogMarker() = default;
 };
 
+class RGWDataChangesBE {
+protected:
+  CephContext* const cct;
+private:
+  std::string prefix;
+  static std::string_view get_prefix(CephContext* cct) {
+    std::string_view prefix = cct->_conf->rgw_data_log_obj_prefix;
+    if (prefix.empty()) {
+      prefix = "data_log"sv;
+    }
+    return prefix;
+  }
+public:
+  using entries = std::variant<std::list<cls_log_entry>,
+			       std::vector<ceph::buffer::list>>;
+
+  RGWDataChangesBE(CephContext* const cct)
+    : cct(cct), prefix(get_prefix(cct)) {}
+  virtual ~RGWDataChangesBE() = default;
+
+  static std::string get_oid(CephContext* cct, int i) {
+    return fmt::format("{}.{}", get_prefix(cct), i);
+  }
+  std::string get_oid(int i) {
+    return fmt::format("{}.{}", prefix, i);
+  }
+
+  virtual entries new_entries() = 0;
+  virtual void prepare(ceph::real_time now,
+		       const std::string& key,
+		       ceph::buffer::list&& entry,
+		       entries& out) = 0;
+  virtual int push(int index, entries&& items) = 0;
+  virtual int push(int index, ceph::real_time now,
+		   const std::string& key,
+		   ceph::buffer::list&& bl) = 0;
+  virtual int list(int shard, int max_entries,
+		   std::vector<rgw_data_change_log_entry>& entries,
+		   std::optional<std::string_view> marker,
+		   std::string* out_marker, bool* truncated) = 0;
+  virtual int get_info(int index, RGWDataChangesLogInfo *info) = 0;
+  virtual int trim(int index, std::string_view marker) = 0;
+  virtual int trim(int index, std::string_view marker,
+		   librados::AioCompletion* c) = 0;
+  virtual std::string_view max_marker() const = 0;
+};
 
 class RGWDataChangesLog {
   CephContext *cct;
   rgw::BucketChangeObserver *observer = nullptr;
-  R::RADOS* rados;
   const RGWZone* zone;
+  std::unique_ptr<RGWDataChangesBE> be;
 
-  struct Svc {
-    RGWSI_Cls *cls{nullptr};
-  } svc;
-
-  int num_shards;
-  std::string* oids;
+  const int num_shards;
 
   ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
   ceph::shared_mutex modified_lock =
     ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
-  std::map<int, set<string> > modified_shards;
+  bc::flat_map<int, bc::flat_set<std::string>> modified_shards;
 
   std::atomic<bool> down_flag = { false };
 
@@ -522,20 +568,19 @@ class RGWDataChangesLog {
     ceph::real_time cur_expiration;
     ceph::real_time cur_sent;
     bool pending = false;
-    RefCountedCond *cond = nullptr;
-    ceph::mutex lock =
-      ceph::make_mutex("RGWDataChangesLog::ChangeStatus");
+    RefCountedCond* cond = nullptr;
+    ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::ChangeStatus");
   };
 
   using ChangeStatusPtr = std::shared_ptr<ChangeStatus>;
 
   lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
 
-  std::map<rgw_bucket_shard, bool> cur_cycle;
+  bc::flat_set<rgw_bucket_shard> cur_cycle;
 
   void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
-  void register_renew(rgw_bucket_shard& bs);
-  void update_renewed(rgw_bucket_shard& bs, ceph::real_time& expiration);
+  void register_renew(const rgw_bucket_shard& bs);
+  void update_renewed(const rgw_bucket_shard& bs, ceph::real_time expiration);
 
   class ChangesRenewThread : public Thread {
     CephContext *cct;
@@ -563,7 +608,9 @@ public:
   RGWDataChangesLog(CephContext* cct);
   ~RGWDataChangesLog();
 
-  void init(const RGWZone* _zone, RGWSI_Cls *cls_svc, R::RADOS* rados);
+  void init(const RGWZone* _zone);
+  int start(const RGWZoneParams& zoneparams, RGWSI_Cls *cls_svc, R::RADOS* rados,
+	    librados::Rados* lr);
 
   int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
@@ -583,7 +630,13 @@ public:
 		   LogMarker& marker, bool* ptruncated);
 
   void mark_modified(int shard_id, const rgw_bucket_shard& bs);
-  void read_clear_modified(map<int, set<string> > &modified);
+  auto read_clear_modified() {
+    std::unique_lock wl{modified_lock};
+    decltype(modified_shards) modified;
+    modified.swap(modified_shards);
+    modified_shards.clear();
+    return modified;
+  }
 
   void set_observer(rgw::BucketChangeObserver *observer) {
     this->observer = observer;

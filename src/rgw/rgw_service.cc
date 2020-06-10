@@ -90,7 +90,7 @@ int RGWServices_Def::init(CephContext *cct,
                          bucket_sobj.get());
   cls->init(zone.get(), rados.get());
   config_key_rados->init(rados.get());
-  datalog_rados->init(&zone->get_zone(), cls.get(), neorados);
+  datalog_rados->init(&zone->get_zone());
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
@@ -150,6 +150,13 @@ int RGWServices_Def::init(CephContext *cct,
     r = sync_modules->start();
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to start sync modules service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = datalog_rados->start(zone->get_zone_params(), cls.get(), neorados,
+			     rados->get_rados_handle());
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
   }

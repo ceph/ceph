@@ -51,7 +51,6 @@ public:
   };
 
 private:
-  librados::Rados* get_rados_handle();
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
                     const OpenParams& params = {});
   int pool_iterate(librados::IoCtx& ioctx,
@@ -63,6 +62,7 @@ private:
 public:
   RGWSI_RADOS(CephContext *cct);
   ~RGWSI_RADOS();
+  librados::Rados* get_rados_handle();
 
   void init() {}
   void shutdown() override;
