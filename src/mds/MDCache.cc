@@ -2531,11 +2531,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
-  for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *dir = p->first;
-
+  for (auto& [dir, bounds] : subtrees) {
     // journal subtree as "ours" if we are
     //   me, -2
     //   me, me
@@ -2551,19 +2547,21 @@ ESubtreeMap *MDCache::create_subtree_map()
       dout(15) << " ambig subtree " << *dir << dendl;
       le->ambiguous_subtrees.insert(dir->dirfrag());
     } else {
-      dout(15) << " subtree " << *dir << dendl;
+      dout(15) << " auth subtree " << *dir << dendl;
     }
 
     dirs_to_add[dir->dirfrag()] = dir;
     le->subtrees[dir->dirfrag()].clear();
 
-
     // bounds
-    for (set<CDir*>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      CDir *bound = *q;
-      dout(15) << " subtree bound " << *bound << dendl;
+    size_t nbounds = bounds.size();
+    if (nbounds > 3) {
+      dout(15) << "  subtree has " << nbounds << " bounds" << dendl;
+    }
+    for (auto& bound : bounds) {
+      if (nbounds <= 3) {
+        dout(15) << "  subtree bound " << *bound << dendl;
+      }
       dirs_to_add[bound->dirfrag()] = bound;
       le->subtrees[dir->dirfrag()].push_back(bound->dirfrag());
     }
@@ -2572,18 +2570,18 @@ ESubtreeMap *MDCache::create_subtree_map()
   // apply projected renames
   for (const auto& [diri, renames] : projected_subtree_renames) {
     for (const auto& [olddir, newdir] : renames) {
-      dout(10) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
+      dout(15) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
 
       auto&& dfls = diri->get_dirfrags();
       for (const auto& dir : dfls) {
-	dout(10) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
+	dout(15) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
 	CDir *oldparent = get_projected_subtree_root(olddir);
-	dout(10) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
+	dout(15) << " old parent " << oldparent->dirfrag() << " " << *oldparent << dendl;
 	CDir *newparent = get_projected_subtree_root(newdir);
-	dout(10) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
+	dout(15) << " new parent " << newparent->dirfrag() << " " << *newparent << dendl;
 
 	if (oldparent == newparent) {
-	  dout(10) << "parent unchanged for " << dir->dirfrag() << " at "
+	  dout(15) << "parent unchanged for " << dir->dirfrag() << " at "
 		   << oldparent->dirfrag() << dendl;
 	  continue;
 	}
@@ -2614,10 +2612,7 @@ ESubtreeMap *MDCache::create_subtree_map()
 	  }
 	  
 	  // see if any old bounds move to the new parent.
-	  for (set<CDir*>::iterator p = subtrees[oldparent].begin();
-	       p != subtrees[oldparent].end();
-	       ++p) {
-	    CDir *bound = *p;
+	  for (auto& bound : subtrees.at(oldparent)) {
 	    if (dir->contains(bound->get_parent_dir()))
 	      _move_subtree_map_bound(bound->dirfrag(), oldparent->dirfrag(), newparent->dirfrag(),
 				      le->subtrees);
@@ -2631,21 +2626,22 @@ ESubtreeMap *MDCache::create_subtree_map()
   // subtrees than needed due to migrations that are just getting
   // started or just completing.  but on replay, the "live" map will
   // be simple and we can do a straight comparison.
-  for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = le->subtrees.begin(); p != le->subtrees.end(); ++p) {
-    if (le->ambiguous_subtrees.count(p->first))
+  for (auto& [frag, bfrags] : le->subtrees) {
+    if (le->ambiguous_subtrees.count(frag))
       continue;
     unsigned i = 0;
-    while (i < p->second.size()) {
-      dirfrag_t b = p->second[i];
+    while (i < bfrags.size()) {
+      dirfrag_t b = bfrags[i];
       if (le->subtrees.count(b) &&
 	  le->ambiguous_subtrees.count(b) == 0) {
-	vector<dirfrag_t>& bb = le->subtrees[b];
-	dout(10) << "simplify: " << p->first << " swallowing " << b << " with bounds " << bb << dendl;
-	for (vector<dirfrag_t>::iterator r = bb.begin(); r != bb.end(); ++r)
-	  p->second.push_back(*r);
+	auto& bb = le->subtrees.at(b);
+	dout(10) << "simplify: " << frag << " swallowing " << b << " with bounds " << bb << dendl;
+	for (auto& r : bb) {
+	  bfrags.push_back(r);
+        }
 	dirs_to_add.erase(b);
 	le->subtrees.erase(b);
-	p->second.erase(p->second.begin() + i);
+	bfrags.erase(bfrags.begin() + i);
       } else {
 	++i;
       }
