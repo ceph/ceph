@@ -33,7 +33,7 @@
 #include "ioctl.h"
 #include "common/config.h"
 #include "include/ceph_assert.h"
-#include "include/cephfs/ceph_statx.h"
+#include "include/cephfs/ceph_ll_client.h"
 
 #include "fuse_ll.h"
 #include <fuse.h>
@@ -937,7 +937,7 @@ static void ino_invalidate_cb(void *handle, vinodeno_t vino, int64_t off,
 }
 
 static void dentry_invalidate_cb(void *handle, vinodeno_t dirino,
-				 vinodeno_t ino, string& name)
+				 vinodeno_t ino, const char *name, size_t len)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   fuse_ino_t fdirino = cfuse->make_fake_ino(dirino.ino, dirino.snapid);
@@ -946,12 +946,12 @@ static void dentry_invalidate_cb(void *handle, vinodeno_t dirino,
   if (ino.ino != inodeno_t())
     fino = cfuse->make_fake_ino(ino.ino, ino.snapid);
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
-  fuse_lowlevel_notify_delete(cfuse->se, fdirino, fino, name.c_str(), name.length());
+  fuse_lowlevel_notify_delete(cfuse->se, fdirino, fino, name, len);
 #else
-  fuse_lowlevel_notify_delete(cfuse->ch, fdirino, fino, name.c_str(), name.length());
+  fuse_lowlevel_notify_delete(cfuse->ch, fdirino, fino, name, len);
 #endif
 #elif FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-  fuse_lowlevel_notify_inval_entry(cfuse->ch, fdirino, name.c_str(), name.length());
+  fuse_lowlevel_notify_inval_entry(cfuse->ch, fdirino, name, len);
 #endif
 }
 
@@ -1234,7 +1234,7 @@ int CephFuse::Handle::start()
 #endif
 
 
-  struct client_callback_args args = {
+  struct ceph_client_callback_args args = {
     handle: this,
     ino_cb: client->cct->_conf.get_val<bool>("fuse_use_invalidate_cb") ?
       ino_invalidate_cb : NULL,

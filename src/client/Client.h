@@ -22,7 +22,7 @@
 #include "common/Timer.h"
 #include "common/cmdparse.h"
 #include "common/compiler_extensions.h"
-#include "include/cephfs/ceph_statx.h"
+#include "include/cephfs/ceph_ll_client.h"
 #include "include/filepath.h"
 #include "include/interval_set.h"
 #include "include/lru.h"
@@ -121,28 +121,6 @@ struct CapSnap;
 
 struct MetaRequest;
 class ceph_lock_state_t;
-
-
-typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
-
-typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
-					 vinodeno_t ino, string& name);
-typedef int (*client_remount_callback_t)(void *handle);
-
-typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
-typedef mode_t (*client_umask_callback_t)(void *handle);
-
-/* Callback for delegation recalls */
-typedef void (*ceph_deleg_cb_t)(Fh *fh, void *priv);
-
-struct client_callback_args {
-  void *handle;
-  client_ino_callback_t ino_cb;
-  client_dentry_callback_t dentry_cb;
-  client_switch_interrupt_callback_t switch_intr_cb;
-  client_remount_callback_t remount_cb;
-  client_umask_callback_t umask_cb;
-};
 
 // ========================================================
 // client interface
@@ -255,6 +233,7 @@ public:
   friend class C_Client_Remount;
   friend class C_Client_RequestInterrupt;
   friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
+  friend class C_Client_CacheRelease; // Asserts on client_lock
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
 
@@ -600,7 +579,7 @@ public:
   int ll_osdaddr(int osd, uint32_t *addr);
   int ll_osdaddr(int osd, char* buf, size_t size);
 
-  void ll_register_callbacks(struct client_callback_args *args);
+  void ll_register_callbacks(struct ceph_client_callback_args *args);
   int test_dentry_handling(bool can_invalidate);
 
   const char** get_tracked_conf_keys() const override;
@@ -694,6 +673,10 @@ public:
   void _invalidate_inode_cache(Inode *in);
   void _invalidate_inode_cache(Inode *in, int64_t off, int64_t len);
   void _async_invalidate(vinodeno_t ino, int64_t off, int64_t len);
+
+  void _schedule_ino_release_callback(Inode *in);
+  void _async_inode_release(vinodeno_t ino);
+
   bool _release(Inode *in);
 
   /**
@@ -1204,6 +1187,7 @@ private:
   client_ino_callback_t ino_invalidate_cb = nullptr;
   client_dentry_callback_t dentry_invalidate_cb = nullptr;
   client_umask_callback_t umask_cb = nullptr;
+  client_ino_release_t ino_release_cb = nullptr;
   void *callback_handle = nullptr;
   bool can_invalidate_dentries = false;
 
@@ -1211,6 +1195,7 @@ private:
   Finisher async_dentry_invalidator;
   Finisher interrupt_finisher;
   Finisher remount_finisher;
+  Finisher async_ino_releasor;
   Finisher objecter_finisher;
 
   Context *tick_event = nullptr;
