@@ -95,6 +95,16 @@ class SubvolumeTemplate(object):
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
+    def pin(self, pin_type, pin_setting):
+        """
+        pin a subvolume
+
+        :param pin_type: type of pin
+        :param pin_setting: setting for pin
+        :return: None
+        """
+        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
+
     def create_snapshot(self, snapname):
         """
         snapshot a subvolume.
