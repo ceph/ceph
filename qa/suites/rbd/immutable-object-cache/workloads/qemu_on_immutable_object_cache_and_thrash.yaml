@@ -1,11 +1,11 @@
+tasks:
 - qemu:
     client.0:
       clone: true
       test: qa/run_xfstests_qemu.sh
-      image_url: http://cloud-images.ubuntu.com/releases/bionic/release/ubuntu-18.04-server-cloudimg-amd64.img
+      type: block
       cpus: 4
       memory: 4096
       disks: 3
-tasks:
 - immutable_object_cache_thrash:
     client.0:
