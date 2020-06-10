@@ -84,7 +84,8 @@ class TestNFS(MgrTestCase):
             export_cmd.append(self.pseudo_path)
 
         self._cmd(*export_cmd)
-        res = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'get', f'export-{export_id}', '-'])
+        res = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'get',
+                             'export-%s' % (export_id), '-'])
         if res == b'':
             raise RuntimeError("Export cannot be created")
 
