@@ -29,6 +29,11 @@ class MgrModuleTestCase(DashboardTestCase):
 
         self.wait_until_true(_check_connection, timeout=30)
 
+    def setUp(self):
+        super().setUp()
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("restful",
+                                                     "create-self-signed-cert")
+
 
 class MgrModuleTest(MgrModuleTestCase):
     def test_list_disabled_module(self):
