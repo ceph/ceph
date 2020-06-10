@@ -12,3 +12,7 @@
 * Now when noscrub and/or nodeep-scrub flags are set globally or per pool,
   scheduled scrubs of the type disabled will be aborted. All user initiated
   scrubs are NOT interrupted.
+
+* Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
+  If any OSD has repaired more than this many I/O errors in stored data a
+ ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
