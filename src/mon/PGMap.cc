@@ -2825,6 +2825,7 @@ void PGMap::get_health_checks(
 
     list<string> detail_back;
     list<string> detail_front;
+    list<string> detail;
     set<mon_ping_item_t> back_sorted, front_sorted;
     for (auto i : osd_stat) {
       for (auto j : i.second.hb_pingtime) {
@@ -2855,6 +2856,19 @@ void PGMap::get_health_checks(
 	  front_sorted.emplace(front);
 	}
       }
+      if (i.second.num_shards_repaired >
+		      cct->_conf.get_val<uint64_t>("mon_osd_warn_num_repaired")) {
+        ostringstream ss;
+	ss << "osd." << i.first << " had " << i.second.num_shards_repaired << " reads repaired";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << "Too many repaired reads on " << detail.size() << " OSDs";
+      auto& d = checks->add("OSD_TOO_MANY_REPAIRS", HEALTH_WARN, ss.str(),
+		      detail.size());
+      d.detail.swap(detail);
     }
     int max_detail = 10;
     for (auto &sback : boost::adaptors::reverse(back_sorted)) {

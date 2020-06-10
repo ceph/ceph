@@ -24,6 +24,7 @@ tasks:
     - overall HEALTH_
     - \(POOL_APP_NOT_ENABLED\)
     - \(PG_DEGRADED\)
+    - \(OSD_TOO_MANY_REPAIRS\)
 - full_sequential:
   - exec:
       client.0:

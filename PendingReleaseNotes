@@ -77,3 +77,7 @@
   librbd to load the plugin by adding the following to your configuration::
 
     rbd_plugins = parent_cache
+
+* Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
+  If any OSD has repaired more than this many I/O errors in stored data a
+ ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
