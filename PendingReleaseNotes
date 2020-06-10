@@ -51,3 +51,7 @@
 
   or use any other convenient way to restore the schedule after the
   upgrade.
+
+* Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
+  If any OSD has repaired more than this many I/O errors in stored data a
+ ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
