@@ -894,7 +894,7 @@ COMMAND("osd reweight "
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw")
 COMMAND("osd reweightn "
 	"name=weights,type=CephString",
-	"reweight osds with {<id>: <weight>,...})",
+	"reweight osds with {<id>: <weight>,...}",
 	"osd", "rw")
 COMMAND("osd force-create-pg "
 	"name=pgid,type=CephPgid "\
