@@ -163,3 +163,65 @@ spec:
 
         assert yaml.dump(object) == y
         assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
+
+@pytest.mark.parametrize("spec1, spec2, eq",
+                         [
+                             (
+                                     ServiceSpec(
+                                         service_type='mon'
+                                     ),
+                                     ServiceSpec(
+                                         service_type='mon'
+                                     ),
+                                     True
+                             ),
+                             (
+                                     ServiceSpec(
+                                         service_type='mon'
+                                     ),
+                                     ServiceSpec(
+                                         service_type='mon',
+                                         service_id='foo'
+                                     ),
+                                     False
+                             ),
+                             # Add service_type='mgr'
+                             (
+                                     ServiceSpec(
+                                         service_type='osd'
+                                     ),
+                                     ServiceSpec(
+                                         service_type='osd',
+                                     ),
+                                     True
+                             ),
+                             (
+                                     ServiceSpec(
+                                         service_type='osd'
+                                     ),
+                                     DriveGroupSpec(),
+                                     True
+                             ),
+                             (
+                                     ServiceSpec(
+                                         service_type='osd'
+                                     ),
+                                     ServiceSpec(
+                                         service_type='osd',
+                                         service_id='foo',
+                                     ),
+                                     False
+                             ),
+                             (
+                                     ServiceSpec(
+                                         service_type='rgw'
+                                     ),
+                                     RGWSpec(),
+                                     True
+                             ),
+                         ])
+def test_spec_hash_eq(spec1: ServiceSpec,
+                      spec2: ServiceSpec,
+                      eq: bool):
+
+    assert (spec1 == spec2) is eq
