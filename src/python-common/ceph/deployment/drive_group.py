@@ -142,7 +142,7 @@ class DriveGroupSpec(ServiceSpec):
         "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
-        "journal_size", "unmanaged", "filter_logic"
+        "journal_size", "unmanaged", "filter_logic", "preview_only"
     ]
 
     def __init__(self,
@@ -164,12 +164,14 @@ class DriveGroupSpec(ServiceSpec):
                  journal_size=None,  # type: Optional[int]
                  service_type=None,  # type: Optional[str]
                  unmanaged=False,  # type: bool
-                 filter_logic='AND'  # type: str
+                 filter_logic='AND',  # type: str
+                 preview_only=False,  # type: bool
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
                                              placement=placement,
-                                             unmanaged=unmanaged)
+                                             unmanaged=unmanaged,
+                                             preview_only=preview_only)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
         self.data_devices = data_devices
@@ -218,6 +220,9 @@ class DriveGroupSpec(ServiceSpec):
         #: The logic gate we use to match disks with filters.
         #: defaults to 'AND'
         self.filter_logic = filter_logic.upper()
+
+        #: If this should be treated as a 'preview' spec
+        self.preview_only = preview_only
 
     @classmethod
     def _from_json_impl(cls, json_drive_group):

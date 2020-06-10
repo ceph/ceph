@@ -107,6 +107,7 @@ class SpecStore():
         self.mgr = mgr
         self.specs = {} # type: Dict[str, ServiceSpec]
         self.spec_created = {} # type: Dict[str, datetime.datetime]
+        self.spec_preview = {} # type: Dict[str, ServiceSpec]
 
     def load(self):
         # type: () -> None
@@ -127,6 +128,9 @@ class SpecStore():
 
     def save(self, spec):
         # type: (ServiceSpec) -> None
+        if spec.preview_only:
+            self.spec_preview[spec.service_name()] = spec
+            return None
         self.specs[spec.service_name()] = spec
         self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
         self.mgr.set_store(
