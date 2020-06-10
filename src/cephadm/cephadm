@@ -1887,6 +1887,9 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
 
         # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
         f.write(' '.join(c.rm_cmd()) + '\n')
+        # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
+        if 'podman' in container_path:
+            f.write(' '.join(c.rm_cmd(storage=True)) + '\n')
 
         # container run command
         f.write(' '.join(c.run_cmd()) + '\n')
@@ -2212,13 +2215,16 @@ class CephContainer:
             self.cname,
         ] + cmd
 
-    def rm_cmd(self):
-        # type: () -> List[str]
-        return [
+    def rm_cmd(self, storage=False):
+        # type: (bool) -> List[str]
+        ret = [
             str(container_path),
             'rm', '-f',
-            self.cname
         ]
+        if storage:
+            ret.append('--storage')
+        ret.append(self.cname)
+        return ret
 
     def run(self, timeout=DEFAULT_TIMEOUT):
         # type: (Optional[int]) -> str
