@@ -1142,15 +1142,15 @@ start_ganesha() {
         pid file = $ganesha_dir/ganesha.pid
 EOF
 
-        prun ganesha-rados-grace -p $pool_name -n $namespace add $name
-        prun ganesha-rados-grace -p $pool_name -n $namespace
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
         prun env CEPH_CONF="${conf_fn}" /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
 
-        prun ganesha-rados-grace -p $pool_name -n $namespace
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
         if $with_mgr_dashboard; then
             $CEPH_BIN/rados -p $pool_name put "conf-$name" "$ganesha_dir/ganesha.conf"
