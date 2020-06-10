@@ -1342,7 +1342,7 @@ class CephManager:
         if self.cephadm:
             proc = shell(self.ctx, self.cluster, self.controller,
                          args=['ceph'] + list(args),
-                         stdout=BytesIO())
+                         stdout=StringIO())
         else:
             testdir = teuthology.get_testdir(self.ctx)
             ceph_args = [
@@ -1360,9 +1360,9 @@ class CephManager:
             ceph_args.extend(args)
             proc = self.controller.run(
                 args=ceph_args,
-                stdout=BytesIO(),
+                stdout=StringIO(),
             )
-        return six.ensure_str(proc.stdout.getvalue())
+        return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
