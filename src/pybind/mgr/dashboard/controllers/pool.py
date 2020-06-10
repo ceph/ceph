@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import time
 import cherrypy
 
-from . import ApiController, RESTController, Endpoint, ReadPermission, Task, UiApiController
+from . import ApiController, ControllerDoc, RESTController, Endpoint, ReadPermission, Task, UiApiController
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -207,6 +207,7 @@ class Pool(RESTController):
 
 
 @UiApiController('/pool', Scope.POOL)
+@ControllerDoc("Ui helper function; not part of the public API", "PoolUi")
 class PoolUi(Pool):
     @Endpoint()
     @ReadPermission

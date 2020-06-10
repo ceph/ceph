@@ -308,7 +308,7 @@ class Docs(BaseController):
                     methods[method.lower()]['security'] = [{'jwt': []}]
 
             if not skip:
-                paths[path[len(base_url):]] = methods
+                paths[path] = methods
 
         return paths
 
@@ -363,11 +363,11 @@ class Docs(BaseController):
 
     @Endpoint(path="api.json")
     def api_json(self):
-        return self._gen_spec(False, "/api")
+        return self._gen_spec(False, "/")
 
     @Endpoint(path="api-all.json")
     def api_all_json(self):
-        return self._gen_spec(True, "/api")
+        return self._gen_spec(True, "/")
 
     def _swagger_ui_page(self, all_endpoints=False, token=None):
         base = cherrypy.request.base
