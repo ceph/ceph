@@ -689,7 +689,7 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
       delete it->second.first;
       it->second.first = ack_ctx;
     } else {
-      m_task_finisher->queue(new C_ResponseMessage(ack_ctx), -ESTALE);
+      m_task_finisher->queue(new C_ResponseMessage(ack_ctx));
     }
     locker.unlock();
 
