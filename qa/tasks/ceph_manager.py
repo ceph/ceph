@@ -1154,17 +1154,18 @@ class CephManager:
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'timeout',
-            '900',
+            '120',
             'ceph',
             '--cluster',
             self.cluster,
+            '--log-early',
         ]
         ceph_args.extend(args)
         proc = self.controller.run(
             args=ceph_args,
-            stdout=BytesIO(),
+            stdout=StringIO(),
             )
-        return six.ensure_str(proc.stdout.getvalue())
+        return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
