@@ -683,3 +683,10 @@ class NFSCluster:
         except Exception as e:
             log.warning("Failed to delete NFS Cluster")
             return -errno.EINVAL, "", str(e)
+
+    def list_nfs_cluster(self):
+        try:
+            return 0, '\n'.join(available_clusters(self.mgr)), ""
+        except Exception as e:
+            log.warning("Failed to list NFS Cluster")
+            return -errno.EINVAL, "", str(e)
