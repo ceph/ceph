@@ -81,6 +81,12 @@ Adoption process
 
      # ssh-copy-id -f -i ceph.pub root@<host>
 
+   .. note::
+     It is also possible to import an existing ssh key. See
+     :ref:`ssh errors <cephadm-ssh-errors>` in the troubleshooting
+     document for instructions describing how to import existing
+     ssh keys.
+
 #. Tell cephadm which hosts to manage::
 
      # ceph orch host add <hostname> [ip-address]
