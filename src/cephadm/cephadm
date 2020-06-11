@@ -2659,7 +2659,10 @@ def command_bootstrap():
 
         host = get_hostname()
         logger.info('Adding host %s...' % host)
-        cli(['orch', 'host', 'add', host])
+        try:
+            cli(['orch', 'host', 'add', host])
+        except RuntimeError as e:
+            raise Error('Failed to add host <%s>: %s' % (host, e))
 
         if not args.orphan_initial_daemons:
             for t in ['mon', 'mgr', 'crash']:
