@@ -534,18 +534,12 @@ class CephFSMount(object):
                                       stdout=StringIO(), stderr=StringIO(),
                                       check_status=check_status, cwd=cwd)
 
-    def run_as_root(self, args, wait=True, stdin=None, check_status=True,
-                    cwd=None):
-        if isinstance(args, str):
-            args = 'sudo ' + args
-        if isinstance(args, list):
-            args.insert(0, 'sudo')
-        if not cwd:
-            cwd = self.mountpoint
-
-        return self.client_remote.run(args=args, wait=wait, stdin=stdin,
-                                      stdout=StringIO(), stderr=StringIO(),
-                                      check_status=check_status, cwd=cwd)
+    def run_as_root(self, **kwargs):
+        """
+        Accepts same arguments as run_shell().
+        """
+        kwargs['user'] = 'root'
+        return self.run_as_user(**kwargs)
 
     def _verify(self, proc, retval=None, errmsg=None):
         if retval:
