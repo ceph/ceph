@@ -247,6 +247,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'desc': 'internal - do not modify',
             # used to track track spec and other data migrations.
         },
+        {
+            'name': 'config_dashboard',
+            'type': 'bool',
+            'default': True,
+            'desc': 'manage configs like API endpoints in Dashboard.'
+        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -280,6 +286,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.allow_ptrace = False
             self.prometheus_alerts_path = ''
             self.migration_current = None
+            self.config_dashboard = True
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
@@ -1897,7 +1904,7 @@ you may want to run:
                 continue
 
             # These daemon types require additional configs after creation
-            if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
+            if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
                 daemons_post[dd.daemon_type].append(dd)
 
             deps = self._calc_daemon_deps(dd.daemon_type, dd.daemon_id)
