@@ -99,6 +99,12 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
         dict_spec['pool'] = 'pool'
         dict_spec['api_user'] = 'api_user'
         dict_spec['api_password'] = 'api_password'
+    elif s_type == 'osd':
+        dict_spec['spec'] = {
+            'data_devices': {
+                'all': True
+            }
+        }
     spec = ServiceSpec.from_json(dict_spec)
     assert isinstance(spec, o_spec)
     assert isinstance(spec.placement, PlacementSpec)
