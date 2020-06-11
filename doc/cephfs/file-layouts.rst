@@ -20,10 +20,10 @@ Layout fields
 -------------
 
 pool
-    String, giving ID or name.  Which RADOS pool a file's data objects will be stored in.
+    String, giving ID or name. String can only have characters in the set [a-zA-Z0-9\_-.]. Which RADOS pool a file's data objects will be stored in.
 
 pool_namespace
-    String.  Within the data pool, which RADOS namespace the objects will
+    String with only characters in the set [a-zA-Z0-9\_-.].  Within the data pool, which RADOS namespace the objects will
     be written to.  Empty by default (i.e. default namespace).
 
 stripe_unit

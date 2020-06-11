@@ -158,6 +158,9 @@ class CephFSMount(object):
         return six.ensure_str(p.stdout.getvalue().strip())
 
     def run_shell(self, args, wait=True, check_status=True, omit_sudo=True):
+        if isinstance(args, str):
+            args = args.split()
+
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
         return self.client_remote.run(args=args, stdout=StringIO(),
                                       stderr=StringIO(), wait=wait,
