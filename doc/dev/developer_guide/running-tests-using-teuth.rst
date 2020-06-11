@@ -63,9 +63,10 @@ After building is complete, proceed to trigger tests -
    `Pulpito`_ page created for the tests triggered.
 
 Other frequently used/useful options are ``-d`` (or ``--distro``),
-``--distroversion``, ``--filter-out``, ``--timeout``, ``flavor``, ``-rerun``.
-Run ``teuthology-suite --help`` to read description of these and every other
-options available.
+``--distroversion``, ``--filter-out``, ``--timeout``, ``flavor``, ``-rerun``,
+``-l`` (for limiting number of jobs) , ``-n`` (for how many times job would
+run) and ``-e`` (for email notifications). Run ``teuthology-suite --help``
+to read description of these and every other options available.
 
 Testing QA changes (without re-building binaires)
 -------------------------------------------------
