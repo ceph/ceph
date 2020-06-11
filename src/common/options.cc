@@ -1005,7 +1005,7 @@ std::vector<Option> get_global_options() {
     .set_description("Induce a crash/exit on various bugs (for testing purposes)"),
 
     Option("ms_dispatch_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(100_M)
+    .set_default(128_M)
     .set_description("Limit messages that are read off the network but still being processed"),
 
     Option("ms_bind_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -7915,6 +7915,20 @@ std::vector<Option> get_mds_options() {
     Option("mds_scatter_nudge_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("minimum interval between scatter lock updates"),
+
+    Option("mds_msg_client_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .add_see_also("ms_dispatch_throttle_bytes")
+    .add_see_also("mds_msg_mds_throttle_bytes")
+    .set_default(64_M)
+    .set_description("number of bytes client messages can consume in memory before being throttled")
+    .set_long_description("The number of bytes client messages, for all clients, may consume in memory before the MDS begins throttling reads from the client sockets. This value should be smaller than the global throttle ms_dispatch_throttle_bytes so messages from other MDSs and Monitors may still be processed."),
+
+    Option("mds_msg_mds_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .add_see_also("ms_dispatch_throttle_bytes")
+    .add_see_also("mds_msg_client_throttle_bytes")
+    .set_default(32_M)
+    .set_description("number of bytes mds-mds messages can consume in memory before being throttled")
+    .set_long_description("The number of bytes MDS messages, for all MDS, may consume in memory before the MDS begins throttling reads from the MDS sockets. This value should be smaller than the global throttle ms_dispatch_throttle_bytes so messages from clients and Monitors may still be processed."),
 
     Option("mds_client_prealloc_inos", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)

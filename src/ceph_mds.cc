@@ -187,6 +187,19 @@ int main(int argc, const char **argv)
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
                    Messenger::Policy::stateful_server(0));
 
+  // throttle client-mds traffic
+  {
+    auto limit = cct->_conf.get_val<Option::size_t>("mds_msg_client_throttle_bytes");
+    auto client_throttler = new Throttle(g_ceph_context, "mds_msg_client_throttle_bytes", limit);
+    msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT, client_throttler, NULL);
+  }
+  // throttle mds-mds traffic
+  {
+    auto limit = cct->_conf.get_val<Option::size_t>("mds_msg_mds_throttle_bytes");
+    auto mds_throttler = new Throttle(g_ceph_context, "mds_msg_mds_throttle_bytes", limit);
+    msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, mds_throttler, NULL);
+  }
+
   int r = msgr->bindv(addrs);
   if (r < 0)
     forker.exit(1);
