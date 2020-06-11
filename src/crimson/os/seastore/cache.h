@@ -383,6 +383,18 @@ private:
 
   /// Remove extent from extents handling dirty and refcounting
   void retire_extent(CachedExtentRef ref);
+
+  /**
+   * get_extent_by_type
+   *
+   * Based on type, instantiate the correct concrete type
+   * and read in the extent at location offset~length.
+   */
+  get_extent_ertr::future<CachedExtentRef> get_extent_by_type(
+    extent_types_t type,  ///< [in] type tag
+    paddr_t offset,       ///< [in] starting addr
+    segment_off_t length  ///< [in] length
+  );
 };
 
 }

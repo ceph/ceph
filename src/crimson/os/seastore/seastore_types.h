@@ -202,7 +202,11 @@ std::ostream &operator<<(std::ostream &out, const laddr_list_t &rhs);
 std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs);
 
 /* identifies type of extent, used for interpretting deltas, managing
- * writeback */
+ * writeback.
+ *
+ * Note that any new extent type needs to be added to
+ * Cache::get_extent_by_type in cache.cc
+ */
 enum class extent_types_t : uint8_t {
   ROOT_LOCATION = 0, // delta only
   ROOT = 1,
