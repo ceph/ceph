@@ -995,12 +995,12 @@ static ceph::spinlock debug_lock;
 
     const auto* other_buf = reinterpret_cast<const char*>(other);
     for (const auto& bp : buffers()) {
-      const auto round_length = std::min<size_t>(length, bp.length());
-      if (std::memcmp(bp.c_str(), other_buf, round_length) != 0) {
+      assert(bp.length() <= length);
+      if (std::memcmp(bp.c_str(), other_buf, bp.length()) != 0) {
         return false;
       } else {
-        length -= round_length;
-        other_buf += round_length;
+        length -= bp.length();
+        other_buf += bp.length();
       }
     }
 
