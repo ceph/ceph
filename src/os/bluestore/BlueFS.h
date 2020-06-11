@@ -557,9 +557,9 @@ public:
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
 
-  void flush(FileWriter *h) {
+  void flush(FileWriter *h, bool force = false) {
     std::lock_guard l(lock);
-    _flush(h, false);
+    _flush(h, force);
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
     std::lock_guard l(lock);
