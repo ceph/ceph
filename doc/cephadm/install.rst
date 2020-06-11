@@ -105,6 +105,11 @@ or run ``cephadm bootstrap -h`` to see all available options:
   cluster by putting them in a standard ini-style configuration file
   and using the ``--config *<config-file>*`` option.
 
+* You can choose the ssh user cephadm will use to connect to hosts by
+  using the ``--ssh-user *<user>*`` option. The ssh key will be added
+  to ``/home/*<user>*/.ssh/authorized_keys``. This user will require
+  passwordless sudo access. 
+
 
 Enable Ceph CLI
 ===============
