@@ -194,11 +194,13 @@ if(WITH_RBD_RWL)
   set(librbd_internal_srcs
     ${librbd_internal_srcs}
     cache/rwl/ImageCacheState.cc
+    cache/rwl/InitRequest.cc
     cache/rwl/LogEntry.cc
     cache/rwl/LogMap.cc
     cache/rwl/LogOperation.cc
     cache/rwl/ReadRequest.cc
     cache/rwl/Request.cc
+    cache/rwl/ShutdownRequest.cc
     cache/rwl/SyncPoint.cc
     cache/rwl/Types.cc
     cache/ReplicatedWriteLog.cc)
