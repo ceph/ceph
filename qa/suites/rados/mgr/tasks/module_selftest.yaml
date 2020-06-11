@@ -19,6 +19,7 @@ tasks:
         - \(MGR_ZABBIX_
         - foo bar
         - Failed to open Telegraf
+        - evicting unresponsive client
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_module_selftest
