@@ -141,6 +141,21 @@ You will then need to restart the mgr daemon to reload the configuration with::
 
   ceph mgr fail
 
+Configuring a different SSH user
+----------------------------------
+
+Cephadm must be able to log into all the Ceph cluster nodes as an user
+that has enough privileges to download container images, start containers
+and execute commands without prompting for a password. If you do not want
+to use the "root" user (default option in cephadm), you must provide
+cephadm the name of the user that is going to be used to perform all the
+cephadm operations. Use the command::
+
+  ceph cephadm set-user <user>
+
+Prior to running this the cluster ssh key needs to be added to this users
+authorized_keys file and non-root users must have passwordless sudo access.
+
 
 Customizing the SSH configuration
 ---------------------------------
