@@ -30,13 +30,44 @@ def nice_delta(now, t, suffix=''):
         return '-'
 
 
-def to_format(what, format):
+def to_format(what, format: str, many: bool, cls):
+    def to_json_1(obj):
+        if hasattr(obj, 'to_json'):
+            return obj.to_json()
+        return obj
+
+    def to_json_n(objs):
+        return [to_json_1(o) for o in objs]
+
+    to_json = to_json_n if many else to_json_1
+
     if format == 'json':
-        return json.dumps(what, sort_keys=True)
+        return json.dumps(to_json(what), sort_keys=True)
     elif format == 'json-pretty':
-        return json.dumps(what, indent=2, sort_keys=True)
+        return json.dumps(to_json(what), indent=2, sort_keys=True)
     elif format == 'yaml':
-        return yaml.safe_dump_all(what, default_flow_style=False)
+        # fun with subinterpreters again. pyyaml depends on object identity.
+        # as what originates from a different subinterpreter we have to copy things here.
+        if cls:
+            flat = to_json(what)
+            copy = [cls.from_json(o) for o in flat] if many else cls.from_json(flat)
+        else:
+            copy = what
+
+        def to_yaml_1(obj):
+            if hasattr(obj, 'yaml_representer'):
+                return obj
+            return to_json_1(obj)
+
+        def to_yaml_n(objs):
+            return [to_yaml_1(o) for o in objs]
+
+        to_yaml = to_yaml_n if many else to_yaml_1
+
+        if many:
+            return yaml.dump_all(to_yaml(copy), default_flow_style=False)
+        return yaml.dump(to_yaml(copy), default_flow_style=False)
+
 
 
 @six.add_metaclass(CLICommandMeta)
@@ -216,9 +247,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
         if format != 'plain':
-            hosts = [host.to_json()
-                     for host in completion.result]
-            output = to_format(hosts, format)
+            output = to_format(completion.result, format, many=True, cls=HostSpec)
         else:
             table = PrettyTable(
                 ['HOST', 'ADDR', 'LABELS', 'STATUS'],
@@ -276,8 +305,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         raise_if_exception(completion)
 
         if format != 'plain':
-            data = [n.to_json() for n in completion.result]
-            return HandleCommandResult(stdout=to_format(data, format))
+            return HandleCommandResult(stdout=to_format(completion.result, format, many=True, cls=InventoryHost))
         else:
             out = []
 
@@ -349,10 +377,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout="No services reported")
         elif format != 'plain':
             if export:
-                data = [s.spec.to_json() for s in services]
+                data = [s.spec for s in services]
+                return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
             else:
-                data = [s.to_json() for s in services]
-            return HandleCommandResult(stdout=to_format(data, format))
+                return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
@@ -413,12 +441,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         # Sort the list for display
         daemons.sort(key=lambda s: (ukn(s.daemon_type), ukn(s.hostname), ukn(s.daemon_id)))
 
-        if len(daemons) == 0:
-            return HandleCommandResult(stdout="No daemons reported")
-        elif format != 'plain':
-            data = [s.to_json() for s in daemons]
-            return HandleCommandResult(stdout=to_format(data, format))
+        if format != 'plain':
+            return HandleCommandResult(stdout=to_format(daemons, format, many=True, cls=DaemonDescription))
         else:
+            if len(daemons) == 0:
+                return HandleCommandResult(stdout="No daemons reported")
+
             now = datetime.datetime.utcnow()
             table = PrettyTable(
                 ['NAME', 'HOST', 'STATUS', 'REFRESHED', 'AGE',
@@ -536,7 +564,7 @@ Examples:
 
         def print_preview(previews, format_to):
             if format != 'plain':
-                return to_format(previews, format_to)
+                return to_format(previews, format_to, many=False, cls=None)
             else:
                 table = PrettyTable(
                     ['NAME', 'HOST', 'DATA', 'DB', 'WAL'],
