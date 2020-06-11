@@ -22,21 +22,21 @@ create
 
 snapshot
 ========
-  $ rbd snap create bar@snap
+  $ rbd snap create bar@snap --no-progress
   $ rbd resize -s 1024 --no-progress bar
   $ rbd resize -s 2G --no-progress quuy
-  $ rbd snap create bar@snap2
-  $ rbd snap create foo@snap
+  $ rbd snap create bar@snap2 --no-progress
+  $ rbd snap create foo@snap --no-progress
 
 clone
 =====
   $ rbd snap protect bar@snap
   $ rbd clone --image-feature layering,exclusive-lock,object-map,fast-diff bar@snap rbd_other/child
-  $ rbd snap create rbd_other/child@snap
+  $ rbd snap create rbd_other/child@snap --no-progress
   $ rbd flatten rbd_other/child 2> /dev/null
   $ rbd bench rbd_other/child --io-type write --io-pattern seq --io-total 1B > /dev/null 2>&1
   $ rbd clone bar@snap rbd_other/deep-flatten-child
-  $ rbd snap create rbd_other/deep-flatten-child@snap
+  $ rbd snap create rbd_other/deep-flatten-child@snap --no-progress
   $ rbd flatten rbd_other/deep-flatten-child 2> /dev/null
 
 lock
