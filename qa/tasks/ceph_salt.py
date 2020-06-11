@@ -61,8 +61,35 @@ class CephSalt(Task):
                         using zypper.
         branch:         Ceph-salt branch in case repo is provided. If no branch
                         is provided master is used by default.
+        containers:
+            registry:
+                name: registry name
+                location: <registry url>
+                insecure: True/False    (Is registry insecure, True by default)
+            ceph_image:  <container image path>
 
+
+    For example:
+
+        containers:
+            registry:
+                name: 'registry.suse.com'
+                location: 'registry.suse.com:5000'
+                insecure: True
+            ceph_image: 'registry.suse.de/devel/storage/7.0/containers/ses/7/ceph/ceph'
+
+    There is also the possibility of using overrides in order to set the
+    container registry and image like:
+
+        overrides:
+            ceph_salt:
+                containers:
+                    registry:
+                        name: 'registry.mirror.example.com'
+                        location: 'registry.mirror.example.com:5000'
+                    ceph_image: 'quay.io/ceph-ci/ceph'
     """
+
     err_prefix = "(ceph_salt task) "
 
     log_anchor_str = "WWWW: "
@@ -70,6 +97,8 @@ class CephSalt(Task):
     def __init__(self, ctx, config):
         super(CephSalt, self).__init__(ctx, config)
         log.debug("beginning of constructor method")
+        overrides = ctx.config.get('overrides', {})
+        misc.deep_merge(self.config, overrides.get('ceph_salt', {}))
         if not ceph_salt_ctx:
             self._populate_ceph_salt_context()
             self.log_anchor = ceph_salt_ctx['log_anchor']
@@ -148,6 +177,17 @@ class CephSalt(Task):
                 )
         ceph_salt_ctx['repo'] = self.config.get('repo', None)
         ceph_salt_ctx['branch'] = self.config.get('branch', None)
+        containers = self.config.get('containers', {})
+        self.log.info("Containers dict is: {}".format(containers))
+        registries = containers.get('registry', {})
+        ceph_salt_ctx['registry_name'] = registries.get('name', None)
+        ceph_salt_ctx['registry_location'] = registries.get('location', None)
+        ceph_salt_ctx['registry_insecure'] = registries.get('insecure', True)
+        ceph_salt_ctx['container_image'] = containers.get('ceph_image', None)
+        if not ceph_salt_ctx['container_image']:
+            raise Exception("Configuration error occurred. "
+                            "The 'image' value is undefined. Please provide "
+                            "corresponding options in config or overrides")
 
     def _get_bootstrap_remote(self):
         '''
@@ -208,9 +248,6 @@ class CephSalt(Task):
         chrony server, dashboard credentials etc and then runs the cluster
         deployment
         '''
-        registry_cache = "192.168.0.43:5000"
-        container_image = ("registry.suse.de/devel/storage/7.0/"
-                           "containers/ses/7/ceph/ceph")
         fsid = self.ctx.ceph[self.cluster].fsid
         first_mon = self.ctx.ceph[self.cluster].first_mon
         first_mgr = self.ctx.ceph[self.cluster].first_mgr
@@ -238,12 +275,16 @@ class CephSalt(Task):
                               "/system_update/reboot disable")
         self.master_remote.sh("sudo ceph-salt config /ssh/ generate")
         self.master_remote.sh("sudo ceph-salt config /containers/registries "
-                              "add  prefix=registry.suse.de"
-                              " location={} insecure=true"
-                              .format(registry_cache))
+                              "add  prefix={name}"
+                              " location={loc} insecure={insec}"
+                              .format(name=ceph_salt_ctx['registry_name'],
+                                      loc=ceph_salt_ctx['registry_location'],
+                                      insec=ceph_salt_ctx['registry_insecure']
+                                      ))
         self.master_remote.sh("sudo ceph-salt config /containers/images/ceph "
-                              "set {}".format(container_image))
-        self.ctx.ceph[self.cluster].image = container_image
+                              "set {}"
+                              .format(ceph_salt_ctx['container_image']))
+        self.ctx.ceph[self.cluster].image = ceph_salt_ctx['container_image']
         self.master_remote.sh("sudo ceph-salt "
                               "config /time_server/server_hostname set {}"
                               .format(self.master_remote.hostname))
