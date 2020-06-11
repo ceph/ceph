@@ -74,6 +74,10 @@ class TestNFS(MgrTestCase):
         orch_output = self._check_nfs_status()
         self.assertEqual("No services reported\n", orch_output)
 
+    def _test_list_cluster(self):
+        nfs_output = self._nfs_cmd('cluster', 'ls')
+        self.assertEqual(self.cluster_id, nfs_output.strip())
+
     def _create_export(self, export_id, create_fs=False, extra_cmd=None):
         if create_fs:
             self._cmd('fs', 'volume', 'create', self.fs_name)
@@ -104,6 +108,7 @@ class TestNFS(MgrTestCase):
 
     def test_create_and_delete_cluster(self):
         self._test_create_cluster()
+        self._test_list_cluster()
         self._test_delete_cluster()
 
     def test_create_delete_cluster_idempotency(self):
