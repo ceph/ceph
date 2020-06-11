@@ -14,8 +14,10 @@ import re
 import time
 import uuid
 
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from functools import wraps
+
+import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
@@ -1321,22 +1323,26 @@ class DaemonDescription(object):
                                                          id=self.daemon_id)
 
     def to_json(self):
-        out = {
-            'hostname': self.hostname,
-            'container_id': self.container_id,
-            'container_image_id': self.container_image_id,
-            'container_image_name': self.container_image_name,
-            'daemon_id': self.daemon_id,
-            'daemon_type': self.daemon_type,
-            'version': self.version,
-            'status': self.status,
-            'status_desc': self.status_desc,
-        }
+        out = OrderedDict()
+        out['daemon_type'] = self.daemon_type
+        out['daemon_id'] = self.daemon_id
+        out['hostname'] = self.hostname
+        out['container_id'] = self.container_id
+        out['container_image_id'] = self.container_image_id
+        out['container_image_name'] = self.container_image_name
+        out['version'] = self.version
+        out['status'] = self.status
+        out['status_desc'] = self.status_desc
+
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
             if getattr(self, k):
                 out[k] = getattr(self, k).strftime(DATEFMT)
-        return {k: v for (k, v) in out.items() if v is not None}
+
+        empty = [k for k, v in out.items() if v is None]
+        for e in empty:
+            del out[e]
+        return out
 
     @classmethod
     @handle_type_error
@@ -1351,6 +1357,13 @@ class DaemonDescription(object):
     def __copy__(self):
         # feel free to change this:
         return DaemonDescription.from_json(self.to_json())
+
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription'):
+        return dumper.represent_dict(data.to_json().items())
+
+
+yaml.add_representer(DaemonDescription, DaemonDescription.yaml_representer)
 
 class ServiceDescription(object):
     """
