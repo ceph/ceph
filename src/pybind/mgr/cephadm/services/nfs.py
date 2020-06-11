@@ -7,6 +7,7 @@ from ceph.deployment.service_spec import NFSServiceSpec
 
 import orchestrator
 from orchestrator import OrchestratorError
+from orchestrator import DaemonDescription
 
 import cephadm
 from .. import utils
@@ -69,6 +70,29 @@ class NFSService(CephadmService):
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
         return self.mgr._create_daemon('nfs', daemon_id, host)
+
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
+        
+        def get_set_cmd_dicts(out: str) -> List[dict]:
+            locations: List[str] = []
+            for dd in daemon_descrs:
+                spec = cast(NFSServiceSpec,
+                            self.mgr.spec_store.specs.get(dd.service_name(), None))
+                if not spec or not spec.service_id:
+                    logger.warning('No ServiceSpec or service_id found for %s', dd)
+                    continue
+                locations.append('{}:{}/{}'.format(spec.service_id, spec.pool, spec.namespace))
+            new_value = ','.join(locations)
+            if new_value and new_value != out:
+                return [{'prefix': 'dashboard set-ganesha-clusters-rados-pool-namespace',
+                         'value': new_value}]
+            return []
+
+        self._check_and_set_dashboard(
+            service_name='Ganesha',
+            get_cmd='dashboard get-ganesha-clusters-rados-pool-namespace',
+            get_set_cmd_dicts=get_set_cmd_dicts
+        )
 
 
 class NFSGanesha(object):
