@@ -11,6 +11,7 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 
+#include "librbd/AsioEngine.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/internal.h"
@@ -90,6 +91,11 @@ public:
   }
 };
 
+boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
+  auto asio_engine_singleton = ImageCtx::get_asio_engine(cct);
+  return asio_engine_singleton->get_io_context();
+}
+
 } // anonymous namespace
 
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
@@ -123,6 +129,7 @@ public:
       state(new ImageState<>(this)),
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
+      io_context(get_asio_engine_io_context(cct)),
       op_work_queue(nullptr),
       plugin_registry(new PluginRegistry<ImageCtx>(this)),
       external_callback_completions(32),
@@ -911,6 +918,11 @@ public:
     ceph_assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
+  }
+
+  AsioEngine* ImageCtx::get_asio_engine(CephContext* cct) {
+    return &cct->lookup_or_create_singleton_object<AsioEngine>(
+      "librbd::AsioEngine", false, cct);
   }
 
   void ImageCtx::get_thread_pool_instance(CephContext *cct,
