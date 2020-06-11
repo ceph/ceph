@@ -702,28 +702,28 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
   m_async_requests[request] = AsyncRequest(ack_ctx, nullptr);
   m_async_op_tracker.start_op();
 
-  auto unquiesce_ctx = new LambdaContext(
-    [this, request](int r) {
-      if (r == 0) {
-        ldout(m_image_ctx.cct, 10) << this << " quiesce request " << request
-                                   << " timed out" << dendl;
-      }
-
-      auto on_finish = new LambdaContext(
-        [this, request](int r) {
-          std::unique_lock async_request_locker{m_async_request_lock};
-          m_async_pending.erase(request);
-        });
-
-      m_image_ctx.state->notify_unquiesce(on_finish);
-    });
-
   return new LambdaContext(
-    [this, request, unquiesce_ctx, timeout](int r) {
+    [this, request, timeout](int r) {
       if (r < 0) {
         std::unique_lock async_request_locker{m_async_request_lock};
         m_async_pending.erase(request);
       } else {
+        auto unquiesce_ctx = new LambdaContext(
+          [this, request](int r) {
+            if (r == 0) {
+              ldout(m_image_ctx.cct, 10) << this << " quiesce request "
+                                         << request << " timed out" << dendl;
+            }
+
+            auto on_finish = new LambdaContext(
+              [this, request](int r) {
+                std::unique_lock async_request_locker{m_async_request_lock};
+                m_async_pending.erase(request);
+              });
+
+            m_image_ctx.state->notify_unquiesce(on_finish);
+          });
+
         m_task_finisher->add_event_after(Task(TASK_CODE_QUIESCE, request),
                                          timeout, unquiesce_ctx);
       }
