@@ -5,3 +5,4 @@ mypy==0.782; python_version >= '3'
 pytest-mypy; python_version >= '3'
 pytest >= 2.1.3; python_version >= '3'
 pyyaml
+kubernetes
