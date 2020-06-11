@@ -258,8 +258,13 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
             drive_group.validate()
-            if not drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None:
-                                                               [h.hostname for h in all_hosts]):
+
+            def get_hosts_func(label=None, as_hostspec=False):
+                if as_hostspec:
+                    return all_hosts
+                return [h.hostname for h in all_hosts]
+
+            if not drive_group.placement.filter_matching_hosts(get_hosts_func):
                 raise orchestrator.OrchestratorValidationError('failed to match')
 
         return self.get_hosts().then(run).then(
@@ -276,8 +281,13 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         def run(all_hosts):
             # type: (List[orchestrator.HostSpec]) -> None
             drive_group.validate()
-            if not drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None:
-                                                               [h.hostname for h in all_hosts]):
+
+            def get_hosts_func(label=None, as_hostspec=False):
+                if as_hostspec:
+                    return all_hosts
+                return [h.hostname for h in all_hosts]
+
+            if not drive_group.placement.filter_matching_hosts(get_hosts_func):
                 raise orchestrator.OrchestratorValidationError('failed to match')
         return self.get_hosts().then(run).then(
             on_complete=orchestrator.ProgressReference(
