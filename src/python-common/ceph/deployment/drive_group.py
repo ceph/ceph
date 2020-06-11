@@ -1,3 +1,5 @@
+import yaml
+
 from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import ServiceSpecValidationError, ServiceSpec, PlacementSpec
 
@@ -45,7 +47,7 @@ class DeviceSelection(object):
         #: Size specification of format LOW:HIGH.
         #: Can also take the the form :HIGH, LOW:
         #: or an exact value (as ceph-volume inventory reports)
-        self.size = size
+        self.size:  Optional[str] = size
 
         #: is the drive rotating or not
         self.rotational = rotational
@@ -76,7 +78,7 @@ class DeviceSelection(object):
 
     @classmethod
     def from_json(cls, device_spec):
-        # type: (dict) -> DeviceSelection
+        # type: (dict) -> Optional[DeviceSelection]
         if not device_spec:
             return  # type: ignore
         for applied_filter in list(device_spec.keys()):
@@ -88,10 +90,23 @@ class DeviceSelection(object):
 
     def to_json(self):
         # type: () -> Dict[str, Any]
-        c = self.__dict__.copy()
+        ret: Dict[str, Any] = {}
         if self.paths:
-            c['paths'] = [p.path for p in self.paths]
-        return c
+            ret['paths'] = [p.path for p in self.paths]
+        if self.model:
+            ret['model'] = self.model
+        if self.vendor:
+            ret['vendor'] = self.vendor
+        if self.size:
+            ret['size'] = self.size
+        if self.rotational:
+            ret['rotational'] = self.rotational
+        if self.limit:
+            ret['limit'] = self.limit
+        if self.all:
+            ret['all'] = self.all
+
+        return ret
 
     def __repr__(self):
         keys = [
@@ -209,11 +224,32 @@ class DriveGroupSpec(ServiceSpec):
         :param json_drive_group: A valid json string with a Drive Group
                specification
         """
+        args = {}
         # legacy json (pre Octopus)
         if 'host_pattern' in json_drive_group and 'placement' not in json_drive_group:
             json_drive_group['placement'] = {'host_pattern': json_drive_group['host_pattern']}
             del json_drive_group['host_pattern']
 
+        try:
+            args['placement'] = PlacementSpec.from_json(json_drive_group.pop('placement'))
+        except KeyError:
+            raise DriveGroupValidationError('OSD spec needs a `placement` key.')
+
+        args['service_type'] = json_drive_group.pop('service_type', 'osd')
+
+        # service_id was not required in early octopus.
+        args['service_id'] = json_drive_group.pop('service_id', '')
+
+        # spec: was not mandatory in octopus
+        if 'spec' in json_drive_group:
+            args.update(cls._drive_group_spec_from_json(json_drive_group.pop('spec')))
+        else:
+            args.update(cls._drive_group_spec_from_json(json_drive_group))
+
+        return cls(**args)
+
+    @classmethod
+    def _drive_group_spec_from_json(cls, json_drive_group: dict) -> dict:
         for applied_filter in list(json_drive_group.keys()):
             if applied_filter not in cls._supported_features:
                 raise DriveGroupValidationError(
@@ -225,21 +261,21 @@ class DriveGroupSpec(ServiceSpec):
                     from ceph.deployment.drive_selection import SizeMatcher
                     json_drive_group[key] = SizeMatcher.str_to_byte(json_drive_group[key])
 
-        if 'placement' in json_drive_group:
-            json_drive_group['placement'] = PlacementSpec.from_json(json_drive_group['placement'])
-
         try:
             args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
                     json_drive_group.items()}
             if not args:
                 raise DriveGroupValidationError("Didn't find Drivegroup specs")
-            return DriveGroupSpec(**args)
+            return args
         except (KeyError, TypeError) as e:
             raise DriveGroupValidationError(str(e))
 
     def validate(self):
         # type: () -> None
         super(DriveGroupSpec, self).validate()
+
+        if not self.service_id:
+            raise DriveGroupValidationError('service_id is required')
 
         if not isinstance(self.placement.host_pattern, six.string_types) and \
                 self.placement.host_pattern is not None:
@@ -273,19 +309,8 @@ class DriveGroupSpec(ServiceSpec):
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
 
-    def to_json(self):
-        # type: () -> Dict[str, Any]
-        c = self.__dict__.copy()
-        if self.placement:
-            c['placement'] = self.placement.to_json()
-        if self.data_devices:
-            c['data_devices'] = self.data_devices.to_json()
-        if self.db_devices:
-            c['db_devices'] = self.db_devices.to_json()
-        if self.wal_devices:
-            c['wal_devices'] = self.wal_devices.to_json()
-        c['service_name'] = self.service_name()
-        return c
-
     def __eq__(self, other):
         return repr(self) == repr(other)
+
+
+yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)
