@@ -1420,7 +1420,7 @@ class ServiceDescription(object):
     def __repr__(self):
         return f"<ServiceDescription of {self.spec.one_line_str()}>"
 
-    def to_json(self):
+    def to_json(self) -> OrderedDict:
         out = self.spec.to_json()
         status = {
             'container_image_id': self.container_image_id,
@@ -1451,6 +1451,13 @@ class ServiceDescription(object):
             if k in c_status:
                 c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
         return cls(spec=spec, **c_status)
+
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription'):
+        return dumper.represent_dict(data.to_json().items())
+
+
+yaml.add_representer(ServiceDescription, ServiceDescription.yaml_representer)
 
 
 class InventoryFilter(object):
