@@ -461,7 +461,7 @@ def ceph_bootstrap(ctx, config):
             try:
                 ctx.daemons.get_daemon(type_, id_, cluster).stop()
             except Exception:
-                log.exception(f'Failed to stop "{role}"')
+                log.exception('Failed to stop "{role}"'.format(role=role))
                 raise 
 
         # clean up /etc/ceph
