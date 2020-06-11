@@ -23,7 +23,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 GetInfoRequest<I>::GetInfoRequest(librados::IoCtx& io_ctx,
-                                  ContextWQ *op_work_queue,
+                                  asio::ContextWQ *op_work_queue,
                                   const std::string &image_id,
                                   cls::rbd::MirrorImage *mirror_image,
                                   PromotionState *promotion_state,

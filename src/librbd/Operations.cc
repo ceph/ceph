@@ -6,7 +6,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
-#include "common/WorkQueue.h"
 #include "osdc/Striper.h"
 
 #include "librbd/ExclusiveLock.h"
@@ -17,6 +16,7 @@
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/journal/StandardPolicy.h"
 #include "librbd/operation/DisableFeaturesRequest.h"

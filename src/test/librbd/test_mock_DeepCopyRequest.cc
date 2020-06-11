@@ -100,7 +100,8 @@ public:
                                      librados::snap_t src_snap_id_start,
                                      librados::snap_t src_snap_id_end,
                                      librados::snap_t dst_snap_id_start,
-                                     bool flatten, ContextWQ *work_queue,
+                                     bool flatten,
+                                     librbd::asio::ContextWQ *work_queue,
                                      SnapSeqs *snap_seqs, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -149,7 +150,7 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
-  ContextWQ *m_work_queue;
+  librbd::asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
     TestMockFixture::SetUp();

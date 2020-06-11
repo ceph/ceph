@@ -14,6 +14,7 @@ class ContextWQ;
 namespace librbd {
 
 class Watcher;
+namespace asio { struct ContextWQ; }
 
 namespace managed_lock {
 
@@ -25,7 +26,7 @@ private:
 
 public:
   static ReleaseRequest* create(librados::IoCtx& ioctx, Watcher *watcher,
-                                ContextWQ *work_queue,
+                                asio::ContextWQ *work_queue,
                                 const std::string& oid,
                                 const std::string& cookie,
                                 Context *on_finish);
@@ -49,7 +50,7 @@ private:
    */
 
   ReleaseRequest(librados::IoCtx& ioctx, Watcher *watcher,
-                 ContextWQ *work_queue, const std::string& oid,
+                 asio::ContextWQ *work_queue, const std::string& oid,
                  const std::string& cookie, Context *on_finish);
 
   librados::IoCtx& m_ioctx;

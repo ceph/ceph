@@ -22,7 +22,7 @@ namespace librbd {
 namespace {
 
 struct MockExclusiveLockImageCtx : public MockImageCtx {
-  ContextWQ *op_work_queue;
+  asio::ContextWQ *op_work_queue;
 
   MockExclusiveLockImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
     op_work_queue = image_ctx.op_work_queue;
@@ -40,7 +40,7 @@ struct Traits<MockExclusiveLockImageCtx> {
 
 template <>
 struct ManagedLock<MockExclusiveLockImageCtx> {
-  ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  ManagedLock(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
               const std::string& oid, librbd::MockImageWatcher *watcher,
               managed_lock::Mode  mode, bool blacklist_on_break_lock,
               uint32_t blacklist_expire_seconds)
@@ -341,7 +341,7 @@ public:
 
   void expect_shut_down(MockManagedLock *managed_lock) {
     EXPECT_CALL(*managed_lock, shut_down(_))
-      .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(nullptr)));
+      .WillOnce(CompleteContext(0, static_cast<asio::ContextWQ*>(nullptr)));
   }
 
   void expect_accept_blocked_request(

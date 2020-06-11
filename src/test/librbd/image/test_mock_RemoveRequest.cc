@@ -14,6 +14,7 @@
 #include "librbd/image/PreRemoveRequest.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/operation/TrimRequest.h"
 #include "gmock/gmock.h"
@@ -43,6 +44,12 @@ struct MockTestImageCtx : public MockImageCtx {
 MockTestImageCtx* MockTestImageCtx::s_instance = nullptr;
 
 } // anonymous namespace
+
+template<>
+struct Journal<MockTestImageCtx> {
+  static void get_work_queue(CephContext*, MockContextWQ**) {
+  }
+};
 
 namespace image {
 
@@ -96,6 +103,15 @@ public:
 PreRemoveRequest<MockTestImageCtx> *PreRemoveRequest<MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace image
+
+namespace journal {
+
+template <>
+struct TypeTraits<MockTestImageCtx> {
+  typedef librbd::MockContextWQ ContextWQ;
+};
+
+} // namespace journal
 
 namespace operation {
 

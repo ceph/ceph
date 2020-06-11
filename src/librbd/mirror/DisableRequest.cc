@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/mirror/DisableRequest.h"
-#include "common/WorkQueue.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/journal/cls_journal_client.h"
@@ -12,6 +11,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/PromoteRequest.h"
 #include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/mirror/ImageRemoveRequest.h"

@@ -90,7 +90,7 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 
   ldout(cct, 10) << dendl;
 
-  ContextWQ *op_work_queue;
+  asio::ContextWQ *op_work_queue;
   ImageCtx::get_work_queue(cct, &op_work_queue);
   C_SaferCond ctx;
   auto req = mirror::EnableRequest<I>::create(
@@ -534,7 +534,7 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
     return -EBUSY;
   }
 
-  ContextWQ *op_work_queue;
+  asio::ContextWQ *op_work_queue;
   ImageCtx::get_work_queue(cct, &op_work_queue);
 
   C_SaferCond cond;

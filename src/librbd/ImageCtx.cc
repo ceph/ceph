@@ -8,7 +8,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
-#include "common/WorkQueue.h"
 #include "common/Timer.h"
 
 #include "librbd/AsioEngine.h"
@@ -25,6 +24,7 @@
 #include "librbd/PluginRegistry.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/io/AioCompletion.h"
@@ -57,26 +57,6 @@ namespace librbd {
 
 namespace {
 
-class ThreadPoolSingleton : public ThreadPool {
-public:
-  ContextWQ *op_work_queue;
-
-  explicit ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
-                 "rbd_op_threads"),
-      op_work_queue(new ContextWQ("librbd::op_work_queue",
-                                  cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
-                                  this)) {
-    start();
-  }
-  ~ThreadPoolSingleton() override {
-    op_work_queue->drain();
-    delete op_work_queue;
-
-    stop();
-  }
-};
-
 class SafeTimerSingleton : public SafeTimer {
 public:
   ceph::mutex lock = ceph::make_mutex("librbd::SafeTimerSingleton::lock");
@@ -94,15 +74,6 @@ public:
 boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
   auto asio_engine_singleton = ImageCtx::get_asio_engine(cct);
   return asio_engine_singleton->get_io_context();
-}
-
-void get_thread_pool_instance(CephContext *cct, ThreadPool **thread_pool,
-                              ContextWQ **op_work_queue) {
-  auto thread_pool_singleton =
-    &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      "librbd::thread_pool", false, cct);
-  *thread_pool = thread_pool_singleton;
-  *op_work_queue = thread_pool_singleton->op_work_queue;
 }
 
 } // anonymous namespace
@@ -154,8 +125,7 @@ void get_thread_pool_instance(CephContext *cct, ThreadPool **thread_pool,
     // FIPS zeroization audit 20191117: this memset is not security related.
     memset(&header, 0, sizeof(header));
 
-    ThreadPool *thread_pool;
-    get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+    get_work_queue(cct, &op_work_queue);
     io_image_dispatcher = new io::ImageDispatcher<ImageCtx>(this);
     io_object_dispatcher = new io::ObjectDispatcher<ImageCtx>(this);
 
@@ -935,10 +905,8 @@ void get_thread_pool_instance(CephContext *cct, ThreadPool **thread_pool,
   }
 
   void ImageCtx::get_work_queue(CephContext *cct,
-                                ContextWQ **op_work_queue) {
-
-    ThreadPool* thread_pool;
-    get_thread_pool_instance(cct, &thread_pool, op_work_queue);
+                                asio::ContextWQ **op_work_queue) {
+    *op_work_queue = get_asio_engine(cct)->get_work_queue();
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,

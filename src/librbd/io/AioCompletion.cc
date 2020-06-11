@@ -8,12 +8,12 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
-#include "common/WorkQueue.h"
 
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/Types.h"
+#include "librbd/asio/ContextWQ.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"

@@ -97,7 +97,7 @@ public:
   typedef image::DetachParentRequest<MockTestImageCtx> MockDetachParentRequest;
 
   librbd::ImageCtx *m_image_ctx;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
     TestMockFixture::SetUp();

@@ -251,7 +251,7 @@ int Pool<I>::init(librados::IoCtx& io_ctx, bool force) {
     return 0;
   }
 
-  ContextWQ *op_work_queue;
+  asio::ContextWQ *op_work_queue;
   ImageCtx::get_work_queue(cct, &op_work_queue);
 
   C_SaferCond ctx;

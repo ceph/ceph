@@ -76,7 +76,7 @@ public:
   typedef SnapshotCreateRequest<librbd::MockTestImageCtx> MockSnapshotCreateRequest;
 
   librbd::ImageCtx *m_image_ctx;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
     TestMockFixture::SetUp();
