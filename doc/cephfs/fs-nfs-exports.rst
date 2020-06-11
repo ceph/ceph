@@ -45,6 +45,15 @@ Delete NFS Ganesha Cluster
 
 This deletes the deployed cluster.
 
+List NFS Ganesha Cluster
+========================
+
+.. code:: bash
+
+    $ ceph nfs cluster ls
+
+This lists deployed clusters.
+
 Create CephFS Export
 ====================
 
