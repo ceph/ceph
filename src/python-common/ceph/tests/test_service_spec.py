@@ -109,3 +109,50 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     assert spec.validate() is None
     ServiceSpec.from_json(spec.to_json())
 
+
+def test_yaml():
+    y = """service_type: crash
+service_name: crash
+placement:
+  host_pattern: '*'
+---
+service_type: crash
+service_name: crash
+placement:
+  host_pattern: '*'
+unmanaged: true
+---
+service_type: rgw
+service_id: default-rgw-realm.eu-central-1.1
+service_name: rgw.default-rgw-realm.eu-central-1.1
+placement:
+  hosts:
+  - hostname: ceph-001
+    name: ''
+    network: ''
+spec:
+  rgw_realm: default-rgw-realm
+  rgw_zone: eu-central-1
+  subcluster: '1'
+---
+service_type: osd
+service_id: osd_spec_default
+service_name: osd.osd_spec_default
+placement:
+  host_pattern: '*'
+spec:
+  data_devices:
+    model: MC-55-44-XZ
+  db_devices:
+    model: SSD-123-foo
+  objectstore: bluestore
+  wal_devices:
+    model: NVME-QQQQ-987
+"""
+
+    for y in y.split('---\n'):
+        data = yaml.safe_load(y)
+        object = ServiceSpec.from_json(data)
+
+        assert yaml.dump(object) == y
+        assert yaml.dump(ServiceSpec.from_json(object.to_json())) == y
