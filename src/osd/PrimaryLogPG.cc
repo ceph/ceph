@@ -10879,7 +10879,7 @@ void PrimaryLogPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
 
 void PrimaryLogPG::populate_obc_watchers(ObjectContextRef obc)
 {
-  ceph_assert(is_active());
+  ceph_assert(is_primary() && is_active());
   auto it_objects = recovery_state.get_pg_log().get_log().objects.find(obc->obs.oi.soid);
   ceph_assert((recovering.count(obc->obs.oi.soid) ||
 	  !is_missing_object(obc->obs.oi.soid)) ||
@@ -11073,7 +11073,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       soid, true,
       soid.has_snapset() ? attrs : 0);
 
-    if (is_active())
+    if (is_primary() && is_active())
       populate_obc_watchers(obc);
 
     if (pool.info.is_erasure()) {
