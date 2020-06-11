@@ -193,8 +193,11 @@ Mount only part of the namespace/file system::
     mount.ceph :/some/directory/in/cephfs /mnt/mycephfs
 
 Mount non-default FS, in case cluster has multiple FSs::
-
-    mount -t ceph :/ /mnt/mycephfs2 -o mds_namespace=mycephfs2
+    mount -t ceph :/ /mnt/mycephfs2 -o fs=mycephfs2
+    
+    or
+    
+    mount -t ceph :/ /mnt/mycephfs2 -o mds_namespace=mycephfs2 # This option name is deprecated.
 
 Pass the monitor host's IP address, optionally::
 
