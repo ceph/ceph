@@ -32,6 +32,7 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/Types.h"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
@@ -42,6 +43,7 @@ class SafeTimer;
 
 namespace librbd {
 
+  struct AsioEngine;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -180,6 +182,8 @@ namespace librbd {
     ObjectMap<ImageCtx> *object_map;
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
+
+    boost::asio::io_context& io_context;
 
     io::ImageDispatcherInterface *io_image_dispatcher = nullptr;
     io::ObjectDispatcherInterface *io_object_dispatcher = nullptr;
@@ -342,6 +346,7 @@ namespace librbd {
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
 
+    static AsioEngine* get_asio_engine(CephContext* cct);
     static void get_thread_pool_instance(CephContext *cct,
                                          ThreadPool **thread_pool,
                                          ContextWQ **op_work_queue);

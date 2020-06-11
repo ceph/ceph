@@ -6,6 +6,7 @@ add_library(rbd_types STATIC
   WatchNotifyTypes.cc)
 
 set(librbd_internal_srcs
+  AsioEngine.cc
   AsyncObjectThrottle.cc
   AsyncRequest.cc
   DeepCopyRequest.cc
