@@ -103,6 +103,7 @@ Cephadm writes small wrappers that run a containers. Refer to
 ``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the
 container execution command.
 
+.. _cephadm-ssh-errors:
 
 ssh errors
 ----------
