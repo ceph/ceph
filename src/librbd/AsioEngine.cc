@@ -3,6 +3,7 @@
 
 #include "librbd/AsioEngine.h"
 #include "common/dout.h"
+#include "librbd/asio/ContextWQ.h"
 #include <boost/system/error_code.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -35,6 +36,8 @@ void AsioEngine::init() {
       m_io_context.run(ec);
     });
   }
+
+  m_work_queue = std::make_unique<asio::ContextWQ>(m_io_context);
 }
 
 void AsioEngine::shut_down() {
