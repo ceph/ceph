@@ -1,10 +1,11 @@
 import fnmatch
 import re
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from functools import wraps
 from typing import Optional, Dict, Any, List, Union, Callable, Iterator
 
 import six
+import yaml
 
 from ceph.deployment.hostspec import HostSpec
 
@@ -38,7 +39,7 @@ def handle_type_error(method):
             return method(cls, *args, **kwargs)
         except (TypeError, AttributeError) as e:
             error_msg = '{}: {}'.format(cls.__name__, e)
-        raise ServiceSpecValidationError(error_msg)
+            raise ServiceSpecValidationError(error_msg)
     return inner
 
 
@@ -470,16 +471,27 @@ class ServiceSpec(object):
         return n
 
     def to_json(self):
-        # type: () -> Dict[str, Any]
+        # type: () -> OrderedDict[str, Any]
+        ret: OrderedDict[str, Any] = OrderedDict()
+        ret['service_type'] = self.service_type
+        if self.service_id:
+            ret['service_id'] = self.service_id
+        ret['service_name'] = self.service_name()
+        ret['placement'] = self.placement.to_json()
+        if self.unmanaged:
+            ret['unmanaged'] = self.unmanaged
+
         c = {}
-        for key, val in self.__dict__.items():
+        for key, val in sorted(self.__dict__.items(), key=lambda tpl: tpl[0]):
+            if key in ret:
+                continue
             if hasattr(val, 'to_json'):
                 val = val.to_json()
             if val:
                 c[key] = val
-
-        c['service_name'] = self.service_name()
-        return c
+        if c:
+            ret['spec'] = c
+        return ret
 
     def validate(self):
         if not self.service_type:
@@ -496,6 +508,13 @@ class ServiceSpec(object):
 
     def one_line_str(self):
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
+
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceSpec'):
+        return dumper.represent_dict(data.to_json().items())
+
+
+yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 
 class NFSServiceSpec(ServiceSpec):
@@ -537,6 +556,9 @@ class NFSServiceSpec(ServiceSpec):
             url += self.namespace + '/'
         url += self.rados_config_name()
         return url
+
+
+yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
 
 
 class RGWSpec(ServiceSpec):
@@ -600,6 +622,9 @@ class RGWSpec(ServiceSpec):
         return f'beast {" ".join(ports)}'
 
 
+yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
+
+
 class IscsiServiceSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'iscsi',
@@ -644,3 +669,6 @@ class IscsiServiceSpec(ServiceSpec):
         if not self.api_password:
             raise ServiceSpecValidationError(
                 'Cannot add ISCSI: No Api password specified')
+
+
+yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
