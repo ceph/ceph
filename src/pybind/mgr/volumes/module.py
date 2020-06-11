@@ -305,6 +305,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Deletes an NFS Cluster",
             'perm': 'rw'
         },
+        {
+            'cmd': 'nfs cluster ls ',
+            'desc': "List NFS Clusters",
+            'perm': 'r'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -517,3 +522,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_nfs_cluster_delete(self, inbuf, cmd):
         return self.nfs.delete_nfs_cluster(cluster_id=cmd['clusterid'])
+
+    def _cmd_nfs_cluster_ls(self, inbuf, cmd):
+        return self.nfs.list_nfs_cluster()
