@@ -57,7 +57,12 @@ namespace librbd {
   template <typename> class PluginRegistry;
 
   namespace asio { struct ContextWQ; }
-  namespace cache { template <typename> class ImageCache; }
+  namespace cache {
+  template <typename> class ImageCache;
+  namespace rwl {
+  template <typename> class ImageCacheState;
+  } // namespace rwl
+  } // namespace cache
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -177,6 +182,7 @@ namespace librbd {
     file_layout_t layout;
 
     cache::ImageCache<ImageCtx> *image_cache = nullptr;
+    cache::rwl::ImageCacheState<ImageCtx> *cache_state = nullptr;
 
     Readahead readahead;
     std::atomic<uint64_t> total_bytes_read = {0};

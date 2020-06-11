@@ -41,14 +41,7 @@ inline ImageCtx *get_image_ctx(MockImageCtx *image_ctx) {
 // template definitions
 #include "librbd/cache/ImageWriteback.cc"
 #include "librbd/cache/rwl/ImageCacheState.cc"
-#include "librbd/cache/rwl/SyncPoint.cc"
 #include "librbd/cache/rwl/Request.cc"
-#include "librbd/cache/rwl/Types.cc"
-#include "librbd/cache/rwl/LogOperation.cc"
-#include "librbd/cache/rwl/LogMap.cc"
-
-template class librbd::cache::ImageWriteback<librbd::MockImageCtx>;
-template class librbd::cache::rwl::ImageCacheState<librbd::MockImageCtx>;
 
 namespace librbd {
 namespace cache {
