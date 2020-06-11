@@ -22,7 +22,7 @@ namespace {
 struct MockWatcher : public Watcher {
   std::string oid;
 
-  MockWatcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  MockWatcher(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
               const std::string& oid)
     : Watcher(ioctx, work_queue, oid) {
   }

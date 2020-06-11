@@ -15,12 +15,11 @@
 #include <string>
 #include <utility>
 
-class ContextWQ;
-
 namespace librbd {
 
 struct ImageCtx;
 
+namespace asio { struct ContextWQ; }
 namespace managed_lock { struct Locker; }
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -30,7 +29,8 @@ private:
   typedef typename TypeTraits::Watcher Watcher;
 
 public:
-  static ManagedLock *create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  static ManagedLock *create(librados::IoCtx& ioctx,
+                             asio::ContextWQ *work_queue,
                              const std::string& oid, Watcher *watcher,
                              managed_lock::Mode mode,
                              bool blacklist_on_break_lock,
@@ -42,7 +42,7 @@ public:
     delete this;
   }
 
-  ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  ManagedLock(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
               const std::string& oid, Watcher *watcher,
               managed_lock::Mode mode, bool blacklist_on_break_lock,
               uint32_t blacklist_expire_seconds);
@@ -211,7 +211,7 @@ private:
 
   librados::IoCtx& m_ioctx;
   CephContext *m_cct;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
   std::string m_oid;
   Watcher *m_watcher;
   managed_lock::Mode m_mode;

@@ -2,14 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/managed_lock/ReleaseRequest.h"
-#include "librbd/Watcher.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/Utils.h"
-
 #include "librbd/ImageCtx.h"
+#include "librbd/Utils.h"
+#include "librbd/Watcher.h"
+#include "librbd/asio/ContextWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -26,7 +26,7 @@ using util::create_rados_callback;
 template <typename I>
 ReleaseRequest<I>* ReleaseRequest<I>::create(librados::IoCtx& ioctx,
                                              Watcher *watcher,
-                                             ContextWQ *work_queue,
+                                             asio::ContextWQ *work_queue,
                                              const string& oid,
                                              const string& cookie,
                                              Context *on_finish) {
@@ -36,10 +36,11 @@ ReleaseRequest<I>* ReleaseRequest<I>::create(librados::IoCtx& ioctx,
 
 template <typename I>
 ReleaseRequest<I>::ReleaseRequest(librados::IoCtx& ioctx, Watcher *watcher,
-                                  ContextWQ *work_queue, const string& oid,
-                                  const string& cookie, Context *on_finish)
+                                  asio::ContextWQ *work_queue,
+                                  const string& oid, const string& cookie,
+                                  Context *on_finish)
   : m_ioctx(ioctx), m_watcher(watcher), m_oid(oid), m_cookie(cookie),
-    m_on_finish(new C_AsyncCallback<ContextWQ>(work_queue, on_finish)) {
+    m_on_finish(new C_AsyncCallback<asio::ContextWQ>(work_queue, on_finish)) {
 }
 
 template <typename I>

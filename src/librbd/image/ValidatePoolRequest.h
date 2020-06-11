@@ -9,11 +9,11 @@
 #include "include/buffer.h"
 
 class Context;
-class ContextWQ;
 
 namespace librbd {
 
 struct ImageCtx;
+namespace asio { struct ContextWQ; }
 
 namespace image {
 
@@ -21,12 +21,12 @@ template <typename ImageCtxT>
 class ValidatePoolRequest {
 public:
   static ValidatePoolRequest* create(librados::IoCtx& io_ctx,
-                                     ContextWQ *op_work_queue,
+                                     asio::ContextWQ *op_work_queue,
                                      Context *on_finish) {
     return new ValidatePoolRequest(io_ctx, op_work_queue, on_finish);
   }
 
-  ValidatePoolRequest(librados::IoCtx& io_ctx, ContextWQ *op_work_queue,
+  ValidatePoolRequest(librados::IoCtx& io_ctx, asio::ContextWQ *op_work_queue,
                       Context *on_finish);
 
   void send();
@@ -62,7 +62,7 @@ private:
 
   librados::IoCtx m_io_ctx;
   CephContext* m_cct;
-  ContextWQ* m_op_work_queue;
+  asio::ContextWQ* m_op_work_queue;
   Context* m_on_finish;
 
   int m_ret_val = 0;

@@ -36,7 +36,6 @@
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
-class ContextWQ;
 class Finisher;
 class ThreadPool;
 class SafeTimer;
@@ -53,9 +52,8 @@ namespace librbd {
   template <typename> class Operations;
   template <typename> class PluginRegistry;
 
-  namespace cache {
-  template <typename> class ImageCache;
-  }
+  namespace asio { struct ContextWQ; }
+  namespace cache { template <typename> class ImageCache; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -188,7 +186,7 @@ namespace librbd {
     io::ImageDispatcherInterface *io_image_dispatcher = nullptr;
     io::ObjectDispatcherInterface *io_object_dispatcher = nullptr;
 
-    ContextWQ *op_work_queue;
+    asio::ContextWQ *op_work_queue;
 
     PluginRegistry<ImageCtx>* plugin_registry;
 
@@ -347,7 +345,8 @@ namespace librbd {
     void set_journal_policy(journal::Policy *policy);
 
     static AsioEngine* get_asio_engine(CephContext* cct);
-    static void get_work_queue(CephContext *cct, ContextWQ **op_work_queue);
+    static void get_work_queue(CephContext *cct,
+                               asio::ContextWQ **op_work_queue);
     static void get_timer_instance(CephContext *cct, SafeTimer **timer,
                                    ceph::mutex **timer_lock);
   };

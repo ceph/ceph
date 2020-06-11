@@ -8,6 +8,7 @@
 #include "include/ceph_assert.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
@@ -46,7 +47,7 @@ CloneRequest<I>::CloneRequest(
     cls::rbd::MirrorImageMode mirror_image_mode,
     const std::string &non_primary_global_image_id,
     const std::string &primary_mirror_uuid,
-    ContextWQ *op_work_queue, Context *on_finish)
+    asio::ContextWQ *op_work_queue, Context *on_finish)
   : m_config(config), m_parent_io_ctx(parent_io_ctx),
     m_parent_image_id(parent_image_id), m_parent_snap_name(parent_snap_name),
     m_parent_snap_namespace(parent_snap_namespace),

@@ -12,6 +12,7 @@
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/journal/CreateRequest.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/object_map/CreateRequest.h"
 
@@ -235,13 +236,16 @@ void EnableFeaturesRequest<I>::send_create_journal() {
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_create_journal>(this);
 
+  typename journal::TypeTraits<I>::ContextWQ* context_wq;
+  Journal<I>::get_work_queue(cct, &context_wq);
+
   journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
     image_ctx.md_ctx, image_ctx.id,
     image_ctx.config.template get_val<uint64_t>("rbd_journal_order"),
     image_ctx.config.template get_val<uint64_t>("rbd_journal_splay_width"),
     image_ctx.config.template get_val<std::string>("rbd_journal_pool"),
     cls::journal::Tag::TAG_CLASS_NEW, tag_data,
-    librbd::Journal<>::IMAGE_CLIENT_ID, image_ctx.op_work_queue, ctx);
+    librbd::Journal<>::IMAGE_CLIENT_ID, context_wq, ctx);
 
   req->send();
 }

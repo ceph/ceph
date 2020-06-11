@@ -9,6 +9,7 @@
 #include "test/librbd/mock/io/MockObjectDispatch.h"
 #include "common/Cond.h"
 #include "common/ceph_mutex.h"
+#include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Journaler.h"
 #include "librbd/Journal.h"
@@ -297,7 +298,7 @@ public:
   void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, remove_listener(_));
     EXPECT_CALL(mock_journaler, shut_down(_))
-                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(0, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_register_dispatch(MockImageCtx& mock_image_ctx,
@@ -353,7 +354,7 @@ public:
 
   void expect_stop_replay(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, stop_replay(_))
-                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(0, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_shut_down_replay(MockJournalImageCtx &mock_image_ctx,
@@ -389,7 +390,7 @@ public:
     EXPECT_CALL(mock_journal_replay, decode(_, _))
                   .WillOnce(Return(0));
     EXPECT_CALL(mock_journal_replay, process(_, _, _))
-                  .WillOnce(DoAll(WithArg<1>(CompleteContext(0, static_cast<ContextWQ*>(NULL))),
+                  .WillOnce(DoAll(WithArg<1>(CompleteContext(0, static_cast<asio::ContextWQ*>(NULL))),
                                   WithArg<2>(Invoke(this, &TestMockJournal::save_commit_context))));
   }
 
@@ -408,7 +409,7 @@ public:
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, stop_append(_))
-                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_committed(::journal::MockJournaler &mock_journaler,
@@ -438,7 +439,7 @@ public:
 
   void expect_flush_commit_position(::journal::MockJournaler &mock_journaler) {
     EXPECT_CALL(mock_journaler, flush_commit_position(_))
-                  .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(0, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   int when_open(MockJournal *mock_journal) {

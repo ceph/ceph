@@ -4,12 +4,12 @@
 #include "librbd/managed_lock/BreakRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "include/stringify.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -47,7 +47,8 @@ struct C_BlacklistClient : public Context {
 } // anonymous namespace
 
 template <typename I>
-BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx, ContextWQ *work_queue,
+BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx,
+                              asio::ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,

@@ -813,7 +813,7 @@ int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info) {
 
 template <typename I>
 void Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
-                               ContextWQ *op_work_queue,
+                               asio::ContextWQ *op_work_queue,
                                const std::string &image_id,
                                mirror_image_info_t *mirror_image_info,
                                Context *on_finish) {
@@ -831,7 +831,7 @@ void Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
 
 template <typename I>
 int Mirror<I>::image_get_info(librados::IoCtx& io_ctx,
-                              ContextWQ *op_work_queue,
+                              asio::ContextWQ *op_work_queue,
                               const std::string &image_id,
                               mirror_image_info_t *mirror_image_info) {
   C_SaferCond ctx;
@@ -1940,7 +1940,7 @@ int Mirror<I>::image_info_list(
       break;
     }
 
-    ContextWQ *op_work_queue;
+    asio::ContextWQ *op_work_queue;
     ImageCtx::get_work_queue(cct, &op_work_queue);
 
     for (auto &it : images) {

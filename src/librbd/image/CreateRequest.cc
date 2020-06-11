@@ -12,10 +12,12 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/image/Types.h"
 #include "librbd/image/ValidatePoolRequest.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "journal/Journaler.h"
 
@@ -119,7 +121,8 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
                                 cls::rbd::MirrorImageMode mirror_image_mode,
                                 const std::string &non_primary_global_image_id,
                                 const std::string &primary_mirror_uuid,
-                                ContextWQ *op_work_queue, Context *on_finish)
+                                asio::ContextWQ *op_work_queue,
+                                Context *on_finish)
   : m_config(config), m_image_name(image_name), m_image_id(image_id),
     m_size(size), m_create_flags(create_flags),
     m_mirror_image_mode(mirror_image_mode),
@@ -613,10 +616,13 @@ void CreateRequest<I>::journal_create() {
   tag_data.mirror_uuid = (use_primary_mirror_uuid ? m_primary_mirror_uuid :
                           librbd::Journal<I>::LOCAL_MIRROR_UUID);
 
+  typename journal::TypeTraits<I>::ContextWQ* context_wq;
+  Journal<>::get_work_queue(m_cct, &context_wq);
+
   auto req = librbd::journal::CreateRequest<I>::create(
     m_io_ctx, m_image_id, m_journal_order, m_journal_splay_width,
     m_journal_pool, cls::journal::Tag::TAG_CLASS_NEW, tag_data,
-    librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
+    librbd::Journal<I>::IMAGE_CLIENT_ID, context_wq, ctx);
   req->send();
 }
 
@@ -697,9 +703,12 @@ void CreateRequest<I>::journal_remove() {
   Context *ctx = create_context_callback<klass, &klass::handle_journal_remove>(
     this);
 
+  typename journal::TypeTraits<I>::ContextWQ* context_wq;
+  Journal<>::get_work_queue(m_cct, &context_wq);
+
   librbd::journal::RemoveRequest<I> *req =
     librbd::journal::RemoveRequest<I>::create(
-      m_io_ctx, m_image_id, librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue,
+      m_io_ctx, m_image_id, librbd::Journal<I>::IMAGE_CLIENT_ID, context_wq,
       ctx);
   req->send();
 }

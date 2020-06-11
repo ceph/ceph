@@ -174,7 +174,7 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
   librbd::SnapSeqs m_snap_seqs;
   SnapMap m_snap_map;
 

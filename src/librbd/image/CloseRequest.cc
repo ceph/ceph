@@ -10,6 +10,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/io/ImageDispatchSpec.h"
