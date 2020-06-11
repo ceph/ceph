@@ -4,6 +4,11 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/common/log.h"
 
+// included for get_extent_by_type
+#include "crimson/os/seastore/lba_manager/btree/lba_btree_node_impl.h"
+#include "crimson/os/seastore/onode_manager/simple-fltree/onode_block.h"
+#include "test/crimson/seastore/test_block.h"
+
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_filestore);
@@ -214,6 +219,51 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
 	get_root_ertr::ready_future_marker{},
 	ret);
     });
+  }
+}
+
+Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
+  extent_types_t type,
+  paddr_t offset,
+  segment_off_t length)
+{
+  switch (type) {
+  case extent_types_t::ROOT_LOCATION: {
+    ceph_assert(0 == "root location deltas are handled specially");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
+  }
+  case extent_types_t::ROOT:
+    return get_extent<RootBlock>(offset, length
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::LADDR_INTERNAL:
+    return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::LADDR_LEAF:
+    return get_extent<lba_manager::btree::LBALeafNode>(offset, length
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::ONODE_BLOCK:
+    return get_extent<OnodeBlock>(offset, length
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::TEST_BLOCK:
+    return get_extent<TestBlock>(offset, length
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::NONE: {
+    ceph_assert(0 == "NONE is an invalid extent type");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
+  }
+  default:
+    ceph_assert(0 == "impossible");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
   }
 }
 
