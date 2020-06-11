@@ -1,5 +1,5 @@
 from io import BytesIO
-from io import StringIO
+from six import StringIO
 import json
 import time
 import logging
