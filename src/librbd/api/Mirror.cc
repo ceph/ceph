@@ -1940,9 +1940,8 @@ int Mirror<I>::image_info_list(
       break;
     }
 
-    ThreadPool *thread_pool;
     ContextWQ *op_work_queue;
-    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+    ImageCtx::get_work_queue(cct, &op_work_queue);
 
     for (auto &it : images) {
       auto &image_id = it.first;

@@ -236,8 +236,7 @@ public:
     : m_cct(cct),
       m_lock(ceph::make_mutex(util::unique_lock_name(
         "librbd::QuiesceWatchers::m_lock", this))) {
-    ThreadPool *thread_pool;
-    ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &m_work_queue);
+    ImageCtx::get_work_queue(m_cct, &m_work_queue);
   }
 
   ~QuiesceWatchers() {
