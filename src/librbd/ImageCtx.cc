@@ -96,6 +96,15 @@ boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
   return asio_engine_singleton->get_io_context();
 }
 
+void get_thread_pool_instance(CephContext *cct, ThreadPool **thread_pool,
+                              ContextWQ **op_work_queue) {
+  auto thread_pool_singleton =
+    &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      "librbd::thread_pool", false, cct);
+  *thread_pool = thread_pool_singleton;
+  *op_work_queue = thread_pool_singleton->op_work_queue;
+}
+
 } // anonymous namespace
 
   const string ImageCtx::METADATA_CONF_PREFIX = "conf_";
@@ -925,14 +934,11 @@ boost::asio::io_context& get_asio_engine_io_context(CephContext* cct) {
       "librbd::AsioEngine", false, cct);
   }
 
-  void ImageCtx::get_thread_pool_instance(CephContext *cct,
-                                          ThreadPool **thread_pool,
-                                          ContextWQ **op_work_queue) {
-    auto thread_pool_singleton =
-      &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-	"librbd::thread_pool", false, cct);
-    *thread_pool = thread_pool_singleton;
-    *op_work_queue = thread_pool_singleton->op_work_queue;
+  void ImageCtx::get_work_queue(CephContext *cct,
+                                ContextWQ **op_work_queue) {
+
+    ThreadPool* thread_pool;
+    get_thread_pool_instance(cct, &thread_pool, op_work_queue);
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,

@@ -149,7 +149,6 @@ public:
 
   librbd::ImageCtx *m_src_image_ctx;
   librbd::ImageCtx *m_dst_image_ctx;
-  ThreadPool *m_thread_pool;
   ContextWQ *m_work_queue;
 
   void SetUp() override {
@@ -160,8 +159,7 @@ public:
 
     ASSERT_EQ(0, open_image(m_image_name, &m_dst_image_ctx));
 
-    librbd::ImageCtx::get_thread_pool_instance(m_src_image_ctx->cct,
-                                               &m_thread_pool, &m_work_queue);
+    librbd::ImageCtx::get_work_queue(m_src_image_ctx->cct, &m_work_queue);
   }
 
   void TearDown() override {

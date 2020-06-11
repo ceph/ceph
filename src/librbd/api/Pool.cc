@@ -251,9 +251,8 @@ int Pool<I>::init(librados::IoCtx& io_ctx, bool force) {
     return 0;
   }
 
-  ThreadPool *thread_pool;
   ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  ImageCtx::get_work_queue(cct, &op_work_queue);
 
   C_SaferCond ctx;
   auto req = image::ValidatePoolRequest<I>::create(io_ctx, op_work_queue, &ctx);
