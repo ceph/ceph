@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_ASIO_ENGINE_H
 
 #include "include/common_fwd.h"
+#include <memory>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -13,6 +14,8 @@
 
 namespace librbd {
 
+namespace asio { struct ContextWQ; }
+
 class AsioEngine {
 public:
   explicit AsioEngine(CephContext* cct);
@@ -20,6 +23,10 @@ public:
 
   inline boost::asio::io_context& get_io_context() {
     return m_io_context;
+  }
+
+  inline asio::ContextWQ* get_work_queue() {
+    return m_work_queue.get();
   }
 
 private:
@@ -33,6 +40,8 @@ private:
 
   boost::asio::io_context m_io_context;
   std::optional<WorkGuard> m_work_guard;
+
+  std::unique_ptr<asio::ContextWQ> m_work_queue;
 
   void init();
   void shut_down();
