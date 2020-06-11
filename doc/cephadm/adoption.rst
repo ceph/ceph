@@ -111,7 +111,7 @@ Adoption process
 
 #. Redeploy MDS daemons by telling cephadm how many daemons to run for
    each file system.  You can list file systems by name with ``ceph fs
-   ls``.  For each file system::
+   ls``.  Run the following command on the master nodes::
 
      # ceph orch apply mds <fs-name> [--placement=<placement>]
 
