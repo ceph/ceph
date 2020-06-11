@@ -53,8 +53,9 @@ class TestModuleSelftest(MgrTestCase):
     def test_diskprediction_local(self):
         if sys.version_info >= (3, 8):
             # https://tracker.ceph.com/issues/45147
-            python_version = f'python {sys.version_info.major}.{sys.version_info.minor}'
-            self.skipTest(f'{python_version} not compatible with diskprediction_local')
+            v = str(sys.version_info.major) + '.' + str(sys.version_info.minor)
+            self.skipTest(
+                'python %s not compatible with diskprediction_local' % v)
         self._selftest_plugin("diskprediction_local")
 
     # Not included in qa/packages/packages.yaml
