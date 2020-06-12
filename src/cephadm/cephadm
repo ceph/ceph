@@ -814,6 +814,8 @@ def call(command,  # type: List[str]
                     assert False
             except (IOError, OSError):
                 pass
+        logger.debug(desc + ':profile rt=%s, stop=%s, exit=%s, reads=%s'
+                % (time.time()-start_time, stop, process.poll(), reads))
 
     returncode = process.wait()
 
