@@ -60,7 +60,7 @@ class GrafanaService(CephadmService):
         # Use the least-created one as the active daemon
         return daemon_descrs[-1]
 
-    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         # TODO: signed cert
         dd = self.get_active_daemon(daemon_descrs)
         service_url = 'https://{}:{}'.format(
@@ -128,7 +128,7 @@ class AlertmanagerService(CephadmService):
         # TODO: if there are multiple daemons, who is the active one?
         return daemon_descrs[0]
 
-    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
         service_url = 'http://{}:{}'.format(self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
         self._set_service_url_on_dashboard(
@@ -216,7 +216,7 @@ class PrometheusService(CephadmService):
         # TODO: if there are multiple daemons, who is the active one?
         return daemon_descrs[0]
 
-    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         dd = self.get_active_daemon(daemon_descrs)
         service_url = 'http://{}:{}'.format(
             self._inventory_get_addr(dd.hostname), self.DEFAULT_SERVICE_PORT)
