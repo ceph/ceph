@@ -1295,7 +1295,7 @@ you may want to run:
                         osd_count += 1
                         sm[n].size = osd_count
                     else:
-                        sm[n].size = spec.placement.get_host_selection_size(self._get_hosts)
+                        sm[n].size = spec.placement.get_host_selection_size(self.inventory.all_specs())
 
                     sm[n].created = self.spec_store.spec_created[n]
                     if service_type == 'nfs':
@@ -1320,7 +1320,7 @@ you may want to run:
                 continue
             sm[n] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=spec.placement.get_host_selection_size(self._get_hosts),
+                size=spec.placement.get_host_selection_size(self.inventory.all_specs()),
                 running=0,
             )
             if service_type == 'nfs':
