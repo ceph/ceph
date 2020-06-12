@@ -280,10 +280,9 @@ class LocalRemote(object):
         try:
             shutil.copy(src, dst)
         except exception as e:
-            if sys.version_info.major < 3 and e.message.find('are the same '
-               'file') != -1:
-                return
-            raise e
+            if sys.version_info.major < 3:
+                if 'are the same file' not in  e.message:
+                    raise e
 
     # XXX: accepts only two arugments to maintain compatibility with
     # teuthology's mkdtemp.
