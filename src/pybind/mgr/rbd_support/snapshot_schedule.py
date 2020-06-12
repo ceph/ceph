@@ -111,7 +111,7 @@ class SnapshotScheduleHandler:
     def load_schedules(self):
         self.log.info("SnapshotScheduleHandler: load_schedules")
 
-        schedules = Schedules(self)
+        schedules = Schedules(self, format=2)
         schedules.load()
         with self.lock:
             self.schedules = schedules

@@ -10,6 +10,8 @@ from .common import get_rbd_pools
 
 SCHEDULE_INTERVAL = "interval"
 SCHEDULE_START_TIME = "start_time"
+SCHEDULE_CFG_KEY = "schedule"
+SCHEDULE_KEY_PREFIX = "schedule_"
 
 
 class LevelSpec:
@@ -334,8 +336,9 @@ class Schedule:
 
 class Schedules:
 
-    def __init__(self, handler):
+    def __init__(self, handler, format=1):
         self.handler = handler
+        self.format = format
         self.level_specs = {}
         self.schedules = {}
 
@@ -346,16 +349,19 @@ class Schedules:
 
         schedule_cfg = self.handler.module.get_localized_module_option(
             self.handler.MODULE_OPTION_NAME, '')
-        if schedule_cfg:
-            try:
+        try:
+            if schedule_cfg and self.format > 1:
+                global_cfg = json.loads(schedule_cfg)
+                schedule_cfg = json.dumps(
+                    global_cfg.get(SCHEDULE_CFG_KEY, []))
+            if schedule_cfg:
                 level_spec = LevelSpec.make_global()
                 self.level_specs[level_spec.id] = level_spec
                 schedule = Schedule.from_json(level_spec.name, schedule_cfg)
                 self.schedules[level_spec.id] = schedule
-            except ValueError:
-                self.handler.log.error(
-                    "Failed to decode configured schedule {}".format(
-                        schedule_cfg))
+        except ValueError:
+            self.handler.log.error(
+                "Failed to decode configured schedule {}".format(schedule_cfg))
 
         for pool_id, pool_name in get_rbd_pools(self.handler.module).items():
             try:
@@ -384,6 +390,10 @@ class Schedules:
                     it = list(it)
                     for k, v in it:
                         start_after = k
+                        if self.format > 1:
+                            if not k.startswith(SCHEDULE_KEY_PREFIX):
+                                continue
+                            k = k[len(SCHEDULE_KEY_PREFIX):]
                         v = v.decode()
                         self.handler.log.info(
                             "load_schedule: {} {}".format(k, v))
@@ -394,9 +404,12 @@ class Schedules:
                                     image_validator)
                             except ValueError as e:
                                 self.handler.log.debug(
-                                    "Stail schedule key {} in pool {}: {}".format(
+                                    "Stale schedule key {} in pool {}: {}".format(
                                         k, pool_name, e))
-                                stale_keys += (k,)
+                                if self.format == 1:
+                                    stale_keys += (k,)
+                                else:
+                                    stale_keys += (SCHEDULE_KEY_PREFIX + k,)
                                 continue
 
                             self.level_specs[level_spec.id] = level_spec
@@ -421,19 +434,32 @@ class Schedules:
 
     def save(self, level_spec, schedule):
         if level_spec.is_global():
-            schedule_cfg = schedule and schedule.to_json() or ''
+            if self.format == 1:
+                global_cfg_str = schedule and schedule.to_json() or ''
+            else:
+                global_cfg_str = self.handler.module.get_localized_module_option(
+                    self.handler.MODULE_OPTION_NAME, '')
+                global_cfg = global_cfg_str and json.loads(global_cfg_str) or {}
+                if schedule:
+                    global_cfg[SCHEDULE_CFG_KEY] = schedule.to_list()
+                else:
+                    global_cfg.pop(SCHEDULE_CFG_KEY, None)
+                global_cfg_str = global_cfg and json.dumps(global_cfg) or ''
             self.handler.module.set_localized_module_option(
-                self.handler.MODULE_OPTION_NAME, schedule_cfg)
+                self.handler.MODULE_OPTION_NAME, global_cfg_str)
             return
 
         pool_id = level_spec.get_pool_id()
         with self.handler.module.rados.open_ioctx2(int(pool_id)) as ioctx:
             with rados.WriteOpCtx() as write_op:
-                if schedule:
-                    ioctx.set_omap(write_op, (level_spec.id, ),
-                                   (schedule.to_json(), ))
+                if self.format == 1:
+                    key = level_spec.id
                 else:
-                    ioctx.remove_omap_keys(write_op, (level_spec.id, ))
+                    key = SCHEDULE_KEY_PREFIX + level_spec.id
+                if schedule:
+                    ioctx.set_omap(write_op, (key, ), (schedule.to_json(), ))
+                else:
+                    ioctx.remove_omap_keys(write_op, (key, ))
                 ioctx.operate_write_op(write_op, self.handler.SCHEDULE_OID)
 
 
@@ -504,4 +530,3 @@ class Schedules:
                     'schedule' : schedule.to_list(),
                 }
         return result
-
