@@ -20,15 +20,12 @@
 #include "include/types.h"
 #include "rgw_metadata.h"
 
-class DoutPrefixProvider;
-class rgw_user;
 class optional_yield;
 class RGWRole;
 
 class RGWSI_Zone;
 class RGWSI_Account;
 class RGWSI_MetaBackend_Handler;
-class RGWObjVersionTracker;
 
 struct AccountQuota {
   uint16_t max_users {1000};
