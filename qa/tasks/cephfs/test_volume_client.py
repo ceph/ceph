@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import six
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
@@ -656,11 +657,10 @@ vc.disconnect()
             guest_entity_2=guest_entity_2,
         )))
         # Check the list of authorized IDs and their access levels.
-        if self.py_version == 'python3':
-            expected_result = [('guest1', 'rw'), ('guest2', 'r')]
+        expected_result = [('guest1', 'rw'), ('guest2', 'r')]
+        if six.PY3:
             self.assertCountEqual(str(expected_result), auths)
         else:
-            expected_result = [(u'guest1', u'rw'), (u'guest2', u'r')]
             self.assertItemsEqual(str(expected_result), auths)
 
         # Disallow both the auth IDs' access to the volume.
