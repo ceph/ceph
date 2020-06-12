@@ -14,7 +14,15 @@
 #ifndef CEPH_FUSE_H
 #define CEPH_FUSE_H
 
-#define FUSE_USE_VERSION 30
+/*
+ * The API version that we want to use, regardless of what the
+ * library version is. Note that this must be defined before
+ * fuse.h is included.
+ */
+#ifndef FUSE_USE_VERSION
+#define FUSE_USE_VERSION	35
+#endif
+
 #include <fuse.h>
 #include "acconfig.h"
 
