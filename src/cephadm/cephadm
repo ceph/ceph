@@ -765,9 +765,10 @@ def call(command,  # type: List[str]
         end_time = start_time + timeout
     while not stop:
         if end_time and (time.time() >= end_time):
-            logger.info(desc + ':timeout after %s seconds' % timeout)
             stop = True
-            process.kill()
+            if process.poll() is None:
+                logger.info(desc + ':timeout after %s seconds' % timeout)
+                process.kill()
         if reads and process.poll() is not None:
             # we want to stop, but first read off anything remaining
             # on stdout/stderr
