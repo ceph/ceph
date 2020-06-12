@@ -6,12 +6,12 @@
 #include "OpenLocalImageRequest.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/journal/Policy.h"
 #include "librbd/mirror/GetInfoRequest.h"
@@ -73,9 +73,10 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
 };
 
 struct MirrorJournalPolicy : public librbd::journal::Policy {
-  ContextWQ *work_queue;
+  librbd::asio::ContextWQ *work_queue;
 
-  MirrorJournalPolicy(ContextWQ *work_queue) : work_queue(work_queue) {
+  MirrorJournalPolicy(librbd::asio::ContextWQ *work_queue)
+    : work_queue(work_queue) {
   }
 
   bool append_disabled() const override {
@@ -95,11 +96,12 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
 } // anonymous namespace
 
 template <typename I>
-OpenLocalImageRequest<I>::OpenLocalImageRequest(librados::IoCtx &local_io_ctx,
-                                                I **local_image_ctx,
-                                                const std::string &local_image_id,
-                                                ContextWQ *work_queue,
-                                                Context *on_finish)
+OpenLocalImageRequest<I>::OpenLocalImageRequest(
+    librados::IoCtx &local_io_ctx,
+    I **local_image_ctx,
+    const std::string &local_image_id,
+    librbd::asio::ContextWQ *work_queue,
+    Context *on_finish)
   : m_local_io_ctx(local_io_ctx), m_local_image_ctx(local_image_ctx),
     m_local_image_id(local_image_id), m_work_queue(work_queue),
     m_on_finish(on_finish) {

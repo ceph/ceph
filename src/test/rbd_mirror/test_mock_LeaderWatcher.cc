@@ -60,7 +60,7 @@ MockManagedLock *MockManagedLock::s_instance = nullptr;
 
 template <>
 struct ManagedLock<MockTestImageCtx> {
-  ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  ManagedLock(librados::IoCtx& ioctx, librbd::asio::ContextWQ *work_queue,
               const std::string& oid, librbd::Watcher *watcher,
               managed_lock::Mode  mode, bool blacklist_on_break_lock,
               uint32_t blacklist_expire_seconds)
@@ -72,7 +72,7 @@ struct ManagedLock<MockTestImageCtx> {
     MockManagedLock::get_instance().destroy();
   }
 
-  ContextWQ *m_work_queue;
+  librbd::asio::ContextWQ *m_work_queue;
 
   mutable ceph::mutex m_lock = ceph::make_mutex("ManagedLock::m_lock");
 
@@ -184,7 +184,7 @@ template <>
 struct Threads<librbd::MockTestImageCtx> {
   ceph::mutex &timer_lock;
   SafeTimer *timer;
-  ContextWQ *work_queue;
+  librbd::asio::ContextWQ *work_queue;
 
   Threads(Threads<librbd::ImageCtx> *threads)
     : timer_lock(threads->timer_lock), timer(threads->timer),

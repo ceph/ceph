@@ -12,9 +12,11 @@
 #include <boost/variant/static_visitor.hpp>
 
 struct Context;
-struct ContextWQ;
 namespace journal { class Journaler; }
-namespace librbd { class ImageCtx; }
+namespace librbd {
+class ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -32,7 +34,7 @@ public:
                                    Journaler &remote_journaler,
                                    const std::string &local_mirror_uuid,
                                    MirrorPeerClientMeta *client_meta,
-                                   ContextWQ *work_queue) {
+                                   librbd::asio::ContextWQ *work_queue) {
     return new EventPreprocessor(local_image_ctx, remote_journaler,
                                  local_mirror_uuid, client_meta, work_queue);
   }
@@ -43,7 +45,8 @@ public:
 
   EventPreprocessor(ImageCtxT &local_image_ctx, Journaler &remote_journaler,
                     const std::string &local_mirror_uuid,
-                    MirrorPeerClientMeta *client_meta, ContextWQ *work_queue);
+                    MirrorPeerClientMeta *client_meta,
+                    librbd::asio::ContextWQ *work_queue);
   ~EventPreprocessor();
 
   bool is_required(const EventEntry &event_entry);
@@ -90,7 +93,7 @@ private:
   Journaler &m_remote_journaler;
   std::string m_local_mirror_uuid;
   MirrorPeerClientMeta *m_client_meta;
-  ContextWQ *m_work_queue;
+  librbd::asio::ContextWQ *m_work_queue;
 
   bool m_in_progress = false;
   EventEntry *m_event_entry = nullptr;
