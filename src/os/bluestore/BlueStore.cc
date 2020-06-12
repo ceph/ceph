@@ -11559,11 +11559,11 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
   {
     std::lock_guard l(txc->osr->qlock);
     txc->state = TransContext::STATE_KV_DONE;
-    if (txc->ch->commit_queue) {
-      txc->ch->commit_queue->queue(txc->oncommits);
-    } else {
-      finisher.queue(txc->oncommits);
-    }
+  }
+  if (txc->ch->commit_queue) {
+    txc->ch->commit_queue->queue(txc->oncommits);
+  } else {
+    finisher.queue(txc->oncommits);
   }
   throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_committing_lat);
   log_latency_fn(
