@@ -3,6 +3,7 @@ import pytest
 import yaml
 
 from ceph.deployment import drive_selection, translate
+from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpecValidationError
 from ceph.tests.utils import _mk_inventory, _mk_device
@@ -24,7 +25,7 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, \
 ])
 def test_DriveGroup(test_input):
     dg = [DriveGroupSpec.from_json(inp) for inp in test_input][0]
-    assert dg.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: ['hostname']) == ['hostname']
+    assert dg.placement.filter_matching_hostspecs([HostSpec('hostname')]) == ['hostname']
     assert dg.service_id == 'testing_drivegroup'
     assert all([isinstance(x, Device) for x in dg.data_devices.paths])
     assert dg.data_devices.paths[0].path == '/dev/sda'
@@ -53,7 +54,7 @@ def test_DriveGroup_fail(test_input):
 
 def test_drivegroup_pattern():
     dg = DriveGroupSpec(PlacementSpec(host_pattern='node[1-3]'), data_devices=DeviceSelection(all=True))
-    assert dg.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: ['node{}'.format(i) for i in range(10)]) == ['node1', 'node2', 'node3']
+    assert dg.placement.filter_matching_hostspecs([HostSpec('node{}'.format(i)) for i in range(10)]) == ['node1', 'node2', 'node3']
 
 
 def test_drive_selection():

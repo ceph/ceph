@@ -1,6 +1,7 @@
 from typing import NamedTuple, List
 import pytest
 
+from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
 
 from cephadm.module import HostAssignment
@@ -424,9 +425,15 @@ class NodeAssignmentTest(NamedTuple):
         ),
     ])
 def test_node_assignment(service_type, placement, hosts, daemons, expected):
+    def get_hosts_func(label=None, as_hostspec=False):
+        if as_hostspec:
+            return [HostSpec(h) for h in hosts]
+        return hosts
+
+
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
-        get_hosts_func=lambda label=None, as_hostspec=False: hosts,
+        get_hosts_func=get_hosts_func,
         get_daemons_func=lambda _: daemons).place()
     assert sorted([h.hostname for h in hosts]) == sorted(expected)
 
@@ -502,9 +509,14 @@ class NodeAssignmentTest2(NamedTuple):
     ])
 def test_node_assignment2(service_type, placement, hosts,
                           daemons, expected_len, in_set):
+    def get_hosts_func(label=None, as_hostspec=False):
+        if as_hostspec:
+            return [HostSpec(h) for h in hosts]
+        return hosts
+
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
-        get_hosts_func=lambda label=None, as_hostspec=False: hosts,
+        get_hosts_func=get_hosts_func,
         get_daemons_func=lambda _: daemons).place()
     assert len(hosts) == expected_len
     for h in [h.hostname for h in hosts]:
@@ -533,9 +545,14 @@ def test_node_assignment2(service_type, placement, hosts,
     ])
 def test_node_assignment3(service_type, placement, hosts,
                           daemons, expected_len, must_have):
+    def get_hosts_func(label=None, as_hostspec=False):
+        if as_hostspec:
+            return [HostSpec(h) for h in hosts]
+        return hosts
+
     hosts = HostAssignment(
         spec=ServiceSpec(service_type, placement=placement),
-        get_hosts_func=lambda label=None, as_hostspec=False: hosts,
+        get_hosts_func=get_hosts_func,
         get_daemons_func=lambda _: daemons).place()
     assert len(hosts) == expected_len
     for h in must_have:
@@ -591,9 +608,13 @@ class NodeAssignmentTestBadSpec(NamedTuple):
         ),
     ])
 def test_bad_specs(service_type, placement, hosts, daemons, expected):
+    def get_hosts_func(label=None, as_hostspec=False):
+        if as_hostspec:
+            return [HostSpec(h) for h in hosts]
+        return hosts
     with pytest.raises(OrchestratorValidationError) as e:
         hosts = HostAssignment(
             spec=ServiceSpec(service_type, placement=placement),
-            get_hosts_func=lambda label=None, as_hostspec=False: hosts,
+            get_hosts_func=get_hosts_func,
             get_daemons_func=lambda _: daemons).place()
     assert str(e.value) == expected

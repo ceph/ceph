@@ -2,9 +2,11 @@ import fnmatch
 import re
 from collections import namedtuple
 from functools import wraps
-from typing import Optional, Dict, Any, List, Union, Callable
+from typing import Optional, Dict, Any, List, Union, Callable, Iterator
 
 import six
+
+from ceph.deployment.hostspec import HostSpec
 
 
 class ServiceSpecValidationError(Exception):
@@ -182,22 +184,26 @@ class PlacementSpec(object):
         self.hosts = hosts
 
     def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
+        return self.filter_matching_hostspecs(_get_hosts_func(as_hostspec=True))
+
+    def filter_matching_hostspecs(self, hostspecs: Iterator[HostSpec]) -> List[str]:
         if self.hosts:
-            all_hosts = _get_hosts_func(label=None, as_hostspec=False)
+            all_hosts = [hs.hostname for hs in hostspecs]
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
         elif self.label:
-            return _get_hosts_func(label=self.label, as_hostspec=False)
+            return [hs.hostname for hs in hostspecs if self.label in hs.labels]
         elif self.host_pattern:
-            return fnmatch.filter(_get_hosts_func(label=None, as_hostspec=False), self.host_pattern)
+            all_hosts = [hs.hostname for hs in hostspecs]
+            return fnmatch.filter(all_hosts, self.host_pattern)
         else:
             # This should be caught by the validation but needs to be here for
             # get_host_selection_size
             return []
 
-    def get_host_selection_size(self, _get_hosts_func):
+    def get_host_selection_size(self, hostspecs: Iterator[HostSpec]):
         if self.count:
             return self.count
-        return len(self.filter_matching_hosts(_get_hosts_func))
+        return len(self.filter_matching_hostspecs(hostspecs))
 
     def pretty_str(self):
         kv = []
