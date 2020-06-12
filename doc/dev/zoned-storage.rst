@@ -19,10 +19,19 @@ drives are high capacity hard drives with the ZBC/ZAC interface.  The longer
 term goal is to support ZNS SSDs, as they become available, as well as overwrite
 workloads.
 
-The first patch in these series enables writing data to HM-SMR drives.  Upcoming
-patches will introduce a rudimentary cleaner to form a baseline for further
-research.  Currently we can perform basic RADOS benchmarks on HM-SMR drives, as
-can be seen below.
+The first patch in these series enables writing data to HM-SMR drives.  The
+second patch will introduce ZonedFreelistManger, a FreelistManager
+implementation that passes enough information to ZonedAllocator to correctly
+initialize state of zones.  We have to introduce a new FreelistManager
+implementation because with zoned devices a region of disk can be in three
+states (empty, used, and stale), whereas current BitmapFreelistManager tracks
+only two states (empty and used).  It is not possible to accurately initialize
+the state of zones in ZonedAllocator by tracking only two states.  The third
+planned patch will introduce a rudimentary cleaner to form a baseline for
+further research.
+
+Currently we can perform basic RADOS benchmarks on an OSD running on an HM-SMR
+drives, restart the OSD, and read the written data, as can be seen below.
 
 Please contact Abutalib Aghayev <agayev@cs.cmu.edu> for questions.
 
@@ -75,6 +84,10 @@ Please contact Abutalib Aghayev <agayev@cs.cmu.edu> for questions.
   Stddev Latency(s):      0.180238
   Max latency(s):         1.00844
   Min latency(s):         0.108616
+  $ sudo ../src/stop.sh
+  $ # Notice the lack of "--new" parameter to vstart.sh
+  $ MON=1 OSD=1 MDS=0 sudo ../src/vstart.sh --localhost --bluestore --bluestore-devs /dev/sdc --bluestore-zoned  
+  <snipped verbose output>
   $ sudo ./bin/rados bench -p bench 10 rand
   hints = 1
     sec Cur ops   started  finished  avg MB/s  cur MB/s last lat(s)  avg lat(s)
