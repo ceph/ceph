@@ -2,7 +2,7 @@ import fnmatch
 import re
 from collections import namedtuple
 from functools import wraps
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, Callable
 
 import six
 
@@ -173,11 +173,23 @@ class PlacementSpec(object):
         # in the orchestrator backend.
         self.hosts = hosts
 
-    def pattern_matches_hosts(self, all_hosts):
-        # type: (List[str]) -> List[str]
-        if not self.host_pattern:
+    def filter_matching_hosts(self, _get_hosts_func: Callable) -> List[str]:
+        if self.hosts:
+            all_hosts = _get_hosts_func(label=None, as_hostspec=False)
+            return [h.hostname for h in self.hosts if h.hostname in all_hosts]
+        elif self.label:
+            return _get_hosts_func(label=self.label, as_hostspec=False)
+        elif self.host_pattern:
+            return fnmatch.filter(_get_hosts_func(label=None, as_hostspec=False), self.host_pattern)
+        else:
+            # This should be caught by the validation but needs to be here for
+            # get_host_selection_size
             return []
-        return fnmatch.filter(all_hosts, self.host_pattern)
+
+    def get_host_selection_size(self, _get_hosts_func):
+        if self.count:
+            return self.count
+        return len(self.filter_matching_hosts(_get_hosts_func))
 
     def pretty_str(self):
         kv = []
@@ -377,11 +389,11 @@ class ServiceSpec(object):
         return object.__new__(sub_cls)
 
     def __init__(self,
-                 service_type,     # type: str
-                 service_id=None,  # type: Optional[str]
-                 placement=None,   # type: Optional[PlacementSpec]
-                 count=None,       # type: Optional[int]
-                 unmanaged=False,  # type: bool
+                 service_type: str,
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 count: Optional[int] = None,
+                 unmanaged: bool = False,
                  ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
@@ -478,8 +490,14 @@ def servicespec_validate_add(self: ServiceSpec):
 
 
 class NFSServiceSpec(ServiceSpec):
-    def __init__(self, service_id=None, pool=None, namespace=None, placement=None,
-                 service_type='nfs', unmanaged=False):
+    def __init__(self,
+                 service_type: str = 'nfs',
+                 service_id: Optional[str] = None,
+                 pool: Optional[str] = None,
+                 namespace: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
             'nfs', service_id=service_id,
@@ -503,6 +521,7 @@ class NFSServiceSpec(ServiceSpec):
 
     def rados_config_location(self):
         # type: () -> str
+        assert self.pool
         url = 'rados://' + self.pool + '/'
         if self.namespace:
             url += self.namespace + '/'
@@ -516,17 +535,17 @@ class RGWSpec(ServiceSpec):
 
     """
     def __init__(self,
-                 service_type='rgw',
-                 service_id=None,  # type: Optional[str]
-                 placement=None,
-                 rgw_realm=None,  # type: Optional[str]
-                 rgw_zone=None,  # type: Optional[str]
-                 subcluster=None,  # type: Optional[str]
-                 rgw_frontend_port=None,  # type: Optional[int]
-                 rgw_frontend_ssl_certificate=None,  # type Optional[List[str]]
-                 rgw_frontend_ssl_key=None,  # type: Optional[List[str]]
-                 unmanaged=False,  # type: bool
-                 ssl=False,   # type: bool
+                 service_type: str = 'rgw',
+                 service_id: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 rgw_realm: Optional[str] = None,
+                 rgw_zone: Optional[str] = None,
+                 subcluster: Optional[str] = None,
+                 rgw_frontend_port: Optional[int] = None,
+                 rgw_frontend_ssl_certificate: Optional[List[str]] = None,
+                 rgw_frontend_ssl_key: Optional[List[str]] = None,
+                 unmanaged: bool = False,
+                 ssl: bool = False,
                  ):
         assert service_type == 'rgw', service_type
         if service_id:
@@ -572,17 +591,20 @@ class RGWSpec(ServiceSpec):
 
 
 class IscsiServiceSpec(ServiceSpec):
-    def __init__(self, service_id, pool=None,
-                 placement=None,
-                 trusted_ip_list=None,
-                 api_port=None,
-                 api_user=None,
-                 api_password=None,
-                 api_secure=None,
-                 ssl_cert=None,
-                 ssl_key=None,
-                 service_type='iscsi',
-                 unmanaged=False):
+    def __init__(self,
+                 service_type: str = 'iscsi',
+                 service_id: Optional[str] = None,
+                 pool: Optional[str] = None,
+                 trusted_ip_list: Optional[str] = None,
+                 api_port: Optional[int] = None,
+                 api_user: Optional[str] = None,
+                 api_password: Optional[str] = None,
+                 api_secure: Optional[bool] = None,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False
+                 ):
         assert service_type == 'iscsi'
         super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
                                                placement=placement, unmanaged=unmanaged)

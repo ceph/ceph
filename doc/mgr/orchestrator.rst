@@ -73,6 +73,32 @@ Add and remove hosts::
     ceph orch host add <hostname> [<addr>] [<labels>...]
     ceph orch host rm <hostname>
 
+Host Specification
+------------------
+
+Many hosts can be added at once using
+``ceph orch apply -i`` by submitting a multi-document YAML file::
+
+    ---
+    service_type: host
+    addr: node-00
+    hostname: node-00
+    labels:
+    - example1
+    - example2
+    ---
+    service_type: host
+    addr: node-01
+    hostname: node-01
+    labels:
+    - grafana
+    ---
+    service_type: host
+    addr: node-02
+    hostname: node-02
+
+This can be combined with service specifications (below) to create a cluster spec file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior.
+
 OSD Management
 ==============
 
@@ -126,12 +152,12 @@ Create OSDs on a group of devices on a single host::
 
 or::
 
-    ceph orch apply osd -i <json_file/yaml_file> [--preview]
+    ceph orch apply osd -i <json_file/yaml_file>
 
 
 or::
 
-    ceph orch apply osd --use-all-devices [--preview]
+    ceph orch apply osd --all-available-devices
 
 
 For a more in-depth guide to DriveGroups please refer to :ref:`drivegroups`
@@ -380,6 +406,7 @@ to specify the deployment of services. For example:
         - host2
         - host3
     spec: ...
+    unmanaged: false
         
 Where the properties of a service specification are the following:
 
@@ -391,6 +418,10 @@ Where the properties of a service specification are the following:
 * ``service_id`` is the name of the service. Omit the service time
 * ``placement`` is a :ref:`orchestrator-cli-placement-spec`
 * ``spec``: additional specifications for a specific service.
+* ``unmanaged``: If set to ``true``, the orchestrator will not deploy nor
+   remove any daemon associated with this service. Placement and all other
+   properties will be ignored. This is useful, if this service should not
+   be managed temporarily.
 
 Each service type can have different requirements for the spec.
 
@@ -548,8 +579,7 @@ Or with hosts:
       hosts: 
         - host1
         - host2
-        - host3
-
+        - host3 
 
 Configuring the Orchestrator CLI
 ================================

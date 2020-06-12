@@ -87,6 +87,12 @@ cached_stdin = None
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
+
+class termcolor:
+    yellow = '\033[93m'
+    red = '\033[31m'
+    end = '\033[0m'
+
 class Error(Exception):
     pass
 
@@ -231,7 +237,7 @@ class NFSGanesha(object):
 
     @staticmethod
     def get_version(container_id):
-        # type(str) -> Optional[str]
+        # type: (str) -> Optional[str]
         version = None
         out, err, code = call(
             [container_path, 'exec', container_id,
@@ -243,7 +249,7 @@ class NFSGanesha(object):
         return version
 
     def validate(self):
-        # type () -> None
+        # type: () -> None
         if not is_fsid(self.fsid):
             raise Error('not an fsid: %s' % self.fsid)
         if not self.daemon_id:
@@ -380,7 +386,7 @@ class CephIscsi(object):
 
     @staticmethod
     def get_version(container_id):
-        # type(str) -> Optional[str]
+        # type: (str) -> Optional[str]
         version = None
         out, err, code = call(
             [container_path, 'exec', container_id,
@@ -390,7 +396,7 @@ class CephIscsi(object):
         return version
 
     def validate(self):
-        # type () -> None
+        # type: () -> None
         if not is_fsid(self.fsid):
             raise Error('not an fsid: %s' % self.fsid)
         if not self.daemon_id:
@@ -445,6 +451,7 @@ class CephIscsi(object):
 
     @staticmethod
     def configfs_mount_umount(data_dir, mount=True):
+        # type: (str, bool) -> List[str]
         mount_path = os.path.join(data_dir, 'configfs')
         if mount:
             cmd = "if ! grep -qs {0} /proc/mounts; then " \
@@ -457,6 +464,7 @@ class CephIscsi(object):
 ##################################
 
 def get_supported_daemons():
+    # type: () -> List[str]
     supported_daemons = list(Ceph.daemons)
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
@@ -467,7 +475,7 @@ def get_supported_daemons():
 ##################################
 
 def attempt_bind(s, address, port):
-    # type (str) -> None
+    # type: (socket.socket, str, int) -> None
     try:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((address, port))
@@ -482,7 +490,7 @@ def attempt_bind(s, address, port):
         s.close()
 
 def port_in_use(port_num):
-    # type (int) -> bool
+    # type: (int) -> bool
     """Detect whether a port is in use on the local machine - IPv4 and IPv6"""
     logger.info('Verifying port %d ...' % port_num)
     try:
@@ -497,6 +505,7 @@ def port_in_use(port_num):
         return False
 
 def check_ip_port(ip, port):
+    # type: (str, int) -> None
     if not args.skip_ping_check:
         logger.info('Verifying IP %s port %d ...' % (ip, port))
         if ip.startswith('[') or '::' in ip:
@@ -934,6 +943,7 @@ def pathify(p):
     return os.path.abspath(p)
 
 def get_file_timestamp(fn):
+    # type: (str) -> Optional[str]
     try:
         mt = os.path.getmtime(fn)
         return datetime.datetime.fromtimestamp(
@@ -943,6 +953,7 @@ def get_file_timestamp(fn):
         return None
 
 def try_convert_datetime(s):
+    # type: (str) -> Optional[str]
     # This is super irritating because
     #  1) podman and docker use different formats
     #  2) python's strptime can't parse either one
@@ -1111,14 +1122,12 @@ def infer_config(func):
 
 def _get_default_image():
     if DEFAULT_IMAGE_IS_MASTER:
-        yellow = '\033[93m'
-        end = '\033[0m'
         warn = '''This is a development version of cephadm.
 For information regarding the latest stable release:
     https://docs.ceph.com/docs/{}/cephadm/install
 '''.format(LATEST_STABLE_RELEASE)
         for line in warn.splitlines():
-            logger.warning('{}{}{}'.format(yellow, line, end))
+            logger.warning('{}{}{}'.format(termcolor.yellow, line, termcolor.end))
     return DEFAULT_IMAGE
 
 def infer_image(func):
@@ -1171,6 +1180,7 @@ def get_last_local_ceph_image():
     return None
 
 def write_tmp(s, uid, gid):
+    # type: (str, int, int) -> Any
     tmp_f = tempfile.NamedTemporaryFile(mode='w',
                                         prefix='ceph-tmp')
     os.fchown(tmp_f.fileno(), uid, gid)
@@ -1346,6 +1356,13 @@ def get_unit_name(fsid, daemon_type, daemon_id=None):
         return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
     else:
         return 'ceph-%s@%s' % (fsid, daemon_type)
+
+def get_unit_name_by_daemon_name(fsid, name):
+    daemon = get_daemon_description(fsid, name)
+    try:
+        return daemon['systemd_unit']
+    except KeyError:
+        raise Error('Failed to get unit name for {}'.format(daemon))
 
 def check_unit(unit_name):
     # type: (str) -> Tuple[bool, str, bool]
@@ -1619,6 +1636,22 @@ def get_container_mounts(fsid, daemon_type, daemon_id,
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
+
+    try:
+        if args.shared_ceph_folder:  # make easy manager modules/ceph-volume development
+            ceph_folder = pathify(args.shared_ceph_folder)
+            if os.path.exists(ceph_folder):
+                mounts[ceph_folder + '/src/ceph-volume/ceph_volume'] = '/usr/lib/python3.6/site-packages/ceph_volume'
+                mounts[ceph_folder + '/src/pybind/mgr'] = '/usr/share/ceph/mgr'
+                mounts[ceph_folder + '/src/python-common/ceph'] = '/usr/lib/python3.6/site-packages/ceph'
+                mounts[ceph_folder + '/monitoring/grafana/dashboards'] = '/etc/grafana/dashboards/ceph-dashboard'
+                mounts[ceph_folder + '/monitoring/prometheus/alerts'] = '/etc/prometheus/ceph'
+            else:
+                logger.error('{}{}{}'.format(termcolor.red,
+                'Ceph shared source folder does not exist.',
+                termcolor.end))
+    except AttributeError:
+        pass
 
     if daemon_type in Monitoring.components and daemon_id:
         data_dir = get_data_dir(fsid, daemon_type, daemon_id)
@@ -2655,6 +2688,28 @@ def command_bootstrap():
                         get_fqdn(), port,
                         args.initial_dashboard_user,
                         password))
+    
+    if args.apply_spec:
+        logger.info('Applying %s to cluster' % args.apply_spec)
+
+        with open(args.apply_spec) as f:
+            for line in f:
+                if 'hostname:' in line:
+                    line = line.replace('\n', '')
+                    split = line.split(': ')
+                    if split[1] != host:
+                        logger.info('Adding ssh key to %s' % split[1])
+
+                        ssh_key = '/etc/ceph/ceph.pub'
+                        if args.ssh_public_key:
+                            ssh_key = args.ssh_public_key.name
+                        out, err, code = call_throws(['ssh-copy-id', '-f', '-i', ssh_key, 'root@%s' % split[1]])
+
+        mounts = {}
+        mounts[pathify(args.apply_spec)] = '/tmp/spec.yml:z'
+
+        out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
+        logger.info(out)
 
     logger.info('You can access the Ceph CLI with:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
@@ -2927,8 +2982,9 @@ def command_unit():
     # type: () -> None
     if not args.fsid:
         raise Error('must pass --fsid to specify cluster')
-    (daemon_type, daemon_id) = args.name.split('.', 1)
-    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+
+    unit_name = get_unit_name_by_daemon_name(args.fsid, args.name)
+
     call_throws([
         'systemctl',
         args.command,
@@ -2942,8 +2998,7 @@ def command_logs():
     if not args.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    (daemon_type, daemon_id) = args.name.split('.', 1)
-    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+    unit_name = get_unit_name_by_daemon_name(args.fsid, args.name)
 
     cmd = [find_program('journalctl')]
     cmd.extend(['-u', unit_name])
@@ -3053,6 +3108,7 @@ def list_daemons(detail=True, legacy_dir=None):
                         'style': 'cephadm:v1',
                         'name': name,
                         'fsid': fsid,
+                        'systemd_unit': unit_name,
                     }
                     if detail:
                         # get container id
@@ -3136,13 +3192,22 @@ def list_daemons(detail=True, legacy_dir=None):
                             os.path.join(data_dir, fsid, j, 'unit.image'))
                         i['configured'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.configured'))
-                        i['systemd_unit'] = unit_name
 
                     ls.append(i)
 
-    # /var/lib/rook
-    # WRITE ME
     return ls
+
+
+def get_daemon_description(fsid, name, detail=False, legacy_dir=None):
+    # type: (str, str, bool, Optional[str]) -> Dict[str, str]
+
+    for d in list_daemons(detail=detail, legacy_dir=legacy_dir):
+        if d['fsid'] != fsid:
+            continue
+        if d['name'] != name:
+            continue
+        return d
+    raise Error('Daemon not found: {}. See `cephadm ls`'.format(name))
 
 
 ##################################
@@ -3543,11 +3608,13 @@ def command_rm_daemon():
     l = FileLock(args.fsid)
     l.acquire()
 
+    unit_name = get_unit_name_by_daemon_name(args.fsid, args.name)
+
     (daemon_type, daemon_id) = args.name.split('.', 1)
     if daemon_type in ['mon', 'osd'] and not args.force:
         raise Error('must pass --force to proceed: '
                       'this command may destroy precious data!')
-    unit_name = get_unit_name(args.fsid, daemon_type, daemon_id)
+
     call(['systemctl', 'stop', unit_name],
          verbose_on_failure=False)
     call(['systemctl', 'reset-failed', unit_name],
@@ -3648,7 +3715,7 @@ def check_time_sync(enabler=None):
         'ntpd.service', # el7 (at least)
         'ntp.service',  # 18.04 (at least)
     ]
-    if not check_units(units, enabler=None):
+    if not check_units(units, enabler):
         logger.warning('No time sync service is running; checked for %s' % units)
         return False
     return True
@@ -3755,6 +3822,7 @@ class CustomValidation(argparse.Action):
 ##################################
 
 def get_distro():
+    # type: () -> Tuple[Optional[str], Optional[str], Optional[str]]
     distro = None
     distro_version = None
     distro_codename = None
@@ -4541,6 +4609,15 @@ def _get_parser():
         '--skip-monitoring-stack',
         action='store_true',
         help='Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)')
+    parser_bootstrap.add_argument(
+        '--apply-spec',
+        help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
+
+
+    parser_bootstrap.add_argument(
+        '--shared_ceph_folder',
+        metavar='CEPH_SOURCE_FOLDER',
+        help='Development mode. Several folders in containers are volumes mapped to different sub-folders in the ceph source folder')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

@@ -2,8 +2,9 @@ import json
 import errno
 import logging
 from collections import defaultdict
-from threading import Event
 from functools import wraps
+from tempfile import TemporaryDirectory
+from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -27,6 +28,7 @@ from mgr_module import MgrModule, HandleCommandResult
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta
+from orchestrator._interface import GenericSpec
 
 from . import remotes
 from . import utils
@@ -40,6 +42,7 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
+from .template import TemplateMgr
 
 try:
     import remoto
@@ -79,27 +82,6 @@ DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
-
-
-# for py2 compat
-try:
-    from tempfile import TemporaryDirectory # py3
-except ImportError:
-    # define a minimal (but sufficient) equivalent for <= py 3.2
-    class TemporaryDirectory(object): # type: ignore
-        def __init__(self):
-            self.name = tempfile.mkdtemp()
-
-        def __enter__(self):
-            if not self.name:
-                self.name = tempfile.mkdtemp()
-            return self.name
-
-        def cleanup(self):
-            shutil.rmtree(self.name)
-
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.cleanup()
 
 
 def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
@@ -363,6 +345,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'crash': self.crash_service,
             'iscsi': self.iscsi_service,
         }
+
+        self.template = TemplateMgr()
 
     def shutdown(self):
         self.log.debug('shutdown')
@@ -1063,12 +1047,10 @@ you may want to run:
             self.log.exception(ex)
             raise
 
-    def _get_hosts(self, label=None):
-        # type: (Optional[str]) -> List[str]
-        return list(self.inventory.filter_by_label(label))
+    def _get_hosts(self, label: Optional[str] = '', as_hostspec: bool = False) -> List:
+        return list(self.inventory.filter_by_label(label=label, as_hostspec=as_hostspec))
 
-    @trivial_completion
-    def add_host(self, spec):
+    def _add_host(self, spec):
         # type: (HostSpec) -> str
         """
         Add a host to be managed by the orchestrator.
@@ -1090,6 +1072,10 @@ you may want to run:
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}'".format(spec.hostname)
+
+    @trivial_completion
+    def add_host(self, spec: HostSpec) -> str:
+        return self._add_host(spec)
 
     @trivial_completion
     def remove_host(self, host):
@@ -1240,18 +1226,6 @@ you may want to run:
         self.cache.save_host(host)
         return None
 
-    def _get_spec_size(self, spec):
-        if spec.placement.count:
-            return spec.placement.count
-        elif spec.placement.host_pattern:
-            return len(spec.placement.pattern_matches_hosts(self.inventory.keys()))
-        elif spec.placement.label:
-            return len(self._get_hosts(spec.placement.label))
-        elif spec.placement.hosts:
-            return len(spec.placement.hosts)
-        # hmm!
-        return 0
-
     @trivial_completion
     def describe_service(self, service_type=None, service_name=None,
                          refresh=False):
@@ -1302,7 +1276,7 @@ you may want to run:
                         osd_count += 1
                         sm[n].size = osd_count
                     else:
-                        sm[n].size = self._get_spec_size(spec)
+                        sm[n].size = spec.placement.get_host_selection_size(self._get_hosts)
 
                     sm[n].created = self.spec_store.spec_created[n]
                     if service_type == 'nfs':
@@ -1327,7 +1301,7 @@ you may want to run:
                 continue
             sm[n] = orchestrator.ServiceDescription(
                 spec=spec,
-                size=self._get_spec_size(spec),
+                size=spec.placement.get_host_selection_size(self._get_hosts),
                 running=0,
             )
             if service_type == 'nfs':
@@ -1535,14 +1509,13 @@ you may want to run:
         if not osdspecs:
             self.log.debug("No OSDSpecs found")
             return []
-        # TODO: adapt this when we change patter_matches_hosts with https://github.com/ceph/ceph/pull/34860
-        return sum([spec.placement.pattern_matches_hosts(self.cache.get_hosts()) for spec in osdspecs], [])
+        return sum([spec.placement.filter_matching_hosts(self._get_hosts) for spec in osdspecs], [])
 
     def resolve_osdspecs_for_host(self, host):
         matching_specs = []
         self.log.debug(f"Finding OSDSpecs for host: <{host}>")
         for spec in self.spec_store.find('osd'):
-            if host in spec.placement.pattern_matches_hosts(self.cache.get_hosts()):
+            if host in spec.placement.filter_matching_hosts(self._get_hosts):
                 self.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
                 matching_specs.append(spec)
         return matching_specs
@@ -2004,7 +1977,13 @@ you may want to run:
         # type: (ServiceSpec) -> List[str]
         return self._add_daemon('mgr', spec, self.mgr_service.create)
 
-    def _apply(self, spec: ServiceSpec) -> str:
+    def _apply(self, spec: GenericSpec) -> str:
+        if spec.service_type == 'host':
+            return self._add_host(cast(HostSpec, spec))
+
+        return self._apply_service_spec(cast(ServiceSpec, spec))
+
+    def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
@@ -2041,8 +2020,11 @@ you may want to run:
         return "Scheduled %s update..." % spec.service_name()
 
     @trivial_completion
-    def apply(self, specs: List[ServiceSpec]):
-        return [self._apply(spec) for spec in specs]
+    def apply(self, specs: List[GenericSpec]):
+        results = []
+        for spec in specs:
+            results.append(self._apply(spec))
+        return results
 
     @trivial_completion
     def apply_mgr(self, spec):
