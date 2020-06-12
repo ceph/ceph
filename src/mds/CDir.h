@@ -598,6 +598,14 @@ public:
   void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;
   void dump_load(ceph::Formatter *f);
 
+  mds_rank_t bucket_hash(mds_rank_t max) const {
+    return ((mds_rank_t) ceph_frag_value(frag)) % max;
+  }
+  bool is_hot_exportable(mds_rank_t dest, mds_rank_t max) const {
+    mds_rank_t rank = bucket_hash(max);
+    return (rank == dest);
+  }
+
   // context
   MDCache *cache;
 

@@ -790,9 +790,19 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   ceph_assert(dest != mds->get_nodeid());
    
   CDir* parent = dir->inode->get_projected_parent_dir();
-  if (!mds->is_stopping() && !dir->inode->is_exportable(dest) && dir->get_num_head_items() > 0) {
-    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": dir is export pinned" << dendl;
+  if (export_state.count(dir) > 0) {
+    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": already exporting" << dendl;
     return;
+  } else if (!mds->is_stopping()) {
+    if (dir->inode->get_hot_flag()) {
+      if (!dir->is_hot_exportable(dest, mds->mdsmap->get_max_mds())) {
+        dout(7) << "Cannot export to mds." << dest << " " << *dir << ": dir is marked hot" << dendl;
+	return;
+      }
+    } else if (!dir->inode->is_exportable(dest)) {
+      dout(7) << "Cannot export to mds." << dest << " " << *dir << ": dir is export pinned" << dendl;
+      return;
+    }
   } else if (!(mds->is_active() || mds->is_stopping())) {
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": not active" << dendl;
     return;

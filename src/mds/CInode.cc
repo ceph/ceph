@@ -24,6 +24,7 @@
 
 #include "MDSRank.h"
 #include "MDCache.h"
+#include "MDBalancer.h"
 #include "MDLog.h"
 #include "Locker.h"
 #include "Mutation.h"
@@ -458,15 +459,23 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   bool pin_update = inode.export_pin != front.inode.export_pin;
   bool dist_update = inode.export_ephemeral_distributed_pin
                      != front.inode.export_ephemeral_distributed_pin;
+  bool hot_flag_update = inode.hot_flag != front.inode.hot_flag;
+  bool expected_file_bits_update = inode.expected_file_bits
+                                   != front.inode.expected_file_bits;
 
   mark_dirty(front.inode.version, ls);
 
   inode = std::move(front.inode);
 
-  if (pin_update)
+  if (expected_file_bits_update) {
+    maybe_fragment();
+  }
+  if (pin_update || hot_flag_update || expected_file_bits_update) {
     maybe_export_pin(true);
+  }
   if (dist_update)
     maybe_ephemeral_dist_children(true);
+
 
   if (inode.is_backtrace_updated())
     mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
@@ -5227,8 +5236,12 @@ int64_t CInode::get_backtrace_pool() const
   }
 }
 
-void CInode::queue_export_pin(mds_rank_t target)
+void CInode::queue_export_pin(mds_rank_t export_pin)
 {
+  mds_rank_t max_rank = mdcache->mds->mdsmap->get_max_mds();
+  mds_rank_t target = export_pin;
+  bool hot_flag = get_hot_flag(false);
+
   if (state_test(CInode::STATE_QUEUEDEXPORTPIN))
     return;
 
@@ -5237,6 +5250,9 @@ void CInode::queue_export_pin(mds_rank_t target)
     CDir *dir = p.second;
     if (!dir->is_auth())
       continue;
+    if (export_pin == MDS_RANK_NONE && hot_flag) {
+      target = dir->bucket_hash(max_rank);
+    }
     if (target != MDS_RANK_NONE) {
       if (dir->is_subtree_root()) {
 	// set auxsubtree bit or export it
@@ -5269,13 +5285,16 @@ void CInode::maybe_export_pin(bool update)
   dout(15) << __func__ << " update=" << update << " " << *this << dendl;
 
   mds_rank_t export_pin = get_export_pin(false, false);
-  if (export_pin == MDS_RANK_NONE && !update) {
+  bool hot_flag = get_hot_flag(false);
+
+  if (export_pin == MDS_RANK_NONE && !hot_flag && !update) {
     return;
   }
 
   /* disable ephemeral pins */
   set_ephemeral_dist(false);
   set_ephemeral_rand(false);
+
   queue_export_pin(export_pin);
 }
 
@@ -5553,6 +5572,21 @@ bool CInode::is_exportable(mds_rank_t dest) const
   }
 }
 
+void CInode::maybe_fragment()
+{
+  if (!is_dir() || !is_normal()) {
+    return;
+  }
+
+  for (auto p = dirfrags.begin(); p != dirfrags.end(); p++) {
+    CDir *dir = p->second;
+    if (!dir->is_auth()) {
+      continue;
+    }
+    mdcache->mds->balancer->maybe_fragment(dir, false);
+  }
+}
+
 void CInode::set_expected_file_bits(uint8_t bits)
 {
   ceph_assert(is_dir());
@@ -5572,6 +5606,39 @@ uint8_t CInode::get_expected_file_bits() const
     return 0;
   }
   return in->get_inode().expected_file_bits;
+}
+
+void CInode::set_hot_flag(bool flag)
+{
+  ceph_assert(is_dir());
+  ceph_assert(is_projected());
+  get_projected_inode()->hot_flag = flag;
+}
+
+bool CInode::get_hot_flag(bool inherit) const
+{
+  const CInode *in = this;
+  while (true) {
+    if (in->is_system()) {
+      break;
+    }
+    // unlinked directories are not hot
+    if (in->get_inode().nlink == 0) {
+      break;
+    }
+    if (in->get_inode().hot_flag) {
+      return true;
+    }
+    if (!inherit) {
+      break;
+    }
+    const CDentry *pdn = in->get_parent_dn();
+    if (!pdn) {
+      break;
+    }
+    in = pdn->get_dir()->inode;
+  }
+  return false;
 }
 
 void CInode::get_nested_dirfrags(std::vector<CDir*>& v) const

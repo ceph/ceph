@@ -927,7 +927,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   mds_rank_t get_export_pin(bool inherit=true, bool ephemeral=true) const;
   void set_export_pin(mds_rank_t rank);
-  void queue_export_pin(mds_rank_t target);
+  void queue_export_pin(mds_rank_t export_pin);
   void maybe_export_pin(bool update=false);
 
   void check_pin_policy();
@@ -963,8 +963,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     maybe_ephemeral_dist();
     maybe_ephemeral_rand();
   }
+  void maybe_fragment();
   void set_expected_file_bits(uint8_t bits);
   uint8_t get_expected_file_bits() const;
+
+  void set_hot_flag(bool flag);
+  bool get_hot_flag(bool inherit=true) const;
 
   void print(std::ostream& out) override;
   void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;

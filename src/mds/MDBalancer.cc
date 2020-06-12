@@ -92,6 +92,8 @@ void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const 
 
 void MDBalancer::handle_export_pins(void)
 {
+  mds_rank_t max_rank = mds->mdsmap->get_max_mds();
+
   auto &q = mds->mdcache->export_pin_queue;
   auto it = q.begin();
   dout(20) << "export_pin_queue size=" << q.size() << dendl;
@@ -102,7 +104,8 @@ void MDBalancer::handle_export_pins(void)
 
     in->check_pin_policy();
     mds_rank_t export_pin = in->get_export_pin(false);
-    if (export_pin >= mds->mdsmap->get_max_mds()) {
+    mds_rank_t target = export_pin;
+    if (target >= max_rank) {
       dout(20) << " delay export_pin=" << export_pin << " on " << *in << dendl;
       in->state_clear(CInode::STATE_QUEUEDEXPORTPIN);
       q.erase(cur);
@@ -116,11 +119,18 @@ void MDBalancer::handle_export_pins(void)
 
     bool remove = true;
     for (auto&& dir : in->get_dirfrags()) {
-      if (!dir->is_auth())
+      if (!dir->is_auth()) {
 	continue;
-
-      if (export_pin == MDS_RANK_NONE) {
-	if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
+      }
+      // only set the rank using hot_flag if the directory isn't pinned.
+      if (export_pin == MDS_RANK_NONE && in->get_hot_flag(false)) {
+        target = dir->bucket_hash(max_rank);
+	dout(20) << " dir: " << *dir << " export_pin: " << export_pin
+	        << ", target: " << target << ", max_rank: " << max_rank
+		<< ", nodeid: " << mds->get_nodeid() << dendl;
+      }
+      if (target == MDS_RANK_NONE) {
+        if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
 	  if (dir->is_frozen() || dir->is_freezing()) {
 	    // try again later
 	    remove = false;
@@ -130,7 +140,7 @@ void MDBalancer::handle_export_pins(void)
 	  dir->state_clear(CDir::STATE_AUXSUBTREE);
 	  mds->mdcache->try_subtree_merge(dir);
 	}
-      } else if (export_pin == mds->get_nodeid()) {
+      } else if (target == mds->get_nodeid()) {
         if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
           ceph_assert(dir->is_subtree_root());
         } else if (dir->state_test(CDir::STATE_CREATING) ||
@@ -147,12 +157,7 @@ void MDBalancer::handle_export_pins(void)
 	  dir->state_set(CDir::STATE_AUXSUBTREE);
 	}
       } else {
-        /* Only export a directory if it's non-empty. An empty directory will
-         * be sent back by the importer.
-         */
-        if (dir->get_num_head_items() > 0) {
-	  mds->mdcache->migrator->export_dir(dir, export_pin);
-        }
+	mds->mdcache->migrator->export_dir(dir, target);
 	remove = false;
       }
     }
@@ -174,18 +179,22 @@ void MDBalancer::handle_export_pins(void)
   }
 
   for (auto &cd : authsubs) {
-    mds_rank_t export_pin = cd->inode->get_export_pin();
-
+    mds_rank_t target = cd->inode->get_export_pin(true);
+    bool hot_flag = cd->inode->get_hot_flag(true);
+    // only set the target using hot_flag if the directory isn't pinned.
+    if (target == MDS_RANK_NONE && hot_flag) {
+      target = cd->bucket_hash(max_rank);
+    }
     if (print_auth_subtrees) {
-      dout(25) << "auth tree " << *cd << " export_pin=" << export_pin <<
+      dout(25) << "auth tree " << *cd << " target=" << target <<
 		  dendl;
     }
 
-    if (export_pin >= 0 && export_pin < mds->mdsmap->get_max_mds()) {
-      if (export_pin == mds->get_nodeid()) {
+    if (target >= 0 && target < max_rank) {
+      if (target == mds->get_nodeid()) {
         cd->get_inode()->check_pin_policy();
       } else {
-        mds->mdcache->migrator->export_dir(cd, export_pin);
+        mds->mdcache->migrator->export_dir(cd, target);
       }
     }
   }
@@ -516,14 +525,14 @@ double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxe
   return howmuch;
 }
 
-void MDBalancer::queue_split(const CDir *dir, bool fast)
+void MDBalancer::queue_split(const CDir *dir, bool fast, int bits)
 {
   dout(10) << __func__ << " enqueuing " << *dir
-                       << " (fast=" << fast << ")" << dendl;
+          << " (fast=" << fast << ", bits =" << bits << ")" << dendl;
 
   const dirfrag_t frag = dir->dirfrag();
 
-  auto callback = [this, frag](int r) {
+  auto callback = [this, frag, bits](int r) {
     if (split_pending.erase(frag) == 0) {
       // Someone beat me to it.  This can happen in the fast splitting
       // path, because we spawn two contexts, one with mds->timer and
@@ -545,7 +554,8 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
     // Pass on to MDCache: note that the split might still not
     // happen if the checks in MDCache::can_fragment fail.
     dout(10) << __func__ << " splitting " << *split_dir << dendl;
-    mds->mdcache->split_dir(split_dir, g_conf()->mds_bal_split_bits);
+    int fb = (bits < 0) ? g_conf()->mds_bal_split_bits : bits;
+    mds->mdcache->split_dir(split_dir, fb);
   };
 
   bool is_new = false;
@@ -865,6 +875,9 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     CInode *diri = dir->get_inode();
     if (diri->is_mdsdir())
       continue;
+    if (diri->get_hot_flag(false)) {
+      continue;
+    }
     if (diri->get_export_pin(false) != MDS_RANK_NONE)
       continue;
     if (dir->is_freezing() || dir->is_frozen())
@@ -1166,9 +1179,10 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
       !dir->inode->is_stray()) { // not straydir
 
     // split
-    if (dir->frag.bits() < dir->inode->get_expected_file_bits()) {
+    if (dir->inode->get_expected_file_bits() > dir->frag.bits()) {
+      int bits = dir->inode->get_expected_file_bits() - dir->frag.bits();
       // fast-path pre-split based on expected directory size
-      queue_split(dir, true);
+      queue_split(dir, true, bits);
     } else if (g_conf()->mds_bal_split_size > 0 && (dir->should_split() || hot)) {
       if (split_pending.count(dir->dirfrag()) == 0) {
         queue_split(dir, false);

@@ -594,8 +594,10 @@ struct inode_t {
 
   quota_info_t quota;
 
+  // manual pinning and directory optimization
   mds_rank_t export_pin = MDS_RANK_NONE;
   uint8_t expected_file_bits = 0;
+  bool hot_flag = false;
 
   double export_ephemeral_random_pin = 0;
   bool export_ephemeral_distributed_pin = false;
@@ -678,6 +680,7 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_ephemeral_distributed_pin, bl);
 
   encode(expected_file_bits, bl);
+  encode(hot_flag, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -784,8 +787,10 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 
   if (struct_v >= 17) {
     decode(expected_file_bits, p);
+    decode(hot_flag, p);
   } else {
     expected_file_bits = 0;
+    hot_flag = false;
   }
   DECODE_FINISH(p);
 }

@@ -58,7 +58,7 @@ public:
   void hit_inode(CInode *in, int type, int who=-1);
   void hit_dir(CDir *dir, int type, int who=-1, double amount=1.0);
 
-  void queue_split(const CDir *dir, bool fast);
+  void queue_split(const CDir *dir, bool fast, int bits=-1);
   void queue_merge(CDir *dir);
   bool is_fragment_pending(dirfrag_t df) {
     return split_pending.count(df) || merge_pending.count(df);
@@ -87,6 +87,8 @@ private:
   //MDSMap is up to date
   void prep_rebalance(int beat);
   int mantle_prep_rebalance();
+
+  void handle_hot_flags(void);
 
   mds_load_t get_load();
   int localize_balancer();

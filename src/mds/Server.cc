@@ -5720,6 +5720,26 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     dout(10) << " setting expected files to " << files << ", bits to " << +bits << dendl;
     cur->set_expected_file_bits(bits);
     pip = &pi.inode;
+  } else if (name == "ceph.dir.hot"sv) {
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+    bool flag;
+    dout(10) << " setting hot flag" << dendl;
+    try {
+      flag = boost::lexical_cast<bool>(value);
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse uint64_t for " << name << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+    if (!xlock_policylock(mdr, cur)) {
+      return;
+    }
+    auto &pi = cur->project_inode();
+    cur->set_hot_flag(flag);
+    pip = &pi.inode;
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);
