@@ -157,7 +157,7 @@ def configure_instance(ctx, config):
         run_in_keystone_dir(ctx, client,
             [
                 'source',
-                f'{get_toxvenv_dir(ctx)}/bin/activate',
+                get_toxvenv_dir(ctx) + '/bin/activate',
                 run.Raw('&&'),
                 'tox', '-e', 'genconfig'
             ])
