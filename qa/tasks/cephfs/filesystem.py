@@ -11,6 +11,8 @@ import random
 import traceback
 
 from io import BytesIO
+
+from six import ensure_str
 from six import StringIO
 
 from teuthology.exceptions import CommandFailedError
@@ -828,7 +830,8 @@ class Filesystem(MDSCluster):
 
         :return: list of strings like ['a', 'b'], sorted by rank
         """
-        return self.get_daemon_names("up:active", status=status)
+        return [ensure_str(_) for _ in
+                self.get_daemon_names("up:active", status=status)]
 
     def get_all_mds_rank(self, status=None):
         mdsmap = self.get_mds_map(status)
