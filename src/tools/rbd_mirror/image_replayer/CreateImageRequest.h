@@ -12,7 +12,6 @@
 #include <string>
 
 class Context;
-class ContextWQ;
 namespace librbd { class ImageCtx; }
 namespace librbd { class ImageOptions; }
 

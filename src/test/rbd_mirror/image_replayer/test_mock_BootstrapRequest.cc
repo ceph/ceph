@@ -39,7 +39,7 @@ template <>
 struct Threads<librbd::MockTestImageCtx> {
   ceph::mutex &timer_lock;
   SafeTimer *timer;
-  ContextWQ *work_queue;
+  librbd::asio::ContextWQ *work_queue;
 
   Threads(Threads<librbd::ImageCtx> *threads)
     : timer_lock(threads->timer_lock), timer(threads->timer),
@@ -127,7 +127,7 @@ struct OpenLocalImageRequest<librbd::MockTestImageCtx> {
   static OpenLocalImageRequest* create(librados::IoCtx &local_io_ctx,
                                        librbd::MockTestImageCtx **local_image_ctx,
                                        const std::string &local_image_id,
-                                       ContextWQ *work_queue,
+                                       librbd::asio::ContextWQ *work_queue,
                                        Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->image_ctx = local_image_ctx;
@@ -160,7 +160,7 @@ struct PrepareLocalImageRequest<librbd::MockTestImageCtx> {
                                           const std::string &global_image_id,
                                           std::string *local_image_name,
                                           StateBuilder<librbd::MockTestImageCtx>** state_builder,
-                                          ContextWQ *work_queue,
+                                          librbd::asio::ContextWQ *work_queue,
                                           Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->local_image_name = local_image_name;

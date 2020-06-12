@@ -8,6 +8,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ManagedLock.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "InstanceReplayer.h"
 #include "Throttler.h"
 #include "common/Cond.h"
@@ -57,7 +58,8 @@ struct C_RemoveInstanceRequest : public Context {
   InstanceWatcher<I> instance_watcher;
   Context *on_finish;
 
-  C_RemoveInstanceRequest(librados::IoCtx &io_ctx, ContextWQ *work_queue,
+  C_RemoveInstanceRequest(librados::IoCtx &io_ctx,
+                          librbd::asio::ContextWQ *work_queue,
                           const std::string &instance_id, Context *on_finish)
     : instance_watcher(io_ctx, work_queue, nullptr, nullptr, instance_id),
       on_finish(on_finish) {
@@ -301,7 +303,7 @@ void InstanceWatcher<I>::get_instances(librados::IoCtx &io_ctx,
 
 template <typename I>
 void InstanceWatcher<I>::remove_instance(librados::IoCtx &io_ctx,
-                                         ContextWQ *work_queue,
+                                         librbd::asio::ContextWQ *work_queue,
                                          const std::string &instance_id,
                                          Context *on_finish) {
   auto req = new C_RemoveInstanceRequest<I>(io_ctx, work_queue, instance_id,
@@ -311,7 +313,7 @@ void InstanceWatcher<I>::remove_instance(librados::IoCtx &io_ctx,
 
 template <typename I>
 InstanceWatcher<I> *InstanceWatcher<I>::create(
-    librados::IoCtx &io_ctx, ContextWQ *work_queue,
+    librados::IoCtx &io_ctx, librbd::asio::ContextWQ *work_queue,
     InstanceReplayer<I> *instance_replayer,
     Throttler<I> *image_sync_throttler) {
   return new InstanceWatcher<I>(io_ctx, work_queue, instance_replayer,
@@ -321,7 +323,7 @@ InstanceWatcher<I> *InstanceWatcher<I>::create(
 
 template <typename I>
 InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
-                                    ContextWQ *work_queue,
+                                    librbd::asio::ContextWQ *work_queue,
                                     InstanceReplayer<I> *instance_replayer,
                                     Throttler<I> *image_sync_throttler,
                                     const std::string &instance_id)

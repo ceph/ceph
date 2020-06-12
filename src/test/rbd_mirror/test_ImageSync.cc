@@ -11,6 +11,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/Journal.h"
 #include "librbd/Operations.h"
 #include "librbd/api/Io.h"
 #include "librbd/io/AioCompletion.h"
@@ -82,8 +83,11 @@ public:
         m_local_io_ctx, m_threads->work_queue, nullptr, m_image_sync_throttler);
     m_instance_watcher->handle_acquire_leader();
 
+    ContextWQ* context_wq;
+    librbd::Journal<>::get_work_queue(cct, &context_wq);
+
     m_remote_journaler = new ::journal::Journaler(
-      m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
+      context_wq, m_threads->timer, &m_threads->timer_lock,
       m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {}, nullptr);
 
     m_client_meta = {"image-id"};

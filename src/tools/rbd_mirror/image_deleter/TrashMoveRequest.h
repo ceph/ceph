@@ -11,8 +11,10 @@
 #include <string>
 
 struct Context;
-class ContextWQ;
-namespace librbd { struct ImageCtx; }
+namespace librbd {
+struct ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -23,14 +25,16 @@ class TrashMoveRequest {
 public:
   static TrashMoveRequest* create(librados::IoCtx& io_ctx,
                                   const std::string& global_image_id,
-                                  bool resync, ContextWQ* op_work_queue,
+                                  bool resync,
+                                  librbd::asio::ContextWQ* op_work_queue,
                                   Context* on_finish) {
     return new TrashMoveRequest(io_ctx, global_image_id, resync, op_work_queue,
                                 on_finish);
   }
 
   TrashMoveRequest(librados::IoCtx& io_ctx, const std::string& global_image_id,
-                   bool resync, ContextWQ* op_work_queue, Context* on_finish)
+                   bool resync, librbd::asio::ContextWQ* op_work_queue,
+                   Context* on_finish)
     : m_io_ctx(io_ctx), m_global_image_id(global_image_id), m_resync(resync),
       m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
   }
@@ -82,7 +86,7 @@ private:
   librados::IoCtx &m_io_ctx;
   std::string m_global_image_id;
   bool m_resync;
-  ContextWQ *m_op_work_queue;
+  librbd::asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   ceph::bufferlist m_out_bl;

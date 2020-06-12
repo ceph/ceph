@@ -9,6 +9,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "include/stringify.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/watcher/Types.h"
 #include "Threads.h"
 

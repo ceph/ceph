@@ -6,11 +6,12 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/GetMirrorImageIdRequest.h"
@@ -149,8 +150,12 @@ void PrepareRemoteImageRequest<I>::get_client() {
   journal_settings.commit_interval = cct->_conf.get_val<double>(
     "rbd_mirror_journal_commit_age");
 
+  // TODO use Journal thread pool for journal ops until converted to ASIO
+  ContextWQ* context_wq;
+  librbd::Journal<>::get_work_queue(cct, &context_wq);
+
   ceph_assert(m_remote_journaler == nullptr);
-  m_remote_journaler = new Journaler(m_threads->work_queue, m_threads->timer,
+  m_remote_journaler = new Journaler(context_wq, m_threads->timer,
                                      &m_threads->timer_lock, m_remote_io_ctx,
                                      m_remote_image_id, m_local_mirror_uuid,
                                      journal_settings, m_cache_manager_handler);
