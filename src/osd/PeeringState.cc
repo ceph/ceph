@@ -3086,6 +3086,20 @@ void PeeringState::merge_from(
 	       << sources.begin()->second->info.history
 	       << dendl;
 
+    // above we have pulled down source's history and we need to check
+    // history.epoch_created again to confirm that source is not a placeholder
+    // too. (peering requires a sane history.same_interval_since value for any
+    // non-newly created pg and below here we know we are basically iterating
+    // back a series of past maps to fake a merge process, hence we need to
+    // fix history.same_interval_since first so that start_peering_interval()
+    // will not complain)
+    if (info.history.epoch_created == 0) {
+      dout(10) << __func__ << " both merge target and source are placeholders,"
+               << " set sis to lec " << info.history.last_epoch_clean
+               << dendl;
+      info.history.same_interval_since = info.history.last_epoch_clean;
+    }
+
     // if the past_intervals start is later than last_epoch_clean, it
     // implies the source repeered again but the target didn't, or
     // that the source became clean in a later epoch than the target.
