@@ -2949,9 +2949,9 @@ void PeeringState::split_into(
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap_epoch();
 
-  child->info.stats.up = up;
+  child->info.stats.up = newup;
   child->info.stats.up_primary = up_primary;
-  child->info.stats.acting = acting;
+  child->info.stats.acting = newacting;
   child->info.stats.acting_primary = primary;
   child->info.stats.mapping_epoch = get_osdmap_epoch();
 
