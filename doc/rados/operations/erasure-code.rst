@@ -27,10 +27,11 @@ requires at least three hosts::
 Erasure code profiles
 ---------------------
 
-The default erasure code profile sustains the loss of a two OSDs. It
-is equivalent to a replicated pool of size three but requires 2TB
-instead of 3TB to store 1TB of data. The default profile can be
-displayed with::
+The default erasure code profile sustains the loss of two hosts.  It
+is equivalent in resilience to a replicated pool of size three that
+requires just 2TB instead of 3TB to store 1TB of data, but requires 4
+hosts instead of 3 to be healthy. The default profile can be displayed
+with::
 
     $ ceph osd erasure-code-profile get default
     k=2
@@ -44,10 +45,18 @@ after the pool is created: a new pool with a different profile needs
 to be created and all objects from the previous pool moved to the new.
 
 The most important parameters of the profile are *K*, *M* and
-*crush-failure-domain* because they define the storage overhead and
-the data durability. For instance, if the desired architecture must
-sustain the loss of two racks with a storage overhead of 67% overhead,
-the following profile can be defined::
+*crush-failure-domain* because they define the storage overhead, the
+data durability, and the minimum hardware requirements.
+
+When selecting a profile, remember these guidelines: up to *m* of the
+*crush-failure-domains* can fail, the pool will have a storage
+overhead of *(m+k)/k*, and *m+k* of the *crush-failure-domains* must
+be up for the pool to be HEALTH_OK.
+
+For another example, suppose the desired architecture will begin with
+at least six racks, must sustain the loss of two racks, and the
+acceptable overhead range allows a 67% storage penalty and a 5x
+network amplification. The following profile can be defined::
 
     $ ceph osd erasure-code-profile set myprofile \
        k=3 \
@@ -108,7 +117,15 @@ no two *chunks* are stored in the same rack.
               +----------------->| OSD5 |
                                  +------+
 
- 
+Because six racks are available but objects are each spread across
+five, a rack going 'out' will result in a healthy cluster (after
+significant rebalancing traffic, and assuming there is sufficient
+free space).
+
+If two racks go 'out' in this configuration, the cluster will be in
+HEALTH_WARN because replication requirements cannot be met for newly
+written objects, and no data loss has occurred.
+
 More information can be found in the `erasure code profiles
 <../erasure-code-profile>`_ documentation.
 
