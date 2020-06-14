@@ -271,6 +271,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'nfs export ls '
+                   'name=clusterid,type=CephString '
+                   'name=detailed,type=CephBool,req=false ',
+            'desc': "List exports of a NFS cluster",
+            'perm': 'r'
+        },
+        {
             'cmd': 'nfs cluster create '
                    'name=type,type=CephString '
                    'name=clusterid,type=CephString,goodchars=[A-Za-z0-9-_.] '
@@ -487,6 +494,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_nfs_export_delete(self, inbuf, cmd):
         return self.fs_export.delete_export(cluster_id=cmd['attach'], pseudo_path=cmd['binding'])
+
+    def _cmd_nfs_export_ls(self, inbuf, cmd):
+        return self.fs_export.list_exports(cluster_id=cmd['clusterid'], detailed=cmd.get('detailed', False))
 
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
         return self.nfs.create_nfs_cluster(cluster_id=cmd['clusterid'], export_type=cmd['type'],
