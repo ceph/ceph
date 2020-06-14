@@ -209,6 +209,15 @@ class CephFSFSal():
         return cls(fsal_dict['name'], fsal_dict['user_id'],
                    fsal_dict['fs_name'], fsal_dict['sec_label_xattr'], None)
 
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'user_id': self.user_id,
+            'fs_name': self.fs_name,
+            'sec_label_xattr': self.sec_label_xattr
+        }
+
+
 class Client(object):
     def __init__(self, addresses, access_type=None, squash=None):
         self.addresses = addresses
@@ -311,6 +320,22 @@ class Export(object):
                    ex_dict['pseudo'],
                    ex_dict['access_type'],
                    [Client.from_dict(client) for client in ex_dict['clients']])
+
+    def to_dict(self):
+        return {
+            'export_id': self.export_id,
+            'path': self.path,
+            'fsal': self.fsal.to_dict(),
+            'cluster_id': self.cluster_id,
+            'pseudo': self.pseudo,
+            'access_type': self.access_type,
+            'squash': self.squash,
+            'security_label': self.security_label,
+            'protocols': sorted([p for p in self.protocols]),
+            'transports': sorted([t for t in self.transports]),
+            'clients': [client.to_dict() for client in self.clients]
+        }
+
 
 class FSExport(object):
     def __init__(self, mgr, namespace=None):
@@ -524,6 +549,16 @@ class FSExport(object):
             log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
         except KeyError:
             log.info("No exports to delete")
+
+    def list_exports(self, cluster_id, detailed):
+        if not f"ganesha-{cluster_id}" in available_clusters(self.mgr):
+            return -errno.ENOENT, "", f"NFS cluster '{cluster_id}' not found"
+        if detailed:
+            result = [export.to_dict() for export in self.exports[cluster_id]]
+        else:
+            result = [export.pseudo for export in self.exports[cluster_id]]
+
+        return 0, json.dumps(result, indent=2), ''
 
     def make_rados_url(self, obj):
         if self.rados_namespace:
