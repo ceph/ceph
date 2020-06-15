@@ -2,13 +2,14 @@ import json
 import errno
 import logging
 from collections import defaultdict
+from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory
 from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast
+    Any, Set, TYPE_CHECKING, cast, Iterator
 
 import datetime
 import six
@@ -891,6 +892,46 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             executable_path))
         return executable_path
 
+    @contextmanager
+    def _remote_connection(self,
+                           host: str,
+                           addr: Optional[str]=None,
+                           ) -> Iterator[Tuple[BaseConnection, Any]]:
+        if not addr and host in self.inventory:
+            addr = self.inventory.get_addr(host)
+
+        self.offline_hosts_remove(host)
+
+        try:
+            try:
+                conn, connr = self._get_connection(addr)
+            except OSError as e:
+                self._reset_con(host)
+                msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there: {str(e)}"
+                raise execnet.gateway_bootstrap.HostNotFound(msg)
+
+            yield (conn, connr)
+
+        except execnet.gateway_bootstrap.HostNotFound as e:
+            # this is a misleading exception as it seems to be thrown for
+            # any sort of connection failure, even those having nothing to
+            # do with "host not found" (e.g., ssh key permission denied).
+            self.offline_hosts.add(host)
+            self._reset_con(host)
+
+            user = 'root' if self.mode == 'root' else 'cephadm'
+            msg = f'''Failed to connect to {host} ({addr}).
+Check that the host is reachable and accepts connections using the cephadm SSH key
+
+you may want to run:
+> ceph cephadm get-ssh-config > ssh_config
+> ceph config-key get mgr/cephadm/ssh_identity_key > key
+> ssh -F ssh_config -i key {user}@{host}'''
+            raise OrchestratorError(msg) from e
+        except Exception as ex:
+            self.log.exception(ex)
+            raise
+
     def _run_cephadm(self,
                      host: str,
                      entity: Optional[str],
@@ -908,20 +949,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         :env_vars: in format -> [KEY=VALUE, ..]
         """
-        if not addr and host in self.inventory:
-            addr = self.inventory.get_addr(host)
-
-        self.offline_hosts_remove(host)
-
-        try:
-            try:
-                conn, connr = self._get_connection(addr)
-            except OSError as e:
-                if error_ok:
-                    self.log.exception('failed to establish ssh connection')
-                    return [], [str("Can't communicate with remote host, possibly because python3 is not installed there")], 1
-                raise execnet.gateway_bootstrap.HostNotFound(str(e)) from e
-
+        with self._remote_connection(host, addr) as tpl:
+            conn, connr = tpl
             assert image or entity
             if not image:
                 daemon_type = entity.split('.', 1)[0]  # type: ignore
@@ -1008,23 +1037,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                         code, '\n'.join(err)))
             return out, err, code
 
-        except execnet.gateway_bootstrap.HostNotFound as e:
-            # this is a misleading exception as it seems to be thrown for
-            # any sort of connection failure, even those having nothing to
-            # do with "host not found" (e.g., ssh key permission denied).
-            self.offline_hosts.add(host)
-            user = 'root' if self.mode == 'root' else 'cephadm'
-            msg = f'''Failed to connect to {host} ({addr}).
-Check that the host is reachable and accepts connections using the cephadm SSH key
-
-you may want to run:
-> ceph cephadm get-ssh-config > ssh_config
-> ceph config-key get mgr/cephadm/ssh_identity_key > key
-> ssh -F ssh_config -i key {user}@{host}'''
-            raise OrchestratorError(msg) from e
-        except Exception as ex:
-            self.log.exception(ex)
-            raise
 
     def _get_hosts(self, label: Optional[str] = '', as_hostspec: bool = False) -> List:
         return list(self.inventory.filter_by_label(label=label, as_hostspec=as_hostspec))
@@ -1400,10 +1412,12 @@ you may want to run:
         }
         name = '%s.%s' % (daemon_type, daemon_id)
         for a in actions[action]:
-            out, err, code = self._run_cephadm(
-                host, name, 'unit',
-                ['--name', name, a],
-                error_ok=True)
+            try:
+                out, err, code = self._run_cephadm(
+                    host, name, 'unit',
+                    ['--name', name, a])
+            except Exception:
+                self.log.exception('cephadm failed')
         self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
@@ -1503,7 +1517,7 @@ you may want to run:
                 host, 'osd', 'shell', ['--'] + cmd,
                 error_ok=True)
             if code:
-                raise RuntimeError(
+                raise OrchestratorError(
                     'Unable to affect %s light for %s:%s. Command: %s' % (
                         ident_fault, host, dev, ' '.join(cmd)))
             self.log.info('Set %s light for %s:%s %s' % (
