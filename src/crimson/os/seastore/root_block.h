@@ -88,7 +88,7 @@ struct RootBlock : CachedExtent {
     return ceph::bufferlist();
   }
 
-  void apply_delta(paddr_t base, ceph::bufferlist &bl) final {
+  void apply_delta(paddr_t base, const ceph::bufferlist &bl) final {
     ceph_assert(0 == "TODO");
   }
 

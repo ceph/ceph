@@ -169,7 +169,7 @@ struct LBAInternalNode
     return ceph::bufferlist();
   }
 
-  void apply_delta(paddr_t delta_base, ceph::bufferlist &bl) final {
+  void apply_delta(paddr_t delta_base, const ceph::bufferlist &bl) final {
     ceph_assert(0 == "TODO");
   }
 
@@ -371,7 +371,7 @@ struct LBALeafNode
     return ceph::bufferlist();
   }
 
-  void apply_delta(paddr_t delta_base, ceph::bufferlist &bl) final {
+  void apply_delta(paddr_t delta_base, const ceph::bufferlist &bl) final {
     ceph_assert(0 == "TODO");
   }
 

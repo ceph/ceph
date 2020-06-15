@@ -61,7 +61,7 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
     return { get_length(), get_crc32c(1) };
   }
 
-  void apply_delta(paddr_t delta_base, ceph::bufferlist &bl) final {
+  void apply_delta(paddr_t delta_base, const ceph::bufferlist &bl) final {
     ceph_assert(0 == "TODO");
   }
 };

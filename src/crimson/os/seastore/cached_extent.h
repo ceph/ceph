@@ -133,7 +133,7 @@ public:
    * match.  Implementation should mutate buffer based on bl.  base matches
    * the address passed on_delta_write.
    */
-  virtual void apply_delta(paddr_t base, ceph::bufferlist &bl) = 0;
+  virtual void apply_delta(paddr_t base, const ceph::bufferlist &bl) = 0;
 
   /**
    * Called on dirty CachedExtent implementation after replay.
