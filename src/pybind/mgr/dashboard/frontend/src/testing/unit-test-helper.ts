@@ -4,11 +4,11 @@ import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
+import { NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { configureTestSuite } from 'ng-bullet';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';

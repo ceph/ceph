@@ -102,8 +102,6 @@ export class CephfsChartComponent implements OnChanges, OnInit {
     chartType: 'line'
   };
 
-  constructor() {}
-
   ngOnInit() {
     if (_.isUndefined(this.mdsCounter)) {
       return;

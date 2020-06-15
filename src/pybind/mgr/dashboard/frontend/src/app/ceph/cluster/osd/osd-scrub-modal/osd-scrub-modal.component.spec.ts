@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
+
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { JoinPipe } from '../../../../shared/pipes/join.pipe';
@@ -15,13 +16,13 @@ describe('OsdScrubModalComponent', () => {
 
   const fakeService = {
     list: () => {
-      return new Promise(() => {});
+      return new Promise(() => undefined);
     },
     scrub: () => {
-      return new Promise(() => {});
+      return new Promise(() => undefined);
     },
     scrub_many: () => {
-      return new Promise(() => {});
+      return new Promise(() => undefined);
     }
   };
 

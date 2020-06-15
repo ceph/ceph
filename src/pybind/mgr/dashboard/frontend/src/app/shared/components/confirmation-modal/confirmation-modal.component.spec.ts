@@ -1,11 +1,11 @@
 import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
 
-import { By } from '@angular/platform-browser';
 import {
   configureTestBed,
   FixtureHelper,

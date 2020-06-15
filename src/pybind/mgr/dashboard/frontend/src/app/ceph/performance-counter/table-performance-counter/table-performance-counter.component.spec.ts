@@ -33,7 +33,7 @@ describe('TablePerformanceCounterComponent', () => {
   });
 
   describe('Error handling', () => {
-    const context = new CdTableFetchDataContext(() => {});
+    const context = new CdTableFetchDataContext(() => undefined);
 
     beforeEach(() => {
       spyOn(context, 'error');

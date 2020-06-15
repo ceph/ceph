@@ -1,9 +1,9 @@
 import { AfterViewInit, Component, EventEmitter, Output, ViewChild } from '@angular/core';
 
+import { TableColumnProp } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { TableColumnProp } from '@swimlane/ngx-datatable';
 import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';

@@ -33,8 +33,6 @@ export class TableActionsComponent implements OnInit {
 
   icons = Icons;
 
-  constructor() {}
-
   ngOnInit() {
     this.removeActionsWithNoPermissions();
     this.updateDropDownActions();

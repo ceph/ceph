@@ -1,6 +1,8 @@
 import { DatePipe } from '@angular/common';
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { HostService } from '../../../shared/api/host.service';
 import { OsdService } from '../../../shared/api/osd.service';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
