@@ -19,13 +19,6 @@ namespace crimson::os::seastore {
 
 Cache::~Cache()
 {
-  retire_extent(root);
-  root.reset();
-  for (auto i = dirty.begin(); i != dirty.end(); ) {
-    auto ptr = &*i;
-    dirty.erase(i++);
-    intrusive_ptr_release(ptr);
-  }
   for (auto &i: extents) {
     logger().error("~Cache: extent {} still alive", i);
   }
@@ -188,6 +181,13 @@ Cache::mkfs_ertr::future<> Cache::mkfs(Transaction &t)
 
 Cache::close_ertr::future<> Cache::close()
 {
+  retire_extent(root);
+  root.reset();
+  for (auto i = dirty.begin(); i != dirty.end(); ) {
+    auto ptr = &*i;
+    dirty.erase(i++);
+    intrusive_ptr_release(ptr);
+  }
   return close_ertr::now();
 }
 
