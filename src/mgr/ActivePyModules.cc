@@ -21,6 +21,8 @@
 
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
+#include "osd/OSDMap.cc"
+#include "crush/CrushWrapper.h"
 
 #include "mgr/MgrContext.h"
 
@@ -434,7 +436,16 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       mgr_map.dump(&f);
     });
     return f.get();
-  } else {
+  } else if (what == "osd_df"){
+    cluster_state.with_osdmap_and_pgmap([&f, &what, &tstate](const OSDMap& osd_map, const PGMap& pg_map){
+      string class_name{""};
+      string item_name{""};
+      PyEval_RestoreThread(tstate);
+      OSDUtilizationFormatDumper d(crush, &osd_map, pg_map, false, class_name, item_name);
+      d.dump(&f);
+    });
+    return f.get();
+  }else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     PyEval_RestoreThread(tstate);
     Py_RETURN_NONE;

@@ -108,6 +108,7 @@ DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
+DF_OSD = ['kb', 'kb_used', 'kb_used_data', 'kb_used_omap', 'kb_used_meta', 'kb_avail', 'utilization']
 
 class Metric(object):
     def __init__(self, mtype, name, desc, labels=None):
@@ -361,6 +362,14 @@ class Module(MgrModule):
                 'PG {} per pool'.format(state),
                 ('pool_id',)
             )
+        for stat in DF_OSD:
+            path = 'osd_df_{}'.format(stat)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD DF STATS: {}'.format(stat),
+                ('ceph_daemon',)
+            )
         for state in DF_CLUSTER:
             path = 'cluster_{}'.format(state)
             metrics[path] = Metric(
@@ -402,6 +411,16 @@ class Module(MgrModule):
                     pool['recovery_rate'].get(stat, 0),
                     (pool['pool_id'],)
                 )
+
+    def get_osd_df(self):
+        osd_df = self.get('osd_df')
+        for osd in osd_df['nodes']:
+            name_ = osd['name']
+        for stat in DF_OSD:
+            self.metrics['osd_df_{}'.format(stat)].set(
+                osd[stat], 
+                ('{}'.format(name_),)
+            )
 
     def get_df(self):
         # maybe get the to-be-exported metrics from a config?
@@ -942,6 +961,7 @@ class Module(MgrModule):
         self.get_metadata_and_osd_status()
         self.get_pg_status()
         self.get_num_objects()
+        self.get_osd_df()
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
