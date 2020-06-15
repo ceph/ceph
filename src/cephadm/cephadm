@@ -1075,9 +1075,14 @@ def infer_fsid(func):
         fsids = set()
         daemon_list = list_daemons(detail=False)
         for daemon in daemon_list:
-            if 'name' not in args or not args.name:
+            if not is_fsid(daemon['fsid']):
+                # 'unknown' fsid
+                continue
+            elif 'name' not in args or not args.name:
+                # args.name not specified
                 fsids.add(daemon['fsid'])
             elif daemon['name'] == args.name:
+                # args.name is a match
                 fsids.add(daemon['fsid'])
         fsids = sorted(fsids)
 
