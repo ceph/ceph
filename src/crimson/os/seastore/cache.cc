@@ -68,6 +68,7 @@ CachedExtentRef Cache::duplicate_for_write(
 
   auto ret = i->duplicate_for_write();
   ret->version++;
+  ret->last_committed_crc = i->last_committed_crc;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
 
   if (ret->get_type() == extent_types_t::ROOT) {
@@ -109,14 +110,19 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     add_extent(i);
     i->prepare_write();
     i->set_io_wait();
+    assert(i->get_version() > 0);
+    auto final_crc = i->get_crc32c();
     record.deltas.push_back(
       delta_info_t{
 	i->get_type(),
 	i->get_paddr(),
+	i->last_committed_crc,
+	final_crc,
 	(segment_off_t)i->get_length(),
-	i->get_version(),
+	i->get_version() - 1,
 	i->get_delta()
       });
+    i->last_committed_crc = final_crc;
   }
 
   record.extents.reserve(t.fresh_block_list.size());
@@ -130,6 +136,8 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 	delta_info_t{
 	  extent_types_t::ROOT_LOCATION,
 	  i->get_paddr(),
+	  0,
+	  0,
 	  0,
 	  0,
 	  bufferlist()
@@ -154,6 +162,7 @@ void Cache::complete_commit(
     i->set_paddr(cur);
     cur.offset += i->get_length();
     i->state = CachedExtent::extent_state_t::CLEAN;
+    i->last_committed_crc = i->get_crc32c();
     logger().debug("complete_commit: fresh {}", *i);
     i->on_initial_write();
     add_extent(i);
@@ -190,6 +199,7 @@ Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
       ? record_base.add_record_relative(delta.paddr)
       : delta.paddr;
     logger().debug("replay_delta: found root addr {}", root_location);
+    root->apply_delta_and_adjust_crc(record_base, delta.bl);
     return get_extent<RootBlock>(
       root_location,
       RootBlock::SIZE
