@@ -27,6 +27,7 @@ def available_clusters(mgr):
     orchestrator.raise_if_exception(completion)
     return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result]
 
+
 class GaneshaConfParser(object):
     def __init__(self, raw_config):
         self.pos = 0
@@ -265,6 +266,7 @@ class Client(object):
             'squash': self.squash
         }
 
+
 class Export(object):
     # pylint: disable=R0902
     def __init__(self, export_id, path, fsal, cluster_id, pseudo,
@@ -334,7 +336,6 @@ class Export(object):
         return {
             'export_id': self.export_id,
             'path': self.path,
-            'fsal': self.fsal.to_dict(),
             'cluster_id': self.cluster_id,
             'pseudo': self.pseudo,
             'access_type': self.access_type,
@@ -342,6 +343,7 @@ class Export(object):
             'security_label': self.security_label,
             'protocols': sorted([p for p in self.protocols]),
             'transports': sorted([t for t in self.transports]),
+            'fsal': self.fsal.to_dict(),
             'clients': [client.to_dict() for client in self.clients]
         }
 
@@ -537,13 +539,15 @@ class FSExport(object):
                 self._delete_export_url(common_conf, export.export_id)
                 self.exports[cluster_id].remove(export)
                 self._delete_user(export.fsal.user_id)
+                if not self.exports[cluster_id]:
+                    del self.exports[cluster_id]
                 return 0, "Successfully deleted export", ""
-            return 0, "", "Export does not exist"
         except KeyError:
-            return -errno.EINVAL, "", "Cluster does not exist"
+            pass
         except Exception as e:
             log.warning("Failed to delete exports")
             return -errno.EINVAL, "", str(e)
+        return 0, "", "Export does not exist"
 
     def delete_all_exports(self, cluster_id):
         try:
@@ -557,32 +561,36 @@ class FSExport(object):
             log.info("No exports to delete")
 
     def list_exports(self, cluster_id, detailed):
-        if not cluster_id in available_clusters(self.mgr):
-            return -errno.ENOENT, "", f"NFS cluster '{cluster_id}' not found"
-        if detailed:
-            result = [export.to_dict() for export in self.exports[cluster_id]]
-        else:
-            result = [export.pseudo for export in self.exports[cluster_id]]
-
-        return 0, json.dumps(result, indent=2), ''
+        try:
+            if detailed:
+                result = [export.to_dict() for export in self.exports[cluster_id]]
+            else:
+                result = [export.pseudo for export in self.exports[cluster_id]]
+            return 0, json.dumps(result, indent=2), ''
+        except KeyError:
+            log.warning(f"No exports to list for {cluster_id}")
+            return 0, '', ''
+        except Exception as e:
+            log.error(f"Failed to list exports for {cluster_id}")
+            return -errno.EINVAL, "", str(e)
 
     def get_export(self, cluster_id, pseudo_path):
-        if not cluster_id in available_clusters(self.mgr):
-            return -errno.ENOENT, "", f"NFS cluster '{cluster_id}' not found"
-        export_dict = {}
-        for export in self.exports[cluster_id]:
-            if export.pseudo == pseudo_path:
-                export_dict = export.to_dict()
-                break
-        if not export_dict:
-            return (-errno.ENOENT, "",
-                    f"export with pseudo path '{pseudo_path}' not found in NFS cluster '{cluster_id}'")
-        return 0, json.dumps(export_dict, indent=2), ''
+        try:
+            self.rados_namespace = cluster_id
+            export_dict = self._fetch_export(pseudo_path).to_dict()
+            return 0, json.dumps(export_dict, indent=2), ''
+        except (AttributeError, KeyError):
+            log.warning(f"No {pseudo_path} export to show for {cluster_id}")
+            return 0, '', ''
+        except Exception as e:
+            log.error(f"Failed to get {pseudo_path} export for {cluster_id}")
+            return -errno.EINVAL, "", str(e)
 
     def make_rados_url(self, obj):
         if self.rados_namespace:
             return "rados://{}/{}/{}".format(self.rados_pool, self.rados_namespace, obj)
         return "rados://{}/{}".format(self.rados_pool, obj)
+
 
 class NFSCluster:
     def __init__(self, mgr):
