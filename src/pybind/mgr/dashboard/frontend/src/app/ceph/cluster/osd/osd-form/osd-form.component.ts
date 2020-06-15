@@ -104,11 +104,9 @@ export class OsdFormComponent implements OnInit {
   createForm() {
     this.form = new CdFormGroup({
       walSlots: new FormControl(0, {
-        updateOn: 'blur',
         validators: [Validators.min(0)]
       }),
       dbSlots: new FormControl(0, {
-        updateOn: 'blur',
         validators: [Validators.min(0)]
       }),
       features: new CdFormGroup(
