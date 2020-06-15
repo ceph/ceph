@@ -1100,7 +1100,7 @@ you may want to run:
         self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
         return True
 
-    def _refresh_hosts_and_daemons(self):
+    def _refresh_hosts_and_daemons(self) -> None:
         bad_hosts = []
         failures = []
 
@@ -1155,7 +1155,7 @@ you may want to run:
         if health_changed:
             self.set_health_checks(self.health_checks)
 
-    def _refresh_host_daemons(self, host):
+    def _refresh_host_daemons(self, host) -> Optional[str]:
         try:
             out, err, code = self._run_cephadm(
                 host, 'mon', 'ls', [], no_fsid=True)
@@ -1208,7 +1208,7 @@ you may want to run:
         self.cache.save_host(host)
         return None
 
-    def _refresh_host_devices(self, host):
+    def _refresh_host_devices(self, host) -> Optional[str]:
         try:
             out, err, code = self._run_cephadm(
                 host, 'osd',
