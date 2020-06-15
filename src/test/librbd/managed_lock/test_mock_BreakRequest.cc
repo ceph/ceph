@@ -110,10 +110,10 @@ public:
   }
 
 
-  void expect_blacklist_add(MockTestImageCtx &mock_image_ctx, int r) {
+  void expect_blocklist_add(MockTestImageCtx &mock_image_ctx, int r) {
     auto& mock_rados_client = librados::get_mock_rados_client(
       mock_image_ctx.rados_api);
-    EXPECT_CALL(mock_rados_client, mon_command(IsBlacklistCommand(), _, _, _))
+    EXPECT_CALL(mock_rados_client, mon_command(IsBlocklistCommand(), _, _, _))
       .WillOnce(Return(r));
   }
 
@@ -154,7 +154,7 @@ TEST_F(TestMockManagedLockBreakRequest, DeadLockOwner) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_wait_for_latest_osd_map(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, 0);
 
@@ -184,7 +184,7 @@ TEST_F(TestMockManagedLockBreakRequest, ForceBreak) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_wait_for_latest_osd_map(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, 0);
 
@@ -341,7 +341,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetLockerError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockManagedLockBreakRequest, BlacklistDisabled) {
+TEST_F(TestMockManagedLockBreakRequest, BlocklistDisabled) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -369,7 +369,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistDisabled) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockManagedLockBreakRequest, BlacklistSelf) {
+TEST_F(TestMockManagedLockBreakRequest, BlocklistSelf) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -397,7 +397,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistSelf) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockManagedLockBreakRequest, BlacklistError) {
+TEST_F(TestMockManagedLockBreakRequest, BlocklistError) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -414,7 +414,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistError) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, -EINVAL);
+  expect_blocklist_add(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
@@ -442,7 +442,7 @@ TEST_F(TestMockManagedLockBreakRequest, BreakLockMissing) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_wait_for_latest_osd_map(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, -ENOENT);
 
@@ -472,7 +472,7 @@ TEST_F(TestMockManagedLockBreakRequest, BreakLockError) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_wait_for_latest_osd_map(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, -EINVAL);
 

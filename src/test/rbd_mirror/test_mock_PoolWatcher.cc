@@ -443,7 +443,7 @@ TEST_F(TestMockPoolWatcher, RegisterWatcherBlacklist) {
   C_SaferCond ctx;
   mock_pool_watcher.init(&ctx);
   ASSERT_EQ(-EBLACKLISTED, ctx.wait());
-  ASSERT_TRUE(mock_pool_watcher.is_blacklisted());
+  ASSERT_TRUE(mock_pool_watcher.is_blocklisted());
 
   expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
@@ -509,7 +509,7 @@ TEST_F(TestMockPoolWatcher, RegisterWatcherError) {
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
 }
 
-TEST_F(TestMockPoolWatcher, RefreshBlacklist) {
+TEST_F(TestMockPoolWatcher, RefreshBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -519,15 +519,15 @@ TEST_F(TestMockPoolWatcher, RefreshBlacklist) {
   expect_mirroring_watcher_register(mock_mirroring_watcher, 0);
 
   MockRefreshImagesRequest mock_refresh_images_request;
-  expect_refresh_images(mock_refresh_images_request, {}, -EBLACKLISTED);
+  expect_refresh_images(mock_refresh_images_request, {}, -EBLOCKLISTED);
 
   MockListener mock_listener(this);
   MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
                                     "remote uuid", mock_listener);
   C_SaferCond ctx;
   mock_pool_watcher.init(&ctx);
-  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
-  ASSERT_TRUE(mock_pool_watcher.is_blacklisted());
+  ASSERT_EQ(-EBLOCKLISTED, ctx.wait());
+  ASSERT_TRUE(mock_pool_watcher.is_blocklisted());
 
   expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
@@ -624,7 +624,7 @@ TEST_F(TestMockPoolWatcher, Rewatch) {
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
 }
 
-TEST_F(TestMockPoolWatcher, RewatchBlacklist) {
+TEST_F(TestMockPoolWatcher, RewatchBlocklist) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -646,8 +646,8 @@ TEST_F(TestMockPoolWatcher, RewatchBlacklist) {
   ASSERT_EQ(0, ctx.wait());
   ASSERT_TRUE(wait_for_update(1));
 
-  MirroringWatcher::get_instance().handle_rewatch_complete(-EBLACKLISTED);
-  ASSERT_TRUE(mock_pool_watcher.is_blacklisted());
+  MirroringWatcher::get_instance().handle_rewatch_complete(-EBLOCKLISTED);
+  ASSERT_TRUE(mock_pool_watcher.is_blocklisted());
 
   expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));

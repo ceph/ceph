@@ -210,7 +210,7 @@ void MgrStandby::send_beacon()
 
   auto clients = py_module_registry.get_clients();
   for (const auto& client : clients) {
-    dout(15) << "noting RADOS client for blacklist: " << client << dendl;
+    dout(15) << "noting RADOS client for blocklist: " << client << dendl;
   }
 
   // Whether I think I am available (request MgrMonitor to set me

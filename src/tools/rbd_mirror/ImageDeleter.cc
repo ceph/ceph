@@ -262,9 +262,9 @@ void ImageDeleter<I>::enqueue_failed_delete(DeleteInfoRef* delete_info,
                                             int error_code,
                                             double retry_delay) {
   dout(20) << "info=" << *delete_info << ", r=" << error_code << dendl;
-  if (error_code == -EBLACKLISTED) {
+  if (error_code == -EBLOCKLISTED) {
     std::lock_guard locker{m_lock};
-    derr << "blacklisted while deleting local image" << dendl;
+    derr << "blocklisted while deleting local image" << dendl;
     complete_active_delete(delete_info, error_code);
     return;
   }

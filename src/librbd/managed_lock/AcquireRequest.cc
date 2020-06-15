@@ -38,12 +38,12 @@ AcquireRequest<I>* AcquireRequest<I>::create(librados::IoCtx& ioctx,
                                              const string& oid,
                                              const string& cookie,
                                              bool exclusive,
-					     bool blacklist_on_break_lock,
-					     uint32_t blacklist_expire_seconds,
+					     bool blocklist_on_break_lock,
+					     uint32_t blocklist_expire_seconds,
                                              Context *on_finish) {
     return new AcquireRequest(ioctx, watcher, asio_engine, oid, cookie,
-                              exclusive, blacklist_on_break_lock,
-                              blacklist_expire_seconds, on_finish);
+                              exclusive, blocklist_on_break_lock,
+                              blocklist_expire_seconds, on_finish);
 }
 
 template <typename I>
@@ -51,15 +51,15 @@ AcquireRequest<I>::AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
                                   AsioEngine& asio_engine,
                                   const string& oid,
                                   const string& cookie, bool exclusive,
-                                  bool blacklist_on_break_lock,
-                                  uint32_t blacklist_expire_seconds,
+                                  bool blocklist_on_break_lock,
+                                  uint32_t blocklist_expire_seconds,
                                   Context *on_finish)
   : m_ioctx(ioctx), m_watcher(watcher),
     m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_asio_engine(asio_engine), m_oid(oid), m_cookie(cookie),
     m_exclusive(exclusive),
-    m_blacklist_on_break_lock(blacklist_on_break_lock),
-    m_blacklist_expire_seconds(blacklist_expire_seconds),
+    m_blocklist_on_break_lock(blocklist_on_break_lock),
+    m_blocklist_expire_seconds(blocklist_expire_seconds),
     m_on_finish(new C_AsyncCallback<asio::ContextWQ>(
       asio_engine.get_work_queue(), on_finish)) {
 }
@@ -150,7 +150,7 @@ void AcquireRequest<I>::send_break_lock() {
     AcquireRequest<I>, &AcquireRequest<I>::handle_break_lock>(this);
   auto req = BreakRequest<I>::create(
     m_ioctx, m_asio_engine, m_oid, m_locker, m_exclusive,
-    m_blacklist_on_break_lock, m_blacklist_expire_seconds, false, ctx);
+    m_blocklist_on_break_lock, m_blocklist_expire_seconds, false, ctx);
   req->send();
 }
 

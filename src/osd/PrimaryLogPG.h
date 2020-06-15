@@ -1053,8 +1053,8 @@ protected:
   std::map<hobject_t, std::map<client_t, ceph_tid_t>> debug_op_order;
 
   void populate_obc_watchers(ObjectContextRef obc);
-  void check_blacklisted_obc_watchers(ObjectContextRef obc);
-  void check_blacklisted_watchers() override;
+  void check_blocklisted_obc_watchers(ObjectContextRef obc);
+  void check_blocklisted_watchers() override;
   void get_watchers(std::list<obj_watch_item_t> *ls) override;
   void get_obc_watchers(ObjectContextRef obc, std::list<obj_watch_item_t> &pg_watchers);
 public:

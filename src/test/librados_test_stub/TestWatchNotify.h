@@ -97,7 +97,7 @@ public:
             librados::WatchCtx2 *ctx2);
   int unwatch(TestRadosClient *rados_client, uint64_t handle);
 
-  void blacklist(uint32_t nonce);
+  void blocklist(uint32_t nonce);
 
 private:
   typedef std::tuple<int64_t, std::string, std::string> PoolFile;

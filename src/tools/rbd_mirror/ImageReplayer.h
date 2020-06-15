@@ -85,9 +85,9 @@ public:
     m_finished = finished;
   }
 
-  inline bool is_blacklisted() const {
+  inline bool is_blocklisted() const {
     std::lock_guard locker{m_lock};
-    return (m_last_r == -EBLACKLISTED);
+    return (m_last_r == -EBLOCKLISTED);
   }
 
   image_replayer::HealthState get_health_state() const;

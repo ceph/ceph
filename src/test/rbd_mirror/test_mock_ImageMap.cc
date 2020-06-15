@@ -1308,9 +1308,9 @@ TEST_F(TestMockImageMap, AddErrorAndRemoveImage) {
   expect_listener_images_unmapped(mock_listener, 1, &released_global_image_ids,
                                   &release_peer_ack_ctxs);
 
-  // instance blacklisted -- ACQUIRE request fails
+  // instance blocklisted -- ACQUIRE request fails
   remote_peer_ack_nowait(mock_image_map.get(), shuffled_global_image_ids,
-                         -EBLACKLISTED, &peer_ack_ctxs);
+                         -EBLOCKLISTED, &peer_ack_ctxs);
   ASSERT_TRUE(wait_for_listener_notify(shuffled_global_image_ids.size()));
 
   std::map<std::string, Context*> remap_peer_ack_ctxs;
@@ -1318,7 +1318,7 @@ TEST_F(TestMockImageMap, AddErrorAndRemoveImage) {
                          mock_listener, shuffled_global_image_ids, 0,
                          &remap_peer_ack_ctxs);
 
-  // instance blacklisted -- RELEASE request fails
+  // instance blocklisted -- RELEASE request fails
   remote_peer_ack_listener_wait(mock_image_map.get(), shuffled_global_image_ids,
                                 -ENOENT, &release_peer_ack_ctxs);
   wait_for_scheduled_task();
