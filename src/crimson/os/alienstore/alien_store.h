@@ -111,6 +111,8 @@ public:
   seastar::future<FuturizedStore::OmapIteratorRef> get_omap_iterator(
     CollectionRef ch,
     const ghobject_t& oid) final;
+
+  static void configure_thread_memory();
 private:
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
   const std::string path;
