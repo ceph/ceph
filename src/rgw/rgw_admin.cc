@@ -10474,6 +10474,15 @@ next:
     }
 
     RGWAccountInfo account_info(account_id, tenant);
+
+    RGWObjVersionTracker objv_tracker;
+    ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
+        dpp(), account_info, &objv_tracker, real_time(), true, nullptr, null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
     encode_json("AccountInfo", account_info, formatter.get());
     formatter->flush(cout);
   }
