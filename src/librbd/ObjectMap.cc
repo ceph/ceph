@@ -338,8 +338,11 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
 		 << "->" << static_cast<uint32_t>(new_state) << dendl;
   if (snap_id == CEPH_NOSNAP) {
     ceph_assert(ceph_mutex_is_wlocked(m_lock));
+    uint64_t flags;
+    int r = m_image_ctx.get_flags(CEPH_NOSNAP, &flags);
     end_object_no = std::min(end_object_no, m_object_map.size());
-    if (start_object_no >= end_object_no) {
+    if (start_object_no >= end_object_no || r < 0 ||
+        (flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
       ldout(cct, 20) << "skipping update of invalid object map" << dendl;
       m_image_ctx.op_work_queue->queue(on_finish, 0);
       return;
