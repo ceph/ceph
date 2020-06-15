@@ -338,7 +338,7 @@ public:
   /**
    * close
    *
-   * TODO: currently a noop -- probably should be used to flush dirty blocks
+   * TODO: should flush dirty blocks
    */
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
