@@ -38,6 +38,22 @@ void Cache::add_extent(CachedExtentRef ref)
   logger().debug("add_extent: {}", *ref);
 }
 
+void Cache::mark_dirty(CachedExtentRef ref)
+{
+  if (ref->is_dirty()) {
+    assert(ref->primary_ref_list_hook.is_linked());
+    return;
+  }
+
+  assert(ref->is_valid());
+  assert(!ref->primary_ref_list_hook.is_linked());
+  intrusive_ptr_add_ref(&*ref);
+  dirty.push_back(*ref);
+  ref->state = CachedExtent::extent_state_t::DIRTY;
+
+  logger().debug("mark_dirty: {}", *ref);
+}
+
 void Cache::retire_extent(CachedExtentRef ref)
 {
   logger().debug("retire_extent: {}", *ref);
@@ -212,8 +228,26 @@ Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
       return replay_delta_ret(replay_delta_ertr::ready_future_marker{});
     });
   }
-  // TODO
-  return replay_delta_ret(replay_delta_ertr::ready_future_marker{});
+
+  return get_extent_by_type(
+    delta.type,
+    delta.paddr,
+    delta.length).safe_then([this, record_base, delta](auto extent) {
+      /* TODO asserts about version */
+      logger().debug(
+	"replay_delta: replaying {} on {}",
+	*extent,
+	delta);
+
+      assert(extent->version == delta.pversion);
+
+      assert(extent->last_committed_crc == delta.prev_crc);
+      extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+      assert(extent->last_committed_crc == delta.final_crc);
+
+      extent->version++;
+      mark_dirty(extent);
+    });
 }
 
 Cache::get_root_ret Cache::get_root(Transaction &t)

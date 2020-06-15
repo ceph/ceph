@@ -385,6 +385,9 @@ private:
   /// Add extent to extents handling dirty and refcounting
   void add_extent(CachedExtentRef ref);
 
+  /// Mark exising extent ref dirty -- mainly for replay
+  void mark_dirty(CachedExtentRef ref);
+
   /// Remove extent from extents handling dirty and refcounting
   void retire_extent(CachedExtentRef ref);
 
