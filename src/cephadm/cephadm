@@ -1079,7 +1079,7 @@ def infer_fsid(func):
                 fsids.add(daemon['fsid'])
             elif daemon['name'] == args.name:
                 fsids.add(daemon['fsid'])
-        fsids = list(fsids)
+        fsids = sorted(fsids)
 
         if not fsids:
             # some commands do not always require an fsid
