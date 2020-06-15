@@ -82,4 +82,5 @@ public:
 
 private:
   RGWSI_MetaBackend_Handler *be_handler;
+  std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
 };

@@ -7,6 +7,44 @@
 #include "rgw/rgw_zone.h"
 #include "svc_zone.h"
 
+#define dout_subsys ceph_subsys_rgw
+
+constexpr auto RGW_ACCOUNT_USER_OBJ_SUFFIX = ".users";
+
+class RGWSI_Account_Module : public RGWSI_MBSObj_Handler_Module {
+  RGWSI_Account_RADOS::Svc& svc;
+
+  const std::string prefix;
+public:
+  RGWSI_Account_Module(RGWSI_Account_RADOS::Svc& _svc) : RGWSI_MBSObj_Handler_Module("account"),
+                                                   svc(_svc) {}
+
+  void get_pool_and_oid(const std::string& key, rgw_pool *pool, std::string *oid) override {
+    if (pool) {
+      *pool = svc.zone->get_zone_params().account_pool;
+    }
+    if (oid) {
+      *oid = key;
+    }
+  }
+
+  const std::string& get_oid_prefix() override {
+    return prefix;
+  }
+
+  bool is_valid_oid(const std::string& oid) override {
+    // filter out the user.buckets objects
+    return !boost::algorithm::ends_with(oid, RGW_ACCOUNT_USER_OBJ_SUFFIX);
+  }
+
+  std::string key_to_oid(const std::string& key) override {
+    return key;
+  }
+
+  std::string oid_to_key(const std::string& oid) override {
+    return oid;
+  }
+};
 
 RGWSI_Account_RADOS::RGWSI_Account_RADOS(CephContext *cct) :
   RGWSI_Account(cct) {
@@ -23,8 +61,18 @@ void RGWSI_Account_RADOS::init(RGWSI_Zone *_zone_svc,
 
 int RGWSI_Account_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
-  return svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ,
+  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ,
                                      &be_handler);
+  if (r < 0) {
+    ldout(ctx(), 0) << "ERROR: failed to create be_handler for accounts: r=" << r << dendl;
+    return r;
+  }
+
+  RGWSI_MetaBackend_Handler_SObj *bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
+  auto module = new RGWSI_Account_Module(svc);
+  be_module.reset(module);
+  bh->set_module(module);
+  return 0;
 }
 
 int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
