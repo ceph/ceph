@@ -148,6 +148,6 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
       task: new FinishedTask('rbd/mirroring/bootstrap/create', {}),
       call: apiActionsObs
     });
-    taskObs.subscribe(undefined, finishHandler, finishHandler);
+    taskObs.subscribe({ error: finishHandler, complete: finishHandler });
   }
 }

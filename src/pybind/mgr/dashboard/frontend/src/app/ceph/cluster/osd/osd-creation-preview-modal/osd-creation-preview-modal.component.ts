@@ -48,15 +48,14 @@ export class OsdCreationPreviewModalComponent {
         }),
         call: this.osdService.create(this.driveGroups)
       })
-      .subscribe(
-        undefined,
-        () => {
+      .subscribe({
+        error: () => {
           this.formGroup.setErrors({ cdSubmitButton: true });
         },
-        () => {
+        complete: () => {
           this.submitAction.emit();
           this.bsModalRef.hide();
         }
-      );
+      });
   }
 }

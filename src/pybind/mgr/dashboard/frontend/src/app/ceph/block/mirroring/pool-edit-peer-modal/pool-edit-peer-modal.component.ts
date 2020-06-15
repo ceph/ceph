@@ -128,13 +128,12 @@ export class PoolEditPeerModalComponent implements OnInit {
       });
     }
 
-    action.subscribe(
-      undefined,
-      () => this.editPeerForm.setErrors({ cdSubmitButton: true }),
-      () => {
+    action.subscribe({
+      error: () => this.editPeerForm.setErrors({ cdSubmitButton: true }),
+      complete: () => {
         this.rbdMirroringService.refresh();
         this.modalRef.hide();
       }
-    );
+    });
   }
 }

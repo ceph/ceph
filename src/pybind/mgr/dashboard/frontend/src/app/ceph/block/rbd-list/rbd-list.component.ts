@@ -376,8 +376,10 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         }),
         call: this.rbdService.flatten(imageSpec)
       })
-      .subscribe(undefined, undefined, () => {
-        this.modalRef.hide();
+      .subscribe({
+        complete: () => {
+          this.modalRef.hide();
+        }
       });
   }
 

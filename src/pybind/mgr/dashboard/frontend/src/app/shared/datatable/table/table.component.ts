@@ -353,7 +353,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   _initUserConfigAutoSave() {
-    const source: Observable<any> = Observable.create(this._initUserConfigProxy.bind(this));
+    const source: Observable<any> = new Observable(this._initUserConfigProxy.bind(this));
     this.saveSubscriber = source.subscribe(this._saveUserConfig.bind(this));
   }
 

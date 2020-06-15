@@ -67,14 +67,13 @@ export class HostFormComponent extends CdForm implements OnInit {
         }),
         call: this.hostService.create(hostname)
       })
-      .subscribe(
-        undefined,
-        () => {
+      .subscribe({
+        error: () => {
           this.hostForm.setErrors({ cdSubmitButton: true });
         },
-        () => {
+        complete: () => {
           this.router.navigate(['/hosts']);
         }
-      );
+      });
   }
 }
