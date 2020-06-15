@@ -44,7 +44,7 @@ describe('PrometheusAlertService', () => {
       prometheusService = TestBed.inject(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
       spyOn(prometheusService, 'getAlerts').and.returnValue(
-        Observable.create((observer: any) => observer.error({ status: statusCode, error: {} }))
+        new Observable((observer: any) => observer.error({ status: statusCode, error: {} }))
       );
       const disableFn = spyOn(prometheusService, 'disableAlertmanagerConfig').and.callFake(() => {
         expect(expectedStatus).toBe(true);

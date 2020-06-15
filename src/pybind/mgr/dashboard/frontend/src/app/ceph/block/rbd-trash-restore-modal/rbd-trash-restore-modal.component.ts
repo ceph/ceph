@@ -51,14 +51,13 @@ export class RbdTrashRestoreModalComponent implements OnInit {
         }),
         call: this.rbdService.restoreTrash(imageSpec, name)
       })
-      .subscribe(
-        undefined,
-        () => {
+      .subscribe({
+        error: () => {
           this.restoreForm.setErrors({ cdSubmitButton: true });
         },
-        () => {
+        complete: () => {
           this.modalRef.hide();
         }
-      );
+      });
   }
 }

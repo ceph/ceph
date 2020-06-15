@@ -770,13 +770,12 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
       });
     }
 
-    wrapTask.subscribe(
-      undefined,
-      () => {
+    wrapTask.subscribe({
+      error: () => {
         this.targetForm.setErrors({ cdSubmitButton: true });
       },
-      () => this.router.navigate(['/block/iscsi/targets'])
-    );
+      complete: () => this.router.navigate(['/block/iscsi/targets'])
+    });
   }
 
   targetSettingsModal() {
