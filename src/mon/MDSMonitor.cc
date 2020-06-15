@@ -773,7 +773,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     } else if (state == MDSMap::STATE_DAMAGED) {
       if (!mon->osdmon()->is_writeable()) {
         dout(1) << __func__ << ": DAMAGED from rank " << info.rank
-                << " waiting for osdmon writeable to blacklist it" << dendl;
+                << " waiting for osdmon writeable to blocklist it" << dendl;
         mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
         return false;
       }
@@ -784,10 +784,10 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
               << info.rank << " damaged" << dendl;
 
       utime_t until = ceph_clock_now();
-      until += g_conf().get_val<double>("mon_mds_blacklist_interval");
-      const auto blacklist_epoch = mon->osdmon()->blacklist(info.addrs, until);
+      until += g_conf().get_val<double>("mon_mds_blocklist_interval");
+      const auto blocklist_epoch = mon->osdmon()->blocklist(info.addrs, until);
       request_proposal(mon->osdmon());
-      pending.damaged(gid, blacklist_epoch);
+      pending.damaged(gid, blocklist_epoch);
       last_beacon.erase(gid);
 
       // Respond to MDS, so that it knows it can continue to shut down
@@ -799,7 +799,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     } else if (state == MDSMap::STATE_DNE) {
       if (!mon->osdmon()->is_writeable()) {
         dout(1) << __func__ << ": DNE from rank " << info.rank
-                << " waiting for osdmon writeable to blacklist it" << dendl;
+                << " waiting for osdmon writeable to blocklist it" << dendl;
         mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
         return false;
       }
@@ -1210,21 +1210,21 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
 
   ceph_assert(mon->osdmon()->is_writeable());
 
-  epoch_t blacklist_epoch = 0;
+  epoch_t blocklist_epoch = 0;
   if (info.rank >= 0 && info.state != MDSMap::STATE_STANDBY_REPLAY) {
     utime_t until = ceph_clock_now();
-    until += g_conf().get_val<double>("mon_mds_blacklist_interval");
-    blacklist_epoch = mon->osdmon()->blacklist(info.addrs, until);
+    until += g_conf().get_val<double>("mon_mds_blocklist_interval");
+    blocklist_epoch = mon->osdmon()->blocklist(info.addrs, until);
   }
 
-  fsmap.erase(gid, blacklist_epoch);
+  fsmap.erase(gid, blocklist_epoch);
   last_beacon.erase(gid);
   if (pending_daemon_health.count(gid)) {
     pending_daemon_health.erase(gid);
     pending_daemon_health_rm.insert(gid);
   }
 
-  return blacklist_epoch != 0;
+  return blocklist_epoch != 0;
 }
 
 mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const std::string &arg, std::ostream &ss)
@@ -2043,7 +2043,7 @@ bool MDSMonitor::check_health(FSMap& fsmap, bool* propose_osdmap)
               << " (gid: " << gid << " addr: " << info.addrs
               << " state: " << ceph_mds_state_name(info.state) << ")"
               << " since " << since_last.count() << dendl;
-      // If the OSDMap is writeable, we can blacklist things, so we can
+      // If the OSDMap is writeable, we can blocklist things, so we can
       // try failing any laggy MDS daemons.  Consider each one for failure.
       if (!info.laggy()) {
         dout(1)  << " marking " << gid << " " << info.addrs

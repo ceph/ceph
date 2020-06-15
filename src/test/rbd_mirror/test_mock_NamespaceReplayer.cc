@@ -213,7 +213,7 @@ struct PoolWatcher<librbd::MockTestImageCtx> {
     return s_instances[pool_id];
   }
 
-  MOCK_METHOD0(is_blacklisted, bool());
+  MOCK_METHOD0(is_blocklisted, bool());
 
   MOCK_METHOD0(get_image_count, uint64_t());
 

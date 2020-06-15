@@ -98,7 +98,7 @@ class C_MDL_WriteError : public MDSIOContextBase {
     // assume journal is reliable, so don't choose action based on
     // g_conf()->mds_action_on_write_error.
     if (r == -EBLACKLISTED) {
-      derr << "we have been blacklisted (fenced), respawning..." << dendl;
+      derr << "we have been blocklisted (fenced), respawning..." << dendl;
       mds->respawn();
     } else {
       derr << "unhandled error " << cpp_strerror(r) << ", shutting down..." << dendl;
@@ -974,8 +974,8 @@ void MDLog::_recovery_thread(MDSContext *completion)
     int write_result = jp.save(mds->objecter);
     // Nothing graceful we can do for this
     ceph_assert(write_result >= 0);
-  } else if (read_result == -EBLACKLISTED) {
-    derr << "Blacklisted during JournalPointer read!  Respawning..." << dendl;
+  } else if (read_result == -EBLOCKLISTED) {
+    derr << "Blocklisted during JournalPointer read!  Respawning..." << dendl;
     mds->respawn();
     ceph_abort(); // Should be unreachable because respawn calls execv
   } else if (read_result != 0) {
@@ -1009,8 +1009,8 @@ void MDLog::_recovery_thread(MDSContext *completion)
     C_SaferCond recover_wait;
     back.recover(&recover_wait);
     int recovery_result = recover_wait.wait();
-    if (recovery_result == -EBLACKLISTED) {
-      derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
+    if (recovery_result == -EBLOCKLISTED) {
+      derr << "Blocklisted during journal recovery!  Respawning..." << dendl;
       mds->respawn();
       ceph_abort(); // Should be unreachable because respawn calls execv
     } else if (recovery_result != 0) {
@@ -1057,8 +1057,8 @@ void MDLog::_recovery_thread(MDSContext *completion)
   int recovery_result = recover_wait.wait();
   dout(4) << "Journal " << jp.front << " recovered." << dendl;
 
-  if (recovery_result == -EBLACKLISTED) {
-    derr << "Blacklisted during journal recovery!  Respawning..." << dendl;
+  if (recovery_result == -EBLOCKLISTED) {
+    derr << "Blocklisted during journal recovery!  Respawning..." << dendl;
     mds->respawn();
     ceph_abort(); // Should be unreachable because respawn calls execv
   } else if (recovery_result != 0) {

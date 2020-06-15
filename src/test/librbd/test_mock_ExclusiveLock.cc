@@ -42,8 +42,8 @@ template <>
 struct ManagedLock<MockExclusiveLockImageCtx> {
   ManagedLock(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
               const std::string& oid, librbd::MockImageWatcher *watcher,
-              managed_lock::Mode  mode, bool blacklist_on_break_lock,
-              uint32_t blacklist_expire_seconds)
+              managed_lock::Mode  mode, bool blocklist_on_break_lock,
+              uint32_t blocklist_expire_seconds)
   {}
 
   virtual ~ManagedLock() = default;
@@ -662,8 +662,8 @@ TEST_F(TestMockExclusiveLock, AcquireLockError) {
   expect_is_state_acquiring(exclusive_lock, true);
   expect_prepare_lock_complete(mock_image_ctx);
   expect_is_action_acquire_lock(exclusive_lock, true);
-  ASSERT_EQ(-EBLACKLISTED, when_post_acquire_lock_handler(exclusive_lock,
-                                                          -EBLACKLISTED));
+  ASSERT_EQ(-EBLOCKLISTED, when_post_acquire_lock_handler(exclusive_lock,
+                                                          -EBLOCKLISTED));
 }
 
 TEST_F(TestMockExclusiveLock, PostAcquireLockError) {

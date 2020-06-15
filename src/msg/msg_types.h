@@ -479,7 +479,7 @@ struct entity_addr_t {
       encode(type, bl);
     } else {
       // map any -> legacy for old clients.  this is primary for the benefit
-      // of OSDMap's blacklist, but is reasonable in general since any: is
+      // of OSDMap's blocklist, but is reasonable in general since any: is
       // meaningless for pre-nautilus clients or daemons.
       auto t = type;
       if (t == TYPE_ANY) {

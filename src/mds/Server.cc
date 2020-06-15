@@ -449,11 +449,11 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
       send_reply = nullptr;
     }
 
-    bool blacklisted = mds->objecter->with_osdmap([target](const OSDMap &map) {
-	  return map.is_blacklisted(target->info.inst.addr);
+    bool blocklisted = mds->objecter->with_osdmap([target](const OSDMap &map) {
+	  return map.is_blocklisted(target->info.inst.addr);
 	});
 
-    if (blacklisted || !g_conf()->mds_session_blacklist_on_evict) {
+    if (blocklisted || !g_conf()->mds_session_blocklist_on_evict) {
       kill_session(target, send_reply);
     } else {
       std::stringstream ss;
@@ -572,14 +572,14 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
         log_session_status("REJECTED", err_str);
       };
 
-      bool blacklisted = mds->objecter->with_osdmap(
+      bool blocklisted = mds->objecter->with_osdmap(
 	  [&addr](const OSDMap &osd_map) -> bool {
-	    return osd_map.is_blacklisted(addr);
+	    return osd_map.is_blocklisted(addr);
 	  });
 
-      if (blacklisted) {
-	dout(10) << "rejecting blacklisted client " << addr << dendl;
-	send_reject_message("blacklisted");
+      if (blocklisted) {
+	dout(10) << "rejecting blocklisted client " << addr << dendl;
+	send_reject_message("blocklisted");
 	session->clear();
 	break;
       }
@@ -887,8 +887,8 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
   mds->objecter->with_osdmap(
       [this, &cm, &cmm](const OSDMap &osd_map) {
 	for (auto p = cm.begin(); p != cm.end(); ) {
-	  if (osd_map.is_blacklisted(p->second.addr)) {
-	    dout(10) << " ignoring blacklisted client." << p->first
+	  if (osd_map.is_blocklisted(p->second.addr)) {
+	    dout(10) << " ignoring blocklisted client." << p->first
 		     << " (" <<  p->second.addr << ")" << dendl;
 	    cmm.erase(p->first);
 	    cm.erase(p++);
@@ -1126,7 +1126,7 @@ void Server::find_idle_sessions()
     dout(10) << "autoclosing stale session " << session->info.inst
 	     << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
 
-    if (g_conf()->mds_session_blacklist_on_timeout) {
+    if (g_conf()->mds_session_blocklist_on_timeout) {
       std::stringstream ss;
       mds->evict_client(session->get_client().v, false, true, ss, nullptr);
     } else {
@@ -1151,7 +1151,7 @@ void Server::evict_cap_revoke_non_responders() {
 
     std::stringstream ss;
     bool evicted = mds->evict_client(client.v, false,
-                                     g_conf()->mds_session_blacklist_on_evict,
+                                     g_conf()->mds_session_blocklist_on_evict,
                                      ss, nullptr);
     if (evicted && logger) {
       logger->inc(l_mdss_cap_revoke_eviction);
@@ -1210,7 +1210,7 @@ void Server::kill_session(Session *session, Context *on_safe, bool need_purge_in
   }
 }
 
-size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
+size_t Server::apply_blocklist(const std::set<entity_addr_t> &blocklist)
 {
   bool prenautilus = mds->objecter->with_osdmap(
       [&](const OSDMap& o) {
@@ -1221,23 +1221,23 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
   const auto& sessions = mds->sessionmap.get_sessions();
   for (const auto& p : sessions) {
     if (!p.first.is_client()) {
-      // Do not apply OSDMap blacklist to MDS daemons, we find out
+      // Do not apply OSDMap blocklist to MDS daemons, we find out
       // about their death via MDSMap.
       continue;
     }
 
     Session *s = p.second;
     auto inst_addr = s->info.inst.addr;
-    // blacklist entries are always TYPE_ANY for nautilus+
+    // blocklist entries are always TYPE_ANY for nautilus+
     inst_addr.set_type(entity_addr_t::TYPE_ANY);
-    if (blacklist.count(inst_addr)) {
+    if (blocklist.count(inst_addr)) {
       victims.push_back(s);
       continue;
     }
     if (prenautilus) {
       // ...except pre-nautilus, they were TYPE_LEGACY
       inst_addr.set_type(entity_addr_t::TYPE_LEGACY);
-      if (blacklist.count(inst_addr)) {
+      if (blocklist.count(inst_addr)) {
 	victims.push_back(s);
       }
     }
@@ -1247,7 +1247,7 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
     kill_session(s, nullptr);
   }
 
-  dout(10) << "apply_blacklist: killed " << victims.size() << dendl;
+  dout(10) << "apply_blocklist: killed " << victims.size() << dendl;
 
   return victims.size();
 }
@@ -1546,18 +1546,18 @@ void Server::update_required_client_features()
       feature_bitset_t missing_features = required_client_features;
       missing_features -= session->info.client_metadata.features;
       if (!missing_features.empty()) {
-	bool blacklisted = mds->objecter->with_osdmap(
+	bool blocklisted = mds->objecter->with_osdmap(
 	    [session](const OSDMap &osd_map) -> bool {
-	      return osd_map.is_blacklisted(session->info.inst.addr);
+	      return osd_map.is_blocklisted(session->info.inst.addr);
 	    });
-	if (blacklisted)
+	if (blocklisted)
 	  continue;
 
 	mds->clog->warn() << "evicting session " << *session << ", missing required features '"
 			  << missing_features << "'";
 	std::stringstream ss;
 	mds->evict_client(session->get_client().v, false,
-			  g_conf()->mds_session_blacklist_on_evict, ss);
+			  g_conf()->mds_session_blocklist_on_evict, ss);
       }
     }
   }
@@ -1631,7 +1631,7 @@ void Server::reconnect_tick()
   dout(7) << "reconnect timed out, " << remaining_sessions.size()
           << " clients have not reconnected in time" << dendl;
 
-  // If we're doing blacklist evictions, use this to wait for them before
+  // If we're doing blocklist evictions, use this to wait for them before
   // proceeding to reconnect_gather_finish
   MDSGatherBuilder gather(g_ceph_context);
 
@@ -1653,7 +1653,7 @@ void Server::reconnect_tick()
 		      << ", after waiting " << elapse1
 		      << " seconds during MDS startup";
 
-    if (g_conf()->mds_session_blacklist_on_timeout) {
+    if (g_conf()->mds_session_blocklist_on_timeout) {
       std::stringstream ss;
       mds->evict_client(session->get_client().v, false, true, ss,
 			gather.new_sub());

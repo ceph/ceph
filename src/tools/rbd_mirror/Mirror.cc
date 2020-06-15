@@ -714,8 +714,8 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);
-        } else if (pool_replayer->is_blacklisted()) {
-          derr << "restarting blacklisted pool replayer for " << peer << dendl;
+        } else if (pool_replayer->is_blocklisted()) {
+          derr << "restarting blocklisted pool replayer for " << peer << dendl;
           // TODO: make async
           pool_replayer->shut_down();
           pool_replayer->init(site_name);

@@ -105,7 +105,7 @@ class TestRadosStateError(object):
         assert_raises(RadosStateError, rados.osd_command, 0, '', b'')
         assert_raises(RadosStateError, rados.pg_command, '', '', b'')
         assert_raises(RadosStateError, rados.wait_for_latest_osdmap)
-        assert_raises(RadosStateError, rados.blacklist_add, '127.0.0.1/123', 0)
+        assert_raises(RadosStateError, rados.blocklist_add, '127.0.0.1/123', 0)
 
     def test_configuring(self):
         rados = Rados(conffile='')
@@ -244,8 +244,8 @@ class TestRados(object):
         fsid = self.rados.get_fsid()
         assert re.match('[0-9a-f\-]{36}', fsid, re.I)
 
-    def test_blacklist_add(self):
-        self.rados.blacklist_add("1.2.3.4/123", 1)
+    def test_blocklist_add(self):
+        self.rados.blocklist_add("1.2.3.4/123", 1)
 
     def test_get_cluster_stats(self):
         stats = self.rados.get_cluster_stats()

@@ -60,8 +60,8 @@ accessing RBD data in an uncoordinated and destructive manner.
 
 Thus, in the event that a lock cannot be acquired in the standard
 graceful manner, the overtaking process not only breaks the lock, but
-also blacklists the previous lock holder. This is negotiated between
-the new client process and the Ceph Mon: upon receiving the blacklist
+also blocklists the previous lock holder. This is negotiated between
+the new client process and the Ceph Mon: upon receiving the blocklist
 request,
 
 * the Mon instructs the relevant OSDs to no longer serve requests from
@@ -71,10 +71,10 @@ request,
 * once the new client has acquired the lock, it can commence writing
   to the image.
 
-Blacklisting is thus a form of storage-level resource `fencing`_.
+Blocklisting is thus a form of storage-level resource `fencing`_.
 
-In order for blacklisting to work, the client must have the ``osd
-blacklist`` capability. This capability is included in the ``profile
+In order for blocklisting to work, the client must have the ``osd
+blocklist`` capability. This capability is included in the ``profile
 rbd`` capability profile, which should generally be set on all Ceph
 :ref:`client identities <user-management>` using RBD.
 

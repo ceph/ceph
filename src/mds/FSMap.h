@@ -215,12 +215,12 @@ public:
    * The rank held by 'who', if any, is to be relinquished, and
    * the state for the daemon GID is to be forgotten.
    */
-  void erase(mds_gid_t who, epoch_t blacklist_epoch);
+  void erase(mds_gid_t who, epoch_t blocklist_epoch);
 
   /**
    * Update to indicate that the rank held by 'who' is damaged
    */
-  void damaged(mds_gid_t who, epoch_t blacklist_epoch);
+  void damaged(mds_gid_t who, epoch_t blocklist_epoch);
 
   /**
    * Update to indicate that the rank `rank` is to be removed

@@ -421,10 +421,10 @@ class CephFSMount(object):
         finally:
             self.umount_wait()
 
-    def is_blacklisted(self):
+    def is_blocklisted(self):
         addr = self.get_global_addr()
-        blacklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "ls", "--format=json"))
-        for b in blacklist:
+        blocklist = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "blocklist", "ls", "--format=json"))
+        for b in blocklist:
             if addr == b["addr"]:
                 return True
         return False

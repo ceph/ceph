@@ -31,14 +31,14 @@ struct BreakRequest<librbd::MockImageCtx> {
   static BreakRequest* create(librados::IoCtx& ioctx,
                               asio::ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
-                              bool exclusive, bool blacklist_locker,
-                              uint32_t blacklist_expire_seconds,
+                              bool exclusive, bool blocklist_locker,
+                              uint32_t blocklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
     CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
-    EXPECT_EQ(cct->_conf.get_val<bool>("rbd_blacklist_on_break_lock"),
-              blacklist_locker);
-    EXPECT_EQ(cct->_conf.get_val<uint64_t>("rbd_blacklist_expire_seconds"),
-              blacklist_expire_seconds);
+    EXPECT_EQ(cct->_conf.get_val<bool>("rbd_blocklist_on_break_lock"),
+              blocklist_locker);
+    EXPECT_EQ(cct->_conf.get_val<uint64_t>("rbd_blocklist_expire_seconds"),
+              blocklist_expire_seconds);
     EXPECT_FALSE(force_break_lock);
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

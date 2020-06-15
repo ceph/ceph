@@ -56,11 +56,11 @@ def clients_evicted(ctx, config):
         mount = mounts.get(client)
         if mount is not None:
             if evicted:
-                log.info("confirming client {} is blacklisted".format(client))
-                assert mount.is_blacklisted()
+                log.info("confirming client {} is blocklisted".format(client))
+                assert mount.is_blocklisted()
             elif client in no_session:
                 log.info("client {} should not be evicted but has no session with an MDS".format(client))
-                mount.is_blacklisted() # for debugging
+                mount.is_blocklisted() # for debugging
                 should_assert = True
     if should_assert:
         raise RuntimeError("some clients which should not be evicted have no session with an MDS?")

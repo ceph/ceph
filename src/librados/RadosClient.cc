@@ -766,9 +766,9 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
   return r;
 }
 
-void librados::RadosClient::blacklist_self(bool set) {
+void librados::RadosClient::blocklist_self(bool set) {
   std::lock_guard l(lock);
-  objecter->blacklist_self(set);
+  objecter->blocklist_self(set);
 }
 
 std::string librados::RadosClient::get_addrs() const {
@@ -777,7 +777,7 @@ std::string librados::RadosClient::get_addrs() const {
   return std::string(cos->strv());
 }
 
-int librados::RadosClient::blacklist_add(const string& client_address,
+int librados::RadosClient::blocklist_add(const string& client_address,
 					 uint32_t expire_seconds)
 {
   entity_addr_t addr;
@@ -788,8 +788,8 @@ int librados::RadosClient::blacklist_add(const string& client_address,
 
   std::stringstream cmd;
   cmd << "{"
-      << "\"prefix\": \"osd blacklist\", "
-      << "\"blacklistop\": \"add\", "
+      << "\"prefix\": \"osd blocklist\", "
+      << "\"blocklistop\": \"add\", "
       << "\"addr\": \"" << client_address << "\"";
   if (expire_seconds != 0) {
     cmd << ", \"expire\": " << expire_seconds << ".0";
@@ -801,6 +801,7 @@ int librados::RadosClient::blacklist_add(const string& client_address,
   bufferlist inbl;
   int r = mon_command(cmds, inbl, NULL, NULL);
   if (r < 0) {
+#warning blocklist fallback
     return r;
   }
 

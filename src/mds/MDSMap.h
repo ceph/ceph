@@ -550,7 +550,7 @@ protected:
   uint32_t flags = CEPH_MDSMAP_DEFAULTS; // flags
   epoch_t last_failure = 0;  // mds epoch of last failure
   epoch_t last_failure_osd_epoch = 0; // osd epoch of last failure; any mds entering replay needs
-                                  // at least this osdmap to ensure the blacklist propagates.
+                                  // at least this osdmap to ensure the blocklist propagates.
   utime_t created;
   utime_t modified;
 

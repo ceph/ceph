@@ -238,7 +238,7 @@ public:
   /// features
   uint64_t active_mgr_features = 0;
 
-  std::vector<entity_addrvec_t> clients; // for blacklist
+  std::vector<entity_addrvec_t> clients; // for blocklist
 
   std::map<uint64_t, StandbyInfo> standbys;
 

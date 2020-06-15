@@ -914,7 +914,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return 0;
     }
 
-    // might have been blacklisted by peer -- ensure we still own
+    // might have been blocklisted by peer -- ensure we still own
     // the lock by pinging the OSD
     int r = ictx->exclusive_lock->assert_header_locked();
     if (r == -EBUSY || r == -ENOENT) {
@@ -1444,7 +1444,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EINVAL;
     }
 
-    if (ictx->config.get_val<bool>("rbd_blacklist_on_break_lock")) {
+    if (ictx->config.get_val<bool>("rbd_blocklist_on_break_lock")) {
       typedef std::map<rados::cls::lock::locker_id_t,
 		       rados::cls::lock::locker_info_t> Lockers;
       Lockers lockers;
@@ -1472,11 +1472,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
 
       librados::Rados rados(ictx->md_ctx);
-      r = rados.blacklist_add(
+      r = rados.blocklist_add(
         client_address,
-        ictx->config.get_val<uint64_t>("rbd_blacklist_expire_seconds"));
+        ictx->config.get_val<uint64_t>("rbd_blocklist_expire_seconds"));
       if (r < 0) {
-        lderr(ictx->cct) << "unable to blacklist client: " << cpp_strerror(r)
+        lderr(ictx->cct) << "unable to blocklist client: " << cpp_strerror(r)
           	       << dendl;
         return r;
       }

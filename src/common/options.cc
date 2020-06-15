@@ -2123,25 +2123,25 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description(""),
 
-    Option("mon_osd_blacklist_default_expire", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mon_osd_blocklist_default_expire", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
     .add_service("mon")
-    .set_description("Duration in seconds that blacklist entries for clients "
+    .set_description("Duration in seconds that blocklist entries for clients "
                      "remain in the OSD map"),
 
-    Option("mon_mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    Option("mon_mds_blocklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1_day)
     .set_min(1_hr)
     .add_service("mon")
-    .set_description("Duration in seconds that blacklist entries for MDS "
+    .set_description("Duration in seconds that blocklist entries for MDS "
                      "daemons remain in the OSD map")
     .set_flag(Option::FLAG_RUNTIME),
 
-    Option("mon_mgr_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    Option("mon_mgr_blocklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1_day)
     .set_min(1_hr)
     .add_service("mon")
-    .set_description("Duration in seconds that blacklist entries for mgr "
+    .set_description("Duration in seconds that blocklist entries for mgr "
                      "daemons remain in the OSD map")
     .set_flag(Option::FLAG_RUNTIME),
 
@@ -7299,13 +7299,13 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("copy-up parent image blocks to clone upon read request"),
 
-    Option("rbd_blacklist_on_break_lock", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("rbd_blocklist_on_break_lock", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description("whether to blacklist clients whose lock was broken"),
+    .set_description("whether to blocklist clients whose lock was broken"),
 
-    Option("rbd_blacklist_expire_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rbd_blocklist_expire_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description("number of seconds to blacklist - set to 0 for OSD default"),
+    .set_description("number of seconds to blocklist - set to 0 for OSD default"),
 
     Option("rbd_request_timed_out_seconds", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
@@ -7864,13 +7864,13 @@ std::vector<Option> get_mds_options() {
     .set_default(true)
     .set_description("require MDS name is unique in the cluster"),
 
-    Option("mds_session_blacklist_on_timeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("mds_session_blocklist_on_timeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description("blacklist clients whose sessions have become stale"),
+    .set_description("blocklist clients whose sessions have become stale"),
 
-    Option("mds_session_blacklist_on_evict", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("mds_session_blocklist_on_evict", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description("blacklist clients that have been evicted"),
+    .set_description("blocklist clients that have been evicted"),
 
     Option("mds_sessionmap_keys_per_op", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1024)

@@ -1651,10 +1651,10 @@ private:
   bool honor_pool_full = true;
   bool pool_full_try = false;
 
-  // If this is true, accumulate a set of blacklisted entities
-  // to be drained by consume_blacklist_events.
-  bool blacklist_events_enabled = false;
-  std::set<entity_addr_t> blacklist_events;
+  // If this is true, accumulate a set of blocklisted entities
+  // to be drained by consume_blocklist_events.
+  bool blocklist_events_enabled = false;
+  std::set<entity_addr_t> blocklist_events;
   struct pg_mapping_t {
     epoch_t epoch = 0;
     std::vector<int> up;
@@ -1716,7 +1716,7 @@ private:
 public:
   void maybe_request_map();
 
-  void enable_blacklist_events();
+  void enable_blocklist_events();
 private:
 
   void _maybe_request_map();
@@ -2675,15 +2675,15 @@ private:
 
 
   /**
-   * Get std::list of entities blacklisted since this was last called,
+   * Get std::list of entities blocklisted since this was last called,
    * and reset the std::list.
    *
    * Uses a std::set because typical use case is to compare some
-   * other std::list of clients to see which overlap with the blacklisted
+   * other std::list of clients to see which overlap with the blocklisted
    * addrs.
    *
    */
-  void consume_blacklist_events(std::set<entity_addr_t> *events);
+  void consume_blocklist_events(std::set<entity_addr_t> *events);
 
   int pool_snap_by_name(int64_t poolid,
 			const char *snap_name,
@@ -2693,8 +2693,8 @@ private:
   int pool_snap_list(int64_t poolid, std::vector<uint64_t> *snaps);
 private:
 
-  void emit_blacklist_events(const OSDMap::Incremental &inc);
-  void emit_blacklist_events(const OSDMap &old_osd_map,
+  void emit_blocklist_events(const OSDMap::Incremental &inc);
+  void emit_blocklist_events(const OSDMap &old_osd_map,
                              const OSDMap &new_osd_map);
 
   // low-level
@@ -3887,7 +3887,7 @@ public:
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;
 
-  void blacklist_self(bool set);
+  void blocklist_self(bool set);
 
 private:
   epoch_t epoch_barrier = 0;

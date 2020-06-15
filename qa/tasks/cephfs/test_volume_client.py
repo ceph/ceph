@@ -461,7 +461,7 @@ vc.disconnect()
 
         # Evicted guest client, guest_mounts[0], should not be able to do
         # anymore metadata ops.  It should start failing all operations
-        # when it sees that its own address is in the blacklist.
+        # when it sees that its own address is in the blocklist.
         try:
             guest_mounts[0].write_n_mb("rogue.bin", 1)
         except CommandFailedError:
@@ -469,7 +469,7 @@ vc.disconnect()
         else:
             raise RuntimeError("post-eviction write should have failed!")
 
-        # The blacklisted guest client should now be unmountable
+        # The blocklisted guest client should now be unmountable
         guest_mounts[0].umount_wait()
 
         # Guest client, guest_mounts[1], using the same auth ID 'guest', but

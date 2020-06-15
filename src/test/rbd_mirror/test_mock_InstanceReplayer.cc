@@ -98,7 +98,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(get_local_image_id, const std::string &());
   MOCK_METHOD0(is_running, bool());
   MOCK_METHOD0(is_stopped, bool());
-  MOCK_METHOD0(is_blacklisted, bool());
+  MOCK_METHOD0(is_blocklisted, bool());
 
   MOCK_CONST_METHOD0(is_finished, bool());
   MOCK_METHOD1(set_finished, void(bool));
@@ -199,7 +199,7 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   C_SaferCond on_acquire;
   EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
-  EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
+  EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, start(_, false))
     .WillOnce(CompleteContext(0));
@@ -270,7 +270,7 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   C_SaferCond on_acquire;
   EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
-  EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
+  EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, start(_, false))
     .WillOnce(CompleteContext(0));
@@ -300,7 +300,7 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   EXPECT_CALL(mock_image_replayer, get_health_state()).WillOnce(
     Return(image_replayer::HEALTH_STATE_OK));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
-  EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
+  EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, destroy());
   EXPECT_CALL(mock_service_daemon,
@@ -344,7 +344,7 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
 
   EXPECT_CALL(mock_image_replayer, add_peer(_));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
-  EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
+  EXPECT_CALL(mock_image_replayer, is_blocklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, start(_, false))
     .WillOnce(CompleteContext(0));

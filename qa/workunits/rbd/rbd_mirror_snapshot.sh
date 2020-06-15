@@ -448,7 +448,7 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
 if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   # teuthology will trash the daemon
-  testlog "TEST: no blacklists"
-  CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER1} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
-  CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
+  testlog "TEST: no blocklists"
+  CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER1} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
+  CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
 fi

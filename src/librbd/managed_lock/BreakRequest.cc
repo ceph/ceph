@@ -25,13 +25,13 @@ using util::create_rados_callback;
 
 namespace {
 
-struct C_BlacklistClient : public Context {
+struct C_BlocklistClient : public Context {
   librados::IoCtx &ioctx;
   std::string locker_address;
   uint32_t expire_seconds;
   Context *on_finish;
 
-  C_BlacklistClient(librados::IoCtx &ioctx, const std::string &locker_address,
+  C_BlocklistClient(librados::IoCtx &ioctx, const std::string &locker_address,
                     uint32_t expire_seconds, Context *on_finish)
     : ioctx(ioctx), locker_address(locker_address),
       expire_seconds(expire_seconds), on_finish(on_finish) {
@@ -39,7 +39,7 @@ struct C_BlacklistClient : public Context {
 
   void finish(int r) override {
     librados::Rados rados(ioctx);
-    r = rados.blacklist_add(locker_address, expire_seconds);
+    r = rados.blocklist_add(locker_address, expire_seconds);
     on_finish->complete(r);
   }
 };
@@ -50,13 +50,13 @@ template <typename I>
 BreakRequest<I>::BreakRequest(librados::IoCtx& ioctx,
                               asio::ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
-                              bool exclusive, bool blacklist_locker,
-                              uint32_t blacklist_expire_seconds,
+                              bool exclusive, bool blocklist_locker,
+                              uint32_t blocklist_expire_seconds,
                               bool force_break_lock, Context *on_finish)
   : m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(m_ioctx.cct())),
     m_work_queue(work_queue), m_oid(oid), m_locker(locker),
-    m_exclusive(exclusive), m_blacklist_locker(blacklist_locker),
-    m_blacklist_expire_seconds(blacklist_expire_seconds),
+    m_exclusive(exclusive), m_blocklist_locker(blocklist_locker),
+    m_blocklist_expire_seconds(blocklist_expire_seconds),
     m_force_break_lock(force_break_lock), m_on_finish(on_finish) {
 }
 
@@ -151,12 +151,12 @@ void BreakRequest<I>::handle_get_locker(int r) {
     return;
   }
 
-  send_blacklist();
+  send_blocklist();
 }
 
 template <typename I>
-void BreakRequest<I>::send_blacklist() {
-  if (!m_blacklist_locker) {
+void BreakRequest<I>::send_blocklist() {
+  if (!m_blocklist_locker) {
     send_break_lock();
     return;
   }
@@ -166,26 +166,26 @@ void BreakRequest<I>::send_blacklist() {
                    << "locker entity=" << m_locker.entity << dendl;
 
   if (m_locker.entity == entity_name) {
-    lderr(m_cct) << "attempting to self-blacklist" << dendl;
+    lderr(m_cct) << "attempting to self-blocklist" << dendl;
     finish(-EINVAL);
     return;
   }
 
-  // TODO: need async version of RadosClient::blacklist_add
+  // TODO: need async version of RadosClient::blocklist_add
   using klass = BreakRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_blacklist>(
+  Context *ctx = create_context_callback<klass, &klass::handle_blocklist>(
     this);
-  m_work_queue->queue(new C_BlacklistClient(m_ioctx, m_locker.address,
-                                            m_blacklist_expire_seconds, ctx),
+  m_work_queue->queue(new C_BlocklistClient(m_ioctx, m_locker.address,
+                                            m_blocklist_expire_seconds, ctx),
                       0);
 }
 
 template <typename I>
-void BreakRequest<I>::handle_blacklist(int r) {
+void BreakRequest<I>::handle_blocklist(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to blacklist lock owner: " << cpp_strerror(r)
+    lderr(m_cct) << "failed to blocklist lock owner: " << cpp_strerror(r)
                  << dendl;
     finish(r);
     return;

@@ -102,17 +102,17 @@ class CephFSTestCase(CephTestCase):
         self.fs = None # is now invalid!
         self.recovery_fs = None
 
-        # In case anything is in the OSD blacklist list, clear it out.  This is to avoid
-        # the OSD map changing in the background (due to blacklist expiry) while tests run.
+        # In case anything is in the OSD blocklist list, clear it out.  This is to avoid
+        # the OSD map changing in the background (due to blocklist expiry) while tests run.
         try:
-            self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blacklist", "clear")
+            self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "clear")
         except CommandFailedError:
             # Fallback for older Ceph cluster
-            blacklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
-                                  "dump", "--format=json-pretty"))['blacklist']
-            log.info("Removing {0} blacklist entries".format(len(blacklist)))
-            for addr, blacklisted_at in blacklist.items():
-                self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
+            blocklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
+                                  "dump", "--format=json-pretty"))['blocklist']
+            log.info("Removing {0} blocklist entries".format(len(blocklist)))
+            for addr, blocklisted_at in blocklist.items():
+                self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "rm", addr)
 
         client_mount_ids = [m.client_id for m in self.mounts]
         # In case the test changes the IDs of clients, stash them so that we can

@@ -3655,19 +3655,23 @@ CEPH_RADOS_API int rados_break_lock(rados_ioctx_t io, const char *o,
                                     const char *cookie);
 
 /**
- * Blacklists the specified client from the OSDs
+ * Blocklists the specified client from the OSDs
  *
  * @param cluster cluster handle
  * @param client_address client address
- * @param expire_seconds number of seconds to blacklist (0 for default)
+ * @param expire_seconds number of seconds to blocklist (0 for default)
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
+CEPH_RADOS_API int rados_blocklist_add(rados_t cluster,
 				       char *client_address,
 				       uint32_t expire_seconds);
+CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
+				       char *client_address,
+				       uint32_t expire_seconds)
+  __attribute__((deprecated));
 
 /**
- * Gets addresses of the RADOS session, suitable for blacklisting.
+ * Gets addresses of the RADOS session, suitable for blocklisting.
  *
  * @param cluster cluster handle
  * @param addrs the output string.

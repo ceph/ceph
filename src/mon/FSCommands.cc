@@ -775,7 +775,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
   {
-    /* We may need to blacklist ranks. */
+    /* We may need to blocklist ranks. */
     if (!mon->osdmon()->is_writeable()) {
       // not allowed to write yet, so retry when we can
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
@@ -826,7 +826,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       mon->mdsmon()->fail_mds_gid(fsmap, gid);
     }
     if (!to_fail.empty()) {
-      mon->osdmon()->propose_pending(); /* maybe new blacklists */
+      mon->osdmon()->propose_pending(); /* maybe new blocklists */
     }
 
     fsmap.erase_filesystem(fs->fscid);

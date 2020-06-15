@@ -164,19 +164,19 @@ void TestMemCluster::allocate_client(uint32_t *nonce, uint64_t *global_id) {
 
 void TestMemCluster::deallocate_client(uint32_t nonce) {
   std::lock_guard locker{m_lock};
-  m_blacklist.erase(nonce);
+  m_blocklist.erase(nonce);
 }
 
-bool TestMemCluster::is_blacklisted(uint32_t nonce) const {
+bool TestMemCluster::is_blocklisted(uint32_t nonce) const {
   std::lock_guard locker{m_lock};
-  return (m_blacklist.find(nonce) != m_blacklist.end());
+  return (m_blocklist.find(nonce) != m_blocklist.end());
 }
 
-void TestMemCluster::blacklist(uint32_t nonce) {
-  m_watch_notify.blacklist(nonce);
+void TestMemCluster::blocklist(uint32_t nonce) {
+  m_watch_notify.blocklist(nonce);
 
   std::lock_guard locker{m_lock};
-  m_blacklist.insert(nonce);
+  m_blocklist.insert(nonce);
 }
 
 void TestMemCluster::transaction_start(const ObjectLocator& locator) {

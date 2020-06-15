@@ -951,7 +951,7 @@ void MDSRank::damaged_unlocked()
 void MDSRank::handle_write_error(int err)
 {
   if (err == -EBLACKLISTED) {
-    derr << "we have been blacklisted (fenced), respawning..." << dendl;
+    derr << "we have been blocklisted (fenced), respawning..." << dendl;
     respawn();
     return;
   }
@@ -1318,7 +1318,7 @@ void MDSRank::heartbeat_reset()
   }
 
   // NB not enabling suicide grace, because the mon takes care of killing us
-  // (by blacklisting us) when we fail to send beacons, and it's simpler to
+  // (by blocklisting us) when we fail to send beacons, and it's simpler to
   // only have one way of dying.
   auto grace = g_conf().get_val<double>("mds_heartbeat_grace");
   g_ceph_context->get_heartbeat_map()->reset_timeout(hb, grace, 0);
@@ -1496,7 +1496,7 @@ void MDSRank::send_message_client(const ref_t<Message>& m, Session* session)
 
 /**
  * This is used whenever a RADOS operation has been cancelled
- * or a RADOS client has been blacklisted, to cause the MDS and
+ * or a RADOS client has been blocklisted, to cause the MDS and
  * any clients to wait for this OSD epoch before using any new caps.
  *
  * See doc/cephfs/eviction
@@ -1729,7 +1729,7 @@ void MDSRank::replay_start()
     boot_start();
   } else {
     dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
-	    << " (which blacklists prior instance)" << dendl;
+	    << " (which blocklists prior instance)" << dendl;
     Context *fin = new C_IO_Wrapper(this, new C_MDS_BootStart(this, MDS_BOOT_INITIAL));
     objecter->wait_for_map(
       mdsmap->get_last_failure_osd_epoch(),
@@ -1802,7 +1802,7 @@ void MDSRank::standby_replay_restart()
     } else {
       auto fin = new C_IO_Wrapper(this, new C_MDS_StandbyReplayRestart(this));
       dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
-	      << " (which blacklists prior instance)" << dendl;
+	      << " (which blocklists prior instance)" << dendl;
       objecter->wait_for_map(mdsmap->get_last_failure_osd_epoch(),
 			     lambdafy(fin));
     }
@@ -1914,18 +1914,18 @@ void MDSRank::reconnect_start()
     reopen_log();
   }
 
-  // Drop any blacklisted clients from the SessionMap before going
+  // Drop any blocklisted clients from the SessionMap before going
   // into reconnect, so that we don't wait for them.
-  objecter->enable_blacklist_events();
-  std::set<entity_addr_t> blacklist;
+  objecter->enable_blocklist_events();
+  std::set<entity_addr_t> blocklist;
   epoch_t epoch = 0;
-  objecter->with_osdmap([&blacklist, &epoch](const OSDMap& o) {
-      o.get_blacklist(&blacklist);
+  objecter->with_osdmap([&blocklist, &epoch](const OSDMap& o) {
+      o.get_blocklist(&blocklist);
       epoch = o.get_epoch();
   });
-  auto killed = server->apply_blacklist(blacklist);
-  dout(4) << "reconnect_start: killed " << killed << " blacklisted sessions ("
-          << blacklist.size() << " blacklist entries, "
+  auto killed = server->apply_blocklist(blocklist);
+  dout(4) << "reconnect_start: killed " << killed << " blocklisted sessions ("
+          << blocklist.size() << " blocklist entries, "
           << sessionmap.get_sessions().size() << ")" << dendl;
   if (killed) {
     set_osd_epoch_barrier(epoch);
@@ -2145,7 +2145,7 @@ void MDSRank::boot_create()
   mdlog->flush();
 
   // Usually we do this during reconnect, but creation skips that.
-  objecter->enable_blacklist_events();
+  objecter->enable_blocklist_events();
 
   fin.activate();
 }
@@ -2173,7 +2173,7 @@ void MDSRank::stopping_start()
     for (const auto &s : victims) {
       std::stringstream ss;
       evict_client(s->get_client().v, false,
-                   g_conf()->mds_session_blacklist_on_evict, ss, gather.new_sub());
+                   g_conf()->mds_session_blocklist_on_evict, ss, gather.new_sub());
     }
     gather.activate();
   }
@@ -2589,7 +2589,7 @@ void MDSRankDispatcher::handle_asok_command(
     }
     std::lock_guard l(mds_lock);
     bool evicted = evict_client(strtol(client_id.c_str(), 0, 10), true,
-        g_conf()->mds_session_blacklist_on_evict, ss);
+        g_conf()->mds_session_blocklist_on_evict, ss);
     if (!evicted) {
       dout(15) << ss.str() << dendl;
       r = -ENOENT;
@@ -2819,7 +2819,7 @@ void MDSRankDispatcher::evict_clients(
   for (const auto s : victims) {
     std::stringstream ss;
     evict_client(s->get_client().v, false,
-                 g_conf()->mds_session_blacklist_on_evict, ss, gather.new_sub());
+                 g_conf()->mds_session_blocklist_on_evict, ss, gather.new_sub());
   }
   gather.activate();
 }
@@ -3366,12 +3366,12 @@ void MDSRankDispatcher::handle_osd_map()
 
   purge_queue.update_op_limit(*mdsmap);
 
-  std::set<entity_addr_t> newly_blacklisted;
-  objecter->consume_blacklist_events(&newly_blacklisted);
+  std::set<entity_addr_t> newly_blocklisted;
+  objecter->consume_blocklist_events(&newly_blocklisted);
   auto epoch = objecter->with_osdmap([](const OSDMap &o){return o.get_epoch();});
   dout(4) << "handle_osd_map epoch " << epoch << ", "
-          << newly_blacklisted.size() << " new blacklist entries" << dendl;
-  auto victims = server->apply_blacklist(newly_blacklisted);
+          << newly_blocklisted.size() << " new blocklist entries" << dendl;
+  auto victims = server->apply_blocklist(newly_blocklisted);
   if (victims) {
     set_osd_epoch_barrier(epoch);
   }
@@ -3420,7 +3420,7 @@ int MDSRank::config_client(int64_t session_id, bool remove,
 }
 
 bool MDSRank::evict_client(int64_t session_id,
-    bool wait, bool blacklist, std::ostream& err_ss,
+    bool wait, bool blocklist, std::ostream& err_ss,
     Context *on_killed)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
@@ -3443,15 +3443,15 @@ bool MDSRank::evict_client(int64_t session_id,
   auto& addr = session->info.inst.addr;
   {
     CachedStackStringStream css;
-    *css << "Evicting " << (blacklist ? "(and blacklisting) " : "")
+    *css << "Evicting " << (blocklist ? "(and blocklisting) " : "")
          << "client session " << session_id << " (" << addr << ")";
     dout(1) << css->strv() << dendl;
     clog->info() << css->strv();
   }
 
-  dout(4) << "Preparing blacklist command... (wait=" << wait << ")" << dendl;
+  dout(4) << "Preparing blocklist command... (wait=" << wait << ")" << dendl;
   stringstream ss;
-  ss << "{\"prefix\":\"osd blacklist\", \"blacklistop\":\"add\",";
+  ss << "{\"prefix\":\"osd blocklist\", \"blocklistop\":\"add\",";
   ss << "\"addr\":\"";
   ss << addr;
   ss << "\"}";
@@ -3475,7 +3475,7 @@ bool MDSRank::evict_client(int64_t session_id,
       }
     } else {
       dout(1) << "session " << session_id << " was removed while we waited "
-      "for blacklist" << dendl;
+      "for blocklist" << dendl;
 
       // Even though it wasn't us that removed it, kick our completion
       // as the session has been removed.
@@ -3485,10 +3485,10 @@ bool MDSRank::evict_client(int64_t session_id,
     }
   };
 
-  auto apply_blacklist = [this, cmd](std::function<void ()> fn){
+  auto apply_blocklist = [this, cmd](std::function<void ()> fn){
     ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
-    Context *on_blacklist_done = new LambdaContext([this, fn](int r) {
+    Context *on_blocklist_done = new LambdaContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
       lambdafy((new C_OnFinisher(
          new LambdaContext([this, fn](int r) {
@@ -3504,14 +3504,14 @@ bool MDSRank::evict_client(int64_t session_id,
       )));
     });
 
-    dout(4) << "Sending mon blacklist command: " << cmd[0] << dendl;
-    monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blacklist_done);
+    dout(4) << "Sending mon blocklist command: " << cmd[0] << dendl;
+    monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blocklist_done);
   };
 
   if (wait) {
-    if (blacklist) {
+    if (blocklist) {
       C_SaferCond inline_ctx;
-      apply_blacklist([&inline_ctx](){inline_ctx.complete(0);});
+      apply_blocklist([&inline_ctx](){inline_ctx.complete(0);});
       mds_lock.unlock();
       inline_ctx.wait();
       mds_lock.lock();
@@ -3522,13 +3522,13 @@ bool MDSRank::evict_client(int64_t session_id,
           session_id));
     if (!session) {
       dout(1) << "session " << session_id << " was removed while we waited "
-                 "for blacklist" << dendl;
+                 "for blocklist" << dendl;
       return true;
     }
     kill_client_session();
   } else {
-    if (blacklist) {
-      apply_blacklist(kill_client_session);
+    if (blocklist) {
+      apply_blocklist(kill_client_session);
     } else {
       kill_client_session();
     }

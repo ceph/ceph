@@ -2537,12 +2537,12 @@ will start to track new ops received afterwards.";
     f->open_object_section("pq");
     op_shardedwq.dump(f);
     f->close_section();
-  } else if (prefix == "dump_blacklist") {
+  } else if (prefix == "dump_blocklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
-    f->open_array_section("blacklist");
-    curmap->get_blacklist(&bl);
+    f->open_array_section("blocklist");
+    curmap->get_blocklist(&bl);
     for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
 	it != bl.end(); ++it) {
       f->open_object_section("entry");
@@ -2552,7 +2552,7 @@ will start to track new ops received afterwards.";
       it->second.localtime(f->dump_stream("expire_time"));
       f->close_section(); //entry
     }
-    f->close_section(); //blacklist
+    f->close_section(); //blocklist
   } else if (prefix == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     // scan pg's
@@ -3735,9 +3735,9 @@ void OSD::final_init()
 				     asok_hook,
 				     "dump op priority queue state");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_blacklist",
+  r = admin_socket->register_command("dump_blocklist",
 				     asok_hook,
-				     "dump blacklisted clients and times");
+				     "dump blocklisted clients and times");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_watchers",
 				     asok_hook,
@@ -8106,7 +8106,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     OSDMapRef newmap = get_map(cur);
     ceph_assert(newmap);  // we just cached it above!
 
-    // start blacklisting messages sent to peers that go down.
+    // start blocklisting messages sent to peers that go down.
     service.pre_publish_map(newmap);
 
     // kill connections to newly down osds

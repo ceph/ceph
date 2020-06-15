@@ -283,7 +283,7 @@ public:
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
   }
-  void check_blacklisted_watchers() final {
+  void check_blocklisted_watchers() final {
     // Not needed yet
   }
   void clear_primary_state() final {

@@ -1185,10 +1185,10 @@ PyMethodDef BaseMgrModule_methods[] = {
     METH_VARARGS, "Verify the current session caps are valid"},
 
   {"_ceph_register_client", (PyCFunction)ceph_register_client,
-    METH_VARARGS, "Register RADOS instance for potential blacklisting"},
+    METH_VARARGS, "Register RADOS instance for potential blocklisting"},
 
   {"_ceph_unregister_client", (PyCFunction)ceph_unregister_client,
-    METH_VARARGS, "Unregister RADOS instance for potential blacklisting"},
+    METH_VARARGS, "Unregister RADOS instance for potential blocklisting"},
 
   {NULL, NULL, 0, NULL}
 };

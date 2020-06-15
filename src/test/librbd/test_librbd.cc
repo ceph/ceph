@@ -6828,25 +6828,25 @@ TEST_F(TestLibRBD, BreakLock)
 
   static char buf[10];
 
-  rados_t blacklist_cluster;
-  ASSERT_EQ("", connect_cluster(&blacklist_cluster));
+  rados_t blocklist_cluster;
+  ASSERT_EQ("", connect_cluster(&blocklist_cluster));
 
-  rados_ioctx_t ioctx, blacklist_ioctx;
+  rados_ioctx_t ioctx, blocklist_ioctx;
   ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
-  ASSERT_EQ(0, rados_ioctx_create(blacklist_cluster, m_pool_name.c_str(),
-                                  &blacklist_ioctx));
+  ASSERT_EQ(0, rados_ioctx_create(blocklist_cluster, m_pool_name.c_str(),
+                                  &blocklist_ioctx));
 
   std::string name = get_temp_image_name();
   uint64_t size = 2 << 20;
   int order = 0;
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
 
-  rbd_image_t image, blacklist_image;
+  rbd_image_t image, blocklist_image;
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
-  ASSERT_EQ(0, rbd_open(blacklist_ioctx, name.c_str(), &blacklist_image, NULL));
+  ASSERT_EQ(0, rbd_open(blocklist_ioctx, name.c_str(), &blocklist_image, NULL));
 
-  ASSERT_EQ(0, rbd_metadata_set(image, "conf_rbd_blacklist_on_break_lock", "true"));
-  ASSERT_EQ(0, rbd_lock_acquire(blacklist_image, RBD_LOCK_MODE_EXCLUSIVE));
+  ASSERT_EQ(0, rbd_metadata_set(image, "conf_rbd_blocklist_on_break_lock", "true"));
+  ASSERT_EQ(0, rbd_lock_acquire(blocklist_image, RBD_LOCK_MODE_EXCLUSIVE));
 
   rbd_lock_mode_t lock_mode;
   char *lock_owners[1];
@@ -6859,19 +6859,19 @@ TEST_F(TestLibRBD, BreakLock)
 
   ASSERT_EQ(0, rbd_lock_break(image, RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]));
   ASSERT_EQ(0, rbd_lock_acquire(image, RBD_LOCK_MODE_EXCLUSIVE));
-  EXPECT_EQ(0, rados_wait_for_latest_osdmap(blacklist_cluster));
+  EXPECT_EQ(0, rados_wait_for_latest_osdmap(blocklist_cluster));
 
   ASSERT_EQ((ssize_t)sizeof(buf), rbd_write(image, 0, sizeof(buf), buf));
-  ASSERT_EQ(-EBLACKLISTED, rbd_write(blacklist_image, 0, sizeof(buf), buf));
+  ASSERT_EQ(-EBLOCKLISTED, rbd_write(blocklist_image, 0, sizeof(buf), buf));
 
   ASSERT_EQ(0, rbd_close(image));
-  ASSERT_EQ(0, rbd_close(blacklist_image));
+  ASSERT_EQ(0, rbd_close(blocklist_image));
 
   rbd_lock_get_owners_cleanup(lock_owners, max_lock_owners);
 
   rados_ioctx_destroy(ioctx);
-  rados_ioctx_destroy(blacklist_ioctx);
-  rados_shutdown(blacklist_cluster);
+  rados_ioctx_destroy(blocklist_ioctx);
+  rados_shutdown(blocklist_cluster);
 }
 
 TEST_F(TestLibRBD, DiscardAfterWrite)

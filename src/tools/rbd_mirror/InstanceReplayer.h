@@ -52,7 +52,7 @@ public:
                    PoolMetaCache* pool_meta_cache);
   ~InstanceReplayer();
 
-  bool is_blacklisted() const;
+  bool is_blocklisted() const;
 
   int init();
   void shut_down();
@@ -111,7 +111,7 @@ private:
   Context *m_image_state_check_task = nullptr;
   Context *m_on_shut_down = nullptr;
   bool m_manual_stop = false;
-  bool m_blacklisted = false;
+  bool m_blocklisted = false;
 
   void wait_for_ops();
   void handle_wait_for_ops(int r);

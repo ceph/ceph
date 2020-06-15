@@ -189,7 +189,8 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     // This command grant is checked explicitly in MRemoveSnaps handling
     profile_grants.push_back(MonCapGrant("osd pool rmsnap"));
-    profile_grants.push_back(MonCapGrant("osd blacklist"));
+    profile_grants.push_back(MonCapGrant("osd blocklist"));
+    profile_grants.push_back(MonCapGrant("osd blacklist")); // for compat
     profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
   if (profile == "mgr") {
@@ -293,7 +294,14 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
 
-    // exclusive lock dead-client blacklisting (IP+nonce required)
+    // exclusive lock dead-client blocklisting (IP+nonce required)
+    profile_grants.push_back(MonCapGrant("osd blocklist"));
+    profile_grants.back().command_args["blocklistop"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_EQUAL, "add");
+    profile_grants.back().command_args["addr"] = StringConstraint(
+      StringConstraint::MATCH_TYPE_REGEX, "^[^/]+/[0-9]+$");
+
+    // for compat,
     profile_grants.push_back(MonCapGrant("osd blacklist"));
     profile_grants.back().command_args["blacklistop"] = StringConstraint(
       StringConstraint::MATCH_TYPE_EQUAL, "add");

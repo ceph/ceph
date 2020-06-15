@@ -53,13 +53,13 @@ function assert_unlocked() {
         grep '"lockers":\[\]'
 }
 
-function blacklist_add() {
+function blocklist_add() {
     local dev_id="${1#/dev/rbd}"
 
     local client_addr
     client_addr="$(< $SYSFS_DIR/$dev_id/client_addr)"
 
-    ceph osd blacklist add $client_addr
+    ceph osd blocklist add $client_addr
 }
 
 SYSFS_DIR="/sys/bus/rbd/devices"
@@ -203,7 +203,7 @@ assert_unlocked
 DEV=$(sudo rbd map $IMAGE_NAME)
 assert_locked $DEV
 dd if=/dev/urandom of=$DEV bs=4k count=10 oflag=direct
-{ sleep 10; blacklist_add $DEV; } &
+{ sleep 10; blocklist_add $DEV; } &
 PID=$!
 expect_false dd if=/dev/urandom of=$DEV bs=4k count=200000 oflag=direct
 wait $PID

@@ -78,7 +78,7 @@ public:
   NamespaceReplayer(const NamespaceReplayer&) = delete;
   NamespaceReplayer& operator=(const NamespaceReplayer&) = delete;
 
-  bool is_blacklisted() const;
+  bool is_blocklisted() const;
 
   void init(Context *on_finish);
   void shut_down(Context *on_finish);

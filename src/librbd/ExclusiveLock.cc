@@ -33,8 +33,8 @@ ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
   : RefCountedObject(image_ctx.cct),
     ML<I>(image_ctx.md_ctx, image_ctx.op_work_queue, image_ctx.header_oid,
           image_ctx.image_watcher, managed_lock::EXCLUSIVE,
-          image_ctx.config.template get_val<bool>("rbd_blacklist_on_break_lock"),
-          image_ctx.config.template get_val<uint64_t>("rbd_blacklist_expire_seconds")),
+          image_ctx.config.template get_val<bool>("rbd_blocklist_on_break_lock"),
+          image_ctx.config.template get_val<uint64_t>("rbd_blocklist_expire_seconds")),
     m_image_ctx(image_ctx) {
   std::lock_guard locker{ML<I>::m_lock};
   ML<I>::set_state_uninitialized();
@@ -111,8 +111,8 @@ void ExclusiveLock<I>::unblock_requests() {
 
 template <typename I>
 int ExclusiveLock<I>::get_unlocked_op_error() const {
-  if (m_image_ctx.image_watcher->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_image_ctx.image_watcher->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
   return -EROFS;
 }

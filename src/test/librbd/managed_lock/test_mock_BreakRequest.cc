@@ -105,9 +105,9 @@ public:
   }
 
 
-  void expect_blacklist_add(MockTestImageCtx &mock_image_ctx, int r) {
+  void expect_blocklist_add(MockTestImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(*get_mock_io_ctx(mock_image_ctx.md_ctx).get_mock_rados_client(),
-                blacklist_add(_, _))
+                blocklist_add(_, _))
                   .WillOnce(Return(r));
   }
 
@@ -140,7 +140,7 @@ TEST_F(TestMockManagedLockBreakRequest, DeadLockOwner) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
@@ -169,7 +169,7 @@ TEST_F(TestMockManagedLockBreakRequest, ForceBreak) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
@@ -325,7 +325,7 @@ TEST_F(TestMockManagedLockBreakRequest, GetLockerError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockManagedLockBreakRequest, BlacklistDisabled) {
+TEST_F(TestMockManagedLockBreakRequest, BlocklistDisabled) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -353,7 +353,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistDisabled) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockManagedLockBreakRequest, BlacklistSelf) {
+TEST_F(TestMockManagedLockBreakRequest, BlocklistSelf) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -381,7 +381,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistSelf) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockManagedLockBreakRequest, BlacklistError) {
+TEST_F(TestMockManagedLockBreakRequest, BlocklistError) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::ImageCtx *ictx;
@@ -398,7 +398,7 @@ TEST_F(TestMockManagedLockBreakRequest, BlacklistError) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, -EINVAL);
+  expect_blocklist_add(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
   Locker locker{entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123};
@@ -426,7 +426,7 @@ TEST_F(TestMockManagedLockBreakRequest, BreakLockMissing) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, -ENOENT);
 
   C_SaferCond ctx;
@@ -455,7 +455,7 @@ TEST_F(TestMockManagedLockBreakRequest, BreakLockError) {
                     {entity_name_t::CLIENT(1), "auto 123", "1.2.3.4:0/0", 123},
                     0);
 
-  expect_blacklist_add(mock_image_ctx, 0);
+  expect_blocklist_add(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;

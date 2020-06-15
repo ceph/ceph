@@ -2449,7 +2449,7 @@ void Locker::revoke_stale_cap(CInode *in, client_t client)
 
   if (cap->revoking() & CEPH_CAP_ANY_WR) {
     std::stringstream ss;
-    mds->evict_client(client.v, false, g_conf()->mds_session_blacklist_on_timeout, ss, nullptr);
+    mds->evict_client(client.v, false, g_conf()->mds_session_blocklist_on_timeout, ss, nullptr);
     return;
   }
 

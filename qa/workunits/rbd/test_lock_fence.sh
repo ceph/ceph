@@ -26,7 +26,7 @@ clientid=$(rbd lock list $IMAGE | tail -1 | awk '{print $1;}')
 echo "clientaddr: $clientaddr"
 echo "clientid: $clientid"
 
-ceph osd blacklist add $clientaddr || exit 1
+ceph osd blocklist add $clientaddr || exit 1
 
 wait $iochild
 rbdrw_exitcode=$?
@@ -39,7 +39,7 @@ else
 fi
 
 set -e
-ceph osd blacklist rm $clientaddr
+ceph osd blocklist rm $clientaddr
 rbd lock remove $IMAGE $LOCKID "$clientid"
 # rbdrw will have exited with an existing watch, so, until #3527 is fixed,
 # hang out until the watch expires

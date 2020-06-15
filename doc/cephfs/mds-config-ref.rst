@@ -69,14 +69,14 @@
 :Default: ``15``
 
 
-``mds blacklist interval``
+``mds blocklist interval``
 
-:Description: The blacklist duration for failed MDSs in the OSD map. Note,
+:Description: The blocklist duration for failed MDSs in the OSD map. Note,
               this controls how long failed MDS daemons will stay in the
-              OSDMap blacklist. It has no effect on how long something is
-              blacklisted when the administrator blacklists it manually. For
-              example, ``ceph osd blacklist add`` will still use the default
-              blacklist time.
+              OSDMap blocklist. It has no effect on how long something is
+              blocklisted when the administrator blocklists it manually. For
+              example, ``ceph osd blocklist add`` will still use the default
+              blocklist time.
 :Type:  Float
 :Default: ``24.0*60.0``
 

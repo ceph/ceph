@@ -33,8 +33,8 @@ public:
                                 const std::string& oid,
                                 const std::string& cookie,
                                 bool exclusive,
-                                bool blacklist_on_break_lock,
-                                uint32_t blacklist_expire_seconds,
+                                bool blocklist_on_break_lock,
+                                uint32_t blocklist_expire_seconds,
                                 Context *on_finish);
 
   ~AcquireRequest();
@@ -66,8 +66,8 @@ private:
   AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
                  asio::ContextWQ *work_queue, const std::string& oid,
                  const std::string& cookie, bool exclusive,
-                 bool blacklist_on_break_lock,
-                 uint32_t blacklist_expire_seconds, Context *on_finish);
+                 bool blocklist_on_break_lock,
+                 uint32_t blocklist_expire_seconds, Context *on_finish);
 
   librados::IoCtx& m_ioctx;
   Watcher *m_watcher;
@@ -76,8 +76,8 @@ private:
   std::string m_oid;
   std::string m_cookie;
   bool m_exclusive;
-  bool m_blacklist_on_break_lock;
-  uint32_t m_blacklist_expire_seconds;
+  bool m_blocklist_on_break_lock;
+  uint32_t m_blocklist_expire_seconds;
   Context *m_on_finish;
 
   bufferlist m_out_bl;

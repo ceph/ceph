@@ -160,7 +160,7 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_cluster_stat(rados_t cluster, rados_cluster_stat_t *result)
     int rados_cluster_fsid(rados_t cluster, char *buf, size_t len)
-    int rados_blacklist_add(rados_t cluster, char *client_address, uint32_t expire_seconds)
+    int rados_blocklist_add(rados_t cluster, char *client_address, uint32_t expire_seconds)
     int rados_getaddrs(rados_t cluster, char** addrs)
     int rados_application_enable(rados_ioctx_t io, const char *app_name,
                                  int force)
@@ -1576,13 +1576,13 @@ Rados object in state %s." % self.state)
             ret = rados_wait_for_latest_osdmap(self.cluster)
         return ret
 
-    def blacklist_add(self, client_address, expire_seconds=0):
+    def blocklist_add(self, client_address, expire_seconds=0):
         """
-        Blacklist a client from the OSDs
+        Blocklist a client from the OSDs
 
         :param client_address: client address
         :type client_address: str
-        :param expire_seconds: number of seconds to blacklist
+        :param expire_seconds: number of seconds to blocklist
         :type expire_seconds: int
 
         :raises: :class:`Error`
@@ -1594,9 +1594,9 @@ Rados object in state %s." % self.state)
             char *_client_address = client_address
 
         with nogil:
-            ret = rados_blacklist_add(self.cluster, _client_address, _expire_seconds)
+            ret = rados_blocklist_add(self.cluster, _client_address, _expire_seconds)
         if ret < 0:
-            raise make_ex(ret, "error blacklisting client '%s'" % client_address)
+            raise make_ex(ret, "error blocklisting client '%s'" % client_address)
 
     def monitor_log(self, level, callback, arg):
         if level not in MONITOR_LEVELS:

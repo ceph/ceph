@@ -1027,10 +1027,10 @@ int Rados::aio_watch_flush(AioCompletion* c) {
   return impl->aio_watch_flush(c->pc);
 }
 
-int Rados::blacklist_add(const std::string& client_address,
+int Rados::blocklist_add(const std::string& client_address,
 			 uint32_t expire_seconds) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
-  return impl->blacklist_add(client_address, expire_seconds);
+  return impl->blocklist_add(client_address, expire_seconds);
 }
 
 config_t Rados::cct() {
@@ -1202,7 +1202,7 @@ void Rados::shutdown() {
   client = NULL;
 }
 
-void Rados::test_blacklist_self(bool set) {
+void Rados::test_blocklist_self(bool set) {
 }
 
 int Rados::wait_for_latest_osdmap() {

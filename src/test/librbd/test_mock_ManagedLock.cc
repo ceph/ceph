@@ -29,8 +29,8 @@ struct Traits<MockManagedLockImageCtx> {
 struct MockMockManagedLock : public ManagedLock<MockManagedLockImageCtx> {
   MockMockManagedLock(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
                  const std::string& oid, librbd::MockImageWatcher *watcher,
-                 managed_lock::Mode  mode, bool blacklist_on_break_lock, 
-                 uint32_t blacklist_expire_seconds)
+                 managed_lock::Mode  mode, bool blocklist_on_break_lock, 
+                 uint32_t blocklist_expire_seconds)
     : ManagedLock<MockManagedLockImageCtx>(ioctx, work_queue, oid, watcher, 
       librbd::managed_lock::EXCLUSIVE, true, 0) {
   };
@@ -74,8 +74,8 @@ struct AcquireRequest<MockManagedLockImageCtx> : public BaseRequest<AcquireReque
                                 asio::ContextWQ *work_queue,
                                 const std::string& oid,
                                 const std::string& cookie,
-                                bool exclusive, bool blacklist_on_break_lock,
-                                uint32_t blacklist_expire_seconds,
+                                bool exclusive, bool blocklist_on_break_lock,
+                                uint32_t blocklist_expire_seconds,
                                 Context *on_finish) {
     return BaseRequest::create(ioctx, watcher, work_queue, oid, cookie, on_finish);
   }
@@ -125,8 +125,8 @@ struct BreakRequest<MockManagedLockImageCtx> {
   static BreakRequest* create(librados::IoCtx& ioctx,
                               asio::ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
-                              bool exclusive, bool blacklist_locker,
-                              uint32_t blacklist_expire_seconds,
+                              bool exclusive, bool blocklist_locker,
+                              uint32_t blocklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
     ceph_abort_msg("unexpected call");
   }
@@ -372,7 +372,7 @@ TEST_F(TestMockManagedLock, AcquireLockError) {
   ASSERT_EQ(0, when_shut_down(managed_lock));
 }
 
-TEST_F(TestMockManagedLock, AcquireLockBlacklist) {
+TEST_F(TestMockManagedLock, AcquireLockBlocklist) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -382,10 +382,10 @@ TEST_F(TestMockManagedLock, AcquireLockBlacklist) {
                                librbd::managed_lock::EXCLUSIVE, true, 0);
   InSequence seq;
 
-  // will abort after seeing blacklist error (avoid infinite request loop)
+  // will abort after seeing blocklist error (avoid infinite request loop)
   MockAcquireRequest request_lock_acquire;
-  expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, request_lock_acquire, -EBLACKLISTED);
-  ASSERT_EQ(-EBLACKLISTED, when_acquire_lock(managed_lock));
+  expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, request_lock_acquire, -EBLOCKLISTED);
+  ASSERT_EQ(-EBLOCKLISTED, when_acquire_lock(managed_lock));
   ASSERT_FALSE(is_lock_owner(managed_lock));
 
   ASSERT_EQ(0, when_shut_down(managed_lock));
@@ -406,7 +406,7 @@ TEST_F(TestMockManagedLock, ReleaseLockUnlockedState) {
   ASSERT_EQ(0, when_shut_down(managed_lock));
 }
 
-TEST_F(TestMockManagedLock, ReleaseLockBlacklist) {
+TEST_F(TestMockManagedLock, ReleaseLockBlocklist) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -420,9 +420,9 @@ TEST_F(TestMockManagedLock, ReleaseLockBlacklist) {
   expect_acquire_lock(*mock_image_ctx.image_watcher, ictx->op_work_queue, try_lock_acquire, 0);
   ASSERT_EQ(0, when_acquire_lock(managed_lock));
 
-  expect_pre_release_lock_handler(managed_lock, false, -EBLACKLISTED);
-  expect_post_release_lock_handler(managed_lock, false, -EBLACKLISTED, -EBLACKLISTED);
-  ASSERT_EQ(-EBLACKLISTED, when_release_lock(managed_lock));
+  expect_pre_release_lock_handler(managed_lock, false, -EBLOCKLISTED);
+  expect_post_release_lock_handler(managed_lock, false, -EBLOCKLISTED, -EBLOCKLISTED);
+  ASSERT_EQ(-EBLOCKLISTED, when_release_lock(managed_lock));
   ASSERT_FALSE(is_lock_owner(managed_lock));
 
   ASSERT_EQ(0, when_shut_down(managed_lock));
@@ -539,7 +539,7 @@ TEST_F(TestMockManagedLock, ReacquireLock) {
   ASSERT_FALSE(is_lock_owner(managed_lock));
 }
 
-TEST_F(TestMockManagedLock, AttemptReacquireBlacklistedLock) {
+TEST_F(TestMockManagedLock, AttemptReacquireBlocklistedLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -568,7 +568,7 @@ TEST_F(TestMockManagedLock, AttemptReacquireBlacklistedLock) {
   ASSERT_FALSE(is_lock_owner(managed_lock));
 }
 
-TEST_F(TestMockManagedLock, ReacquireBlacklistedLock) {
+TEST_F(TestMockManagedLock, ReacquireBlocklistedLock) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 

@@ -27,7 +27,7 @@ class IscsiService(CephadmService):
             'prefix': 'auth get-or-create',
             'entity': utils.name_to_auth_entity('iscsi', igw_id),
             'caps': ['mon', 'profile rbd, '
-                            'allow command "osd blacklist", '
+                            'allow command "osd blocklist", '
                             'allow command "config-key get" with "key" prefix "iscsi/"',
                      'osd', f'allow rwx pool={spec.pool}'],
         })

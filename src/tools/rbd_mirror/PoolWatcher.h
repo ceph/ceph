@@ -48,7 +48,7 @@ public:
   PoolWatcher(const PoolWatcher&) = delete;
   PoolWatcher& operator=(const PoolWatcher&) = delete;
 
-  bool is_blacklisted() const;
+  bool is_blocklisted() const;
 
   void init(Context *on_finish = nullptr);
   void shut_down(Context *on_finish);
@@ -127,7 +127,7 @@ private:
   Context *m_timer_ctx = nullptr;
 
   AsyncOpTracker m_async_op_tracker;
-  bool m_blacklisted = false;
+  bool m_blocklisted = false;
   bool m_shutting_down = false;
   bool m_image_ids_invalid = true;
   bool m_refresh_in_progress = false;

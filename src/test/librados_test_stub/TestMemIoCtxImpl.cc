@@ -69,8 +69,8 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
                              const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -87,8 +87,8 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
 }
 
 int TestMemIoCtxImpl::assert_exists(const std::string &oid) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::shared_lock l{m_pool->file_lock};
@@ -103,8 +103,8 @@ int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive,
                              const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::unique_lock l{m_pool->file_lock};
@@ -113,8 +113,8 @@ int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive,
 }
 
 int TestMemIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   out_snaps->seq = 0;
@@ -191,8 +191,8 @@ int TestMemIoCtxImpl::omap_get_vals2(const std::string& oid,
                                     bool *pmore) {
   if (out_vals == NULL) {
     return -EINVAL;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -248,8 +248,8 @@ int TestMemIoCtxImpl::omap_rm_keys(const std::string& oid,
                                    const std::set<std::string>& keys) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -273,8 +273,8 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
                                const std::map<std::string, bufferlist> &map) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -299,8 +299,8 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
 
 int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
                            bufferlist *bl) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -328,8 +328,8 @@ int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
 int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::unique_lock l{m_pool->file_lock};
@@ -366,8 +366,8 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
 }
 
 int TestMemIoCtxImpl::selfmanaged_snap_create(uint64_t *snapid) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::unique_lock l{m_pool->file_lock};
@@ -377,8 +377,8 @@ int TestMemIoCtxImpl::selfmanaged_snap_create(uint64_t *snapid) {
 }
 
 int TestMemIoCtxImpl::selfmanaged_snap_remove(uint64_t snapid) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::unique_lock l{m_pool->file_lock};
@@ -395,8 +395,8 @@ int TestMemIoCtxImpl::selfmanaged_snap_remove(uint64_t snapid) {
 
 int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
                                                 uint64_t snapid) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::unique_lock l{m_pool->file_lock};
@@ -449,8 +449,8 @@ int TestMemIoCtxImpl::set_alloc_hint(const std::string& oid,
                                      const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   {
@@ -465,8 +465,8 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
                                   uint64_t len,
                                   std::map<uint64_t,uint64_t> *m,
                                   bufferlist *data_bl) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   // TODO verify correctness
@@ -498,8 +498,8 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
 
 int TestMemIoCtxImpl::stat(const std::string& oid, uint64_t *psize,
                            time_t *pmtime) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -525,8 +525,8 @@ int TestMemIoCtxImpl::truncate(const std::string& oid, uint64_t size,
                                const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -563,8 +563,8 @@ int TestMemIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
                             uint64_t off, const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -590,8 +590,8 @@ int TestMemIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
                                  const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -621,8 +621,8 @@ int TestMemIoCtxImpl::writesame(const std::string& oid, bufferlist& bl, size_t l
                                 uint64_t off, const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
-  } else if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  } else if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   if (len == 0 || (len % bl.length())) {
@@ -654,8 +654,8 @@ int TestMemIoCtxImpl::writesame(const std::string& oid, bufferlist& bl, size_t l
 
 int TestMemIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
                              bufferlist& cmp_bl) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   bufferlist read_bl;
@@ -682,8 +682,8 @@ int TestMemIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
 
 int TestMemIoCtxImpl::xattr_get(const std::string& oid,
                                 std::map<std::string, bufferlist>* attrset) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestMemCluster::SharedFile file;
@@ -699,8 +699,8 @@ int TestMemIoCtxImpl::xattr_get(const std::string& oid,
 
 int TestMemIoCtxImpl::xattr_set(const std::string& oid, const std::string &name,
                                 bufferlist& bl) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   std::unique_lock l{m_pool->file_lock};
@@ -710,8 +710,8 @@ int TestMemIoCtxImpl::xattr_set(const std::string& oid, const std::string &name,
 
 int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
                            const SnapContext &snapc) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   bool truncate_redirect = false;

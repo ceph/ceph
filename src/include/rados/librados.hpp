@@ -1418,7 +1418,7 @@ inline namespace v14_2_0 {
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);
 
     // Features useful for test cases
-    void test_blacklist_self(bool set);
+    void test_blocklist_self(bool set);
 
     /* pool info */
     int pool_list(std::list<std::string>& v);
@@ -1486,7 +1486,7 @@ inline namespace v14_2_0 {
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
 
-    int blacklist_add(const std::string& client_address,
+    int blocklist_add(const std::string& client_address,
                       uint32_t expire_seconds);
 
     /*

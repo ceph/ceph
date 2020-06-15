@@ -1467,7 +1467,7 @@ class CephManager:
                         wait for all specified osds, but some of them could be
                         moved out of osdmap, so we cannot get their updated
                         stat seq from monitor anymore. in that case, you need
-                        to pass a blacklist.
+                        to pass a blocklist.
         :param wait_for_mon: wait for mon to be synced with mgr. 0 to disable
                              it. (5 min by default)
         """

@@ -1945,10 +1945,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
-  // blacklisted?
-  if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
-    dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
-    osd->reply_op_error(op, -EBLACKLISTED);
+  // blocklisted?
+  if (get_osdmap()->is_blocklisted(m->get_source_addr())) {
+    dout(10) << "do_op " << m->get_source_addr() << " is blocklisted" << dendl;
+    osd->reply_op_error(op, -EBLOCKLISTED);
     return;
   }
 
@@ -10848,17 +10848,17 @@ void PrimaryLogPG::get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t>
   }
 }
 
-void PrimaryLogPG::check_blacklisted_watchers()
+void PrimaryLogPG::check_blocklisted_watchers()
 {
-  dout(20) << "PrimaryLogPG::check_blacklisted_watchers for pg " << get_pgid() << dendl;
+  dout(20) << "PrimaryLogPG::check_blocklisted_watchers for pg " << get_pgid() << dendl;
   pair<hobject_t, ObjectContextRef> i;
   while (object_contexts.get_next(i.first, &i))
-    check_blacklisted_obc_watchers(i.second);
+    check_blocklisted_obc_watchers(i.second);
 }
 
-void PrimaryLogPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
+void PrimaryLogPG::check_blocklisted_obc_watchers(ObjectContextRef obc)
 {
-  dout(20) << "PrimaryLogPG::check_blacklisted_obc_watchers for obc " << obc->obs.oi.soid << dendl;
+  dout(20) << "PrimaryLogPG::check_blocklisted_obc_watchers for obc " << obc->obs.oi.soid << dendl;
   for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator k =
 	 obc->watchers.begin();
 	k != obc->watchers.end();
@@ -10868,8 +10868,8 @@ void PrimaryLogPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
     dout(30) << "watch: Found " << j->second->get_entity() << " cookie " << j->second->get_cookie() << dendl;
     entity_addr_t ea = j->second->get_peer_addr();
     dout(30) << "watch: Check entity_addr_t " << ea << dendl;
-    if (get_osdmap()->is_blacklisted(ea)) {
-      dout(10) << "watch: Found blacklisted watcher for " << ea << dendl;
+    if (get_osdmap()->is_blocklisted(ea)) {
+      dout(10) << "watch: Found blocklisted watcher for " << ea << dendl;
       ceph_assert(j->second->get_pg() == this);
       j->second->unregister_cb();
       handle_watch_timeout(j->second);
@@ -10909,8 +10909,8 @@ void PrimaryLogPG::populate_obc_watchers(ObjectContextRef obc)
 	make_pair(p->first.first, p->first.second),
 	watch));
   }
-  // Look for watchers from blacklisted clients and drop
-  check_blacklisted_obc_watchers(obc);
+  // Look for watchers from blocklisted clients and drop
+  check_blocklisted_obc_watchers(obc);
 }
 
 void PrimaryLogPG::handle_watch_timeout(WatchRef watch)

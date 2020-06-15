@@ -38,7 +38,7 @@ LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
     m_instance_id(stringify(m_notifier_id)),
     m_leader_lock(new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
                                  m_cct->_conf.get_val<uint64_t>(
-                                   "rbd_blacklist_expire_seconds"))) {
+                                   "rbd_blocklist_expire_seconds"))) {
 }
 
 template <typename I>
@@ -250,9 +250,9 @@ void LeaderWatcher<I>::handle_wait_for_tasks() {
 }
 
 template <typename I>
-bool LeaderWatcher<I>::is_blacklisted() const {
+bool LeaderWatcher<I>::is_blocklisted() const {
   std::lock_guard locker{m_lock};
-  return m_blacklisted;
+  return m_blocklisted;
 }
 
 template <typename I>
@@ -1022,9 +1022,9 @@ template <typename I>
 void LeaderWatcher<I>::handle_rewatch_complete(int r) {
   dout(5) << "r=" << r << dendl;
 
-  if (r == -EBLACKLISTED) {
-    dout(1) << "blacklisted detected" << dendl;
-    m_blacklisted = true;
+  if (r == -EBLOCKLISTED) {
+    dout(1) << "blocklisted detected" << dendl;
+    m_blocklisted = true;
     return;
   }
 

@@ -55,7 +55,7 @@ public:
   PoolReplayer(const PoolReplayer&) = delete;
   PoolReplayer& operator=(const PoolReplayer&) = delete;
 
-  bool is_blacklisted() const;
+  bool is_blocklisted() const;
   bool is_leader() const;
   bool is_running() const;
 
@@ -205,7 +205,7 @@ private:
   std::string m_site_name;
   bool m_stopping = false;
   bool m_manual_stop = false;
-  bool m_blacklisted = false;
+  bool m_blocklisted = false;
 
   RadosRef m_local_rados;
   RadosRef m_remote_rados;

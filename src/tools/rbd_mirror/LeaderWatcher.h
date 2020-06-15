@@ -47,7 +47,7 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  bool is_blacklisted() const;
+  bool is_blocklisted() const;
   bool is_leader() const;
   bool is_releasing_leader() const;
   bool get_leader_instance_id(std::string *instance_id) const;
@@ -121,10 +121,10 @@ private:
 
     LeaderLock(librados::IoCtx& ioctx, librbd::asio::ContextWQ *work_queue,
                const std::string& oid, LeaderWatcher *watcher,
-               bool blacklist_on_break_lock,
-               uint32_t blacklist_expire_seconds)
+               bool blocklist_on_break_lock,
+               uint32_t blocklist_expire_seconds)
       : Parent(ioctx, work_queue, oid, watcher, librbd::managed_lock::EXCLUSIVE,
-               blacklist_on_break_lock, blacklist_expire_seconds),
+               blocklist_on_break_lock, blocklist_expire_seconds),
         watcher(watcher) {
     }
 
@@ -219,7 +219,7 @@ private:
   Instances<ImageCtxT> *m_instances = nullptr;
   librbd::managed_lock::Locker m_locker;
 
-  bool m_blacklisted = false;
+  bool m_blocklisted = false;
 
   AsyncOpTracker m_timer_op_tracker;
   Context *m_timer_task = nullptr;

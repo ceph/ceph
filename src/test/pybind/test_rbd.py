@@ -150,15 +150,15 @@ def require_features(required_features):
         return functools.wraps(fn)(_require_features)
     return wrapper
 
-def blacklist_features(blacklisted_features):
+def blocklist_features(blocklisted_features):
     def wrapper(fn):
-        def _blacklist_features(*args, **kwargs):
+        def _blocklist_features(*args, **kwargs):
             global features
-            for feature in blacklisted_features:
+            for feature in blocklisted_features:
                 if features is not None and feature & features == feature:
                     raise SkipTest
             return fn(*args, **kwargs)
-        return functools.wraps(fn)(_blacklist_features)
+        return functools.wraps(fn)(_blocklist_features)
     return wrapper
 
 def test_version():
@@ -527,7 +527,7 @@ class TestImage(object):
         self.image = None
 
     @require_new_format()
-    @blacklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
+    @blocklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
     def test_update_features(self):
         features = self.image.features()
         self.image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, True)
@@ -892,13 +892,13 @@ class TestImage(object):
     def test_remove_with_exclusive_lock(self):
         assert_raises(ImageBusy, remove_image)
 
-    @blacklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
+    @blocklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
     def test_remove_with_snap(self):
         self.image.create_snap('snap1')
         assert_raises(ImageHasSnapshots, remove_image)
         self.image.remove_snap('snap1')
 
-    @blacklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
+    @blocklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
     def test_remove_with_watcher(self):
         data = rand_data(256)
         self.image.write(data, 0)
@@ -1886,19 +1886,19 @@ class TestExclusiveLock(object):
             image.lock_release()
 
     def test_break_lock(self):
-        blacklist_rados = Rados(conffile='')
-        blacklist_rados.connect()
+        blocklist_rados = Rados(conffile='')
+        blocklist_rados.connect()
         try:
-            blacklist_ioctx = blacklist_rados.open_ioctx(pool_name)
+            blocklist_ioctx = blocklist_rados.open_ioctx(pool_name)
             try:
-                rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
+                rados2.conf_set('rbd_blocklist_on_break_lock', 'true')
                 with Image(ioctx2, image_name) as image, \
-                     Image(blacklist_ioctx, image_name) as blacklist_image:
+                     Image(blocklist_ioctx, image_name) as blocklist_image:
 
                     lock_owners = list(image.lock_get_owners())
                     eq(0, len(lock_owners))
 
-                    blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+                    blocklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
                     assert_raises(ReadOnlyImage, image.lock_acquire,
                                   RBD_LOCK_MODE_EXCLUSIVE)
                     lock_owners = list(image.lock_get_owners())
@@ -1908,23 +1908,23 @@ class TestExclusiveLock(object):
                                      lock_owners[0]['owner'])
 
                     assert_raises(ConnectionShutdown,
-                                  blacklist_image.is_exclusive_lock_owner)
+                                  blocklist_image.is_exclusive_lock_owner)
 
-                    blacklist_rados.wait_for_latest_osdmap()
+                    blocklist_rados.wait_for_latest_osdmap()
                     data = rand_data(256)
                     assert_raises(ConnectionShutdown,
-                                  blacklist_image.write, data, 0)
+                                  blocklist_image.write, data, 0)
 
                     image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
 
                     try:
-                        blacklist_image.close()
+                        blocklist_image.close()
                     except ConnectionShutdown:
                         pass
             finally:
-                blacklist_ioctx.close()
+                blocklist_ioctx.close()
         finally:
-            blacklist_rados.shutdown()
+            blocklist_rados.shutdown()
 
 class TestMirroring(object):
 

@@ -534,10 +534,10 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'lspools',
                                                     'toomany']))
 
-    def test_blacklist_ls(self):
-        self.assert_valid_command(['osd', 'blacklist', 'ls'])
-        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+    def test_blocklist_ls(self):
+        self.assert_valid_command(['osd', 'blocklist', 'ls'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'blocklist']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                     'ls', 'toomany']))
 
     def test_crush_rule(self):
@@ -878,25 +878,25 @@ class TestOSD(TestArgparse):
                                                     uuid,
                                                     'toomany']))
 
-    def test_blacklist(self):
+    def test_blocklist(self):
         for action in ('add', 'rm'):
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4/567'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4/567', '600.40'])
-            self.assert_valid_command(['osd', 'blacklist', action,
+            self.assert_valid_command(['osd', 'blocklist', action,
                                        '1.2.3.4', '600.40'])
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         'invalid',
                                                         '600.40']))
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         '1.2.3.4/567',
                                                         '-1.0']))
-            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+            assert_equal({}, validate_command(sigdict, ['osd', 'blocklist',
                                                         action,
                                                         '1.2.3.4/567',
                                                         '600.40',

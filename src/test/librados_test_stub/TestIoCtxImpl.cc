@@ -133,8 +133,8 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
   m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
-  if (m_client->is_blacklisted()) {
-    m_client->get_aio_finisher()->queue(ctx, -EBLACKLISTED);
+  if (m_client->is_blocklisted()) {
+    m_client->get_aio_finisher()->queue(ctx, -EBLOCKLISTED);
   } else {
     m_client->get_watch_notify()->aio_watch(m_client, m_pool_id,
                                             get_namespace(), o,
@@ -148,8 +148,8 @@ int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
   m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
-  if (m_client->is_blacklisted()) {
-    m_client->get_aio_finisher()->queue(ctx, -EBLACKLISTED);
+  if (m_client->is_blocklisted()) {
+    m_client->get_aio_finisher()->queue(ctx, -EBLOCKLISTED);
   } else {
     m_client->get_watch_notify()->aio_unwatch(m_client, handle, ctx);
   }
@@ -160,8 +160,8 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
                         const SnapContext &snapc) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   cls_method_cxx_call_t call = handler->get_method(cls, method);
@@ -175,8 +175,8 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
                                  std::list<obj_watch_t> *out_watchers) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   return m_client->get_watch_notify()->list_watchers(m_pool_id, get_namespace(),
@@ -185,8 +185,8 @@ int TestIoCtxImpl::list_watchers(const std::string& o,
 
 int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
                           uint64_t timeout_ms, bufferlist *pbl) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   return m_client->get_watch_notify()->notify(m_client, m_pool_id,
@@ -269,8 +269,8 @@ void TestIoCtxImpl::set_snap_read(snap_t seq) {
 }
 
 int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   // TODO: protect against concurrent tmap updates
@@ -326,8 +326,8 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
 }
 
 int TestIoCtxImpl::unwatch(uint64_t handle) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   return m_client->get_watch_notify()->unwatch(m_client, handle);
@@ -335,8 +335,8 @@ int TestIoCtxImpl::unwatch(uint64_t handle) {
 
 int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                          librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   return m_client->get_watch_notify()->watch(m_client, m_pool_id,
@@ -347,8 +347,8 @@ int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
 
 int TestIoCtxImpl::execute_operation(const std::string& oid,
                                      const Operation &operation) {
-  if (m_client->is_blacklisted()) {
-    return -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    return -EBLOCKLISTED;
   }
 
   TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
@@ -360,8 +360,8 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
                                           bufferlist *pbl,
                                           const SnapContext &snapc) {
   int ret = 0;
-  if (m_client->is_blacklisted()) {
-    ret = -EBLACKLISTED;
+  if (m_client->is_blocklisted()) {
+    ret = -EBLOCKLISTED;
   } else {
     TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
     for (ObjectOperations::iterator it = ops->ops.begin();

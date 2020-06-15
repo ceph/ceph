@@ -108,7 +108,7 @@ void MDSIOContextBase::complete(int r) {
   }
 
   if (r == -EBLACKLISTED) {
-    derr << "MDSIOContextBase: blacklisted!  Restarting..." << dendl;
+    derr << "MDSIOContextBase: blocklisted!  Restarting..." << dendl;
     mds->respawn();
   } else {
     MDSContext::complete(r);

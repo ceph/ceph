@@ -65,16 +65,16 @@ using managed_lock::util::encode_lock_cookie;
 template <typename I>
 ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, asio::ContextWQ *work_queue,
                             const string& oid, Watcher *watcher, Mode mode,
-                            bool blacklist_on_break_lock,
-                            uint32_t blacklist_expire_seconds)
+                            bool blocklist_on_break_lock,
+                            uint32_t blocklist_expire_seconds)
   : m_lock(ceph::make_mutex(unique_lock_name("librbd::ManagedLock<I>::m_lock", this))),
     m_ioctx(ioctx), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
     m_work_queue(work_queue),
     m_oid(oid),
     m_watcher(watcher),
     m_mode(mode),
-    m_blacklist_on_break_lock(blacklist_on_break_lock),
-    m_blacklist_expire_seconds(blacklist_expire_seconds),
+    m_blocklist_on_break_lock(blocklist_on_break_lock),
+    m_blocklist_expire_seconds(blocklist_expire_seconds),
     m_state(STATE_UNLOCKED) {
 }
 
@@ -268,7 +268,7 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
       on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::BreakRequest<I>::create(
         m_ioctx, m_work_queue, m_oid, locker, m_mode == EXCLUSIVE,
-        m_blacklist_on_break_lock, m_blacklist_expire_seconds, force_break_lock,
+        m_blocklist_on_break_lock, m_blocklist_expire_seconds, force_break_lock,
         on_finish);
       req->send();
       return;
@@ -294,8 +294,8 @@ int ManagedLock<I>::assert_header_locked() {
 
   int r = m_ioctx.operate(m_oid, &op, nullptr);
   if (r < 0) {
-    if (r == -EBLACKLISTED) {
-      ldout(m_cct, 5) << "client is not lock owner -- client blacklisted"
+    if (r == -EBLOCKLISTED) {
+      ldout(m_cct, 5) << "client is not lock owner -- client blocklisted"
                       << dendl;
     } else if (r == -ENOENT) {
       ldout(m_cct, 5) << "client is not lock owner -- no lock detected"
@@ -510,7 +510,7 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
   using managed_lock::AcquireRequest;
   AcquireRequest<I>* req = AcquireRequest<I>::create(
     m_ioctx, m_watcher, m_work_queue, m_oid, m_cookie, m_mode == EXCLUSIVE,
-    m_blacklist_on_break_lock, m_blacklist_expire_seconds,
+    m_blocklist_on_break_lock, m_blocklist_expire_seconds,
     create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_acquire_lock>(this));
   m_work_queue->queue(new C_SendLockRequest<AcquireRequest<I>>(req), 0);
@@ -593,7 +593,7 @@ void ManagedLock<I>::send_reacquire_lock() {
   }
 
   m_new_cookie = encode_lock_cookie(watch_handle);
-  if (m_cookie == m_new_cookie && m_blacklist_on_break_lock) {
+  if (m_cookie == m_new_cookie && m_blocklist_on_break_lock) {
     ldout(m_cct, 10) << "skipping reacquire since cookie still valid"
                      << dendl;
     auto ctx = create_context_callback<
@@ -717,7 +717,7 @@ void ManagedLock<I>::handle_release_lock(int r) {
   std::lock_guard locker{m_lock};
   ceph_assert(m_state == STATE_RELEASING);
 
-  if (r >= 0 || r == -EBLACKLISTED || r == -ENOENT) {
+  if (r >= 0 || r == -EBLOCKLISTED || r == -ENOENT) {
     m_cookie = "";
     m_post_next_state = STATE_UNLOCKED;
   } else {

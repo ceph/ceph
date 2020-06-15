@@ -2035,7 +2035,7 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
                                            std::map<std::string, ceph::bufferlist>& attrs,
                                            const bool allow_empty_attrs = true)
 {
-  static const std::set<std::string> blacklisted_headers = {
+  static const std::set<std::string> blocklisted_headers = {
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
       "x-amz-server-side-encryption-customer-key-md5",
@@ -2047,7 +2047,7 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
     const std::string& name = kv.first;
     std::string& xattr = kv.second;
 
-    if (blacklisted_headers.count(name) == 1) {
+    if (blocklisted_headers.count(name) == 1) {
       lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
       continue;
     } else if (allow_empty_attrs || !xattr.empty()) {

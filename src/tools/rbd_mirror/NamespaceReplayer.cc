@@ -71,13 +71,13 @@ NamespaceReplayer<I>::NamespaceReplayer(
 }
 
 template <typename I>
-bool NamespaceReplayer<I>::is_blacklisted() const {
+bool NamespaceReplayer<I>::is_blocklisted() const {
   std::lock_guard locker{m_lock};
-  return m_instance_replayer->is_blacklisted() ||
+  return m_instance_replayer->is_blocklisted() ||
          (m_local_pool_watcher &&
-          m_local_pool_watcher->is_blacklisted()) ||
+          m_local_pool_watcher->is_blocklisted()) ||
          (m_remote_pool_watcher &&
-          m_remote_pool_watcher->is_blacklisted());
+          m_remote_pool_watcher->is_blocklisted());
 }
 
 template <typename I>
@@ -809,7 +809,7 @@ void NamespaceReplayer<I>::shut_down_image_map(Context *on_finish) {
 template <typename I>
 void NamespaceReplayer<I>::handle_shut_down_image_map(int r, Context *on_finish) {
   dout(5) << "r=" << r << dendl;
-  if (r < 0 && r != -EBLACKLISTED) {
+  if (r < 0 && r != -EBLOCKLISTED) {
     derr << "failed to shut down image map: " << cpp_strerror(r) << dendl;
   }
 

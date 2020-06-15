@@ -127,8 +127,8 @@ void PreReleaseRequest<I>::handle_block_writes(int r) {
   ldout(cct, 10) << "r=" << r << dendl;
 
   if (r == -EBLACKLISTED) {
-    // allow clean shut down if blacklisted
-    lderr(cct) << "failed to block writes because client is blacklisted"
+    // allow clean shut down if blocklisted
+    lderr(cct) << "failed to block writes because client is blocklisted"
                << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(r) << dendl;
@@ -176,7 +176,7 @@ void PreReleaseRequest<I>::handle_invalidate_cache(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  if (r < 0 && r != -EBLACKLISTED && r != -EBUSY) {
+  if (r < 0 && r != -EBLOCKLISTED && r != -EBUSY) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(r)
                << dendl;
     m_image_dispatch->unset_require_lock(io::DIRECTION_BOTH);

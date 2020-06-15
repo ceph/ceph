@@ -1843,12 +1843,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	  pending_inc.new_pools[i.first].flags |= pg_pool_t::FLAG_CREATING;
 	}
       }
-      // adjust blacklist items to all be TYPE_ANY
-      for (auto& i : tmp.blacklist) {
+      // adjust blocklist items to all be TYPE_ANY
+      for (auto& i : tmp.blocklist) {
 	auto a = i.first;
 	a.set_type(entity_addr_t::TYPE_ANY);
-	pending_inc.new_blacklist[a] = i.second;
-	pending_inc.old_blacklist.push_back(i.first);
+	pending_inc.new_blocklist[a] = i.second;
+	pending_inc.old_blocklist.push_back(i.first);
       }
     }
 
@@ -4716,29 +4716,29 @@ int OSDMonitor::get_version_full(version_t ver, uint64_t features,
   return 0;
 }
 
-epoch_t OSDMonitor::blacklist(const entity_addrvec_t& av, utime_t until)
+epoch_t OSDMonitor::blocklist(const entity_addrvec_t& av, utime_t until)
 {
-  dout(10) << "blacklist " << av << " until " << until << dendl;
+  dout(10) << "blocklist " << av << " until " << until << dendl;
   for (auto a : av.v) {
     if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
       a.set_type(entity_addr_t::TYPE_ANY);
     } else {
       a.set_type(entity_addr_t::TYPE_LEGACY);
     }
-    pending_inc.new_blacklist[a] = until;
+    pending_inc.new_blocklist[a] = until;
   }
   return pending_inc.epoch;
 }
 
-epoch_t OSDMonitor::blacklist(entity_addr_t a, utime_t until)
+epoch_t OSDMonitor::blocklist(entity_addr_t a, utime_t until)
 {
   if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
     a.set_type(entity_addr_t::TYPE_ANY);
   } else {
     a.set_type(entity_addr_t::TYPE_LEGACY);
   }
-  dout(10) << "blacklist " << a << " until " << until << dendl;
-  pending_inc.new_blacklist[a] = until;
+  dout(10) << "blocklist " << a << " until " << until << dendl;
+  pending_inc.new_blocklist[a] = until;
   return pending_inc.epoch;
 }
 
@@ -5156,13 +5156,13 @@ void OSDMonitor::tick()
     dout(10) << "tick NOOUT flag set, not checking down osds" << dendl;
   }
 
-  // expire blacklisted items?
-  for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
-       p != osdmap.blacklist.end();
+  // expire blocklisted items?
+  for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blocklist.begin();
+       p != osdmap.blocklist.end();
        ++p) {
     if (p->second < now) {
-      dout(10) << "expiring blacklist item " << p->first << " expired " << p->second << " < now " << now << dendl;
-      pending_inc.old_blacklist.push_back(p->first);
+      dout(10) << "expiring blocklist item " << p->first << " expired " << p->second << " < now " << now << dendl;
+      pending_inc.old_blocklist.push_back(p->first);
       do_propose = true;
     }
   }
@@ -5919,12 +5919,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->flush(ds);
     }
     rdata.append(ds);
-  } else if (prefix == "osd blacklist ls") {
+  } else if (prefix == "osd blocklist ls" ||
+	     prefix == "osd blacklist ls") {
     if (f)
-      f->open_array_section("blacklist");
+      f->open_array_section("blocklist");
 
-    for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
-	 p != osdmap.blacklist.end();
+    for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blocklist.begin();
+	 p != osdmap.blocklist.end();
 	 ++p) {
       if (f) {
 	f->open_object_section("entry");
@@ -5944,7 +5945,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
       f->flush(rdata);
     }
-    ss << "listed " << osdmap.blacklist.size() << " entries";
+    ss << "listed " << osdmap.blocklist.size() << " entries";
 
   } else if (prefix == "osd pool ls") {
     string detail;
@@ -12376,19 +12377,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd blacklist clear") {
-    pending_inc.new_blacklist.clear();
-    std::list<std::pair<entity_addr_t,utime_t > > blacklist;
-    osdmap.get_blacklist(&blacklist);
-    for (const auto &entry : blacklist) {
-      pending_inc.old_blacklist.push_back(entry.first);
+  } else if (prefix == "osd blocklist clear" ||
+	     prefix == "osd blacklist clear") {
+    pending_inc.new_blocklist.clear();
+    std::list<std::pair<entity_addr_t,utime_t > > blocklist;
+    osdmap.get_blocklist(&blocklist);
+    for (const auto &entry : blocklist) {
+      pending_inc.old_blocklist.push_back(entry.first);
     }
-    ss << " removed all blacklist entries";
+    ss << " removed all blocklist entries";
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                               get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd blacklist") {
+  } else if (prefix == "osd blocklist" ||
+	     prefix == "osd blacklist") {
     string addrstr;
     cmd_getval(cmdmap, "addr", addrstr);
     entity_addr_t addr;
@@ -12399,52 +12402,54 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     else {
       if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
-	// always blacklist type ANY
+	// always blocklist type ANY
 	addr.set_type(entity_addr_t::TYPE_ANY);
       } else {
 	addr.set_type(entity_addr_t::TYPE_LEGACY);
       }
 
-      string blacklistop;
-      cmd_getval(cmdmap, "blacklistop", blacklistop);
-      if (blacklistop == "add") {
+      string blocklistop;
+      if (!cmd_getval(cmdmap, "blocklistop", blocklistop)) {
+	cmd_getval(cmdmap, "blacklistop", blocklistop);
+      }
+      if (blocklistop == "add") {
 	utime_t expires = ceph_clock_now();
 	double d;
 	// default one hour
 	cmd_getval(cmdmap, "expire", d,
-          g_conf()->mon_osd_blacklist_default_expire);
+          g_conf()->mon_osd_blocklist_default_expire);
 	expires += d;
 
-	pending_inc.new_blacklist[addr] = expires;
+	pending_inc.new_blocklist[addr] = expires;
 
         {
-          // cancel any pending un-blacklisting request too
-          auto it = std::find(pending_inc.old_blacklist.begin(),
-            pending_inc.old_blacklist.end(), addr);
-          if (it != pending_inc.old_blacklist.end()) {
-            pending_inc.old_blacklist.erase(it);
+          // cancel any pending un-blocklisting request too
+          auto it = std::find(pending_inc.old_blocklist.begin(),
+            pending_inc.old_blocklist.end(), addr);
+          if (it != pending_inc.old_blocklist.end()) {
+            pending_inc.old_blocklist.erase(it);
           }
         }
 
-	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
+	ss << "blocklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
 	return true;
-      } else if (blacklistop == "rm") {
-	if (osdmap.is_blacklisted(addr) ||
-	    pending_inc.new_blacklist.count(addr)) {
-	  if (osdmap.is_blacklisted(addr))
-	    pending_inc.old_blacklist.push_back(addr);
+      } else if (blocklistop == "rm") {
+	if (osdmap.is_blocklisted(addr) ||
+	    pending_inc.new_blocklist.count(addr)) {
+	  if (osdmap.is_blocklisted(addr))
+	    pending_inc.old_blocklist.push_back(addr);
 	  else
-	    pending_inc.new_blacklist.erase(addr);
-	  ss << "un-blacklisting " << addr;
+	    pending_inc.new_blocklist.erase(addr);
+	  ss << "un-blocklisting " << addr;
 	  getline(ss, rs);
 	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						    get_last_committed() + 1));
 	  return true;
 	}
-	ss << addr << " isn't blacklisted";
+	ss << addr << " isn't blocklisted";
 	err = 0;
 	goto reply;
       }

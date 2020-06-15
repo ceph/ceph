@@ -462,8 +462,8 @@ void PeeringState::activate_map(PeeringCtx &rctx)
   }
   write_if_dirty(rctx.transaction);
 
-  if (get_osdmap()->check_new_blacklist_entries()) {
-    pl->check_blacklisted_watchers();
+  if (get_osdmap()->check_new_blocklist_entries()) {
+    pl->check_blocklisted_watchers();
   }
 }
 

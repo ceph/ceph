@@ -473,7 +473,7 @@ void Client::dump_status(Formatter *f)
     f->dump_int("mds_epoch", mdsmap->get_epoch());
     f->dump_int("osd_epoch", osd_epoch);
     f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
-    f->dump_bool("blacklisted", blacklisted);
+    f->dump_bool("blocklisted", blocklisted);
   }
 }
 
@@ -483,7 +483,7 @@ void Client::_pre_init()
 
   objecter_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
-  objecter->enable_blacklist_events();
+  objecter->enable_blocklist_events();
 
   objectcacher->start();
 }
@@ -1709,8 +1709,8 @@ int Client::make_request(MetaRequest *request,
     if (request->aborted())
       break;
 
-    if (blacklisted) {
-      request->abort(-EBLACKLISTED);
+    if (blocklisted) {
+      request->abort(-EBLOCKLISTED);
       break;
     }
 
@@ -2486,58 +2486,58 @@ void Client::_handle_full_flag(int64_t pool)
 
 void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
-  std::set<entity_addr_t> new_blacklists;
-  objecter->consume_blacklist_events(&new_blacklists);
+  std::set<entity_addr_t> new_blocklists;
+  objecter->consume_blocklist_events(&new_blocklists);
 
   const auto myaddrs = messenger->get_myaddrs();
-  bool new_blacklist = false;
+  bool new_blocklist = false;
   bool prenautilus = objecter->with_osdmap(
     [&](const OSDMap& o) {
       return o.require_osd_release < ceph_release_t::nautilus;
     });
-  if (!blacklisted) {
+  if (!blocklisted) {
     for (auto a : myaddrs.v) {
-      // blacklist entries are always TYPE_ANY for nautilus+
+      // blocklist entries are always TYPE_ANY for nautilus+
       a.set_type(entity_addr_t::TYPE_ANY);
-      if (new_blacklists.count(a)) {
-	new_blacklist = true;
+      if (new_blocklists.count(a)) {
+	new_blocklist = true;
 	break;
       }
       if (prenautilus) {
 	// ...except pre-nautilus, they were TYPE_LEGACY
 	a.set_type(entity_addr_t::TYPE_LEGACY);
-	if (new_blacklists.count(a)) {
-	  new_blacklist = true;
+	if (new_blocklists.count(a)) {
+	  new_blocklist = true;
 	  break;
 	}
       }
     }
   }
-  if (new_blacklist) {
+  if (new_blocklist) {
     auto epoch = objecter->with_osdmap([](const OSDMap &o){
         return o.get_epoch();
         });
-    lderr(cct) << "I was blacklisted at osd epoch " << epoch << dendl;
-    blacklisted = true;
+    lderr(cct) << "I was blocklisted at osd epoch " << epoch << dendl;
+    blocklisted = true;
 
-    _abort_mds_sessions(-EBLACKLISTED);
+    _abort_mds_sessions(-EBLOCKLISTED);
 
     // Since we know all our OSD ops will fail, cancel them all preemtively,
     // so that on an unhealthy cluster we can umount promptly even if e.g.
     // some PGs were inaccessible.
-    objecter->op_cancel_writes(-EBLACKLISTED);
+    objecter->op_cancel_writes(-EBLOCKLISTED);
 
   } 
 
-  if (blacklisted) {
-    // Handle case where we were blacklisted but no longer are
-    blacklisted = objecter->with_osdmap([myaddrs](const OSDMap &o){
-        return o.is_blacklisted(myaddrs);});
+  if (blocklisted) {
+    // Handle case where we were blocklisted but no longer are
+    blocklisted = objecter->with_osdmap([myaddrs](const OSDMap &o){
+        return o.is_blocklisted(myaddrs);});
   }
 
-  // Always subscribe to next osdmap for blacklisted client
-  // until this client is not blacklisted.
-  if (blacklisted) {
+  // Always subscribe to next osdmap for blocklisted client
+  // until this client is not blocklisted.
+  if (blocklisted) {
     objecter->maybe_request_map();
   }
 
@@ -4198,7 +4198,7 @@ void Client::remove_session_caps(MetaSession *s, int err)
     }
     caps &= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER;
     if (caps && !in->caps_issued_mask(caps, true)) {
-      if (err == -EBLACKLISTED) {
+      if (err == -EBLOCKLISTED) {
 	if (in->oset.dirty_or_tx) {
 	  lderr(cct) << __func__ << " still has dirty data on " << *in << dendl;
 	  in->set_async_err(err);
@@ -6123,8 +6123,8 @@ void Client::_unmount(bool abort)
   if (unmounting)
     return;
 
-  if (abort || blacklisted) {
-    ldout(cct, 2) << "unmounting (" << (abort ? "abort)" : "blacklisted)") << dendl;
+  if (abort || blocklisted) {
+    ldout(cct, 2) << "unmounting (" << (abort ? "abort)" : "blocklisted)") << dendl;
   } else {
     ldout(cct, 2) << "unmounting" << dendl;
   }
@@ -6200,7 +6200,7 @@ void Client::_unmount(bool abort)
       // prevent inode from getting freed
       anchor.emplace_back(in);
 
-      if (abort || blacklisted) {
+      if (abort || blocklisted) {
         objectcacher->purge_set(&in->oset);
       } else if (!in->caps.empty()) {
 	_release(in);
@@ -6209,7 +6209,7 @@ void Client::_unmount(bool abort)
     }
   }
 
-  if (abort || blacklisted) {
+  if (abort || blocklisted) {
     for (auto p = dirty_list.begin(); !p.end(); ) {
       Inode *in = *p;
       ++p;
@@ -6339,12 +6339,12 @@ void Client::tick()
 
   trim_cache(true);
 
-  if (blacklisted && mounted &&
+  if (blocklisted && mounted &&
       last_auto_reconnect + 30 * 60 < now &&
       cct->_conf.get_val<bool>("client_reconnect_stale")) {
     messenger->client_reset();
     fd_gen++; // invalidate open files
-    blacklisted = false;
+    blocklisted = false;
     _kick_stale_sessions();
     last_auto_reconnect = now;
   }
@@ -13811,7 +13811,7 @@ int Client::set_deleg_timeout(uint32_t timeout)
   std::lock_guard lock(client_lock);
 
   /*
-   * The whole point is to prevent blacklisting so we must time out the
+   * The whole point is to prevent blocklisting so we must time out the
    * delegation before the session autoclose timeout kicks in.
    */
   if (timeout >= mdsmap->get_session_autoclose())
@@ -14166,7 +14166,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 
 	case MetaSession::STATE_OPEN:
 	  {
-	    objecter->maybe_request_map(); /* to check if we are blacklisted */
+	    objecter->maybe_request_map(); /* to check if we are blocklisted */
 	    if (cct->_conf.get_val<bool>("client_reconnect_stale")) {
 	      ldout(cct, 1) << "reset from mds we were open; close mds session for reconnect" << dendl;
 	      _closed_mds_session(s);
@@ -14587,8 +14587,8 @@ int Client::start_reclaim(const std::string& uuid, unsigned flags,
   if (flags & CEPH_RECLAIM_RESET)
     return 0;
 
-  // use blacklist to check if target session was killed
-  // (config option mds_session_blacklist_on_evict needs to be true)
+  // use blocklist to check if target session was killed
+  // (config option mds_session_blocklist_on_evict needs to be true)
   ldout(cct, 10) << __func__ << ": waiting for OSD epoch " << reclaim_osd_epoch << dendl;
   bs::error_code ec;
   l.unlock();
@@ -14598,11 +14598,11 @@ int Client::start_reclaim(const std::string& uuid, unsigned flags,
   if (ec)
     return ceph::from_error_code(ec);
 
-  bool blacklisted = objecter->with_osdmap(
+  bool blocklisted = objecter->with_osdmap(
       [this](const OSDMap &osd_map) -> bool {
-	return osd_map.is_blacklisted(reclaim_target_addrs);
+	return osd_map.is_blocklisted(reclaim_target_addrs);
       });
-  if (blacklisted)
+  if (blocklisted)
     return -ENOTRECOVERABLE;
 
   metadata["reclaiming_uuid"] = uuid;

@@ -86,3 +86,28 @@
 * Monitors now have a config option ``mon_osd_warn_num_repaired``, 10 by default.
   If any OSD has repaired more than this many I/O errors in stored data a
  ``OSD_TOO_MANY_REPAIRS`` health warning is generated.
+
+* `blacklist` has been replaced with `blocklist` throughout.  The following commands have changed:
+
+  - ``ceph osd blacklist ...`` are now ``ceph osd blocklist ...``
+  - ``ceph <tell|daemon> osd.<NNN> dump_blacklist`` is now ``ceph <tell|daemon> osd.<NNN> dump_blocklist``
+
+* The following config options have changed:
+
+  - ``mon osd blacklist default expire`` is now ``mon osd blocklist default expire``
+  - ``mon mds blacklist interval`` is now ``mon mds blocklist interval``
+  - ``mon mgr blacklist interval`` is now ''mon mgr blocklist interval``
+  - ``rbd blacklist on break lock`` is now ``rbd blocklist on break lock``
+  - ``rbd blacklist expire seconds`` is now ``rbd blocklist expire seconds``
+  - ``mds session blacklist on timeout`` is now ``mds session blocklist on timeout``
+  - ``mds session blacklist on evict`` is now ``mds session blocklist on evict``
+
+* The following librados API calls have changed:
+
+  - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.
+  - ``rados.blacklist_add`` is now ``rados.blocklist_add`` in the C++ API.
+
+* The JSON output for the following commands now shows ``blocklist`` instead of ``blacklist``:
+
+  - ``ceph osd dump``
+  - ``ceph <tell|daemon> osd.<N> dump_blocklist``
