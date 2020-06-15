@@ -103,6 +103,10 @@ class TestNFS(MgrTestCase):
     def _delete_export(self):
         self._nfs_cmd('export', 'delete', self.cluster_id, self.pseudo_path)
 
+    def _test_list_export(self):
+        nfs_output = json.loads(self._nfs_cmd('export', 'ls', self.cluster_id))
+        self.assertIn(self.pseudo_path, nfs_output)
+
     def _check_export_obj_deleted(self, conf_obj=False):
         rados_obj_ls = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'ls'])
 
@@ -152,5 +156,5 @@ class TestNFS(MgrTestCase):
         self._unload_module("cephadm")
         self._load_module("cephadm")
         self._orch_cmd("set", "backend", "cephadm")
-        #Add list export command
+        self._test_list_export()
         self._delete_export()
