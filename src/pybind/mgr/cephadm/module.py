@@ -253,7 +253,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             'type': 'bool',
             'default': True,
             'desc': 'manage configs like API endpoints in Dashboard.'
-        }
+        },
+        {
+            'name': 'manage_etc_ceph_ceph_conf',
+            'type': 'bool',
+            'default': False,
+            'desc': 'Manage and own /etc/ceph/ceph.conf on the hosts.',
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -288,6 +294,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.prometheus_alerts_path = ''
             self.migration_current = None
             self.config_dashboard = True
+            self.manage_etc_ceph_ceph_conf = True
 
         self._cons = {}  # type: Dict[str, Tuple[remoto.backends.BaseConnection,remoto.backends.LegacyModuleExecute]]
 
@@ -547,10 +554,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.event.set()
 
     def config_notify_one(self, what):
-        pass
+        if what == 'manage_etc_ceph_ceph_conf' and self.manage_etc_ceph_ceph_conf:
+            self.cache.distribute_new_etc_ceph_ceph_conf()
 
     def notify(self, notify_type, notify_id):
-        pass
+        if notify_type == "mon_map":
+            self.cache.distribute_new_etc_ceph_ceph_conf()
 
     def pause(self):
         if not self.paused:
@@ -909,7 +918,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def _remote_connection(self,
                            host: str,
                            addr: Optional[str]=None,
-                           ) -> Iterator[Tuple[BaseConnection, Any]]:
+                           ) -> Iterator[Tuple["BaseConnection", Any]]:
         if not addr and host in self.inventory:
             addr = self.inventory.get_addr(host)
 
@@ -1171,9 +1180,15 @@ you may want to run:
                 r = self._refresh_host_osdspec_previews(host)
                 if r:
                     failures.append(r)
-                    
-        refresh(self.cache.get_hosts())
 
+            if self.cache.host_needs_new_etc_ceph_ceph_conf(host):
+                self.log.debug(f"deploying new /etc/ceph/ceph.conf on `{host}`")
+                r = self._deploy_etc_ceph_ceph_conf(host)
+                if r:
+                    bad_hosts.append(r)
+
+        refresh(self.cache.get_hosts())
+		
         health_changed = False
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
             del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
@@ -1283,6 +1298,31 @@ you may want to run:
         self.cache.update_host_devices_networks(host, devices.devices, networks)
         self.update_osdspec_previews(host)
         self.cache.save_host(host)
+        return None
+
+    def _deploy_etc_ceph_ceph_conf(self, host: str) -> Optional[str]:
+        ret, config, err = self.check_mon_command({
+            "prefix": "config generate-minimal-conf",
+        })
+
+        try:
+            with self._remote_connection(host) as tpl:
+                conn, connr = tpl
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['mkdir', '-p', '/etc/ceph'])
+                if code:
+                    return f'failed to create /etc/ceph on {host}: {err}'
+                out, err, code = remoto.process.check(
+                    conn,
+                    ['dd', 'of=/etc/ceph/ceph.conf'],
+                    stdin=config.encode('utf-8')
+                )
+                if code:
+                    return f'failed to create /etc/ceph/ceph.conf on {host}: {err}'
+                self.cache.remove_host_needs_new_etc_ceph_ceph_conf(host)
+        except OrchestratorError as e:
+            return f'failed to create /etc/ceph/ceph.conf on {host}: {str(e)}'
         return None
 
     @trivial_completion
@@ -1430,7 +1470,7 @@ you may want to run:
                     host, name, 'unit',
                     ['--name', name, a])
             except Exception:
-                self.log.exception('cephadm failed')
+                self.log.exception(f'`{host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(host)
         return "{} {} from host '{}'".format(action, name, host)
 
