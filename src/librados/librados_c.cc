@@ -435,11 +435,18 @@ extern "C" int _rados_wait_for_latest_osdmap(rados_t cluster)
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_wait_for_latest_osdmap);
 
-extern "C" int _rados_blacklist_add(rados_t cluster, char *client_address,
+extern "C" int _rados_blocklist_add(rados_t cluster, char *client_address,
 				    uint32_t expire_seconds)
 {
   librados::RadosClient *radosp = (librados::RadosClient *)cluster;
-  return radosp->blacklist_add(client_address, expire_seconds);
+  return radosp->blocklist_add(client_address, expire_seconds);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_blocklist_add);
+
+extern "C" int _rados_blacklist_add(rados_t cluster, char *client_address,
+				    uint32_t expire_seconds)
+{
+  return _rados_blocklist_add(cluster, client_address, expire_seconds);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_blacklist_add);
 

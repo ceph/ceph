@@ -748,8 +748,8 @@ public:
   int get_inc(version_t ver, OSDMap::Incremental& inc);
   int get_full_from_pinned_map(version_t ver, ceph::buffer::list& bl);
 
-  epoch_t blacklist(const entity_addrvec_t& av, utime_t until);
-  epoch_t blacklist(entity_addr_t a, utime_t until);
+  epoch_t blocklist(const entity_addrvec_t& av, utime_t until);
+  epoch_t blocklist(entity_addr_t a, utime_t until);
 
   void dump_info(ceph::Formatter *f);
   int dump_osd_metadata(int osd, ceph::Formatter *f, std::ostream *err);

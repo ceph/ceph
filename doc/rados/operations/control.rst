@@ -237,18 +237,18 @@ Deployments utilizing Nautilus (or later revisions of Luminous and Mimic)
 that have no pre-Luminous cients may instead wish to instead enable the
 `balancer`` module for ``ceph-mgr``.
 
-Add/remove an IP address to/from the blacklist. When adding an address,
-you can specify how long it should be blacklisted in seconds; otherwise,
-it will default to 1 hour. A blacklisted address is prevented from
-connecting to any OSD. Blacklisting is most often used to prevent a
+Add/remove an IP address to/from the blocklist. When adding an address,
+you can specify how long it should be blocklisted in seconds; otherwise,
+it will default to 1 hour. A blocklisted address is prevented from
+connecting to any OSD. Blocklisting is most often used to prevent a
 lagging metadata server from making bad changes to data on the OSDs.
 
 These commands are mostly only useful for failure testing, as
-blacklists are normally maintained automatically and shouldn't need
+blocklists are normally maintained automatically and shouldn't need
 manual intervention. ::
 
-	ceph osd blacklist add ADDRESS[:source_port] [TIME]
-	ceph osd blacklist rm ADDRESS[:source_port]
+	ceph osd blocklist add ADDRESS[:source_port] [TIME]
+	ceph osd blocklist rm ADDRESS[:source_port]
 
 Creates/deletes a snapshot of a pool. ::
 

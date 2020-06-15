@@ -232,7 +232,7 @@ static void handle_mgr_signal(int signum)
   derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
 
   // The python modules don't reliably shut down, so don't even
-  // try. The mon will blacklist us (and all of our rados/cephfs
+  // try. The mon will blocklist us (and all of our rados/cephfs
   // clients) anyway. Just exit!
 
   _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
@@ -269,9 +269,9 @@ void Mgr::init()
   cluster_state.with_mgrmap([&e](const MgrMap& m) {
     e = m.last_failure_osd_epoch;
   });
-  /* wait for any blacklists to be applied to previous mgr instance */
+  /* wait for any blocklists to be applied to previous mgr instance */
   dout(4) << "Waiting for new OSDMap (e=" << e
-          << ") that may blacklist prior active." << dendl;
+          << ") that may blocklist prior active." << dendl;
   objecter->wait_for_osd_map(e);
   lock.lock();
 

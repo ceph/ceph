@@ -40,7 +40,7 @@ tasks:
       object-storage-feature-enabled:
         container_sync: false
         discoverability: true
-      blacklist:
+      blocklist:
         - .*test_account_quotas_negative.AccountQuotasNegativeTest.test_user_modify_quota
         - .*test_container_acl_negative.ObjectACLsNegativeTest.*
         - .*test_container_services_negative.ContainerNegativeTest.test_create_container_metadata_.*

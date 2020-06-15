@@ -1803,7 +1803,7 @@ int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
  * Get the amount of time that the client has to return caps
  * @param cmount the ceph mount handle to use.
  *
- * In the event that a client does not return its caps, the MDS may blacklist
+ * In the event that a client does not return its caps, the MDS may blocklist
  * it after this timeout. Applications should check this value and ensure
  * that they set the delegation timeout to a value lower than this.
  *
@@ -1817,7 +1817,7 @@ uint32_t ceph_get_cap_return_timeout(struct ceph_mount_info *cmount);
  * @param cmount the ceph mount handle to use.
  * @param timeout the delegation timeout (in seconds)
  *
- * Since the client could end up blacklisted if it doesn't return delegations
+ * Since the client could end up blocklisted if it doesn't return delegations
  * in time, we mandate that any application wanting to use delegations
  * explicitly set the timeout beforehand. Until this call is done on the
  * mount, attempts to set a delegation will return -ETIME.
