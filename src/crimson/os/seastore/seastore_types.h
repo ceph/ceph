@@ -267,7 +267,11 @@ struct delta_info_t {
       bl == rhs.bl
     );
   }
+
+  friend std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 };
+
+std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs);
 
 struct record_t {
   std::vector<extent_t> extents;

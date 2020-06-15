@@ -73,4 +73,16 @@ std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs)
   return out << ']';
 }
 
+std::ostream &operator<<(std::ostream &lhs, const delta_info_t &rhs)
+{
+  return lhs << "delta_info_t("
+	     << "type: " << rhs.type
+	     << ", paddr: " << rhs.paddr
+	     << ", prev_crc: " << rhs.prev_crc
+	     << ", final_crc: " << rhs.final_crc
+	     << ", length: " << rhs.length
+	     << ", pversion: " << rhs.pversion
+	     << ")";
+}
+
 }
