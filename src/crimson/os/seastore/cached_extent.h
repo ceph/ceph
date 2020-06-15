@@ -48,6 +48,7 @@ class CachedExtent : public boost::intrusive_ref_counter<
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
 
+  uint32_t last_committed_crc = 0;
 public:
   /**
    *  duplicate_for_write
@@ -129,11 +130,24 @@ public:
   virtual ceph::bufferlist get_delta() = 0;
 
   /**
+   * apply_delta
+   *
    * bl is a delta obtained previously from get_delta.  The versions will
    * match.  Implementation should mutate buffer based on bl.  base matches
    * the address passed on_delta_write.
+   *
+   * Implementation *must* use set_last_committed_crc to update the crc to
+   * what the crc of the buffer would have been at submission.  For physical
+   * extents that use base to adjust internal record-relative deltas, this
+   * means that the crc should be of the buffer after applying the delta,
+   * but before that adjustment.  We do it this way because the crc in the
+   * commit path does not yet know the record base address.
+   *
+   * LogicalCachedExtent overrides this method and provides a simpler
+   * apply_delta override for LogicalCachedExtent implementers.
    */
-  virtual void apply_delta(paddr_t base, const ceph::bufferlist &bl) = 0;
+  virtual void apply_delta_and_adjust_crc(
+    paddr_t base, const ceph::bufferlist &bl) = 0;
 
   /**
    * Called on dirty CachedExtent implementation after replay.
@@ -209,7 +223,7 @@ public:
   }
 
   /// Returns crc32c of buffer
-  uint32_t get_crc32c(uint32_t crc) {
+  uint32_t get_crc32c(uint32_t crc=1) {
     return ceph_crc32c(
       crc,
       reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
@@ -310,6 +324,11 @@ protected:
   template <typename T>
   static TCachedExtentRef<T> make_cached_extent_ref(bufferptr &&ptr) {
     return new T(std::move(ptr));
+  }
+
+  /// Sets last_committed_crc
+  void set_last_committed_crc(uint32_t crc) {
+    last_committed_crc = crc;
   }
 
   void set_paddr(paddr_t offset) { poffset = offset; }

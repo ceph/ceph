@@ -46,7 +46,7 @@ struct OnodeBlock final : LogicalCachedExtent {
   ceph::bufferlist get_delta() final;
   void on_initial_write() final;
   void on_delta_write(paddr_t record_block_offset) final;
-  void apply_delta(paddr_t base, const ceph::bufferlist &bl) final;
+  void apply_delta(const ceph::bufferlist &bl) final;
 
   void sync() {
     apply_pending_changes(false);

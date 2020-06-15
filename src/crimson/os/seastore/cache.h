@@ -191,6 +191,10 @@ public:
       ref->set_io_wait();
       ref->set_paddr(offset);
       ref->state = CachedExtent::extent_state_t::CLEAN;
+
+      /* TODO: crc should be checked against LBA manager */
+      ref->last_committed_crc = ref->get_crc32c();
+
       return segment_manager.read(
 	offset,
 	length,
