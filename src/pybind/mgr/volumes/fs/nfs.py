@@ -28,6 +28,18 @@ def available_clusters(mgr):
     return [cluster.spec.service_id.replace('ganesha-', '', 1) for cluster in completion.result]
 
 
+def export_cluster_checker(func):
+    def cluster_check(fs_export, *args, **kwargs):
+        """
+        This method checks if cluster exists and sets rados namespace.
+        """
+        if kwargs['cluster_id'] not in available_clusters(fs_export.mgr):
+            return -errno.ENOENT, "", "Cluster does not exists"
+        fs_export.rados_namespace = kwargs['cluster_id']
+        return func(fs_export, *args, **kwargs)
+    return cluster_check
+
+
 class GaneshaConfParser(object):
     def __init__(self, raw_config):
         self.pos = 0
@@ -379,9 +391,12 @@ class FSExport(object):
         return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
 
     def _fetch_export(self, pseudo_path):
-        for ex in self.exports[self.rados_namespace]:
-            if ex.pseudo == pseudo_path:
-                return ex
+        try:
+            for ex in self.exports[self.rados_namespace]:
+                if ex.pseudo == pseudo_path:
+                    return ex
+        except KeyError:
+            pass
 
     def _create_user_key(self, entity, path, fs_name):
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
@@ -481,18 +496,14 @@ class FSExport(object):
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
         self._update_common_conf(export.cluster_id, export.export_id)
 
+    @export_cluster_checker
     def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
         try:
             if not self.check_fs(fs_name):
                 return -errno.ENOENT, "", f"filesystem {fs_name} not found"
 
-            if cluster_id not in available_clusters(self.mgr):
-                return -errno.ENOENT, "", "Cluster does not exists"
-
             if cluster_id not in self.exports:
                 self.exports[cluster_id] = []
-
-            self.rados_namespace = cluster_id
 
             if not self._fetch_export(pseudo_path):
                 ex_id = self._gen_export_id()
@@ -526,9 +537,8 @@ class FSExport(object):
             log.warning("Failed to create exports")
             return -errno.EINVAL, "", str(e)
 
-    def delete_export(self, cluster_id, pseudo_path, export_obj=None):
+    def _delete_export(self, cluster_id, pseudo_path, export_obj=None):
         try:
-            self.rados_namespace = cluster_id
             if export_obj:
                 export = export_obj
             else:
@@ -542,24 +552,29 @@ class FSExport(object):
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                 return 0, "Successfully deleted export", ""
-        except KeyError:
-            pass
+            return 0, "", "Export does not exist"
         except Exception as e:
             log.warning("Failed to delete exports")
             return -errno.EINVAL, "", str(e)
-        return 0, "", "Export does not exist"
+
+    @export_cluster_checker
+    def delete_export(self, cluster_id, pseudo_path):
+        return self._delete_export(cluster_id, pseudo_path)
 
     def delete_all_exports(self, cluster_id):
         try:
             export_list = list(self.exports[cluster_id])
+            self.rados_namespace = cluster_id
             for export in export_list:
-               ret, out, err = self.delete_export(cluster_id, None, export)
+               ret, out, err = self._delete_export(cluster_id=cluster_id, pseudo_path=None,
+                                                   export_obj=export)
                if ret != 0:
                    raise Exception(f"Failed to delete exports: {err} and {ret}")
             log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
         except KeyError:
             log.info("No exports to delete")
 
+    @export_cluster_checker
     def list_exports(self, cluster_id, detailed):
         try:
             if detailed:
@@ -574,12 +589,12 @@ class FSExport(object):
             log.error(f"Failed to list exports for {cluster_id}")
             return -errno.EINVAL, "", str(e)
 
+    @export_cluster_checker
     def get_export(self, cluster_id, pseudo_path):
         try:
-            self.rados_namespace = cluster_id
-            export_dict = self._fetch_export(pseudo_path).to_dict()
-            return 0, json.dumps(export_dict, indent=2), ''
-        except (AttributeError, KeyError):
+            export = self._fetch_export(pseudo_path)
+            if export:
+                return 0, json.dumps(export.to_dict(), indent=2), ''
             log.warning(f"No {pseudo_path} export to show for {cluster_id}")
             return 0, '', ''
         except Exception as e:
