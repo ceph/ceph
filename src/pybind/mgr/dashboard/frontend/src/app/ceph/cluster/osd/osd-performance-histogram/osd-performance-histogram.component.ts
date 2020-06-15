@@ -13,8 +13,6 @@ export class OsdPerformanceHistogramComponent implements OnChanges {
   valuesStyle: any;
   last = {};
 
-  constructor() {}
-
   ngOnChanges() {
     this.render();
   }

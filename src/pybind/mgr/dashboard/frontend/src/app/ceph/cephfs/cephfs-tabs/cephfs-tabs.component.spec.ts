@@ -149,7 +149,7 @@ describe('CephfsTabsComponent', () => {
       data: [],
       status: ViewCacheStatus.ValueNone
     };
-    component['subscribeInterval'] = () => {};
+    component['subscribeInterval'] = () => undefined;
     updateData();
     expect(component.clients).not.toEqual(defaultClients);
     expect(component.details).not.toEqual(defaultDetails);

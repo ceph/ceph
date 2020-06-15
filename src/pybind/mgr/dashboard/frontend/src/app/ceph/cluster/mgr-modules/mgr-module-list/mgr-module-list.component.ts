@@ -191,7 +191,7 @@ export class MgrModuleListComponent extends ListWithDetails {
       $obs = this.mgrModuleService.enable(module.name);
     }
     $obs.subscribe(
-      () => {},
+      () => undefined,
       () => {
         // Suspend showing the notification toasties.
         this.notificationService.suspendToasties(true);

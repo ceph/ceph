@@ -7,6 +7,9 @@
     "class-name": true,
     "comment-format": [true, "check-space"],
     "curly": true,
+    "deprecation": {
+      "severity": "warning"
+    },
     "eofline": true,
     "forin": true,
     "import-blacklist": [true, "rxjs/Rx", "ngx-bootstrap"],
@@ -27,7 +30,8 @@
     "no-construct": true,
     "no-debugger": true,
     "no-duplicate-super": true,
-    "no-empty": false,
+    "no-duplicate-imports": [true, { "allow-namespace-imports": true }],
+    "no-empty": [true, "allow-empty-catch"],
     "no-empty-interface": true,
     "no-eval": true,
     "no-inferrable-types": [true, "ignore-params"],
@@ -83,7 +87,29 @@
     "directive-class-suffix": true,
     "no-forward-ref": true,
     "no-output-native": true,
-    "ordered-imports": true
+    "ordered-imports": [
+      true,
+      {
+        "grouped-imports": true,
+        "groups": [
+          {
+            "name": "angular",
+            "match": "^@angular",
+            "order": 1
+          },
+          {
+            "name": "relative dir",
+            "match": "^([.]|src/).*",
+            "order": 3
+          },
+          {
+            "name": "node_modules",
+            "match": ".*",
+            "order": 2
+          }
+        ]
+      }
+    ]
   },
   "jsRules": { "no-empty": true }
 }

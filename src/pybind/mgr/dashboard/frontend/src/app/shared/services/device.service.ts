@@ -8,8 +8,6 @@ import { CdDevice } from '../models/devices';
   providedIn: 'root'
 })
 export class DeviceService {
-  constructor() {}
-
   /**
    * Calculates additional data and appends them as new attributes to the given device.
    */

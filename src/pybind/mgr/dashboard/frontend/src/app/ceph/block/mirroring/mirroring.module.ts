@@ -8,7 +8,6 @@ import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ModalModule } from 'ngx-bootstrap/modal';
 
 import { SharedModule } from '../../../shared/shared.module';
-
 import { BootstrapCreateModalComponent } from './bootstrap-create-modal/bootstrap-create-modal.component';
 import { BootstrapImportModalComponent } from './bootstrap-import-modal/bootstrap-import-modal.component';
 import { DaemonListComponent } from './daemon-list/daemon-list.component';

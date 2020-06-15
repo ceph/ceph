@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
@@ -7,7 +8,6 @@ import { ClickOutsideModule } from 'ng-click-outside';
 import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
-import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../api/prometheus.service';
 import { RbdService } from '../../api/rbd.service';

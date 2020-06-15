@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+
 import { Icons } from '../../../shared/enum/icons.enum';
 
 @Component({

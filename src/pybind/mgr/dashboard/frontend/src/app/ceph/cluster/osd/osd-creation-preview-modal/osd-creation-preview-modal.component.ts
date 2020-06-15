@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -15,7 +15,7 @@ import { TaskWrapperService } from '../../../../shared/services/task-wrapper.ser
   templateUrl: './osd-creation-preview-modal.component.html',
   styleUrls: ['./osd-creation-preview-modal.component.scss']
 })
-export class OsdCreationPreviewModalComponent implements OnInit {
+export class OsdCreationPreviewModalComponent {
   @Input()
   driveGroups: Object[] = [];
 
@@ -35,8 +35,6 @@ export class OsdCreationPreviewModalComponent implements OnInit {
     this.action = actionLabels.CREATE;
     this.createForm();
   }
-
-  ngOnInit() {}
 
   createForm() {
     this.formGroup = this.formBuilder.group({});

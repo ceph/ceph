@@ -17,8 +17,6 @@ export class ModalComponent {
   @Output()
   hide = new EventEmitter();
 
-  constructor() {}
-
   close() {
     if (this.modalRef) {
       this.modalRef.hide();

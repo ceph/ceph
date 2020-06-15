@@ -1,6 +1,7 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import {
