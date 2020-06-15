@@ -146,6 +146,8 @@ smallmds=0
 short=0
 ec=0
 cephadm=0
+cephadm_hosts=""
+cephadm_ssh_config_path=""
 parallel=true
 hitset=""
 overwrite_conf=0
@@ -232,6 +234,8 @@ usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bl
 usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)\n"
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
+usage=$usage"\t--cephadm-hosts: set a list of hosts that should be assigned to the cephadm orchestrator\n"
+usage=$usage"\t--cephadm-ssh-config-path: that should be assigned to the cephadm orchestrator\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
 
 usage_exit() {
@@ -292,6 +296,14 @@ case $1 in
         ;;
     --cephadm )
         cephadm=1
+        ;;
+    --cephadm-hosts )
+        cephadm_hosts="$2"
+        shift
+        ;;
+    --cephadm-ssh-config-path )
+        cephadm_ssh_config_path="$2"
+        shift
         ;;
     --no-parallel )
         parallel=false
@@ -991,8 +1003,21 @@ EOF
         ceph_adm config-key set mgr/cephadm/ssh_identity_key -i ~/.ssh/id_rsa
         ceph_adm config-key set mgr/cephadm/ssh_identity_pub -i ~/.ssh/id_rsa.pub
         ceph_adm mgr module enable cephadm
+        ceph_adm config set mgr mgr/cephadm/log_to_cluster_level debug
+        if [ -n "$cephadm_ssh_config_path" ]; then
+            ceph_adm cephadm set-ssh-config -i "$cephadm_ssh_config_path"
+            # hack to get cephadm to read the ssh-config
+            ceph_adm mgr module disable cephadm
+            ceph_adm mgr module enable cephadm
+        fi
         ceph_adm orch set backend cephadm
-        ceph_adm orch host add $HOSTNAME
+        if [ -n "$cephadm_hosts" ]; then
+            for i in $cephadm_hosts; do
+                ceph_adm orch host add "$i"
+            done
+        else
+            ceph_adm orch host add "$HOSTNAME"
+        fi
         ceph_adm orch apply crash '*'
         ceph_adm config set mgr mgr/cephadm/allow_ptrace true
     fi
