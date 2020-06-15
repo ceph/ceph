@@ -529,6 +529,9 @@ vc.disconnect()
         self.mount_a.run_shell(["touch", os.path.join(mount_path, "noperms")])
         self.mount_a.run_shell(["chmod", "0000", os.path.join(mount_path, "noperms")])
 
+        # A folder with non-ascii characters
+        self.mount_a.run_shell(["mkdir", os.path.join(mount_path, u"f\u00F6n")
+
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", u"{volume_id}")
             vc.delete_volume(vp)
