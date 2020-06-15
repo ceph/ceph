@@ -26,7 +26,7 @@ void OnodeBlock::on_delta_write(paddr_t)
   apply_pending_changes(true);
 }
 
-void OnodeBlock::apply_delta(paddr_t, ceph::bufferlist &bl)
+void OnodeBlock::apply_delta(paddr_t, const ceph::bufferlist &bl)
 {
   assert(deltas.empty());
 
