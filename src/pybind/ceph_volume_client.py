@@ -731,7 +731,7 @@ class CephFSVolumeClient(object):
             return
 
         def rmtree(root_path):
-            log.debug("rmtree {0}".format(root_path))
+            log.debug(u"rmtree {0}".format(root_path))
             dir_handle = self.fs.opendir(root_path)
             d = self.fs.readdir(dir_handle)
             while d:
