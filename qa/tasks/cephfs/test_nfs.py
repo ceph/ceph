@@ -185,3 +185,26 @@ class TestNFS(MgrTestCase):
         self._orch_cmd("set", "backend", "cephadm")
         self._test_list_export()
         self._delete_export()
+
+    def test_export_create_with_non_existing_fsname(self):
+        try:
+            fs_name = 'nfs-test'
+            self._test_create_cluster()
+            self._nfs_cmd('export', 'create', 'cephfs', fs_name, self.cluster_id, self.pseudo_path)
+            self.fail(f"Export created with non-existing filesystem {fs_name}")
+        except CommandFailedError as e:
+            # Command should fail for test to pass
+            if e.exitstatus != errno.ENOENT:
+                raise
+        finally:
+            self._test_delete_cluster()
+
+    def test_export_create_with_non_existing_clusterid(self):
+        try:
+            cluster_id = 'invalidtest'
+            self._nfs_cmd('export', 'create', 'cephfs', self.fs_name, cluster_id, self.pseudo_path)
+            self.fail(f"Export created with non-existing cluster id {cluster_id}")
+        except CommandFailedError as e:
+            # Command should fail for test to pass
+            if e.exitstatus != errno.ENOENT:
+                raise
