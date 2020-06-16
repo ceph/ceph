@@ -14,6 +14,7 @@
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/rwl/ImageCacheState.h"
 #include "librbd/cache/rwl/LogEntry.h"
 #include "librbd/cache/rwl/Types.h"

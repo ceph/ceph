@@ -12,7 +12,6 @@
 #include "librbd/mirror/Types.h"
 #include <string>
 
-class ContextWQ;
 struct Context;
 
 namespace cls { namespace rbd { struct MirrorImage; } }
@@ -20,6 +19,7 @@ namespace cls { namespace rbd { struct MirrorImage; } }
 namespace librbd {
 
 struct ImageCtx;
+namespace asio { struct ContextWQ; }
 
 namespace mirror {
 
@@ -27,7 +27,7 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class GetInfoRequest {
 public:
   static GetInfoRequest *create(librados::IoCtx &io_ctx,
-                                ContextWQ *op_work_queue,
+                                asio::ContextWQ *op_work_queue,
                                 const std::string &image_id,
                                 cls::rbd::MirrorImage *mirror_image,
                                 PromotionState *promotion_state,
@@ -45,7 +45,7 @@ public:
                               primary_mirror_uuid, on_finish);
   }
 
-  GetInfoRequest(librados::IoCtx& io_ctx, ContextWQ *op_work_queue,
+  GetInfoRequest(librados::IoCtx& io_ctx, asio::ContextWQ *op_work_queue,
                  const std::string &image_id,
                  cls::rbd::MirrorImage *mirror_image,
                  PromotionState *promotion_state,
@@ -83,7 +83,7 @@ private:
 
   ImageCtxT *m_image_ctx = nullptr;
   librados::IoCtx &m_io_ctx;
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   std::string m_image_id;
   cls::rbd::MirrorImage *m_mirror_image;
   PromotionState *m_promotion_state;

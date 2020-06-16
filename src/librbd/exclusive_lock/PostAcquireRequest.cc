@@ -6,7 +6,6 @@
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "include/stringify.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"

@@ -52,7 +52,7 @@ struct RemoveRequest<librbd::MockTestImageCtx> {
 
   static RemoveRequest *create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
-                               ContextWQ *work_queue,
+                               librbd::asio::ContextWQ *work_queue,
                                bool force,
                                librbd::ProgressContext &progress_ctx,
                                Context *on_finish) {

@@ -10,12 +10,12 @@
 #include "librbd/TaskFinisher.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"
 #include "librbd/io/AioCompletion.h"
 #include "include/encoding.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include <boost/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd

@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/asio/ContextWQ.h"
 #include "ServiceDaemon.h"
 #include "Threads.h"
 

@@ -4,12 +4,12 @@
 #include "librbd/journal/PromoteRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/OpenRequest.h"
 
 #define dout_subsys ceph_subsys_rbd

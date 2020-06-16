@@ -2,9 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/watcher/Notifier.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/watcher/Types.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -36,7 +36,8 @@ void Notifier::C_AioNotify::finish(int r) {
   notifier->handle_notify(r, on_finish);
 }
 
-Notifier::Notifier(ContextWQ *work_queue, IoCtx &ioctx, const std::string &oid)
+Notifier::Notifier(asio::ContextWQ *work_queue, IoCtx &ioctx,
+                   const std::string &oid)
   : m_work_queue(work_queue), m_ioctx(ioctx), m_oid(oid),
     m_aio_notify_lock(ceph::make_mutex(util::unique_lock_name(
       "librbd::object_watcher::Notifier::m_aio_notify_lock", this))) {

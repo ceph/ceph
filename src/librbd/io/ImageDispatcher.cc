@@ -5,7 +5,6 @@
 #include "include/Context.h"
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AsyncOperation.h"
