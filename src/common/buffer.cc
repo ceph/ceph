@@ -1175,6 +1175,8 @@ static ceph::spinlock debug_lock;
     std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer> nb)
   {
     unsigned pos = 0;
+    int mempool = _buffers.front().get_mempool();
+    nb->reassign_to_mempool(mempool);
     for (auto& node : _buffers) {
       nb->copy_in(pos, node.length(), node.c_str(), false);
       pos += node.length();
