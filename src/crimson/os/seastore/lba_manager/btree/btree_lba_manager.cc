@@ -205,7 +205,6 @@ BtreeLBAManager::insert_mapping_ret BtreeLBAManager::insert_mapping(
       });
   }
   return split.safe_then([this, &t, laddr, val](LBANodeRef node) {
-    node = cache.duplicate_for_write(t, node)->cast<LBANode>();
     return node->insert(cache, t, laddr, val);
   });
 }
@@ -242,9 +241,6 @@ BtreeLBAManager::update_mapping_ret BtreeLBAManager::update_mapping(
 {
   return get_root(t
   ).safe_then([this, f=std::move(f), &t, addr](LBANodeRef root) mutable {
-    if (root->depth == 0) {
-      root = cache.duplicate_for_write(t, root)->cast<LBANode>();
-    }
     return root->mutate_mapping(
       cache,
       t,

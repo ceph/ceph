@@ -83,10 +83,6 @@ LBAInternalNode::insert_ret LBAInternalNode::insert(
 	  insert_ertr::make_ready_future<LBANodeRef>(std::move(extent));
       }).safe_then([&cache, &t, laddr, val=std::move(val)](
 		     LBANodeRef extent) mutable {
-	if (extent->depth == 0) {
-	  auto mut_extent = cache.duplicate_for_write(t, extent);
-	  extent = mut_extent->cast<LBANode>();
-	}
 	return extent->insert(cache, t, laddr, val);
       });
 }
@@ -105,26 +101,18 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
     get_paddr()
   ).safe_then([this, &cache, &t, laddr](LBANodeRef extent) {
     if (extent->at_min_capacity()) {
-      auto mut_this = cache.duplicate_for_write(
-	t, this)->cast<LBAInternalNode>();
-      return mut_this->merge_entry(
+      return merge_entry(
 	cache,
 	t,
 	laddr,
-	mut_this->get_containing_child(laddr),
+	get_containing_child(laddr),
 	extent);
     } else {
       return merge_ertr::make_ready_future<LBANodeRef>(
 	std::move(extent));
     }
   }).safe_then([&cache, &t, laddr, f=std::move(f)](LBANodeRef extent) mutable {
-    if (extent->depth == 0) {
-      auto mut_extent = cache.duplicate_for_write(
-	t, extent)->cast<LBANode>();
-      return mut_extent->mutate_mapping(cache, t, laddr, std::move(f));
-    } else {
-      return extent->mutate_mapping(cache, t, laddr, std::move(f));
-    }
+    return extent->mutate_mapping(cache, t, laddr, std::move(f));
   });
 }
 
@@ -203,6 +191,12 @@ LBAInternalNode::split_entry(
   Cache &c, Transaction &t, laddr_t addr,
   internal_iterator_t iter, LBANodeRef entry)
 {
+  if (!is_pending()) {
+    auto mut = c.duplicate_for_write(t, this)->cast<LBAInternalNode>();
+    auto mut_iter = mut->iter_idx(iter->get_offset());
+    return mut->split_entry(c, t, addr, mut_iter, entry);
+  }
+
   ceph_assert(!at_max_capacity());
   auto [left, right, pivot] = entry->make_split_children(c, t);
 
@@ -227,6 +221,12 @@ LBAInternalNode::merge_entry(
   Cache &c, Transaction &t, laddr_t addr,
   internal_iterator_t iter, LBANodeRef entry)
 {
+  if (!is_pending()) {
+    auto mut = c.duplicate_for_write(t, this)->cast<LBAInternalNode>();
+    auto mut_iter = mut->iter_idx(iter->get_offset());
+    return mut->merge_entry(c, t, addr, mut_iter, entry);
+  }
+
   logger().debug(
     "LBAInternalNode: merge_entry: {}, {}",
     *this,
@@ -333,11 +333,19 @@ LBALeafNode::lookup_range_ret LBALeafNode::lookup_range(
 
 LBALeafNode::insert_ret LBALeafNode::insert(
   Cache &cache,
-  Transaction &transaction,
+  Transaction &t,
   laddr_t laddr,
   lba_map_val_t val)
 {
   ceph_assert(!at_max_capacity());
+
+  if (!is_pending()) {
+    return cache.duplicate_for_write(t, this)->cast<LBALeafNode>()->insert(
+      cache,
+      t,
+      laddr,
+      val);
+  }
 
   val.paddr = maybe_generate_relative(val.paddr);
   logger().debug(
@@ -368,6 +376,15 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
   laddr_t laddr,
   mutate_func_t &&f)
 {
+  if (!is_pending()) {
+    return cache.duplicate_for_write(transaction, this)->cast<LBALeafNode>(
+    )->mutate_mapping(
+      cache,
+      transaction,
+      laddr,
+      std::move(f));
+  }
+
   ceph_assert(!at_min_capacity());
   auto mutation_pt = find(laddr);
   if (mutation_pt == end()) {
