@@ -365,6 +365,21 @@ TEST(mempool, bufferlist_reassign)
   ASSERT_EQ(bytes_before, mempool::osd::allocated_bytes());
 }
 
+TEST(mempool, bufferlist_c_str)
+{
+  bufferlist bl;
+  int len = 1048576;
+  size_t before = mempool::osd::allocated_bytes();
+  bl.append(buffer::create_aligned(len, 4096));
+  bl.append(buffer::create_aligned(len, 4096));
+  bl.reassign_to_mempool(mempool::mempool_osd);
+  size_t after = mempool::osd::allocated_bytes();
+  ASSERT_GE(after, before + len * 2);
+  bl.c_str();
+  size_t after_c_str = mempool::osd::allocated_bytes();
+  ASSERT_EQ(after, after_c_str);
+}
+
 TEST(mempool, check_shard_select)
 {
   const size_t samples = 100;
