@@ -19,7 +19,6 @@ License version 2, as published by the Free Software
 Foundation.  See file COPYING.
 """
 
-from __future__ import print_function
 from time import sleep
 import codecs
 import grp
@@ -156,20 +155,10 @@ from ceph_daemon import admin_socket, DaemonWatcher, Termsize
 verbose = False
 cluster_handle = None
 
-# Always use Unicode (UTF-8) for stdout
-if sys.version_info[0] >= 3:
-    raw_stdout = sys.stdout.buffer
-    raw_stderr = sys.stderr.buffer
-else:
-    raw_stdout = sys.__stdout__
-    raw_stderr = sys.__stderr__
-    sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
-    sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
-
 
 def raw_write(buf):
     sys.stdout.flush()
-    raw_stdout.write(rados.cstr(buf, ''))
+    sys.stdout.buffer.write(rados.cstr(buf, ''))
 
 
 def osdids():
@@ -658,7 +647,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 if ret < 0:
                     ret = -ret
                     errstr = errno.errorcode.get(ret, 'Unknown')
-                    print(u'Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
+                    print('Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
                 else:
                     if outs:
                         print(outs, file=sys.stderr)
@@ -893,12 +882,12 @@ def check_scrub_stamps(waitdata, currdata):
     return True
 
 def waitscrub(childargs, waitdata):
-    print(u'Waiting for {0} to complete...'.format(childargs[1]), file=sys.stdout)
+    print('Waiting for {0} to complete...'.format(childargs[1]), file=sys.stdout)
     currdata = get_scrub_timestamps(childargs)
     while not check_scrub_stamps(waitdata, currdata):
         time.sleep(3)
         currdata = get_scrub_timestamps(childargs)
-    print(u'{0} completed'.format(childargs[1]), file=sys.stdout)
+    print('{0} completed'.format(childargs[1]), file=sys.stdout)
 
 def wait(childargs, waitdata):
     if childargs[1] in ['scrub', 'deep-scrub']:
@@ -1087,8 +1076,7 @@ def main():
         # an awfully simple callback
         def watch_cb(arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
             # Filter on channel
-            if sys.version_info[0] >= 3:
-                channel = channel.decode('utf-8')
+            channel = channel.decode('utf-8')
             if (channel == parsed_args.watch_channel or \
                            parsed_args.watch_channel == "*"):
                 print(line.decode('utf-8'))
@@ -1129,7 +1117,7 @@ def main():
     if parsed_args.output_file:
         try:
             if parsed_args.output_file == '-':
-                outf = raw_stdout
+                outf = sys.stdout.buffer
             else:
                 outf = open(parsed_args.output_file, 'wb')
         except Exception as e:
@@ -1232,7 +1220,7 @@ def main():
         if ret < 0:
             ret = -ret
             errstr = errno.errorcode.get(ret, 'Unknown')
-            print(u'Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
+            print('Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
             if len(targets) > 1:
                 final_ret = ret
             else:
