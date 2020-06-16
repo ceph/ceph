@@ -8362,16 +8362,17 @@ TEST_F(TestLibRBD, QuiesceWatchError)
     ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &handle2));
 
     ASSERT_EQ(-EINVAL, image1.snap_create("snap1"));
-    ASSERT_EQ(1U, watcher1.quiesce_count);
+    ASSERT_LT(0U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
     ASSERT_EQ(1U, watcher2.quiesce_count);
     ASSERT_EQ(1U, watcher2.unquiesce_count);
 
     PrintProgress prog_ctx;
+    watcher1.quiesce_count = 0;
     ASSERT_EQ(0, image2.snap_create2("snap2",
                                      RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
                                      prog_ctx));
-    ASSERT_EQ(2U, watcher1.quiesce_count);
+    ASSERT_LT(0U, watcher1.quiesce_count);
     ASSERT_EQ(0U, watcher1.unquiesce_count);
     ASSERT_EQ(2U, watcher2.quiesce_count);
     ASSERT_EQ(2U, watcher2.unquiesce_count);
