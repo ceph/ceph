@@ -22,7 +22,7 @@ describe('DocService', () => {
 
   it('should return full URL', () => {
     expect(service.urlGenerator('foo', 'iscsi')).toBe(
-      'http://docs.ceph.com/docs/foo/mgr/dashboard/#enabling-iscsi-management'
+      'https://documentation.suse.com/ses/7/single-html/ses-admin/#dashboard-iscsi-management'
     );
   });
 
@@ -60,7 +60,7 @@ describe('DocService', () => {
 
       nextSummary('foo');
       expect(result).toEqual(
-        'http://docs.ceph.com/docs/foo/mgr/dashboard/#enabling-prometheus-alerting'
+        'https://documentation.suse.com/ses/7/single-html/ses-deployment/#deploy-cephadm-day2-service-monitoring'
       );
       expect(i).toBe(1);
       expect(subscriber.closed).toBe(true);
