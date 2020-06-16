@@ -25,6 +25,7 @@ import codecs
 import grp
 import os
 import pwd
+import shutil
 import sys
 import time
 import platform
@@ -503,7 +504,14 @@ def format_help(cmddict, partial=None):
 
 
 def ceph_conf(parsed_args, field, name):
-    args = ['ceph-conf']
+    cmd = 'ceph-conf'
+    bindir = os.path.dirname(__file__)
+    if shutil.which(cmd):
+        args = [cmd]
+    elif shutil.which(cmd, path=bindir):
+        args = [os.path.join(bindir, cmd)]
+    else:
+        raise RuntimeError('"ceph-conf" not found')
 
     if name:
         args.extend(['--name', name])
