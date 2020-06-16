@@ -204,9 +204,6 @@ namespace librbd {
       io::AioCompletion*,
       boost::lockfree::allocator<ceph::allocator<void>>> Completions;
 
-    Completions external_callback_completions;
-    std::atomic<bool> external_callback_in_progress = {false};
-
     Completions event_socket_completions;
     EventSocket event_socket;
 

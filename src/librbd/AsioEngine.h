@@ -8,6 +8,7 @@
 #include "include/rados/librados_fwd.hpp"
 #include <memory>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/io_context_strand.hpp>
 
 namespace neorados { struct RADOS; }
 
@@ -39,6 +40,11 @@ public:
     return m_io_context.get_executor();
   }
 
+  inline boost::asio::io_context::strand& get_api_strand() {
+    // API client callbacks should never fire concurrently
+    return m_api_strand;
+  }
+
   inline asio::ContextWQ* get_work_queue() {
     return m_context_wq.get();
   }
@@ -48,6 +54,7 @@ private:
   CephContext* m_cct;
 
   boost::asio::io_context& m_io_context;
+  boost::asio::io_context::strand m_api_strand;
   std::unique_ptr<asio::ContextWQ> m_context_wq;
 };
 
