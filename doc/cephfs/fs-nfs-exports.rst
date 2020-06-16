@@ -73,6 +73,25 @@ Delete CephFS Export
 
 It deletes an export in cluster based on pseudo root name (binding).
 
+List CephFS Export
+==================
+
+.. code:: bash
+
+    $ ceph nfs export ls <clusterid> [--detailed]
+
+It lists export for a cluster. With detailed option enabled it shows entire
+export block.
+
+Get CephFS Export
+=================
+
+.. code:: bash
+
+    $ ceph nfs export get <clusterid> <binding>
+
+It displays export block for a cluster based on pseudo root name (binding).
+
 Configuring NFS-Ganesha to export CephFS with vstart
 ====================================================
 
