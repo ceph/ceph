@@ -40,7 +40,7 @@ check_device_available() {
 
         case "$DEVICE" in
             chrome)
-                [ -x "$(command -v google-chrome)" ] || [ -x "$(command -v google-chrome-stable)" ] ] || failed=true
+                [ -x "$(command -v google-chrome)" ] || [ -x "$(command -v google-chrome-stable)" ] || failed=true
                 ;;
             chromium)
                 [ -x "$(command -v chromium)" ] || failed=true
