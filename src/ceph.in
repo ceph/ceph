@@ -1077,8 +1077,7 @@ def main():
         def watch_cb(arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
             # Filter on channel
             channel = channel.decode('utf-8')
-            if (channel == parsed_args.watch_channel or \
-                           parsed_args.watch_channel == "*"):
+            if parsed_args.watch_channel in (channel, '*'):
                 print(line.decode('utf-8'))
                 sys.stdout.flush()
 
