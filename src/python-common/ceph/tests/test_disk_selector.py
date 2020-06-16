@@ -329,6 +329,7 @@ class TestDriveGroup(object):
                 }
 
             dgo = DriveGroupSpec.from_json(raw_sample)
+            dgo.validate()
             return dgo
 
         return make_sample_data

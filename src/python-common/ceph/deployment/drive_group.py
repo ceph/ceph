@@ -2,7 +2,7 @@ from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import ServiceSpecValidationError, ServiceSpec, PlacementSpec
 
 try:
-    from typing import Optional, List, Dict, Any
+    from typing import Optional, List, Dict, Any, Union
 except ImportError:
     pass
 import six
@@ -145,9 +145,9 @@ class DriveGroupSpec(ServiceSpec):
                  db_slots=None,  # type: Optional[int]
                  wal_slots=None,  # type: Optional[int]
                  osd_id_claims=None,  # type: Optional[Dict[str, List[str]]]
-                 block_db_size=None,  # type: Optional[int]
-                 block_wal_size=None,  # type: Optional[int]
-                 journal_size=None,  # type: Optional[int]
+                 block_db_size=None,  # type: Union[int, float, None]
+                 block_wal_size=None,  # type: Union[int, float, None]
+                 journal_size=None,  # type: Union[int, float, None]
                  service_type=None,  # type: Optional[str]
                  unmanaged=False,  # type: bool
                  ):
@@ -169,13 +169,13 @@ class DriveGroupSpec(ServiceSpec):
         self.journal_devices = journal_devices
 
         #: Set (or override) the "bluestore_block_wal_size" value, in bytes
-        self.block_wal_size = block_wal_size
+        self.block_wal_size: Union[int, float, None] = block_wal_size
 
         #: Set (or override) the "bluestore_block_db_size" value, in bytes
-        self.block_db_size = block_db_size
+        self.block_db_size: Union[int, float, None] = block_db_size
 
         #: set journal_size is bytes
-        self.journal_size = journal_size
+        self.journal_size: Union[int, float, None] = journal_size
 
         #: Number of osd daemons per "DATA" device.
         #: To fully utilize nvme devices multiple osds are required.
@@ -255,10 +255,10 @@ class DriveGroupSpec(ServiceSpec):
         if self.objectstore not in ('filestore', 'bluestore'):
             raise DriveGroupValidationError("objectstore not in ('filestore', 'bluestore')")
 
-        if self.block_wal_size is not None and type(self.block_wal_size) != int:
-            raise DriveGroupValidationError('block_wal_size must be of type int')
-        if self.block_db_size is not None and type(self.block_db_size) != int:
-            raise DriveGroupValidationError('block_db_size must be of type int')
+        for name in 'block_wal_size block_db_size journal_size'.split():
+            val = getattr(self, name)
+            if val is not None and not isinstance(val, (int, float)):
+                raise DriveGroupValidationError(f'{name} must be of type int or of type float')
 
     def __repr__(self):
         keys = [

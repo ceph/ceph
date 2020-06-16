@@ -3,6 +3,7 @@ import pytest
 import yaml
 
 from ceph.deployment import drive_selection, translate
+from ceph.deployment.drive_selection import SizeMatcher
 from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpecValidationError
@@ -71,6 +72,7 @@ def test_ceph_volume_command_0():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(all=True)
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device()*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(spec, sel, []).run()
@@ -82,6 +84,7 @@ def test_ceph_volume_command_1():
                           data_devices=DeviceSelection(rotational=True),
                           db_devices=DeviceSelection(rotational=False)
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(spec, sel, []).run()
@@ -95,6 +98,7 @@ def test_ceph_volume_command_2():
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G')
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
                               _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
@@ -113,6 +117,7 @@ def test_ceph_volume_command_3():
                           wal_devices=DeviceSelection(size='10G'),
                           encrypted=True
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
                               _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
@@ -130,11 +135,12 @@ def test_ceph_volume_command_4():
                           data_devices=DeviceSelection(size='200GB:350GB', rotational=True),
                           db_devices=DeviceSelection(size='200GB:350GB', rotational=False),
                           wal_devices=DeviceSelection(size='10G'),
-                          block_db_size='500M',
-                          block_wal_size='500M',
+                          block_db_size=SizeMatcher.str_to_byte('500M'),
+                          block_wal_size=SizeMatcher.str_to_byte('500M'),
                           osds_per_device=3,
                           encrypted=True
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True, size="300.00 GB")*2 +
                               _mk_device(rotational=False, size="300.00 GB")*2 +
                               _mk_device(size="10.0 GB", rotational=False)*2
@@ -143,7 +149,7 @@ def test_ceph_volume_command_4():
     cmd = translate.to_ceph_volume(spec, sel, []).run()
     assert cmd == ('lvm batch --no-auto /dev/sda /dev/sdb '
                    '--db-devices /dev/sdc /dev/sdd --wal-devices /dev/sde /dev/sdf '
-                   '--block-wal-size 500M --block-db-size 500M --dmcrypt '
+                   '--block-wal-size 500000000.0 --block-db-size 500000000.0 --dmcrypt '
                    '--osds-per-device 3 --yes --no-systemd')
 
 
@@ -152,6 +158,7 @@ def test_ceph_volume_command_5():
                           data_devices=DeviceSelection(rotational=True),
                           objectstore='filestore'
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(spec, sel, []).run()
@@ -162,14 +169,15 @@ def test_ceph_volume_command_6():
     spec = DriveGroupSpec(placement=PlacementSpec(host_pattern='*'),
                           data_devices=DeviceSelection(rotational=False),
                           journal_devices=DeviceSelection(rotational=True),
-                          journal_size='500M',
+                          journal_size=SizeMatcher.str_to_byte('500M'),
                           objectstore='filestore'
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2 + _mk_device(rotational=False)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(spec, sel, []).run()
     assert cmd == ('lvm batch --no-auto /dev/sdc /dev/sdd '
-                   '--journal-size 500M --journal-devices /dev/sda /dev/sdb '
+                   '--journal-size 500000000.0 --journal-devices /dev/sda /dev/sdb '
                    '--filestore --yes --no-systemd')
 
 
@@ -178,6 +186,7 @@ def test_ceph_volume_command_7():
                           data_devices=DeviceSelection(all=True),
                           osd_id_claims={'host1': ['0', '1']}
                           )
+    spec.validate()
     inventory = _mk_inventory(_mk_device(rotational=True)*2)
     sel = drive_selection.DriveSelection(spec, inventory)
     cmd = translate.to_ceph_volume(spec, sel, ['0', '1']).run()
