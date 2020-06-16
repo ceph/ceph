@@ -1,0 +1,52 @@
+<div *ngIf="isLoginActive">
+  <h2 i18n>Login</h2>
+  <form name="loginForm"
+        (ngSubmit)="login()"
+        #loginForm="ngForm"
+        novalidate>
+
+    <!-- Username -->
+    <div class="form-group has-feedback">
+      <input name="username"
+             [(ngModel)]="model.username"
+             #username="ngModel"
+             type="text"
+             placeholder="Enter your username..."
+             class="form-control"
+             required
+             autofocus>
+      <div class="invalid-feedback"
+           *ngIf="(loginForm.submitted || username.dirty) && username.invalid"
+           i18n>Username is required</div>
+    </div>
+
+    <!-- Password -->
+    <div class="form-group has-feedback">
+      <div class="input-group">
+        <input id="password"
+               name="password"
+               [(ngModel)]="model.password"
+               #password="ngModel"
+               type="password"
+               placeholder="Enter your password..."
+               class="form-control"
+               required>
+        <span class="input-group-append">
+          <button type="button"
+                  class="btn btn-outline-light btn-password"
+                  cdPasswordButton="password">
+          </button>
+        </span>
+      </div>
+      <div class="invalid-feedback"
+           *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
+           i18n>Password is required</div>
+    </div>
+
+    <input type="submit"
+           class="btn btn-primary btn-block"
+           [disabled]="loginForm.invalid"
+           value="Login"
+           i18n-value>
+  </form>
+</div>

@@ -24,18 +24,19 @@ export class DocService {
   }
 
   urlGenerator(release: string, section: string): string {
-    const domain = `http://docs.ceph.com/docs/${release}/`;
+    const domain = `https://documentation.suse.com/ses/7/single-html/`;
 
     const sections = {
-      iscsi: `${domain}mgr/dashboard/#enabling-iscsi-management`,
-      prometheus: `${domain}mgr/dashboard/#enabling-prometheus-alerting`,
-      'nfs-ganesha': `${domain}mgr/dashboard/#configuring-nfs-ganesha-in-the-dashboard`,
-      'rgw-nfs': `${domain}radosgw/nfs`,
-      rgw: `${domain}mgr/dashboard/#enabling-the-object-gateway-management-frontend`,
-      dashboard: `${domain}mgr/dashboard`,
-      grafana: `${domain}mgr/dashboard/#enabling-the-embedding-of-grafana-dashboards`,
-      orch: `${domain}mgr/orchestrator`,
-      pgs: `http://ceph.com/pgcalc`
+      iscsi: `${domain}ses-admin/#dashboard-iscsi-management`,
+      prometheus: `${domain}ses-deployment/#deploy-cephadm-day2-service-monitoring`,
+      'nfs-ganesha': `${domain}ses-admin/#ceph-nfsganesha-config`,
+      'rgw-nfs': `${domain}ses-admin/#ceph-nfsganesha-config-service-rgw`,
+      rgw: `${domain}ses-admin/#dashboard-ogw-enabling`,
+      dashboard: `${domain}ses-admin/#dashboard-initial-configuration`,
+      grafana: `${domain}ses-deployment/#deploy-cephadm-day2-service-monitoring`,
+      orch: `${domain}ses-deployment/#deploy-cephadm-day2-orch`,
+      pgs: `${domain}ses-admin/#ceph-pools`,
+      unsued: `${release}`
     };
 
     return sections[section];

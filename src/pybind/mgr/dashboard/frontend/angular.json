@@ -59,10 +59,30 @@
               "extractLicenses": true,
               "vendorChunk": false,
               "buildOptimizer": true,
+              "index": {
+                "input": "src/index.brand.html",
+                "output": "index.html"
+              },
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
                   "with": "src/environments/environment.prod.ts"
+                },
+                {
+                  "replace": "src/app/core/layouts/login-layout/login-layout.component.html",
+                  "with": "src/app/core/layouts/login-layout/login-layout.component.brand.html"
+                },
+                {
+                  "replace": "src/app/core/auth/login/login.component.html",
+                  "with": "src/app/core/auth/login/login.component.brand.html"
+                },
+                {
+                  "replace": "src/app/core/navigation/navigation/navigation.component.html",
+                  "with": "src/app/core/navigation/navigation/navigation.component.brand.html"
+                },
+                {
+                  "replace": "src/app/core/navigation/about/about.component.html",
+                  "with": "src/app/core/navigation/about/about.component.brand.html"
                 }
               ]
             },
