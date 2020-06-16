@@ -185,7 +185,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_grafana',
-            'default': 'ceph/ceph-grafana:latest',
+            'default': 'ceph/ceph-grafana:6.6.2',
             'desc': 'Prometheus container image',
         },
         {
