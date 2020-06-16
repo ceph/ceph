@@ -292,7 +292,7 @@ To remove a S3 key pair, specify the access key. ::
 
 To remove the swift secret key. ::
 
-	radosgw-admin key rm -subuser=foo:bar --key-type=swift
+	radosgw-admin key rm --subuser=foo:bar --key-type=swift
 
 
 Add / Remove Admin Capabilities
