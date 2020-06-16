@@ -371,24 +371,20 @@ The ``name`` parameter is an identifier of the group of instances:
 * a CephFS file system for a group of MDS daemons,
 * a zone name for a group of RGWs
 
-Sizing: the ``size`` parameter gives the number of daemons in the cluster
-(e.g. the number of MDS daemons for a particular CephFS file system).
-
 Creating/growing/shrinking/removing services::
 
-    ceph orch {mds,rgw} update <name> <size> [host…]
-    ceph orch {mds,rgw} add <name>
-    ceph orch nfs update <name> <size> [host…]
-    ceph orch nfs add <name> <pool> [--namespace=<namespace>]
-    ceph orch {mds,rgw,nfs} rm <name>
+    ceph orch apply mds <fs_name> [--placement=<placement>]
+    ceph orch apply rgw <realm> <zone> [--subcluster=<subcluster>] [--port=<port>] [--ssl] [--placement=<placement>]
+    ceph orch apply nfs <name> <pool> [--namespace=<namespace>] [--placement=<placement>]
+    ceph orch rm <service_name> [--force]
 
-e.g., ``ceph orch mds update myfs 3 host1 host2 host3``
+Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
 
-Start/stop/reload::
+e.g., ``ceph orch apply mds myfs --placement="3 host1 host2 host3"``
 
-    ceph orch service {stop,start,reload} <type> <name>
+Service Commands::
 
-    ceph orch daemon {start,stop,reload} <type> <daemon-id>
+    ceph orch <start|stop|restart|redeploy|reconfig> <service_name>
     
 .. _orchestrator-cli-service-spec:
     
