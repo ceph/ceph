@@ -7,11 +7,10 @@ import { filter } from 'rxjs/operators';
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { MirroringSummary } from '../models/mirroring-summary';
 import { TimerService } from '../services/timer.service';
-import { ApiModule } from './api.module';
 
 @cdEncode
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class RbdMirroringService {
   readonly REFRESH_INTERVAL = 30000;

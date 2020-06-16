@@ -5,10 +5,9 @@ import { Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
 
 import { UserFormModel } from '../../core/auth/user-form/user-form.model';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class UserService {
   constructor(private http: HttpClient) {}
