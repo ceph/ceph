@@ -18,6 +18,10 @@
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 #endif
 
+#ifdef WITH_SEASTAR
+#include "crimson/os/alienstore/alien_store.h"
+#endif
+
 #include "common/Thread.h"
 #include "common/code_environment.h"
 #include "common/debug.h"
@@ -81,6 +85,9 @@ void *Thread::entry_wrapper()
     _set_affinity(cpuid);
 
   ceph_pthread_setname(pthread_self(), thread_name);
+#ifdef WITH_SEASTAR
+  crimson::os::AlienStore::configure_thread_memory();
+#endif
   return entry();
 }
 
