@@ -6,11 +6,11 @@ import logging
 import random
 import string
 from copy import deepcopy
-from util.rgw import rgwadmin, wait_for_radosgw
-from util.rados import create_ec_pool, create_replicated_pool
-from rgw_multi import multisite
-from rgw_multi.zone_rados import RadosZone as RadosZone
-from rgw_multi.zone_ps import PSZone as PSZone
+from tasks.util.rgw import rgwadmin, wait_for_radosgw
+from tasks.util.rados import create_ec_pool, create_replicated_pool
+from tasks.rgw_multi import multisite
+from tasks.rgw_multi.zone_rados import RadosZone as RadosZone
+from tasks.rgw_multi.zone_ps import PSZone as PSZone
 
 from teuthology.orchestra import run
 from teuthology import misc

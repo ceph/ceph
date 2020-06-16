@@ -1,8 +1,7 @@
 import logging
 import json
 import tempfile
-import BaseHTTPServer
-import SocketServer
+from six.moves import BaseHTTPServer
 import random
 import threading
 import subprocess
@@ -31,7 +30,7 @@ from .zone_ps import PSTopic, \
     put_object_tagging, \
     get_object_tagging, \
     delete_all_objects
-from multisite import User
+from .multisite import User
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
 import boto.s3.tagging
@@ -2572,7 +2571,7 @@ def test_ps_creation_triggers():
     fp.write('bar')
     fp.close()
     uploader = bucket.initiate_multipart_upload('multipart')
-    fp = tempfile.TemporaryFile(mode='r')
+    fp = tempfile.NamedTemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
@@ -2643,7 +2642,7 @@ def test_ps_s3_creation_triggers_on_master():
     fp.write('bar')
     fp.close()
     uploader = bucket.initiate_multipart_upload('multipart')
-    fp = tempfile.TemporaryFile(mode='r')
+    fp = tempfile.NamedTemporaryFile(mode='r')
     uploader.upload_part_from_file(fp, 1)
     uploader.complete_upload()
     fp.close()
@@ -2718,7 +2717,7 @@ def test_ps_s3_multipart_on_master():
     assert_equal(status/100, 2)
 
     # create objects in the bucket using multi-part upload
-    fp = tempfile.TemporaryFile(mode='w+b')
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
     object_size = 10*1024*1024
     content = bytearray(os.urandom(object_size))
     fp.write(content)
@@ -2914,7 +2913,7 @@ def test_ps_s3_metadata_on_master():
     # create objects in the bucket using COPY
     bucket.copy_key('copy_of_foo', bucket.name, key.name)
     # create objects in the bucket using multi-part upload
-    fp = tempfile.TemporaryFile(mode='w')
+    fp = tempfile.NamedTemporaryFile(mode='w')
     fp.write('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
     fp.close()
     uploader = bucket.initiate_multipart_upload('multipart_foo', 

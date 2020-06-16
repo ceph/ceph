@@ -25,8 +25,7 @@ class TestMisc(CephFSTestCase):
         # on lookup/open
         self.mount_b.umount_wait()
         self.set_conf('client', 'client debug getattr caps', 'true')
-        self.mount_b.mount()
-        self.mount_b.wait_until_mounted()
+        self.mount_b.mount_wait()
 
         # create a file and hold it open. MDS will issue CEPH_CAP_EXCL_*
         # to mount_a
@@ -47,7 +46,7 @@ class TestMisc(CephFSTestCase):
         t = time.time()
         rctime = self.mount_a.getfattr(".", "ceph.dir.rctime")
         log.info("rctime = {}".format(rctime))
-        self.assertGreaterEqual(rctime, t-10)
+        self.assertGreaterEqual(float(rctime), t - 10)
 
     def test_fs_new(self):
         self.mount_a.umount_wait()

@@ -8,7 +8,7 @@ from teuthology.misc import deep_merge
 from teuthology.orchestra.run import CommandFailedError
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
-from cephfs.kernel_mount import KernelMount
+from tasks.cephfs.kernel_mount import KernelMount
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ def task(ctx, config):
                 try:
                     mount.umount()
                 except (CommandFailedError, MaxWhileTries):
-                    log.warn("Ordinary umount failed, forcing...")
+                    log.warning("Ordinary umount failed, forcing...")
                     forced = True
                     mount.umount_wait(force=True)
 

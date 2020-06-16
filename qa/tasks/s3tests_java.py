@@ -1,7 +1,7 @@
 """
 Task for running RGW S3 tests with the AWS Java SDK
 """
-from cStringIO import StringIO
+from io import BytesIO
 import logging
 
 import base64
@@ -117,7 +117,7 @@ class S3tests_java(Task):
                 repo,
                 '{tdir}/s3-tests-java'.format(tdir=testdir),
             ],
-            stdout=StringIO()
+            stdout=BytesIO()
         )
         if client in self.config and self.config[client] is not None:
             if 'sha1' in self.config[client] and self.config[client]['sha1'] is not None:
@@ -156,7 +156,7 @@ class S3tests_java(Task):
         testdir = teuthology.get_testdir(self.ctx)
         self.ctx.cluster.only(client).run(
             args=['{tdir}/s3-tests-java/bootstrap.sh'.format(tdir=testdir)],
-            stdout=StringIO()
+            stdout=BytesIO()
         )
 
         endpoint = self.ctx.rgw.role_endpoints[client]
@@ -173,7 +173,7 @@ class S3tests_java(Task):
                       '-file', endpoint.cert.certificate,
                       '-storepass', 'changeit',
                       ],
-                stdout=StringIO()
+                stdout=BytesIO()
             )
 
     def create_users(self):
@@ -196,7 +196,7 @@ class S3tests_java(Task):
                 '/home/{local}/s3tests.teuth.config.yaml'.format(local=local_user))
             log.debug("S3 Tests Java: s3tests_conf is {s3cfg}".format(
                 s3cfg=s3tests_conf))
-            for section, user in self.users.items():
+            for section, user in list(self.users.items()):
                 if section in s3tests_conf:
                     s3_user_id = '{user}.{client}'.format(
                         user=user, client=client)
@@ -224,7 +224,7 @@ class S3tests_java(Task):
                     log.info('{args}'.format(args=args))
                     self.ctx.cluster.only(client).run(
                         args=args,
-                        stdout=StringIO()
+                        stdout=BytesIO()
                     )
                 else:
                     self.users.pop(section)
@@ -239,7 +239,7 @@ class S3tests_java(Task):
         """
         access_key = ''.join(random.choice(string.ascii_uppercase)
                              for i in range(20))
-        access_secret = base64.b64encode(os.urandom(40))
+        access_secret = base64.b64encode(os.urandom(40)).decode('ascii')
         endpoint = self.ctx.rgw.role_endpoints.get(client)
 
         self._set_cfg_entry(
@@ -279,8 +279,8 @@ class S3tests_java(Task):
         with open('s3_tests_tmp.yaml', 'w') as outfile:
             yaml.dump(cfg_dict, outfile, default_flow_style=False)
 
-        conf_fp = StringIO()
-        with open('s3_tests_tmp.yaml', 'r') as infile:
+        conf_fp = BytesIO()
+        with open('s3_tests_tmp.yaml', 'rb') as infile:
             for line in infile:
                 conf_fp.write(line)
 
@@ -309,7 +309,7 @@ class S3tests_java(Task):
                       '{tdir}/s3-tests-java/config.properties'.format(
                           tdir=testdir)
                       ],
-                stdout=StringIO()
+                stdout=BytesIO()
             )
             args = ['cd',
                     '{tdir}/s3-tests-java'.format(tdir=testdir),
@@ -346,25 +346,25 @@ class S3tests_java(Task):
                     self.ctx.cluster.only(client).run(
                         args=['radosgw-admin', 'gc',
                               'process', '--include-all'],
-                        stdout=StringIO()
+                        stdout=BytesIO()
                     )
 
                 if gr != 'All':
                     self.ctx.cluster.only(client).run(
                         args=args + ['--tests'] + [gr] + extra_args,
-                        stdout=StringIO()
+                        stdout=BytesIO()
                     )
                 else:
                     self.ctx.cluster.only(client).run(
                         args=args + extra_args,
-                        stdout=StringIO()
+                        stdout=BytesIO()
                     )
 
                 for i in range(2):
                     self.ctx.cluster.only(client).run(
                         args=['radosgw-admin', 'gc',
                               'process', '--include-all'],
-                        stdout=StringIO()
+                        stdout=BytesIO()
                     )
 
     def remove_tests(self, client):
@@ -379,7 +379,7 @@ class S3tests_java(Task):
                       'cat', self.log_name,
                       run.Raw('&&'),
                       'rm', self.log_name],
-                stdout=StringIO()
+                stdout=BytesIO()
             )
 
         self.ctx.cluster.only(client).run(
@@ -388,7 +388,7 @@ class S3tests_java(Task):
                 '-rf',
                 '{tdir}/s3-tests-java'.format(tdir=testdir),
             ],
-            stdout=StringIO()
+            stdout=BytesIO()
         )
 
     def delete_users(self, client):
@@ -408,7 +408,7 @@ class S3tests_java(Task):
                     '--purge-data',
                     '--cluster', 'ceph',
                 ],
-                stdout=StringIO()
+                stdout=BytesIO()
             )
 
 

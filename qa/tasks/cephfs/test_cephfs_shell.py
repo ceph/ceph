@@ -2,15 +2,16 @@
 Before running this testsuite, add path to cephfs-shell module to $PATH and
 export $PATH.
 """
+from io import BytesIO
 from os import path
 import crypt
 import logging
 from tempfile import mkstemp as tempfile_mkstemp
 import math
+from six import ensure_str
 from sys import version_info as sys_version_info
 from re import search as re_search
 from time import sleep
-from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.misc import sudo_write_file
 from teuthology.orchestra.run import CommandFailedError
@@ -52,23 +53,23 @@ class TestCephFSShell(CephFSTestCase):
         args.extend(("--", cmd))
 
         log.info("Running command: {}".format(" ".join(args)))
-        return mount_x.client_remote.run(args=args, stdout=StringIO(),
-                                         stderr=StringIO(), stdin=stdin)
+        return mount_x.client_remote.run(args=args, stdout=BytesIO(),
+                                         stderr=BytesIO(), stdin=stdin)
 
     def get_cephfs_shell_cmd_error(self, cmd, mount_x=None, opts=None,
                                     stdin=None):
-        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stderr.\
-            getvalue().strip()
+        return ensure_str(self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stderr.\
+            getvalue().strip())
 
     def get_cephfs_shell_cmd_output(self, cmd, mount_x=None, opts=None,
                                     stdin=None, config_path=None):
-        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin,
+        return ensure_str(self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin,
                                          config_path).\
-            stdout.getvalue().strip()
+            stdout.getvalue().strip())
 
     def get_cephfs_shell_script_output(self, script, mount_x=None, stdin=None):
-        return self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
-            getvalue().strip()
+        return ensure_str(self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
+            getvalue().strip())
 
     def run_cephfs_shell_script(self, script, mount_x=None, stdin=None):
         if mount_x is None:
@@ -83,8 +84,8 @@ class TestCephFSShell(CephFSTestCase):
 
         args = ["cephfs-shell", "-c", mount_x.config_path, '-b', scriptpath]
         log.info('Running script \"' + scriptpath + '\"')
-        return mount_x.client_remote.run(args=args, stdout=StringIO(),
-                                         stderr=StringIO(), stdin=stdin)
+        return mount_x.client_remote.run(args=args, stdout=BytesIO(),
+                                         stderr=BytesIO(), stdin=stdin)
 
 class TestMkdir(TestCephFSShell):
     def test_mkdir(self):
@@ -490,7 +491,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + regfilename)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -512,7 +513,7 @@ class TestDU(TestCephFSShell):
         sleep(10)
         du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -528,7 +529,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -549,7 +550,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + hlinkname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -568,7 +569,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -587,7 +588,7 @@ class TestDU(TestCephFSShell):
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
         if sys_version_info.major >= 3:
-            self.assertRegex(expected_output, du_output)
+            self.assertRegex(du_output, expected_output)
         elif sys_version_info.major < 3:
             assert re_search(expected_output, du_output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -678,7 +679,7 @@ class TestDU(TestCephFSShell):
 
         for expected_output in expected_patterns_in_output:
             if sys_version_info.major >= 3:
-                self.assertRegex(expected_output, du_output)
+                self.assertRegex(du_output, expected_output)
             elif sys_version_info.major < 3:
                 assert re_search(expected_output, du_output) != None, "\n" + \
                        "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -695,7 +696,7 @@ class TestDU(TestCephFSShell):
 
         for expected_output in expected_patterns_in_output:
             if sys_version_info.major >= 3:
-                self.assertRegex(expected_output, du_output)
+                self.assertRegex(du_output, expected_output)
             elif sys_version_info.major < 3:
                 assert re_search(expected_output, du_output) != None, "\n" +\
                        "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -711,7 +712,7 @@ class TestDU(TestCephFSShell):
             # CWD in DU report.
             if expected_output.find('/') == len(expected_output) - 1:
                 if sys_version_info.major >= 3:
-                    self.assertRegex(expected_output, du_output)
+                    self.assertRegex(du_output, expected_output)
                 elif sys_version_info.major < 3:
                     assert re_search(expected_output, du_output) != None, "\n" + \
                         "expected_output -\n{}\ndu_output -\n{}\n".format(
@@ -749,7 +750,7 @@ class TestDF(TestCephFSShell):
     def test_df_for_invalid_directory(self):
         dir_abspath = path.join(self.mount_a.mountpoint, 'non-existent-dir')
         proc = self.run_cephfs_shell_cmd('df ' + dir_abspath)
-        assert proc.stderr.getvalue().find('error in stat') != -1
+        assert proc.stderr.getvalue().find(b'error in stat') != -1
 
     def test_df_for_valid_file(self):
         s = 'df test' * 14145016
@@ -924,12 +925,12 @@ class TestMisc(TestCephFSShell):
         dirname = 'somedirectory'
         self.run_cephfs_shell_cmd(['mkdir', dirname])
 
-        output = self.mount_a.client_remote.run(args=['cephfs-shell', '-c',
-            self.mount_a.config_path, 'ls'],
-            stdout=StringIO()).stdout.getvalue().strip()
+        output = self.mount_a.client_remote.sh([
+            'cephfs-shell', '-c', self.mount_a.config_path, 'ls'
+        ]).strip()
 
         if sys_version_info.major >= 3:
-            self.assertRegex(dirname, output)
+            self.assertRegex(output, dirname)
         elif sys_version_info.major < 3:
             assert re_search(dirname, output) != None, "\n" + \
                    "expected_output -\n{}\ndu_output -\n{}\n".format(

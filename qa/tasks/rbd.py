@@ -7,7 +7,7 @@ import os
 import tempfile
 import sys
 
-from cStringIO import StringIO
+from io import BytesIO
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -303,12 +303,12 @@ def canonical_path(ctx, role, path):
     representing the given role.  A canonical path contains no
     . or .. components, and includes no symbolic links.
     """
-    version_fp = StringIO()
+    version_fp = BytesIO()
     ctx.cluster.only(role).run(
         args=[ 'readlink', '-f', path ],
         stdout=version_fp,
         )
-    canonical_path = version_fp.getvalue().rstrip('\n')
+    canonical_path = six.ensure_str(version_fp.getvalue()).rstrip('\n')
     version_fp.close()
     return canonical_path
 
@@ -413,9 +413,10 @@ def run_xfstests_one_client(ctx, role, properties):
         log.info('         randomize: {randomize}'.format(randomize=randomize))
 
         if exclude_list:
-            with tempfile.NamedTemporaryFile(bufsize=0, prefix='exclude') as exclude_file:
+            with tempfile.NamedTemporaryFile(mode='w', prefix='exclude') as exclude_file:
                 for test in exclude_list:
                     exclude_file.write("{}\n".format(test))
+                exclude_file.flush()
                 remote.put_file(exclude_file.name, exclude_file.name)
 
         # Note that the device paths are interpreted using

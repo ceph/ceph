@@ -1,7 +1,6 @@
 """
 Qemu task
 """
-from cStringIO import StringIO
 
 import contextlib
 import logging
@@ -9,13 +8,12 @@ import os
 import yaml
 import time
 
-from teuthology import misc as teuthology
-from teuthology import contextutil
 from tasks import rbd
-from teuthology.orchestra import run
+from tasks.util.workunit import get_refspec_after_overrides
+from teuthology import contextutil
+from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
-
-from util.workunit import get_refspec_after_overrides
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -122,7 +120,7 @@ def generate_iso(ctx, config):
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
         metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
 
-        with open(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_setup.yaml')) as f:
             test_setup = ''.join(f.readlines())
             # configuring the commands to setup the nfs mount
             mnt_dir = "/export/{client}".format(client=client)
@@ -130,7 +128,7 @@ def generate_iso(ctx, config):
                 mnt_dir=mnt_dir
             )
 
-        with open(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
+        with open(os.path.join(src_dir, 'userdata_teardown.yaml')) as f:
             test_teardown = ''.join(f.readlines())
 
         user_data = test_setup
@@ -172,7 +170,7 @@ def generate_iso(ctx, config):
         user_data = user_data.format(
             ceph_branch=ctx.config.get('branch'),
             ceph_sha1=ctx.config.get('sha1'))
-        teuthology.write_file(remote, userdata_path, StringIO(user_data))
+        teuthology.write_file(remote, userdata_path, user_data)
 
         with open(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
             teuthology.write_file(remote, metadata_path, f)

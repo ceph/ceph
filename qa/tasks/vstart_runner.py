@@ -130,7 +130,7 @@ try:
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.kernel_mount import KernelMount
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
-    from mgr.mgr_test_case import MgrCluster
+    from tasks.mgr.mgr_test_case import MgrCluster
     from teuthology.contextutil import MaxWhileTries
     from teuthology.task import interactive
 except ImportError:
@@ -339,8 +339,8 @@ class LocalRemote(object):
         shell = any([a for a in args if isinstance(a, Raw)])
 
         # Filter out helper tools that don't exist in a vstart environment
-        args = [a for a in args if a not in {
-            'adjust-ulimits', 'ceph-coverage'}]
+        args = [a for a in args if a not in ('adjust-ulimits',
+                                             'ceph-coverage')]
 
         # Adjust binary path prefix if given a bare program name
         if "/" not in args[0]:
@@ -800,7 +800,7 @@ class LocalFuseMount(FuseMount):
                 check_status=False
             )
             if p.exitstatus != 0:
-                log.warn("ls conns failed with {0}, assuming none".format(p.exitstatus))
+                log.warning("ls conns failed with {0}, assuming none".format(p.exitstatus))
                 return []
 
             ls_str = six.ensure_str(p.stdout.getvalue().strip())
@@ -1322,7 +1322,7 @@ def exec_test():
     for line in lines:
         if 'ceph-fuse' in line or 'ceph-mds' in line:
             pid = int(line.split()[0])
-            log.warn("Killing stray process {0}".format(line))
+            log.warning("Killing stray process {0}".format(line))
             os.kill(pid, signal.SIGKILL)
 
     # Fire up the Ceph cluster if the user requested it
@@ -1386,7 +1386,7 @@ def exec_test():
         mounts.append(mount)
         if os.path.exists(mount.mountpoint):
             if mount.is_mounted():
-                log.warn("unmounting {0}".format(mount.mountpoint))
+                log.warning("unmounting {0}".format(mount.mountpoint))
                 mount.umount_wait()
             else:
                 os.rmdir(mount.mountpoint)
@@ -1452,11 +1452,11 @@ def exec_test():
 
         if hasattr(fn, 'is_for_teuthology') and getattr(fn, 'is_for_teuthology') is True:
             drop_test = True
-            log.warn("Dropping test because long running: {method_id}".format(method_id=method.id()))
+            log.warning("Dropping test because long running: {method_id}".format(method_id=method.id()))
 
         if getattr(fn, "needs_trimming", False) is True:
             drop_test = (os.getuid() != 0)
-            log.warn("Dropping test because client trim unavailable: {method_id}".format(method_id=method.id()))
+            log.warning("Dropping test because client trim unavailable: {method_id}".format(method_id=method.id()))
 
         if drop_test:
             # Don't drop the test if it was explicitly requested in arguments

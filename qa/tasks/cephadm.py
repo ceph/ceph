@@ -1,8 +1,6 @@
 """
 Ceph cluster task, deployed via cephadm orchestrator
 """
-from io import BytesIO
-
 import argparse
 import configobj
 import contextlib
@@ -15,8 +13,10 @@ import uuid
 
 import six
 import toml
-from ceph_manager import CephManager
+from io import BytesIO
+from six import StringIO
 from tarfile import ReadError
+from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
@@ -192,7 +192,7 @@ def ceph_log(ctx, config):
                 run.Raw('|'), 'head', '-n', '1',
             ])
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
-                stdout=BytesIO(),
+                stdout=StringIO(),
                 args=args,
             )
             stdout = r.stdout.getvalue()
@@ -319,7 +319,7 @@ def ceph_bootstrap(ctx, config):
             remote=bootstrap_remote,
             path='{}/seed.{}.conf'.format(testdir, cluster_name),
             data=conf_fp.getvalue())
-        log.debug('Final config:\n' + conf_fp.getvalue())
+        log.debug('Final config:\n' + conf_fp.getvalue().decode())
         ctx.ceph[cluster_name].conf = seed_config
 
         # register initial daemons
@@ -398,7 +398,7 @@ def ceph_bootstrap(ctx, config):
         ssh_pub_key = teuthology.get_file(
             remote=bootstrap_remote,
             path='{}/{}.pub'.format(testdir, cluster_name)
-        ).strip()
+        ).decode('ascii').strip()
 
         log.info('Installing pub ssh key for root users...')
         ctx.cluster.run(args=[
@@ -436,7 +436,7 @@ def ceph_bootstrap(ctx, config):
             ])
             r = _shell(ctx, cluster_name, remote,
                        ['ceph', 'orch', 'host', 'ls', '--format=json'],
-                       stdout=BytesIO())
+                       stdout=StringIO())
             hosts = [node['hostname'] for node in json.loads(r.stdout.getvalue())]
             assert remote.shortname in hosts
 
@@ -512,7 +512,7 @@ def ceph_mons(ctx, config):
                             args=[
                                 'ceph', 'mon', 'dump', '-f', 'json',
                             ],
-                            stdout=BytesIO(),
+                            stdout=StringIO(),
                         )
                         j = json.loads(r.stdout.getvalue())
                         if len(j['mons']) == num_mons:
@@ -527,7 +527,7 @@ def ceph_mons(ctx, config):
             args=[
                 'ceph', 'config', 'generate-minimal-conf',
             ],
-            stdout=BytesIO(),
+            stdout=StringIO(),
         )
         ctx.ceph[cluster_name].config_file = r.stdout.getvalue()
 
@@ -785,7 +785,7 @@ def ceph_clients(ctx, config):
                     'mds', 'allow *',
                     'mgr', 'allow *',
                 ],
-                stdout=BytesIO(),
+                stdout=StringIO(),
             )
             keyring = r.stdout.getvalue()
             teuthology.sudo_write_file(

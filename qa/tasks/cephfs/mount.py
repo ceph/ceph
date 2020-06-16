@@ -2,10 +2,11 @@ from contextlib import contextmanager
 import json
 import logging
 import datetime
+import six
 import time
+from six import StringIO
 from textwrap import dedent
 import os
-from StringIO import StringIO
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import Filesystem
@@ -60,6 +61,11 @@ class CephFSMount(object):
 
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
         raise NotImplementedError()
+
+    def mount_wait(self, mount_path=None, mount_fs_name=None, mountpoint=None, mount_options=[]):
+        self.mount(mount_path=mount_path, mount_fs_name=mount_fs_name, mountpoint=mountpoint,
+                   mount_options=mount_options)
+        self.wait_until_mounted()
 
     def umount(self):
         raise NotImplementedError()
@@ -189,7 +195,7 @@ class CephFSMount(object):
     def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
         p.wait()
-        return p.stdout.getvalue().strip()
+        return six.ensure_str(p.stdout.getvalue().strip())
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
                   omit_sudo=True):
@@ -418,8 +424,8 @@ class CephFSMount(object):
 
         return self.run_shell(["dd", "if=/dev/urandom", "of={0}".format(filename),
                                "bs=1M", "conv=fdatasync",
-                               "count={0}".format(n_mb),
-                               "seek={0}".format(seek)
+                               "count={0}".format(int(n_mb)),
+                               "seek={0}".format(int(seek))
                                ], wait=wait)
 
     def write_test_pattern(self, filename, size):
@@ -714,7 +720,7 @@ class CephFSMount(object):
             else:
                 raise
 
-        return p.stdout.getvalue()
+        return str(p.stdout.getvalue())
 
     def df(self):
         """
@@ -724,7 +730,7 @@ class CephFSMount(object):
         p = self.run_shell(["df", "-B1", "."])
         lines = p.stdout.getvalue().strip().split("\n")
         fs, total, used, avail = lines[1].split()[:4]
-        log.warn(lines)
+        log.warning(lines)
 
         return {
             "total": int(total),

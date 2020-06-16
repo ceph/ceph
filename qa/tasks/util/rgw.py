@@ -1,7 +1,8 @@
-from cStringIO import StringIO
 import logging
 import json
 import time
+
+from six import StringIO
 
 from teuthology import misc as teuthology
 

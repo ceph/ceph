@@ -3,10 +3,10 @@ test_stress_watch task
 """
 import contextlib
 import logging
-import proc_thrasher
 
 import six
 from teuthology.orchestra import run
+from teuthology.task import proc_thrasher
 
 log = logging.getLogger(__name__)
 

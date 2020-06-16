@@ -3,8 +3,9 @@ import signal
 import logging
 import operator
 from random import randint
+from six.moves import range
 
-from cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
 
@@ -24,7 +25,7 @@ class TestClusterAffinity(CephFSTestCase):
         current = sorted(current, key=operator.itemgetter('name'))
         log.info("current = %s", current)
         self.assertEqual(len(current), len(target))
-        for i in xrange(len(current)):
+        for i in range(len(current)):
             for attr in target[i]:
                 self.assertIn(attr, current[i])
                 self.assertEqual(target[i][attr], current[i][attr])
@@ -413,8 +414,7 @@ class TestFailover(CephFSTestCase):
         self.mounts[0].umount_wait()
 
         # Control: that we can mount and unmount usually, while the cluster is healthy
-        self.mounts[0].mount()
-        self.mounts[0].wait_until_mounted()
+        self.mounts[0].mount_wait()
         self.mounts[0].umount_wait()
 
         # Stop the daemon processes
@@ -431,7 +431,7 @@ class TestFailover(CephFSTestCase):
 
         self.wait_until_true(laggy, grace * 2)
         with self.assertRaises(CommandFailedError):
-            self.mounts[0].mount()
+            self.mounts[0].mount_wait()
 
     def test_standby_count_wanted(self):
         """

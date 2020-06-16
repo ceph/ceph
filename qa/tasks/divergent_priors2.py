@@ -6,7 +6,7 @@ import time
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks.util.rados import rados
 import os
 
 

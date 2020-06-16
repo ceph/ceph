@@ -131,8 +131,7 @@ class TestSnapshots(CephFSTestCase):
                 else:
                     self.assertGreater(self._get_last_created_snap(rank=0), last_created)
 
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+            self.mount_a.mount_wait()
 
         self.mount_a.run_shell(["rmdir", Raw("d1/dir/.snap/*")])
 
@@ -173,8 +172,7 @@ class TestSnapshots(CephFSTestCase):
                 else:
                     self.assertGreater(self._get_last_created_snap(rank=0), last_created)
 
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+            self.mount_a.mount_wait()
 
         self.mount_a.run_shell(["rmdir", Raw("d1/dir/.snap/*")])
 
@@ -216,8 +214,7 @@ class TestSnapshots(CephFSTestCase):
         self.wait_until_true(lambda: len(self._get_pending_snap_update(rank=0)) == 0, timeout=30)
         self.assertEqual(self._get_last_created_snap(rank=0), last_created)
 
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
     def test_snapclient_cache(self):
         """
@@ -345,8 +342,7 @@ class TestSnapshots(CephFSTestCase):
             self.assertEqual(snaps_dump["last_created"], rank0_cache["last_created"])
             self.assertTrue(_check_snapclient_cache(snaps_dump, cache_dump=rank0_cache));
 
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
+            self.mount_a.mount_wait()
 
         self.mount_a.run_shell(["rmdir", Raw("d0/d2/dir/.snap/*")])
 
@@ -474,7 +470,6 @@ class TestSnapshots(CephFSTestCase):
                 # failing at the last mkdir beyond the limit is expected
                 if sno == snaps:
                     log.info("failed while creating snap #{}: {}".format(sno, repr(e)))
-                    sys.exc_clear()
                     raise TestSnapshots.SnapLimitViolationException(sno)
 
     def test_mds_max_snaps_per_dir_default_limit(self):
@@ -500,7 +495,6 @@ class TestSnapshots(CephFSTestCase):
             self.create_dir_and_snaps("accounts", new_limit + 1)
         except TestSnapshots.SnapLimitViolationException as e:
             if e.failed_snapshot_number == (new_limit + 1):
-                sys.exc_clear()
                 pass
         # then increase the limit by one and test
         new_limit = new_limit + 1
