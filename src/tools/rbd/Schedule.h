@@ -25,11 +25,11 @@ void add_schedule_options(
   boost::program_options::options_description *positional);
 int get_schedule_args(const boost::program_options::variables_map &vm,
                       bool mandatory, std::map<std::string, std::string> *args);
-void add_retention_policy_options(
-  const std::string &name,
-  boost::program_options::options_description *options);
-int get_retention_policy_args(const boost::program_options::variables_map &vm,
-                              std::map<std::string, std::string> *args);
+void add_retention_options(
+  boost::program_options::options_description *options, bool all);
+int get_retention_args(const boost::program_options::variables_map &vm,
+                       bool mandatory, bool all,
+                       std::map<std::string, std::string> *args);
 
 class Schedule {
 public:
@@ -45,7 +45,6 @@ private:
   struct Item {
     std::string interval;
     std::optional<std::string> start_time;
-    std::optional<int> keep;
   };
 
   std::string name;
@@ -71,6 +70,45 @@ private:
 };
 
 std::ostream& operator<<(std::ostream& os, ScheduleList &l);
+
+class RetentionPolicy {
+public:
+  RetentionPolicy() {
+  }
+
+  int parse(json_spirit::mValue &schedule_val);
+  void dump(ceph::Formatter *f);
+
+  friend std::ostream& operator<<(std::ostream& os, RetentionPolicy &p);
+
+private:
+  struct Item {
+    std::string interval = "*";
+    uint64_t count;
+  };
+
+  std::string name;
+  std::list<Item> items;
+};
+
+std::ostream& operator<<(std::ostream& os, RetentionPolicy &p);
+
+class RetentionPolicyList {
+public:
+  RetentionPolicyList() {
+  }
+
+  int parse(const std::string &list);
+  RetentionPolicy *find(const std::string &name);
+  void dump(ceph::Formatter *f);
+
+  friend std::ostream& operator<<(std::ostream& os, RetentionPolicyList &l);
+
+private:
+  std::map<std::string, RetentionPolicy> policies;
+};
+
+std::ostream& operator<<(std::ostream& os, RetentionPolicyList &l);
 
 } // namespace rbd
 

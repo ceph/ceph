@@ -172,18 +172,37 @@ int get_schedule_args(const po::variables_map &vm, bool mandatory,
   return 0;
 }
 
-void add_retention_policy_options(const std::string &name,
-                                  po::options_description *options) {
-  options->add_options()
-    ("keep", po::value<uint64_t>(),
-     ("keep this number of last " + name).c_str());
+void add_retention_options(po::options_description *positional, bool all) {
+  positional->add_options()
+    ("interval", "retention interval");
+  if (all) {
+    positional->add_options()
+      ("count", "retention count");
+  }
 }
 
-int get_retention_policy_args(const po::variables_map &vm,
-                              std::map<std::string, std::string> *args) {
-  if (vm.count("keep")) {
-    
-    (*args)["keep"] = stringify(vm["keep"].as<uint64_t>());
+int get_retention_args(const po::variables_map &vm, bool mandatory,
+                       bool all, std::map<std::string, std::string> *args) {
+  size_t arg_index = 0;
+
+  std::string interval = utils::get_positional_argument(vm, arg_index++);
+  if (interval.empty()) {
+    if (mandatory) {
+      std::cerr << "rbd: missing 'interval' argument" << std::endl;
+      return -EINVAL;
+    }
+    return 0;
+  }
+  (*args)["interval"] = interval;
+
+  if (!all) {
+    return 0;
+  }
+
+  std::string count = utils::get_positional_argument(vm, arg_index++);
+  if (!count.empty()) {
+    // TODO: validate
+    (*args)["count"] = count;
   }
 
   return 0;
@@ -219,10 +238,6 @@ int Schedule::parse(json_spirit::mValue &schedule_val) {
         i.start_time = item["start_time"].get_str();
       }
 
-      if (item["keep"].type() == json_spirit::int_type) {
-        i.keep = item["keep"].get_uint64();
-      }
-
       items.push_back(i);
     }
 
@@ -241,9 +256,6 @@ void Schedule::dump(ceph::Formatter *f) {
     f->dump_string("interval", item.interval);
     f->dump_string("start_time",
                    item.start_time ? *item.start_time : std::string());
-    if (item.keep) {
-      f->dump_unsigned("keep", *item.keep);
-    }
     f->close_section(); // item
   }
   f->close_section(); // items
@@ -255,9 +267,6 @@ std::ostream& operator<<(std::ostream& os, Schedule &s) {
     os << delimiter << "every " << item.interval;
     if (item.start_time) {
       os << " starting at " << *item.start_time;
-    }
-    if (item.keep) {
-      os << " keep " << *item.keep;
     }
     delimiter = ", ";
   }
@@ -369,6 +378,166 @@ std::ostream& operator<<(std::ostream& os, ScheduleList &l) {
       tbl << image_name;
     }
     tbl << ss.str() << TextTable::endrow;
+  }
+
+  os << tbl;
+  return os;
+}
+
+int RetentionPolicy::parse(json_spirit::mValue &retention_val) {
+  if (retention_val.type() != json_spirit::array_type) {
+    std::cerr << "rbd: unexpected JSON received: "
+              << "retention policy is not array" << std::endl;
+    return -EBADMSG;
+  }
+
+  try {
+    for (auto &item_val : retention_val.get_array()) {
+      if (item_val.type() != json_spirit::obj_type) {
+        std::cerr << "rbd: unexpected JSON received: "
+                  << "retention policy item is not object" << std::endl;
+        return -EBADMSG;
+      }
+
+      auto &item = item_val.get_obj();
+
+      Item i;
+      if (item["interval"].type() == json_spirit::str_type) {
+        i.interval = item["interval"].get_str();
+      }
+      if (item["count"].type() == json_spirit::int_type) {
+        i.count = item["count"].get_int();
+      }
+      items.push_back(i);
+    }
+
+  } catch (std::runtime_error &) {
+    std::cerr << "rbd: invalid retention policy JSON received" << std::endl;
+    return -EBADMSG;
+  }
+
+  return 0;
+}
+
+void RetentionPolicy::dump(ceph::Formatter *f) {
+  f->open_array_section("items");
+  for (auto &item : items) {
+    f->open_object_section("item");
+    f->dump_string("interval", item.interval);
+    f->dump_unsigned("count", item.count);
+    f->close_section(); // item
+  }
+  f->close_section(); // items
+}
+
+std::ostream& operator<<(std::ostream& os, RetentionPolicy &p) {
+  std::string delimiter;
+  for (auto &item : p.items) {
+    os << delimiter << "last " << item.count << " every " << item.interval;
+    delimiter = ", ";
+  }
+  return os;
+}
+
+int RetentionPolicyList::parse(const std::string &list) {
+  json_spirit::mValue json_root;
+  if (!json_spirit::read(list, json_root)) {
+    std::cerr << "rbd: invalid schedule list JSON received" << std::endl;
+    return -EBADMSG;
+  }
+
+  try {
+    for (auto &[id, retention_val] : json_root.get_obj()) {
+      if (retention_val.type() != json_spirit::obj_type) {
+        std::cerr << "rbd: unexpected retention policy JSON received: "
+                  << "retention_val is not object" << std::endl;
+        return -EBADMSG;
+      }
+      auto &retention_policy = retention_val.get_obj();
+      if (retention_policy["name"].type() != json_spirit::str_type) {
+        std::cerr << "rbd: unexpected JSON received: "
+                  << "retention policy name is not string" << std::endl;
+        return -EBADMSG;
+      }
+      auto name = retention_policy["name"].get_str();
+
+      if (retention_policy["retention_policy"].type() !=
+          json_spirit::array_type) {
+        std::cerr << "rbd: unexpected JSON received: "
+                  << "retention_policy is not array" << std::endl;
+        return -EBADMSG;
+      }
+
+      RetentionPolicy policy;
+      int r = policy.parse(retention_policy["retention_policy"]);
+      if (r < 0) {
+        return r;
+      }
+      policies[name] = policy;
+    }
+  } catch (std::runtime_error &) {
+    std::cerr << "rbd: invalid JSON received" << std::endl;
+    return -EBADMSG;
+  }
+
+  return 0;
+}
+
+RetentionPolicy *RetentionPolicyList::find(const std::string &name) {
+  auto it = policies.find(name);
+  if (it == policies.end()) {
+    return nullptr;
+  }
+
+  return &it->second;
+}
+
+void RetentionPolicyList::dump(ceph::Formatter *f) {
+  f->open_array_section("retention_policies");
+  for (auto &[name, policy] : policies) {
+    std::string pool_name;
+    std::string namespace_name;
+    std::string image_name;
+
+    int r = parse_schedule_name(name, true, &pool_name, &namespace_name,
+                                &image_name);
+    if (r < 0) {
+      continue;
+    }
+
+    f->open_object_section("retention_policy");
+    f->dump_string("pool", pool_name);
+    f->dump_string("namespace", namespace_name);
+    f->dump_string("image", image_name);
+    policy.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+std::ostream& operator<<(std::ostream& os, RetentionPolicyList &l) {
+  TextTable tbl;
+  tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("IMAGE", TextTable::LEFT, TextTable::LEFT);
+  tbl.define_column("RETENTION POLICY", TextTable::LEFT, TextTable::LEFT);
+
+  for (auto &[name, policy] : l.policies) {
+    std::string pool_name;
+    std::string namespace_name;
+    std::string image_name;
+
+    int r = parse_schedule_name(name, true, &pool_name, &namespace_name,
+                                &image_name);
+    if (r < 0) {
+      continue;
+    }
+
+    std::stringstream ss;
+    ss << policy;
+
+    tbl << pool_name << namespace_name << image_name << ss.str()
+        << TextTable::endrow;
   }
 
   os << tbl;
