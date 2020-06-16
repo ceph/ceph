@@ -13,13 +13,15 @@
 #include "librbd/ImageCtx.h"
 
 class Context;
-class ContextWQ;
 
 using librados::IoCtx;
 
 namespace journal { class Journaler; }
 
 namespace librbd {
+
+namespace asio { struct ContextWQ; }
+
 namespace image {
 
 template <typename ImageCtxT = ImageCtx>
@@ -33,7 +35,8 @@ public:
                                cls::rbd::MirrorImageMode mirror_image_mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               ContextWQ *op_work_queue, Context *on_finish) {
+                               asio::ContextWQ *op_work_queue,
+                               Context *on_finish) {
     return new CreateRequest(config, ioctx, image_name, image_id, size,
                              image_options, create_flags,
                              mirror_image_mode, non_primary_global_image_id,
@@ -95,7 +98,7 @@ private:
                 cls::rbd::MirrorImageMode mirror_image_mode,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
-                ContextWQ *op_work_queue, Context *on_finish);
+                asio::ContextWQ *op_work_queue, Context *on_finish);
 
   const ConfigProxy& m_config;
   IoCtx m_io_ctx;
@@ -118,7 +121,7 @@ private:
   const std::string m_primary_mirror_uuid;
   bool m_negotiate_features = false;
 
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   CephContext *m_cct;

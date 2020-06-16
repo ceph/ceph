@@ -3,10 +3,10 @@
 
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/ObjectCacherWriteback.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcherInterface.h"

@@ -74,7 +74,8 @@ struct ResetRequest<MockTestImageCtx> {
                               const std::string &image_id,
                               const std::string &client_id,
                               const std::string &mirror_uuid,
-                              ContextWQ *op_work_queue, Context *on_finish) {
+                              ContextWQ *op_work_queue,
+                              Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     EXPECT_EQ(librbd::Journal<>::LOCAL_MIRROR_UUID, mirror_uuid);
     s_instance->on_finish = on_finish;
@@ -103,7 +104,7 @@ struct GetInfoRequest<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static GetInfoRequest* create(librados::IoCtx& io_ctx,
-                                ContextWQ* context_wq,
+                                librbd::asio::ContextWQ* context_wq,
                                 const std::string& image_id,
                                 cls::rbd::MirrorImage *mirror_image,
                                 PromotionState *promotion_state,

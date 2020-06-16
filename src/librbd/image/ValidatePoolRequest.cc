@@ -6,9 +6,9 @@
 #include "include/ceph_assert.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -31,7 +31,7 @@ using util::create_async_context_callback;
 
 template <typename I>
 ValidatePoolRequest<I>::ValidatePoolRequest(librados::IoCtx& io_ctx,
-                                            ContextWQ *op_work_queue,
+                                            asio::ContextWQ *op_work_queue,
                                             Context *on_finish)
     : m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
       m_op_work_queue(op_work_queue), m_on_finish(on_finish) {

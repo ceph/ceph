@@ -32,16 +32,17 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/Types.h"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
-class ContextWQ;
 class Finisher;
 class ThreadPool;
 class SafeTimer;
 
 namespace librbd {
 
+  struct AsioEngine;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -51,9 +52,8 @@ namespace librbd {
   template <typename> class Operations;
   template <typename> class PluginRegistry;
 
-  namespace cache {
-  template <typename> class ImageCache;
-  }
+  namespace asio { struct ContextWQ; }
+  namespace cache { template <typename> class ImageCache; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -181,10 +181,12 @@ namespace librbd {
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
+    boost::asio::io_context& io_context;
+
     io::ImageDispatcherInterface *io_image_dispatcher = nullptr;
     io::ObjectDispatcherInterface *io_object_dispatcher = nullptr;
 
-    ContextWQ *op_work_queue;
+    asio::ContextWQ *op_work_queue;
 
     PluginRegistry<ImageCtx>* plugin_registry;
 
@@ -342,9 +344,9 @@ namespace librbd {
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
 
-    static void get_thread_pool_instance(CephContext *cct,
-                                         ThreadPool **thread_pool,
-                                         ContextWQ **op_work_queue);
+    static AsioEngine* get_asio_engine(CephContext* cct);
+    static void get_work_queue(CephContext *cct,
+                               asio::ContextWQ **op_work_queue);
     static void get_timer_instance(CephContext *cct, SafeTimer **timer,
                                    ceph::mutex **timer_lock);
   };

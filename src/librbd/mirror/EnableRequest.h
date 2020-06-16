@@ -14,9 +14,11 @@
 #include <string>
 
 class Context;
-class ContextWQ;
 
 namespace librbd {
+
+namespace asio { struct ContextWQ; }
+
 namespace mirror {
 
 template <typename ImageCtxT = ImageCtx>
@@ -34,7 +36,7 @@ public:
                                const std::string &image_id,
                                cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
-                               bool image_clean, ContextWQ *op_work_queue,
+                               bool image_clean, asio::ContextWQ *op_work_queue,
                                Context *on_finish) {
     return new EnableRequest(io_ctx, image_id, nullptr, mode,
                              non_primary_global_image_id, image_clean,
@@ -79,7 +81,8 @@ private:
   EnableRequest(librados::IoCtx &io_ctx, const std::string &image_id,
                 ImageCtxT* image_ctx, cls::rbd::MirrorImageMode mode,
                 const std::string &non_primary_global_image_id,
-                bool image_clean, ContextWQ *op_work_queue, Context *on_finish);
+                bool image_clean, asio::ContextWQ *op_work_queue,
+                Context *on_finish);
 
   librados::IoCtx &m_io_ctx;
   std::string m_image_id;
@@ -87,7 +90,7 @@ private:
   cls::rbd::MirrorImageMode m_mode;
   std::string m_non_primary_global_image_id;
   bool m_image_clean;
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   CephContext *m_cct = nullptr;

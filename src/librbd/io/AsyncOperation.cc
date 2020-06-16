@@ -3,8 +3,8 @@
 
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/asio/ContextWQ.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rbd

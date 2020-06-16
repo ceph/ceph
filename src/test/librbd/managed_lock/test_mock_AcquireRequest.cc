@@ -28,7 +28,8 @@ template<>
 struct BreakRequest<librbd::MockImageCtx> {
   Context *on_finish = nullptr;
   static BreakRequest *s_instance;
-  static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  static BreakRequest* create(librados::IoCtx& ioctx,
+                              asio::ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,

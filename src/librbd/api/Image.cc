@@ -674,16 +674,15 @@ int Image<I>::deep_copy(I *src, I *dest, bool flatten,
     snap_id_end = src->snap_id;
   }
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  asio::ContextWQ *op_work_queue;
+  ImageCtx::get_work_queue(cct, &op_work_queue);
 
   C_SaferCond cond;
   SnapSeqs snap_seqs;
   deep_copy::ProgressHandler progress_handler{&prog_ctx};
   auto req = DeepCopyRequest<I>::create(
-    src, dest, snap_id_start, snap_id_end, 0U, flatten, boost::none, op_work_queue,
-    &snap_seqs, &progress_handler, &cond);
+    src, dest, snap_id_start, snap_id_end, 0U, flatten, boost::none,
+    op_work_queue, &snap_seqs, &progress_handler, &cond);
   req->send();
   int r = cond.wait();
   if (r < 0) {
@@ -825,9 +824,8 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     // fall-through if trash isn't supported
   }
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  asio::ContextWQ *op_work_queue;
+  ImageCtx::get_work_queue(cct, &op_work_queue);
 
   // might be a V1 image format that cannot be moved to the trash
   // and would not have been listed in the V2 directory -- or the OSDs

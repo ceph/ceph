@@ -27,7 +27,7 @@ struct Traits<MockManagedLockImageCtx> {
 }
 
 struct MockMockManagedLock : public ManagedLock<MockManagedLockImageCtx> {
-  MockMockManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  MockMockManagedLock(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
                  const std::string& oid, librbd::MockImageWatcher *watcher,
                  managed_lock::Mode  mode, bool blacklist_on_break_lock, 
                  uint32_t blacklist_expire_seconds)
@@ -50,7 +50,7 @@ struct BaseRequest {
   Context *on_finish = nullptr;
 
   static T* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
-                   ContextWQ *work_queue, const std::string& oid,
+                   asio::ContextWQ *work_queue, const std::string& oid,
                    const std::string& cookie, Context *on_finish) {
     ceph_assert(!s_requests.empty());
     T* req = s_requests.front();
@@ -71,7 +71,8 @@ template <>
 struct AcquireRequest<MockManagedLockImageCtx> : public BaseRequest<AcquireRequest<MockManagedLockImageCtx> > {
   static AcquireRequest* create(librados::IoCtx& ioctx,
 				MockImageWatcher *watcher,
-                                ContextWQ *work_queue, const std::string& oid,
+                                asio::ContextWQ *work_queue,
+                                const std::string& oid,
                                 const std::string& cookie,
                                 bool exclusive, bool blacklist_on_break_lock,
                                 uint32_t blacklist_expire_seconds,
@@ -97,7 +98,8 @@ struct ReacquireRequest<MockManagedLockImageCtx> : public BaseRequest<ReacquireR
 template <>
 struct ReleaseRequest<MockManagedLockImageCtx> : public BaseRequest<ReleaseRequest<MockManagedLockImageCtx> > {
   static ReleaseRequest* create(librados::IoCtx& ioctx, MockImageWatcher *watcher,
-                                ContextWQ *work_queue, const std::string& oid,
+                                asio::ContextWQ *work_queue,
+                                const std::string& oid,
                                 const std::string& cookie, Context *on_finish) {
     return BaseRequest::create(ioctx, watcher, work_queue, oid, cookie,
                                on_finish);
@@ -120,7 +122,8 @@ struct GetLockerRequest<MockManagedLockImageCtx> {
 
 template <>
 struct BreakRequest<MockManagedLockImageCtx> {
-  static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  static BreakRequest* create(librados::IoCtx& ioctx,
+                              asio::ContextWQ *work_queue,
                               const std::string& oid, const Locker &locker,
                               bool exclusive, bool blacklist_locker,
                               uint32_t blacklist_expire_seconds,
@@ -182,21 +185,21 @@ public:
   }
 
   void expect_acquire_lock(MockImageWatcher &watcher,
-                           ContextWQ *work_queue,
+                           asio::ContextWQ *work_queue,
                            MockAcquireRequest &acquire_request, int r) {
     expect_get_watch_handle(watcher);
     EXPECT_CALL(acquire_request, send())
                   .WillOnce(QueueRequest(&acquire_request, r, work_queue));
   }
 
-  void expect_release_lock(ContextWQ *work_queue,
+  void expect_release_lock(asio::ContextWQ *work_queue,
                            MockReleaseRequest &release_request, int r) {
     EXPECT_CALL(release_request, send())
                   .WillOnce(QueueRequest(&release_request, r, work_queue));
   }
 
   void expect_reacquire_lock(MockImageWatcher& watcher,
-                             ContextWQ *work_queue,
+                             asio::ContextWQ *work_queue,
                              MockReacquireRequest &mock_reacquire_request,
                              int r) {
     EXPECT_CALL(mock_reacquire_request, send())
@@ -205,7 +208,7 @@ public:
 
   void expect_flush_notifies(MockImageWatcher *mock_watcher) {
     EXPECT_CALL(*mock_watcher, flush(_))
-                  .WillOnce(CompleteContext(0, (ContextWQ *)nullptr));
+                  .WillOnce(CompleteContext(0, (asio::ContextWQ *)nullptr));
   }
 
   void expect_post_reacquired_lock_handler(MockImageWatcher& watcher, 

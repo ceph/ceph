@@ -5,11 +5,11 @@
 #include "SetHeadRequest.h"
 #include "SnapshotCreateRequest.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -48,7 +48,8 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *src_image_ctx,
                                             librados::snap_t src_snap_id_start,
                                             librados::snap_t src_snap_id_end,
                                             librados::snap_t dst_snap_id_start,
-                                            bool flatten, ContextWQ *work_queue,
+                                            bool flatten,
+                                            asio::ContextWQ *work_queue,
                                             SnapSeqs *snap_seqs,
                                             Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),

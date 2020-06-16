@@ -3,9 +3,9 @@
 
 #include "librbd/io/ObjectDispatch.h"
 #include "common/dout.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectRequest.h"
 
 #define dout_subsys ceph_subsys_rbd

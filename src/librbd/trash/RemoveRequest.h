@@ -11,13 +11,12 @@
 #include <string>
 
 class Context;
-class ContextWQ;
 
 namespace librbd {
 
-class ProgressContext;
-
 struct ImageCtx;
+class ProgressContext;
+namespace asio { struct ContextWQ; }
 
 namespace trash {
 
@@ -26,14 +25,14 @@ class RemoveRequest {
 public:
   static RemoveRequest* create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
-                               ContextWQ *op_work_queue, bool force,
+                               asio::ContextWQ *op_work_queue, bool force,
                                ProgressContext &prog_ctx, Context *on_finish) {
     return new RemoveRequest(io_ctx, image_id, op_work_queue, force, prog_ctx,
                              on_finish);
   }
 
   static RemoveRequest* create(librados::IoCtx &io_ctx, ImageCtxT *image_ctx,
-                               ContextWQ *op_work_queue, bool force,
+                               asio::ContextWQ *op_work_queue, bool force,
                                ProgressContext &prog_ctx, Context *on_finish) {
     return new RemoveRequest(io_ctx, image_ctx, op_work_queue, force, prog_ctx,
                              on_finish);
@@ -41,16 +40,16 @@ public:
 
 
   RemoveRequest(librados::IoCtx &io_ctx, const std::string &image_id,
-                ContextWQ *op_work_queue, bool force, ProgressContext &prog_ctx,
-                Context *on_finish)
+                asio::ContextWQ *op_work_queue, bool force,
+                ProgressContext &prog_ctx, Context *on_finish)
     : m_io_ctx(io_ctx), m_image_id(image_id), m_op_work_queue(op_work_queue),
       m_force(force), m_prog_ctx(prog_ctx), m_on_finish(on_finish),
       m_cct(reinterpret_cast<CephContext *>(io_ctx.cct())) {
   }
 
   RemoveRequest(librados::IoCtx &io_ctx, ImageCtxT *image_ctx,
-                ContextWQ *op_work_queue, bool force, ProgressContext &prog_ctx,
-                Context *on_finish)
+                asio::ContextWQ *op_work_queue, bool force,
+                ProgressContext &prog_ctx, Context *on_finish)
     : m_io_ctx(io_ctx), m_image_ctx(image_ctx), m_image_id(m_image_ctx->id),
       m_op_work_queue(op_work_queue), m_force(force), m_prog_ctx(prog_ctx),
       m_on_finish(on_finish),
@@ -83,7 +82,7 @@ private:
   librados::IoCtx &m_io_ctx;
   ImageCtxT *m_image_ctx = nullptr;
   std::string m_image_id;
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   bool m_force;
   ProgressContext &m_prog_ctx;
   Context *m_on_finish;

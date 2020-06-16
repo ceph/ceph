@@ -11,8 +11,10 @@
 #include <string>
 
 class Context;
-class ContextWQ;
-namespace librbd { class ImageCtx; }
+namespace librbd {
+class ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -24,7 +26,7 @@ public:
   static OpenLocalImageRequest* create(librados::IoCtx &local_io_ctx,
                                        ImageCtxT **local_image_ctx,
                                        const std::string &local_image_id,
-                                       ContextWQ *work_queue,
+                                       librbd::asio::ContextWQ *work_queue,
                                        Context *on_finish) {
     return new OpenLocalImageRequest(local_io_ctx, local_image_ctx,
                                      local_image_id, work_queue, on_finish);
@@ -33,7 +35,7 @@ public:
   OpenLocalImageRequest(librados::IoCtx &local_io_ctx,
                         ImageCtxT **local_image_ctx,
                         const std::string &local_image_id,
-                        ContextWQ *m_work_queue,
+                        librbd::asio::ContextWQ *work_queue,
                         Context *on_finish);
 
   void send();
@@ -61,7 +63,7 @@ private:
   librados::IoCtx &m_local_io_ctx;
   ImageCtxT **m_local_image_ctx;
   std::string m_local_image_id;
-  ContextWQ *m_work_queue;
+  librbd::asio::ContextWQ *m_work_queue;
   Context *m_on_finish;
 
   cls::rbd::MirrorImage m_mirror_image;

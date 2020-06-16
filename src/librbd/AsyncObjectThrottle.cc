@@ -2,10 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/AsyncObjectThrottle.h"
 #include "common/RWLock.h"
-#include "common/WorkQueue.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 
 namespace librbd
 {

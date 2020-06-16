@@ -4,6 +4,8 @@
 #ifndef CEPH_LIBRBD_JOURNAL_TYPE_TRAITS_H
 #define CEPH_LIBRBD_JOURNAL_TYPE_TRAITS_H
 
+struct ContextWQ;
+
 namespace journal {
 class Future;
 class Journaler;
@@ -18,6 +20,7 @@ struct TypeTraits {
   typedef ::journal::Journaler Journaler;
   typedef ::journal::Future Future;
   typedef ::journal::ReplayEntry ReplayEntry;
+  typedef ::ContextWQ ContextWQ;
 };
 
 } // namespace journal

@@ -4,11 +4,11 @@
 #include "librbd/journal/OpenRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/Utils.h"
 

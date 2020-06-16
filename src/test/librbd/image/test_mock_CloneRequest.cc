@@ -137,7 +137,7 @@ struct CreateRequest<MockTestImageCtx> {
                                cls::rbd::MirrorImageMode mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               ContextWQ *op_work_queue,
+                               asio::ContextWQ *op_work_queue,
                                Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
@@ -162,7 +162,7 @@ struct RemoveRequest<MockTestImageCtx> {
                                const std::string &image_id,
                                bool force, bool from_trash_remove,
                                ProgressContext &prog_ctx,
-                               ContextWQ *op_work_queue,
+                               asio::ContextWQ *op_work_queue,
                                Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

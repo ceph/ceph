@@ -38,7 +38,7 @@ struct GetInfoRequest<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static GetInfoRequest* create(librados::IoCtx& io_ctx,
-                                ContextWQ* context_wq,
+                                librbd::asio::ContextWQ* context_wq,
                                 const std::string& image_id,
                                 cls::rbd::MirrorImage *mirror_image,
                                 PromotionState *promotion_state,

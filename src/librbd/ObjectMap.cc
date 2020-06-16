@@ -5,6 +5,7 @@
 #include "librbd/BlockGuard.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/object_map/RefreshRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
@@ -15,7 +16,6 @@
 #include "librbd/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 
 #include "include/rados/librados.hpp"
 

@@ -7,10 +7,10 @@
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "include/stringify.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
 #include "librbd/managed_lock/Utils.h"
@@ -33,7 +33,7 @@ namespace managed_lock {
 template <typename I>
 AcquireRequest<I>* AcquireRequest<I>::create(librados::IoCtx& ioctx,
                                              Watcher *watcher,
-                                             ContextWQ *work_queue,
+                                             asio::ContextWQ *work_queue,
                                              const string& oid,
                                              const string& cookie,
                                              bool exclusive,
@@ -47,7 +47,8 @@ AcquireRequest<I>* AcquireRequest<I>::create(librados::IoCtx& ioctx,
 
 template <typename I>
 AcquireRequest<I>::AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
-                                  ContextWQ *work_queue, const string& oid,
+                                  asio::ContextWQ *work_queue,
+                                  const string& oid,
                                   const string& cookie, bool exclusive,
                                   bool blacklist_on_break_lock,
                                   uint32_t blacklist_expire_seconds,
@@ -58,7 +59,7 @@ AcquireRequest<I>::AcquireRequest(librados::IoCtx& ioctx, Watcher *watcher,
     m_exclusive(exclusive),
     m_blacklist_on_break_lock(blacklist_on_break_lock),
     m_blacklist_expire_seconds(blacklist_expire_seconds),
-    m_on_finish(new C_AsyncCallback<ContextWQ>(work_queue, on_finish)) {
+    m_on_finish(new C_AsyncCallback<asio::ContextWQ>(work_queue, on_finish)) {
 }
 
 template <typename I>

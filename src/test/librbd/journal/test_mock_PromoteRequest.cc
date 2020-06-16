@@ -96,7 +96,7 @@ public:
 
     EXPECT_CALL(mock_journaler, allocate_tag(456, ContentsEqual(tag_data_bl),
                                              _, _))
-      .WillOnce(WithArg<3>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
+      .WillOnce(WithArg<3>(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL))));
   }
 
   void expect_append_journaler(::journal::MockJournaler &mock_journaler) {
@@ -106,7 +106,7 @@ public:
 
   void expect_future_flush(::journal::MockFuture &mock_future, int r) {
     EXPECT_CALL(mock_future, flush(_))
-                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_future_committed(::journal::MockJournaler &mock_journaler) {
@@ -116,7 +116,7 @@ public:
   void expect_flush_commit_position(::journal::MockJournaler &mock_journaler,
                                     int r) {
     EXPECT_CALL(mock_journaler, flush_commit_position(_))
-                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_start_append(::journal::MockJournaler &mock_journaler) {
@@ -125,13 +125,13 @@ public:
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, stop_append(_))
-                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler,
                                   int r) {
     EXPECT_CALL(mock_journaler, shut_down(_))
-      .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+      .WillOnce(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL)));
   }
 
 };

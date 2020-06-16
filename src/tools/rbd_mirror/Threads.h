@@ -7,23 +7,28 @@
 #include "include/common_fwd.h"
 #include "common/ceph_mutex.h"
 
-class ContextWQ;
 class SafeTimer;
 class ThreadPool;
 
-namespace librbd { struct ImageCtx; }
+namespace librbd {
+struct AsioEngine;
+struct ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-struct Threads {
-  ThreadPool *thread_pool = nullptr;
-  ContextWQ *work_queue = nullptr;
+class Threads {
+private:
+  librbd::AsioEngine* asio_engine = nullptr;
+
+public:
+  librbd::asio::ContextWQ* work_queue = nullptr;
 
   SafeTimer *timer = nullptr;
-  ceph::mutex timer_lock =
-    ceph::make_mutex("Threads::timer_lock");
+  ceph::mutex timer_lock = ceph::make_mutex("Threads::timer_lock");
 
   explicit Threads(CephContext *cct);
   Threads(const Threads&) = delete;

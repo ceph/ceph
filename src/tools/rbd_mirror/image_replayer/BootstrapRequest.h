@@ -14,7 +14,6 @@
 #include <string>
 
 class Context;
-class ContextWQ;
 class SafeTimer;
 
 namespace journal { class CacheManagerHandler; }

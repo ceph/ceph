@@ -4,7 +4,6 @@
 #include "CloseImageRequest.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"

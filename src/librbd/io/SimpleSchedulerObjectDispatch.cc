@@ -3,10 +3,10 @@
 
 #include "librbd/io/SimpleSchedulerObjectDispatch.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"

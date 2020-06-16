@@ -5,7 +5,6 @@
 #define CEPH_RBD_MIRROR_NAMESPACE_REPLAYER_H
 
 #include "common/AsyncOpTracker.h"
-#include "common/WorkQueue.h"
 #include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 

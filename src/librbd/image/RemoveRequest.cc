@@ -11,6 +11,7 @@
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/PreRemoveRequest.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/operation/TrimRequest.h"
 
@@ -322,8 +323,11 @@ void RemoveRequest<I>::send_journal_remove() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_journal_remove>(this);
 
+  typename journal::TypeTraits<I>::ContextWQ* context_wq;
+  Journal<I>::get_work_queue(m_cct, &context_wq);
+
   journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
-    m_ioctx, m_image_id, Journal<>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
+    m_ioctx, m_image_id, Journal<>::IMAGE_CLIENT_ID, context_wq, ctx);
   req->send();
 }
 

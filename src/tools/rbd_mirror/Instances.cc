@@ -3,10 +3,10 @@
 
 #include "include/stringify.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "InstanceWatcher.h"
 #include "Instances.h"
 #include "Threads.h"
