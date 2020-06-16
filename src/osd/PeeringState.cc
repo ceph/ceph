@@ -5369,6 +5369,7 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
   if (!ps->async_recovery_targets.empty()) {
     pg_shard_t auth_log_shard;
     bool history_les_bound = false;
+    // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(auth_log_shard, true, &history_les_bound);
   }
   return transit<WaitLocalBackfillReserved>();
@@ -5445,6 +5446,7 @@ PeeringState::Recovered::Recovered(my_context ctx)
 						 true, &history_les_bound)) {
     ceph_assert(ps->want_acting.size());
   } else if (!ps->async_recovery_targets.empty()) {
+    // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(auth_log_shard, true, &history_les_bound);
   }
 
@@ -5685,6 +5687,7 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     // if so, request pg_temp change to trigger a new interval transition
     pg_shard_t auth_log_shard;
     bool history_les_bound = false;
+    // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(auth_log_shard, false, &history_les_bound, true);
     if (!ps->want_acting.empty() && ps->want_acting != ps->acting) {
       psdout(10) << "Active: got notify from previous acting member "
