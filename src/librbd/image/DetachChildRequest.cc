@@ -73,6 +73,9 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
                              m_parent_spec.pool_id,
                              m_parent_spec.pool_namespace, &m_parent_io_ctx);
   if (r < 0) {
+    if (r == -ENOENT) {
+      r = 0;
+    }
     finish(r);
     return;
   }
@@ -143,7 +146,7 @@ void DetachChildRequest<I>::handle_clone_v2_get_snapshot(int r) {
     }
   }
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     ldout(cct, 5) << "failed to retrieve snapshot: " << cpp_strerror(r)
                   << dendl;
   }
