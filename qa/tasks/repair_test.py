@@ -124,7 +124,7 @@ def repair_test_2(ctx, manager, config, chooser):
         log.info("starting repair test type 2")
         victim_osd = chooser(manager, pool, 0)
         first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
         # create object
         log.info("doing put and setomapval")

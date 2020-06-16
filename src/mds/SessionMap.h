@@ -425,7 +425,7 @@ public:
     birth_time(clock::now()),
     auth_caps(g_ceph_context),
     item_session_list(this),
-    requests(0)  // member_offset passed to front() manually
+    requests(member_offset(MDRequestImpl, item_session_request))
   {
     set_connection(std::move(con));
   }

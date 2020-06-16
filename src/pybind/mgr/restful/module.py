@@ -13,6 +13,7 @@ import threading
 import traceback
 import six
 import socket
+import fcntl
 
 from . import common
 from . import context
@@ -329,8 +330,15 @@ class Module(MgrModule):
             ),
             ssl_context=(cert_fname, pkey_fname),
         )
-
-        self.server.serve_forever()
+        sock_fd_flag = fcntl.fcntl(self.server.socket.fileno(), fcntl.F_GETFD)
+        if not (sock_fd_flag & fcntl.FD_CLOEXEC):
+            self.log.debug("set server socket close-on-exec")
+            fcntl.fcntl(self.server.socket.fileno(), fcntl.F_SETFD, sock_fd_flag | fcntl.FD_CLOEXEC)
+        if self.stop_server:
+            self.log.debug('made server, but stop flag set')
+        else:
+            self.log.debug('made server, serving forever')
+            self.server.serve_forever()
 
 
     def shutdown(self):

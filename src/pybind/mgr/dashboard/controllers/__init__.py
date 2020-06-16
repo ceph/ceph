@@ -590,6 +590,7 @@ class BaseController(object):
     def __init__(self):
         logger.info('Initializing controller: %s -> %s',
                     self.__class__.__name__, self._cp_path_)
+        super(BaseController, self).__init__()
 
     def _has_permissions(self, permissions, scope=None):
         if not self._cp_config['tools.authenticate.on']:

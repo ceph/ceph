@@ -44,13 +44,13 @@ groups:
   - name: osd
     rules:
       - alert: 10% OSDs down
-        expr: (sum(ceph_osd_up) / count(ceph_osd_up)) * 100 <= 90
+        expr: count(ceph_osd_up == 0) / count(ceph_osd_up) * 100 >= 10
         labels:
           severity: critical
           type: ceph_default
         annotations:
           description: |
-            {{ $value | humanize}}% or {{with query "sum(ceph_osd_up)" }}{{ . | first | value }}{{ end }} of {{ with query "count(ceph_osd_up)"}}{{. | first | value }}{{ end }} OSDs are down (>=10%).
+            {{ $value | humanize }}% or {{ with query "count(ceph_osd_up == 0)" }}{{ . | first | value }}{{ end }} of {{ with query "count(ceph_osd_up)" }}{{ . | first | value }}{{ end }} OSDs are down (≥ 10%).
 
             The following OSDs are down:
             {{- range query "(ceph_osd_up * on(ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0" }}
@@ -156,6 +156,7 @@ groups:
     rules:
       - alert: root volume full
         expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100 < 5
+        for: 5m
         labels:
           severity: critical
           type: ceph_default
@@ -186,15 +187,10 @@ groups:
             Node {{ $labels.instance }} experiences packet errors > 1
             packet/s on interface {{ $labels.device }}.
 
-      # predict fs fill-up times
-      - alert: storage filling
+      - alert: storage filling up
         expr: |
-          (
-            (
-              node_filesystem_free_bytes / deriv(node_filesystem_free_bytes[2d])
-              * on(instance) group_left(nodename) node_uname_info
-            ) <= 5
-          ) > 0
+          predict_linear(node_filesystem_free_bytes[2d], 3600 * 24 * 5) *
+          on(instance) group_left(nodename) node_uname_info < 0
         labels:
           severity: warning
           type: ceph_default
@@ -208,7 +204,7 @@ groups:
     rules:
       - alert: pool full
         expr: |
-          ceph_pool_stored / ceph_pool_max_avail
+          ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)
           * on(pool_id) group_right ceph_pool_metadata * 100 > 90
         labels:
           severity: critical
@@ -219,10 +215,9 @@ groups:
       - alert: pool filling up
         expr: |
           (
-            (
-              (ceph_pool_max_avail - ceph_pool_stored) / deriv(ceph_pool_max_avail[2d])
-            ) * on(pool_id) group_right ceph_pool_metadata <= 5
-          ) > 0
+            predict_linear(ceph_pool_stored[2d], 3600 * 24 * 5) >=
+            ceph_pool_max_avail
+          ) * on(pool_id) group_left(name) ceph_pool_metadata
         labels:
           severity: warning
           type: ceph_default

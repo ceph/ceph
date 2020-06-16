@@ -34,21 +34,21 @@ class SubvolumeBase(object):
     def uid(self):
         return self.user_id
 
-    @property
-    def gid(self):
-        return self.group_id
-
-    @property
-    def mode(self):
-        return self.cmode
-
     @uid.setter
     def uid(self, val):
         self.user_id = val
 
+    @property
+    def gid(self):
+        return self.group_id
+
     @gid.setter
     def gid(self, val):
         self.group_id = val
+
+    @property
+    def mode(self):
+        return self.cmode
 
     @mode.setter
     def mode(self, val):
@@ -99,7 +99,7 @@ class SubvolumeBase(object):
         else:
             self.metadata_mgr = MetadataManager(self.fs, self.config_path, 0o640)
 
-    def _set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
+    def set_attrs(self, path, size, isolate_namespace, pool, uid, gid):
         # set size
         if size is not None:
             try:
@@ -130,7 +130,11 @@ class SubvolumeBase(object):
             # layout remains unset and will undesirably change with ancestor's
             # pool layout changes.
             xattr_key = 'ceph.dir.layout.pool'
-            xattr_val = get_ancestor_xattr(self.fs, path, "ceph.dir.layout.pool")
+            xattr_val = None
+            try:
+                self.fs.getxattr(path, 'ceph.dir.layout.pool').decode('utf-8')
+            except cephfs.NoData as e:
+                xattr_val = get_ancestor_xattr(self.fs, os.path.split(path)[0], "ceph.dir.layout.pool")
         if xattr_key and xattr_val:
             try:
                 self.fs.setxattr(path, xattr_key, xattr_val.encode('utf-8'), 0)
@@ -227,3 +231,30 @@ class SubvolumeBase(object):
             self.fs.mkdirs(self.base_path, mode)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
+
+    def info (self):
+        subvolpath = self.metadata_mgr.get_global_option('path')
+        etype = self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE)
+        st = self.fs.statx(subvolpath, cephfs.CEPH_STATX_BTIME | cephfs.CEPH_STATX_SIZE |
+                                       cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID |
+                                       cephfs.CEPH_STATX_MODE | cephfs.CEPH_STATX_ATIME |
+                                       cephfs.CEPH_STATX_MTIME | cephfs.CEPH_STATX_CTIME,
+                                       cephfs.AT_SYMLINK_NOFOLLOW)
+        usedbytes = st["size"]
+        try:
+            nsize = int(self.fs.getxattr(subvolpath, 'ceph.quota.max_bytes').decode('utf-8'))
+        except cephfs.NoData:
+            nsize = 0
+
+        try:
+            data_pool = self.fs.getxattr(subvolpath, 'ceph.dir.layout.pool').decode('utf-8')
+            pool_namespace = self.fs.getxattr(subvolpath, 'ceph.dir.layout.pool_namespace').decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        return {'path': subvolpath, 'type': etype, 'uid': int(st["uid"]), 'gid': int(st["gid"]),
+            'atime': str(st["atime"]), 'mtime': str(st["mtime"]), 'ctime': str(st["ctime"]),
+            'mode': int(st["mode"]), 'data_pool': data_pool, 'created_at': str(st["btime"]),
+            'bytes_quota': "infinite" if nsize == 0 else nsize, 'bytes_used': int(usedbytes),
+            'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
+            'pool_namespace': pool_namespace}

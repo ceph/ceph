@@ -283,7 +283,8 @@ OPTION(mon_scrub_inject_crc_mismatch, OPT_DOUBLE) // probability of injected crc
 OPTION(mon_scrub_inject_missing_keys, OPT_DOUBLE) // probability of injected missing keys [0.0, 1.0]
 OPTION(mon_config_key_max_entry_size, OPT_INT) // max num bytes per config-key entry
 OPTION(mon_sync_timeout, OPT_DOUBLE)
-OPTION(mon_sync_max_payload_size, OPT_U32) // max size for a sync chunk payload (say)
+OPTION(mon_sync_max_payload_size, OPT_SIZE)
+OPTION(mon_sync_max_payload_keys, OPT_INT)
 OPTION(mon_sync_debug, OPT_BOOL) // enable sync-specific debug
 OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE)  // inject N second delay on each get_chunk request
 OPTION(mon_osd_force_trim_to, OPT_INT)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous)
@@ -1088,6 +1089,9 @@ OPTION(bluestore_warn_on_legacy_statfs, OPT_BOOL)
 OPTION(bluestore_log_op_age, OPT_DOUBLE)
 OPTION(bluestore_log_omap_iterator_age, OPT_DOUBLE)
 OPTION(bluestore_log_collection_list_age, OPT_DOUBLE)
+OPTION(bluestore_volume_selection_policy, OPT_STR)
+OPTION(bluestore_volume_selection_reserved_factor, OPT_DOUBLE)
+OPTION(bluestore_volume_selection_reserved, OPT_INT)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
@@ -1352,7 +1356,6 @@ OPTION(rgw_keystone_accepted_admin_roles, OPT_STR) // list of roles allowing an 
 OPTION(rgw_keystone_token_cache_size, OPT_INT)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_revocation_interval, OPT_INT)  // seconds between tokens revocation check
 OPTION(rgw_keystone_verify_ssl, OPT_BOOL) // should we try to verify keystone's ssl
-OPTION(rgw_keystone_implicit_tenants, OPT_BOOL)  // create new users in their own tenants of the same name
 OPTION(rgw_cross_domain_policy, OPT_STR)
 OPTION(rgw_healthcheck_disabling_path, OPT_STR) // path that existence causes the healthcheck to respond 503
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL)  // should we try to use the internal credentials for s3?

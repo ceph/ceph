@@ -9,6 +9,7 @@ overrides:
     index_pool_pg_size: 64
 tasks:
 - cbt:
+    branch: 'nautilus'
     benchmarks:
       cosbench:
         obj_size: [64KB]

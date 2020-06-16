@@ -2934,6 +2934,28 @@ TEST(BufferList, DanglingLastP) {
   EXPECT_EQ(0, ::memcmp("12C", bl.c_str(), 3));
 }
 
+TEST(BufferList, ClaimingTwoUnsharablePtrs) {
+  // two or more consecutive, to be precise. Otherwise the problem
+  // is nonexistent or self-healing.
+  // See: https://tracker.ceph.com/issues/43814.
+  bufferlist to_claim;
+  {
+    bufferptr one(buffer::create_unshareable(3));
+    one.copy_in(0, 3, "ABC");
+    to_claim.push_back(std::move(one));
+
+    bufferptr two(buffer::create_unshareable(3));
+    two.copy_in(0, 3, "123");
+    to_claim.push_back(std::move(two));
+  }
+  bufferlist claimer;
+  // this is supposed to not fail because of destructing wrong bptr:
+  // [ RUN      ] BufferList.ClaimingTwoUnsharablePtrs
+  // *** Error in `./bin/unittest_bufferlist': free(): invalid pointer: 0x00007ffe20f03e20 ***
+  claimer.claim_append(to_claim);
+  EXPECT_EQ(0, ::memcmp("ABC123", claimer.c_str(), 6));
+}
+
 TEST(BufferHash, all) {
   {
     bufferlist bl;

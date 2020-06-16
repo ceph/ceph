@@ -181,7 +181,7 @@ void usage(ostream& out)
 "   --format=[--format plain|json|json-pretty]\n"
 "   -b op_size\n"
 "        set the block size for put/get ops and for write benchmarking\n"
-"   -o object_size\n"
+"   -O object_size\n"
 "        set the object size for put/get ops and for write benchmarking\n"
 "   --max-objects\n"
 "        set the max number of objects for write benchmarking\n"
@@ -3960,7 +3960,7 @@ int main(int argc, const char **argv)
       opts["max-objects"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--offset", (char*)NULL)) {
       opts["offset"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-o", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-O", (char*)NULL)) {
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {
       opts["snap"] = val;

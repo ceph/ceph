@@ -105,7 +105,7 @@ class Alerts(MgrModule):
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_module_option(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']))
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))
         # Do the same for the native options.

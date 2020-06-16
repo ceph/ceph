@@ -1,7 +1,6 @@
 """
 Run rgw roundtrip message tests
 """
-from cStringIO import StringIO
 import base64
 import contextlib
 import logging
@@ -78,8 +77,8 @@ def _config_user(s3tests_conf, section, user):
     s3tests_conf[section].setdefault('user_id', user)
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
-    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.uppercase) for i in xrange(20)))
-    s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)))
+    s3tests_conf[section].setdefault('access_key', ''.join(random.choice(string.ascii_uppercase) for i in range(20)))
+    s3tests_conf[section].setdefault('secret_key', base64.b64encode(os.urandom(40)).decode('ascii'))
 
 @contextlib.contextmanager
 def create_users(ctx, config):
@@ -123,7 +122,7 @@ def create_users(ctx, config):
         yield
     finally:
         for client in config['clients']:
-            for user in users.itervalues():
+            for user in users.values():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 ctx.cluster.only(client).run(
                     args=[
@@ -147,11 +146,11 @@ def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring s3-roundtrip-tests...')
     testdir = teuthology.get_testdir(ctx)
-    for client, properties in config['clients'].iteritems():
+    for client, properties in config['clients'].items():
         s3tests_conf = config['s3tests_conf'][client]
         if properties is not None and 'rgw_server' in properties:
             host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
+            for target, roles in zip(ctx.config['targets'].keys(), ctx.config['roles']):
                 log.info('roles: ' + str(roles))
                 log.info('target: ' + str(target))
                 if properties['rgw_server'] in roles:
@@ -174,17 +173,14 @@ def configure(ctx, config):
                 './bootstrap',
                 ],
             )
-        conf_fp = StringIO()
         conf = dict(
                         s3=s3tests_conf['s3'],
                         roundtrip=s3tests_conf['roundtrip'],
                     )
-        yaml.safe_dump(conf, conf_fp, default_flow_style=False)
         teuthology.write_file(
             remote=remote,
             path='{tdir}/archive/s3roundtrip.{client}.config.yaml'.format(tdir=testdir, client=client),
-            data=conf_fp.getvalue(),
-            )
+            data=yaml.safe_dump(conf, default_flow_style=False))
     yield
 
 
@@ -198,7 +194,7 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    for client, client_config in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf = teuthology.get_file(remote, '{tdir}/archive/s3roundtrip.{client}.config.yaml'.format(tdir=testdir, client=client))
         args = [

@@ -1,3 +1,5 @@
+import json
+
 from teuthology.orchestra.run import CommandFailedError
 
 from unittest import case
@@ -31,6 +33,11 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
+    def _check_pool_application_metadata_key_value(self, pool, app, key, value):
+        output = self.fs.mon_manager.raw_cluster_cmd(
+            'osd', 'pool', 'application', 'get', pool, app, key)
+        self.assertEqual(str(output.strip()), value)
+
     def test_add_data_pool_root(self):
         """
         That a new data pool can be added and used for the root directory.
@@ -39,6 +46,19 @@ class TestAdminCommands(CephFSTestCase):
         p = self.fs.add_data_pool("foo")
         self.fs.set_dir_layout(self.mount_a, ".", FileLayout(pool=p))
 
+    def test_add_data_pool_application_metadata(self):
+        """
+        That the application metadata set on a newly added data pool is as expected.
+        """
+        pool_name = "foo"
+        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        mon_cmd('osd', 'pool', 'create', pool_name, str(self.fs.pgs_per_fs_pool))
+        # Check whether https://tracker.ceph.com/issues/43061 is fixed
+        mon_cmd('osd', 'pool', 'application', 'enable', pool_name, 'cephfs')
+        self.fs.add_data_pool(pool_name, create=False)
+        self._check_pool_application_metadata_key_value(
+            pool_name, 'cephfs', 'data', self.fs.name)
+
     def test_add_data_pool_subdir(self):
         """
         That a new data pool can be added and used for a sub-directory.
@@ -46,6 +66,14 @@ class TestAdminCommands(CephFSTestCase):
 
         p = self.fs.add_data_pool("foo")
         self.mount_a.run_shell(["mkdir", "subdir"])
+        self.fs.set_dir_layout(self.mount_a, "subdir", FileLayout(pool=p))
+
+    def test_add_data_pool_non_alphamueric_name_as_subdir(self):
+        """
+        That a new data pool with non-alphanumeric name can be added and used for a sub-directory.
+        """
+        p = self.fs.add_data_pool("I-am-data_pool00.")
+        self.mount_a.run_shell("mkdir subdir")
         self.fs.set_dir_layout(self.mount_a, "subdir", FileLayout(pool=p))
 
     def test_add_data_pool_ec(self):
@@ -112,6 +140,24 @@ class TestAdminCommands(CephFSTestCase):
                 raise
         else:
             raise RuntimeError("expected failure")
+
+    def test_fs_new_pool_application_metadata(self):
+        """
+        That the application metadata set on the pools of a newly created filesystem are as expected.
+        """
+        self.fs.delete_all_filesystems()
+        fs_name = "test_fs_new_pool_application"
+        keys = ['metadata', 'data']
+        pool_names = [fs_name+'-'+key for key in keys]
+        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        for p in pool_names:
+            mon_cmd('osd', 'pool', 'create', p, str(self.fs.pgs_per_fs_pool))
+            mon_cmd('osd', 'pool', 'application', 'enable', p, 'cephfs')
+        mon_cmd('fs', 'new', fs_name, pool_names[0], pool_names[1])
+        for i in range(2):
+            self._check_pool_application_metadata_key_value(
+                pool_names[i], 'cephfs', keys[i], fs_name)
+
 
 class TestConfigCommands(CephFSTestCase):
     """

@@ -1597,7 +1597,7 @@ std::vector<Option> get_global_options() {
     .add_service("mgr"),
 
     Option("mon_pg_warn_min_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(30)
+    .set_default(0)
     .add_service("mgr")
     .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
@@ -1738,6 +1738,13 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .add_service("mon")
     .set_description("issue POOL_PG_NUM_NOT_POWER_OF_TWO warning if pool has a non-power-of-two pg_num value"),
+
+    Option("mon_warn_on_pool_no_redundancy", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("Issue a health warning if any pool is configured with no replicas")
+    .add_see_also("osd_pool_default_size")
+    .add_see_also("osd_pool_default_min_size"),
 
     Option("mon_warn_on_misplaced", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -1940,6 +1947,11 @@ std::vector<Option> get_global_options() {
     .set_default(1_M)
     .add_service("mon")
     .set_description("target max message payload for mon sync"),
+
+    Option("mon_sync_max_payload_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(2000)
+    .add_service("mon")
+    .set_description("target max keys in message payload for mon sync"),
 
     Option("mon_sync_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -4342,8 +4354,9 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description(""),
+    .set_default(false)
+    .set_description("Enabled buffered IO for bluefs reads.")
+    .set_long_description("When this option is enabled, bluefs will in some cases perform buffered reads.  This allows the kernel page cache to act as a secondary cache for things like RocksDB compaction.  For example, if the rocksdb block cache isn't large enough to hold blocks from the compressed SST files itself, they can be read from page cache instead of from the disk.  This option previously was enabled by default, however in some test cases it appears to cause excessive swap utilization by the linux kernel and a large negative performance impact after several hours of run time.  Please exercise caution when enabling."),
 
     Option("bluefs_sync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -4929,6 +4942,22 @@ std::vector<Option> get_global_options() {
     Option("bluestore_log_collection_list_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60)
     .set_description("log collection list operation if it's slower than this age (seconds)"),
+
+    Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("rocksdb_original")
+    .set_enum_allowed({ "rocksdb_original", "use_some_extra" })
+    .set_description("Determines bluefs volume selection policy")
+    .set_long_description("Determines bluefs volume selection policy. 'use_some_extra' policy allows to override RocksDB level granularity and put high level's data to faster device even when the level doesn't completely fit there"),
+
+    Option("bluestore_volume_selection_reserved_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+      .set_flag(Option::FLAG_STARTUP)
+      .set_default(2.0)
+      .set_description("DB level size multiplier. Determines amount of space at DB device to bar from the usage when 'use some extra' policy is in action. Reserved size is determined as sum(L_max_size[0], L_max_size[L-1]) + L_max_size[L] * this_factor"),
+
+    Option("bluestore_volume_selection_reserved", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+      .set_flag(Option::FLAG_STARTUP)
+      .set_default(0)
+      .set_description("Space reserved at DB device and not allowed for 'use some extra' policy usage. Overrides 'bluestore_volume_selection_reserved_factor' setting and introduces straightforward limit."),
 
     // -----------------------------------------
     // kstore
@@ -5968,12 +5997,13 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Should RGW verify the Keystone server SSL certificate."),
 
-    Option("rgw_keystone_implicit_tenants", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    Option("rgw_keystone_implicit_tenants", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("false")
+    .set_enum_allowed( { "false", "true", "swift", "s3", "both", "0", "1", "none" } )
     .set_description("RGW Keystone implicit tenants creation")
     .set_long_description(
         "Implicitly create new users in their own tenant with the same name when "
-        "authenticating via Keystone."),
+        "authenticating via Keystone.  Can be limited to s3 or swift only."),
 
     Option("rgw_cross_domain_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("<allow-access-from domain=\"*\" secure=\"false\" />")
@@ -8155,6 +8185,18 @@ std::vector<Option> get_mds_options() {
      .set_default(0)
      .set_description("threshold for cache usage to disallow \"dump cache\" operation to file")
      .set_long_description("Disallow MDS from dumping caches to file via \"dump cache\" command if cache usage exceeds this threshold."),
+
+    Option("mds_max_snaps_per_dir", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(100)
+     .set_min_max(0, 4096)
+     .set_flag(Option::FLAG_RUNTIME)
+     .set_description("max snapshots per directory")
+     .set_long_description("maximum number of snapshots that can be created per directory"),
+
+    Option("mds_task_status_update_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+     .set_default(2.0)
+     .set_description("task status update interval to manager")
+     .set_long_description("interval (in seconds) for sending mds task status to ceph manager"),
   });
 }
 
@@ -8322,7 +8364,7 @@ std::vector<Option> get_mds_client_options() {
     .set_flag(Option::FLAG_STARTUP),
 
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description("big_writes is deprecated in libfuse 3.0.0"),
 
     Option("fuse_max_write", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)

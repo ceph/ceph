@@ -1240,13 +1240,37 @@ void ProtocolV1::discard_out_queue() {
   write_in_progress = false;
 }
 
-void ProtocolV1::reset_recv_state() {
+void ProtocolV1::reset_security()
+{
+  ldout(cct, 5) << __func__ << dendl;
+
   // clean up state internal variables and states
   if (state == CONNECTING_SEND_CONNECT_MSG) {
     if (authorizer) {
       delete authorizer;
     }
     authorizer = nullptr;
+  }
+}
+
+void ProtocolV1::reset_recv_state() {
+  ldout(cct, 5) << __func__ << dendl;
+
+  // execute in the same thread that uses the `session_security`.
+  // We need to do the warp because holding `write_lock` is not
+  // enough as `write_event()` releases it just before calling
+  // `write_message()`. `submit_to()` here is NOT blocking.
+  if (!connection->center->in_thread()) {
+    connection->center->submit_to(connection->center->get_id(), [this] {
+      ldout(cct, 5) << "reset_recv_state (warped) reseting security handlers"
+                    << dendl;
+      // Possibly unnecessary. See the comment in `deactivate_existing`.
+      std::lock_guard<std::mutex> l(connection->lock);
+      std::lock_guard<std::mutex> wl(connection->write_lock);
+      reset_security();
+    }, /* nowait = */true);
+  } else {
+    reset_security();
   }
 
   // clean read and write callbacks

@@ -3,7 +3,6 @@ Thrash mds by simulating failures
 """
 import logging
 import contextlib
-import ceph_manager
 import itertools
 import random
 import signal
@@ -14,6 +13,7 @@ from gevent.greenlet import Greenlet
 from gevent.event import Event
 from teuthology import misc as teuthology
 
+from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 
 log = logging.getLogger(__name__)
@@ -255,7 +255,7 @@ class MDSThrasher(Greenlet):
     def kill_mds(self, mds):
         if self.config.get('powercycle'):
             (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
-                         remotes.iterkeys())
+                         remotes.keys())
             self.log('kill_mds on mds.{m} doing powercycle of {s}'.
                      format(m=mds, s=remote.name))
             self._assert_ipmi(remote)
@@ -276,7 +276,7 @@ class MDSThrasher(Greenlet):
         """
         if self.config.get('powercycle'):
             (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
-                         remotes.iterkeys())
+                         remotes.keys())
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.
                      format(m=mds, s=remote.name))
             self._assert_ipmi(remote)
@@ -291,10 +291,11 @@ class MDSThrasher(Greenlet):
             status = self.fs.status()
             max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
             ranks = list(status.get_ranks(self.fs.id))
-            stopping = filter(lambda info: "up:stopping" == info['state'], ranks)
-            actives = filter(lambda info: "up:active" == info['state'] and "laggy_since" not in info, ranks)
+            stopping = sum(1 for _ in ranks if "up:stopping" == _['state'])
+            actives = sum(1 for _ in ranks
+                          if "up:active" == _['state'] and "laggy_since" not in _)
 
-            if not bool(self.config.get('thrash_while_stopping', False)) and len(stopping) > 0:
+            if not bool(self.config.get('thrash_while_stopping', False)) and stopping > 0:
                 if itercount % 5 == 0:
                     self.log('cluster is considered unstable while MDS are in up:stopping (!thrash_while_stopping)')
             else:
@@ -306,13 +307,14 @@ class MDSThrasher(Greenlet):
                             return status
                     except:
                         pass # no rank present
-                    if len(actives) >= max_mds:
+                    if actives >= max_mds:
                         # no replacement can occur!
-                        self.log("cluster has %d actives (max_mds is %d), no MDS can replace rank %d".format(len(actives), max_mds, rank))
+                        self.log("cluster has {actives} actives (max_mds is {max_mds}), no MDS can replace rank {rank}".format(
+                            actives=actives, max_mds=max_mds, rank=rank))
                         return status
                 else:
-                    if len(actives) == max_mds:
-                        self.log('mds cluster has {count} alive and active, now stable!'.format(count = len(actives)))
+                    if actives == max_mds:
+                        self.log('mds cluster has {count} alive and active, now stable!'.format(count = actives))
                         return status, None
             if itercount > 300/2: # 5 minutes
                  raise RuntimeError('timeout waiting for cluster to stabilize')
@@ -349,7 +351,7 @@ class MDSThrasher(Greenlet):
 
             if random.random() <= self.thrash_max_mds:
                 max_mds = status.get_fsmap(self.fs.id)['mdsmap']['max_mds']
-                options = range(1, max_mds)+range(max_mds+1, self.max_mds+1)
+                options = list(range(1, max_mds))+list(range(max_mds+1, self.max_mds+1))
                 if len(options) > 0:
                     sample = random.sample(options, 1)
                     new_max_mds = sample[0]
@@ -492,7 +494,7 @@ def task(ctx, config):
     log.info('mds thrasher using random seed: {seed}'.format(seed=seed))
     random.seed(seed)
 
-    (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.iterkeys()
+    (first,) = ctx.cluster.only('mds.{_id}'.format(_id=mdslist[0])).remotes.keys()
     manager = ceph_manager.CephManager(
         first, ctx=ctx, logger=log.getChild('ceph_manager'),
     )

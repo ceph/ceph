@@ -59,7 +59,7 @@ def init():
 
     keys = []
     values = []
-    for x in xrange(20000):
+    for x in range(20000):
         keys.append(str(x))
         values.append(buffer)
 

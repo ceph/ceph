@@ -19,8 +19,8 @@ class TestPoolPerm(CephFSTestCase):
                 if {check_read}:
                     ret = os.read(fd, 1024)
                 else:
-                    os.write(fd, 'content')
-            except OSError, e:
+                    os.write(fd, b'content')
+            except OSError as e:
                 if e.errno != errno.EPERM:
                     raise
             else:

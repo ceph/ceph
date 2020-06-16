@@ -247,6 +247,12 @@ void LeaderWatcher<I>::handle_wait_for_tasks() {
 }
 
 template <typename I>
+bool LeaderWatcher<I>::is_blacklisted() const {
+  std::lock_guard locker{m_lock};
+  return m_blacklisted;
+}
+
+template <typename I>
 bool LeaderWatcher<I>::is_leader() const {
   Mutex::Locker locker(m_lock);
 
@@ -1080,7 +1086,7 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
     auto iter = bl.cbegin();
     decode(notify_message, iter);
   } catch (const buffer::error &err) {
-    derr << ": error decoding image notification: " << err.what() << dendl;
+    derr << "error decoding image notification: " << err.what() << dendl;
     ctx->complete(0);
     return;
   }
@@ -1092,9 +1098,13 @@ template <typename I>
 void LeaderWatcher<I>::handle_rewatch_complete(int r) {
   dout(5) << "r=" << r << dendl;
 
-  if (r != -EBLACKLISTED) {
-    m_leader_lock->reacquire_lock(nullptr);
+  if (r == -EBLACKLISTED) {
+    dout(1) << "blacklisted detected" << dendl;
+    m_blacklisted = true;
+    return;
   }
+
+  m_leader_lock->reacquire_lock(nullptr);
 }
 
 template <typename I>

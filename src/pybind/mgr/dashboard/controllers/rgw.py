@@ -10,7 +10,8 @@ from . import ApiController, BaseController, RESTController, Endpoint, \
 from .. import logger
 from ..exceptions import DashboardException
 from ..rest_client import RequestException
-from ..security import Scope
+from ..security import Scope, Permission
+from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
 
@@ -188,6 +189,13 @@ class RgwUser(RgwRESTController):
                 if user['tenant'] else user['user_id']
         return user
 
+    @staticmethod
+    def _keys_allowed():
+        permissions = AuthManager.get_user(JwtManager.get_username()).permissions_dict()
+        edit_permissions = [Permission.CREATE, Permission.UPDATE, Permission.DELETE]
+        return Scope.RGW in permissions and Permission.READ in permissions[Scope.RGW] \
+            and len(set(edit_permissions).intersection(set(permissions[Scope.RGW]))) > 0
+
     def list(self):
         users = []
         marker = None
@@ -208,6 +216,9 @@ class RgwUser(RgwRESTController):
 
     def get(self, uid):
         result = self.proxy('GET', 'user', {'uid': uid})
+        if not self._keys_allowed():
+            del result['keys']
+            del result['swift_keys']
         return self._append_uid(result)
 
     @Endpoint()

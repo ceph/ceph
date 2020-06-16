@@ -10,7 +10,10 @@ how the functionality responds to damaged metadata.
 import json
 
 import logging
+import six
+
 from collections import namedtuple
+from io import BytesIO
 from textwrap import dedent
 
 from teuthology.orchestra.run import CommandFailedError
@@ -31,9 +34,10 @@ class TestForwardScrub(CephFSTestCase):
         """
         Read a ceph-encoded string from a rados xattr
         """
-        output = self.fs.rados(["getxattr", obj, attr], pool=pool)
+        output = self.fs.rados(["getxattr", obj, attr], pool=pool,
+                               stdout_data=BytesIO())
         strlen = struct.unpack('i', output[0:4])[0]
-        return output[4:(4 + strlen)]
+        return six.ensure_str(output[4:(4 + strlen)], encoding='ascii')
 
     def _get_paths_to_ino(self):
         inos = {}
@@ -202,7 +206,7 @@ class TestForwardScrub(CephFSTestCase):
         inotable_dict = {}
         for rank in ranks:
             inotable_oid = "mds{rank:d}_".format(rank=rank) + "inotable"
-            print "Trying to fetch inotable object: " + inotable_oid
+            print("Trying to fetch inotable object: " + inotable_oid)
 
             #self.fs.get_metadata_object("InoTable", "mds0_inotable")
             inotable_raw = self.fs.get_metadata_object_raw(inotable_oid)
@@ -248,7 +252,7 @@ class TestForwardScrub(CephFSTestCase):
                               "--inode={0}".format(inos["./file3_sixmegs"]), "summary"], 0)
 
         # Revert to old inotable.
-        for key, value in inotable_copy.iteritems():
+        for key, value in inotable_copy.items():
            self.fs.put_metadata_object_raw(key, value)
 
         self.mds_cluster.mds_restart()

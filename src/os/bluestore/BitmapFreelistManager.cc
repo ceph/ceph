@@ -111,11 +111,11 @@ int BitmapFreelistManager::expand(uint64_t new_size, KeyValueDB::Transaction txn
 
   uint64_t blocks0 = size / bytes_per_block;
   if (blocks0 / blocks_per_key * blocks_per_key != blocks0) {
-    blocks0 = (blocks / blocks_per_key + 1) * blocks_per_key;
+    blocks0 = (blocks0 / blocks_per_key + 1) * blocks_per_key;
     dout(10) << __func__ << " rounding blocks up from 0x" << std::hex << size
 	     << " to 0x" << (blocks0 * bytes_per_block)
 	     << " (0x" << blocks0 << " blocks)" << std::dec << dendl;
-    // reset past-eof blocks to unallocated
+    // reset previous past-eof blocks to unallocated
     _xor(size, blocks0 * bytes_per_block - size, txn);
   }
 

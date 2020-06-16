@@ -146,7 +146,7 @@ describe('RbdListComponent', () => {
       component.images = images;
       refresh({ executing_tasks: [], finished_tasks: [] });
       spyOn(rbdService, 'list').and.callFake(() =>
-        of([{ poool_name: 'rbd', status: 1, value: images }])
+        of([{ pool_name: 'rbd', status: 1, value: images }])
       );
       fixture.detectChanges();
     });

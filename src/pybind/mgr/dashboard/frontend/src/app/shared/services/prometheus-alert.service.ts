@@ -3,7 +3,11 @@ import { Injectable } from '@angular/core';
 import * as _ from 'lodash';
 
 import { PrometheusService } from '../api/prometheus.service';
-import { AlertmanagerAlert, PrometheusCustomAlert } from '../models/prometheus-alerts';
+import {
+  AlertmanagerAlert,
+  PrometheusCustomAlert,
+  PrometheusRule
+} from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 
 @Injectable({
@@ -12,13 +16,14 @@ import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 export class PrometheusAlertService {
   private canAlertsBeNotified = false;
   alerts: AlertmanagerAlert[] = [];
+  rules: PrometheusRule[] = [];
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
     private prometheusService: PrometheusService
   ) {}
 
-  refresh() {
+  getAlerts() {
     this.prometheusService.ifAlertmanagerConfigured(() => {
       this.prometheusService.getAlerts().subscribe(
         (alerts) => this.handleAlerts(alerts),
@@ -29,6 +34,26 @@ export class PrometheusAlertService {
         }
       );
     });
+  }
+
+  getRules() {
+    this.prometheusService.ifPrometheusConfigured(() => {
+      this.prometheusService.getRules('alerting').subscribe((groups) => {
+        this.rules = groups['groups'].reduce((acc, group) => {
+          return acc.concat(
+            group.rules.map((rule) => {
+              rule.group = group.name;
+              return rule;
+            })
+          );
+        }, []);
+      });
+    });
+  }
+
+  refresh() {
+    this.getAlerts();
+    this.getRules();
   }
 
   private handleAlerts(alerts: AlertmanagerAlert[]) {

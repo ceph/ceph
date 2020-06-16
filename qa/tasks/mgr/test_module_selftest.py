@@ -5,7 +5,8 @@ import errno
 import logging
 from teuthology.exceptions import CommandFailedError
 
-from tasks.mgr.mgr_test_case import MgrTestCase
+from .mgr_test_case import MgrTestCase
+
 
 log = logging.getLogger(__name__)
 
@@ -50,8 +51,9 @@ class TestModuleSelftest(MgrTestCase):
     def test_diskprediction_local(self):
         self._selftest_plugin("diskprediction_local")
 
-    def test_diskprediction_cloud(self):
-        self._selftest_plugin("diskprediction_cloud")
+    # Not included in qa/packages/packages.yaml
+    #def test_diskprediction_cloud(self):
+    #    self._selftest_plugin("diskprediction_cloud")
 
     def test_telegraf(self):
         self._selftest_plugin("telegraf")

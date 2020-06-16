@@ -277,7 +277,7 @@ void sync_fs(BlueFS &fs)
     while (1) {
       if (writes_done == true)
         break;
-      fs.sync_metadata();
+      fs.sync_metadata(false);
       sleep(1);
     }
 }
@@ -439,10 +439,10 @@ TEST(BlueFS, test_simple_compaction_sync) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
-	  fs.flush_log();
+	  fs.sync_metadata(false);
        }
        ASSERT_EQ(0, fs.rmdir(dir));
-       fs.flush_log();
+       fs.sync_metadata(false);
     }
   }
   fs.compact_log();
@@ -492,10 +492,10 @@ TEST(BlueFS, test_simple_compaction_async) {
           string file = "file.";
 	  file.append(to_string(j));
           fs.unlink(dir, file);
-	  fs.flush_log();
+	  fs.sync_metadata(false);
        }
        ASSERT_EQ(0, fs.rmdir(dir));
-       fs.flush_log();
+       fs.sync_metadata(false);
     }
   }
   fs.compact_log();

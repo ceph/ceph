@@ -185,7 +185,7 @@ export class OsdListComponent implements OnInit {
       },
       {
         prop: 'stats_history.in_bytes',
-        name: this.i18n('Writes bytes'),
+        name: this.i18n('Write bytes'),
         cellTransformation: CellTemplate.sparkline
       },
       {

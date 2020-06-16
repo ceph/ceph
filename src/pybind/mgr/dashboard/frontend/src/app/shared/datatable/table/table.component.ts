@@ -52,6 +52,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   executingTpl: TemplateRef<any>;
   @ViewChild('classAddingTpl')
   classAddingTpl: TemplateRef<any>;
+  @ViewChild('mapTpl')
+  mapTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -104,6 +106,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   @Input()
   autoSave = true;
+
+  // Enable this in order to search through the JSON of any used object.
+  @Input()
+  searchableObjects = false;
 
   // Only needed to set if the classAddingTpl is used
   @Input()
@@ -319,7 +325,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     // https://github.com/swimlane/ngx-datatable/issues/193#issuecomment-329144543
     if (this.table && this.table.element.clientWidth !== this.currentWidth) {
       this.currentWidth = this.table.element.clientWidth;
+      // Recalculate the sizes of the grid.
       this.table.recalculate();
+      // Mark the datatable as changed, Angular's change-detection will
+      // do the rest for us => the grid will be redrawn.
+      // Note, the ChangeDetectorRef variable is private, so we need to
+      // use this workaround to access it and make TypeScript happy.
+      const cdRef = _.get(this.table, 'cd');
+      cdRef.markForCheck();
     }
   }
 
@@ -331,6 +344,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.perSecond = this.perSecondTpl;
     this.cellTemplates.executing = this.executingTpl;
     this.cellTemplates.classAdding = this.classAddingTpl;
+    this.cellTemplates.map = this.mapTpl;
   }
 
   useCustomClass(value: any): string {
@@ -537,6 +551,15 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
           } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
             cellValue = cellValue.toString();
           }
+
+          if (_.isObjectLike(cellValue)) {
+            if (this.searchableObjects) {
+              cellValue = JSON.stringify(cellValue);
+            } else {
+              return false;
+            }
+          }
+
           return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
         }).length > 0
       );

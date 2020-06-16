@@ -176,6 +176,97 @@ describe('RgwUserFormComponent', () => {
     }));
   });
 
+  describe('max buckets', () => {
+    it('disable creation (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', -1, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: -1,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('disable creation (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', -1, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: -1,
+        suspended: false
+      });
+    });
+
+    it('unlimited buckets (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', 0, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 0,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('unlimited buckets (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', 0, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 0,
+        suspended: false
+      });
+    });
+
+    it('custom (create)', () => {
+      spyOn(rgwUserService, 'create');
+      formHelper.setValue('max_buckets_mode', 1, true);
+      formHelper.setValue('max_buckets', 100, true);
+      component.onSubmit();
+      expect(rgwUserService.create).toHaveBeenCalledWith({
+        access_key: '',
+        display_name: null,
+        email: '',
+        generate_key: true,
+        max_buckets: 100,
+        secret_key: '',
+        suspended: false,
+        uid: null
+      });
+    });
+
+    it('custom (edit)', () => {
+      spyOn(rgwUserService, 'update');
+      component.editing = true;
+      formHelper.setValue('max_buckets_mode', 1, true);
+      formHelper.setValue('max_buckets', 100, true);
+      component.onSubmit();
+      expect(rgwUserService.update).toHaveBeenCalledWith(null, {
+        display_name: null,
+        email: null,
+        max_buckets: 100,
+        suspended: false
+      });
+    });
+  });
+
   describe('submit form', () => {
     let notificationService: NotificationService;
 

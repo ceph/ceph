@@ -480,7 +480,7 @@ function TEST_auto_repair_bluestore_failed() {
     grep scrub_finish $dir/osd.${primary}.log
     grep -q "scrub_finish.*still present after re-scrub" $dir/osd.${primary}.log || return 1
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).*+failed_repair" || return 1
+    ceph pg dump pgs | grep -q "^${pgid}.*+failed_repair" || return 1
 
     # Verify - obj1 should be back
     # Restarted osd get $ceph_osd_args passed
@@ -495,7 +495,7 @@ function TEST_auto_repair_bluestore_failed() {
     sleep 2
 
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).* active+clean " || return 1
+    ceph pg dump pgs | grep -q "^${pgid}.* active+clean " || return 1
     grep scrub_finish $dir/osd.${primary}.log
 
     # Tear down
@@ -550,7 +550,7 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     flush_pg_stats
     grep -q "scrub_finish.*present with no repair possible" $dir/osd.${primary}.log || return 1
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).*+failed_repair" || return 1
+    ceph pg dump pgs | grep -q "^${pgid}.*+failed_repair" || return 1
 
     # Tear down
     teardown $dir || return 1
@@ -600,13 +600,14 @@ function TEST_repair_stats() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'
@@ -673,13 +674,14 @@ function TEST_repair_stats_ec() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'

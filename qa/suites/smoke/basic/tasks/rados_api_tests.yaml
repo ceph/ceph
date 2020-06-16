@@ -15,6 +15,7 @@ tasks:
       - \(TOO_FEW_PGS\)
       - reached quota
       - but it is still running
+      - slow request
     conf:
       mon:
         mon warn on pool no app: false

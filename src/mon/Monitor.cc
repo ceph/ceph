@@ -1149,6 +1149,19 @@ void Monitor::bootstrap()
 	    << messenger->get_myaddrs()
 	    << ", monmap is " << monmap->get_addrs(newrank) << ", respawning"
 	    << dendl;
+
+    if (monmap->get_epoch()) {
+      // store this map in temp mon_sync location so that we use it on
+      // our next startup
+      derr << " stashing newest monmap " << monmap->get_epoch()
+	   << " for next startup" << dendl;
+      bufferlist bl;
+      monmap->encode(bl, -1);
+      auto t(std::make_shared<MonitorDBStore::Transaction>());
+      t->put("mon_sync", "temp_newer_monmap", bl);
+      store->apply_transaction(t);
+    }
+
     respawn();
   }
   if (newrank != rank) {
@@ -1628,8 +1641,11 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
   MMonSync *reply = new MMonSync(MMonSync::OP_CHUNK, sp.cookie);
   auto tx(std::make_shared<MonitorDBStore::Transaction>());
 
-  int left = g_conf()->mon_sync_max_payload_size;
-  while (sp.last_committed < paxos->get_version() && left > 0) {
+  int bytes_left = g_conf()->mon_sync_max_payload_size;
+  int keys_left = g_conf()->mon_sync_max_payload_keys;
+  while (sp.last_committed < paxos->get_version() &&
+	 bytes_left > 0 &&
+	 keys_left > 0) {
     bufferlist bl;
     sp.last_committed++;
 
@@ -1637,14 +1653,15 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
     ceph_assert(err == 0);
 
     tx->put(paxos->get_name(), sp.last_committed, bl);
-    left -= bl.length();
+    bytes_left -= bl.length();
+    --keys_left;
     dout(20) << __func__ << " including paxos state " << sp.last_committed
 	     << dendl;
   }
   reply->last_committed = sp.last_committed;
 
-  if (sp.full && left > 0) {
-    sp.synchronizer->get_chunk_tx(tx, left);
+  if (sp.full && bytes_left > 0 && keys_left > 0) {
+    sp.synchronizer->get_chunk_tx(tx, bytes_left, keys_left);
     sp.last_key = sp.synchronizer->get_last_key();
     reply->last_key = sp.last_key;
   }
@@ -2287,21 +2304,11 @@ void Monitor::collect_metadata(Metadata *m)
   string devname = store->get_devname();
   set<string> devnames;
   get_raw_devices(devname, &devnames);
-  (*m)["devices"] = stringify(devnames);
-  string devids;
-  for (auto& devname : devnames) {
-    string err;
-    string id = get_device_id(devname, &err);
-    if (id.size()) {
-      if (!devids.empty()) {
-	devids += ",";
-      }
-      devids += devname + "=" + id;
-    } else {
-      derr << "failed to get devid for " << devname << ": " << err << dendl;
-    }
+  map<string,string> errs;
+  get_device_metadata(devnames, m, &errs);
+  for (auto& i : errs) {
+    dout(1) << __func__ << " " << i.first << ": " << i.second << dendl;
   }
-  (*m)["device_ids"] = devids;
 }
 
 void Monitor::finish_election()
@@ -3016,8 +3023,25 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
       ss << "\n";
       for (auto& p : service_map.services) {
+        const std::string &service = p.first;
+        // filter out normal ceph entity types
+        if (ServiceMap::is_normal_ceph_entity(service)) {
+          continue;
+        }
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
 	   << p.second.get_summary() << "\n";
+      }
+    }
+
+    {
+      auto& service_map = mgrstatmon()->get_service_map();
+      if (!service_map.services.empty()) {
+        ss << "\n \n  task status:\n";
+        {
+          for (auto &p : service_map.services) {
+            ss << p.second.get_task_summary(p.first);
+          }
+        }
       }
     }
 
@@ -3873,7 +3897,11 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->close_section();
 
     for (auto& p : mgrstatmon()->get_service_map().services) {
-      f->open_object_section(p.first.c_str());
+      auto &service = p.first;
+      if (ServiceMap::is_normal_ceph_entity(service)) {
+        continue;
+      }
+      f->open_object_section(service.c_str());
       map<string,int> m;
       p.second.count_metadata("ceph_version", &m);
       for (auto& q : m) {
@@ -4340,6 +4368,7 @@ void Monitor::_ms_dispatch(Message *m)
       if (s->item.is_on_list()) {
         // forwarded messages' sessions are not in the sessions map and
         // exist only while the op is being handled.
+        std::lock_guard l(session_map_lock);
         remove_session(s);
       }
       s = nullptr;

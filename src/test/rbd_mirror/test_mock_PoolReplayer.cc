@@ -116,6 +116,8 @@ struct InstanceReplayer<librbd::MockTestImageCtx> {
     return s_instance;
   }
 
+  MOCK_METHOD0(is_blacklisted, bool());
+
   MOCK_METHOD0(start, void());
   MOCK_METHOD0(stop, void());
   MOCK_METHOD0(restart, void());
@@ -189,6 +191,7 @@ struct LeaderWatcher<librbd::MockTestImageCtx> {
     return s_instance;
   }
 
+  MOCK_METHOD0(is_blacklisted, bool());
   MOCK_METHOD0(is_leader, bool());
   MOCK_METHOD0(release_leader, void());
 
@@ -330,6 +333,12 @@ public:
                       Return(r)));
   }
 
+  void expect_instance_replayer_is_blacklisted(
+      MockInstanceReplayer &mock_instance_replayer, bool blacklisted) {
+    EXPECT_CALL(mock_instance_replayer, is_blacklisted())
+      .WillRepeatedly(Return(blacklisted));
+  }
+
   void expect_instance_replayer_init(MockInstanceReplayer& mock_instance_replayer) {
     EXPECT_CALL(mock_instance_replayer, init());
   }
@@ -364,6 +373,12 @@ public:
     EXPECT_CALL(mock_instance_watcher, shut_down());
   }
 
+  void expect_leader_watcher_is_blacklisted(
+      MockLeaderWatcher &mock_leader_watcher, bool blacklisted) {
+    EXPECT_CALL(mock_leader_watcher, is_blacklisted())
+      .WillRepeatedly(Return(blacklisted));
+  }
+
   void expect_leader_watcher_init(MockLeaderWatcher& mock_leader_watcher,
                                   int r) {
     EXPECT_CALL(mock_leader_watcher, init())
@@ -394,6 +409,12 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   peer_spec.mon_host = "123";
   peer_spec.key = "234";
 
+  auto mock_instance_replayer = new MockInstanceReplayer();
+  expect_instance_replayer_is_blacklisted(*mock_instance_replayer, false);
+
+  auto mock_leader_watcher = new MockLeaderWatcher();
+  expect_leader_watcher_is_blacklisted(*mock_leader_watcher, false);
+
   InSequence seq;
 
   auto& mock_cluster = get_mock_cluster();
@@ -413,7 +434,6 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
 
   expect_mirror_uuid_get(mock_local_io_ctx, "uuid", 0);
 
-  auto mock_instance_replayer = new MockInstanceReplayer();
   expect_instance_replayer_init(*mock_instance_replayer);
   expect_instance_replayer_add_peer(*mock_instance_replayer, "uuid");
 
@@ -424,7 +444,6 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   expect_service_daemon_add_or_update_instance_id_attribute(
       *mock_instance_watcher, mock_service_daemon);
 
-  auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockThreads mock_threads(m_threads);

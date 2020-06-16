@@ -402,7 +402,7 @@ class Module(MgrModule):
             # anonymize device id
             anon_devid = self.get_store('devid-id/%s' % devid)
             if not anon_devid:
-                anon_devid = devid[:devid.rfind('_')] + '_' + uuid.uuid1()
+                anon_devid = devid[:devid.rfind('_')] + '_' + str(uuid.uuid1())
                 self.set_store('devid-id/%s' % devid, anon_devid)
             self.log.info('devid %s / %s, host %s / %s' % (devid, anon_devid,
                                                            host, anon_host))
@@ -677,30 +677,33 @@ class Module(MgrModule):
 
         return report
 
+    def _try_post(self, what, url, report):
+        self.log.info('Sending %s to: %s' % (what, url))
+        proxies = dict()
+        if self.proxy:
+            self.log.info('Send using HTTP(S) proxy: %s', self.proxy)
+            proxies['http'] = self.proxy
+            proxies['https'] = self.proxy
+        try:
+            resp = requests.put(url=url, json=report)
+            resp.raise_for_status()
+        except Exception as e:
+            fail_reason = 'Failed to send %s to %s: %s' % (what, url, str(e))
+            self.log.error(fail_reason)
+            return fail_reason
+        return None
+
     def send(self, report, endpoint=None):
         if not endpoint:
             endpoint = ['ceph', 'device']
         failed = []
         success = []
-        proxies = dict()
         self.log.debug('Send endpoints %s' % endpoint)
-        if self.proxy:
-            self.log.info('Send using HTTP(S) proxy: %s', self.proxy)
-            proxies['http'] = self.proxy
-            proxies['https'] = self.proxy
         for e in endpoint:
             if e == 'ceph':
-                self.log.info('Sending ceph report to: %s', self.url)
-                resp = requests.put(url=self.url, json=report, proxies=proxies)
-                if not resp.ok:
-                    self.log.error("Report send failed: %d %s %s" %
-                                   (resp.status_code, resp.reason, resp.text))
-                    failed.append('Failed to send report to %s: %d %s %s' % (
-                        self.url,
-                        resp.status_code,
-                        resp.reason,
-                        resp.text
-                    ))
+                fail_reason = self._try_post('ceph report', self.url, report)
+                if fail_reason:
+                    failed.append(fail_reason)
                 else:
                     now = int(time.time())
                     self.last_upload = now
@@ -709,9 +712,6 @@ class Module(MgrModule):
                     self.log.info('Sent report to {0}'.format(self.url))
             elif e == 'device':
                 if 'device' in self.get_active_channels():
-                    self.log.info('hi')
-                    self.log.info('Sending device report to: %s',
-                                  self.device_url)
                     devices = self.gather_device_report()
                     num_devs = 0
                     num_hosts = 0
@@ -719,19 +719,10 @@ class Module(MgrModule):
                         self.log.debug('host %s devices %s' % (host, ls))
                         if not len(ls):
                             continue
-                        resp = requests.put(url=self.device_url, json=ls,
-                                            proxies=proxies)
-                        if not resp.ok:
-                            self.log.error(
-                                "Device report failed: %d %s %s" %
-                                (resp.status_code, resp.reason, resp.text))
-                            failed.append(
-                                'Failed to send devices to %s: %d %s %s' % (
-                                    self.device_url,
-                                    resp.status_code,
-                                    resp.reason,
-                                    resp.text
-                                ))
+                        fail_reason = self._try_post('devices', self.device_url,
+                                                     ls)
+                        if fail_reason:
+                            failed.append(fail_reason)
                         else:
                             num_devs += len(ls)
                             num_hosts += 1
@@ -747,6 +738,7 @@ class Module(MgrModule):
             r = {}
             for opt in self.MODULE_OPTIONS:
                 r[opt['name']] = getattr(self, opt['name'])
+            r['last_upload'] = time.ctime(self.last_upload) if self.last_upload else self.last_upload
             return 0, json.dumps(r, indent=4), ''
         elif command['prefix'] == 'telemetry on':
             if command.get('license') != LICENSE:

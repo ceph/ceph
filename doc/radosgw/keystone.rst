@@ -48,6 +48,13 @@ For a v3 version of the OpenStack Identity API you should replace
    rgw keystone admin domain = {keystone admin domain name}
    rgw keystone admin project = {keystone admin project name}
 
+For compatibility with previous versions of ceph, it is also
+possible to set ``rgw keystone implicit tenants`` to either
+``s3`` or ``swift``.  This has the effect of splitting
+the identity space such that the indicated protocol will
+only use implicit tenants, and the other protocol will
+never use implicit tenants.  Some older versions of ceph
+only supported implicit tenants with swift.
 
 Prior to Kilo
 -------------

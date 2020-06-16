@@ -784,7 +784,7 @@ class RbdTest(DashboardTestCase):
         time.sleep(1)
 
         self._task_post('/api/block/image/trash/purge?pool_name={}'.format('rbd'))
-        self.assertStatus(200)
+        self.assertStatus([200, 201])
 
         time.sleep(1)
 
@@ -792,4 +792,4 @@ class RbdTest(DashboardTestCase):
         self.assertIsNotNone(trash_not_expired)
 
         trash_expired = self.get_trash('rbd', id_expired)
-        self.assertIsNone(trash_expired)
+        self.wait_until_equal(lambda: self.get_trash('rbd', id_expired), None, 60)

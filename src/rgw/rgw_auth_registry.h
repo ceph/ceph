@@ -36,9 +36,11 @@ class StrategyRegistry {
     s3_main_strategy_plain_t s3_main_strategy_plain;
     s3_main_strategy_boto2_t s3_main_strategy_boto2;
 
-    s3_main_strategy_t(CephContext* const cct, RGWRados* const store)
-      : s3_main_strategy_plain(cct, store),
-        s3_main_strategy_boto2(cct, store) {
+    s3_main_strategy_t(CephContext* const cct,
+		       ImplicitTenants& implicit_tenant_context,
+		       RGWRados* const store)
+      : s3_main_strategy_plain(cct, implicit_tenant_context, store),
+        s3_main_strategy_boto2(cct, implicit_tenant_context, store) {
       add_engine(Strategy::Control::SUFFICIENT, s3_main_strategy_plain);
       add_engine(Strategy::Control::FALLBACK, s3_main_strategy_boto2);
     }
@@ -58,10 +60,11 @@ class StrategyRegistry {
 
 public:
   StrategyRegistry(CephContext* const cct,
+                   ImplicitTenants& implicit_tenant_context,
                    RGWRados* const store)
-    : s3_main_strategy(cct, store),
-      s3_post_strategy(cct, store),
-      swift_strategy(cct, store),
+    : s3_main_strategy(cct, implicit_tenant_context, store),
+      s3_post_strategy(cct, implicit_tenant_context, store),
+      swift_strategy(cct, implicit_tenant_context, store),
       sts_strategy(cct, store) {
   }
 
@@ -83,8 +86,9 @@ public:
 
   static std::shared_ptr<StrategyRegistry>
   create(CephContext* const cct,
+         ImplicitTenants& implicit_tenant_context,
          RGWRados* const store) {
-    return std::make_shared<StrategyRegistry>(cct, store);
+    return std::make_shared<StrategyRegistry>(cct, implicit_tenant_context, store);
   }
 };
 

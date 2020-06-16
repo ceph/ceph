@@ -147,7 +147,7 @@ function TEST_backfill_test_simple() {
     do
       ceph osd pool set "${poolprefix}$p" size 2
     done
-    sleep 5
+    sleep 30
 
     wait_for_not_backfilling 240 || return 1
     wait_for_not_activating 60 || return 1
@@ -226,7 +226,7 @@ function TEST_backfill_test_multi() {
     do
       ceph osd pool set "${poolprefix}$p" size 2
     done
-    sleep 5
+    sleep 30
 
     wait_for_not_backfilling 240 || return 1
     wait_for_not_activating 60 || return 1
@@ -378,7 +378,7 @@ function TEST_backfill_test_sametarget() {
 
     ceph osd pool set $pool1 size 2
     ceph osd pool set $pool2 size 2
-    sleep 5
+    sleep 30
 
     wait_for_not_backfilling 240 || return 1
     wait_for_not_activating 60 || return 1
@@ -470,10 +470,8 @@ function TEST_backfill_multi_partial() {
       osd="0"
     fi
 
-    sleep 5
-    kill $(cat $dir/osd.$fillosd.pid)
+    kill_daemon $dir/osd.$fillosd.pid TERM
     ceph osd out osd.$fillosd
-    sleep 2
 
     _objectstore_tool_nodown $dir $fillosd --op export-remove --pgid 1.0 --file $dir/fillexport.out || return 1
     activate_osd $dir $fillosd || return 1
@@ -489,8 +487,7 @@ function TEST_backfill_multi_partial() {
     ceph pg dump pgs
     # The $osd OSD is started, but we don't wait so we can kill $fillosd at the same time
     _objectstore_tool_nowait $dir $osd --op export --pgid 2.0 --file $dir/export.out
-    kill $(cat $dir/osd.$fillosd.pid)
-    sleep 5
+    kill_daemon $dir/osd.$fillosd.pid TERM
     _objectstore_tool_nodown $dir $fillosd --force --op remove --pgid 2.0
     _objectstore_tool_nodown $dir $fillosd --op import --pgid 2.0 --file $dir/export.out || return 1
     _objectstore_tool_nodown $dir $fillosd --op import --pgid 1.0 --file $dir/fillexport.out || return 1
@@ -508,12 +505,12 @@ function TEST_backfill_multi_partial() {
       done
     done
 
-    kill $(cat $dir/osd.$osd.pid)
+    kill_daemon $dir/osd.$osd.pid TERM
     ceph osd out osd.$osd
 
     activate_osd $dir $fillosd || return 1
     ceph osd in osd.$fillosd
-    sleep 15
+    sleep 30
 
     wait_for_not_backfilling 240 || return 1
     wait_for_not_activating 60 || return 1
@@ -664,7 +661,7 @@ function TEST_ec_backfill_simple() {
     fi
 
     sleep 5
-    kill $(cat $dir/osd.$fillosd.pid)
+    kill_daemon $dir/osd.$fillosd.pid TERM
     ceph osd out osd.$fillosd
     sleep 2
     ceph osd erasure-code-profile set ec-profile k=$k m=$m crush-failure-domain=osd technique=reed_sol_van plugin=jerasure || return 1
@@ -689,7 +686,7 @@ function TEST_ec_backfill_simple() {
       done
     done
 
-    kill $(cat $dir/osd.$osd.pid)
+    kill_daemon $dir/osd.$osd.pid TERM
     ceph osd out osd.$osd
 
     activate_osd $dir $fillosd || return 1
@@ -820,7 +817,7 @@ function TEST_ec_backfill_multi() {
       ceph osd pg-upmap $(expr $p + 1).0 ${nonfillosds% *} $fillosd
     done
 
-    sleep 10
+    sleep 30
 
     wait_for_not_backfilling 240 || return 1
     wait_for_not_activating 60 || return 1
@@ -958,7 +955,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
     #activate_osd $dir $lastosd || return 1
     #ceph tell osd.0 debug kick_recovery_wq 0
 
-    sleep 10
+    sleep 30
     ceph pg dump pgs
 
     wait_for_not_backfilling 240 || return 1
@@ -1033,7 +1030,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
     fi
 
     sleep 5
-    kill $(cat $dir/osd.$fillosd.pid)
+    kill_daemon $dir/osd.$fillosd.pid TERM
     ceph osd out osd.$fillosd
     sleep 2
     ceph osd erasure-code-profile set ec-profile k=3 m=2 crush-failure-domain=osd technique=reed_sol_van plugin=jerasure || return 1
@@ -1059,7 +1056,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
     done
 
     #ceph pg map 2.0 --format=json | jq '.'
-    kill $(cat $dir/osd.$osd.pid)
+    kill_daemon $dir/osd.$osd.pid TERM
     ceph osd out osd.$osd
 
     _objectstore_tool_nodown $dir $osd --op export --pgid 2.0 --file $dir/export.out
@@ -1067,7 +1064,7 @@ function SKIP_TEST_ec_backfill_multi_partial() {
 
     activate_osd $dir $fillosd || return 1
     ceph osd in osd.$fillosd
-    sleep 15
+    sleep 30
 
     wait_for_not_backfilling 240 || return 1
     wait_for_not_activating 60 || return 1

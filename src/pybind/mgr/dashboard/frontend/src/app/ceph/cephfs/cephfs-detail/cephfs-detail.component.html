@@ -35,7 +35,7 @@
   </tab>
   <tab i18n-heading
        heading="Clients: {{ clientCount }}"
-       (select)="clientsSelect=true"
+       (selectTab)="clientsSelect=true"
        (deselect)="clientsSelect=false">
     <cd-cephfs-clients [id]="id"
                        *ngIf="clientsSelect">

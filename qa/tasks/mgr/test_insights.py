@@ -2,7 +2,9 @@ import logging
 import json
 import datetime
 import time
-from mgr_test_case import MgrTestCase
+
+from .mgr_test_case import MgrTestCase
+
 
 log = logging.getLogger(__name__)
 UUID = 'd5775432-0742-44a3-a435-45095e32e6b2'

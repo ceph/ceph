@@ -4,7 +4,7 @@ Run fsx on an rbd image
 import contextlib
 import logging
 
-from teuthology.orchestra import run
+from teuthology.exceptions import ConfigError
 from teuthology.parallel import parallel
 from teuthology import misc as teuthology
 
@@ -47,7 +47,7 @@ def _run_one_client(ctx, config, role):
     krbd = config.get('krbd', False)
     nbd = config.get('nbd', False)
     testdir = teuthology.get_testdir(ctx)
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(role).remotes.keys()
 
     args = []
     if krbd or nbd:

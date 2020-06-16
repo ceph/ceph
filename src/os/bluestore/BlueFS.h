@@ -72,6 +72,25 @@ public:
   virtual size_t available_freespace(uint64_t alloc_size) = 0;
 };
 
+class BlueFSVolumeSelector {
+public:
+  typedef std::vector<std::pair<std::string, uint64_t>> paths;
+
+  virtual ~BlueFSVolumeSelector() {
+  }
+  virtual void* get_hint_by_device(uint8_t dev) const = 0;
+  virtual void* get_hint_by_dir(const string& dirname) const = 0;
+
+  virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
+  virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
+  virtual void add_usage(void* file_hint, uint64_t fsize) = 0;
+  virtual void sub_usage(void* file_hint, uint64_t fsize) = 0;
+  virtual uint8_t select_prefer_bdev(void* hint) = 0;
+  virtual void get_paths(const std::string& base, paths& res) const = 0;
+  virtual void dump(ostream& sout) = 0;
+};
+class BlueFS;
+
 class BlueFS {
 public:
   CephContext* cct;
@@ -101,6 +120,8 @@ public:
     std::atomic_int num_readers, num_writers;
     std::atomic_int num_reading;
 
+    void* vselector_hint = nullptr;
+
     File()
       : RefCountedObject(NULL, 0),
 	refs(0),
@@ -109,7 +130,8 @@ public:
 	deleted(false),
 	num_readers(0),
 	num_writers(0),
-	num_reading(0)
+	num_reading(0),
+        vselector_hint(nullptr)
       {}
     ~File() override {
       ceph_assert(num_readers.load() == 0);
@@ -312,6 +334,7 @@ private:
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
   BlueFSDeviceExpander* slow_dev_expander = nullptr;
+  std::unique_ptr<BlueFSVolumeSelector> vselector;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -328,7 +351,9 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
-  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  unsigned _get_slow_device_id() {
+    return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
+  }
   const char* get_device_name(unsigned id);
   int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
@@ -408,7 +433,8 @@ private:
     return 4096;
   }
 
-  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
+  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
+                         bool skip=false);
 
 public:
   BlueFS(CephContext* cct);
@@ -417,7 +443,7 @@ public:
   // the super is always stored on bdev 0
   int mkfs(uuid_d osd_uuid);
   int mount();
-  void umount();
+  void umount(bool avoid_compact = false);
   int prepare_new_device(int id);
   
   int log_dump();
@@ -483,24 +509,35 @@ public:
   int lock_file(const string& dirname, const string& filename, FileLock **p);
   int unlock_file(FileLock *l);
 
-  void flush_log();
   void compact_log();
 
   /// sync any uncommitted state to disk
-  void sync_metadata();
+  void sync_metadata(bool avoid_compact);
 
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;
   }
+  void set_volume_selector(BlueFSVolumeSelector* s) {
+    vselector.reset(s);
+  }
+  void dump_volume_selector(ostream& sout) {
+    vselector->dump(sout);
+  }
+  void get_vselector_paths(const std::string& base,
+                           BlueFSVolumeSelector::paths& res) const {
+    return vselector->get_paths(base, res);
+  }
+
   int add_block_device(unsigned bdev, const string& path, bool trim,
 		       bool shared_with_bluestore=false);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space
-  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len) {
+  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len,
+                        bool skip=false) {
     std::unique_lock l(lock);
-    _add_block_extent(bdev, offset, len);
+    _add_block_extent(bdev, offset, len, skip);
     int r = _flush_and_sync_log(l);
     ceph_assert(r == 0);
   }
@@ -551,6 +588,47 @@ public:
     return _truncate(h, offset);
   }
 
+  /// test purpose methods
+  const PerfCounters* get_perf_counters() const {
+    return logger;
+  }
+};
+
+class OriginalVolumeSelector : public BlueFSVolumeSelector {
+  uint64_t wal_total;
+  uint64_t db_total;
+  uint64_t slow_total;
+
+public:
+  OriginalVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total)
+    : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
+
+  void* get_hint_by_device(uint8_t dev) const override;
+  void* get_hint_by_dir(const string& dirname) const override;
+
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    // do nothing
+    return;
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    // do nothing
+    return;
+  }
+  void add_usage(void* hint, uint64_t fsize) override {
+    // do nothing
+    return;
+  }
+  void sub_usage(void* hint, uint64_t fsize) override {
+    // do nothing
+    return;
+  }
+
+  uint8_t select_prefer_bdev(void* hint) override;
+  void get_paths(const std::string& base, paths& res) const override;
+  void dump(ostream& sout) override;
 };
 
 #endif

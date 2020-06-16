@@ -5,7 +5,8 @@
             class="btn btn-sm btn-primary"
             [ngClass]="{'disabled': disableSelectionAction(action)}"
             (click)="useClickAction(action)"
-            [routerLink]="useRouterLink(action)">
+            [routerLink]="useRouterLink(action)"
+            [preserveFragment]="action.preserveFragment ? '' : null">
       <i class="fa fa-fw {{ action.icon }}"></i><span>{{ action.name }}</span>
     </button>
   </ng-container>
@@ -28,7 +29,8 @@
           data-toggle="tooltip" title="{{ useDisableDesc(action) }}">
         <a class="dropdown-item"
            (click)="useClickAction(action)"
-           [routerLink]="useRouterLink(action)">
+           [routerLink]="useRouterLink(action)"
+           [preserveFragment]="action.preserveFragment ? '' : null">
           <i class="fa fa-fw {{ action.icon }}"></i><span>{{ action.name }}</span>
         </a>
       </li>

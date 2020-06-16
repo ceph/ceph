@@ -21,6 +21,8 @@
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSTableRequest.h"
 
+#include "mgr/MgrClient.h"
+
 #include "MDSDaemon.h"
 #include "MDSMap.h"
 #include "SnapClient.h"
@@ -481,6 +483,7 @@ MDSRank::MDSRank(
     std::unique_ptr<MDSMap>& mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
+    MgrClient *mgrc,
     Context *respawn_hook_,
     Context *suicide_hook_)
   :
@@ -517,7 +520,7 @@ MDSRank::MDSRank(
     hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
     mds_slow_req_count(0),
     last_client_mdsmap_bcast(0),
-    messenger(msgr), monc(monc_),
+    messenger(msgr), monc(monc_), mgrc(mgrc),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
     standby_replaying(false),
@@ -535,7 +538,7 @@ MDSRank::MDSRank(
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this, messenger, monc);
 
-  scrubstack = new ScrubStack(mdcache, finisher);
+  scrubstack = new ScrubStack(mdcache, clog, finisher);
 
   inotable = new InoTable(this);
   snapserver = new SnapServer(this, monc);
@@ -548,6 +551,8 @@ MDSRank::MDSRank(
                                          cct->_conf->mds_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
                                            cct->_conf->mds_op_history_duration);
+
+  schedule_update_timer_task();
 }
 
 MDSRank::~MDSRank()
@@ -3512,10 +3517,11 @@ MDSRankDispatcher::MDSRankDispatcher(
     std::unique_ptr<MDSMap> &mdsmap_,
     Messenger *msgr,
     MonClient *monc_,
+    MgrClient *mgrc,
     Context *respawn_hook_,
     Context *suicide_hook_)
   : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
-      msgr, monc_, respawn_hook_, suicide_hook_)
+            msgr, monc_, mgrc, respawn_hook_, suicide_hook_)
 {
   g_conf().add_observer(this);
 }
@@ -3690,6 +3696,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_max_purge_files",
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
+    "mds_max_snaps_per_dir",
     "mds_op_complaint_time",
     "mds_op_history_duration",
     "mds_op_history_size",
@@ -3740,4 +3747,37 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
     mdcache->handle_conf_change(changed, *mdsmap);
     purge_queue.handle_conf_change(changed, *mdsmap);
   }));
+}
+
+void MDSRank::get_task_status(std::map<std::string, std::string> *status) {
+  dout(20) << __func__ << dendl;
+
+  // scrub summary for now..
+  std::string_view scrub_summary = scrubstack->scrub_summary();
+  status->emplace(SCRUB_STATUS_KEY, std::move(scrub_summary));
+}
+
+void MDSRank::schedule_update_timer_task() {
+  dout(20) << __func__ << dendl;
+
+  timer.add_event_after(g_conf().get_val<double>("mds_task_status_update_interval"),
+                        new FunctionContext([this](int _) {
+                            send_task_status();
+                          }));
+}
+
+void MDSRank::send_task_status() {
+  std::map<std::string, std::string> status;
+  get_task_status(&status);
+
+  if (!status.empty()) {
+    dout(20) << __func__ << ": updating " << status.size() << " status keys" << dendl;
+
+    int r = mgrc->service_daemon_update_task_status(std::move(status));
+    if (r < 0) {
+      derr << ": failed to update service daemon status: " << cpp_strerror(r) << dendl;
+    }
+  }
+
+  schedule_update_timer_task();
 }

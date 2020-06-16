@@ -45,7 +45,7 @@ if sys.version_info[0] >= 3:
     def decode(s):
         return s.decode('utf-8')
 
-    def check_output(*args, **kwargs):
+    def check_output(*args, **kwargs): # noqa
         return decode(subprocess.check_output(*args, **kwargs))
 else:
     def decode(s):
@@ -336,7 +336,7 @@ def check_entry_transactions(entry, enum):
 
 
 def check_transaction_ops(ops, enum, tnum):
-    if len(ops) is 0:
+    if len(ops) == 0:
         logging.warning("No ops found in entry {e} trans {t}".format(e=enum, t=tnum))
     errors = 0
     for onum in range(len(ops)):
@@ -375,7 +375,7 @@ def test_dump_journal(CFSD_PREFIX, osds):
         os.unlink(TMPFILE)
 
         journal_errors = check_journal(jsondict)
-        if journal_errors is not 0:
+        if journal_errors != 0:
             logging.error(jsondict)
         ERRORS += journal_errors
 
@@ -519,7 +519,7 @@ def get_osd_weights(CFSD_PREFIX, osd_ids, osd_path):
     for line in output.strip().split('\n'):
         print(line)
         linev = re.split('\s+', line)
-        if linev[0] is '':
+        if linev[0] == '':
             linev.pop(0)
         print('linev %s' % linev)
         weights.append(float(linev[2]))

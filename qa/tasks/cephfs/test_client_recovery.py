@@ -161,7 +161,7 @@ class TestClientRecovery(CephFSTestCase):
         in_reconnect_for = self.fs.wait_for_state('up:active', timeout=self.mds_reconnect_timeout * 2)
         # Check that the period we waited to enter active is within a factor
         # of two of the reconnect timeout.
-        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout / 2,
+        self.assertGreater(in_reconnect_for, self.mds_reconnect_timeout // 2,
                            "Should have been in reconnect phase for {0} but only took {1}".format(
                                self.mds_reconnect_timeout, in_reconnect_for
                            ))
@@ -449,10 +449,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.wait_until_mounted()
 
     def test_dir_fsync(self):
-	self._test_fsync(True);
+        self._test_fsync(True);
 
     def test_create_fsync(self):
-	self._test_fsync(False);
+        self._test_fsync(False);
 
     def _test_fsync(self, dirfsync):
         """
@@ -472,22 +472,22 @@ class TestClientRecovery(CephFSTestCase):
 
                 path = "{path}"
 
-                print "Starting creation..."
+                print("Starting creation...")
                 start = time.time()
 
                 os.mkdir(path)
                 dfd = os.open(path, os.O_DIRECTORY)
 
                 fd = open(os.path.join(path, "childfile"), "w")
-                print "Finished creation in {{0}}s".format(time.time() - start)
+                print("Finished creation in {{0}}s".format(time.time() - start))
 
-                print "Starting fsync..."
+                print("Starting fsync...")
                 start = time.time()
                 if {dirfsync}:
                     os.fsync(dfd)
                 else:
                     os.fsync(fd)
-                print "Finished fsync in {{0}}s".format(time.time() - start)
+                print("Finished fsync in {{0}}s".format(time.time() - start))
             """.format(path=path,dirfsync=str(dirfsync)))
         )
 
@@ -570,7 +570,7 @@ class TestClientRecovery(CephFSTestCase):
             cephfs.mount()
             client_id = cephfs.get_instance_id()
             cephfs.abort_conn()
-            print client_id
+            print(client_id)
             """)
         )
         gid = int(gid_str);
@@ -593,7 +593,7 @@ class TestClientRecovery(CephFSTestCase):
         SESSION_AUTOCLOSE = 50
         time_at_beg = time.time()
         mount_a_gid = self.mount_a.get_global_id()
-        mount_a_pid = self.mount_a.client_pid
+        _ = self.mount_a.client_pid
         self.fs.set_var('session_timeout', SESSION_TIMEOUT)
         self.fs.set_var('session_autoclose', SESSION_AUTOCLOSE)
         self.assert_session_count(2, self.fs.mds_asok(['session', 'ls']))

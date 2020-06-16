@@ -1,4 +1,3 @@
-
 """
 Balance PG distribution across OSDs.
 """
@@ -18,18 +17,19 @@ import datetime
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
 class MappingState:
-    def __init__(self, osdmap, pg_dump, desc=''):
+    def __init__(self, osdmap, raw_pg_stats, raw_pool_stats, desc=''):
         self.desc = desc
         self.osdmap = osdmap
         self.osdmap_dump = self.osdmap.dump()
         self.crush = osdmap.get_crush()
         self.crush_dump = self.crush.dump()
-        self.pg_dump = pg_dump
+        self.raw_pg_stats = raw_pg_stats
+        self.raw_pool_stats = raw_pool_stats
         self.pg_stat = {
-            i['pgid']: i['stat_sum'] for i in pg_dump.get('pg_stats', [])
+            i['pgid']: i['stat_sum'] for i in raw_pg_stats.get('pg_stats', [])
         }
         osd_poolids = [p['pool'] for p in self.osdmap_dump.get('pools', [])]
-        pg_poolids = [p['poolid'] for p in pg_dump.get('pool_stats', [])]
+        pg_poolids = [p['poolid'] for p in raw_pool_stats.get('pool_stats', [])]
         self.poolids = set(osd_poolids) & set(pg_poolids)
         self.pg_up = {}
         self.pg_up_by_poolid = {}
@@ -63,7 +63,8 @@ class Plan:
         self.inc.set_osd_reweights(self.osd_weights)
         self.inc.set_crush_compat_weight_set_weights(self.compat_ws)
         return MappingState(self.initial.osdmap.apply_incremental(self.inc),
-                            self.initial.pg_dump,
+                            self.initial.raw_pg_stats,
+                            self.initial.raw_pool_stats,
                             'plan %s final' % self.name)
 
     def dump(self):
@@ -437,7 +438,8 @@ class Module(MgrModule):
                     return (-errno.EPERM, '', warn)
             elif command['mode'] == 'crush-compat':
                 ms = MappingState(self.get_osdmap(),
-                                  self.get("pg_dump"),
+                                  self.get("pg_stats"),
+                                  self.get("pool_stats"),
                                   'initialize compat weight-set')
                 self.get_compat_weight_set_weights(ms) # ignore error
             self.set_module_option('mode', command['mode'])
@@ -514,13 +516,14 @@ class Module(MgrModule):
                     if option not in valid_pool_names:
                          return (-errno.EINVAL, '', 'option "%s" not a plan or a pool' % option)
                     pools.append(option)
-                    ms = MappingState(osdmap, self.get("pg_dump"), 'pool "%s"' % option)
+                    ms = MappingState(osdmap, self.get("pg_stats"), self.get("pool_stats"), 'pool "%s"' % option)
                 else:
                     pools = plan.pools
                     ms = plan.final_state()
             else:
                 ms = MappingState(self.get_osdmap(),
-                                  self.get("pg_dump"),
+                                  self.get("pg_stats"),
+                                  self.get("pool_stats"),
                                   'current cluster')
             return (0, self.evaluate(ms, pools, verbose=verbose), '')
         elif command['prefix'] == 'balancer optimize':
@@ -667,7 +670,8 @@ class Module(MgrModule):
     def plan_create(self, name, osdmap, pools):
         plan = Plan(name,
                     MappingState(osdmap,
-                                 self.get("pg_dump"),
+                                 self.get("pg_stats"),
+                                 self.get("pool_stats"),
                                  'plan %s initial' % name),
                     pools)
         return plan
@@ -758,15 +762,14 @@ class Module(MgrModule):
             pgs_by_osd = {}
             objects_by_osd = {}
             bytes_by_osd = {}
-            for root in pe.pool_roots[pool]:
-                for osd in pe.target_by_root[root]:
-                    pgs_by_osd[osd] = 0
-                    objects_by_osd[osd] = 0
-                    bytes_by_osd[osd] = 0
             for pgid, up in six.iteritems(pm):
                 for osd in [int(osd) for osd in up]:
                     if osd == CRUSHMap.ITEM_NONE:
                         continue
+                    if osd not in pgs_by_osd:
+                        pgs_by_osd[osd] = 0
+                        objects_by_osd[osd] = 0
+                        bytes_by_osd[osd] = 0
                     pgs_by_osd[osd] += 1
                     objects_by_osd[osd] += ms.pg_stat[pgid]['num_objects']
                     bytes_by_osd[osd] += ms.pg_stat[pgid]['num_bytes']

@@ -360,7 +360,10 @@ Instructions
    and verify that each monitor has both a ``v2:`` and ``v1:`` address
    listed.
 
-#. For each host that has been upgrade, you should update your
+   Running nautilus OSDs will not bind to their v2 address automatically.
+   They must be restarted for that to happen.
+
+#. For each host that has been upgraded, you should update your
    ``ceph.conf`` file so that it references both the v2 and v1
    addresses.  Things will still work if only the v1 IP and port are
    listed, but each CLI instantiation or daemon will need to reconnect

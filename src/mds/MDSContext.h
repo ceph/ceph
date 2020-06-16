@@ -111,9 +111,8 @@ public:
 private:
   ceph::coarse_mono_time created_at;
   elist<MDSIOContextBase*>::item list_item;
-
-  static elist<MDSIOContextBase*> ctx_list;
-  static ceph::spinlock ctx_list_lock;
+  
+  friend struct MDSIOContextList;
 };
 
 /**

@@ -117,7 +117,7 @@ public:
       goto fail;
 
     {
-      client_callback_args args = {};
+      ceph_client_callback_args args = {};
       args.handle = this;
       args.umask_cb = umask_cb;
       client->ll_register_callbacks(&args);
@@ -1992,4 +1992,10 @@ extern "C" int ceph_start_reclaim(class ceph_mount_info *cmount,
 extern "C" void ceph_finish_reclaim(class ceph_mount_info *cmount)
 {
   cmount->get_client()->finish_reclaim();
+}
+
+extern "C" void ceph_ll_register_callbacks(class ceph_mount_info *cmount,
+					   struct ceph_client_callback_args *args)
+{
+  cmount->get_client()->ll_register_callbacks(args);
 }

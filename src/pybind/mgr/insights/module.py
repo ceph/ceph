@@ -130,6 +130,8 @@ class Module(MgrModule):
         for key in self._health_filter(lambda ts: ts <= cutoff):
             self.log.info("Removing old health slot key {}".format(key))
             self.set_store(key, None)
+        if not hours:
+            self._health_slot = health_util.HealthHistorySlot()
 
     def _health_report(self, hours):
         """
@@ -162,7 +164,7 @@ class Module(MgrModule):
         constituent components, such as when Ceph has been built with
         ENABLE_GIT_VERSION=OFF.
         """
-        r = "ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
+        r = r"ceph version (?P<release>\d+)\.(?P<major>\d+)\.(?P<minor>\d+)"
         m = re.match(r, version)
         ver = {} if not m else {
             "release": m.group("release"),

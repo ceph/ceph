@@ -135,6 +135,7 @@ private:
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
   void reset_recv_state();
+  void reset_security();
   void reset_throttle();
   Ct<ProtocolV2> *_fault();
   void discard_out_queue();

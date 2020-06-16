@@ -2218,7 +2218,7 @@ private:
   int _minimal_open_bluefs(bool create);
   void _minimal_close_bluefs();
   int _open_bluefs(bool create);
-  void _close_bluefs();
+  void _close_bluefs(bool cold_close);
 
   // Limited (u)mount intended for BlueFS operations only
   int _mount_for_bluefs();
@@ -2231,7 +2231,7 @@ private:
   * in the proper order
   */
   int _open_db_and_around(bool read_only);
-  void _close_db_and_around();
+  void _close_db_and_around(bool read_only);
 
   // updates legacy bluefs related recs in DB to a state valid for
   // downgrades from nautilus.
@@ -2244,7 +2244,7 @@ private:
   int _open_db(bool create,
 	       bool to_repair_db=false,
 	       bool read_only = false);
-  void _close_db();
+  void _close_db(bool read_only);
   int _open_fm(KeyValueDB::Transaction t);
   void _close_fm();
   int _open_alloc();
@@ -2531,6 +2531,8 @@ public:
   int expand_devices(ostream& out);
   string get_device_path(unsigned id);
 
+  int dump_bluefs_sizes(ostream& out);
+
 public:
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
@@ -2670,6 +2672,9 @@ public:
   }
   const PerfCounters* get_perf_counters() const override {
     return logger;
+  }
+  const PerfCounters* get_bluefs_perf_counters() const {
+    return bluefs->get_perf_counters();
   }
 
   int queue_transactions(
@@ -3372,4 +3377,189 @@ private:
   fsck_interval misreferenced_extents;
 
 };
+
+class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
+{
+  template <class T, size_t MaxX, size_t MaxY>
+  class matrix_2d {
+    T values[MaxX][MaxY];
+  public:
+    matrix_2d() {
+      clear();
+    }
+    T& at(size_t x, size_t y) {
+      ceph_assert(x < MaxX);
+      ceph_assert(y < MaxY);
+
+      return values[x][y];
+    }
+    size_t get_max_x() const {
+      return MaxX;
+    }
+    size_t get_max_y() const {
+      return MaxY;
+    }
+    void clear() {
+      memset(values, 0, sizeof(values));
+    }
+  };
+
+  enum {
+    // use 0/nullptr as unset indication
+    LEVEL_FIRST = 1,
+    LEVEL_WAL = LEVEL_FIRST,
+    LEVEL_DB,
+    LEVEL_SLOW,
+    LEVEL_MAX
+  };
+  // add +1 row for corresponding per-device totals
+  // add +1 column for per-level actual (taken from file size) total
+  typedef matrix_2d<uint64_t, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
+
+  per_level_per_dev_usage_t per_level_per_dev_usage;
+
+  // Note: maximum per-device totals below might be smaller than corresponding
+  // perf counters by up to a single alloc unit (1M) due to superblock extent.
+  // The later is not accounted here.
+  per_level_per_dev_usage_t per_level_per_dev_max;
+
+  uint64_t l_totals[LEVEL_MAX - LEVEL_FIRST];
+  uint64_t db_avail4slow = 0;
+  enum {
+    OLD_POLICY,
+    USE_SOME_EXTRA
+  };
+
+public:
+  RocksDBBlueFSVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total,
+    uint64_t _level0_size,
+    uint64_t _level_base,
+    uint64_t _level_multiplier,
+    double reserved_factor,
+    uint64_t reserved,
+    bool new_pol)
+  {
+    l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
+    l_totals[LEVEL_DB - LEVEL_FIRST] = _db_total;
+    l_totals[LEVEL_SLOW - LEVEL_FIRST] = _slow_total;
+
+    if (!new_pol) {
+      return;
+    }
+
+    // Calculating how much extra space is available at DB volume.
+    // Depending on the presence of explicit reserved size specification it might be either
+    // * DB volume size - reserved
+    // or
+    // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
+    if (!reserved) {
+      uint64_t prev_levels = _level0_size;
+      uint64_t cur_level = _level_base;
+      uint64_t cur_threshold = 0;
+      do {
+        uint64_t next_level = cur_level * _level_multiplier;
+        uint64_t next_threshold = prev_levels + cur_level + next_level * reserved_factor;
+        if (_db_total <= next_threshold) {
+          db_avail4slow = cur_threshold ? _db_total - cur_threshold : 0;
+          break;
+        } else {
+          prev_levels += cur_level;
+          cur_level = next_level;
+          cur_threshold = next_threshold;
+        }
+      } while (true);
+    } else {
+      db_avail4slow = _db_total - reserved;
+    }
+  }
+
+  void* get_hint_by_device(uint8_t dev) const override {
+    ceph_assert(dev == BlueFS::BDEV_WAL); // others aren't used atm
+    return  reinterpret_cast<void*>(LEVEL_WAL);
+  }
+  void* get_hint_by_dir(const string& dirname) const override;
+
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      auto& max = per_level_per_dev_max.at(p.bdev, pos);
+      cur += p.length;
+      if (cur > max) {
+        max = cur;
+      }
+      {
+        //update per-device totals
+        auto& cur = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+        auto& max = per_level_per_dev_max.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+        cur += p.length;
+        if (cur > max) {
+          max = cur;
+        }
+      }
+    }
+    {
+      //update per-level actual totals
+      auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+      auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+      cur += fnode.size;
+      if (cur > max) {
+        max = cur;
+      }
+    }
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      ceph_assert(cur >= p.length);
+      cur -= p.length;
+
+      //update per-device totals
+      auto& cur2 = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+      ceph_assert(cur2 >= p.length);
+      cur2 -= p.length;
+    }
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fnode.size);
+    cur -= fnode.size;
+  }
+  void add_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+    cur += fsize;
+    if (cur > max) {
+      max = cur;
+    }
+  }
+  void sub_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fsize);
+    per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos) -= fsize;
+  }
+
+  uint8_t select_prefer_bdev(void* h) override;
+  void get_paths(
+    const std::string& base,
+    BlueFSVolumeSelector::paths& res) const override;
+
+  void dump(ostream& sout) override;
+};
+
 #endif

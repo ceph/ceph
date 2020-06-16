@@ -173,7 +173,7 @@ function rados_put_get_data() {
         ceph osd out ${last_osd} || return 1
         ! get_osds $poolname $objname | grep '\<'${last_osd}'\>' || return 1
         ceph osd in ${last_osd} || return 1
-        run_osd $dir ${last_osd} || return 1
+        activate_osd $dir ${last_osd} || return 1
         wait_for_clean || return 1
     fi
 
@@ -373,7 +373,7 @@ function TEST_ec_object_attr_read_error() {
     inject_eio ec mdata $poolname $objname $dir 1 || return 1
 
     # Restart OSD
-    run_osd $dir ${primary_osd} || return 1
+    activate_osd $dir ${primary_osd} || return 1
 
     # Cluster should recover this object
     wait_for_clean || return 1
@@ -541,7 +541,7 @@ function TEST_ec_backfill_unfound() {
     inject_eio ec data $poolname $testobj $dir 0 || return 1
     inject_eio ec data $poolname $testobj $dir 1 || return 1
 
-    run_osd $dir ${last_osd} || return 1
+    activate_osd $dir ${last_osd} || return 1
     ceph osd in ${last_osd} || return 1
 
     sleep 15
@@ -621,7 +621,7 @@ function TEST_ec_recovery_unfound() {
     inject_eio ec data $poolname $testobj $dir 0 || return 1
     inject_eio ec data $poolname $testobj $dir 1 || return 1
 
-    run_osd $dir ${last_osd} || return 1
+    activate_osd $dir ${last_osd} || return 1
     ceph osd in ${last_osd} || return 1
 
     sleep 15

@@ -7,34 +7,42 @@ if test -e build; then
 fi
 
 PYBUILD="2"
-source /etc/os-release
-case "$ID" in
-    fedora)
-        if [ "$VERSION_ID" -ge "29" ] ; then
-            PYBUILD="3"
-        fi
-        ;;
-    rhel|centos)
-        MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-        if [ "$MAJOR_VER" -ge "8" ] ; then
-            PYBUILD="3"
-        fi
-        ;;
-    opensuse*|suse|sles)
-        PYBUILD="3"
-        WITH_RADOSGW_AMQP_ENDPOINT="OFF"
-        ;;
-esac
+if [ -r /etc/os-release ]; then
+  source /etc/os-release
+  case "$ID" in
+      fedora)
+          if [ "$VERSION_ID" -ge "29" ] ; then
+              PYBUILD="3"
+          fi
+          ;;
+      rhel|centos)
+          MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
+          if [ "$MAJOR_VER" -ge "8" ] ; then
+              PYBUILD="3"
+          fi
+          ;;
+      opensuse*|suse|sles)
+          PYBUILD="3"
+          ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+          ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
+          ;;
+  esac
+elif [ "$(uname)" == FreeBSD ] ; then
+  PYBUILD="3"
+  ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+  ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
+else
+  echo Unknown release
+  exit 1
+fi
+
 if [ "$PYBUILD" = "3" ] ; then
-    ARGS="$ARGS -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
+    ARGS+=" -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
 fi
 
 if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
-    ARGS="$ARGS -DWITH_CCACHE=ON"
-fi
-if [ -n "$WITH_RADOSGW_AMQP_ENDPOINT" ] ; then
-    ARGS="$ARGS -DWITH_RADOSGW_AMQP_ENDPOINT=$WITH_RADOSGW_AMQP_ENDPOINT"
+    ARGS+=" -DWITH_CCACHE=ON"
 fi
 
 mkdir build

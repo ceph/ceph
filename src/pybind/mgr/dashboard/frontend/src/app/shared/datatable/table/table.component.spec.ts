@@ -8,6 +8,7 @@ import * as _ from 'lodash';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
+import { PipesModule } from '../../pipes/pipes.module';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -33,7 +34,7 @@ describe('TableComponent', () => {
 
   configureTestBed({
     declarations: [TableComponent],
-    imports: [NgxDatatableModule, FormsModule, ComponentsModule, RouterTestingModule]
+    imports: [NgxDatatableModule, FormsModule, ComponentsModule, PipesModule, RouterTestingModule]
   });
 
   beforeEach(() => {
@@ -77,14 +78,6 @@ describe('TableComponent', () => {
     it('should have an int in setLimit parsing a string', () => {
       expect(component.limit).toBe(10);
       expect(component.limit).toEqual(jasmine.any(Number));
-
-      const e = { target: { value: '1' } };
-      component.setLimit(e);
-      expect(component.userConfig.limit).toBe(1);
-      expect(component.userConfig.limit).toEqual(jasmine.any(Number));
-      e.target.value = '-20';
-      component.setLimit(e);
-      expect(component.userConfig.limit).toBe(1);
     });
 
     it('should prevent propagation of mouseenter event', (done) => {
@@ -111,85 +104,122 @@ describe('TableComponent', () => {
       expect(component.sorts[0].prop).toBe('a');
       expect(component.sorts).toEqual(component.createSortingDefinition('a'));
     });
+  });
 
-    describe('test search', () => {
-      const doSearch = (search: string, expectedLength: number, firstObject?: object) => {
-        component.search = search;
-        component.updateFilter();
-        expect(component.rows.length).toBe(expectedLength);
-        if (firstObject) {
-          expect(component.rows[0]).toEqual(firstObject);
+  describe('test search', () => {
+    const doSearch = (search: string, expectedLength: number, firstObject?: object) => {
+      component.search = search;
+      component.updateFilter();
+      expect(component.rows.length).toBe(expectedLength);
+      if (firstObject) {
+        expect(component.rows[0]).toEqual(firstObject);
+      }
+    };
+
+    describe('searchableObjects', () => {
+      const testObject = {
+        obj: {
+          min: 8,
+          max: 123
         }
       };
 
-      it('should search for 13', () => {
-        doSearch('13', 9, { a: 7, b: 49, c: [-7, 'score13'], d: false });
-        expect(component.rows[1].a).toBe(13);
-        expect(component.rows[8].a).toBe(87);
+      beforeEach(() => {
+        component.data = [testObject];
+        component.columns = [{ prop: 'obj', name: 'Object' }];
       });
 
-      it('should search for true', () => {
-        doSearch('true', 50, { a: 0, b: 0, c: [-0, 'score6'], d: true });
-        expect(component.rows[0].d).toBe(true);
-        expect(component.rows[1].d).toBe(true);
+      it('should not search through objects as default case', () => {
+        expect(component.searchableObjects).toBe(false);
+        doSearch('8', 0);
       });
 
-      it('should search for false', () => {
-        doSearch('false', 50, { a: 1, b: 1, c: [-1, 'score7'], d: false });
-        expect(component.rows[0].d).toBe(false);
-        expect(component.rows[1].d).toBe(false);
+      it('should search through objects if searchableObjects is set to true', () => {
+        component.searchableObjects = true;
+        doSearch('28', 0);
+        doSearch('8', 1, testObject);
+        doSearch('123', 1, testObject);
+        doSearch('max', 1, testObject);
       });
+    });
 
-      it('should test search manipulation', () => {
-        let searchTerms = [];
-        spyOn(component, 'subSearch').and.callFake((_d, search) => {
-          expect(search).toEqual(searchTerms);
-        });
-        const searchTest = (s: string, st: string[]) => {
-          component.search = s;
-          searchTerms = st;
-          component.updateFilter();
-        };
-        searchTest('a b c', ['a', 'b', 'c']);
-        searchTest('a+b c', ['a+b', 'c']);
-        searchTest('a,,,, b,,,     c', ['a', 'b', 'c']);
-        searchTest('a,,,+++b,,,     c', ['a+++b', 'c']);
-        searchTest('"a b c"   "d e  f", "g, h i"', ['a+b+c', 'd+e++f', 'g+h+i']);
+    it('should find a particular number', () => {
+      doSearch('5', 37, { a: 5, b: 25, c: [-5, 'score11'], d: false });
+      // { a: 3, b: 9, c: [ -3, 'score9' ], d: false },
+      // { a: 7, b: 49, c: [ -7, 'score13' ], d: false },
+      // { a: 9, b: 81, c: [ -9, 'score15' ], d: false },
+
+      doSearch('9', 50, { a: 3, b: 9, c: [-3, 'score9'], d: false });
+    });
+
+    it('should search for 13', () => {
+      doSearch('13', 9, { a: 7, b: 49, c: [-7, 'score13'], d: false });
+      expect(component.rows[1].a).toBe(13);
+      expect(component.rows[8].a).toBe(87);
+    });
+
+    it('should search for true', () => {
+      doSearch('true', 50, { a: 0, b: 0, c: [-0, 'score6'], d: true });
+      expect(component.rows[0].d).toBe(true);
+      expect(component.rows[1].d).toBe(true);
+    });
+
+    it('should search for false', () => {
+      doSearch('false', 50, { a: 1, b: 1, c: [-1, 'score7'], d: false });
+      expect(component.rows[0].d).toBe(false);
+      expect(component.rows[1].d).toBe(false);
+    });
+
+    it('should test search manipulation', () => {
+      let searchTerms = [];
+      spyOn(component, 'subSearch').and.callFake((_d, search) => {
+        expect(search).toEqual(searchTerms);
       });
-
-      it('should search for multiple values', () => {
-        doSearch('7 5 3', 5, { a: 57, b: 3249, c: [-7, 'score15'], d: false });
-      });
-
-      it('should search with column filter', () => {
-        doSearch('power:1369', 1, { a: 37, b: 1369, c: [-7, 'score11'], d: false });
-        doSearch('ndex:7 ofa:5 poker:3', 3, { a: 71, b: 5041, c: [-1, 'score13'], d: false });
-      });
-
-      it('should search with through array', () => {
-        doSearch('array:score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-      });
-
-      it('should search with spaces', () => {
-        doSearch(`'poker array':score21`, 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-        doSearch('"poker array":score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-        doSearch('poker+array:score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-      });
-
-      it('should search if column name is incomplete', () => {
-        doSearch(`'poker array'`, 0);
-        doSearch('pok', 0);
-        doSearch('pok:', 100);
-      });
-
-      it('should restore full table after search', () => {
-        expect(component.rows.length).toBe(100);
-        component.search = '13';
+      const searchTest = (s: string, st: string[]) => {
+        component.search = s;
+        searchTerms = st;
         component.updateFilter();
-        expect(component.rows.length).toBe(9);
-        component.updateFilter(true);
-        expect(component.rows.length).toBe(100);
-      });
+      };
+      searchTest('a b c', ['a', 'b', 'c']);
+      searchTest('a+b c', ['a+b', 'c']);
+      searchTest('a,,,, b,,,     c', ['a', 'b', 'c']);
+      searchTest('a,,,+++b,,,     c', ['a+++b', 'c']);
+      searchTest('"a b c"   "d e  f", "g, h i"', ['a+b+c', 'd+e++f', 'g+h+i']);
+    });
+
+    it('should search for multiple values', () => {
+      doSearch('7 5 3', 5, { a: 57, b: 3249, c: [-7, 'score15'], d: false });
+    });
+
+    it('should search with column filter', () => {
+      doSearch('power:1369', 1, { a: 37, b: 1369, c: [-7, 'score11'], d: false });
+      doSearch('ndex:7 ofa:5 poker:3', 3, { a: 71, b: 5041, c: [-1, 'score13'], d: false });
+    });
+
+    it('should search with through array', () => {
+      doSearch('array:score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
+    });
+
+    it('should search with spaces', () => {
+      doSearch(`'poker array':score21`, 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
+      doSearch('"poker array":score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
+      doSearch('poker+array:score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
+    });
+
+    it('should search if column name is incomplete', () => {
+      doSearch(`'poker array'`, 0);
+      doSearch('pok', 0);
+      doSearch('pok:', 100);
+    });
+
+    it('should restore full table after search', () => {
+      component.updateFilter();
+      expect(component.rows.length).toBe(100);
+      component.search = '13';
+      component.updateFilter();
+      expect(component.rows.length).toBe(9);
+      component.updateFilter(true);
+      expect(component.rows.length).toBe(100);
     });
   });
 

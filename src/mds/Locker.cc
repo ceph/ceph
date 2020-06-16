@@ -1612,7 +1612,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
   if (lock->get_parent()->is_auth()) {
     // auth
     while (1) {
-      if (lock->can_xlock(client) &&
+      if (mut->locking && // started xlock (not preempt other request)
+	  lock->can_xlock(client) &&
 	  !(lock->get_state() == LOCK_LOCK_XLOCK &&	// client is not xlocker or
 	    in && in->issued_caps_need_gather(lock))) { // xlocker does not hold shared cap
 	lock->set_state(LOCK_XLOCK);
@@ -3511,7 +3512,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     dout(7) << " xattrs v" << pi.inode.xattr_version << " -> " << m->head.xattr_version << dendl;
     pi.inode.xattr_version = m->head.xattr_version;
     auto p = m->xattrbl.cbegin();
-    decode(*pi.xattrs, p);
+    decode_noshare(*pi.xattrs, p);
     wrlock_force(&in->xattrlock, mut);
   }
   

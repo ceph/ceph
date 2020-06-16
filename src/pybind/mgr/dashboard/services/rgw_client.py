@@ -136,43 +136,12 @@ def _parse_frontend_config(config):
     Get the port the RGW is running on. Due the complexity of the
     syntax not all variations are supported.
 
+    If there are multiple (ssl_)ports/(ssl_)endpoints options, then
+    the first found option will be returned.
+
     Get more details about the configuration syntax here:
     http://docs.ceph.com/docs/master/radosgw/frontends/
     https://civetweb.github.io/civetweb/UserManual.html
-
-    >>> _parse_frontend_config('beast port=8000')
-    (8000, False)
-
-    >>> _parse_frontend_config('civetweb port=8000s')
-    (8000, True)
-
-    >>> _parse_frontend_config('beast port=192.0.2.3:80')
-    (80, False)
-
-    >>> _parse_frontend_config('civetweb port=172.5.2.51:8080s')
-    (8080, True)
-
-    >>> _parse_frontend_config('civetweb port=[::]:8080')
-    (8080, False)
-
-    >>> _parse_frontend_config('civetweb port=ip6-localhost:80s')
-    (80, True)
-
-    >>> _parse_frontend_config('civetweb port=[2001:0db8::1234]:80')
-    (80, False)
-
-    >>> _parse_frontend_config('civetweb port=[::1]:8443s')
-    (8443, True)
-
-    >>> _parse_frontend_config('civetweb port=xyz')
-    Traceback (most recent call last):
-    ...
-    LookupError: Failed to determine RGW port
-
-    >>> _parse_frontend_config('civetweb')
-    Traceback (most recent call last):
-    ...
-    LookupError: Failed to determine RGW port
 
     :param config: The configuration string to parse.
     :type config: str
@@ -181,12 +150,36 @@ def _parse_frontend_config(config):
              whether SSL is used.
     :rtype: (int, boolean)
     """
-    match = re.search(r'port=(.*:)?(\d+)(s)?', config)
+    match = re.search(r'^(beast|civetweb)\s+.+$', config)
     if match:
-        port = int(match.group(2))
-        ssl = match.group(3) == 's'
-        return port, ssl
-    raise LookupError('Failed to determine RGW port')
+        if match.group(1) == 'beast':
+            match = re.search(r'(port|ssl_port|endpoint|ssl_endpoint)=(.+)',
+                              config)
+            if match:
+                option_name = match.group(1)
+                if option_name in ['port', 'ssl_port']:
+                    match = re.search(r'(\d+)', match.group(2))
+                    if match:
+                        port = int(match.group(1))
+                        ssl = option_name == 'ssl_port'
+                        return port, ssl
+                if option_name in ['endpoint', 'ssl_endpoint']:
+                    match = re.search(r'([\d.]+|\[.+\])(:(\d+))?',
+                                      match.group(2))
+                    if match:
+                        port = int(match.group(3)) if \
+                            match.group(2) is not None else 443 if \
+                            option_name == 'ssl_endpoint' else \
+                            80
+                        ssl = option_name == 'ssl_endpoint'
+                        return port, ssl
+        if match.group(1) == 'civetweb':
+            match = re.search(r'port=(.*:)?(\d+)(s)?', config)
+            if match:
+                port = int(match.group(2))
+                ssl = match.group(3) == 's'
+                return port, ssl
+    raise LookupError('Failed to determine RGW port from "{}"'.format(config))
 
 
 class RgwClient(RestClient):
@@ -310,7 +303,8 @@ class RgwClient(RestClient):
         # If user ID is not set, then try to get it via the RGW Admin Ops API.
         self.userid = userid if userid else self._get_user_id(self.admin_path)
 
-        logger.info("Created new connection for user: %s", self.userid)
+        logger.info("Created new connection: user=%s, host=%s, port=%s, ssl=%d, sslverify=%d",
+                    self.userid, host, port, ssl, ssl_verify)
 
     @RestClient.api_get('/', resp_structure='[0] > (ID & DisplayName)')
     def is_service_online(self, request=None):

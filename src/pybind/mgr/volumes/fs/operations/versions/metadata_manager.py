@@ -1,10 +1,11 @@
 import os
 import errno
 import logging
+import sys
 
-try:
+if sys.version_info >= (3, 2):
     import configparser
-except ImportError:
+else:
     import ConfigParser as configparser
 
 try:
@@ -31,7 +32,10 @@ class MetadataManager(object):
         self.fs = fs
         self.mode = mode
         self.config_path = config_path
-        self.config = configparser.ConfigParser()
+        if sys.version_info >= (3, 2):
+            self.config = configparser.ConfigParser()
+        else:
+            self.config = configparser.SafeConfigParser()
 
     def refresh(self):
         fd = None

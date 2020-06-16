@@ -9573,7 +9573,8 @@ void MDCache::request_kill(MDRequestRef& mdr)
   mdr->mark_event("killing request");
 
   if (mdr->committing) {
-    dout(10) << "request_kill " << *mdr << " -- already committing, no-op" << dendl;
+    dout(10) << "request_kill " << *mdr << " -- already committing, remove it from sesssion requests" << dendl;
+    mdr->item_session_request.remove_myself();
   } else {
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);
@@ -11213,7 +11214,7 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 
   CDir *first = dirs.front();
   int bits = first->get_frag().bits() - frag.bits();
-  dout(10) << " we are merginb by " << bits << " bits" << dendl;
+  dout(10) << " we are merging by " << bits << " bits" << dendl;
 
   dirfrag_t basedirfrag(diri->ino(), frag);
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);

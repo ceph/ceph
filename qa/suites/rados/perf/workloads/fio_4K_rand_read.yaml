@@ -1,5 +1,6 @@
 tasks:
 - cbt:
+    branch: 'nautilus'
     benchmarks:
       librbdfio:
         op_size: [4096]

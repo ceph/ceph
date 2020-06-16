@@ -31,6 +31,7 @@
 #include "common/async/yield_context.h"
 #include "rgw_website.h"
 #include "rgw_object_lock.h"
+#include "rgw_tag.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -1631,11 +1632,12 @@ namespace rgw {
   }
 }
 
+using meta_map_t = boost::container::flat_map <std::string, std::string>;
 
 struct req_info {
   const RGWEnv *env;
   RGWHTTPArgs args;
-  map<string, string> x_meta_map;
+  meta_map_t x_meta_map;
 
   string host;
   const char *method;
@@ -1725,6 +1727,14 @@ struct rgw_obj_key {
 
   const string& get_instance() const {
     return instance;
+  }
+
+  void set_ns(const std::string& _ns) {
+    ns = _ns;
+  }
+
+  const std::string& get_ns() const {
+    return ns;
   }
 
   string get_index_key_name() const {
@@ -2082,6 +2092,8 @@ struct req_state : DoutPrefixProvider {
   string trans_id;
   uint64_t id;
 
+  RGWObjTags tagset;
+
   bool mfa_verified{false};
 
   /// optional coroutine context
@@ -2436,7 +2448,7 @@ static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
 /* implement combining step, S3 header canonicalization;  k is a
  * valid header and in lc form */
 static inline void add_amz_meta_header(
-  std::map<std::string, std::string>& x_meta_map,
+  meta_map_t& x_meta_map,
   const std::string& k,
   const std::string& v)
 {

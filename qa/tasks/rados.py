@@ -6,6 +6,8 @@ import logging
 import gevent
 from teuthology import misc as teuthology
 
+import six
+
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
@@ -156,8 +158,8 @@ def task(ctx, config):
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
         '--size', str(object_size),
-        '--min-stride-size', str(config.get('min_stride_size', object_size / 10)),
-        '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
+        '--min-stride-size', str(config.get('min_stride_size', object_size // 10)),
+        '--max-stride-size', str(config.get('max_stride_size', object_size // 5)),
         '--max-seconds', str(config.get('max_seconds', 0))
         ])
 
@@ -193,14 +195,14 @@ def task(ctx, config):
 
     if config.get('write_append_excl', True):
         if 'write' in weights:
-            weights['write'] = weights['write'] / 2
+            weights['write'] = weights['write'] // 2
             weights['write_excl'] = weights['write']
 
         if 'append' in weights:
-            weights['append'] = weights['append'] / 2
+            weights['append'] = weights['append'] // 2
             weights['append_excl'] = weights['append']
 
-    for op, weight in weights.iteritems():
+    for op, weight in weights.items():
         args.extend([
             '--op', op, str(weight)
         ])
@@ -223,7 +225,7 @@ def task(ctx, config):
             existing_pools = config.get('pools', [])
             created_pools = []
             for role in config.get('clients', clients):
-                assert isinstance(role, basestring)
+                assert isinstance(role, six.string_types)
                 PREFIX = 'client.'
                 assert role.startswith(PREFIX)
                 id_ = role[len(PREFIX):]
@@ -246,7 +248,7 @@ def task(ctx, config):
                         manager.raw_cluster_cmd(
                             'osd', 'pool', 'set', pool, 'min_size', str(min_size))
 
-                (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+                (remote,) = ctx.cluster.only(role).remotes.keys()
                 proc = remote.run(
                     args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args +
                     ["--pool", pool],
@@ -255,7 +257,7 @@ def task(ctx, config):
                     wait=False
                     )
                 tests[id_] = proc
-            run.wait(tests.itervalues())
+            run.wait(tests.values())
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool);

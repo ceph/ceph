@@ -1,7 +1,6 @@
 """
 ceph manager -- Thrasher and CephManager objects
 """
-from cStringIO import StringIO
 from functools import wraps
 import contextlib
 import random
@@ -14,14 +13,18 @@ import logging
 import threading
 import traceback
 import os
+
+from io import BytesIO
+from six import StringIO
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
-from util.rados import cmd_erasure_code_profile
-from util import get_remote
+from tasks.util.rados import cmd_erasure_code_profile
+from tasks.util import get_remote
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
+import six
 
 try:
     from subprocess import DEVNULL # py3k
@@ -34,20 +37,17 @@ log = logging.getLogger(__name__)
 
 
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
-    conf_fp = StringIO()
+    conf_fp = BytesIO()
     ctx.ceph[cluster].conf.write(conf_fp)
     conf_fp.seek(0)
     writes = ctx.cluster.run(
         args=[
             'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
             'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'python',
-            '-c',
-            ('import shutil, sys; '
-             'shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))'),
-            conf_path,
-            run.Raw('&&'),
+            'sudo', 'tee', conf_path, run.Raw('&&'),
             'sudo', 'chmod', '0644', conf_path,
+            run.Raw('>'), '/dev/null',
+
         ],
         stdin=run.PIPE,
         wait=False)
@@ -138,7 +138,7 @@ class Thrasher:
                 """
                 Implement log behavior
                 """
-                print x
+                print(x)
             self.log = tmp
         if self.config is None:
             self.config = dict()
@@ -187,8 +187,8 @@ class Thrasher:
         allremotes = list(set(allremotes))
         for remote in allremotes:
             proc = remote.run(args=['type', cmd], wait=True,
-                              check_status=False, stdout=StringIO(),
-                              stderr=StringIO())
+                              check_status=False, stdout=BytesIO(),
+                              stderr=BytesIO())
             if proc.exitstatus != 0:
                 return False;
         return True;
@@ -243,8 +243,8 @@ class Thrasher:
             with safe_while(sleep=15, tries=40, action="type ceph-objectstore-tool") as proceed:
                 while proceed():
                     proc = exp_remote.run(args=['type', 'ceph-objectstore-tool'], 
-                               wait=True, check_status=False, stdout=StringIO(),
-                               stderr=StringIO())
+                               wait=True, check_status=False, stdout=BytesIO(),
+                               stderr=BytesIO())
                     if proc.exitstatus == 0:
                         break
                     log.debug("ceph-objectstore-tool binary not present, trying again")
@@ -255,17 +255,17 @@ class Thrasher:
                 while proceed():
                     proc = exp_remote.run(args=cmd, wait=True,
                                           check_status=False,
-                                          stdout=StringIO(), stderr=StringIO())
+                                          stdout=BytesIO(), stderr=BytesIO())
                     if proc.exitstatus == 0:
                         break
-                    elif proc.exitstatus == 1 and proc.stderr == "OSD has the store locked":
+                    elif proc.exitstatus == 1 and proc.stderr == b"OSD has the store locked":
                         continue
                     else:
                         raise Exception("ceph-objectstore-tool: "
                                         "exp list-pgs failure with status {ret}".
                                         format(ret=proc.exitstatus))
 
-            pgs = proc.stdout.getvalue().split('\n')[:-1]
+            pgs = six.ensure_str(proc.stdout.getvalue()).split('\n')[:-1]
             if len(pgs) == 0:
                 self.log("No PGs found for osd.{osd}".format(osd=exp_osd))
                 return
@@ -298,12 +298,12 @@ class Thrasher:
                 # If pg isn't already on this osd, then we will move it there
                 cmd = (prefix + "--op list-pgs").format(id=imp_osd)
                 proc = imp_remote.run(args=cmd, wait=True,
-                                      check_status=False, stdout=StringIO())
+                                      check_status=False, stdout=BytesIO())
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
                                     format(ret=proc.exitstatus))
-                pgs = proc.stdout.getvalue().split('\n')[:-1]
+                pgs = six.ensure_str(proc.stdout.getvalue()).split('\n')[:-1]
                 if pg not in pgs:
                     self.log("Moving pg {pg} from osd.{fosd} to osd.{tosd}".
                              format(pg=pg, fosd=exp_osd, tosd=imp_osd))
@@ -322,9 +322,9 @@ class Thrasher:
             cmd = (prefix + "--op import --file {file}")
             cmd = cmd.format(id=imp_osd, file=exp_path)
             proc = imp_remote.run(args=cmd, wait=True, check_status=False,
-                                  stderr=StringIO())
+                                  stderr=BytesIO())
             if proc.exitstatus == 1:
-                bogosity = "The OSD you are using is older than the exported PG"
+                bogosity = b"The OSD you are using is older than the exported PG"
                 if bogosity in proc.stderr.getvalue():
                     self.log("OSD older than exported PG"
                              "...ignored")
@@ -355,14 +355,14 @@ class Thrasher:
                 cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
                        "--filestore-split-multiple 1' sudo -E "
                        + no_sudo_prefix + "--op apply-layout-settings --pool " + pool).format(id=osd)
-                proc = remote.run(args=cmd, wait=True, check_status=False, stderr=StringIO())
+                proc = remote.run(args=cmd, wait=True, check_status=False,
+                                  stderr=BytesIO())
                 output = proc.stderr.getvalue()
-                if 'Couldn\'t find pool' in output:
+                if b'Couldn\'t find pool' in output:
                     continue
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool apply-layout-settings"
                                     " failed with {status}".format(status=proc.exitstatus))
-
 
     def blackhole_kill_osd(self, osd=None):
         """
@@ -656,7 +656,7 @@ class Thrasher:
         Decrease the size of the pool
         """
         pool = self.ceph_manager.get_pool()
-        orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
+        _ = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Shrinking pool %s" % (pool,))
         if self.ceph_manager.contract_pool(
                 pool,
@@ -807,7 +807,6 @@ class Thrasher:
         Random action selector.
         """
         chance_down = self.config.get('chance_down', 0.4)
-        chance_test_min_size = self.config.get('chance_test_min_size', 0)
         chance_test_backfill_full = \
             self.config.get('chance_test_backfill_full', 0)
         if isinstance(chance_down, int):
@@ -840,7 +839,7 @@ class Thrasher:
         actions.append((self.fix_pgp_num,
                         self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size,
-                        chance_test_min_size,))
+                        self.config.get('chance_test_min_size', 0),))
         actions.append((self.test_backfill_full,
                         chance_test_backfill_full,))
         if self.chance_thrash_cluster_full > 0:
@@ -1045,8 +1044,8 @@ class ObjectStoreTool:
             self.pgid = self.manager.get_object_pg_with_shard(self.pool,
                                                               self.object_name,
                                                               self.osd)
-        self.remote = self.manager.ctx.\
-            cluster.only('osd.{o}'.format(o=self.osd)).remotes.keys()[0]
+        self.remote = next(iter(self.manager.ctx.\
+            cluster.only('osd.{o}'.format(o=self.osd)).remotes.keys()))
         path = self.manager.get_filepath().format(id=self.osd)
         self.paths = ("--data-path {path} --journal-path {path}/journal".
                       format(path=path))
@@ -1075,7 +1074,7 @@ class ObjectStoreTool:
 
     def run(self, options, args, stdin=None, stdout=None):
         if stdout is None:
-            stdout = StringIO()
+            stdout = BytesIO()
         self.manager.kill_osd(self.osd)
         cmd = self.build_cmd(options, args, stdin)
         self.manager.log(cmd)
@@ -1083,11 +1082,12 @@ class ObjectStoreTool:
             proc = self.remote.run(args=['bash', '-e', '-x', '-c', cmd],
                                    check_status=False,
                                    stdout=stdout,
-                                   stderr=StringIO())
+                                   stderr=BytesIO())
             proc.wait()
             if proc.exitstatus != 0:
                 self.manager.log("failed with " + str(proc.exitstatus))
-                error = proc.stdout.getvalue() + " " + proc.stderr.getvalue()
+                error = six.ensure_str(proc.stdout.getvalue())  + " " + \
+                        six.ensure_str(proc.stderr.getvalue())
                 raise Exception(error)
         finally:
             if self.do_revive:
@@ -1122,7 +1122,7 @@ class CephManager:
                 """
                 implement log behavior.
                 """
-                print x
+                print(x)
             self.log = tmp
         if self.config is None:
             self.config = dict()
@@ -1146,7 +1146,7 @@ class CephManager:
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'timeout',
-            '120',
+            '900',
             'ceph',
             '--cluster',
             self.cluster,
@@ -1154,9 +1154,9 @@ class CephManager:
         ceph_args.extend(args)
         proc = self.controller.run(
             args=ceph_args,
-            stdout=StringIO(),
+            stdout=BytesIO(),
             )
-        return proc.stdout.getvalue()
+        return six.ensure_str(proc.stdout.getvalue())
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
@@ -1169,7 +1169,7 @@ class CephManager:
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'timeout',
-            '120',
+            '900',
             'ceph',
             '--cluster',
             self.cluster,
@@ -1182,7 +1182,7 @@ class CephManager:
 
     def run_ceph_w(self, watch_channel=None):
         """
-        Execute "ceph -w" in the background with stdout connected to a StringIO,
+        Execute "ceph -w" in the background with stdout connected to a BytesIO,
         and return the RemoteProcess.
 
         :param watch_channel: Specifies the channel to be watched. This can be
@@ -1221,7 +1221,7 @@ class CephManager:
             return
         if no_wait is None:
             no_wait = []
-        for osd, need in seq.iteritems():
+        for osd, need in seq.items():
             if osd in no_wait:
                 continue
             got = 0
@@ -1480,7 +1480,7 @@ class CephManager:
         while True:
             proc = self.admin_socket(service_type, service_id,
                                      args, check_status=False, stdout=stdout)
-            if proc.exitstatus is 0:
+            if proc.exitstatus == 0:
                 return proc
             else:
                 tries += 1
@@ -1527,7 +1527,7 @@ class CephManager:
         :param osdnum: osd number
         :param argdict: dictionary containing values to set.
         """
-        for k, v in argdict.iteritems():
+        for k, v in argdict.items():
             self.wait_run_admin_socket(
                 'osd', osdnum,
                 ['config', 'set', str(k), str(v)])
@@ -1549,9 +1549,9 @@ class CephManager:
         """
         Get osd statuses sorted by states that the osds are in.
         """
-        osd_lines = filter(
+        osd_lines = list(filter(
             lambda x: x.startswith('osd.') and (("up" in x) or ("down" in x)),
-            self.raw_osd_status().split('\n'))
+            self.raw_osd_status().split('\n')))
         self.log(osd_lines)
         in_osds = [int(i[4:].split()[0])
                    for i in filter(lambda x: " in " in x, osd_lines)]
@@ -1630,7 +1630,7 @@ class CephManager:
         :param erasure_code_use_overwrites: if true, allow overwrites
         """
         with self.lock:
-            assert isinstance(pool_name, basestring)
+            assert isinstance(pool_name, six.string_types)
             assert isinstance(pg_num, int)
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
@@ -1682,7 +1682,7 @@ class CephManager:
         :param pool_name: Pool to be removed
         """
         with self.lock:
-            assert isinstance(pool_name, basestring)
+            assert isinstance(pool_name, six.string_types)
             assert pool_name in self.pools
             self.log("removing pool_name %s" % (pool_name,))
             del self.pools[pool_name]
@@ -1694,14 +1694,14 @@ class CephManager:
         Pick a random pool
         """
         with self.lock:
-            return random.choice(self.pools.keys())
+            return random.sample(self.pools.keys(), 1)[0]
 
     def get_pool_pg_num(self, pool_name):
         """
         Return the number of pgs in the pool specified.
         """
         with self.lock:
-            assert isinstance(pool_name, basestring)
+            assert isinstance(pool_name, six.string_types)
             if pool_name in self.pools:
                 return self.pools[pool_name]
             return 0
@@ -1713,8 +1713,8 @@ class CephManager:
         :returns: property as an int value.
         """
         with self.lock:
-            assert isinstance(pool_name, basestring)
-            assert isinstance(prop, basestring)
+            assert isinstance(pool_name, six.string_types)
+            assert isinstance(prop, six.string_types)
             output = self.raw_cluster_cmd(
                 'osd',
                 'pool',
@@ -1732,8 +1732,8 @@ class CephManager:
         This routine retries if set operation fails.
         """
         with self.lock:
-            assert isinstance(pool_name, basestring)
-            assert isinstance(prop, basestring)
+            assert isinstance(pool_name, six.string_types)
+            assert isinstance(prop, six.string_types)
             assert isinstance(val, int)
             tries = 0
             while True:
@@ -1760,7 +1760,7 @@ class CephManager:
         Increase the number of pgs in a pool
         """
         with self.lock:
-            assert isinstance(pool_name, basestring)
+            assert isinstance(pool_name, six.string_types)
             assert isinstance(by, int)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
@@ -1780,7 +1780,7 @@ class CephManager:
         with self.lock:
             self.log('contract_pool %s by %s min %s' % (
                      pool_name, str(by), str(min_pgs)))
-            assert isinstance(pool_name, basestring)
+            assert isinstance(pool_name, six.string_types)
             assert isinstance(by, int)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
@@ -1803,6 +1803,9 @@ class CephManager:
         self.log('Canceling any pending splits or merges...')
         osd_dump = self.get_osd_dump_json()
         for pool in osd_dump['pools']:
+            if 'pg_num_target' not in pool:
+                # mimic does not adjust pg num automatically
+                continue
             if pool['pg_num'] != pool['pg_num_target']:
                 self.log('Setting pool %s (%d) pg_num %d -> %d' %
                          (pool['pool_name'], pool['pool'],
@@ -1816,7 +1819,7 @@ class CephManager:
         Set pgpnum property of pool_name pool.
         """
         with self.lock:
-            assert isinstance(pool_name, basestring)
+            assert isinstance(pool_name, six.string_types)
             assert pool_name in self.pools
             if not force and self.get_num_creating() > 0:
                 return False
@@ -2258,8 +2261,8 @@ class CephManager:
                 else:
                     self.log("no progress seen, keeping timeout for now")
                     if now - start >= timeout:
-			if self.is_recovered():
-			    break
+                        if self.is_recovered():
+                            break
                         self.log('dumping pgs')
                         out = self.raw_cluster_cmd('pg', 'dump')
                         self.log(out)
@@ -2587,6 +2590,24 @@ class CephManager:
         remote.run(args=['sudo',
                          'install', '-d', '-m0777', '--', '/var/run/ceph', ], )
 
+    def get_service_task_status(self, service, status_key):
+        """
+        Return daemon task status for a given ceph service.
+
+        :param service: ceph service (mds, osd, etc...)
+        :param status_key: matching task status key
+        """
+        task_status = {}
+        status = self.raw_cluster_status()
+        try:
+            for k,v in status['servicemap']['services'][service]['daemons'].items():
+                ts = dict(v).get('task_status', None)
+                if ts:
+                    task_status[k] = ts[status_key]
+        except KeyError: # catches missing service and status key
+            return {}
+        self.log(task_status)
+        return task_status
 
 def utility_task(name):
     """

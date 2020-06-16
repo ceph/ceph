@@ -551,7 +551,9 @@ void PoolReplayer<I>::run()
     }
 
     Mutex::Locker locker(m_lock);
-    if ((m_local_pool_watcher && m_local_pool_watcher->is_blacklisted()) ||
+    if (m_leader_watcher->is_blacklisted() ||
+        m_instance_replayer->is_blacklisted() ||
+        (m_local_pool_watcher && m_local_pool_watcher->is_blacklisted()) ||
 	(m_remote_pool_watcher && m_remote_pool_watcher->is_blacklisted())) {
       m_blacklisted = true;
       m_stopping = true;
@@ -591,9 +593,11 @@ void PoolReplayer<I>::print_status(Formatter *f, stringstream *ss)
   Mutex::Locker l(m_lock);
 
   f->open_object_section("pool_replayer_status");
-  f->dump_string("pool", m_local_io_ctx.get_pool_name());
   f->dump_stream("peer") << m_peer;
-  f->dump_string("instance_id", m_instance_watcher->get_instance_id());
+  if (m_local_io_ctx.is_valid()) {
+    f->dump_string("pool", m_local_io_ctx.get_pool_name());
+    f->dump_stream("instance_id") << m_instance_watcher->get_instance_id();
+  }
 
   std::string state("running");
   if (m_manual_stop) {
@@ -654,7 +658,10 @@ void PoolReplayer<I>::start()
   }
 
   m_manual_stop = false;
-  m_instance_replayer->start();
+
+  if (m_instance_replayer) {
+    m_instance_replayer->start();
+  }
 }
 
 template <typename I>
@@ -672,7 +679,10 @@ void PoolReplayer<I>::stop(bool manual)
   }
 
   m_manual_stop = true;
-  m_instance_replayer->stop();
+
+  if (m_instance_replayer) {
+    m_instance_replayer->stop();
+  }
 }
 
 template <typename I>
@@ -686,7 +696,9 @@ void PoolReplayer<I>::restart()
     return;
   }
 
-  m_instance_replayer->restart();
+  if (m_instance_replayer) {
+    m_instance_replayer->restart();
+  }
 }
 
 template <typename I>
@@ -700,7 +712,9 @@ void PoolReplayer<I>::flush()
     return;
   }
 
-  m_instance_replayer->flush();
+  if (m_instance_replayer) {
+    m_instance_replayer->flush();
+  }
 }
 
 template <typename I>

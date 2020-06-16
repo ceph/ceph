@@ -35,6 +35,7 @@ tasks:
     - \(OBJECT_
     - \(TOO_FEW_PGS\)
     - \(POOL_BACKFILLFULL\)
+    - slow request
 - thrashosds:
     op_delay: 30
     clean_interval: 120

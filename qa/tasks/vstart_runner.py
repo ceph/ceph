@@ -30,7 +30,8 @@ Alternative usage:
 
 """
 
-from StringIO import StringIO
+from io import BytesIO
+from io import StringIO
 from collections import defaultdict
 import getpass
 import signal
@@ -41,16 +42,16 @@ import shutil
 import re
 import os
 import time
-import json
 import sys
 import errno
 from unittest import suite, loader
 import unittest
 import platform
+from teuthology import misc
 from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
-
+import six
 import logging
 
 log = logging.getLogger(__name__)
@@ -118,7 +119,7 @@ try:
     from tasks.ceph_manager import CephManager
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
-    from mgr.mgr_test_case import MgrCluster
+    from tasks.mgr.mgr_test_case import MgrCluster
     from teuthology.contextutil import MaxWhileTries
     from teuthology.task import interactive
 except ImportError:
@@ -143,15 +144,8 @@ class LocalRemoteProcess(object):
     def __init__(self, args, subproc, check_status, stdout, stderr):
         self.args = args
         self.subproc = subproc
-        if stdout is None:
-            self.stdout = StringIO()
-        else:
-            self.stdout = stdout
-
-        if stderr is None:
-            self.stderr = StringIO()
-        else:
-            self.stderr = stderr
+        self.stdout = stdout or BytesIO()
+        self.stderr = stderr or BytesIO()
 
         self.check_status = check_status
         self.exitstatus = self.returncode = None
@@ -166,14 +160,20 @@ class LocalRemoteProcess(object):
                 return
 
         out, err = self.subproc.communicate()
-        self.stdout.write(out)
-        self.stderr.write(err)
+        if isinstance(self.stdout, StringIO):
+            self.stdout.write(out.decode(errors='ignore'))
+        else:
+            self.stdout.write(out)
+        if isinstance(self.stderr, StringIO):
+            self.stderr.write(err.decode(errors='ignore'))
+        else:
+            self.stderr.write(err)
 
         self.exitstatus = self.returncode = self.subproc.returncode
 
         if self.exitstatus != 0:
-            sys.stderr.write(out)
-            sys.stderr.write(err)
+            sys.stderr.write(six.ensure_str(out))
+            sys.stderr.write(six.ensure_str(err))
 
         if self.check_status and self.exitstatus != 0:
             raise CommandFailedError(self.args, self.exitstatus)
@@ -236,17 +236,23 @@ class LocalRemote(object):
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None, env=None, timeout=None):
+            logger=None, label=None, env=None, timeout=None, omit_sudo=True):
+        try:
+            if args[args.index('sudo') + 1] in ['-u', 'passwd', 'chown']:
+                omit_sudo = False
+        except ValueError:
+            pass
 
         # We don't need no stinkin' sudo
-        args = [a for a in args if a != "sudo"]
+        if omit_sudo:
+            args = [a for a in args if a != "sudo"]
 
         # We have to use shell=True if any run.Raw was present, e.g. &&
         shell = any([a for a in args if isinstance(a, Raw)])
 
         # Filter out helper tools that don't exist in a vstart environment
-        args = [a for a in args if a not in {
-            'adjust-ulimits', 'ceph-coverage', 'timeout'}]
+        args = [a for a in args if a not in (
+            'adjust-ulimits', 'ceph-coverage', 'timeout')]
 
         # Adjust binary path prefix if given a bare program name
         if "/" not in args[0]:
@@ -272,7 +278,7 @@ class LocalRemote(object):
         else:
             # Sanity check that we've got a list of strings
             for arg in args:
-                if not isinstance(arg, basestring):
+                if not isinstance(arg, six.string_types):
                     raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
                         arg, arg.__class__
                     ))
@@ -285,12 +291,12 @@ class LocalRemote(object):
                                        env=env)
 
         if stdin:
-            if not isinstance(stdin, basestring):
-                raise RuntimeError("Can't handle non-string stdins on a vstart cluster")
-
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
             # as long as the input buffer is "small"
-            subproc.stdin.write(stdin)
+            if isinstance(stdin, str):
+                subproc.stdin.write(stdin.encode())
+            else:
+                subproc.stdin.write(stdin)
 
         proc = LocalRemoteProcess(
             args, subproc, check_status,
@@ -302,6 +308,10 @@ class LocalRemote(object):
 
         return proc
 
+    def sh(self, command, log_limit=1024, cwd=None, env=None):
+
+        return misc.sh(command=command, log_limit=log_limit, cwd=cwd,
+                        env=env)
 
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
@@ -325,9 +335,9 @@ class LocalDaemon(object):
         """
         Return PID as an integer or None if not found
         """
-        ps_txt = self.controller.run(
+        ps_txt = six.ensure_str(self.controller.run(
             args=["ps", "ww", "-u"+str(os.getuid())]
-        ).stdout.getvalue().strip()
+        ).stdout.getvalue()).strip()
         lines = ps_txt.split("\n")[1:]
 
         for line in lines:
@@ -418,13 +428,13 @@ class LocalFuseMount(FuseMount):
         # to avoid assumptions about daemons' pwd
         return os.path.abspath("./client.{0}.keyring".format(self.client_id))
 
-    def run_shell(self, args, wait=True):
+    def run_shell(self, args, wait=True, check_status=True, omit_sudo=True):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
         # the "cd foo && bar" shenanigans isn't needed to begin with and
         # then we wouldn't have to special case this
-        return self.client_remote.run(
-            args, wait=wait, cwd=self.mountpoint
-        )
+        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+                                      check_status=check_status,
+                                      omit_sudo=omit_sudo)
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
@@ -485,10 +495,10 @@ class LocalFuseMount(FuseMount):
                 check_status=False
             )
             if p.exitstatus != 0:
-                log.warn("ls conns failed with {0}, assuming none".format(p.exitstatus))
+                log.warning("ls conns failed with {0}, assuming none".format(p.exitstatus))
                 return []
 
-            ls_str = p.stdout.getvalue().strip()
+            ls_str = six.ensure_str(p.stdout.getvalue().strip())
             if ls_str:
                 return [int(n) for n in ls_str.split("\n")]
             else:
@@ -592,7 +602,7 @@ class LocalCephManager(CephManager):
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)
-        proc = self.controller.run(args, wait=False, stdout=StringIO())
+        proc = self.controller.run(args=args, wait=False, stdout=StringIO())
         return proc
 
     def raw_cluster_cmd(self, *args, **kwargs):
@@ -600,8 +610,9 @@ class LocalCephManager(CephManager):
         args like ["osd", "dump"}
         return stdout string
         """
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
-        return proc.stdout.getvalue()
+        proc = self.controller.run(args=[os.path.join(BIN_PREFIX, "ceph")] + \
+                                        list(args), **kwargs)
+        return six.ensure_str(proc.stdout.getvalue())
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
@@ -771,10 +782,6 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
     def set_clients_block(self, blocked, mds_id=None):
         raise NotImplementedError()
 
-    def get_pgs_per_fs_pool(self):
-        # FIXME: assuming there are 3 OSDs
-        return 3 * int(self.get_config('mon_pg_warn_min_per_osd'))
-
 
 class InteractiveFailureResult(unittest.TextTestResult):
     """
@@ -832,7 +839,7 @@ def scan_tests(modules):
     max_required_mgr = 0
     require_memstore = False
 
-    for suite, case in enumerate_methods(overall_suite):
+    for suite_, case in enumerate_methods(overall_suite):
         max_required_mds = max(max_required_mds,
                                getattr(case, "MDSS_REQUIRED", 0))
         max_required_clients = max(max_required_clients,
@@ -917,14 +924,15 @@ def exec_test():
     remote = LocalRemote()
 
     # Tolerate no MDSs or clients running at start
-    ps_txt = remote.run(
-        args=["ps", "-u"+str(os.getuid())]
-    ).stdout.getvalue().strip()
+    ps_txt = six.ensure_str(remote.run(
+        args=["ps", "-u"+str(os.getuid())],
+        stdout=StringIO()
+    ).stdout.getvalue().strip())
     lines = ps_txt.split("\n")[1:]
     for line in lines:
         if 'ceph-fuse' in line or 'ceph-mds' in line:
             pid = int(line.split()[0])
-            log.warn("Killing stray process {0}".format(line))
+            log.warning("Killing stray process {0}".format(line))
             os.kill(pid, signal.SIGKILL)
 
     # Fire up the Ceph cluster if the user requested it
@@ -978,12 +986,12 @@ def exec_test():
                                  "mds", "allow",
                                  "mon", "allow r"])
 
-            open("./keyring", "a").write(p.stdout.getvalue())
+            open("./keyring", "ab").write(p.stdout.getvalue())
 
         mount = LocalFuseMount(ctx, test_dir, client_id)
         mounts.append(mount)
         if mount.is_mounted():
-            log.warn("unmounting {0}".format(mount.mountpoint))
+            log.warning("unmounting {0}".format(mount.mountpoint))
             mount.umount_wait()
         else:
             if os.path.exists(mount.mountpoint):
@@ -1050,11 +1058,11 @@ def exec_test():
 
         if hasattr(fn, 'is_for_teuthology') and getattr(fn, 'is_for_teuthology') is True:
             drop_test = True
-            log.warn("Dropping test because long running: ".format(method.id()))
+            log.warning("Dropping test because long running: ".format(method.id()))
 
         if getattr(fn, "needs_trimming", False) is True:
             drop_test = (os.getuid() != 0)
-            log.warn("Dropping test because client trim unavailable: ".format(method.id()))
+            log.warning("Dropping test because client trim unavailable: ".format(method.id()))
 
         if drop_test:
             # Don't drop the test if it was explicitly requested in arguments

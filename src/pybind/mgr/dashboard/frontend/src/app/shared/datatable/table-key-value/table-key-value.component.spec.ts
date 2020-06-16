@@ -9,6 +9,7 @@ import { ComponentsModule } from '../../components/components.module';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdDatePipe } from '../../pipes/cd-date.pipe';
+import { PipesModule } from '../../pipes/pipes.module';
 import { TableComponent } from '../table/table.component';
 import { TableKeyValueComponent } from './table-key-value.component';
 
@@ -18,7 +19,7 @@ describe('TableKeyValueComponent', () => {
 
   configureTestBed({
     declarations: [TableComponent, TableKeyValueComponent],
-    imports: [FormsModule, NgxDatatableModule, ComponentsModule, RouterTestingModule]
+    imports: [FormsModule, NgxDatatableModule, ComponentsModule, PipesModule, RouterTestingModule]
   });
 
   beforeEach(() => {
@@ -39,6 +40,13 @@ describe('TableKeyValueComponent', () => {
       { key: 'someKey', value: 0 },
       { key: 3, value: 'something' }
     ]);
+  });
+
+  it('should not show data supposed to be have hidden by key', () => {
+    component.data = [['a', 1], ['b', 2]];
+    component.hideKeys = ['a'];
+    component.ngOnInit();
+    expect(component.tableData).toEqual([{ key: 'b', value: 2 }]);
   });
 
   it('should remove items with objects as values', () => {

@@ -1,9 +1,11 @@
-""" 
+"""
 Run an autotest test on the ceph cluster.
 """
 import json
 import logging
 import os
+
+import six
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
@@ -42,17 +44,17 @@ def task(ctx, config):
     log.info('Setting up autotest...')
     testdir = teuthology.get_testdir(ctx)
     with parallel() as p:
-        for role in config.iterkeys():
+        for role in config.keys():
             (remote,) = ctx.cluster.only(role).remotes.keys()
             p.spawn(_download, testdir, remote)
 
     log.info('Making a separate scratch dir for every client...')
-    for role in config.iterkeys():
-        assert isinstance(role, basestring)
+    for role in config.keys():
+        assert isinstance(role, six.string_types)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
         mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
         scratch = os.path.join(mnt, 'client.{id}'.format(id=id_))
         remote.run(
@@ -68,7 +70,7 @@ def task(ctx, config):
             )
 
     with parallel() as p:
-        for role, tests in config.iteritems():
+        for role, tests in config.items():
             (remote,) = ctx.cluster.only(role).remotes.keys()
             p.spawn(_run_tests, testdir, remote, role, tests)
 
@@ -103,7 +105,7 @@ def _run_tests(testdir, remote, role, tests):
     """
     Spawned to run test on remote site
     """
-    assert isinstance(role, basestring)
+    assert isinstance(role, six.string_types)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]

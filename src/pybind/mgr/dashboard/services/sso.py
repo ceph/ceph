@@ -6,6 +6,7 @@ import errno
 import json
 import sys
 import threading
+import six
 
 try:
     from onelogin.saml2.settings import OneLogin_Saml2_Settings
@@ -186,13 +187,15 @@ def handle_sso_command(cmd):
             # pylint: disable=redefined-builtin
             FileNotFoundError = IOError
         try:
-            f = open(sp_x_509_cert, 'r')
+            f = open(sp_x_509_cert, 'r', encoding='utf-8') if six.PY3 else \
+                open(sp_x_509_cert, 'rb')
             sp_x_509_cert = f.read()
             f.close()
         except FileNotFoundError:
             pass
         try:
-            f = open(sp_private_key, 'r')
+            f = open(sp_private_key, 'r', encoding='utf-8') if six.PY3 else \
+                open(sp_private_key, 'rb')
             sp_private_key = f.read()
             f.close()
         except FileNotFoundError:
@@ -204,7 +207,8 @@ def handle_sso_command(cmd):
         # pylint: disable=broad-except
         except Exception:
             try:
-                f = open(idp_metadata, 'r')
+                f = open(idp_metadata, 'r', encoding='utf-8') if six.PY3 else \
+                    open(idp_metadata, 'rb')
                 idp_metadata = f.read()
                 f.close()
             except FileNotFoundError:
@@ -250,7 +254,7 @@ def handle_sso_command(cmd):
                 "wantMessagesSigned": has_sp_cert,
                 "wantAssertionsSigned": has_sp_cert,
                 "wantAssertionsEncrypted": has_sp_cert,
-                "wantNameIdEncrypted": has_sp_cert,
+                "wantNameIdEncrypted": False,  # Not all Identity Providers support this.
                 "metadataValidUntil": '',
                 "wantAttributeStatement": False
             }

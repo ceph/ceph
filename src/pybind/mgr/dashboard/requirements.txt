@@ -5,7 +5,7 @@ cheroot==6.0.0
 CherryPy==13.1.0
 configparser==3.5.0
 coverage==4.5.2
-enum34==1.1.6
+enum34; python_version<'3.4'
 funcsigs==1.0.2
 isort==4.2.15
 lazy-object-proxy==1.3.1
@@ -27,9 +27,10 @@ pytz==2017.3
 requests==2.20.0
 Routes==2.4.1
 singledispatch==3.4.0.3
-six==1.11.0
+six==1.14.0
 tempora==1.10
 tox==2.9.1
 virtualenv==15.1.0
 werkzeug==0.14.1
 wrapt==1.10.11
+pyfakefs

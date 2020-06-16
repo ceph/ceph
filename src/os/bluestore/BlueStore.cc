@@ -19,6 +19,7 @@
 #include <fcntl.h>
 
 #include <boost/container/flat_set.hpp>
+#include "boost/algorithm/string.hpp"
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -4837,14 +4838,16 @@ int BlueStore::_open_alloc()
     bytes += length;
   }
   fm->enumerate_reset();
-  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
-	  << " in " << num << " extents"
-	  << dendl;
 
   // also mark bluefs space as allocated
   for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
     alloc->init_rm_free(e.get_start(), e.get_len());
   }
+
+  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
+    << " in " << num << " extents"
+    << " available " << byte_u_t(alloc->get_free())
+    << dendl;
 
   return 0;
 }
@@ -5147,9 +5150,38 @@ int BlueStore::_open_bluefs(bool create)
   if (r < 0) {
     return r;
   }
+  RocksDBBlueFSVolumeSelector* vselector = nullptr;
+  if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
+
+    string options = cct->_conf->bluestore_rocksdb_options;
+
+    rocksdb::Options rocks_opts;
+    int r = RocksDBStore::ParseOptionsFromStringStatic(
+      cct,
+      options,
+      rocks_opts,
+      nullptr);
+    if (r < 0) {
+      return r;
+    }
+
+    double reserved_factor = cct->_conf->bluestore_volume_selection_reserved_factor;
+    vselector =
+      new RocksDBBlueFSVolumeSelector(
+        bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+        bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+        bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
+        1024 * 1024 * 1024, //FIXME: set expected l0 size here
+        rocks_opts.max_bytes_for_level_base,
+        rocks_opts.max_bytes_for_level_multiplier,
+        reserved_factor,
+        cct->_conf->bluestore_volume_selection_reserved,
+        cct->_conf->bluestore_volume_selection_policy != "rocksdb_original");
+  }
   if (create) {
     bluefs->mkfs(fsid);
   }
+  bluefs->set_volume_selector(vselector);
   r = bluefs->mount();
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
@@ -5157,9 +5189,9 @@ int BlueStore::_open_bluefs(bool create)
   return r;
 }
 
-void BlueStore::_close_bluefs()
+void BlueStore::_close_bluefs(bool cold_close)
 {
-  bluefs->umount();
+  bluefs->umount(cold_close);
   _minimal_close_bluefs();
 }
 
@@ -5224,7 +5256,7 @@ int BlueStore::_open_db_and_around(bool read_only)
 
     // now open in R/W mode
     if (!read_only) {
-      _close_db();
+      _close_db(true);
 
       r = _open_db(false, false, false);
       if (r < 0) {
@@ -5256,18 +5288,18 @@ int BlueStore::_open_db_and_around(bool read_only)
  out_fm:
   _close_fm();
  out_db:
-  _close_db();
+  _close_db(read_only);
   return r;
 }
 
-void BlueStore::_close_db_and_around()
+void BlueStore::_close_db_and_around(bool read_only)
 {
   if (bluefs) {
-    if (out_of_sync_fm.fetch_and(0)) {
+    if (!read_only && out_of_sync_fm.fetch_and(0)) {
       _sync_bluefs_and_fm();
     }
-    _close_db();
-    while(out_of_sync_fm.fetch_and(0)) {
+    _close_db(read_only);
+    while(!read_only && out_of_sync_fm.fetch_and(0)) {
       // if seen some allocations during close - repeat open_db, sync fm, close
       dout(0) << __func__ << " syncing FreelistManager" << dendl;
       int r = _open_db(false, false, false);
@@ -5278,7 +5310,7 @@ void BlueStore::_close_db_and_around()
 	break;
       }
       _sync_bluefs_and_fm();
-      _close_db();
+      _close_db(false);
     }
     if (!_kv_only) {
       _close_alloc();
@@ -5287,7 +5319,7 @@ void BlueStore::_close_db_and_around()
   } else {
     _close_alloc();
     _close_fm();
-    _close_db();
+    _close_db(read_only);
   }
 }
 
@@ -5361,17 +5393,16 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     if (r < 0) {
       return r;
     }
-    bluefs->set_slow_device_expander(this);
 
     if (cct->_conf->bluestore_bluefs_env_mirror) {
-      rocksdb::Env *a = new BlueRocksEnv(bluefs);
-      rocksdb::Env *b = rocksdb::Env::Default();
+      rocksdb::Env* a = new BlueRocksEnv(bluefs);
+      rocksdb::Env* b = rocksdb::Env::Default();
       if (create) {
-	string cmd = "rm -rf " + path + "/db " +
-	  path + "/db.slow " +
-	  path + "/db.wal";
-	int r = system(cmd.c_str());
-	(void)r;
+        string cmd = "rm -rf " + path + "/db " +
+          path + "/db.slow " +
+          path + "/db.wal";
+        int r = system(cmd.c_str());
+        (void)r;
       }
       env = new rocksdb::EnvMirror(b, a, false, true);
     } else {
@@ -5380,25 +5411,33 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
       // simplify the dir names, too, as "seen" by rocksdb
       fn = "db";
     }
+    bluefs->set_slow_device_expander(this);
+    BlueFSVolumeSelector::paths paths;
+    bluefs->get_vselector_paths(fn, paths);
 
     if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
       // we have both block.db and block; tell rocksdb!
       // note: the second (last) size value doesn't really matter
       ostringstream db_paths;
-      uint64_t db_size = bluefs->get_block_device_size(BlueFS::BDEV_DB);
-      uint64_t slow_size = bluefs->get_block_device_size(BlueFS::BDEV_SLOW);
-      db_paths << fn << ","
-               << (uint64_t)(db_size * 95 / 100) << " "
-               << fn + ".slow" << ","
-               << (uint64_t)(slow_size * 95 / 100);
+      bool first = true;
+      for (auto& p : paths) {
+        if (!first) {
+          db_paths << " ";
+        }
+        first = false;
+        db_paths << p.first << "," << p.second;
+
+      }
       kv_options["db_paths"] = db_paths.str();
-      dout(10) << __func__ << " set db_paths to " << db_paths.str() << dendl;
+      dout(1) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
 
     if (create) {
-      env->CreateDir(fn);
+      for (auto& p : paths) {
+        env->CreateDir(p.first);
+      }
+      // Selectors don't provide wal path so far hence create explicitly
       env->CreateDir(fn + ".wal");
-      env->CreateDir(fn + ".slow");
     } else {
       std::vector<std::string> res;
       // check for dir presence
@@ -5448,7 +5487,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
     if (bluefs) {
-      _close_bluefs();
+      _close_bluefs(read_only);
     }
     // delete env manually here since we can't depend on db to do this
     // under this case
@@ -5493,7 +5532,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    _close_db();
+    _close_db(read_only);
     return -EIO;
   }
   dout(1) << __func__ << " opened " << kv_backend
@@ -5501,13 +5540,13 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   return 0;
 }
 
-void BlueStore::_close_db()
+void BlueStore::_close_db(bool cold_close)
 {
   ceph_assert(db);
   delete db;
   db = NULL;
   if (bluefs) {
-    _close_bluefs();
+    _close_bluefs(cold_close);
   }
 }
 
@@ -6103,7 +6142,7 @@ int BlueStore::mkfs()
  out_close_fm:
   _close_fm();
  out_close_db:
-  _close_db();
+  _close_db(false);
  out_close_bdev:
   _close_bdev();
  out_close_fsid:
@@ -6152,7 +6191,7 @@ int BlueStore::_mount_for_bluefs()
 
 void BlueStore::_umount_for_bluefs()
 {
-  _close_bluefs();
+  _close_bluefs(false);
   _close_fsid();
   _close_path();
 }
@@ -6222,7 +6261,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
   bluefs->add_block_extent(
     id,
     reserved,
-    bluefs->get_block_device_size(id) - reserved);
+    bluefs->get_block_device_size(id) - reserved, true);
 
   r = bluefs->prepare_new_device(id);
   ceph_assert(r == 0);
@@ -6435,10 +6474,10 @@ string BlueStore::get_device_path(unsigned id)
 
 int BlueStore::expand_devices(ostream& out)
 {
-  int r = _mount(false);
+  int r = cold_open();
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
-  out << "Expanding..." << std::endl;
+  out << "Expanding DB/WAL..." << std::endl;
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
     if (devid == bluefs_shared_bdev ) {
       continue;
@@ -6486,13 +6525,18 @@ int BlueStore::expand_devices(ostream& out)
   }
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
+  cold_close();
   if (size0 < size) {
+    out << "Expanding Main..." << std::endl;
+    int r = _mount(false);
+    ceph_assert(r == 0);
+
     out << bluefs_shared_bdev
 	<<" : expanding " << " from 0x" << std::hex
 	<< size0 << " to 0x" << size << std::dec << std::endl;
     KeyValueDB::Transaction txn;
     txn = db->get_transaction();
-    int r = fm->expand(size, txn);
+    r = fm->expand(size, txn);
     ceph_assert(r == 0);
     db->submit_transaction_sync(txn);
 
@@ -6517,8 +6561,17 @@ int BlueStore::expand_devices(ostream& out)
 	      << std::endl;
       }
     }
+    umount();
   }
-  umount();
+  return r;
+}
+
+int BlueStore::dump_bluefs_sizes(ostream& out)
+{
+  int r = cold_open();
+  ceph_assert(r == 0);
+  bluefs->dump_block_extents(out);
+  cold_close();
   return r;
 }
 
@@ -6645,7 +6698,7 @@ int BlueStore::_mount(bool kv_only, bool open_db)
  out_coll:
   _flush_cache();
  out_db:
-  _close_db_and_around();
+  _close_db_and_around(false);
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -6671,7 +6724,7 @@ int BlueStore::umount()
     dout(20) << __func__ << " closing" << dendl;
 
   }
-  _close_db_and_around();
+  _close_db_and_around(false);
   _close_bdev();
   _close_fsid();
   _close_path();
@@ -6723,7 +6776,7 @@ int BlueStore::cold_open()
 }
 int BlueStore::cold_close()
 {
-  _close_db_and_around();
+  _close_db_and_around(true);
   _close_bdev();
   _close_fsid();
   _close_path();
@@ -7720,7 +7773,7 @@ out_scan:
   mempool_thread.shutdown();
   _flush_cache();
 out_db:
-  _close_db_and_around();
+  _close_db_and_around(false);
 out_bdev:
   _close_bdev();
 out_fsid:
@@ -7813,8 +7866,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	ceph_assert(pos < bs.size());
           bs.set(pos);
-        }
-	);
+        });
     }
     int r = bluefs->fsck();
     if (r < 0) {
@@ -12347,7 +12399,10 @@ void BlueStore::_do_write_small(
   uint64_t b_off0 = b_off;
   _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-  wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length, true, true);
+  wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
+    min_alloc_size != block_size, // use 'unused' bitmap when alloc granularity
+                                  // doesn't match disk one only
+    true);
 
   return;
 }
@@ -12686,12 +12741,14 @@ int BlueStore::_do_alloc_write(
     }
 
     if (wi.mark_unused) {
+      ceph_assert(!dblob.is_compressed());
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
         dblob.add_unused(0, b_off);
       }
-      if (b_end < wi.blob_length) {
-        dblob.add_unused(b_end, wi.blob_length - b_end);
+      uint64_t llen = dblob.get_logical_length();
+      if (b_end < llen) {
+        dblob.add_unused(b_end, llen - b_end);
       }
     }
 
@@ -14605,4 +14662,145 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
 }
 
 // =======================================================
+// RocksDBBlueFSVolumeSelector
 
+uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
+  ceph_assert(h != nullptr);
+  uint64_t hint = reinterpret_cast<uint64_t>(h);
+  uint8_t res;
+  switch (hint) {
+  case LEVEL_SLOW:
+    res = BlueFS::BDEV_SLOW;
+    if (db_avail4slow > 0) {
+      // considering statically available db space vs.
+      // - observed maximums on DB dev for DB/WAL/UNSORTED data
+      // - observed maximum spillovers
+      uint64_t max_db_use = 0; // max db usage we potentially observed
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
+      // this could go to db hence using it in the estimation
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_SLOW, LEVEL_DB - LEVEL_FIRST);
+
+      auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
+      uint64_t avail = min(
+        db_avail4slow,
+        max_db_use < db_total ? db_total - max_db_use : 0);
+
+      // considering current DB dev usage for SLOW data
+      if (avail > per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_SLOW - LEVEL_FIRST)) {
+        res = BlueFS::BDEV_DB;
+      }
+    }
+    break;
+  case LEVEL_WAL:
+    res = BlueFS::BDEV_WAL;
+    break;
+  case LEVEL_DB:
+  default:
+    res = BlueFS::BDEV_DB;
+    break;
+  }
+  return res;
+}
+
+void RocksDBBlueFSVolumeSelector::get_paths(const std::string& base, paths& res) const
+{
+  res.emplace_back(base, l_totals[LEVEL_DB - LEVEL_FIRST]);
+  res.emplace_back(base + ".slow", l_totals[LEVEL_SLOW - LEVEL_FIRST]);
+}
+
+void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(const string& dirname) const {
+  uint8_t res = LEVEL_DB;
+  if (dirname.length() > 5) {
+    // the "db.slow" and "db.wal" directory names are hard-coded at
+    // match up with bluestore.  the slow device is always the second
+    // one (when a dedicated block.db device is present and used at
+    // bdev 0).  the wal device is always last.
+    if (boost::algorithm::ends_with(dirname, ".slow")) {
+      res = LEVEL_SLOW;
+    }
+    else if (boost::algorithm::ends_with(dirname, ".wal")) {
+      res = LEVEL_WAL;
+    }
+  }
+  return reinterpret_cast<void*>(res);
+}
+
+void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
+  auto max_x = per_level_per_dev_usage.get_max_x();
+  auto max_y = per_level_per_dev_usage.get_max_y();
+  sout << "RocksDBBlueFSVolumeSelector: wal_total:" << l_totals[LEVEL_WAL - LEVEL_FIRST]
+    << ", db_total:" << l_totals[LEVEL_DB - LEVEL_FIRST]
+    << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
+    << ", db_avail:" << db_avail4slow << std::endl
+    << "Usage matrix:" << std::endl;
+  constexpr std::array<const char*, 7> names{ {
+    "DEV/LEV",
+    "WAL",
+    "DB",
+    "SLOW",
+    "*",
+    "*",
+    "REAL"
+  } };
+  const size_t width = 12;
+  for (size_t i = 0; i < names.size(); ++i) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << names[i];
+  }
+  sout << std::endl;
+  for (size_t l = 0; l < max_y; l++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    switch (l + LEVEL_FIRST) {
+    case LEVEL_WAL:
+      sout << "WAL"; break;
+    case LEVEL_DB:
+      sout << "DB"; break;
+    case LEVEL_SLOW:
+      sout << "SLOW"; break;
+    case LEVEL_MAX:
+      sout << "TOTALS"; break;
+    }
+    for (size_t d = 0; d < max_x - 1; d++) {
+      sout.setf(std::ios::left, std::ios::adjustfield);
+      sout.width(width);
+      sout << stringify(byte_u_t(per_level_per_dev_usage.at(d, l)));
+    }
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << stringify(byte_u_t(per_level_per_dev_usage.at(max_x - 1, l)))
+         << std::endl;
+  }
+  ceph_assert(max_x == per_level_per_dev_max.get_max_x());
+  ceph_assert(max_y == per_level_per_dev_max.get_max_y());
+  sout << "MAXIMUMS:" << std::endl;
+  for (size_t l = 0; l < max_y; l++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    switch (l + LEVEL_FIRST) {
+    case LEVEL_WAL:
+      sout << "WAL"; break;
+    case LEVEL_DB:
+      sout << "DB"; break;
+    case LEVEL_SLOW:
+      sout << "SLOW"; break;
+    case LEVEL_MAX:
+      sout << "TOTALS"; break;
+    }
+    for (size_t d = 0; d < max_x - 1; d++) {
+      sout.setf(std::ios::left, std::ios::adjustfield);
+      sout.width(width);
+      sout << stringify(byte_u_t(per_level_per_dev_max.at(d, l)));
+    }
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << stringify(byte_u_t(per_level_per_dev_max.at(max_x - 1, l)));
+    if (l < max_y - 1) {
+      sout << std::endl;
+    }
+  }
+}
+
+// =======================================================

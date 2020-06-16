@@ -13,6 +13,7 @@ import threading
 import time
 from uuid import uuid4
 from OpenSSL import crypto
+import _strptime  # pylint: disable=unused-import
 from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
 from mgr_util import get_default_addr, ServerConfigException, verify_tls_files
 
@@ -179,7 +180,7 @@ class CherryPyConfig(object):
 
         uri = "{0}://{1}:{2}{3}/".format(
             'https' if ssl else 'http',
-            socket.getfqdn() if server_addr in ['::', '0.0.0.0'] else server_addr,
+            socket.getfqdn(server_addr if server_addr != '::' else ''),
             server_port,
             self.url_prefix
         )

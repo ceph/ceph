@@ -185,13 +185,10 @@ export class CephfsChartComponent implements OnChanges, OnInit {
     const result = [];
     for (i = 1; i < sourceSeries.length; i++) {
       const cur = sourceSeries[i];
-      const tdelta = cur[0] - prev[0];
-      const vdelta = cur[1] - prev[1];
-      const rate = vdelta / tdelta;
 
       result.push({
         x: cur[0] * 1000,
-        y: rate
+        y: cur[1] - prev[1]
       });
 
       prev = cur;

@@ -29,7 +29,7 @@ For example to enable autoscaling on pool ``foo``,::
 You can also configure the default ``pg_autoscale_mode`` that is
 applied to any pools that are created in the future with::
 
-  ceph config set global osd_pool_default_autoscale_mode <mode>
+  ceph config set global osd_pool_default_pg_autoscale_mode <mode>
 
 Viewing PG scaling recommendations
 ----------------------------------
@@ -41,10 +41,10 @@ the PG count with this command::
 
 Output will be something like::
 
-   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  PG_NUM  NEW PG_NUM  AUTOSCALE
-   a     12900M                3.0        82431M  0.4695                     8         128  warn
-   c         0                 3.0        82431M  0.0000        0.2000       1          64  warn
-   b         0        953.6M   3.0        82431M  0.0347                     8              warn
+   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO PG_NUM  NEW PG_NUM  AUTOSCALE
+   a     12900M                3.0        82431M  0.4695                                     8         128  warn
+   c         0                 3.0        82431M  0.0000        0.2000           0.9884      1          64  warn
+   b         0        953.6M   3.0        82431M  0.0347                                     8              warn
 
 **SIZE** is the amount of data stored in the pool. **TARGET SIZE**, if
 present, is the amount of data the administrator has specified that
@@ -62,10 +62,20 @@ pools') data.  **RATIO** is the ratio of that total capacity that
 this pool is consuming (i.e., ratio = size * rate / raw capacity).
 
 **TARGET RATIO**, if present, is the ratio of storage that the
-administrator has specified that they expect this pool to consume.
-The system uses the larger of the actual ratio and the target ratio
-for its calculation.  If both target size bytes and ratio are specified, the
+administrator has specified that they expect this pool to consume
+relative to other pools with target ratios set.
+If both target size bytes and ratio are specified, the
 ratio takes precedence.
+
+**EFFECTIVE RATIO** is the target ratio after adjusting in two ways:
+
+1. subtracting any capacity expected to be used by pools with target size set
+2. normalizing the target ratios among pools with target ratio set so
+   they collectively target the rest of the space. For example, 4
+   pools with target_ratio 1.0 would have an effective ratio of 0.25.
+
+The system uses the larger of the actual ratio and the effective ratio
+for its calculation.
 
 **PG_NUM** is the current number of PGs for the pool (or the current
 number of PGs that the pool is working towards, if a ``pg_num``
@@ -119,9 +129,9 @@ PGs can be used from the beginning, preventing subsequent changes in
 ``pg_num`` and the overhead associated with moving data around when
 those adjustments are made.
 
-The *target size** of a pool can be specified in two ways: either in
-terms of the absolute size of the pool (i.e., bytes), or as a ratio of
-the total cluster capacity.
+The *target size* of a pool can be specified in two ways: either in
+terms of the absolute size of the pool (i.e., bytes), or as a weight
+relative to other pools with a ``target_size_ratio`` set.
 
 For example,::
 
@@ -130,18 +140,23 @@ For example,::
 will tell the system that `mypool` is expected to consume 100 TiB of
 space.  Alternatively,::
 
-  ceph osd pool set mypool target_size_ratio .9
+  ceph osd pool set mypool target_size_ratio 1.0
 
-will tell the system that `mypool` is expected to consume 90% of the
-total cluster capacity.
+will tell the system that `mypool` is expected to consume 1.0 relative
+to the other pools with ``target_size_ratio`` set. If `mypool` is the
+only pool in the cluster, this means an expected use of 100% of the
+total capacity. If there is a second pool with ``target_size_ratio``
+1.0, both pools would expect to use 50% of the cluster capacity.
 
 You can also set the target size of a pool at creation time with the optional ``--target-size-bytes <bytes>`` or ``--target-size-ratio <ratio>`` arguments to the ``ceph osd pool create`` command.
 
 Note that if impossible target size values are specified (for example,
-a capacity larger than the total cluster, or ratio(s) that sum to more
-than 1.0) then a health warning
-(``POOL_TARET_SIZE_RATIO_OVERCOMMITTED`` or
-``POOL_TARGET_SIZE_BYTES_OVERCOMMITTED``) will be raised.
+a capacity larger than the total cluster) then a health warning
+(``POOL_TARGET_SIZE_BYTES_OVERCOMMITTED``) will be raised.
+
+If both ``target_size_ratio`` and ``target_size_bytes`` are specified
+for a pool, only the ratio will be considered, and a health warning
+(``POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO``) will be issued.
 
 Specifying bounds on a pool's PGs
 ---------------------------------

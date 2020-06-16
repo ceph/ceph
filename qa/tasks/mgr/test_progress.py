@@ -4,7 +4,7 @@ import logging
 import time
 from unittest import SkipTest
 
-from mgr_test_case import MgrTestCase
+from .mgr_test_case import MgrTestCase
 
 
 log = logging.getLogger(__name__)

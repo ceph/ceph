@@ -8,50 +8,27 @@ import logging
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
-from teuthology.orchestra.connection import split_user
 from teuthology.packaging import install_package
 from teuthology.packaging import remove_package
 
 log = logging.getLogger(__name__)
 
 
-@contextlib.contextmanager
-def install_packages(ctx, config):
-    """
-    Download the packaged dependencies of Keystone.
-    Remove install packages upon exit.
-
-    The context passed in should be identical to the context
-    passed in to the main task.
-    """
-    assert isinstance(config, dict)
-    log.info('Installing packages for Keystone...')
-
-    deps = {
-	'deb': [ 'libffi-dev', 'libssl-dev', 'libldap2-dev', 'libsasl2-dev' ],
-	'rpm': [ 'libffi-devel', 'openssl-devel' ],
-    }
-    for (client, _) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-        for dep in deps[remote.os.package_type]:
-            install_package(dep, remote)
-    try:
-        yield
-    finally:
-        log.info('Removing packaged dependencies of Keystone...')
-
-        for (client, _) in config.items():
-            (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-            for dep in deps[remote.os.package_type]:
-                remove_package(dep, remote)
-
 def get_keystone_dir(ctx):
     return '{tdir}/keystone'.format(tdir=teuthology.get_testdir(ctx))
 
-def run_in_keystone_dir(ctx, client, args):
-    ctx.cluster.only(client).run(
+def run_in_keystone_dir(ctx, client, args, **kwargs):
+    return ctx.cluster.only(client).run(
         args=[ 'cd', get_keystone_dir(ctx), run.Raw('&&'), ] + args,
+        **kwargs
     )
+
+def get_toxvenv_dir(ctx):
+    return ctx.tox.venv_path
+
+def toxvenv_sh(ctx, remote, args, **kwargs):
+    activate = get_toxvenv_dir(ctx) + '/bin/activate'
+    return remote.sh(['source', activate, run.Raw('&&')] + args, **kwargs)
 
 def run_in_keystone_venv(ctx, client, args):
     run_in_keystone_dir(ctx, client,
@@ -63,9 +40,6 @@ def run_in_keystone_venv(ctx, client, args):
 def get_keystone_venved_cmd(ctx, cmd, args):
     kbindir = get_keystone_dir(ctx) + '/.tox/venv/bin/'
     return [ kbindir + 'python', kbindir + cmd ] + args
-
-def get_toxvenv_dir(ctx):
-    return ctx.tox.venv_path
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -114,6 +88,41 @@ def download(ctx, config):
             )
 
 @contextlib.contextmanager
+def install_packages(ctx, config):
+    """
+    Download the packaged dependencies of Keystone.
+    Remove install packages upon exit.
+
+    The context passed in should be identical to the context
+    passed in to the main task.
+    """
+    assert isinstance(config, dict)
+    log.info('Installing packages for Keystone...')
+
+    packages = {}
+    for (client, _) in config.items():
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        # use bindep to read which dependencies we need from keystone/bindep.txt
+        toxvenv_sh(ctx, remote, ['pip', 'install', 'bindep'])
+        packages[client] = toxvenv_sh(ctx, remote,
+                ['bindep', '--brief', '--file', '{}/bindep.txt'.format(get_keystone_dir(ctx))],
+                check_status=False).splitlines() # returns 1 on success?
+        # install python3 as bindep installs python34 which is not supported
+        # by keystone or tempest's tox based tests.
+        packages[client].append('python3')
+        for dep in packages[client]:
+            install_package(dep, remote)
+    try:
+        yield
+    finally:
+        log.info('Removing packaged dependencies of Keystone...')
+
+        for (client, _) in config.items():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            for dep in packages[client]:
+                remove_package(dep, remote)
+
+@contextlib.contextmanager
 def setup_venv(ctx, config):
     """
     Setup the virtualenv for Keystone using tox.
@@ -123,7 +132,7 @@ def setup_venv(ctx, config):
     for (client, _) in config.items():
         run_in_keystone_dir(ctx, client,
             [   'source',
-		'{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
+                '{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
                 run.Raw('&&'),
                 'tox', '-e', 'venv', '--notest'
             ])
@@ -133,7 +142,7 @@ def setup_venv(ctx, config):
     try:
         yield
     finally:
-	pass
+        pass
 
 @contextlib.contextmanager
 def configure_instance(ctx, config):
@@ -176,12 +185,11 @@ def run_keystone(ctx, config):
     log.info('Configuring keystone...')
 
     for (client, _) in config.items():
-        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         cluster_name, _, client_id = teuthology.split_role(client)
 
         # start the public endpoint
         client_public_with_id = 'keystone.public' + '.' + client_id
-        client_public_with_cluster = cluster_name + '.' + client_public_with_id
 
         public_host, public_port = ctx.keystone.public_endpoints[client]
         run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-public',
@@ -270,7 +278,7 @@ def run_section_cmds(ctx, cclient, section_cmd, special,
     for section_item in section_config_list:
         run_in_keystone_venv(ctx, cclient,
             [ 'openstack' ] + section_cmd.split() +
-            dict_to_args(special, auth_section + section_item.items()))
+            dict_to_args(special, auth_section + list(section_item.items())))
 
 def create_endpoint(ctx, cclient, service, url):
     endpoint_section = {
@@ -317,7 +325,7 @@ def assign_ports(ctx, config, initial_port):
     """
     port = initial_port
     role_endpoints = {}
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
+    for remote, roles_for_host in ctx.cluster.remotes.items():
         for role in roles_for_host:
             if role in config:
                 role_endpoints[role] = (remote.name.split('@')[1], port)
@@ -379,8 +387,8 @@ def task(ctx, config):
     ctx.keystone.admin_endpoints = assign_ports(ctx, config, 35357)
 
     with contextutil.nested(
-        lambda: install_packages(ctx=ctx, config=config),
         lambda: download(ctx=ctx, config=config),
+        lambda: install_packages(ctx=ctx, config=config),
         lambda: setup_venv(ctx=ctx, config=config),
         lambda: configure_instance(ctx=ctx, config=config),
         lambda: run_keystone(ctx=ctx, config=config),

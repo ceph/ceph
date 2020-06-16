@@ -35,7 +35,7 @@ def task(ctx, config):
         for ns in namespace:
             def object_name(i):
                 nslength = 0
-                if namespace is not '':
+                if namespace != '':
                     nslength = len(namespace)
                 numstr = str(i)
                 fillerlen = l - nslength - len(prefix) - len(numstr)

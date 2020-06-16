@@ -24,6 +24,7 @@
 #include "compressor/Compressor.h"
 #include "compressor/CompressionPlugin.h"
 #include "global/global_context.h"
+#include "osd/OSDMap.h"
 
 class CompressorTest : public ::testing::Test,
 			public ::testing::WithParamInterface<const char*> {
@@ -157,6 +158,44 @@ TEST_P(CompressorTest, big_round_trip_file)
 }
 #endif
 
+
+TEST_P(CompressorTest, round_trip_osdmap)
+{
+#include "osdmaps/osdmap.2982809.h"
+
+  auto compressor = Compressor::create(g_ceph_context, plugin);
+  bufferlist orig;
+  orig.append((char*)osdmap_a, sizeof(osdmap_a));
+  cout << "orig length " << orig.length() << std::endl;
+  uint32_t size = 128*1024;
+  OSDMap *o = new OSDMap;
+  o->decode(orig);
+  bufferlist fbl;
+  o->encode(fbl, o->get_encoding_features() | CEPH_FEATURE_RESERVED);
+  ASSERT_TRUE(fbl.contents_equal(orig));
+  for (int j = 0; j < 3; j++) {
+    bufferlist chunk;
+    uint32_t l = std::min(size, fbl.length() - j*size);
+    chunk.substr_of(fbl, j*size, l);
+    //fbl.rebuild();
+    bufferlist compressed;
+    int r = compressor->compress(chunk, compressed);
+    ASSERT_EQ(0, r);
+    bufferlist decompressed;
+    r = compressor->decompress(compressed, decompressed);
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(decompressed.length(), chunk.length());
+    if (!decompressed.contents_equal(chunk)) {
+      cout << "FAILED, orig bl was\n" << fbl << std::endl;
+      ASSERT_TRUE(decompressed.contents_equal(chunk));
+    }
+    cout << "chunk " << chunk.length()
+	 << " compressed " << compressed.length()
+	 << " decompressed " << decompressed.length()
+	 << " with " << plugin << std::endl;
+  }
+  delete o;
+}
 
 TEST_P(CompressorTest, compress_decompress)
 {

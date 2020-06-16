@@ -509,7 +509,7 @@ add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${BLKID_LIBRARIES})
 if(WITH_FUSE)
-  target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
+  target_link_libraries(ceph-osd FUSE::FUSE)
 endif()
 set_target_properties(ceph-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
@@ -663,10 +663,9 @@ if(WITH_FUSE)
     ceph_fuse.cc
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
-  target_link_libraries(ceph-fuse ${FUSE_LIBRARIES}
+  target_link_libraries(ceph-fuse FUSE::FUSE
     ${GSSAPI_LIBRARIES} client ceph-common global-static)
   set_target_properties(ceph-fuse PROPERTIES
-    COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
   install(TARGETS ceph-fuse DESTINATION bin)
   install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})

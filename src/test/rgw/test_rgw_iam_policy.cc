@@ -146,6 +146,7 @@ protected:
   static string example4;
   static string example5;
   static string example6;
+  static string example7;
 public:
   PolicyTest() {
     cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
@@ -656,6 +657,68 @@ TEST_F(PolicyTest, Eval6) {
 	    Effect::Allow);
 }
 
+TEST_F(PolicyTest, Parse7) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(example7)));
+  ASSERT_TRUE(p);
+
+  EXPECT_EQ(p->text, example7);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  ASSERT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_FALSE(p->statements[0].princ.empty());
+  EXPECT_EQ(p->statements[0].princ.size(), 1U);
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::s3);
+  EXPECT_TRUE(p->statements[0].resource.begin()->region.empty());
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "mybucket/*");
+  EXPECT_TRUE(p->statements[0].princ.begin()->is_user());
+  EXPECT_FALSE(p->statements[0].princ.begin()->is_wildcard());
+  EXPECT_EQ(p->statements[0].princ.begin()->get_tenant(), "");
+  EXPECT_EQ(p->statements[0].princ.begin()->get_id(), "A:subA");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  EXPECT_TRUE(p->statements[0].conditions.empty());
+}
+
+TEST_F(PolicyTest, Eval7) {
+  auto p  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(example7));
+  Environment e;
+
+  auto subacct = FakeIdentity(
+    Principal::user(std::move(""), "A:subA"));
+  auto parentacct = FakeIdentity(
+    Principal::user(std::move(""), "A"));
+  auto sub2acct = FakeIdentity(
+    Principal::user(std::move(""), "A:sub2A"));
+
+  EXPECT_EQ(p.eval(e, subacct, s3ListBucket,
+		   ARN(Partition::aws, Service::s3,
+		       "", arbitrary_tenant, "mybucket/*")),
+	    Effect::Allow);
+  
+  EXPECT_EQ(p.eval(e, parentacct, s3ListBucket,
+		   ARN(Partition::aws, Service::s3,
+		       "", arbitrary_tenant, "mybucket/*")),
+	    Effect::Pass);
+  
+  EXPECT_EQ(p.eval(e, sub2acct, s3ListBucket,
+		   ARN(Partition::aws, Service::s3,
+		       "", arbitrary_tenant, "mybucket/*")),
+	    Effect::Pass);
+}
+
 const string PolicyTest::arbitrary_tenant = "arbitrary_tenant";
 string PolicyTest::example1 = R"(
 {
@@ -747,6 +810,18 @@ string PolicyTest::example6 = R"(
     "Effect": "Allow",
     "Action": "*",
     "Resource": "arn:aws:iam:::user/A"
+  }
+}
+)";
+
+string PolicyTest::example7 = R"(
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Principal": {"AWS": ["arn:aws:iam:::user/A:subA"]},
+    "Action": "s3:ListBucket",
+    "Resource": "arn:aws:s3:::mybucket/*"
   }
 }
 )";

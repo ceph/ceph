@@ -2033,9 +2033,17 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   bool s3website_enabled = api_priority_s3website >= 0;
 
   if (info.host.size()) {
-    ssize_t pos = info.host.find(':');
-    if (pos >= 0) {
-      info.host = info.host.substr(0, pos);
+    ssize_t pos;
+    if (info.host.find('[') == 0) {
+      pos = info.host.find(']');
+      if (pos >=1) {
+        info.host = info.host.substr(1, pos-1);
+      }
+    } else {
+      pos = info.host.find(':');
+      if (pos >= 0) {
+        info.host = info.host.substr(0, pos);
+      }
     }
     ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;

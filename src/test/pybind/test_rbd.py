@@ -183,7 +183,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
             feature_data_pool = 128
         image_name = get_temp_image_name()
         if exception is None:
-            RBD().create(ioctx, image_name, IMG_SIZE)
+            RBD().create(ioctx, image_name, IMG_SIZE, old_format=(format == 1))
             try:
                 with Image(ioctx, image_name) as image:
                     eq(format == 1, image.old_format())
@@ -537,6 +537,10 @@ class TestImage(object):
 
     def test_image_auto_close(self):
         image = Image(ioctx, image_name)
+
+    def test_use_after_close(self):
+        self.image.close()
+        assert_raises(InvalidArgument, self.image.stat)
 
     def test_write(self):
         data = rand_data(256)
@@ -1728,10 +1732,13 @@ class TestExclusiveLock(object):
                 rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
                 with Image(ioctx2, image_name) as image, \
                      Image(blacklist_ioctx, image_name) as blacklist_image:
+
+                    lock_owners = list(image.lock_get_owners())
+                    eq(0, len(lock_owners))
+
                     blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
                     assert_raises(ReadOnlyImage, image.lock_acquire,
                                   RBD_LOCK_MODE_EXCLUSIVE)
-
                     lock_owners = list(image.lock_get_owners())
                     eq(1, len(lock_owners))
                     eq(RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]['mode'])

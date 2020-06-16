@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(ceph CXX C ASM)
-set(VERSION 14.2.8)
+set(VERSION 14.2.9)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
@@ -253,7 +253,7 @@ endif()
 
 option(WITH_FUSE "Fuse is here" ON)
 if(WITH_FUSE)
-  find_package(fuse)
+  find_package(FUSE)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
 
@@ -445,6 +445,7 @@ option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF
 option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
 option(WITH_RADOSGW_BEAST_OPENSSL "Rados Gateway's Beast frontend uses OpenSSL" ON)
 option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push endpoint" ON)
+option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)

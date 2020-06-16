@@ -108,6 +108,8 @@ void MetadataUpdate::finish(int r)
       DaemonStatePtr state;
       if (daemon_state.exists(key)) {
         state = daemon_state.get(key);
+	state->hostname = daemon_meta.at("hostname").get_str();
+
         if (key.first == "mds" || key.first == "mgr" || key.first == "mon") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
@@ -447,37 +449,22 @@ void Mgr::handle_osd_map()
       names_exist.insert(stringify(osd_id));
 
       // Consider whether to update the daemon metadata (new/restarted daemon)
-      bool update_meta = false;
       const auto k = DaemonKey("osd", stringify(osd_id));
       if (daemon_state.is_updating(k)) {
         continue;
       }
 
+      bool update_meta = false;
       if (daemon_state.exists(k)) {
-        auto metadata = daemon_state.get(k);
-	std::lock_guard l(metadata->lock);
-        auto addr_iter = metadata->metadata.find("front_addr");
-        if (addr_iter != metadata->metadata.end()) {
-          const std::string &metadata_addr = addr_iter->second;
-          const auto &map_addrs = osd_map.get_addrs(osd_id);
-
-          if (metadata_addr != stringify(map_addrs)) {
-            dout(4) << "OSD[" << osd_id << "] addr change " << metadata_addr
-                    << " != " << stringify(map_addrs) << dendl;
-            update_meta = true;
-          } else {
-            dout(20) << "OSD[" << osd_id << "] addr unchanged: "
-                     << metadata_addr << dendl;
-          }
-        } else {
-          // Awkward case where daemon went into DaemonState because it
-          // sent us a report but its metadata didn't get loaded yet
+        if (osd_map.get_up_from(osd_id) == osd_map.get_epoch()) {
+          dout(4) << "Mgr::handle_osd_map: osd." << osd_id
+		  << " joined cluster at " << "e" << osd_map.get_epoch()
+		  << dendl;
           update_meta = true;
         }
       } else {
         update_meta = true;
       }
-
       if (update_meta) {
         auto c = new MetadataUpdate(daemon_state, k);
         std::ostringstream cmd;

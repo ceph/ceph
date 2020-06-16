@@ -165,7 +165,7 @@
 <ng-template #perSecondTpl
              let-row="row"
              let-value="value">
-  {{ value }} /s
+  {{ value | dimless }} /s
 </ng-template>
 
 <ng-template #executingTpl
@@ -181,4 +181,10 @@
 <ng-template #classAddingTpl
              let-value="value">
   <span class="{{useCustomClass(value)}}">{{ value }}</span>
+</ng-template>
+
+<ng-template #mapTpl
+             let-column="column"
+             let-value="value">
+  <span>{{ value | map:column?.customTemplateConfig }}</span>
 </ng-template>

@@ -312,7 +312,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     cluster_state.with_pgmap(
       [&f, &tstate](const PGMap &pg_map) {
         PyEval_RestoreThread(tstate);
-	pg_map.dump(&f);
+	pg_map.dump(&f, false);
       }
     );
     return f.get();
@@ -358,11 +358,36 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
       });
     return f.get();
+  } else if (what == "pg_stats") {
+    cluster_state.with_pgmap(
+        [&f, &tstate](const PGMap &pg_map) {
+      PyEval_RestoreThread(tstate);
+      pg_map.dump_pg_stats(&f, false);
+    });
+    return f.get();
+  } else if (what == "pool_stats") {
+    cluster_state.with_pgmap(
+        [&f, &tstate](const PGMap &pg_map) {
+      PyEval_RestoreThread(tstate);
+      pg_map.dump_pool_stats(&f);
+    });
+    return f.get();
+  } else if (what == "pg_ready") {
+    PyEval_RestoreThread(tstate);
+    server.dump_pg_ready(&f);
+    return f.get();
   } else if (what == "osd_stats") {
     cluster_state.with_pgmap(
         [&f, &tstate](const PGMap &pg_map) {
       PyEval_RestoreThread(tstate);
       pg_map.dump_osd_stats(&f, false);
+    });
+    return f.get();
+  } else if (what == "osd_ping_times") {
+    cluster_state.with_pgmap(
+        [&f, &tstate](const PGMap &pg_map) {
+      PyEval_RestoreThread(tstate);
+      pg_map.dump_osd_ping_times(&f);
     });
     return f.get();
   } else if (what == "osd_pool_stats") {
@@ -379,18 +404,19 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         f.close_section();
     });
     return f.get();
-  } else if (what == "health" || what == "mon_status") {
-    bufferlist json;
-    if (what == "health") {
-      json = cluster_state.get_health();
-    } else if (what == "mon_status") {
-      json = cluster_state.get_mon_status();
-    } else {
-      ceph_abort();
-    }
-
-    PyEval_RestoreThread(tstate);
-    f.dump_string("json", json.to_str());
+  } else if (what == "health") {
+    cluster_state.with_health(
+        [&f, &tstate](const ceph::bufferlist &health_json) {
+      PyEval_RestoreThread(tstate);
+      f.dump_string("json", health_json.to_str());
+    });
+    return f.get();
+  } else if (what == "mon_status") {
+    cluster_state.with_mon_status(
+        [&f, &tstate](const ceph::bufferlist &mon_status_json) {
+      PyEval_RestoreThread(tstate);
+      f.dump_string("json", mon_status_json.to_str());
+    });
     return f.get();
   } else if (what == "mgr_map") {
     cluster_state.with_mgrmap([&f, &tstate](const MgrMap &mgr_map) {

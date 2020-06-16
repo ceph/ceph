@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 from copy import deepcopy
+import re
 import json
 import cherrypy
 
@@ -191,6 +192,13 @@ class Iscsi(BaseController):
     @Endpoint('PUT', 'discoveryauth')
     @UpdatePermission
     def set_discoveryauth(self, user, password, mutual_user, mutual_password):
+        validate_auth({
+            'user': user,
+            'password': password,
+            'mutual_user': mutual_user,
+            'mutual_password': mutual_password
+        })
+
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
         gateway_names = list(config['gateways'].keys())
@@ -249,10 +257,6 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
                                      component='iscsi')
-        if target_iqn not in config['targets']:
-            raise DashboardException(msg='Target does not exist',
-                                     code='target_does_not_exist',
-                                     component='iscsi')
         portal_names = list(config['targets'][target_iqn]['portals'].keys())
         validate_rest_api(portal_names)
         if portal_names:
@@ -272,6 +276,10 @@ class IscsiTarget(RESTController):
         disks = disks or []
         clients = clients or []
         groups = groups or []
+
+        validate_auth(auth)
+        for client in clients:
+            validate_auth(client['auth'])
 
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
@@ -294,6 +302,10 @@ class IscsiTarget(RESTController):
         clients = IscsiTarget._sorted_clients(clients)
         groups = IscsiTarget._sorted_groups(groups)
 
+        validate_auth(auth)
+        for client in clients:
+            validate_auth(client['auth'])
+
         gateway = get_available_gateway()
         config = IscsiClient.instance(gateway_name=gateway).get_config()
         if target_iqn not in config['targets']:
@@ -304,6 +316,7 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target IQN already in use',
                                      code='target_iqn_already_in_use',
                                      component='iscsi')
+
         settings = IscsiClient.instance(gateway_name=gateway).get_settings()
         new_portal_names = {p['host'] for p in portals}
         old_portal_names = set(config['targets'][target_iqn]['portals'].keys())
@@ -483,9 +496,12 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _target_deletion_required(target, new_target_iqn, new_target_controls):
+        gateway = get_available_gateway()
+        settings = IscsiClient.instance(gateway_name=gateway).get_settings()
+
         if target['target_iqn'] != new_target_iqn:
             return True
-        if target['target_controls'] != new_target_controls:
+        if settings['api_version'] < 2 and target['target_controls'] != new_target_controls:
             return True
         return False
 
@@ -625,6 +641,13 @@ class IscsiTarget(RESTController):
                                                                              targetauth_action)
 
     @staticmethod
+    def _is_auth_equal(target_auth, auth):
+        return auth['user'] == target_auth['username'] and \
+               auth['password'] == target_auth['password'] and \
+               auth['mutual_user'] == target_auth['mutual_username'] and \
+               auth['mutual_password'] == target_auth['mutual_password']
+
+    @staticmethod
     def _create(target_iqn, target_controls, acl_enabled,
                 auth, portals, disks, clients, groups,
                 task_progress_begin, task_progress_end, config, settings):
@@ -651,13 +674,17 @@ class IscsiTarget(RESTController):
                                                                                    ip_list)
                 TaskManager.current_task().inc_progress(task_progress_inc)
 
-            if acl_enabled:
-                IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
-                IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled, gateway_name)
-
-            else:
-                IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled, gateway_name)
-                IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
+            if not target_config or \
+               acl_enabled != target_config['acl_enabled'] or \
+               not IscsiTarget._is_auth_equal(target_config['auth'], auth):
+                if acl_enabled:
+                    IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
+                    IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled,
+                                                  gateway_name)
+                else:
+                    IscsiTarget._update_targetacl(target_config, target_iqn, acl_enabled,
+                                                  gateway_name)
+                    IscsiTarget._update_targetauth(config, target_iqn, auth, gateway_name)
 
             for disk in disks:
                 pool = disk['pool']
@@ -931,3 +958,22 @@ def validate_rest_api(gateways):
                                          '{}'.format(gateway),
                                      code='ceph_iscsi_rest_api_not_available_for_gateway',
                                      component='iscsi')
+
+
+def validate_auth(auth):
+    username_regex = re.compile(r'^[\w\.:@_-]{8,64}$')
+    password_regex = re.compile(r'^[\w@\-_\/]{12,16}$')
+    result = True
+
+    if auth['user'] or auth['password']:
+        result = bool(username_regex.match(auth['user'])) and \
+            bool(password_regex.match(auth['password']))
+
+    if auth['mutual_user'] or auth['mutual_password']:
+        result = result and bool(username_regex.match(auth['mutual_user'])) and \
+            bool(password_regex.match(auth['mutual_password'])) and auth['user']
+
+    if not result:
+        raise DashboardException(msg='Bad authentication',
+                                 code='target_bad_auth',
+                                 component='iscsi')

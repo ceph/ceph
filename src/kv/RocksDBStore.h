@@ -114,6 +114,7 @@ class RocksDBStore : public KeyValueDB {
 
   void compact_range(const string& start, const string& end);
   void compact_range_async(const string& start, const string& end);
+  int tryInterpret(const string& key, const string& val, rocksdb::Options& opt);
 
 public:
   /// compact the underlying rocksdb store
@@ -127,8 +128,12 @@ public:
     compact_range_async(string(), string());
   }
 
-  int tryInterpret(const string& key, const string& val, rocksdb::Options &opt);
-  int ParseOptionsFromString(const string& opt_str, rocksdb::Options &opt);
+  int ParseOptionsFromString(const string& opt_str, rocksdb::Options& opt);
+  static int ParseOptionsFromStringStatic(
+    CephContext* cct,
+    const string& opt_str,
+    rocksdb::Options &opt,
+    function<int(const string&, const string&, rocksdb::Options&)> interp);
   static int _test_init(const string& dir);
   int init(string options_str) override;
   /// compact rocksdb for all keys with a given prefix
@@ -492,9 +497,6 @@ err:
     set_cache_flag = true;
     return 0;
   }
-
-  int set_cache_capacity(int64_t capacity);
-  int64_t get_cache_capacity();
 
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() 
       const override {

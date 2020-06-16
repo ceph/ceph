@@ -8,6 +8,7 @@ import { CephShortVersionPipe } from './ceph-short-version.pipe';
 import { DimlessBinaryPerSecondPipe } from './dimless-binary-per-second.pipe';
 import { DimlessBinaryPipe } from './dimless-binary.pipe';
 import { DimlessPipe } from './dimless.pipe';
+import { DurationPipe } from './duration.pipe';
 import { EmptyPipe } from './empty.pipe';
 import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
@@ -16,6 +17,7 @@ import { IopsPipe } from './iops.pipe';
 import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { ListPipe } from './list.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
+import { MapPipe } from './map.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
 import { NotAvailablePipe } from './not-available.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
@@ -48,7 +50,9 @@ import { UpperFirstPipe } from './upper-first.pipe';
     NotAvailablePipe,
     IopsPipe,
     UpperFirstPipe,
-    RbdConfigurationSourcePipe
+    RbdConfigurationSourcePipe,
+    DurationPipe,
+    MapPipe
   ],
   exports: [
     BooleanTextPipe,
@@ -72,7 +76,9 @@ import { UpperFirstPipe } from './upper-first.pipe';
     NotAvailablePipe,
     IopsPipe,
     UpperFirstPipe,
-    RbdConfigurationSourcePipe
+    RbdConfigurationSourcePipe,
+    DurationPipe,
+    MapPipe
   ],
   providers: [
     BooleanTextPipe,
@@ -93,7 +99,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     IopsPipe,
     MillisecondsPipe,
     NotAvailablePipe,
-    UpperFirstPipe
+    UpperFirstPipe,
+    MapPipe
   ]
 })
 export class PipesModule {}

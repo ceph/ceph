@@ -1097,7 +1097,7 @@ int RGWPeriod::update_latest_epoch(epoch_t epoch)
       return r;
     } else if (epoch <= info.epoch) {
       r = -EEXIST; // fail with EEXIST if epoch is not newer
-      ldout(cct, 1) << "found existing latest_epoch " << info.epoch
+      ldout(cct, 10) << "found existing latest_epoch " << info.epoch
           << " >= given epoch " << epoch << ", returning r=" << r << dendl;
       return r;
     } else {

@@ -1643,8 +1643,10 @@ public:
         ceph::real_time mtime; /* for setting delete marker mtime */
         bool high_precision_time;
         rgw_zone_set *zones_trace;
+	bool abortmp;
+	uint64_t parts_accounted_size;
 
-        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr) {}
+        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr), abortmp(false), parts_accounted_size(0) {}
       } params;
 
       struct DeleteResult {
@@ -2203,10 +2205,13 @@ public:
                            ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
-  int cls_bucket_list_ordered(RGWBucketInfo& bucket_info, int shard_id,
-			      const rgw_obj_index_key& start,
+  int cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
+			      const int shard_id,
+			      const rgw_obj_index_key& start_after,
 			      const string& prefix,
-			      uint32_t num_entries, bool list_versions,
+			      const uint32_t num_entries,
+			      const bool list_versions,
+			      const uint16_t exp_factor, // 0 means ignore
 			      map<string, rgw_bucket_dir_entry>& m,
 			      bool *is_truncated,
 			      rgw_obj_index_key *last_entry,
@@ -2463,6 +2468,12 @@ public:
                    bool *is_truncated, RGWAccessListFilter *filter);
 
   uint64_t next_bucket_id();
+
+  /**
+   * This is broken out to facilitate unit testing.
+   */
+  static uint32_t calc_ordered_bucket_list_per_shard(uint32_t num_entries,
+						     uint32_t num_shards);
 };
 
 class RGWStoreManager {

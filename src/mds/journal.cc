@@ -424,7 +424,7 @@ void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
   decode(dnlast, bl);
   decode(dnv, bl);
   decode(inode, bl);
-  decode(xattrs, bl);
+  decode_noshare(xattrs, bl);
   if (inode.is_symlink())
     decode(symlink, bl);
   if (inode.is_dir()) {

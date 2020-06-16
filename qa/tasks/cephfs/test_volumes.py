@@ -49,21 +49,48 @@ class TestVolumes(CephFSTestCase):
     def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
         self.__check_clone_state("failed", clone, clone_group, timo)
 
-    def _verify_clone(self, subvolume, clone, source_group=None, clone_group=None, timo=120):
+    def _check_clone_canceled(self, clone, clone_group=None):
+        self.__check_clone_state("canceled", clone, clone_group, timo=1)
+
+    def _verify_clone_attrs(self, subvolume, clone, source_group=None, clone_group=None):
         path1 = self._get_subvolume_path(self.volname, subvolume, group_name=source_group)
         path2 = self._get_subvolume_path(self.volname, clone, group_name=clone_group)
 
-        s_uid = int(self.mount_a.run_shell(['stat', '-c' '%u', path1]).stdout.getvalue().strip())
-        c_uid = int(self.mount_a.run_shell(['stat', '-c' '%u', path2]).stdout.getvalue().strip())
-        self.assertEqual(s_uid, c_uid)
+        p = self.mount_a.run_shell(["find", path1])
+        paths = p.stdout.getvalue().strip().split()
 
-        s_gid = int(self.mount_a.run_shell(['stat', '-c' '%g', path1]).stdout.getvalue().strip())
-        c_gid = int(self.mount_a.run_shell(['stat', '-c' '%g', path2]).stdout.getvalue().strip())
-        self.assertEqual(s_gid, c_gid)
+        # for each entry in source and clone (sink) verify certain inode attributes:
+        # inode type, mode, ownership, [am]time.
+        for source_path in paths:
+            sink_entry = source_path[len(path1)+1:]
+            sink_path = os.path.join(path2, sink_entry)
 
-        s_mode = int(self.mount_a.run_shell(['stat', '-c' '%a', path1]).stdout.getvalue().strip())
-        c_mode = int(self.mount_a.run_shell(['stat', '-c' '%a', path2]).stdout.getvalue().strip())
-        self.assertEqual(s_mode, c_mode)
+            # mode+type
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%f', source_path]).stdout.getvalue().strip(), 16)
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%f', sink_path]).stdout.getvalue().strip(), 16)
+            self.assertEqual(sval, cval)
+
+            # ownership
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%u', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%u', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%g', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%g', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+            # inode timestamps
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%X', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%X', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+            sval = int(self.mount_a.run_shell(['stat', '-c' '%Y', source_path]).stdout.getvalue().strip())
+            cval = int(self.mount_a.run_shell(['stat', '-c' '%Y', sink_path]).stdout.getvalue().strip())
+            self.assertEqual(sval, cval)
+
+    def _verify_clone(self, subvolume, clone, source_group=None, clone_group=None, timo=120):
+        path1 = self._get_subvolume_path(self.volname, subvolume, group_name=source_group)
+        path2 = self._get_subvolume_path(self.volname, clone, group_name=clone_group)
 
         check = 0
         while check < timo:
@@ -74,6 +101,8 @@ class TestVolumes(CephFSTestCase):
             check += 1
             time.sleep(1)
         self.assertTrue(check < timo)
+
+        self._verify_clone_attrs(subvolume, clone, source_group=source_group, clone_group=clone_group)
 
     def _generate_random_volume_name(self, count=1):
         r = random.sample(range(10000), count)
@@ -127,6 +156,14 @@ class TestVolumes(CephFSTestCase):
         # remove the leading '/', and trailing whitespaces
         return path[1:].rstrip()
 
+    def  _get_subvolume_info(self, vol_name, subvol_name, group_name=None):
+        args = ["subvolume", "info", vol_name, subvol_name]
+        if group_name:
+            args.append(group_name)
+        args = tuple(args)
+        subvol_md = self._fs_cmd(*args)
+        return subvol_md
+
     def _delete_test_volume(self):
         self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
 
@@ -150,6 +187,23 @@ class TestVolumes(CephFSTestCase):
         for i in range(number_of_files):
             filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
             self.mount_a.write_n_mb(os.path.join(io_path, filename), file_size)
+
+    def _do_subvolume_io_mixed(self, subvolume, subvolume_group=None):
+        subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
+
+        reg_file = "regfile.0"
+        reg_path = os.path.join(subvolpath, reg_file)
+        dir_path = os.path.join(subvolpath, "dir.0")
+        sym_path1 = os.path.join(subvolpath, "sym.0")
+        # this symlink's ownership would be changed
+        sym_path2 = os.path.join(dir_path, "sym.0")
+
+        #self.mount_a.write_n_mb(reg_path, TestVolumes.DEFAULT_FILE_SIZE)
+        self.mount_a.run_shell(["sudo", "mkdir", dir_path], omit_sudo=False)
+        self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path1], omit_sudo=False)
+        self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path2], omit_sudo=False)
+        # flip ownership to nobody. assumption: nobody's id is 65534
+        self.mount_a.run_shell(["sudo", "chown", "-h", "65534:65534", sym_path2], omit_sudo=False)
 
     def _wait_for_trash_empty(self, timeout=30):
         # XXX: construct the trash dir path (note that there is no mgr
@@ -310,7 +364,7 @@ class TestVolumes(CephFSTestCase):
         self.assertNotEqual(subvolpath, None)
 
         # shrink the subvolume
-        nsize = osize/2
+        nsize = osize // 2
         self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
 
         # verify the quota
@@ -402,10 +456,10 @@ class TestVolumes(CephFSTestCase):
         self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
-        nsize = usedsize/2
+        nsize = usedsize // 2
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
-        except CommandFailedError as ce:
+        except CommandFailedError:
             raise RuntimeError("expected the 'fs subvolume resize' command to succeed")
 
         # verify the quota
@@ -442,7 +496,7 @@ class TestVolumes(CephFSTestCase):
         self.assertEqual(usedsize, susedsize)
 
         # shrink the subvolume
-        nsize = usedsize/2
+        nsize = usedsize // 2
         try:
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize), "--no_shrink")
         except CommandFailedError as ce:
@@ -477,7 +531,7 @@ class TestVolumes(CephFSTestCase):
         self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
 
         # create a file of size 5MB and try write more
-        file_size=file_size/2
+        file_size=file_size // 2
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
                                                                              number_of_files,
@@ -507,6 +561,44 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
 
         # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_create_idempotence_resize(self):
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # try creating w/ same subvolume name with size -- should set quota
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "1000000000")
+
+        # get subvolume metadata
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+        self.assertEqual(subvol_info["bytes_quota"], 1000000000)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_create_isolated_namespace(self):
+        """
+        Create subvolume in separate rados namespace
+        """
+
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--namespace-isolated")
+
+        # get subvolume metadata
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+        self.assertNotEqual(len(subvol_info), 0)
+        self.assertEqual(subvol_info["pool_namespace"], "fsvolumens_" + subvolume)
+
+        # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
         # verify trash dir is clean
@@ -686,6 +778,109 @@ class TestVolumes(CephFSTestCase):
         except CommandFailedError:
             raise RuntimeError("expected filling subvolume {0} with {1} file of size {2}MB "
                                "to succeed".format(subvolname, number_of_files, file_size))
+
+    def test_subvolume_info(self):
+        # tests the 'fs subvolume info' command
+
+        subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "pool_namespace",
+                     "type", "uid"]
+
+        # create subvolume
+        subvolume = self._generate_random_subvolume_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # get subvolume metadata
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+        if len(subvol_info) == 0:
+            raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
+        for md in subvol_md:
+            if md not in subvol_info.keys():
+                raise RuntimeError("%s not present in the metadata of subvolume" % md)
+
+        if subvol_info["bytes_pcent"] != "undefined":
+            raise RuntimeError("bytes_pcent should be set to undefined if quota is not set")
+
+        if subvol_info["bytes_quota"] != "infinite":
+            raise RuntimeError("bytes_quota should be set to infinite if quota is not set")
+        self.assertEqual(subvol_info["pool_namespace"], "")
+
+        nsize = self.DEFAULT_FILE_SIZE*1024*1024
+        try:
+            self._fs_cmd("subvolume", "resize", self.volname, subvolume, str(nsize))
+        except CommandFailedError:
+            raise RuntimeError("expected the 'fs subvolume resize' command to succeed")
+
+        # get subvolume metadata after quota set
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
+        if len(subvol_info) == 0:
+            raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
+        if subvol_info["bytes_pcent"] == "undefined":
+            raise RuntimeError("bytes_pcent should not be set to undefined if quota is set")
+
+        if subvol_info["bytes_quota"] == "infinite":
+            raise RuntimeError("bytes_quota should not be set to infinite if quota is set")
+
+        if subvol_info["type"] != "subvolume":
+            raise RuntimeError("type should be set to subvolume")
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_clone_subvolume_info(self):
+
+        # tests the 'fs subvolume info' command for a clone
+        subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
+                     "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "pool_namespace",
+                     "type", "uid"]
+
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        subvol_info = json.loads(self._get_subvolume_info(self.volname, clone))
+        if len(subvol_info) == 0:
+            raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
+        for md in subvol_md:
+            if md not in subvol_info.keys():
+                raise RuntimeError("%s not present in the metadata of subvolume" % md)
+        if subvol_info["type"] != "clone":
+            raise RuntimeError("type should be set to clone")
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
 
     ### subvolume group operations
 
@@ -1966,7 +2161,7 @@ class TestVolumes(CephFSTestCase):
 
         pool_capacity = 32 * 1024 * 1024
         # number of files required to fill up 99% of the pool
-        nr_files = int((pool_capacity * 0.99) / (TestVolumes.DEFAULT_FILE_SIZE * 1024 * 1024))
+        nr_files = int((pool_capacity * 0.99) // (TestVolumes.DEFAULT_FILE_SIZE * 1024 * 1024))
 
         # create subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
@@ -1985,7 +2180,7 @@ class TestVolumes(CephFSTestCase):
         self.fs.add_data_pool(new_pool)
 
         self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", new_pool,
-                                            "max_bytes", "{0}".format(pool_capacity / 4))
+                                            "max_bytes", "{0}".format(pool_capacity // 4))
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1, "--pool_layout", new_pool)
@@ -2024,6 +2219,157 @@ class TestVolumes(CephFSTestCase):
 
         #  ... and with force, failed clone can be removed
         self._fs_cmd("subvolume", "rm", self.volname, clone2, "--force")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_attr_clone(self):
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io_mixed(subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # verify clone
+        self._verify_clone(subvolume, clone)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_cancel_in_progress(self):
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clone = self._generate_random_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=128)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule a clone
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        # cancel on-going clone
+        self._fs_cmd("clone", "cancel", self.volname, clone)
+
+        # verify canceled state
+        self._check_clone_canceled(clone)
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_cancel_pending(self):
+        """
+        this test is a bit more involved compared to canceling an in-progress clone.
+        we'd need to ensure that a to-be canceled clone has still not been picked up
+        by cloner threads. exploit the fact that clones are picked up in an FCFS
+        fashion and there are four (4) cloner threads by default. When the number of
+        cloner threads increase, this test _may_ start tripping -- so, the number of
+        clone operations would need to be jacked up.
+        """
+        # default number of clone threads
+        NR_THREADS = 4
+        # good enough for 4 threads
+        NR_CLONES = 5
+        # yeh, 1gig -- we need the clone to run for sometime
+        FILE_SIZE_MB = 1024
+
+        subvolume = self._generate_random_subvolume_name()
+        snapshot = self._generate_random_snapshot_name()
+        clones = self._generate_random_clone_name(NR_CLONES)
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=4, file_size=FILE_SIZE_MB)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # now, protect snapshot
+        self._fs_cmd("subvolume", "snapshot", "protect", self.volname, subvolume, snapshot)
+
+        # schedule clones
+        for clone in clones:
+            self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
+
+        to_wait = clones[0:NR_THREADS]
+        to_cancel = clones[NR_THREADS:]
+
+        # cancel pending clones and verify
+        for clone in to_cancel:
+            status = json.loads(self._fs_cmd("clone", "status", self.volname, clone))
+            self.assertEqual(status["status"]["state"], "pending")
+            self._fs_cmd("clone", "cancel", self.volname, clone)
+            self._check_clone_canceled(clone)
+
+        # let's cancel on-going clones. handle the case where some of the clones
+        # _just_ complete
+        for clone in list(to_wait):
+            try:
+                self._fs_cmd("clone", "cancel", self.volname, clone)
+                to_cancel.append(clone)
+                to_wait.remove(clone)
+            except CommandFailedError as ce:
+                if ce.exitstatus != errno.EINVAL:
+                    raise RuntimeError("invalid error code when cancelling on-going clone")
+
+        # now, unprotect snapshot
+        self._fs_cmd("subvolume", "snapshot", "unprotect", self.volname, subvolume, snapshot)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        for clone in to_wait:
+            self._fs_cmd("subvolume", "rm", self.volname, clone)
+        for clone in to_cancel:
+            self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
 
         # verify trash dir is clean
         self._wait_for_trash_empty()

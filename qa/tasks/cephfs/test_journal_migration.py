@@ -1,5 +1,4 @@
 
-from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.workunit import task as workunit
 
@@ -76,14 +75,12 @@ class TestJournalMigration(CephFSTestCase):
 
         self.fs.journal_tool(["event", "get", "json",
                               "--path", "/tmp/journal.json"], 0)
-        p = self.fs.tool_remote.run(
-            args=[
-                "python",
+        p = self.fs.tool_remote.sh([
+                "python3",
                 "-c",
-                "import json; print len(json.load(open('/tmp/journal.json')))"
-            ],
-            stdout=StringIO())
-        event_count = int(p.stdout.getvalue().strip())
+                "import json; print(len(json.load(open('/tmp/journal.json'))))"
+            ])
+        event_count = int(p.strip())
         if event_count < 1000:
             # Approximate value of "lots", expected from having run fsstress
             raise RuntimeError("Unexpectedly few journal events: {0}".format(event_count))

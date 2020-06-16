@@ -2,10 +2,9 @@
 CephFS sub-tasks.
 """
 
-import contextlib
 import logging
 import re
-import time
+import six
 
 from tasks.cephfs.filesystem import Filesystem
 
@@ -40,7 +39,7 @@ def clients_evicted(ctx, config):
     for rank in fs.get_ranks(status=status):
         ls = fs.rank_asok(['session', 'ls'], rank=rank['rank'], status=status)
         for session in ls:
-            for client, evicted in clients.viewitems():
+            for client, evicted in six.viewitems(clients):
                 mount = mounts.get(client)
                 if mount is not None:
                     global_id = mount.get_global_id()
@@ -53,7 +52,7 @@ def clients_evicted(ctx, config):
 
     no_session = set(clients) - has_session
     should_assert = False
-    for client, evicted in clients.viewitems():
+    for client, evicted in six.viewitems(clients):
         mount = mounts.get(client)
         if mount is not None:
             if evicted:

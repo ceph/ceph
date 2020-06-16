@@ -11,6 +11,7 @@ overrides:
       - \(POOL_APP_NOT_ENABLED\)
       - \(PG_AVAILABILITY\)
       - \(OBJECT_MISPLACED\)
+      - slow request
     conf:
       client:
         debug ms: 1
@@ -22,6 +23,8 @@ overrides:
 tasks:
 - workunit:
     timeout: 6h
+    env:
+      ALLOW_TIMEOUTS: "1"
     clients:
       client.0:
         - rados/test.sh

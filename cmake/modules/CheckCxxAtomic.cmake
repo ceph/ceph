@@ -10,18 +10,29 @@ function(check_cxx_atomics var)
     check_cxx_source_compiles("
 #include <atomic>
 #include <cstdint>
+
+#if __s390x__
+// Boost needs 16-byte atomics for tagged pointers.
+// These are implemented via inline instructions on the platform
+// if 16-byte alignment can be proven, and are delegated to libatomic
+// library routines otherwise.  Whether or not alignment is provably
+// OK for a std::atomic unfortunately depends on compiler version and
+// optimization levels, and also on the details of the expression.
+// We specifically test access via an otherwise unknown pointer here
+// to ensure we get the most complex case.  If this access can be
+// done without libatomic, then all accesses can be done.
+bool atomic16(std::atomic<unsigned __int128> *ptr)
+{
+  return *ptr != 0;
+}
+#endif
+
 int main() {
   std::atomic<uint8_t> w1;
   std::atomic<uint16_t> w2;
   std::atomic<uint32_t> w4;
   std::atomic<uint64_t> w8;
-#ifdef __s390x__
-  // Boost needs 16-byte atomics for tagged pointers.
-  std::atomic<unsigned __int128> w16;
-#else
-  #define w16 0
-#endif
-  return w1 + w2 + w4 + w8 + w16;
+  return w1 + w2 + w4 + w8;
 }
 " ${var})
 endfunction(check_cxx_atomics)

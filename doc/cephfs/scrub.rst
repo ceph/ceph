@@ -70,8 +70,20 @@ initiate the scrub.
    }
 
 `status` shows the number of inodes that are scheduled to be scrubbed at any point in time,
-hence, can change on subsequent `scrub status` invocations.
+hence, can change on subsequent `scrub status` invocations. Also, a high level summary of
+scrub operation (which includes the operation state and paths on which scrub is triggered)
+gets displayed in `ceph status`.
 
+::
+
+   ceph status
+   [...]
+
+   task status:
+     scrub status:
+         mds.0: active [paths:/]
+
+   [...]
 
 Control (ongoing) Filesystem Scrubs
 ===================================

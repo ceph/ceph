@@ -35,12 +35,14 @@
 %bcond_without libradosstriper
 %bcond_without ocf
 %bcond_without amqp_endpoint
+%bcond_without kafka_endpoint
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
 %bcond_with selinux
 %bcond_with cephfs_java
 %bcond_with amqp_endpoint
+%bcond_with kafka_endpoint
 #Compat macro for new _fillupdir macro introduced in Nov 2017
 %if ! %{defined _fillupdir}
 %global _fillupdir /var/adm/fillup-templates
@@ -76,7 +78,9 @@
 %if 0%{without python2}
 %global _defined_if_python2_absent 1
 %endif
-
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
+%global weak_deps 1
+%endif
 %if %{with selinux}
 # get selinux policy version
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
@@ -193,6 +197,9 @@ BuildRequires:	xmlstarlet
 BuildRequires:	yasm
 %if 0%{with amqp_endpoint}
 BuildRequires:  librabbitmq-devel
+%endif
+%if 0%{with kafka_endpoint}
+BuildRequires:  librdkafka-devel
 %endif
 %if 0%{with make_check}
 BuildRequires:  jq
@@ -370,7 +377,7 @@ Requires:      which
 Requires:      gperftools-libs >= 2.6.1
 %endif
 %endif
-%if 0%{?suse_version}
+%if 0%{?weak_deps}
 Recommends:    chrony
 %endif
 %description base
@@ -447,13 +454,15 @@ Requires:       python%{_python_buildid}-werkzeug
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
 Requires:       python%{_python_buildid}-Werkzeug
-Recommends:     python%{_python_buildid}-influxdb
+%endif
+%if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-ssh = %{_epoch_prefix}%{version}-%{release}
+Recommends:	python%{_python_buildid}-influxdb
 %endif
 %if 0%{?rhel} == 7
 Requires:       pyOpenSSL
@@ -479,6 +488,9 @@ Requires:       python%{_python_buildid}-cherrypy
 Requires:       python%{_python_buildid}-jwt
 Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-werkzeug
+%if 0%{?weak_deps}
+Recommends:     python%{_python_buildid}-saml
+%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
@@ -878,7 +890,7 @@ Summary:	Ceph distributed file system client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Obsoletes:	libcephfs1
+Obsoletes:	libcephfs1 < %{_epoch_prefix}%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-libcephfs
@@ -1216,6 +1228,11 @@ ${CMAKE} .. \
     -DWITH_RADOSGW_AMQP_ENDPOINT=ON \
 %else
     -DWITH_RADOSGW_AMQP_ENDPOINT=OFF \
+%endif
+%if 0%{with kafka_endpoint}
+    -DWITH_RADOSGW_KAFKA_ENDPOINT=ON \
+%else
+    -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
 %endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
     -DWITH_GRAFANA=ON
@@ -2075,7 +2092,7 @@ fi
 %files -n libcephfs-devel
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
-%{_includedir}/cephfs/ceph_statx.h
+%{_includedir}/cephfs/ceph_ll_client.h
 %{_libdir}/libcephfs.so
 
 %if 0%{with python2}
@@ -2242,8 +2259,7 @@ if [ $1 -eq 0 ]; then
     fi
 fi
 exit 0
-
-%endif # with selinux
+%endif
 
 %if 0%{with python2}
 %files -n python-ceph-compat

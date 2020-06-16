@@ -190,7 +190,7 @@ class Module(MgrModule):
         {'name': 'server_port'},
         {'name': 'scrape_interval'},
         {'name': 'rbd_stats_pools'},
-        {'name': 'rbd_stats_pools_refresh_interval'},
+        {'name': 'rbd_stats_pools_refresh_interval', 'type': 'int', 'default': 300},
     ]
 
     def __init__(self, *args, **kwargs):
@@ -482,13 +482,13 @@ class Module(MgrModule):
                 ceph_release = host_version[1].split()[-2] # e.g. nautilus
             else:
                 _state = 0
-            
+
             self.metrics['mgr_metadata'].set(1, (
                 'mgr.{}'.format(mgr), host_version[0],
                 host_version[1]
             ))
             self.metrics['mgr_status'].set(_state, (
-                'mgr.{}'.format(mgr), 
+                'mgr.{}'.format(mgr),
             ))
         always_on_modules = mgr_map['always_on_modules'].get(ceph_release, [])
         active_modules = list(always_on_modules)
@@ -512,30 +512,19 @@ class Module(MgrModule):
         pg_summary = self.get('pg_summary')
 
         for pool in pg_summary['by_pool']:
-            total = 0
+            num_by_state = dict((state, 0) for state in PG_STATES)
+            num_by_state['total'] = 0
+
             for state_name, count in pg_summary['by_pool'][pool].items():
-                reported_states = {}
-
                 for state in state_name.split('+'):
-                    reported_states[state] = reported_states.get(
-                        state, 0) + count
+                    num_by_state[state] += count
+                num_by_state['total'] += count
 
-                for state in reported_states:
-                    path = 'pg_{}'.format(state)
-                    try:
-                        self.metrics[path].set(reported_states[state],(pool,))
-                    except KeyError:
-                        self.log.warn("skipping pg in unknown state {}".format(state))
-
-                for state in PG_STATES:
-                    if state not in reported_states:
-                        try:
-                            self.metrics['pg_{}'.format(state)].set(0,(pool,))
-                        except KeyError:
-                            self.log.warn(
-                                "skipping pg in unknown state {}".format(state))
-                total = total + count
-            self.metrics['pg_total'].set(total,(pool,))
+            for state, num in num_by_state.items():
+                try:
+                    self.metrics["pg_{}".format(state)].set(num, (pool,))
+                except KeyError:
+                    self.log.warn("skipping pg in unknown state {}".format(state))
 
     def get_osd_stats(self):
         osd_stats = self.get('osd_stats')

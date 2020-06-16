@@ -1,14 +1,9 @@
-from cStringIO import StringIO
 import logging
 import json
-import requests
 import time
 
-from requests.packages.urllib3 import PoolManager
-from requests.packages.urllib3.util import Retry
-from urlparse import urlparse
+from six import StringIO
 
-from teuthology.orchestra.connection import split_user
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -31,7 +26,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
         ]
     pre.extend(cmd)
     log.log(log_level, 'rgwadmin: cmd=%s' % pre)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(client).remotes.keys()
     proc = remote.run(
         args=pre,
         check_status=check_status,

@@ -94,7 +94,15 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
   ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
   ASSERT_EQ(1u, watches.size());
   bufferlist bl2;
-  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  for (unsigned i=0; i<10; ++i) {
+    int r = ioctx.notify("foo", 0, bl2);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
   sem_wait(sem);
   ioctx.unwatch("foo", handle);
@@ -115,7 +123,15 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
   ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
   ASSERT_EQ(1u, watches.size());
   bufferlist bl2;
-  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  for (unsigned i=0; i<10; ++i) {
+    int r = ioctx.notify("foo", 0, bl2);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
   sem_wait(sem);
   ioctx.unwatch("foo", handle);

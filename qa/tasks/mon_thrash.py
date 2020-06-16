@@ -3,13 +3,13 @@ Monitor thrash
 """
 import logging
 import contextlib
-import ceph_manager
 import random
 import time
 import gevent
 import json
 import math
 from teuthology import misc as teuthology
+from tasks import ceph_manager
 
 log = logging.getLogger(__name__)
 
@@ -299,8 +299,8 @@ class MonitorThrasher:
                 self.log('triggering scrub')
                 try:
                     self.manager.raw_cluster_cmd('scrub')
-                except Exception:
-                    log.exception("Saw exception while triggering scrub")
+                except Exception as e:
+                    log.warning("Ignoring exception while triggering scrub: %s", e)
 
             if self.thrash_delay > 0.0:
                 self.log('waiting for {delay} secs before continuing thrashing'.format(
@@ -324,7 +324,7 @@ def task(ctx, config):
         'mon_thrash task requires at least 3 monitors'
     log.info('Beginning mon_thrash...')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,

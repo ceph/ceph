@@ -14,7 +14,7 @@
                 class="bold col-sm-1">Full name</td>
             <td class="col-sm-3">{{ user.display_name }}</td>
           </tr>
-          <tr *ngIf="user.email.length">
+          <tr *ngIf="user.email?.length">
             <td i18n
                 class="bold col-sm-1">Email address</td>
             <td class="col-sm-3">{{ user.email }}</td>
@@ -27,13 +27,12 @@
           <tr>
             <td i18n
                 class="bold col-sm-1">System</td>
-            <td class="col-sm-3"
-                i18n>{user.system, select, 1 {Yes} 0 {No}}</td>
+            <td class="col-sm-3">{{ user.system === 'true' | booleanText }}</td>
           </tr>
           <tr>
             <td i18n
                 class="bold col-sm-1">Maximum buckets</td>
-            <td class="col-sm-3">{{ user.max_buckets }}</td>
+            <td class="col-sm-3">{{ user.max_buckets| map:maxBucketsMap }}</td>
           </tr>
           <tr *ngIf="user.subusers && user.subusers.length">
             <td i18n
@@ -130,7 +129,8 @@
     </div>
   </tab>
 
-  <tab i18n-heading
+  <tab *ngIf="keys.length"
+       i18n-heading
        heading="Keys">
     <cd-table [data]="keys"
               [columns]="keysColumns"

@@ -2,16 +2,15 @@
 rgw multisite configuration routines
 """
 import argparse
-import contextlib
 import logging
 import random
 import string
 from copy import deepcopy
-from util.rgw import rgwadmin, wait_for_radosgw
-from util.rados import create_ec_pool, create_replicated_pool
-from rgw_multi import multisite
-from rgw_multi.zone_rados import RadosZone as RadosZone
-from rgw_multi.zone_ps import PSZone as PSZone
+from tasks.util.rgw import rgwadmin, wait_for_radosgw
+from tasks.util.rados import create_ec_pool, create_replicated_pool
+from tasks.rgw_multi import multisite
+from tasks.rgw_multi.zone_rados import RadosZone as RadosZone
+from tasks.rgw_multi.zone_ps import PSZone as PSZone
 
 from teuthology.orchestra import run
 from teuthology import misc
@@ -223,7 +222,7 @@ class Gateway(multisite.Gateway):
             # insert zone args before the first |
             pipe = args.index(run.Raw('|'))
             args = args[0:pipe] + zone.zone_args() + args[pipe:]
-        except ValueError, e:
+        except ValueError:
             args += zone.zone_args()
         self.daemon.command_kwargs['args'] = args
 
@@ -241,7 +240,7 @@ def extract_clusters_and_gateways(ctx, role_endpoints):
     """ create cluster and gateway instances for all of the radosgw roles """
     clusters = {}
     gateways = {}
-    for role, endpoint in role_endpoints.iteritems():
+    for role, endpoint in role_endpoints.items():
         cluster_name, daemon_type, client_id = misc.split_role(role)
         # find or create the cluster by name
         cluster = clusters.get(cluster_name)

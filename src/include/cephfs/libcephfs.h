@@ -27,7 +27,7 @@
 #include <stdbool.h>
 #include <fcntl.h>
 
-#include "ceph_statx.h"
+#include "ceph_ll_client.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,27 +73,6 @@ struct ceph_file_layout {
 	uint32_t fl_pg_preferred; /* preferred primary for pg (-1 for none) */
 	uint32_t fl_pg_pool;      /* namespace, crush ruleset, rep level */
 } __attribute__ ((packed));
-
-
-typedef struct inodeno_t {
-  uint64_t val;
-} inodeno_t;
-
-typedef struct _snapid_t {
-  uint64_t val;
-} snapid_t;
-
-typedef struct vinodeno_t {
-  inodeno_t ino;
-  snapid_t snapid;
-} vinodeno_t;
-
-typedef struct Fh Fh;
-#else /* _cplusplus */
-
-struct inodeno_t;
-struct vinodeno_t;
-typedef struct vinodeno_t vinodeno;
 
 #endif /* ! __cplusplus */
 
@@ -1775,7 +1754,6 @@ int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
  * needs, but it should take care to choose a value that allows it to avoid
  * forcible eviction from the cluster in the event of an application bug.
  */
-typedef void (*ceph_deleg_cb_t)(struct Fh *fh, void *priv);
 
 /* Commands for manipulating delegation state */
 #ifndef CEPH_DELEGATION_NONE
@@ -1874,6 +1852,16 @@ int ceph_start_reclaim(struct ceph_mount_info *cmount,
  */
 void ceph_finish_reclaim(struct ceph_mount_info *cmount);
 
+/**
+ * Register a set of callbacks to be used with this cmount
+ * @param cmount the ceph mount handle on which the cb's should be registerd
+ * @param args   callback arguments to register with the cmount
+ *
+ * Any fields set to NULL will be ignored. There currently is no way to
+ * unregister these callbacks, so this is a one-way change.
+ */
+void ceph_ll_register_callbacks(struct ceph_mount_info *cmount,
+				struct ceph_client_callback_args *args);
 #ifdef __cplusplus
 }
 #endif

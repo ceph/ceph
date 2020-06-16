@@ -7,9 +7,11 @@ import json
 import logging
 import os
 import time
-from textwrap import dedent
 import traceback
+
+from io import BytesIO
 from collections import namedtuple, defaultdict
+from textwrap import dedent
 
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
@@ -146,13 +148,13 @@ class StripedStashedLayout(Workload):
             # Exactly stripe_count objects will exist
             self.os * self.sc,
             # Fewer than stripe_count objects will exist
-            self.os * self.sc / 2,
-            self.os * (self.sc - 1) + self.os / 2,
-            self.os * (self.sc - 1) + self.os / 2 - 1,
-            self.os * (self.sc + 1) + self.os / 2,
-            self.os * (self.sc + 1) + self.os / 2 + 1,
+            self.os * self.sc // 2,
+            self.os * (self.sc - 1) + self.os // 2,
+            self.os * (self.sc - 1) + self.os // 2 - 1,
+            self.os * (self.sc + 1) + self.os // 2,
+            self.os * (self.sc + 1) + self.os // 2 + 1,
             # More than stripe_count objects will exist
-            self.os * self.sc + self.os * self.sc / 2
+            self.os * self.sc + self.os * self.sc // 2
         ]
 
     def write(self):
@@ -429,6 +431,10 @@ class TestDataScan(CephFSTestCase):
         file_count = 100
         file_names = ["%s" % n for n in range(0, file_count)]
 
+        # Make sure and disable dirfrag auto merging and splitting
+        self.fs.set_ceph_conf('mds', 'mds bal merge size', 0)
+        self.fs.set_ceph_conf('mds', 'mds bal split size', 100 * file_count)
+
         # Create a directory of `file_count` files, each named after its
         # decimal number and containing the string of its decimal number
         self.mount_a.run_python(dedent("""
@@ -483,6 +489,7 @@ class TestDataScan(CephFSTestCase):
         # by checking the omap now has the dentry's key again
         self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
         self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_links"])
         self.assertIn(victim_key, self._dirfrag_keys(frag_obj_id))
 
         # Start the filesystem and check that the dentry we deleted is now once again visible
@@ -502,6 +509,14 @@ class TestDataScan(CephFSTestCase):
         frag_obj_id = "{0:x}.00000000".format(dir_ino)
         keys = self._dirfrag_keys(frag_obj_id)
         self.assertListEqual(sorted(keys), sorted(["%s_head" % f for f in file_names]))
+
+        # run scrub to update and make sure rstat.rbytes info in subdir inode and dirfrag
+        # are matched
+        out_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair", "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        # Remove the whole 'sudbdir' directory
+        self.mount_a.run_shell(["rm", "-rf", "subdir/"])
 
     @for_teuthology
     def test_parallel_execution(self):
@@ -534,7 +549,7 @@ class TestDataScan(CephFSTestCase):
             pgs_to_files[pgid].append(file_path)
             log.info("{0}: {1}".format(file_path, pgid))
 
-        pg_count = self.fs.get_pgs_per_fs_pool()
+        pg_count = self.fs.pgs_per_fs_pool
         for pg_n in range(0, pg_count):
             pg_str = "{0}.{1}".format(self.fs.get_data_pool_id(), pg_n)
             out = self.fs.data_scan(["pg_files", "mydir", pg_str])
@@ -565,7 +580,8 @@ class TestDataScan(CephFSTestCase):
         # introduce duplicated primary link
         file1_key = "file1_head"
         self.assertIn(file1_key, dirfrag1_keys)
-        file1_omap_data = self.fs.rados(["getomapval", dirfrag1_oid, file1_key, '-'])
+        file1_omap_data = self.fs.rados(["getomapval", dirfrag1_oid, file1_key, '-'],
+                                        stdout_data=BytesIO())
         self.fs.rados(["setomapval", dirfrag2_oid, file1_key], stdin_data=file1_omap_data)
         self.assertIn(file1_key, self._dirfrag_keys(dirfrag2_oid))
 

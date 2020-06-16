@@ -39,6 +39,10 @@
 
 #define BUCKET_TAG_TIMEOUT 30
 
+// default number of entries to list with each bucket listing call
+// (use marker to bridge between calls)
+static constexpr size_t listing_max_entries = 1000;
+
 
 static RGWMetadataHandler *bucket_meta_handler = NULL;
 static RGWMetadataHandler *bucket_instance_meta_handler = NULL;
@@ -372,6 +376,8 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
     auto tenant = name.substr(0, pos);
     bucket->tenant.assign(tenant.begin(), tenant.end());
     name = name.substr(pos + 1);
+  } else {
+    bucket->tenant.clear();
   }
 
   // split name:instance
@@ -818,6 +824,44 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
   return 0;
 }
 
+bool rgw_find_bucket_by_id(CephContext *cct, RGWMetadataManager *mgr,
+                           const string& marker, const string& bucket_id, rgw_bucket* bucket_out)
+{
+  void *handle = NULL;
+  bool truncated = false;
+  int shard_id;
+  string s;
+
+  int ret = mgr->list_keys_init("bucket.instance", marker, &handle);
+  if (ret < 0) {
+    cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+    mgr->list_keys_complete(handle);
+    return -ret;
+  }
+  do {
+      list<string> keys;
+      ret = mgr->list_keys_next(handle, 1000, keys, &truncated);
+      if (ret < 0) {
+        cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
+        mgr->list_keys_complete(handle);
+        return -ret;
+      }
+      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+        s = *iter;
+        ret = rgw_bucket_parse_bucket_key(cct, s, bucket_out, &shard_id);
+        if (ret < 0) {
+          continue;
+        }
+        if (bucket_id == bucket_out->bucket_id) {
+          mgr->list_keys_complete(handle);
+          return true;
+        }
+      }
+  } while (truncated);
+  mgr->list_keys_complete(handle);
+  return false;
+}
+
 int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
 {
   if (!op_state.is_user_op()) {
@@ -1164,17 +1208,27 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
 
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
+  uint16_t expansion_factor = 1;
   while (is_truncated) {
     map<string, rgw_bucket_dir_entry> result;
 
     int r = store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD,
-					   marker, prefix, 1000, true,
+					   marker, prefix,
+					   listing_max_entries, true,
+					   expansion_factor,
 					   result, &is_truncated, &marker,
 					   bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
+    }
+
+    if (result.size() < listing_max_entries / 8) {
+      ++expansion_factor;
+    } else if (result.size() > listing_max_entries * 7 / 8 &&
+	       expansion_factor > 1) {
+      --expansion_factor;
     }
 
     dump_bucket_index(result, formatter);
@@ -1658,6 +1712,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
           formatter->dump_string("bucket", bucket_name);
       }
     }
+    store->meta_mgr->list_keys_complete(handle);
 
     formatter->close_section();
   }
@@ -1814,6 +1869,11 @@ static int process_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_st
   bool truncated;
 
   formatter->open_array_section("keys");
+  auto g = make_scope_guard([&store, &handle, &formatter]() {
+                              store->meta_mgr->list_keys_complete(handle);
+                              formatter->close_section(); // keys
+                              formatter->flush(cout);
+                            });
 
   do {
     list<std::string> keys;
@@ -1839,8 +1899,6 @@ static int process_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_st
     }
   } while (truncated);
 
-  formatter->close_section(); // keys
-  formatter->flush(cout);
   return 0;
 }
 

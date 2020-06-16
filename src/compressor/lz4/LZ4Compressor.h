@@ -36,6 +36,18 @@ class LZ4Compressor : public Compressor {
   }
 
   int compress(const bufferlist &src, bufferlist &dst) override {
+    // older versions of liblz4 introduce bit errors when compressing
+    // fragmented buffers.  this was fixed in lz4 commit
+    // af127334670a5e7b710bbd6adb71aa7c3ef0cd72, which first
+    // appeared in v1.8.2.
+    //
+    // workaround: rebuild if not contiguous.
+    if (!src.is_contiguous()) {
+      bufferlist new_src = src;
+      new_src.rebuild();
+      return compress(new_src, dst);
+    }
+
 #ifdef HAVE_QATZIP
     if (qat_enabled)
       return qat_accel.compress(src, dst);

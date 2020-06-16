@@ -79,8 +79,11 @@ class RbdConfiguration(object):
         # type: () -> [dict]
         def _list(ioctx):
             if self._image_name:  # image config
-                with rbd.Image(ioctx, self._image_name) as image:
-                    result = image.config_list()
+                try:
+                    with rbd.Image(ioctx, self._image_name) as image:
+                        result = image.config_list()
+                except rbd.ImageNotFound:
+                    result = []
             else:  # pool config
                 result = self._rbd.config_list(ioctx)
             return list(result)

@@ -13,9 +13,8 @@ import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-fo
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
-import { AlertListComponent } from './ceph/cluster/prometheus/alert-list/alert-list.component';
+import { MonitoringListComponent } from './ceph/cluster/prometheus/monitoring-list/monitoring-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
-import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
@@ -110,34 +109,31 @@ const routes: Routes = [
     data: { breadcrumbs: 'Cluster/Logs' }
   },
   {
-    path: 'alerts',
-    component: AlertListComponent,
+    path: 'monitoring',
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Alerts' }
-  },
-  {
-    path: 'silence',
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Silences' },
+    data: { breadcrumbs: 'Cluster/Monitoring' },
     children: [
-      { path: '', component: SilenceListComponent },
       {
-        path: URLVerbs.CREATE,
+        path: '',
+        component: MonitoringListComponent
+      },
+      {
+        path: 'silence/' + URLVerbs.CREATE,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: `${ActionLabels.CREATE} Silence` }
+      },
+      {
+        path: `silence/${URLVerbs.CREATE}/:id`,
         component: SilenceFormComponent,
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
-        path: `${URLVerbs.CREATE}/:id`,
-        component: SilenceFormComponent,
-        data: { breadcrumbs: ActionLabels.CREATE }
-      },
-      {
-        path: `${URLVerbs.EDIT}/:id`,
+        path: `silence/${URLVerbs.EDIT}/:id`,
         component: SilenceFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
       },
       {
-        path: `${URLVerbs.RECREATE}/:id`,
+        path: `silence/${URLVerbs.RECREATE}/:id`,
         component: SilenceFormComponent,
         data: { breadcrumbs: ActionLabels.RECREATE }
       }

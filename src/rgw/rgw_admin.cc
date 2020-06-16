@@ -3062,7 +3062,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
       if (bucket_id.empty()) {
-        cerr << "bad bucket-id" << std::endl;
+        cerr << "no value for bucket-id" << std::endl;
         exit(1);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
@@ -5594,6 +5594,15 @@ int main(int argc, const char **argv)
   } /* OPT_BUCKETS_LIST */
 
   if (opt_cmd == OPT_BUCKET_STATS) {
+    if (bucket_name.empty() && !bucket_id.empty()) {
+      rgw_bucket bucket;
+      if (!rgw_find_bucket_by_id(store->ctx(), store->meta_mgr, marker, bucket_id, &bucket)) {
+        cerr << "failure: no such bucket id" << std::endl;
+        return -ENOENT;
+      }
+      bucket_op.set_tenant(bucket.tenant);
+      bucket_op.set_bucket_name(bucket.name);
+    }
     bucket_op.set_fetch_stats(true);
 
     int r = RGWBucketAdminOp::info(store, bucket_op, f);
@@ -6253,20 +6262,28 @@ next:
     formatter->open_object_section("result");
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
+
+    constexpr uint32_t NUM_ENTRIES = 1000;
+    uint16_t expansion_factor = 1;
     while (is_truncated) {
       map<string, rgw_bucket_dir_entry> result;
       int r =
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
-				       prefix, 1000, true,
+				       prefix, NUM_ENTRIES, true, expansion_factor,
 				       result, &is_truncated, &marker,
 				       bucket_object_check_filter);
-
       if (r < 0 && r != -ENOENT) {
         cerr << "ERROR: failed operation r=" << r << std::endl;
+      } else if (r == -ENOENT) {
+        break;
       }
 
-      if (r == -ENOENT)
-        break;
+      if (result.size() < NUM_ENTRIES / 8) {
+	++expansion_factor;
+      } else if (result.size() > NUM_ENTRIES * 7 / 8 &&
+		 expansion_factor > 1) {
+	--expansion_factor;
+      }
 
       map<string, rgw_bucket_dir_entry>::iterator iter;
       for (iter = result.begin(); iter != result.end(); ++iter) {
@@ -7671,7 +7688,7 @@ next:
     do {
       list<rgw_data_change_log_entry> entries;
       if (specified_shard_id) {
-        ret = log->list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, marker, NULL, &truncated);
+        ret = log->list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, marker, &marker, &truncated);
       } else {
         ret = log->list_entries(start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, log_marker, &truncated);
       }

@@ -2,6 +2,7 @@ overrides:
   ceph:
     conf:
       global:
+        mon pg warn min per osd: 0
         bluestore warn on legacy statfs: false
 
 tasks:

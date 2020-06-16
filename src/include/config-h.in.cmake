@@ -345,6 +345,9 @@
 /* Defined if rabbitmq-c is available for rgw amqp push endpoint */
 #cmakedefine WITH_RADOSGW_AMQP_ENDPOINT
 
+/* Defined if libedkafka is available for rgw kafka push endpoint */
+#cmakedefine WITH_RADOSGW_KAFKA_ENDPOINT
+
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 

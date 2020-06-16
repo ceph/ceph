@@ -11,7 +11,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  FormHelper,
+  i18nProviders,
+  IscsiHelper
+} from '../../../../testing/unit-test-helper';
 import { Permission } from '../../../shared/models/permissions';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetDiscoveryModalComponent } from './iscsi-target-discovery-modal.component';
@@ -116,5 +121,18 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
     expect(elemDisabled('input#mutual_user')).toBeTruthy();
     expect(elemDisabled('input#mutual_password')).toBeTruthy();
     expect(elem('cd-submit-button')).toBeNull();
+  });
+
+  it('should validate authentication', () => {
+    component.permission = new Permission(['read', 'create', 'update', 'delete']);
+    fixture.detectChanges();
+    const control = component.discoveryForm;
+    const formHelper = new FormHelper(control);
+    formHelper.expectValid(control);
+
+    IscsiHelper.validateUser(formHelper, 'user');
+    IscsiHelper.validatePassword(formHelper, 'password');
+    IscsiHelper.validateUser(formHelper, 'mutual_user');
+    IscsiHelper.validatePassword(formHelper, 'mutual_password');
   });
 });

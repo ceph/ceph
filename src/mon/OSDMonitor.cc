@@ -343,6 +343,19 @@ epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
   return floor;
 }
 
+void LastEpochClean::dump(Formatter *f) const
+{
+  f->open_array_section("per_pool");
+
+  for (auto& it : report_by_pool) {
+    f->open_object_section("pool");
+    f->dump_unsigned("poolid", it.first);
+    f->dump_unsigned("floor", it.second.floor);
+    f->close_section();
+  }
+
+  f->close_section();
+}
 
 class C_UpdateCreatingPGs : public Context {
 public:
@@ -2067,7 +2080,8 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   // also scan osd epochs
   // don't trim past the oldest reported osd epoch
   for (auto& osd_epoch : osd_epochs) {
-    if (osd_epoch.second < floor) {
+    if (osd_epoch.second < floor &&
+        osdmap.is_out(osd_epoch.first)) {
       floor = osd_epoch.second;
     }
   }
@@ -4467,7 +4481,8 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 void OSDMonitor::do_application_enable(int64_t pool_id,
                                        const std::string &app_name,
 				       const std::string &app_key,
-				       const std::string &app_value)
+				       const std::string &app_value,
+				       bool force)
 {
   ceph_assert(paxos->is_plugged() && is_writeable());
 
@@ -4487,7 +4502,11 @@ void OSDMonitor::do_application_enable(int64_t pool_id,
   if (app_key.empty()) {
     p.application_metadata.insert({app_name, {}});
   } else {
-    p.application_metadata.insert({app_name, {{app_key, app_value}}});
+    if (force) {
+      p.application_metadata[app_name][app_key] = app_value;
+    } else {
+      p.application_metadata.insert({app_name, {{app_key, app_value}}});
+    }
   }
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool_id] = p;
@@ -4667,6 +4686,28 @@ void OSDMonitor::tick()
   // always update osdmap manifest, regardless of being the leader.
   load_osdmap_manifest();
 
+  // always tune priority cache manager memory on leader and peons
+  if (ceph_using_tcmalloc() && mon_memory_autotune) {
+    std::lock_guard l(balancer_lock);
+    if (pcm != nullptr) {
+      pcm->tune_memory();
+      pcm->balance();
+      _set_new_cache_sizes();
+      dout(10) << "tick balancer "
+               << " inc cache_bytes: " << inc_cache->get_cache_bytes()
+               << " inc comtd_bytes: " << inc_cache->get_committed_size()
+               << " inc used_bytes: " << inc_cache->_get_used_bytes()
+               << " inc num_osdmaps: " << inc_cache->_get_num_osdmaps()
+               << dendl;
+      dout(10) << "tick balancer "
+               << " full cache_bytes: " << full_cache->get_cache_bytes()
+               << " full comtd_bytes: " << full_cache->get_committed_size()
+               << " full used_bytes: " << full_cache->_get_used_bytes()
+               << " full num_osdmaps: " << full_cache->_get_num_osdmaps()
+               << dendl;
+    }
+  }
+
   if (!mon->is_leader()) return;
 
   bool do_propose = false;
@@ -4799,27 +4840,6 @@ void OSDMonitor::tick()
   if (do_propose ||
       !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
     propose_pending();
-
-  {
-    std::lock_guard l(balancer_lock);
-    if (ceph_using_tcmalloc() && mon_memory_autotune && pcm != nullptr) {
-      pcm->tune_memory();
-      pcm->balance();
-      _set_new_cache_sizes();
-      dout(10) << "tick balancer "
-               << " inc cache_bytes: " << inc_cache->get_cache_bytes()
-               << " inc comtd_bytes: " << inc_cache->get_committed_size()
-               << " inc used_bytes: " << inc_cache->_get_used_bytes()
-               << " inc num_osdmaps: " << inc_cache->_get_num_osdmaps()
-               << dendl;
-      dout(10) << "tick balancer "
-               << " full cache_bytes: " << full_cache->get_cache_bytes()
-               << " full comtd_bytes: " << full_cache->get_committed_size()
-               << " full used_bytes: " << full_cache->_get_used_bytes()
-               << " full num_osdmaps: " << full_cache->_get_num_osdmaps()
-               << dendl;
-    }
-  }
 }
 
 void OSDMonitor::_set_new_cache_sizes()
@@ -4917,6 +4937,24 @@ void OSDMonitor::dump_info(Formatter *f)
     }
   }
   f->close_section();
+
+  f->open_object_section("osdmap_clean_epochs");
+  f->dump_unsigned("min_last_epoch_clean", get_min_last_epoch_clean());
+
+  f->open_object_section("last_epoch_clean");
+  last_epoch_clean.dump(f);
+  f->close_section();
+
+  f->open_array_section("osd_epochs");
+  for (auto& osd_epoch : osd_epochs) {
+    f->open_object_section("osd");
+    f->dump_unsigned("id", osd_epoch.first);
+    f->dump_unsigned("epoch", osd_epoch.second);
+    f->close_section();
+  }
+  f->close_section(); // osd_epochs
+
+  f->close_section(); // osd_clean_epochs
 
   f->dump_unsigned("osdmap_first_committed", get_first_committed());
   f->dump_unsigned("osdmap_last_committed", get_last_committed());
@@ -7565,8 +7603,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return r;
     }
     p.size = n;
-    if (n < p.min_size)
-      p.min_size = n;
+    p.min_size = g_conf().get_osd_pool_default_min_size(p.size);
   } else if (var == "min_size") {
     if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
       ss << "pool min size change is disabled; you must unset nosizechange flag for the pool first";

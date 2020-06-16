@@ -16,7 +16,7 @@ class TestScrubControls(CephFSTestCase):
     Test basic scrub control operations such as abort, pause and resume.
     """
 
-    MDSS_REQUIRED = 1
+    MDSS_REQUIRED = 2
     CLIENTS_REQUIRED = 1
 
     def _abort_scrub(self, expected):
@@ -30,6 +30,11 @@ class TestScrubControls(CephFSTestCase):
         self.assertEqual(res['return_code'], expected)
     def _get_scrub_status(self):
         return self.fs.rank_tell(["scrub", "status"])
+    def _check_task_status(self, expected_status):
+        task_status = self.fs.get_task_status("scrub status")
+        active = self.fs.get_active_names()
+        log.debug("current active={0}".format(active))
+        self.assertTrue(task_status[active[0]].startswith(expected_status))
 
     def test_scrub_abort(self):
         test_dir = "scrub_control_test_path"
@@ -40,7 +45,7 @@ class TestScrubControls(CephFSTestCase):
         log.info("client_path: {0}".format(client_path))
 
         log.info("Cloning repo into place")
-        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+        TestScrubChecks.clone_repo(self.mount_a, client_path)
 
         out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
@@ -49,6 +54,10 @@ class TestScrubControls(CephFSTestCase):
         self._abort_scrub(0)
         out_json = self._get_scrub_status()
         self.assertTrue("no active" in out_json['status'])
+
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("idle")
 
     def test_scrub_pause_and_resume(self):
         test_dir = "scrub_control_test_path"
@@ -59,7 +68,7 @@ class TestScrubControls(CephFSTestCase):
         log.info("client_path: {0}".format(client_path))
 
         log.info("Cloning repo into place")
-        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+        _ = TestScrubChecks.clone_repo(self.mount_a, client_path)
 
         out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
@@ -68,6 +77,10 @@ class TestScrubControls(CephFSTestCase):
         self._pause_scrub(0)
         out_json = self._get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
+
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("paused")
 
         # resume and verify
         self._resume_scrub(0)
@@ -83,7 +96,7 @@ class TestScrubControls(CephFSTestCase):
         log.info("client_path: {0}".format(client_path))
 
         log.info("Cloning repo into place")
-        repo_path = TestScrubChecks.clone_repo(self.mount_a, client_path)
+        _ = TestScrubChecks.clone_repo(self.mount_a, client_path)
 
         out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
@@ -93,16 +106,56 @@ class TestScrubControls(CephFSTestCase):
         out_json = self._get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
 
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("paused")
+
         # abort and verify
         self._abort_scrub(0)
         out_json = self._get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
         self.assertTrue("0 inodes" in out_json['status'])
 
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("paused")
+
         # resume and verify
         self._resume_scrub(0)
         out_json = self._get_scrub_status()
         self.assertTrue("no active" in out_json['status'])
+
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("idle")
+
+    def test_scrub_task_status_on_mds_failover(self):
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+
+        (original_active, ) = self.fs.get_active_names()
+        original_standbys = self.mds_cluster.get_standby_daemons()
+        self._check_task_status("idle")
+
+        # Kill the rank 0
+        self.fs.mds_stop(original_active)
+
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+
+        def promoted():
+            active = self.fs.get_active_names()
+            return active and active[0] in original_standbys
+
+        log.info("Waiting for promotion of one of the original standbys {0}".format(
+            original_standbys))
+        self.wait_until_true(promoted, timeout=grace*2)
+
+        mgr_beacon_grace = float(self.fs.get_config("mgr_service_beacon_grace", service_type="mon"))
+
+        def status_check():
+            task_status = self.fs.get_task_status("scrub status")
+            return original_active not in task_status
+        self.wait_until_true(status_check, timeout=mgr_beacon_grace*2)
 
 class TestScrubChecks(CephFSTestCase):
     """
@@ -257,11 +310,11 @@ class TestScrubChecks(CephFSTestCase):
         self.tell_command(mds_rank, "scrub start /{0} repair".format(test_dir),
                           lambda j, r: self.json_validator(j, r, "return_code", 0))
 
-	# wait a few second for background repair
-	time.sleep(10)
+        # wait a few second for background repair
+        time.sleep(10)
 
-	# fragstat should be fixed
-	self.mount_a.run_shell(["sudo", "rmdir", test_dir])
+        # fragstat should be fixed
+        self.mount_a.run_shell(["sudo", "rmdir", test_dir])
 
     @staticmethod
     def json_validator(json_out, rc, element, expected_value):
@@ -284,7 +337,7 @@ class TestScrubChecks(CephFSTestCase):
 
         success, errstring = validator(jout, 0)
         if not success:
-            raise AsokCommandFailedError(command, rout, jout, errstring)
+            raise AsokCommandFailedError(command, 0, jout, errstring)
         return jout
 
     def asok_command(self, mds_rank, command, validator):

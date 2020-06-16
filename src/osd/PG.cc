@@ -8354,8 +8354,15 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
-  // XXX: Is this needed?
   pg->publish_stats_to_osd();
+  // transit any async_recovery_targets back into acting
+  // so pg won't have to stay undersized for long
+  // as backfill might take a long time to complete..
+  if (!pg->async_recovery_targets.empty()) {
+    pg_shard_t auth_log_shard;
+    bool history_les_bound = false;
+    pg->choose_acting(auth_log_shard, true, &history_les_bound);
+  }
   return transit<WaitLocalBackfillReserved>();
 }
 

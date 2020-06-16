@@ -95,6 +95,14 @@ void rgw_get_errno_s3(rgw_http_error *e , int err_no)
   }
 }
 
+static inline std::string get_s3_expiration_header(
+  struct req_state* s,
+  const ceph::real_time& mtime)
+{
+  return rgw::lc::s3_expiration_header(
+    s, s->object, s->tagset, mtime, s->bucket_attrs);
+}
+
 struct response_attr_param {
   const char *param;
   const char *http_attr;
@@ -196,6 +204,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   map<string, string>::iterator riter;
   bufferlist metadata_bl;
 
+  string expires = get_s3_expiration_header(s, lastmod);
+
   if (sent_header)
     goto send_data;
 
@@ -267,6 +277,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+  dump_header_if_nonempty(s, "x-amz-expiration", expires);
+
   if (attrs.find(RGW_ATTR_APPEND_PART_NUM) != attrs.end()) {
     dump_header(s, "x-rgw-object-type", "Appendable");
     dump_header(s, "x-rgw-next-append-position", s->obj_size);
@@ -1681,13 +1693,14 @@ int RGWPutObj_ObjStore_S3::get_params()
 
     if (copy_source_range) {
       string range = copy_source_range;
-      pos = range.find("=");
-      if (pos == std::string::npos) {
+      pos = range.find("bytes=");
+      if (pos == std::string::npos || pos != 0) {
         ret = -EINVAL;
         ldout(s->cct, 5) << "x-amz-copy-source-range bad format" << dendl;
         return ret;
       }
-      range = range.substr(pos + 1);
+      /* 6 is the length of "bytes=" */
+      range = range.substr(pos + 6);
       pos = range.find("-");
       if (pos == std::string::npos) {
         ret = -EINVAL;
@@ -1696,8 +1709,20 @@ int RGWPutObj_ObjStore_S3::get_params()
       }
       string first = range.substr(0, pos);
       string last = range.substr(pos + 1);
+      if (first.find_first_not_of("0123456789") != std::string::npos || last.find_first_not_of("0123456789") != std::string::npos)
+      {
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format not an integer" << dendl;
+        ret = -EINVAL;
+        return ret;
+      }
       copy_source_range_fst = strtoull(first.c_str(), NULL, 10);
       copy_source_range_lst = strtoull(last.c_str(), NULL, 10);
+      if (copy_source_range_fst > copy_source_range_lst)
+      {
+        ret = -ERANGE;
+        ldpp_dout(this, 5) << "x-amz-copy-source-range bad format first number bigger than second" << dendl;
+        return ret;
+      }
     }
 
   } /* copy_source */
@@ -1814,16 +1839,21 @@ void RGWPutObj_ObjStore_S3::send_response()
 	s->cct->_conf->rgw_s3_success_create_obj_status);
       set_req_state_err(s, op_ret);
     }
+
+    string expires = get_s3_expiration_header(s, mtime);
+
     if (copy_source.empty()) {
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+      dump_header_if_nonempty(s, "x-amz-expiration", expires);
       for (auto &it : crypt_http_responses)
         dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+      dump_header_if_nonempty(s, "x-amz-expiration", expires);
       end_header(s, this, "application/xml");
       dump_start(s);
       struct tm tmp;
@@ -3514,6 +3544,9 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
     RGWHandler_REST_PSTopic_AWS topic_handler(auth_registry, post_body);
     topic_handler.init(store, s, s->cio);
     auto op = topic_handler.get_op(store);
+    if (op) {
+      return op;
+    }
   }
 
   return NULL;

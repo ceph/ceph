@@ -541,7 +541,7 @@ Cursor find_oldest_period(RGWRados *store)
       RGWPeriod period;
       int r = store->period_puller->pull(predecessor, period);
       if (r < 0) {
-        return Cursor{r};
+        return cursor;
       }
       auto prev = store->period_history->insert(std::move(period));
       if (!prev) {
@@ -596,7 +596,20 @@ Cursor RGWMetadataManager::init_oldest_log_period()
   auto cursor = store->period_history->lookup(state.oldest_realm_epoch);
   if (cursor) {
     return cursor;
+  } else {
+    cursor = find_oldest_period(store);
+    state.oldest_realm_epoch = cursor.get_epoch();
+    state.oldest_period_id = cursor.get_period().get_id();
+    ldout(cct, 10) << "rewriting mdlog history" << dendl;
+    ret = write_history(store, state, &objv);
+    if (ret < 0 && ret != -ECANCELED) {
+    ldout(cct, 1) << "failed to write mdlog history: "
+          << cpp_strerror(ret) << dendl;
+    return Cursor{ret};
+    }
+    return cursor;
   }
+
   // pull the oldest period by id
   RGWPeriod period;
   ret = store->period_puller->pull(state.oldest_period_id, period);

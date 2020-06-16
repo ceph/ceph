@@ -8,26 +8,34 @@ overrides:
 tasks:
 - full_sequential:
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90
   - radosbench:
+      objectsize: 0
       clients: [client.2]
       time: 90

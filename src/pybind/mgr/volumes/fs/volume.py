@@ -56,7 +56,7 @@ class VolumeClient(object):
             self.purge_queue.queue_job(fs['mdsmap']['fs_name'])
 
     def is_stopping(self):
-        return self.stopping.isSet()
+        return self.stopping.is_set()
 
     def shutdown(self):
         log.info("shutting down")
@@ -103,7 +103,7 @@ class VolumeClient(object):
         return delete_volume(self.mgr, volname)
 
     def list_fs_volumes(self):
-        if self.stopping.isSet():
+        if self.stopping.is_set():
             return -errno.ESHUTDOWN, "", "shutdown in progress"
         volumes = list_volumes(self.mgr)
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
@@ -116,11 +116,12 @@ class VolumeClient(object):
         uid        = kwargs['uid']
         gid        = kwargs['gid']
         mode       = kwargs['mode']
+        isolate_nspace = kwargs['namespace_isolated']
 
         oct_mode = octal_str_to_decimal_int(mode)
         try:
             create_subvol(
-                fs_handle, self.volspec, group, subvolname, size, False, pool, oct_mode, uid, gid)
+                fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -132,14 +133,21 @@ class VolumeClient(object):
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
+        size       = kwargs['size']
+        pool       = kwargs['pool_layout']
+        uid        = kwargs['uid']
+        gid        = kwargs['gid']
+        isolate_nspace = kwargs['namespace_isolated']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     try:
-                        with open_subvol(fs_handle, self.volspec, group, subvolname):
-                            # idempotent creation -- valid.
-                            pass
+                        with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                            # idempotent creation -- valid. Attributes set is supported.
+                            uid = uid if uid else subvolume.uid
+                            gid = gid if gid else subvolume.gid
+                            subvolume.set_attrs(subvolume.path, size, isolate_nspace, pool, uid, gid)
                     except VolumeException as ve:
                         if ve.errno == -errno.ENOENT:
                             self._create_subvolume(fs_handle, volname, group, subvolname, **kwargs)
@@ -207,6 +215,29 @@ class VolumeClient(object):
                     with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
                         subvolpath = subvolume.path
                         ret = 0, subvolpath.decode("utf-8"), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_info(self, **kwargs):
+        ret        = None
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(fs_handle, self.volspec, group, subvolname) as subvolume:
+                        mon_addr_lst = []
+                        mon_map_mons = self.mgr.get('mon_map')['mons']
+                        for mon in mon_map_mons:
+                            ip_port = mon['addr'].split("/")[0]
+                            mon_addr_lst.append(ip_port)
+
+                        subvol_info_dict = subvolume.info()
+                        subvol_info_dict["mon_addrs"] = mon_addr_lst
+                        ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -373,6 +404,18 @@ class VolumeClient(object):
                     with open_subvol(fs_handle, self.volspec, group, clonename,
                                      need_complete=False, expected_types=["clone"]) as subvolume:
                         ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def clone_cancel(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        clonename = kwargs['clone_name']
+        groupname = kwargs['group_name']
+
+        try:
+            self.cloner.cancel_job(volname, (clonename, groupname))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

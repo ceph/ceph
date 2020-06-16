@@ -299,7 +299,7 @@ class BlueRocksDirectory : public rocksdb::Directory {
   // Fsync directory. Can be called concurrently from multiple threads.
   rocksdb::Status Fsync() override {
     // it is sufficient to flush the log.
-    fs->sync_metadata();
+    fs->sync_metadata(false);
     return rocksdb::Status::OK();
   }
 };

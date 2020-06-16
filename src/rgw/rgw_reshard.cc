@@ -608,7 +608,6 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	    return ret;
 	  }
 	}
-
 	if (verbose_json_out) {
 	  formatter->close_section();
 	  formatter->flush(*out);
@@ -1011,19 +1010,25 @@ int RGWReshard::process_single_logshard(int logshard_num)
 
 	ret = store->get_bucket_info(obj_ctx, entry.tenant, entry.bucket_name,
 				     bucket_info, nullptr, &attrs);
-	if (ret < 0) {
-	  ldout(cct, 0) <<  __func__ <<
-	    ": Error in get_bucket_info for bucket " << entry.bucket_name <<
-	    ": " << cpp_strerror(-ret) << dendl;
-	  if (ret != -ENOENT) {
-	    // any error other than ENOENT will abort
-	    return ret;
+	if (ret < 0 || bucket_info.bucket.bucket_id != entry.bucket_id) {
+	  if (ret < 0) {
+	    ldout(cct, 0) <<  __func__ <<
+	      ": Error in get_bucket_info for bucket " << entry.bucket_name <<
+	      ": " << cpp_strerror(-ret) << dendl;
+	    if (ret != -ENOENT) {
+	      // any error other than ENOENT will abort
+	      return ret;
+	    }
+	  } else {
+	    ldout(cct,0) << __func__ <<
+	      ": Bucket: " << entry.bucket_name <<
+	      " already resharded by someone, skipping " << dendl;
 	  }
 
 	  // we've encountered a reshard queue entry for an apparently
 	  // non-existent bucket; let's try to recover by cleaning up
 	  ldout(cct, 0) <<  __func__ <<
-	    ": removing reshard queue entry for non-existent bucket " <<
+	    ": removing reshard queue entry for a resharded or non-existent bucket" <<
 	    entry.bucket_name << dendl;
 
 	  ret = remove(entry);

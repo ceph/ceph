@@ -208,7 +208,7 @@ function TEST_rep_backfill_unfound() {
     inject_eio rep data $poolname $testobj $dir 0 || return 1
     inject_eio rep data $poolname $testobj $dir 1 || return 1
 
-    run_osd $dir ${last_osd} || return 1
+    activate_osd $dir ${last_osd} || return 1
     ceph osd in ${last_osd} || return 1
 
     sleep 15
@@ -285,7 +285,7 @@ function TEST_rep_recovery_unfound() {
     inject_eio rep data $poolname $testobj $dir 0 || return 1
     inject_eio rep data $poolname $testobj $dir 1 || return 1
 
-    run_osd $dir ${last_osd} || return 1
+    activate_osd $dir ${last_osd} || return 1
     ceph osd in ${last_osd} || return 1
 
     sleep 15

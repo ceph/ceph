@@ -24,7 +24,7 @@ class TestCapFlush(CephFSTestCase):
             import os
             os.mkdir("{0}")
             fd = os.open("{0}", os.O_RDONLY)
-            os.fchmod(fd, 0777)
+            os.fchmod(fd, 0o777)
             os.fsync(fd)
             """).format(dir_path)
         self.mount_a.run_python(py_script)
@@ -43,8 +43,8 @@ class TestCapFlush(CephFSTestCase):
             os.chdir("{0}")
             os.setgid(65534)
             os.setuid(65534)
-            fd = os.open("{1}", os.O_CREAT | os.O_RDWR, 0644)
-            os.fchmod(fd, 0640)
+            fd = os.open("{1}", os.O_CREAT | os.O_RDWR, 0o644)
+            os.fchmod(fd, 0o640)
             """).format(dir_path, file_name)
         self.mount_a.run_python(py_script)
 

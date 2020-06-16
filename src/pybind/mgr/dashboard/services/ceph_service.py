@@ -6,15 +6,7 @@ import json
 import rados
 
 from mgr_module import CommandResult
-
-try:
-    from more_itertools import pairwise
-except ImportError:
-    def pairwise(iterable):
-        from itertools import tee
-        a, b = tee(iterable)
-        next(b, None)
-        return zip(a, b)
+from mgr_util import get_time_series_rates, get_most_recent_rate
 
 from .. import logger, mgr
 
@@ -112,16 +104,12 @@ class CephService(object):
             stats = pool_stats[pool['pool']]
             s = {}
 
-            def get_rate(series):
-                if len(series) >= 2:
-                    return differentiate(*list(series)[-2:])
-                return 0
-
             for stat_name, stat_series in stats.items():
+                rates = get_time_series_rates(stat_series)
                 s[stat_name] = {
                     'latest': stat_series[0][1],
-                    'rate': get_rate(stat_series),
-                    'rates': get_rates_from_data(stat_series)
+                    'rate': get_most_recent_rate(rates),
+                    'rates': rates
                 }
             pool['stats'] = s
             pools_w_stats.append(pool)
@@ -179,16 +167,12 @@ class CephService(object):
         :return: the derivative of mgr.get_counter()
         :rtype: list[tuple[int, float]]"""
         data = mgr.get_counter(svc_type, svc_name, path)[path]
-        return get_rates_from_data(data)
+        return get_time_series_rates(data)
 
     @classmethod
     def get_rate(cls, svc_type, svc_name, path):
         """returns most recent rate"""
-        data = mgr.get_counter(svc_type, svc_name, path)[path]
-
-        if data and len(data) > 1:
-            return differentiate(*data[-2:])
-        return 0.0
+        return get_most_recent_rate(cls.get_rates(svc_type, svc_name, path))
 
     @classmethod
     def get_client_perf(cls):
@@ -254,33 +238,3 @@ class CephService(object):
             'statuses': pg_summary['all'],
             'pgs_per_osd': pgs_per_osd,
         }
-
-
-def get_rates_from_data(data):
-    """
-    >>> get_rates_from_data([])
-    [(0, 0.0)]
-    >>> get_rates_from_data([[1, 42]])
-    [(1, 0.0)]
-    >>> get_rates_from_data([[0, 100], [2, 101], [3, 100], [4, 100]])
-    [(2, 0.5), (3, 1.0), (4, 0.0)]
-    """
-    if not data:
-        return [(0, 0.0)]
-    if len(data) == 1:
-        return [(data[0][0], 0.0)]
-    return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
-
-
-def differentiate(data1, data2):
-    """
-    >>> times = [0, 2]
-    >>> values = [100, 101]
-    >>> differentiate(*zip(times, values))
-    0.5
-    >>> times = [0, 2]
-    >>> values = [100, 99]
-    >>> differentiate(*zip(times, values))
-    0.5
-    """
-    return abs((data2[1] - data1[1]) / float(data2[0] - data1[0]))

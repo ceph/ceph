@@ -2,9 +2,11 @@
 """
 watch_notify_same_primary task
 """
-from cStringIO import StringIO
+from six import StringIO
 import contextlib
 import logging
+
+import six
 
 from teuthology.orchestra import run
 from teuthology.contextutil import safe_while
@@ -41,10 +43,10 @@ def task(ctx, config):
     clients = config.get('clients', ['client.0'])
     assert len(clients) == 1
     role = clients[0]
-    assert isinstance(role, basestring)
+    assert isinstance(role, six.string_types)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    (remote,) = ctx.cluster.only(role).remotes.keys()
     manager = ctx.managers['ceph']
     manager.raw_cluster_cmd('osd', 'set', 'noout')
 
@@ -79,14 +81,8 @@ def task(ctx, config):
     for i in range(num):
         with safe_while() as proceed:
             while proceed():
-                proc = remote.run(
-                    args = [
-                        "rados",
-                        "-p", pool,
-                        "listwatchers",
-                        obj(i)],
-                    stdout=StringIO())
-                lines = proc.stdout.getvalue()
+                lines = remote.sh(
+                    ["rados", "-p", pool, "listwatchers", obj(i)])
                 num_watchers = lines.count('watcher=')
                 log.info('i see %d watchers for %s', num_watchers, obj(i))
                 if num_watchers >= 1:

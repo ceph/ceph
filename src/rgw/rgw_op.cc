@@ -85,8 +85,6 @@ using rgw::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
-using rgw::IAM::Policy;
-
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
@@ -798,7 +796,7 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, 
 }
 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
-  RGWObjTags tagset;
+  RGWObjTags& tagset = s->tagset;
   try {
     auto bliter = bl.cbegin();
     tagset.decode(bliter);
@@ -988,6 +986,26 @@ int RGWGetObj::verify_permission()
   return 0;
 }
 
+// cache the objects tags into the requests
+// use inside try/catch as "decode()" may throw
+void populate_tags_in_request(req_state* s, const std::map<std::string, bufferlist>& attrs) {
+  const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
+  if (attr_iter != attrs.end()) {
+    auto bliter = attr_iter->second.cbegin();
+    decode(s->tagset, bliter);
+  }
+}
+
+// cache the objects metadata into the request
+void populate_metadata_in_request(req_state* s, std::map<std::string, bufferlist>& attrs) {
+  for (auto& attr : attrs) {
+    if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
+      std::string_view key(attr.first);
+      key.remove_prefix(sizeof(RGW_ATTR_PREFIX)-1);
+      s->info.x_meta_map.emplace(key, attr.second.c_str());
+    }
+  }
+}
 
 int RGWOp::verify_op_mask()
 {
@@ -1972,6 +1990,22 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
   return false;
 }
 
+static inline void rgw_cond_decode_objtags(
+  struct req_state *s,
+  const std::map<std::string, buffer::list> &attrs)
+{
+  const auto& tags = attrs.find(RGW_ATTR_TAGS);
+  if (tags != attrs.end()) {
+    try {
+      bufferlist::const_iterator iter{&tags->second};
+      s->tagset.decode(iter);
+    } catch (buffer::error& err) {
+      ldout(s->cct, 0)
+	<< "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    }
+  }
+}
+
 void RGWGetObj::execute()
 {
   bufferlist bl;
@@ -2101,6 +2135,9 @@ void RGWGetObj::execute()
     op_ret = -ENOENT;
     goto done_err;
   }
+
+  /* Decode S3 objtags, if any */
+  rgw_cond_decode_objtags(s, attrs);
 
   start = ofs;
 
@@ -3925,6 +3962,7 @@ void RGWPutObj::execute()
   }
   encode_delete_at_attr(delete_at, attrs);
   encode_obj_tags_attr(obj_tags.get(), attrs);
+  rgw_cond_decode_objtags(s, attrs);
 
   /* Add a custom metadata to expose the information whether an object
    * is an SLO or not. Appending the attribute must be performed AFTER
@@ -3965,7 +4003,7 @@ void RGWPutObj::execute()
   }
 
   // send request to notification manager
-  const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedPut, store);
+  const auto ret = rgw::notify::publish(s, obj.key, s->obj_size, mtime, etag, rgw::notify::ObjectCreatedPut, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -4201,7 +4239,7 @@ void RGWPostObj::execute()
     }
   } while (is_next_file_to_upload());
 
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedPost, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedPost, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -4620,22 +4658,23 @@ void RGWDeleteObj::execute()
   bool check_obj_lock = obj.key.have_instance() && s->bucket_info.obj_lock_enabled();
 
   if (!s->object.empty()) {
+    /* check if obj exists, read orig attrs */
+    op_ret = get_obj_attrs(store, s, obj, attrs);
+    
     if (need_object_expiration() || multipart_delete) {
-      /* check if obj exists, read orig attrs */
-      op_ret = get_obj_attrs(store, s, obj, attrs);
       if (op_ret < 0) {
+        // failed to get attributes
         return;
       }
     }
 
     if (check_obj_lock) {
-      /* check if obj exists, read orig attrs */
-      op_ret = get_obj_attrs(store, s, obj, attrs);
       if (op_ret < 0) {
         if (op_ret == -ENOENT) {
           /* object maybe delete_marker, skip check_obj_lock*/
           check_obj_lock = false;
         } else {
+          // failed to get attributes and check_obj_lock is needed
           return;
         }
       }
@@ -4740,11 +4779,20 @@ void RGWDeleteObj::execute()
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
       op_ret = 0;
     }
+
+    // cache the objects tags and metadata into the requests
+    // so it could be used in the notification mechanism
+    try {
+      populate_tags_in_request(s, attrs);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
+    }
+    populate_metadata_in_request(s, attrs);
   } else {
     op_ret = -EINVAL;
   }
 
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(),
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(),
           delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
           store);
   if (ret < 0) {
@@ -5054,7 +5102,7 @@ void RGWCopyObj::execute()
 			   copy_obj_progress_cb, (void *)this
     );
 
-  const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -5419,15 +5467,6 @@ void RGWDeleteLC::execute()
       return;
     }
   }
-  map<string, bufferlist> attrs = s->bucket_attrs;
-  attrs.erase(RGW_ATTR_LC);
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				&s->bucket_info.objv_tracker);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
-        << s->bucket.name << " returned err=" << op_ret << dendl;
-    return;
-  }
 
   op_ret = store->get_lc()->remove_bucket_config(s->bucket_info, s->bucket_attrs);
   if (op_ret < 0) {
@@ -5726,7 +5765,7 @@ void RGWInitMultipart::execute()
     op_ret = obj_op.write_meta(bl.length(), 0, attrs);
   } while (op_ret == -EEXIST);
   
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), rgw::notify::ObjectCreatedPost, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), rgw::notify::ObjectCreatedPost, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -6040,7 +6079,7 @@ void RGWCompleteMultipart::execute()
     ldpp_dout(this, 0) << "WARNING: failed to remove object " << meta_obj << dendl;
   }
   
-  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedCompleteMultipartUpload, store);
+  const auto ret = rgw::notify::publish(s, s->object, s->obj_size, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedCompleteMultipartUpload, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -6396,6 +6435,20 @@ void RGWDeleteMultiObj::execute()
 
     send_partial_response(*iter, del_op.result.delete_marker,
 			  del_op.result.version_id, op_ret);
+
+    const auto obj_state = obj_ctx->get_state(obj);
+    bufferlist etag_bl;
+    const auto etag = obj_state->get_attr(RGW_ATTR_ETAG, etag_bl) ? etag_bl.to_str() : "";
+
+    const auto ret = rgw::notify::publish(s, obj.key, obj_state->size, ceph::real_clock::now(), etag, 
+            del_op.result.delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
+            store);
+    if (ret < 0) {
+        ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	    // TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	    // this should be global conf (probably returnign a different handler)
+        // so we don't need to read the configured values before we perform it
+    }
   }
 
   /*  set the return code to zero, errors at this point will be
@@ -7378,6 +7431,8 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
 		      << " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
+    if (s->auth.identity->is_anonymous() && ret == -EACCES)
+      ret = -EPERM;
   }
 
   return ret;

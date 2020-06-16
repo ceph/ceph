@@ -43,49 +43,14 @@ get_build_py_version() {
 
 setup_teuthology() {
     TEMP_DIR=`mktemp -d`
-    TEUTHOLOGY_PY_REQS="
-apache-libcloud==2.2.1
-asn1crypto==0.22.0
-backports.ssl-match-hostname==3.5.0.1
-bcrypt==3.1.4
-certifi==2018.1.18
-cffi==1.10.0
-chardet==3.0.4
-configobj==5.0.6
-cryptography==2.1.4
-enum34==1.1.6
-gevent==1.2.2
-greenlet==0.4.13
-idna==2.5
-ipaddress==1.0.18
-Jinja2==2.9.6
-manhole==1.5.0
-MarkupSafe==1.0
-netaddr==0.7.19
-packaging==16.8
-paramiko==2.4.0
-pexpect==4.4.0
-psutil==5.4.3
-ptyprocess==0.5.2
-pyasn1==0.2.3
-pycparser==2.17
-PyNaCl==1.2.1
-pyparsing==2.2.0
-python-dateutil==2.6.1
-PyYAML==3.12
-requests==2.18.4
-six==1.10.0
-urllib3==1.22
-"
-
     cd $TEMP_DIR
-    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
+    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python3} venv
     source venv/bin/activate
     pip install 'setuptools >= 12'
-    eval pip install $TEUTHOLOGY_PY_REQS
-    pip install -r $CURR_DIR/requirements.txt
-
-    git clone --depth 1 https://github.com/ceph/teuthology.git
+    pip install git+https://github.com/ceph/teuthology#egg=teuthology[test]
+    pushd $CURR_DIR
+    pip install -r requirements.txt -c constraints.txt
+    popd
 
     deactivate
 }
@@ -98,7 +63,7 @@ setup_coverage() {
     source coverage-venv/bin/activate
     cd $CURR_DIR
     pip install coverage==4.5.2
-    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+    COVERAGE_PATH=$(python -c "import sysconfig; print(sysconfig.get_paths()['platlib'])")
     deactivate
 }
 
@@ -148,7 +113,7 @@ run_teuthology_tests() {
         export PYBIND=$BUILD_DIR/src/pybind
         pybind_dir=$PYBIND
     fi
-    export PYTHONPATH=$TEMP_DIR/teuthology:$source_dir/qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
+    export PYTHONPATH=$source_dir/qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$pybind_dir:$python_common_dir:${COVERAGE_PATH}
     export RGW=${RGW:-1}
 
     export COVERAGE_ENABLED=true

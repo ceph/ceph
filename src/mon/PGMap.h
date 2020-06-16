@@ -48,19 +48,19 @@ public:
   mempool::pgmap::map<int64_t,int64_t> num_pg_by_pool;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
-  mempool::pgmap::map<string,osd_stat_t> osd_sum_by_class;
+  mempool::pgmap::map<std::string,osd_stat_t> osd_sum_by_class;
   mempool::pgmap::unordered_map<uint64_t,int32_t> num_pg_by_state;
   struct pg_count {
     int32_t acting = 0;
     int32_t up_not_acting = 0;
     int32_t primary = 0;
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       encode(acting, bl);
       encode(up_not_acting, bl);
       encode(primary, bl);
     }
-    void decode(bufferlist::const_iterator& p) {
+    void decode(ceph::buffer::list::const_iterator& p) {
       using ceph::decode;
       decode(acting, p);
       decode(up_not_acting, p);
@@ -80,7 +80,7 @@ public:
    * keep track of last deltas for each pool, calculated using
    * @p pg_pool_sum as baseline.
    */
-  mempool::pgmap::unordered_map<int64_t, mempool::pgmap::list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
+  mempool::pgmap::unordered_map<int64_t, mempool::pgmap::list<std::pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
   /**
    * keep track of per-pool timestamp deltas, according to last update on
    * each pool.
@@ -92,7 +92,7 @@ public:
    * of the pair is the timestamp referring to the last update (i.e., the first
    * member of the pair) for a given pool.
    */
-  mempool::pgmap::unordered_map<int64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
+  mempool::pgmap::unordered_map<int64_t, std::pair<pool_stat_t,utime_t> > per_pool_sum_delta;
 
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
@@ -103,57 +103,57 @@ public:
     double *inactive_ratio,
     double *unknown_pgs_ratio) const;
 
-  void print_summary(Formatter *f, ostream *out) const;
-  void print_oneline_summary(Formatter *f, ostream *out) const;
+  void print_summary(ceph::Formatter *f, std::ostream *out) const;
+  void print_oneline_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  void recovery_summary(Formatter *f, list<string> *psl,
+  void recovery_summary(ceph::Formatter *f, std::list<std::string> *psl,
                         const pool_stat_t& pool_sum) const;
-  void overall_recovery_summary(Formatter *f, list<string> *psl) const;
-  void pool_recovery_summary(Formatter *f, list<string> *psl,
+  void overall_recovery_summary(ceph::Formatter *f, std::list<std::string> *psl) const;
+  void pool_recovery_summary(ceph::Formatter *f, std::list<std::string> *psl,
                              uint64_t poolid) const;
-  void recovery_rate_summary(Formatter *f, ostream *out,
+  void recovery_rate_summary(ceph::Formatter *f, std::ostream *out,
                              const pool_stat_t& delta_sum,
                              utime_t delta_stamp) const;
-  void overall_recovery_rate_summary(Formatter *f, ostream *out) const;
-  void pool_recovery_rate_summary(Formatter *f, ostream *out,
+  void overall_recovery_rate_summary(ceph::Formatter *f, std::ostream *out) const;
+  void pool_recovery_rate_summary(ceph::Formatter *f, std::ostream *out,
                                   uint64_t poolid) const;
   /**
    * Obtain a formatted/plain output for client I/O, source from stats for a
    * given @p delta_sum pool over a given @p delta_stamp period of time.
    */
-  void client_io_rate_summary(Formatter *f, ostream *out,
+  void client_io_rate_summary(ceph::Formatter *f, std::ostream *out,
                               const pool_stat_t& delta_sum,
                               utime_t delta_stamp) const;
   /**
    * Obtain a formatted/plain output for the overall client I/O, which is
    * calculated resorting to @p pg_sum_delta and @p stamp_delta.
    */
-  void overall_client_io_rate_summary(Formatter *f, ostream *out) const;
+  void overall_client_io_rate_summary(ceph::Formatter *f, std::ostream *out) const;
   /**
    * Obtain a formatted/plain output for client I/O over a given pool
    * with id @p pool_id.  We will then obtain pool-specific data
    * from @p per_pool_sum_delta.
    */
-  void pool_client_io_rate_summary(Formatter *f, ostream *out,
+  void pool_client_io_rate_summary(ceph::Formatter *f, std::ostream *out,
                                    uint64_t poolid) const;
   /**
    * Obtain a formatted/plain output for cache tier IO, source from stats for a
    * given @p delta_sum pool over a given @p delta_stamp period of time.
    */
-  void cache_io_rate_summary(Formatter *f, ostream *out,
+  void cache_io_rate_summary(ceph::Formatter *f, std::ostream *out,
                              const pool_stat_t& delta_sum,
                              utime_t delta_stamp) const;
   /**
    * Obtain a formatted/plain output for the overall cache tier IO, which is
    * calculated resorting to @p pg_sum_delta and @p stamp_delta.
    */
-  void overall_cache_io_rate_summary(Formatter *f, ostream *out) const;
+  void overall_cache_io_rate_summary(ceph::Formatter *f, std::ostream *out) const;
   /**
    * Obtain a formatted/plain output for cache tier IO over a given pool
    * with id @p pool_id.  We will then obtain pool-specific data
    * from @p per_pool_sum_delta.
    */
-  void pool_cache_io_rate_summary(Formatter *f, ostream *out,
+  void pool_cache_io_rate_summary(ceph::Formatter *f, std::ostream *out,
                                   uint64_t poolid) const;
 
   /**
@@ -166,13 +166,13 @@ public:
   /**
    * Dump pool usage and io ops/bytes, used by "ceph df" command
    */
-  virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
-				    Formatter *f, bool verbose) const;
-  void dump_cluster_stats(stringstream *ss, Formatter *f, bool verbose) const;
-  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-			    const pool_stat_t &pool_stat,
-			    uint64_t avail,
-			    float raw_used_rate,
+  virtual void dump_pool_stats_full(const OSDMap &osd_map, std::stringstream *ss,
+				    ceph::Formatter *f, bool verbose) const;
+  void dump_cluster_stats(std::stringstream *ss, ceph::Formatter *f, bool verbose) const;
+  static void dump_object_stat_sum(TextTable &tbl, ceph::Formatter *f,
+				   const pool_stat_t &pool_stat,
+				   uint64_t avail,
+				   float raw_used_rate,
 				   bool verbose, bool per_pool,
 				   const pg_pool_t *pool);
 
@@ -217,10 +217,10 @@ public:
     return 0;
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<PGMapDigest*>& ls);
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<PGMapDigest*>& ls);
 };
 WRITE_CLASS_ENCODER(PGMapDigest::pg_count);
 WRITE_CLASS_ENCODER_FEATURES(PGMapDigest);
@@ -289,17 +289,17 @@ public:
       osd_stat_rm.insert(osd);
       osd_stat_updates.erase(osd);
     }
-    void dump(Formatter *f) const;
-    static void generate_test_instances(list<Incremental*>& o);
+    void dump(ceph::Formatter *f) const;
+    static void generate_test_instances(std::list<Incremental*>& o);
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0) {}
   };
 
 
   // aggregate stats (soft state), generated by calc_stats()
-  mempool::pgmap::unordered_map<int,set<pg_t> > pg_by_osd;
+  mempool::pgmap::unordered_map<int,std::set<pg_t> > pg_by_osd;
   mempool::pgmap::unordered_map<int,int> blocked_by_sum;
-  mempool::pgmap::list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  mempool::pgmap::list<std::pair<pool_stat_t, utime_t> > pg_sum_deltas;
   mempool::pgmap::unordered_map<int64_t,mempool::pgmap::unordered_map<uint64_t,int32_t>> num_pg_by_pool_state;
 
   utime_t stamp;
@@ -336,7 +336,7 @@ public:
     const pool_stat_t& current_pool_sum,
     pool_stat_t *result_pool_delta,
     utime_t *result_ts_delta,
-    mempool::pgmap::list<pair<pool_stat_t,utime_t> > *delta_avg_list);
+    mempool::pgmap::list<std::pair<pool_stat_t,utime_t> > *delta_avg_list);
 
   void update_one_pool_delta(CephContext *cct,
                              const utime_t ts,
@@ -346,7 +346,7 @@ public:
  public:
 
   mempool::pgmap::set<pg_t> creating_pgs;
-  mempool::pgmap::map<int,map<epoch_t,set<pg_t> > > creating_pgs_by_osd_epoch;
+  mempool::pgmap::map<int,std::map<epoch_t,std::set<pg_t> > > creating_pgs_by_osd_epoch;
 
   // Bits that use to be enum StuckPG
   static const int STUCK_INACTIVE = (1<<0);
@@ -392,7 +392,7 @@ public:
     return pool_stat_t();
   }
 
-  osd_stat_t get_osd_sum(const set<int>& osds) const {
+  osd_stat_t get_osd_sum(const std::set<int>& osds) const {
     if (osds.empty()) // all
       return osd_sum;
     osd_stat_t sum;
@@ -424,25 +424,26 @@ public:
   void stat_osd_add(int osd, const osd_stat_t &s);
   void stat_osd_sub(int osd, const osd_stat_t &s);
   
-  void encode(bufferlist &bl, uint64_t features=-1) const;
-  void decode(bufferlist::const_iterator &bl);
+  void encode(ceph::buffer::list &bl, uint64_t features=-1) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
 
   /// encode subset of our data to a PGMapDigest
   void encode_digest(const OSDMap& osdmap,
-		     bufferlist& bl, uint64_t features);
+		     ceph::buffer::list& bl, uint64_t features);
 
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
   void get_rules_avail(const OSDMap& osdmap,
 		       std::map<int,int64_t> *avail_map) const;
-  void dump(Formatter *f) const; 
-  void dump_basic(Formatter *f) const;
-  void dump_pg_stats(Formatter *f, bool brief) const;
-  void dump_pool_stats(Formatter *f) const;
-  void dump_osd_stats(Formatter *f, bool with_net = false) const;
-  void dump_delta(Formatter *f) const;
-  void dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs) const;
-  void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
-			    Formatter *f, bool verbose) const override {
+  void dump(ceph::Formatter *f, bool with_net = true) const;
+  void dump_basic(ceph::Formatter *f) const;
+  void dump_pg_stats(ceph::Formatter *f, bool brief) const;
+  void dump_pool_stats(ceph::Formatter *f) const;
+  void dump_osd_stats(ceph::Formatter *f, bool with_net = true) const;
+  void dump_osd_ping_times(ceph::Formatter *f) const;
+  void dump_delta(ceph::Formatter *f) const;
+  void dump_filtered_pg_stats(ceph::Formatter *f, std::set<pg_t>& pgs) const;
+  void dump_pool_stats_full(const OSDMap &osd_map, std::stringstream *ss,
+			    ceph::Formatter *f, bool verbose) const override {
     get_rules_avail(osd_map, &avail_space_by_rule);
     PGMapDigest::dump_pool_stats_full(osd_map, ss, f, verbose);
   }
@@ -451,63 +452,63 @@ public:
   * Dump client io rate, recovery io rate, cache io rate and recovery information.
   * this function is used by "ceph osd pool stats" command
   */
-  void dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map, Formatter *f,
-                              stringstream *ss) const;
+  void dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map, ceph::Formatter *f,
+				   std::stringstream *ss) const;
 
   void dump_pg_stats_plain(
-    ostream& ss,
+    std::ostream& ss,
     const mempool::pgmap::unordered_map<pg_t, pg_stat_t>& pg_stats,
     bool brief) const;
   void get_stuck_stats(
     int types, const utime_t cutoff,
     mempool::pgmap::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
-  bool get_stuck_counts(const utime_t cutoff, map<string, int>& note) const;
-  void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
-  void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
-  int dump_stuck_pg_stats(stringstream &ds,
-			   Formatter *f,
-			   int threshold,
-			   vector<string>& args) const;
-  void dump(ostream& ss) const;
-  void dump_basic(ostream& ss) const;
-  void dump_pg_stats(ostream& ss, bool brief) const;
-  void dump_pg_sum_stats(ostream& ss, bool header) const;
-  void dump_pool_stats(ostream& ss, bool header) const;
-  void dump_osd_stats(ostream& ss) const;
-  void dump_osd_sum_stats(ostream& ss) const;
-  void dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const;
+  bool get_stuck_counts(const utime_t cutoff, std::map<std::string, int>& note) const;
+  void dump_stuck(ceph::Formatter *f, int types, utime_t cutoff) const;
+  void dump_stuck_plain(std::ostream& ss, int types, utime_t cutoff) const;
+  int dump_stuck_pg_stats(std::stringstream &ds,
+			  ceph::Formatter *f,
+			  int threshold,
+			  std::vector<std::string>& args) const;
+  void dump(std::ostream& ss) const;
+  void dump_basic(std::ostream& ss) const;
+  void dump_pg_stats(std::ostream& ss, bool brief) const;
+  void dump_pg_sum_stats(std::ostream& ss, bool header) const;
+  void dump_pool_stats(std::ostream& ss, bool header) const;
+  void dump_osd_stats(std::ostream& ss) const;
+  void dump_osd_sum_stats(std::ostream& ss) const;
+  void dump_filtered_pg_stats(std::ostream& ss, std::set<pg_t>& pgs) const;
 
-  void dump_osd_perf_stats(Formatter *f) const;
+  void dump_osd_perf_stats(ceph::Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;
 
-  void dump_osd_blocked_by_stats(Formatter *f) const;
+  void dump_osd_blocked_by_stats(ceph::Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
   void get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
-                             bool primary, set<pg_t>& pgs) const;
+                             bool primary, std::set<pg_t>& pgs) const;
 
   void get_health_checks(
     CephContext *cct,
     const OSDMap& osdmap,
     health_check_map_t *checks) const;
 
-  static void generate_test_instances(list<PGMap*>& o);
+  static void generate_test_instances(std::list<PGMap*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
-inline ostream& operator<<(ostream& out, const PGMapDigest& m) {
+inline std::ostream& operator<<(std::ostream& out, const PGMapDigest& m) {
   m.print_oneline_summary(NULL, &out);
   return out;
 }
 
 int process_pg_map_command(
-  const string& prefix,
+  const std::string& prefix,
   const cmdmap_t& cmdmap,
   const PGMap& pg_map,
   const OSDMap& osdmap,
-  Formatter *f,
-  stringstream *ss,
-  bufferlist *odata);
+  ceph::Formatter *f,
+  std::stringstream *ss,
+  ceph::buffer::list *odata);
 
 class PGMapUpdater
 {
@@ -523,7 +524,7 @@ public:
       const OSDMap &osd_map,
       const PGMap &pg_map,
       bool check_all,
-      const set<int>& need_check_down_pg_osds,
+      const std::set<int>& need_check_down_pg_osds,
       PGMap::Incremental *pending_inc);
 };
 
@@ -538,12 +539,12 @@ namespace reweight {
 		     int oload,
 		     double max_changef,
 		     int max_osds,
-		     bool by_pg, const set<int64_t> *pools,
+		     bool by_pg, const std::set<int64_t> *pools,
 		     bool no_increasing,
 		     mempool::osdmap::map<int32_t, uint32_t>* new_weights,
 		     std::stringstream *ss,
 		     std::string *out_str,
-		     Formatter *f);
+		     ceph::Formatter *f);
 }
 
 #endif

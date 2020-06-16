@@ -42,6 +42,7 @@ std::string handle_pyerror()
     PyObject *exc, *val, *tb;
     object formatted_list, formatted;
     PyErr_Fetch(&exc, &val, &tb);
+    PyErr_NormalizeException(&exc, &val, &tb);
     handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
     object traceback(import("traceback"));
     if (!tb) {
@@ -55,6 +56,7 @@ std::string handle_pyerror()
           std::stringstream ss;
           ss << PyString_AsString(name_attr) << ": " << PyString_AsString(val);
           Py_XDECREF(name_attr);
+          ss << "\nError processing exception object: " << peek_pyerror();
           return ss.str();
         }
     } else {
@@ -68,6 +70,7 @@ std::string handle_pyerror()
           std::stringstream ss;
           ss << PyString_AsString(name_attr) << ": " << PyString_AsString(val);
           Py_XDECREF(name_attr);
+          ss << "\nError processing exception object: " << peek_pyerror();
           return ss.str();
         }
     }

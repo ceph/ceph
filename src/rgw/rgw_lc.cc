@@ -7,6 +7,7 @@
 
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "common/Formatter.h"
 #include <common/errno.h>
@@ -18,6 +19,12 @@
 #include "rgw_lc.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
+
+// this seems safe to use, at least for now--arguably, we should
+// prefer header-only fmt, in general
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include "seastar/fmt/include/fmt/format.h"
 
 #include "services/svc_sys_obj.h"
 
@@ -439,20 +446,21 @@ static bool is_valid_op(const lc_op& op)
 static inline bool has_all_tags(const lc_op& rule_action,
 				const RGWObjTags& object_tags)
 {
+  if(! rule_action.obj_tags)
+    return false;
+  if(object_tags.count() < rule_action.obj_tags->count())
+    return false;
+  size_t tag_count = 0;
   for (const auto& tag : object_tags.get_tags()) {
-
-    if (! rule_action.obj_tags)
-      return false;
-
     const auto& rule_tags = rule_action.obj_tags->get_tags();
     const auto& iter = rule_tags.find(tag.first);
-
-    if ((iter == rule_tags.end()) ||
-	(iter->second != tag.second))
-      return false;
+    if(iter->second == tag.second)
+    {
+      tag_count++;
+    }
+  /* all tags in the rule appear in obj tags */
   }
-  /* all tags matched */
-  return true;
+  return tag_count == rule_action.obj_tags->count();
 }
 
 class LCObjsLister {
@@ -680,7 +688,7 @@ static int check_tags(lc_op_ctx& oc, bool *skip)
     }
 
     if (! has_all_tags(op, dest_obj_tags)) {
-      ldout(oc.cct, 20) << __func__ << "() skipping obj " << oc.obj << " as tags do not match" << dendl;
+      ldout(oc.cct, 20) << __func__ << "() skipping obj " << oc.obj << " as tags do not match in rule: " << op.id << dendl;
       return 0;
     }
   }
@@ -1520,4 +1528,151 @@ int fix_lc_shard_entry(RGWRados* store, const RGWBucketInfo& bucket_info,
   return ret;
 }
 
-}
+std::string s3_expiration_header(
+  DoutPrefixProvider* dpp,
+  const rgw_obj_key& obj_key,
+  const RGWObjTags& obj_tagset,
+  const ceph::real_time& mtime,
+  const std::map<std::string, buffer::list>& bucket_attrs)
+{
+  CephContext* cct = dpp->get_cct();
+  RGWLifecycleConfiguration config(cct);
+  std::string hdr{""};
+
+  const auto& aiter = bucket_attrs.find(RGW_ATTR_LC);
+  if (aiter == bucket_attrs.end())
+    return hdr;
+
+  bufferlist::const_iterator iter{&aiter->second};
+  try {
+      config.decode(iter);
+  } catch (const buffer::error& e) {
+      ldpp_dout(dpp, 0) << __func__
+			<<  "() decode life cycle config failed"
+			<< dendl;
+      return hdr;
+  } /* catch */
+
+  /* dump tags at debug level 16 */
+  RGWObjTags::tag_map_t obj_tag_map = obj_tagset.get_tags();
+  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 16)) {
+    for (const auto& elt : obj_tag_map) {
+      ldout(cct, 16) << __func__
+		     <<  "() key=" << elt.first << " val=" << elt.second
+		     << dendl;
+    }
+  }
+
+  boost::optional<ceph::real_time> expiration_date;
+  boost::optional<std::string> rule_id;
+
+  const auto& rule_map = config.get_rule_map();
+  for (const auto& ri : rule_map) {
+    const auto& rule = ri.second;
+    auto& id = rule.get_id();
+    auto& prefix = rule.get_prefix();
+    auto& filter = rule.get_filter();
+    auto& expiration = rule.get_expiration();
+    auto& noncur_expiration = rule.get_noncur_expiration();
+
+    ldpp_dout(dpp, 10) << "rule: " << ri.first
+		       << " prefix: " << prefix
+		       << " expiration: "
+		       << " date: " << expiration.get_date()
+		       << " days: " << expiration.get_days()
+		       << " noncur_expiration: "
+		       << " date: " << noncur_expiration.get_date()
+		       << " days: " << noncur_expiration.get_days()
+		       << dendl;
+
+    /* skip if rule !enabled
+     * if rule has prefix, skip iff object !match prefix
+     * if rule has tags, skip iff object !match tags
+     * note if object is current or non-current, compare accordingly
+     * if rule has days, construct date expression and save iff older
+     * than last saved
+     * if rule has date, convert date expression and save iff older
+     * than last saved
+     * if the date accum has a value, format it into hdr
+     */
+
+    if (!rule.is_enabled())
+      continue;
+
+    if(!prefix.empty()) {
+      if (!boost::starts_with(obj_key.name, prefix))
+	continue;
+    }
+
+    if (filter.has_tags()) {
+      bool tag_match = false;
+      const RGWObjTags& rule_tagset = filter.get_tags();
+      for (auto& tag : rule_tagset.get_tags()) {
+	/* remember, S3 tags are {key,value} tuples */
+	auto ma1 = obj_tag_map.find(tag.first);
+	if (ma1 != obj_tag_map.end()) {
+	  if (tag.second == ma1->second) {
+	    ldpp_dout(dpp, 10) << "tag match obj_key=" << obj_key
+			       << " rule_id=" << id
+			       << " tag=" << tag
+			       << " (ma=" << *ma1 << ")"
+			       << dendl;
+	    tag_match = true;
+	    break;
+	  }
+	}
+      }
+      if (! tag_match)
+	continue;
+    }
+
+    // compute a uniform expiration date
+    boost::optional<ceph::real_time> rule_expiration_date;
+    const LCExpiration& rule_expiration =
+      (obj_key.instance.empty()) ? expiration : noncur_expiration;
+
+    if (rule_expiration.has_date()) {
+      rule_expiration_date =
+	boost::optional<ceph::real_time>(
+	  ceph::from_iso_8601(rule.get_expiration().get_date()));
+      rule_id = id;
+    } else {
+      if (rule_expiration.has_days()) {
+	rule_expiration_date =
+	  boost::optional<ceph::real_time>(
+	    mtime + make_timespan(rule_expiration.get_days()*24*60*60));
+	rule_id = id;
+      }
+    }
+
+    // update earliest expiration
+    if (rule_expiration_date) {
+      if ((! expiration_date) ||
+	  (*expiration_date < *rule_expiration_date)) {
+      expiration_date =
+	boost::optional<ceph::real_time>(rule_expiration_date);
+      }
+    }
+  }
+
+  // cond format header
+  if (expiration_date && rule_id) {
+    // Fri, 23 Dec 2012 00:00:00 GMT
+    char exp_buf[100];
+    time_t exp = ceph::real_clock::to_time_t(*expiration_date);
+    if (std::strftime(exp_buf, sizeof(exp_buf),
+		      "%a, %d %b %Y %T %Z", std::gmtime(&exp))) {
+      hdr = fmt::format("expiry-date=\"{0}\", rule-id=\"{1}\"", exp_buf,
+			*rule_id);
+    } else {
+      ldpp_dout(dpp, 0) << __func__ <<
+	"() strftime of life cycle expiration header failed"
+			<< dendl;
+    }
+  }
+
+  return hdr;
+
+} /* rgwlc_s3_expiration_header */
+
+} /* namespace rgw::lc */

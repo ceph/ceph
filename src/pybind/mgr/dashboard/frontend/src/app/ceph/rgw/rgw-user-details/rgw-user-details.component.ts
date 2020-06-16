@@ -28,6 +28,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   // Details tab
   user: any;
+  maxBucketsMap: {};
 
   // Keys tab
   keys: any = [];
@@ -53,6 +54,10 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         flexGrow: 1
       }
     ];
+    this.maxBucketsMap = {
+      '-1': this.i18n('Disabled'),
+      0: this.i18n('Unlimited')
+    };
   }
 
   ngOnChanges() {
@@ -70,22 +75,27 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
       // Process the keys.
       this.keys = [];
-      this.user.keys.forEach((key: RgwUserS3Key) => {
-        this.keys.push({
-          id: this.keys.length + 1, // Create an unique identifier
-          type: 'S3',
-          username: key.user,
-          ref: key
+      if (this.user.keys) {
+        this.user.keys.forEach((key: RgwUserS3Key) => {
+          this.keys.push({
+            id: this.keys.length + 1, // Create an unique identifier
+            type: 'S3',
+            username: key.user,
+            ref: key
+          });
         });
-      });
-      this.user.swift_keys.forEach((key: RgwUserSwiftKey) => {
-        this.keys.push({
-          id: this.keys.length + 1, // Create an unique identifier
-          type: 'Swift',
-          username: key.user,
-          ref: key
+      }
+      if (this.user.swift_keys) {
+        this.user.swift_keys.forEach((key: RgwUserSwiftKey) => {
+          this.keys.push({
+            id: this.keys.length + 1, // Create an unique identifier
+            type: 'Swift',
+            username: key.user,
+            ref: key
+          });
         });
-      });
+      }
+
       this.keys = _.sortBy(this.keys, 'user');
     }
   }

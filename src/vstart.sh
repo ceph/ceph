@@ -775,6 +775,7 @@ start_mgr() {
     local ssl=${DASHBOARD_SSL:-1}
     # avoid monitors on nearby ports (which test/*.sh use extensively)
     MGR_PORT=$(($CEPH_PORT + 1000))
+    PROMETHEUS_PORT=9283
     for name in x y z a b c d e f g h i j k l m n o p
     do
         [ $mgr -eq $CEPH_NUM_MGR ] && break
@@ -806,6 +807,8 @@ EOF
                 fi
             fi
 	    MGR_PORT=$(($MGR_PORT + 1000))
+	    ceph_adm config set mgr mgr/prometheus/$name/server_port $PROMETHEUS_PORT --force
+	    PROMETHEUS_PORT=$(($PROMETHEUS_PORT + 1000))
 
 	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT --force
             if [ $mgr -eq 1 ]; then
@@ -994,7 +997,6 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
 [global]
 osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
 osd_pool_default_min_size = 1
-mon_pg_warn_min_per_osd = 3
 
 [mon]
 mon_osd_reporter_subtree_level = osd

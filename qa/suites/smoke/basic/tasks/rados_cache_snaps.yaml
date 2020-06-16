@@ -12,6 +12,7 @@ tasks:
       - \(OBJECT_
       - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
+      - slow request
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgnum_shrink: 2

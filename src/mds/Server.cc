@@ -193,6 +193,7 @@ Server::Server(MDSRank *m) :
   terminating_sessions(false),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
+  max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
@@ -1110,6 +1111,11 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
   if (changed.count("mds_recall_max_decay_rate")) {
     recall_throttle = DecayCounter(g_conf().get_val<double>("mds_recall_max_decay_rate"));
   }
+  if (changed.count("mds_max_snaps_per_dir")) {
+    max_snaps_per_dir = g_conf().get_val<uint64_t>("mds_max_snaps_per_dir");
+    dout(20) << __func__ << " max snapshots per directory changed to "
+            << max_snaps_per_dir << dendl;
+  }
 }
 
 /*
@@ -1205,12 +1211,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   mdlog->flush();
 
   // clean up requests, too
-  elist<MDRequestImpl*>::iterator p =
-    session->requests.begin(member_offset(MDRequestImpl,
-					  item_session_request));
-  while (!p.end()) {
-    MDRequestRef mdr = mdcache->request_get((*p)->reqid);
-    ++p;
+  while(!session->requests.empty()) {
+    auto mdr = MDRequestRef(*session->requests.begin());
     mdcache->request_kill(mdr);
   }
 
@@ -3212,7 +3214,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
     // xattrs on new inode?
     CInode::mempool_xattr_map xattrs;
-    decode(xattrs, p);
+    decode_noshare(xattrs, p);
     for (const auto &p : xattrs) {
       dout(10) << "prepare_new_inode setting xattr " << p.first << dendl;
       auto em = in->xattrs.emplace(std::piecewise_construct, std::forward_as_tuple(p.first), std::forward_as_tuple(p.second));
@@ -9681,6 +9683,14 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
+
+  // check if we can create any more snapshots
+  // we don't allow any more if we are already at or beyond the limit
+  if (diri->snaprealm &&
+      diri->snaprealm->get_snaps().size() >= max_snaps_per_dir) {
+    respond_to_request(mdr, -EMLINK);
+    return;
+  }
 
   // make sure name is unique
   if (diri->snaprealm &&

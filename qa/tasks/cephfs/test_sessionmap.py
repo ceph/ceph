@@ -1,4 +1,3 @@
-from StringIO import StringIO
 import time
 import json
 import logging
@@ -7,6 +6,7 @@ from unittest import SkipTest
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class TestSessionMap(CephFSTestCase):
     def _get_connection_count(self, status=None):
         perf = self.fs.rank_asok(["perf", "dump"], status=status)
         conn = 0
-        for module, dump in perf.iteritems():
+        for module, dump in perf.items():
             if "AsyncMessenger::Worker" in module:
                 conn += dump['msgr_active_connections']
         return conn
@@ -149,27 +149,6 @@ class TestSessionMap(CephFSTestCase):
         self.assertEqual(table_json['0']['result'], 0)
         self.assertEqual(len(table_json['0']['data']['sessions']), 0)
 
-    def _sudo_write_file(self, remote, path, data):
-        """
-        Write data to a remote file as super user
-
-        :param remote: Remote site.
-        :param path: Path on the remote being written to.
-        :param data: Data to be written.
-
-        Both perms and owner are passed directly to chmod.
-        """
-        remote.run(
-            args=[
-                'sudo',
-                'python',
-                '-c',
-                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                path,
-            ],
-            stdin=data,
-        )
-
     def _configure_auth(self, mount, id_name, mds_caps, osd_caps=None, mon_caps=None):
         """
         Set up auth credentials for a client mount, and write out the keyring
@@ -189,7 +168,7 @@ class TestSessionMap(CephFSTestCase):
             "mon", mon_caps
         )
         mount.client_id = id_name
-        self._sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
+        sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def test_session_reject(self):

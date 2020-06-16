@@ -122,6 +122,8 @@ private:
   OSDPerfMetricCollector osd_perf_metric_collector;
   void handle_osd_perf_metric_query_updated();
 
+  void update_task_status(DaemonKey key, MMgrReport *m);
+
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
   void shutdown();
@@ -172,6 +174,7 @@ public:
 
   void log_access_denied(std::shared_ptr<CommandContext>& cmdctx,
                          MgrSession* session, std::stringstream& ss);
+  void dump_pg_ready(ceph::Formatter *f);
 };
 
 #endif

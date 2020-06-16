@@ -56,7 +56,7 @@ export class RgwUserService {
     return this.http.get(`${this.url}/${uid}/quota`);
   }
 
-  create(args: object) {
+  create(args: Record<string, any>) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);
@@ -64,7 +64,7 @@ export class RgwUserService {
     return this.http.post(this.url, null, { params: params });
   }
 
-  update(uid: string, args: object) {
+  update(uid: string, args: Record<string, any>) {
     let params = new HttpParams();
     _.keys(args).forEach((key) => {
       params = params.append(key, args[key]);

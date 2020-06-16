@@ -230,6 +230,10 @@ class TestVolume(object):
     def test_is_not_ceph_device(self, dev):
         assert not api.is_ceph_device(dev)
 
+    def test_no_empty_lv_name(self):
+        with pytest.raises(ValueError):
+            api.Volume(lv_name='', lv_tags='')
+
 
 class TestVolumes(object):
 
@@ -326,6 +330,13 @@ class TestVolumes(object):
     def test_filter_requires_params(self, volumes):
         with pytest.raises(TypeError):
             volumes.filter()
+
+
+class TestVolumeGroup(object):
+
+    def test_volume_group_no_empty_name(self):
+        with pytest.raises(ValueError):
+            api.VolumeGroup(vg_name='')
 
 
 class TestVolumeGroups(object):
@@ -533,6 +544,7 @@ class TestCreateLV(object):
         self.foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
         self.foo_group = api.VolumeGroup(vg_name='foo_group',
                                          vg_extent_size=4194304,
+                                         vg_extent_count=100,
                                          vg_free_count=100)
 
     @patch('ceph_volume.api.lvm.process.run')
@@ -658,18 +670,16 @@ class TestTags(object):
         assert self.foo_volume.tags == tags
 
         expected = [
-            ['lvchange', '--deltag', 'ceph.foo0=bar0', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo0=bar0', '/path'],
-            ['lvchange', '--deltag', 'ceph.foo1=bar1', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo1=baz1', '/path'],
-            ['lvchange', '--deltag', 'ceph.foo2=bar2', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo2=baz2', '/path'],
-            ['lvchange', '--deltag', 'ceph.foo1=baz1', '/path'],
-            ['lvchange', '--addtag', 'ceph.foo1=other1', '/path'],
+            sorted(['lvchange', '--deltag', 'ceph.foo0=bar0', '--deltag',
+                    'ceph.foo1=bar1', '--deltag', 'ceph.foo2=bar2', '/path']),
+            sorted(['lvchange', '--deltag', 'ceph.foo1=baz1', '/path']),
+            sorted(['lvchange', '--addtag', 'ceph.foo0=bar0', '--addtag',
+                    'ceph.foo1=baz1', '--addtag', 'ceph.foo2=baz2', '/path']),
+            sorted(['lvchange', '--addtag', 'ceph.foo1=other1', '/path']),
         ]
         # The order isn't guaranted
         for call in capture.calls:
-            assert call['args'][0] in expected
+            assert sorted(call['args'][0]) in expected
         assert len(capture.calls) == len(expected)
 
     def test_clear_tags(self, monkeypatch, capture):
@@ -683,16 +693,16 @@ class TestTags(object):
         assert self.foo_volume_clean.tags == {}
 
         expected = [
-            ['lvchange', '--addtag', 'ceph.foo0=bar0', '/pathclean'],
-            ['lvchange', '--addtag', 'ceph.foo1=bar1', '/pathclean'],
-            ['lvchange', '--addtag', 'ceph.foo2=bar2', '/pathclean'],
-            ['lvchange', '--deltag', 'ceph.foo0=bar0', '/pathclean'],
-            ['lvchange', '--deltag', 'ceph.foo1=bar1', '/pathclean'],
-            ['lvchange', '--deltag', 'ceph.foo2=bar2', '/pathclean'],
+            sorted(['lvchange', '--addtag', 'ceph.foo0=bar0', '--addtag',
+                    'ceph.foo1=bar1', '--addtag', 'ceph.foo2=bar2',
+                    '/pathclean']),
+            sorted(['lvchange', '--deltag', 'ceph.foo0=bar0', '--deltag',
+                    'ceph.foo1=bar1', '--deltag', 'ceph.foo2=bar2',
+                    '/pathclean']),
         ]
         # The order isn't guaranted
         for call in capture.calls:
-            assert call['args'][0] in expected
+            assert sorted(call['args'][0]) in expected
         assert len(capture.calls) == len(expected)
 
 
@@ -961,3 +971,23 @@ class TestIsLV(object):
         splitname = {'LV_NAME': 'data', 'VG_NAME': 'ceph'}
         monkeypatch.setattr(api, 'dmsetup_splitname', lambda x, **kw: splitname)
         assert api.is_lv('/dev/sda1', lvs=volumes) is True
+
+class TestGetDeviceVgs(object):
+
+    @patch('ceph_volume.process.call')
+    @patch('ceph_volume.api.lvm._output_parser')
+    def test_get_device_vgs_with_empty_pv(self, patched_output_parser, pcall):
+        patched_output_parser.return_value = [{'vg_name': ''}]
+        pcall.return_value = ('', '', '')
+        vgs = api.get_device_vgs('/dev/foo')
+        assert vgs == []
+
+class TestGetDeviceLvs(object):
+
+    @patch('ceph_volume.process.call')
+    @patch('ceph_volume.api.lvm._output_parser')
+    def test_get_device_lvs_with_empty_vg(self, patched_output_parser, pcall):
+        patched_output_parser.return_value = [{'lv_name': ''}]
+        pcall.return_value = ('', '', '')
+        vgs = api.get_device_lvs('/dev/foo')
+        assert vgs == []

@@ -24,7 +24,7 @@ import { AuthStorageService } from '../../../../shared/services/auth-storage.ser
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { URLBuilderService } from '../../../../shared/services/url-builder.service';
 
-const BASE_URL = 'silence';
+const BASE_URL = 'monitoring/silence';
 
 @Component({
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
@@ -68,6 +68,7 @@ export class SilenceListComponent implements OnInit {
         permission: 'create',
         icon: Icons.add,
         routerLink: () => this.urlBuilder.getCreate(),
+        preserveFragment: true,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
         name: this.actionLabels.CREATE
       },
@@ -82,6 +83,7 @@ export class SilenceListComponent implements OnInit {
           !selectionExpired(selection),
         icon: Icons.copy,
         routerLink: () => this.urlBuilder.getRecreate(this.selection.first().id),
+        preserveFragment: true,
         name: this.actionLabels.RECREATE
       },
       {
@@ -95,6 +97,7 @@ export class SilenceListComponent implements OnInit {
           (selection.first().cdExecuting && !selectionExpired(selection)) ||
           selectionExpired(selection),
         routerLink: () => this.urlBuilder.getEdit(this.selection.first().id),
+        preserveFragment: true,
         name: this.actionLabels.EDIT
       },
       {

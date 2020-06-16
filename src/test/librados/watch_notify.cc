@@ -92,7 +92,15 @@ TEST_F(LibRadosWatchNotify, WatchNotify) {
   uint64_t handle;
   ASSERT_EQ(0,
       rados_watch(ioctx, "foo", 0, &handle, watch_notify_test_cb, NULL));
-  ASSERT_EQ(0, rados_notify(ioctx, "foo", 0, NULL, 0));
+  for (unsigned i=0; i<10; ++i) {
+    int r = rados_notify(ioctx, "foo", 0, NULL, 0);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
   sem_wait(sem);
   rados_unwatch(ioctx, "foo", handle);
@@ -112,7 +120,15 @@ TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
   uint64_t handle;
   ASSERT_EQ(0,
       rados_watch(ioctx, "foo", 0, &handle, watch_notify_test_cb, NULL));
-  ASSERT_EQ(0, rados_notify(ioctx, "foo", 0, NULL, 0));
+  for (unsigned i=0; i<10; ++i) {
+    int r = rados_notify(ioctx, "foo", 0, NULL, 0);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
   sem_wait(sem);
   rados_unwatch(ioctx, "foo", handle);

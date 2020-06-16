@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 import os
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -15,15 +14,9 @@ class TestVolumeClient(CephFSTestCase):
     # One for looking at the global filesystem, one for being
     # the VolumeClient, two for mounting the created shares
     CLIENTS_REQUIRED = 4
-    default_py_version = 'python3'
 
     def setUp(self):
         CephFSTestCase.setUp(self)
-        self.py_version = self.ctx.config.get('overrides', {}).\
-                          get('python', TestVolumeClient.default_py_version)
-        log.info("using python version: {python_version}".format(
-            python_version=self.py_version
-        ))
 
     def _volume_client_python(self, client, script, vol_prefix=None, ns_prefix=None):
         # Can't dedent this *and* the script we pass in, because they might have different
@@ -46,8 +39,7 @@ vc.connect()
 {payload}
 vc.disconnect()
         """.format(payload=script, conf_path=client.config_path,
-                   vol_prefix=vol_prefix, ns_prefix=ns_prefix),
-        self.py_version)
+                   vol_prefix=vol_prefix, ns_prefix=ns_prefix))
 
     def _configure_vc_auth(self, mount, id_name):
         """
@@ -382,7 +374,7 @@ vc.disconnect()
         for p in osd_map['pools']:
             existing_pg_count += p['pg_num']
 
-        expected_pg_num = (max_overall - existing_pg_count) / 10
+        expected_pg_num = (max_overall - existing_pg_count) // 10
         log.info("max_per_osd {0}".format(max_per_osd))
         log.info("osd_count {0}".format(osd_count))
         log.info("max_overall {0}".format(max_overall))
@@ -638,8 +630,10 @@ vc.disconnect()
         # Read existing content of the volume.
         self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
         # Cannot write into read-only volume.
-        with self.assertRaises(CommandFailedError):
+        try:
             guest_mount.write_n_mb("rogue.bin", 1)
+        except CommandFailedError:
+            pass
 
     def test_get_authorized_ids(self):
         """
@@ -687,12 +681,8 @@ vc.disconnect()
             guest_entity_2=guest_entity_2,
         )))
         # Check the list of authorized IDs and their access levels.
-        if self.py_version == 'python3':
-            expected_result = [('guest1', 'rw'), ('guest2', 'r')]
-        else:
-            expected_result = [(u'guest1', u'rw'), (u'guest2', u'r')]
-
-        self.assertItemsEqual(str(expected_result), auths)
+        expected_result = [('guest1', 'rw'), ('guest2', 'r')]
+        self.assertCountEqual(str(expected_result), auths)
 
         # Disallow both the auth IDs' access to the volume.
         auths = self._volume_client_python(volumeclient_mount, dedent("""
@@ -1111,7 +1101,7 @@ vc.disconnect()
         volume_prefix = "/myprefix"
         group_id = "grpid"
         volume_id = "volid"
-        mount_path = self._volume_client_python(vc_mount, dedent("""
+        self._volume_client_python(vc_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10, namespace_isolated=False)
             print(create_result['mount_path'])

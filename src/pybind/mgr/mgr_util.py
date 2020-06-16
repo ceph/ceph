@@ -176,3 +176,125 @@ def verify_tls_files(cert_fname, pkey_fname):
         logger.warning(
             'Private key {} and certificate {} do not match up: {}'.format(
                 pkey_fname, cert_fname, str(e)))
+
+def get_most_recent_rate(rates):
+    """ Get most recent rate from rates
+
+    :param rates: The derivative between all time series data points [time in seconds, value]
+    :type rates: list[tuple[int, float]]
+
+    :return: The last derivative or 0.0 if none exists
+    :rtype: float
+
+    >>> get_most_recent_rate(None)
+    0.0
+    >>> get_most_recent_rate([])
+    0.0
+    >>> get_most_recent_rate([(1, -2.0)])
+    -2.0
+    >>> get_most_recent_rate([(1, 2.0), (2, 1.5), (3, 5.0)])
+    5.0
+    """
+    if not rates:
+        return 0.0
+    return rates[-1][1]
+
+def get_time_series_rates(data):
+    """ Rates from time series data
+
+    :param data: Time series data [time in seconds, value]
+    :type data: list[tuple[int, float]]
+
+    :return: The derivative between all time series data points [time in seconds, value]
+    :rtype: list[tuple[int, float]]
+
+    >>> logger.debug = lambda s,x,y: print(s % (x,y))
+    >>> get_time_series_rates([])
+    []
+    >>> get_time_series_rates([[0, 1], [1, 3]])
+    [(1, 2.0)]
+    >>> get_time_series_rates([[0, 2], [0, 3], [0, 1], [1, 2], [1, 3]])
+    Duplicate timestamp in time series data: [0, 2], [0, 3]
+    Duplicate timestamp in time series data: [0, 3], [0, 1]
+    Duplicate timestamp in time series data: [1, 2], [1, 3]
+    [(1, 2.0)]
+    >>> get_time_series_rates([[1, 1], [2, 3], [4, 11], [5, 16], [6, 22]])
+    [(2, 2.0), (4, 4.0), (5, 5.0), (6, 6.0)]
+    """
+    data = _filter_time_series(data)
+    if not data:
+        return []
+    return [(data2[0], _derivative(data1, data2)) for data1, data2 in
+            _pairwise(data)]
+
+def _filter_time_series(data):
+    """ Filters time series data
+
+    Filters out samples with the same timestamp in given time series data.
+    It also enforces the list to contain at least two samples.
+
+    All filtered values will be shown in the debug log. If values were filtered it's a bug in the
+    time series data collector, please report it.
+
+    :param data: Time series data [time in seconds, value]
+    :type data: list[tuple[int, float]]
+
+    :return: Filtered time series data [time in seconds, value]
+    :rtype: list[tuple[int, float]]
+
+    >>> logger.debug = lambda s,x,y: print(s % (x,y))
+    >>> _filter_time_series([])
+    []
+    >>> _filter_time_series([[1, 42]])
+    []
+    >>> _filter_time_series([[10, 2], [10, 3]])
+    Duplicate timestamp in time series data: [10, 2], [10, 3]
+    []
+    >>> _filter_time_series([[0, 1], [1, 2]])
+    [[0, 1], [1, 2]]
+    >>> _filter_time_series([[0, 2], [0, 3], [0, 1], [1, 2], [1, 3]])
+    Duplicate timestamp in time series data: [0, 2], [0, 3]
+    Duplicate timestamp in time series data: [0, 3], [0, 1]
+    Duplicate timestamp in time series data: [1, 2], [1, 3]
+    [[0, 1], [1, 3]]
+    >>> _filter_time_series([[1, 1], [2, 3], [4, 11], [5, 16], [6, 22]])
+    [[1, 1], [2, 3], [4, 11], [5, 16], [6, 22]]
+    """
+    filtered = []
+    for i in range(len(data) - 1):
+        if data[i][0] == data[i + 1][0]:  # Same timestamp
+            logger.debug("Duplicate timestamp in time series data: %s, %s", data[i], data[i + 1])
+            continue
+        filtered.append(data[i])
+    if not filtered:
+        return []
+    filtered.append(data[-1])
+    return filtered
+
+def _derivative(p1, p2):
+    """ Derivative between two time series data points
+
+    :param p1: Time series data [time in seconds, value]
+    :type p1: tuple[int, float]
+    :param p2: Time series data [time in seconds, value]
+    :type p2: tuple[int, float]
+
+    :return: Derivative between both points
+    :rtype: float
+
+    >>> _derivative([0, 0], [2, 1])
+    0.5
+    >>> _derivative([0, 1], [2, 0])
+    -0.5
+    >>> _derivative([0, 0], [3, 1])
+    0.3333333333333333
+    """
+    return (p2[1] - p1[1]) / float(p2[0] - p1[0])
+
+def _pairwise(iterable):
+    it = iter(iterable)
+    a = next(it, None)
+
+    for b in it:
+        yield (a, b)
+        a = b

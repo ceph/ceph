@@ -5,7 +5,7 @@ import logging
 import time
 
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks.util.rados import rados
 
 
 log = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ def task(ctx, config):
 
     log.info('writing initial objects')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     # write 100 objects
     for i in range(100):
         rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
@@ -155,6 +155,6 @@ def task(ctx, config):
     for i in range(DIVERGENT_WRITE + DIVERGENT_REMOVE):
         exit_status = rados(ctx, mon, ['-p', 'foo', 'get', 'existing_%d' % i,
                                        '/tmp/existing'])
-        assert exit_status is 0
+        assert exit_status == 0
 
     log.info("success")

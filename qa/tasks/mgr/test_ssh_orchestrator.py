@@ -1,8 +1,5 @@
-import json
 import logging
-from tempfile import NamedTemporaryFile
-from teuthology.exceptions import CommandFailedError
-from mgr_test_case import MgrTestCase
+from tasks.mgr.mgr_test_case import MgrTestCase
 
 log = logging.getLogger(__name__)
 

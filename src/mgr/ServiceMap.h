@@ -23,6 +23,7 @@ struct ServiceMap {
     epoch_t start_epoch = 0;   ///< epoch first registered
     utime_t start_stamp;       ///< timestamp daemon started/registered
     std::map<std::string,std::string> metadata;  ///< static metadata
+    std::map<std::string,std::string> task_status; ///< running task status
 
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator& p);
@@ -64,7 +65,34 @@ struct ServiceMap {
       return ss.str();
     }
 
-    void count_metadata(const string& field,
+    std::string get_task_summary(const std::string_view task_prefix) const {
+      // contruct a map similar to:
+      //     {"service1 status" -> {"service1.0" -> "running"}}
+      //     {"service2 status" -> {"service2.0" -> "idle"},
+      //                           {"service2.1" -> "running"}}
+      std::map<std::string, std::map<std::string, std::string>> by_task;
+      for (const auto &p : daemons) {
+        std::stringstream d;
+        d << task_prefix << "." << p.first;
+        for (const auto &q : p.second.task_status) {
+          auto p1 = by_task.emplace(q.first, std::map<std::string, std::string>{}).first;
+          auto p2 = p1->second.emplace(d.str(), std::string()).first;
+          p2->second = q.second;
+        }
+      }
+
+      std::stringstream ss;
+      for (const auto &p : by_task) {
+        ss << "\n    " << p.first << ":";
+        for (auto q : p.second) {
+          ss << "\n        " << q.first << ": " << q.second;
+        }
+      }
+
+      return ss.str();
+    }
+
+    void count_metadata(const std::string& field,
 			std::map<std::string,int> *out) const {
       for (auto& p : daemons) {
 	auto q = p.second.metadata.find(field);
@@ -87,9 +115,11 @@ struct ServiceMap {
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<ServiceMap*>& ls);
 
-  Daemon* get_daemon(const std::string& service,
-		     const std::string& daemon) {
-    return &services[service].daemons[daemon];
+  std::pair<Daemon*,bool> get_daemon(const std::string& service,
+				     const std::string& daemon) {
+    auto& s = services[service];
+    auto [d, added] = s.daemons.try_emplace(daemon);
+    return {&d->second, added};
   }
 
   bool rm_daemon(const std::string& service,
@@ -107,6 +137,18 @@ struct ServiceMap {
       services.erase(p);
     }
     return true;
+  }
+
+  static inline bool is_normal_ceph_entity(std::string_view type) {
+    if (type == "osd" ||
+        type == "client" ||
+        type == "mon" ||
+        type == "mds" ||
+        type == "mgr") {
+      return true;
+    }
+
+    return false;
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(ServiceMap)

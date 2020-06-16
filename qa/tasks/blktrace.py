@@ -20,7 +20,7 @@ def setup(ctx, config):
     osds = ctx.cluster.only(teuthology.is_type('osd', config['cluster']))
     log_dir = '{tdir}/archive/performance/blktrace'.format(tdir=teuthology.get_testdir(ctx))
 
-    for remote, roles_for_host in osds.remotes.iteritems():
+    for remote, roles_for_host in osds.remotes.items():
         log.info('Creating %s on %s' % (log_dir, remote.name))
         remote.run(
             args=['mkdir', '-p', '-m0755', '--', log_dir],
@@ -38,7 +38,7 @@ def execute(ctx, config):
     log_dir = '{tdir}/archive/performance/blktrace'.format(tdir=testdir)
 
     osds = ctx.cluster.only(teuthology.is_type('osd'))
-    for remote, roles_for_host in osds.remotes.iteritems():
+    for remote, roles_for_host in osds.remotes.items():
         roles_to_devs = ctx.disk_config.remote_to_roles_to_dev[remote]
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd',
                                                      config['cluster']):

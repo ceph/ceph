@@ -19,6 +19,7 @@
     <button class="btn btn-sm btn-default btn-label"
             type="button"
             (click)="purgeModal()"
+            [disabled]="disablePurgeBtn"
             *ngIf="permission.delete">
       <i class="fa fa-fw fa-times"
          aria-hidden="true"></i>

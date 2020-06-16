@@ -1,104 +1,38 @@
-14.2.8
+14.2.9
 ------
 
-* The following OSD memory config options related to bluestore cache autotuning can now
-  be configured during runtime:
+* Bucket notifications now support Kafka endpoints. This requires librdkafka of
+  version 0.9.2 and up. Note that Ubuntu 16.04.6 LTS (Xenial Xerus) has an older
+  version of librdkafka, and would require an update to the library.
 
-    - osd_memory_base (default: 768 MB)
-    - osd_memory_cache_min (default: 128 MB)
-    - osd_memory_expected_fragmentation (default: 0.15)
-    - osd_memory_target (default: 4 GB)
+* The pool parameter ``target_size_ratio``, used by the pg autoscaler,
+  has changed meaning. It is now normalized across pools, rather than
+  specifying an absolute ratio. For details, see :ref:`pg-autoscaler`.
+  If you have set target size ratios on any pools, you may want to set
+  these pools to autoscale ``warn`` mode to avoid data movement during
+  the upgrade::
 
-  The above options can be set with::
+    ceph osd pool set <pool-name> pg_autoscale_mode warn
 
-    ceph config set global <option> <value>
+* The behaviour of the ``-o`` argument to the rados tool has been reverted to
+  its orignal behaviour of indicating an output file. This reverts it to a more
+  consistent behaviour when compared to other tools. Specifying object size is now
+  accomplished by using an upper case O ``-O``.
 
-* The MGR now accepts 'profile rbd' and 'profile rbd-read-only' user caps.
-  These caps can be used to provide users access to MGR-based RBD functionality
-  such as 'rbd perf image iostat' an 'rbd perf image iotop'.
+* The format of MDSs in `ceph fs dump` has changed.
 
-* The configuration value ``osd_calc_pg_upmaps_max_stddev`` used for upmap
-  balancing has been removed. Instead use the mgr balancer config
-  ``upmap_max_deviation`` which now is an integer number of PGs of deviation
-  from the target PGs per OSD.  This can be set with a command like
-  ``ceph config set mgr mgr/balancer/upmap_max_deviation 2``.  The default
-  ``upmap_max_deviation`` is 1.  There are situations where crush rules
-  would not allow a pool to ever have completely balanced PGs.  For example, if
-  crush requires 1 replica on each of 3 racks, but there are fewer OSDs in 1 of
-  the racks.  In those cases, the configuration value can be increased.
+* Ceph will issue a health warning if a RADOS pool's ``size`` is set to 1
+  or in other words the pool is configured with no redundancy. This can
+  be fixed by setting the pool size to the minimum recommended value
+  with::
 
-* RGW: a mismatch between the bucket notification documentation and the actual
-  message format was fixed. This means that any endpoints receiving bucket 
-  notification, will now receive the same notifications inside an JSON array
-  named 'Records'. Note that this does not affect pulling bucket notification
-  from a subscription in a 'pubsub' zone, as these are already wrapped inside
-  that array.
+    ceph osd pool set <pool-name> size <num-replicas>
 
-* Ceph will now issue a health warning if a RADOS pool as a ``pg_num``
-  value that is not a power of two.  This can be fixed by adjusting
-  the pool to a nearby power of two::
+  The warning can be silenced with::
 
-    ceph osd pool set <pool-name> pg_num <new-pg-num>
+    ceph config set global mon_warn_on_pool_no_redundancy false
 
-  Alternatively, the warning can be silenced with::
-
-<<<<<<< HEAD
-    ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
-=======
-* librbd now includes a simple IO scheduler which attempts to
-  batch together multiple IOs against the same backing RBD
-  data block object. The librbd IO scheduler policy can be
-  controlled via a new "rbd_io_scheduler" configuration
-  option.
-
-* RGW: radosgw-admin introduces two subcommands that allow the
-  managing of expire-stale objects that might be left behind after a
-  bucket reshard in earlier versions of RGW. One subcommand lists such
-  objects and the other deletes them. Read the troubleshooting section
-  of the dynamic resharding docs for details.
-
-* RGW: Bucket naming restrictions have changed and likely to cause
-  InvalidBucketName errors. We recommend to set ``rgw_relaxed_s3_bucket_names``
-  option to true as a workaround.
-
-* In the Zabbix Mgr Module there was a typo in the key being send
-  to Zabbix for PGs in backfill_wait state. The key that was sent
-  was 'wait_backfill' and the correct name is 'backfill_wait'.
-  Update your Zabbix template accordingly so that it accepts the
-  new key being send to Zabbix.
-
-* zabbix plugin for ceph manager now includes osd and pool
-  discovery. Update of zabbix_template.xml is needed
-  to receive per-pool (read/write throughput, diskspace usage)
-  and per-osd (latency, status, pgs) statistics
-
-* The format of all date + time stamps has been modified to fully
-  conform to ISO 8601.  The old format (``YYYY-MM-DD
-  HH:MM:SS.ssssss``) excluded the ``T`` separator between the date and
-  time and was rendered using the local time zone without any explicit
-  indication.  The new format includes the separator as well as a
-  ``+nnnn`` or ``-nnnn`` suffix to indicate the time zone, or a ``Z``
-  suffix if the time is UTC.  For example,
-  ``2019-04-26T18:40:06.225953+0100``.
-
-  Any code or scripts that was previously parsing date and/or time
-  values from the JSON or XML structure CLI output should be checked
-  to ensure it can handle ISO 8601 conformant values.  Any code
-  parsing date or time values from the unstructured human-readable
-  output should be modified to parse the structured output instead, as
-  the human-readable output may change without notice.
-
-* The ``osd_recovery_max_active`` option now has
-  ``osd_recovery_max_active_hdd`` and ``osd_recovery_max_active_ssd``
-  variants, each with different default values for HDD and SSD-backed
-  OSDs, respectively.  By default ``osd_recovery_max_active`` now
-  defaults to zero, which means that the OSD will conditionally use
-  the HDD or SSD option values.  Administrators who have customized
-  this value may want to consider whether they have set this to a
-  value similar to the new defaults (3 for HDDs and 10 for SSDs) and,
-  if so, remove the option from their configuration entirely.
-
-* monitors now have a `ceph osd info` command that will provide information
-  on all osds, or provided osds, thus simplifying the process of having to
-  parse `osd dump` for the same information.
->>>>>>> eb6eddbe8d... Validate bucket names as per revised s3 spec
+* RGW: bucket listing performance on sharded bucket indexes has been
+  notably improved by heuristically -- and significantly, in many
+  cases -- reducing the number of entries requested from each bucket
+  index shard.

@@ -514,7 +514,13 @@ Parameters are XML encoded in the body of the request, in the following format:
                         <Name></Name>
                         <Value></Value>
                     </FilterRule>
-                </s3Metadata>
+                </S3Metadata>
+                <S3Tags>
+                    <FilterRule>
+                        <Name></Name>
+                        <Value></Value>
+                    </FilterRule>
+                </S3Tags>
             </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
@@ -533,15 +539,19 @@ Parameters are XML encoded in the body of the request, in the following format:
 | ``Event``                     | String    | List of supported events see: `S3 Notification Compatibility`_.  Multiple ``Event``  | No       |
 |                               |           | entities can be used. If omitted, all events are handled                             |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``Filter``                    | Container | Holding ``S3Key`` and ``S3Metadata`` entities                                        | No       |
+| ``Filter``                    | Container | Holding ``S3Key``, ``S3Metadata`` and ``S3Tags`` entities                            | No       |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``S3Key``                     | Container | Holding a list of ``FilterRule`` entities, for filtering based on object key.        | No       |
 |                               |           | At most, 3 entities may be in the list, with ``Name`` be ``prefix``, ``suffix`` or   |          |
 |                               |           | ``regex``. All filter rules in the list must match for the filter to match.          |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``S3Metadata``                | Container | Holding a list of ``FilterRule`` entities, for filtering based on object metadata.   | No       |
-|                               |           | All filter rules in the list must match the ones defined on the object. The object,  |          |
-|                               |           | have other metadata entitied not listed in the filter.                               |          |
+|                               |           | All filter rules in the list must match the metadata defined on the object. However, |          |
+|                               |           | the object still match if it has other metadata entries not listed in the filter.    |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Tags``                    | Container | Holding a list of ``FilterRule`` entities, for filtering based on object tags.       | No       |
+|                               |           | All filter rules in the list must match the tags defined on the object. However,     |          |
+|                               |           | the object still match it it has other tags not listed in the filter.                |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``S3Key.FilterRule``          | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would  be: ``prefix``, ``suffix``  | Yes      |
 |                               |           | or ``regex``. The ``Value`` would hold the key prefix, key suffix or a regular       |          |
@@ -549,7 +559,10 @@ Parameters are XML encoded in the body of the request, in the following format:
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``S3Metadata.FilterRule``     | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the name of the metadata  | Yes      |
 |                               |           | attribute (e.g. ``x-amz-meta-xxx``). The ``Value`` would be the expected value for   |          | 
-|                               |           | this attribute                                                                       |          |
+|                               |           | this attribute.                                                                      |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Tags.FilterRule``         | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the tag key,              |  Yes     |
+|                               |           | and ``Value`` would be the tag value.                                                |          | 
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 
 
@@ -652,7 +665,13 @@ Response is XML encoded in the body of the request, in the following format:
                         <Name></Name>
                         <Value></Value>
                     </FilterRule>
-                </s3Metadata>
+                </S3Metadata>
+                <S3Tags>
+                    <FilterRule>
+                        <Name></Name>
+                        <Value></Value>
+                    </FilterRule>
+                </S3Tags>
             </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
@@ -684,4 +703,4 @@ HTTP Response
 | ``404``       | NoSuchKey             | The notification does not exist (if provided)            |
 +---------------+-----------------------+----------------------------------------------------------+
 
-.. _S3 Notification Compatibility: ../s3-notification-compatibility
+.. _S3 Notification Compatibility: ../../s3-notification-compatibility

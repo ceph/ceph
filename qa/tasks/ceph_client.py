@@ -16,7 +16,7 @@ def create_keyring(ctx, cluster_name):
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     testdir = teuthology.get_testdir(ctx)
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
-    for remote, roles_for_host in clients.remotes.iteritems():
+    for remote, roles_for_host in clients.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
                                                      cluster_name):
             name = teuthology.ceph_role(role)

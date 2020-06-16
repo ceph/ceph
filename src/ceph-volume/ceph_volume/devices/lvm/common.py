@@ -66,6 +66,7 @@ def common_parser(prog, description):
         '--data-slots',
         help=('Intended number of slots on data device. The new OSD gets one'
               'of those slots or 1/nth of the available capacity'),
+        type=int,
         default=1,
     )
 
@@ -110,6 +111,7 @@ def common_parser(prog, description):
         dest='block_db_slots',
         help=('Intended number of slots on db device. The new OSD gets one'
               'of those slots or 1/nth of the available capacity'),
+        type=int,
         default=1,
     )
 
@@ -131,6 +133,7 @@ def common_parser(prog, description):
         dest='block_wal_slots',
         help=('Intended number of slots on wal device. The new OSD gets one'
               'of those slots or 1/nth of the available capacity'),
+        type=int,
         default=1,
     )
 

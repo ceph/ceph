@@ -258,7 +258,7 @@ bool Beacon::is_laggy()
   return false;
 }
 
-void Beacon::set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState const newstate)
+void Beacon::set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState newstate)
 {
   std::unique_lock lock(mutex);
 

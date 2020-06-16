@@ -53,7 +53,7 @@ tasks:
       - \(SLOW_OPS\)
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
-      - slow requests
+      - slow request
 - interactive:
 - parallel:
     - log-mon-rss

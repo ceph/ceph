@@ -79,8 +79,8 @@ export class IscsiTargetFormComponent implements OnInit {
   };
 
   IQN_REGEX = /^iqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+)*$/;
-  USER_REGEX = /[\w\.:@_-]{8,64}/;
-  PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
+  USER_REGEX = /^[\w\.:@_-]{8,64}$/;
+  PASSWORD_REGEX = /^[\w@\-_\/]{12,16}$/;
   action: string;
   resource: string;
 

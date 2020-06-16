@@ -161,8 +161,10 @@ int64_t BlkDev::get_string_property(blkdev_prop_t prop,
   } else {
     dev = devname.c_str();
   }
-  snprintf(filename, sizeof(filename),
-	   "%s/block/%s/%s", sysfsdir(), dev, propstr);
+  if (snprintf(filename, sizeof(filename), "%s/block/%s/%s", sysfsdir(), dev,
+	       propstr) >= static_cast<int>(sizeof(filename))) {
+    return -ERANGE;
+  }
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
@@ -540,15 +542,22 @@ std::string get_device_id(const std::string& devname,
   if (!blkdev.model(buf, sizeof(buf))) {
     model = buf;
   }
-  if (blkdev.serial(buf, sizeof(buf))) {
+  if (!blkdev.serial(buf, sizeof(buf))) {
     serial = buf;
   }
-  if (!model.size() || serial.size()) {
-    if (err) {
+  if (err) {
+    if (model.empty() && serial.empty()) {
+      *err = std::string("fallback method has no model nor serial'");
+      return {};
+    } else if (model.empty()) {
       *err = std::string("fallback method has serial '") + serial
-	+ "'but no model";
+        + "' but no model'";
+      return {};
+    } else if (serial.empty()) {
+      *err = std::string("fallback method has model '") + model
+        + "' but no serial'";
+      return {};
     }
-    return {};
   }
 
   device_id = model + "_" + serial;
@@ -666,6 +675,34 @@ static int block_device_run_vendor_nvme(
   return ret;
 }
 
+std::string get_device_path(const std::string& devname,
+			    std::string *err)
+{
+  std::set<std::string> links;
+  int r = easy_readdir("/dev/disk/by-path", &links);
+  if (r < 0) {
+    *err = "unable to list contents of /dev/disk/by-path: "s +
+      cpp_strerror(r);
+    return {};
+  }
+  for (auto& i : links) {
+    char fn[PATH_MAX];
+    char target[PATH_MAX+1];
+    snprintf(fn, sizeof(fn), "/dev/disk/by-path/%s", i.c_str());
+    int r = readlink(fn, target, sizeof(target));
+    if (r < 0 || r >= (int)sizeof(target))
+      continue;
+    target[r] = 0;
+    if ((unsigned)r > devname.size() + 1 &&
+	strncmp(target + r - devname.size(), devname.c_str(), r) == 0 &&
+	target[r - devname.size() - 1] == '/') {
+      return fn;
+    }
+  }
+  *err = "no symlink to "s + devname + " in /dev/disk/by-path";
+  return {};
+}
+
 static int block_device_run_smartctl(const string& devname, int timeout,
 				     std::string *result)
 {
@@ -679,7 +716,7 @@ static int block_device_run_smartctl(const string& devname, int timeout,
     "smartctl",
     "-a",
     //"-x",
-    "--json",
+    "--json=o",
     device.c_str(),
     NULL);
 
@@ -698,12 +735,33 @@ static int block_device_run_smartctl(const string& devname, int timeout,
     *result = output.to_str();
   }
 
-  if (smartctl.join() != 0) {
-    *result = std::string("smartctl returned an error:") + smartctl.err();
+  int joinerr = smartctl.join();
+  // Bit 0: Command line did not parse.
+  // Bit 1: Device open failed, device did not return an IDENTIFY DEVICE structure, or device is in a low-power mode (see '-n' option above).
+  // Bit 2: Some SMART or other ATA command to the disk failed, or there was a checksum error in a SMART data structure (see '-b' option above).
+  // Bit 3: SMART status check returned "DISK FAILING".
+  // Bit 4: We found prefail Attributes <= threshold.
+  // Bit 5: SMART status check returned "DISK OK" but we found that some (usage or prefail) Attributes have been <= threshold at some time in the past.
+  // Bit 6: The device error log contains records of errors.
+  // Bit 7: The device self-test log contains records of errors.  [ATA only] Failed self-tests outdated by a newer successful extended self-test are ignored.
+  if (joinerr & 3) {
+    *result = "smartctl returned an error ("s + stringify(joinerr) +
+      "): stderr:\n"s + smartctl.err() + "\nstdout:\n"s + *result;
     return -EINVAL;
   }
 
   return ret;
+}
+
+static std::string escape_quotes(const std::string& s)
+{
+  std::string r = s;
+  auto pos = r.find("\"");
+  while (pos != std::string::npos) {
+    r.replace(pos, 1, "\"");
+    pos = r.find("\"", pos + 1);
+  }
+  return r;
 }
 
 int block_device_get_metrics(const string& devname, int timeout,
@@ -714,15 +772,18 @@ int block_device_get_metrics(const string& devname, int timeout,
   // smartctl
   if (int r = block_device_run_smartctl(devname, timeout, &s);
       r != 0) {
+    string orig = s;
     s = "{\"error\": \"smartctl failed\", \"dev\": \"/dev/";
     s += devname;
     s += "\", \"smartctl_error_code\": " + stringify(r);
-    s += "\", \"smartctl_output\": \"" + s;
+    s += ", \"smartctl_output\": \"" + escape_quotes(orig);
     s += + "\"}";
-  }
-  if (!json_spirit::read(s, *result)) {
+  } else if (!json_spirit::read(s, *result)) {
+    string orig = s;
     s = "{\"error\": \"smartctl returned invalid JSON\", \"dev\": \"/dev/";
     s += devname;
+    s += "\",\"output\":\"";
+    s += escape_quotes(orig);
     s += "\"}";
   }
   if (!json_spirit::read(s, *result)) {
@@ -865,6 +926,16 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
 
 std::string get_device_id(const std::string& devname,
 			  std::string *err)
+{
+  // FIXME: implement me
+  if (err) {
+    *err = "not implemented";
+  }
+  return std::string();
+}
+
+std::string get_device_path(const std::string& devname,
+			    std::string *err)
 {
   // FIXME: implement me
   if (err) {
@@ -1052,6 +1123,16 @@ std::string get_device_id(const std::string& devname,
   return std::string();
 }
 
+std::string get_device_path(const std::string& devname,
+			    std::string *err)
+{
+  // FIXME: implement me for freebsd
+  if (err) {
+    *err = "not implemented for FreeBSD";
+  }
+  return std::string();
+}
+
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
 {
@@ -1201,6 +1282,16 @@ std::string get_device_id(const std::string& devname,
   return std::string();
 }
 
+std::string get_device_path(const std::string& devname,
+			  std::string *err)
+{
+  // not implemented
+  if (err) {
+    *err = "not implemented";
+  }
+  return std::string();
+}
+
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
 {
@@ -1220,3 +1311,36 @@ int block_device_run_nvme(const char *device, const char *vendor, int timeout,
 }
 
 #endif
+
+
+
+void get_device_metadata(
+  const std::set<std::string>& devnames,
+  std::map<std::string,std::string> *pm,
+  std::map<std::string,std::string> *errs)
+{
+  (*pm)["devices"] = stringify(devnames);
+  string &devids = (*pm)["device_ids"];
+  string &devpaths = (*pm)["device_paths"];
+  for (auto& dev : devnames) {
+    string err;
+    string id = get_device_id(dev, &err);
+    if (id.size()) {
+      if (!devids.empty()) {
+	devids += ",";
+      }
+      devids += dev + "=" + id;
+    } else {
+      (*errs)[dev] = " no unique device id for "s + dev + ": " + err;
+    }
+    string path = get_device_path(dev, &err);
+    if (path.size()) {
+      if (!devpaths.empty()) {
+	devpaths += ",";
+      }
+      devpaths += dev + "=" + path;
+    } else {
+      (*errs)[dev] + " no unique device path for "s + dev + ": " + err;
+    }
+  }
+}

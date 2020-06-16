@@ -1,6 +1,6 @@
+import sys
 import logging
 import signal
-import time
 from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -13,6 +13,7 @@ MDS_RESTART_GRACE = 60
 
 class TestSnapshots(CephFSTestCase):
     MDSS_REQUIRED = 3
+    LOAD_SETTINGS = ["mds_max_snaps_per_dir"]
 
     def _check_subtree(self, rank, path, status=None):
         got_subtrees = self.fs.rank_asok(["get", "subtrees"], rank=rank, status=status)
@@ -241,7 +242,7 @@ class TestSnapshots(CephFSTestCase):
         def _check_snapclient_cache(snaps_dump, cache_dump=None, rank=0):
             if cache_dump is None:
                 cache_dump = self._get_snapclient_dump(rank=rank)
-            for key, value in cache_dump.iteritems():
+            for key, value in cache_dump.items():
                 if value != snaps_dump[key]:
                     return False
             return True;
@@ -443,3 +444,87 @@ class TestSnapshots(CephFSTestCase):
 
         self.mount_a.run_shell(["rmdir", "d1/.snap/s1"])
         self.mount_a.run_shell(["rm", "-rf", "d0", "d1"])
+
+    class SnapLimitViolationException(Exception):
+        failed_snapshot_number = -1
+
+        def __init__(self, num):
+            self.failed_snapshot_number = num
+
+    def get_snap_name(self, dir_name, sno):
+            sname = "{dir_name}/.snap/s_{sno}".format(dir_name=dir_name, sno=sno)
+            return sname
+
+    def create_snap_dir(self, sname):
+        self.mount_a.run_shell(["mkdir", sname])
+
+    def delete_dir_and_snaps(self, dir_name, snaps):
+        for sno in range(1, snaps+1, 1):
+            sname = self.get_snap_name(dir_name, sno)
+            self.mount_a.run_shell(["rmdir", sname])
+        self.mount_a.run_shell(["rmdir", dir_name])
+
+    def create_dir_and_snaps(self, dir_name, snaps):
+        self.mount_a.run_shell(["mkdir", dir_name])
+
+        for sno in range(1, snaps+1, 1):
+            sname = self.get_snap_name(dir_name, sno)
+            try:
+                self.create_snap_dir(sname)
+            except CommandFailedError as e:
+                # failing at the last mkdir beyond the limit is expected
+                if sno == snaps:
+                    log.info("failed while creating snap #{}: {}".format(sno, repr(e)))
+                    raise TestSnapshots.SnapLimitViolationException(sno)
+
+    def test_mds_max_snaps_per_dir_default_limit(self):
+        """
+        Test the newly introudced option named mds_max_snaps_per_dir
+        Default snaps limit is 100
+        Test if the default number of snapshot directories can be created
+        """
+        self.create_dir_and_snaps("accounts", int(self.mds_max_snaps_per_dir))
+        self.delete_dir_and_snaps("accounts", int(self.mds_max_snaps_per_dir))
+
+    def test_mds_max_snaps_per_dir_with_increased_limit(self):
+        """
+        Test the newly introudced option named mds_max_snaps_per_dir
+        First create 101 directories and ensure that the 101st directory
+        creation fails. Then increase the default by one and see if the
+        additional directory creation succeeds
+        """
+        # first test the default limit
+        new_limit = int(self.mds_max_snaps_per_dir)
+        self.fs.rank_asok(['config', 'set', 'mds_max_snaps_per_dir', repr(new_limit)])
+        try:
+            self.create_dir_and_snaps("accounts", new_limit + 1)
+        except TestSnapshots.SnapLimitViolationException as e:
+            if e.failed_snapshot_number == (new_limit + 1):
+                pass
+        # then increase the limit by one and test
+        new_limit = new_limit + 1
+        self.fs.rank_asok(['config', 'set', 'mds_max_snaps_per_dir', repr(new_limit)])
+        sname = self.get_snap_name("accounts", new_limit)
+        self.create_snap_dir(sname)
+        self.delete_dir_and_snaps("accounts", new_limit)
+
+    def test_mds_max_snaps_per_dir_with_reduced_limit(self):
+        """
+        Test the newly introudced option named mds_max_snaps_per_dir
+        First create 99 directories. Then reduce the limit to 98. Then try
+        creating another directory and ensure that additional directory
+        creation fails.
+        """
+        # first test the new limit
+        new_limit = int(self.mds_max_snaps_per_dir) - 1
+        self.create_dir_and_snaps("accounts", new_limit)
+        sname = self.get_snap_name("accounts", new_limit + 1)
+        # then reduce the limit by one and test
+        new_limit = new_limit - 1
+        self.fs.rank_asok(['config', 'set', 'mds_max_snaps_per_dir', repr(new_limit)])
+        try:
+            self.create_snap_dir(sname)
+        except CommandFailedError:
+            # after reducing limit we expect the new snapshot creation to fail
+            pass
+        self.delete_dir_and_snaps("accounts", new_limit + 1)

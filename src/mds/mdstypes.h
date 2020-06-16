@@ -946,6 +946,20 @@ using alloc_string = std::basic_string<char,std::char_traits<char>,Allocator<cha
 template<template<typename> class Allocator>
 using xattr_map = compact_map<alloc_string<Allocator>, bufferptr, std::less<alloc_string<Allocator>>, Allocator<std::pair<const alloc_string<Allocator>, bufferptr>>>; // FIXME bufferptr not in mempool
 
+template<template<typename> class Allocator>
+inline void decode_noshare(xattr_map<Allocator>& xattrs, ceph::buffer::list::const_iterator &p)
+{
+  __u32 n;
+  decode(n, p);
+  while (n-- > 0) {
+    alloc_string<Allocator> key;
+    decode(key, p);
+    __u32 len;
+    decode(len, p);
+    p.copy_deep(len, xattrs[key]);
+  }
+}
+
 /*
  * old_inode_t
  */
@@ -978,7 +992,7 @@ void old_inode_t<Allocator>::decode(bufferlist::const_iterator& bl)
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(first, bl);
   decode(inode, bl);
-  decode(xattrs, bl);
+  decode_noshare<Allocator>(xattrs, bl);
   DECODE_FINISH(bl);
 }
 
@@ -1797,7 +1811,7 @@ struct keys_and_values
       query =  pair >> *(qi::lit(' ') >> pair);
       pair  =  key >> '=' >> value;
       key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
-      value = +qi::char_("a-zA-Z_0-9");
+      value = +qi::char_("a-zA-Z0-9-_.");
     }
     qi::rule<Iterator, std::map<string, string>()> query;
     qi::rule<Iterator, std::pair<string, string>()> pair;

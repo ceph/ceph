@@ -5,11 +5,13 @@ import contextlib
 import logging
 import re
 
-from cStringIO import StringIO
+from io import BytesIO
 from itertools import product
 
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
+
+import six
 
 log = logging.getLogger(__name__)
 
@@ -167,11 +169,11 @@ def run_radosbench(ctx, config, f, num_osds, size, replica, rep):
     log.info('  repetition =' + str(rep))
 
     for role in config.get('clients', ['client.0']):
-        assert isinstance(role, basestring)
+        assert isinstance(role, six.string_types)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
 
         proc = remote.run(
             args=[
@@ -187,7 +189,7 @@ def run_radosbench(ctx, config, f, num_osds, size, replica, rep):
             ],
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             stdin=run.PIPE,
-            stdout=StringIO(),
+            stdout=BytesIO(),
             wait=False
         )
 
@@ -217,5 +219,5 @@ def run_radosbench(ctx, config, f, num_osds, size, replica, rep):
 
 def wait_until_healthy(ctx, config):
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
     teuthology.wait_until_healthy(ctx, mon_remote)

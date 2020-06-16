@@ -20,4 +20,6 @@ tasks:
       - \(OSD_
       - \(PG_
       - \(OBJECT_
+      - \(SLOW_OPS\)
+      - slow request
 - lost_unfound:
