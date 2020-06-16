@@ -40,6 +40,14 @@ def export_cluster_checker(func):
     return cluster_check
 
 
+def cluster_setter(func):
+    def set_pool_ns_clusterid(nfs, *args, **kwargs):
+        nfs._set_pool_namespace(kwargs['cluster_id'])
+        nfs._set_cluster_id(kwargs['cluster_id'])
+        return func(nfs, *args, **kwargs)
+    return set_pool_ns_clusterid
+
+
 class GaneshaConfParser(object):
     def __init__(self, raw_config):
         self.pos = 0
@@ -650,6 +658,7 @@ class NFSCluster:
         self.mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
 
+    @cluster_setter
     def create_nfs_cluster(self, export_type, cluster_id, placement):
         if export_type != 'cephfs':
             return -errno.EINVAL, "", f"Invalid export type: {export_type}"
@@ -665,8 +674,6 @@ class NFSCluster:
                 self.mgr.check_mon_command({'prefix': 'osd pool application enable',
                     'pool': self.pool_name, 'app': 'nfs'})
 
-            self._set_pool_namespace(cluster_id)
-            self._set_cluster_id(cluster_id)
             self.create_empty_rados_obj()
 
             if cluster_id not in available_clusters(self.mgr):
@@ -677,10 +684,9 @@ class NFSCluster:
             log.warning("NFS Cluster could not be created")
             return -errno.EINVAL, "", str(e)
 
+    @cluster_setter
     def update_nfs_cluster(self, cluster_id, placement):
         try:
-            self._set_pool_namespace(cluster_id)
-            self._set_cluster_id(cluster_id)
             if cluster_id in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(placement)
                 return 0, "NFS Cluster Updated Successfully", ""
@@ -689,10 +695,9 @@ class NFSCluster:
             log.warning("NFS Cluster could not be updated")
             return -errno.EINVAL, "", str(e)
 
+    @cluster_setter
     def delete_nfs_cluster(self, cluster_id):
         try:
-            self._set_pool_namespace(cluster_id)
-            self._set_cluster_id(cluster_id)
             cluster_list = available_clusters(self.mgr)
             if cluster_id in cluster_list:
                 self.mgr.fs_export.delete_all_exports(cluster_id)
