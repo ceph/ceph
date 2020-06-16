@@ -394,10 +394,6 @@ class FSExport(object):
         except TimedOut:
             log.exception(f"Ganesha timed out")
 
-    def check_fs(self, fs_name):
-        fs_map = self.mgr.get('fs_map')
-        return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
-
     def _fetch_export(self, pseudo_path):
         try:
             for ex in self.exports[self.rados_namespace]:
@@ -428,13 +424,6 @@ class FSExport(object):
             })
         log.info(f"Export user deleted is {entity}")
 
-    def format_path(self, path):
-        if path is not None:
-            path = path.strip()
-            if len(path) > 1 and path[-1] == '/':
-                path = path[:-1]
-        return path
-
     def _gen_export_id(self):
         exports = sorted([ex.export_id for ex in self.exports[self.rados_namespace]])
         nid = 1
@@ -447,9 +436,7 @@ class FSExport(object):
 
     def _read_raw_config(self, rados_namespace):
         with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
-            if rados_namespace:
-                ioctx.set_namespace(rados_namespace)
-
+            ioctx.set_namespace(rados_namespace)
             for obj in ioctx.list_objects():
                 if obj.key.startswith("export-"):
                     size, _ = obj.stat()
@@ -471,18 +458,18 @@ class FSExport(object):
                 FSExport._check_rados_notify(ioctx, obj)
             else:
                 ioctx.write_full(obj, raw_config.encode('utf-8'))
-            log.debug(
-                    "write configuration into rados object %s/%s/%s:\n%s",
-                    self.rados_pool, self.rados_namespace, obj, raw_config)
+            log.debug("write configuration into rados object "
+                      f"{self.rados_pool}/{self.rados_namespace}/{obj}:\n{raw_config}")
+
+    def _make_rados_url(self, obj):
+        return "rados://{}/{}/{}".format(self.rados_pool, self.rados_namespace, obj)
 
     def _delete_export_url(self, obj, ex_id):
         export_name = 'export-{}'.format(ex_id)
         with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
-            if self.rados_namespace:
-                ioctx.set_namespace(self.rados_namespace)
-
+            ioctx.set_namespace(self.rados_namespace)
             export_urls = ioctx.read(obj)
-            url = '%url "{}"\n\n'.format(self.make_rados_url(export_name))
+            url = '%url "{}"\n\n'.format(self._make_rados_url(export_name))
             export_urls = export_urls.replace(url.encode('utf-8'), b'')
             ioctx.remove_object(export_name)
             ioctx.write_full(obj, export_urls)
@@ -493,7 +480,7 @@ class FSExport(object):
         common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
         conf_blocks = {
                 'block_name': '%url',
-                'value': self.make_rados_url(
+                'value': self._make_rados_url(
                 'export-{}'.format(ex_id))
                 }
         self._write_raw_config(conf_blocks, common_conf, True)
@@ -503,6 +490,37 @@ class FSExport(object):
         conf_block = export.to_export_block()
         self._write_raw_config(conf_block, "export-{}".format(export.export_id))
         self._update_common_conf(export.cluster_id, export.export_id)
+
+    def _delete_export(self, cluster_id, pseudo_path, export_obj=None):
+        try:
+            if export_obj:
+                export = export_obj
+            else:
+                export = self._fetch_export(pseudo_path)
+
+            if export:
+                common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
+                self._delete_export_url(common_conf, export.export_id)
+                self.exports[cluster_id].remove(export)
+                self._delete_user(export.fsal.user_id)
+                if not self.exports[cluster_id]:
+                    del self.exports[cluster_id]
+                return 0, "Successfully deleted export", ""
+            return 0, "", "Export does not exist"
+        except Exception as e:
+            log.warning("Failed to delete exports")
+            return -errno.EINVAL, "", str(e)
+
+    def format_path(self, path):
+        if path:
+            path = path.strip()
+            if len(path) > 1 and path[-1] == '/':
+                path = path[:-1]
+        return path
+
+    def check_fs(self, fs_name):
+        fs_map = self.mgr.get('fs_map')
+        return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
 
     @export_cluster_checker
     def create_export(self, fs_name, cluster_id, pseudo_path, read_only, path):
@@ -543,26 +561,6 @@ class FSExport(object):
             return 0, "", "Export already exists"
         except Exception as e:
             log.warning("Failed to create exports")
-            return -errno.EINVAL, "", str(e)
-
-    def _delete_export(self, cluster_id, pseudo_path, export_obj=None):
-        try:
-            if export_obj:
-                export = export_obj
-            else:
-                export = self._fetch_export(pseudo_path)
-
-            if export:
-                common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
-                self._delete_export_url(common_conf, export.export_id)
-                self.exports[cluster_id].remove(export)
-                self._delete_user(export.fsal.user_id)
-                if not self.exports[cluster_id]:
-                    del self.exports[cluster_id]
-                return 0, "Successfully deleted export", ""
-            return 0, "", "Export does not exist"
-        except Exception as e:
-            log.warning("Failed to delete exports")
             return -errno.EINVAL, "", str(e)
 
     @export_cluster_checker
@@ -609,37 +607,12 @@ class FSExport(object):
             log.error(f"Failed to get {pseudo_path} export for {cluster_id}")
             return -errno.EINVAL, "", str(e)
 
-    def make_rados_url(self, obj):
-        if self.rados_namespace:
-            return "rados://{}/{}/{}".format(self.rados_pool, self.rados_namespace, obj)
-        return "rados://{}/{}".format(self.rados_pool, obj)
-
 
 class NFSCluster:
     def __init__(self, mgr):
         self.pool_name = 'nfs-ganesha'
         self.pool_ns = ''
         self.mgr = mgr
-
-    def create_empty_rados_obj(self):
-        common_conf = self._get_common_conf_obj_name()
-        result = ''
-        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
-            if self.pool_ns:
-                ioctx.set_namespace(self.pool_ns)
-            ioctx.write_full(common_conf, result.encode('utf-8'))
-            log.debug(
-                    "write configuration into rados object %s/%s/%s\n",
-                    self.pool_name, self.pool_ns, common_conf)
-
-    def delete_common_config_obj(self):
-        common_conf = self._get_common_conf_obj_name()
-        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
-            if self.pool_ns:
-                ioctx.set_namespace(self.pool_ns)
-
-            ioctx.remove_object(common_conf)
-            log.info(f"Deleted object:{common_conf}")
 
     def _set_cluster_id(self, cluster_id):
         self.cluster_id = f"ganesha-{cluster_id}"
@@ -657,6 +630,22 @@ class NFSCluster:
         completion = self.mgr.apply_nfs(spec)
         self.mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
+
+    def create_empty_rados_obj(self):
+        common_conf = self._get_common_conf_obj_name()
+        result = ''
+        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
+            ioctx.set_namespace(self.pool_ns)
+            ioctx.write_full(common_conf, result.encode('utf-8'))
+            log.debug("write configuration into rados object "
+                      f"{self.pool_name}/{self.pool_ns}/{common_conf}\n")
+
+    def delete_common_config_obj(self):
+        common_conf = self._get_common_conf_obj_name()
+        with self.mgr.rados.open_ioctx(self.pool_name) as ioctx:
+            ioctx.set_namespace(self.pool_ns)
+            ioctx.remove_object(common_conf)
+            log.info(f"Deleted object:{common_conf}")
 
     @cluster_setter
     def create_nfs_cluster(self, export_type, cluster_id, placement):
