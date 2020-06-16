@@ -7,10 +7,9 @@ import { mergeMap } from 'rxjs/operators';
 
 import { InventoryDevice } from '../../ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryHost } from '../../ceph/cluster/inventory/inventory-host.model';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class OrchestratorService {
   private url = 'api/orchestrator';

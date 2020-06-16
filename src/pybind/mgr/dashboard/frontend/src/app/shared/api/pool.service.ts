@@ -7,11 +7,10 @@ import { map } from 'rxjs/operators';
 import { cdEncode } from '../decorators/cd-encode';
 import { RbdConfigurationEntry } from '../models/configuration';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
-import { ApiModule } from './api.module';
 
 @cdEncode
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class PoolService {
   apiPath = 'api/pool';
