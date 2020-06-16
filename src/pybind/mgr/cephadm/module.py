@@ -1274,6 +1274,9 @@ you may want to run:
                     OSDs do not know the affinity to their spec out of the box.
                     """
                     n = f"osd.{dd.osdspec_affinity}"
+                    if not dd.osdspec_affinity:
+                        # If there is no osdspec_affinity, the spec should suffice for displaying
+                        continue
                 if n in self.spec_store.specs:
                     spec = self.spec_store.specs[n]
                 else:
