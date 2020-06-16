@@ -3133,6 +3133,7 @@ int main(int argc, const char **argv)
   string client_id;
   string op_id;
   string op_mask_str;
+  string api_mask_str;
   string quota_scope;
   string object_version;
   string placement_id;
@@ -3290,6 +3291,8 @@ int main(int argc, const char **argv)
       op_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*)NULL)) {
       op_mask_str = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--api-mask", (char*)NULL)){
+      api_mask_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
       key_type_str = val;
       if (key_type_str.compare("swift") == 0) {
@@ -5507,6 +5510,100 @@ int main(int argc, const char **argv)
     }
 
     user_op.set_op_mask(op_mask);
+  }
+  if (!api_mask_str.empty()) {
+    uint32_t api_mask = 0;
+    // basic
+    int ret = rgw_parse_s3api_mask_type_basic(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[basic]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_BASIC, api_mask);
+    // logging
+    ret = rgw_parse_s3api_mask_type_logging(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[logging]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_LOGGING, api_mask);
+    // location 
+    ret = rgw_parse_s3api_mask_type_location(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[location]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_LOCATION, api_mask);
+    // versioning
+    ret = rgw_parse_s3api_mask_type_versioning(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[versioning]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_VERSIONING, api_mask);
+    // website
+    ret = rgw_parse_s3api_mask_type_website(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[website]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_WEBSITE, api_mask);
+    // metasearch
+    ret = rgw_parse_s3api_mask_type_metasearch(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[metasearch]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_METASEARCH, api_mask);
+    // acl
+    ret = rgw_parse_s3api_mask_type_acl(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[acl]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_ACL, api_mask);
+    // cors
+    ret = rgw_parse_s3api_mask_type_cors(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[cors]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_CORS, api_mask);
+    // reqpayment
+    ret = rgw_parse_s3api_mask_type_reqpayment(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[reqpayment]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_REQUEST_PAYMENT, api_mask);
+    // lc
+    ret = rgw_parse_s3api_mask_type_lc(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[lc]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_LC, api_mask);
+    // policy
+    ret = rgw_parse_s3api_mask_type_policy(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[policy]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_POLICY, api_mask);
+    // multiparts
+    ret = rgw_parse_s3api_mask_type_multiparts(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[multiparts]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_MULTIPARTS, api_mask);
+    // tags
+    ret = rgw_parse_s3api_mask_type_tags(api_mask_str, &api_mask);
+    if (ret < 0) {
+      cerr << "failed to parse api_mask[tags]: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    user_op.set_s3api_mask(TYPE_S3MASK_OP_TAGS, api_mask);
   }
 
   if (key_type != KEY_TYPE_UNDEFINED)

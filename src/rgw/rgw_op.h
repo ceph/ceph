@@ -120,6 +120,15 @@ public:
 
 void rgw_bucket_object_pre_exec(struct req_state *s);
 
+class RGWAPIMask {
+  RGWS3IFMaskOpType type;
+  uint32_t          mask;
+public:
+  RGWAPIMask(RGWS3IFMaskOpType t, uint32_t m): type(t), mask(m) {}
+  RGWS3IFMaskOpType get_type() { return type; }
+  uint32_t get_mask() { return mask; }
+};
+
 namespace dmc = rgw::dmclock;
 
 /**
@@ -188,6 +197,7 @@ public:
   }
   virtual int verify_permission() = 0;
   virtual int verify_op_mask();
+  virtual int verify_api_mask();
   virtual void pre_exec() {}
   virtual void execute() = 0;
   virtual void send_response() {}
@@ -196,7 +206,7 @@ public:
   }
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
-
+  virtual RGWAPIMask api_mask() { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, 0); }
   virtual uint32_t op_mask() { return 0; }
 
   virtual int error_handler(int err_no, string *error_content);
@@ -361,6 +371,7 @@ public:
   const char* name() const override { return "get_obj"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_GET_OBJ); }
   virtual bool need_object_expiration() { return false; }
   /**
    * calculates filter used to decrypt RGW objects data
@@ -396,6 +407,7 @@ class RGWGetObjTags : public RGWOp {
   virtual void send_response_data(bufferlist& bl) = 0;
   const char* name() const override { return "get_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_TAGS, RGW_S3MASK_TAGS_GET); }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_TAGGING; }
 
 };
@@ -411,6 +423,7 @@ class RGWPutObjTags : public RGWOp {
   virtual int get_params() = 0;
   const char* name() const override { return "put_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_TAGS, RGW_S3MASK_TAGS_PUT); }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_TAGGING; }
 
 };
@@ -423,6 +436,7 @@ class RGWDeleteObjTags: public RGWOp {
 
   const char* name() const override { return "delete_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_TAGS, RGW_S3MASK_TAGS_DELETE); }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ_TAGGING;}
 };
 
@@ -581,6 +595,7 @@ public:
   const char* name() const override { return "bulk_delete"; }
   RGWOpType get_type() override { return RGW_OP_BULK_DELETE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_DELETE_BUCKET); }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -775,6 +790,7 @@ public:
   const char* name() const override { return "list_buckets"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKETS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_LIST_BUCKETS); }
 }; // class RGWListBuckets
 
 class RGWGetUsage : public RGWOp {
@@ -864,6 +880,7 @@ public:
   const char* name() const override { return "list_bucket"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_LIST_BUCKET); }
   virtual bool need_container_stats() { return false; }
 };
 
@@ -877,6 +894,7 @@ public:
   const char* name() const override { return "get_bucket_logging"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_LOGGING, RGW_S3MASK_LOGGING_GET); }
 };
 
 class RGWGetBucketLocation : public RGWOp {
@@ -890,6 +908,7 @@ public:
   const char* name() const override { return "get_bucket_location"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOCATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_LOCATION, RGW_S3MASK_LOCATION_GET); }
 };
 
 class RGWGetBucketVersioning : public RGWOp {
@@ -908,6 +927,7 @@ public:
   const char* name() const override { return "get_bucket_versioning"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_VERSIONING, RGW_S3MASK_VERSIONING_GET); }
 };
 
 enum BucketVersionStatus {
@@ -936,6 +956,7 @@ public:
   const char* name() const override { return "set_bucket_versioning"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_VERSIONING, RGW_S3MASK_VERSIONING_SET); }
 };
 
 class RGWGetBucketWebsite : public RGWOp {
@@ -950,6 +971,7 @@ public:
   const char* name() const override { return "get_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_WEBSITE, RGW_S3MASK_WEBSITE_GET); }
 };
 
 class RGWSetBucketWebsite : public RGWOp {
@@ -969,6 +991,7 @@ public:
   const char* name() const override { return "set_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_WEBSITE, RGW_S3MASK_WEBSITE_SET); }
 };
 
 class RGWDeleteBucketWebsite : public RGWOp {
@@ -983,6 +1006,7 @@ public:
   const char* name() const override { return "delete_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_WEBSITE, RGW_S3MASK_WEBSITE_DELETE); }
 };
 
 class RGWStatBucket : public RGWOp {
@@ -1001,6 +1025,7 @@ public:
   const char* name() const override { return "stat_bucket"; }
   RGWOpType get_type() override { return RGW_OP_STAT_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_STAT_BUCKET); }
 };
 
 class RGWCreateBucket : public RGWOp {
@@ -1043,6 +1068,7 @@ public:
   const char* name() const override { return "create_bucket"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_CREATE_BUCKET); }
 };
 
 class RGWDeleteBucket : public RGWOp {
@@ -1060,6 +1086,7 @@ public:
   const char* name() const override { return "delete_bucket"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_DELETE_BUCKET); }
 };
 
 struct rgw_slo_entry {
@@ -1220,6 +1247,7 @@ public:
   const char* name() const override { return "put_obj"; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_PUT_OBJ); }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -1274,6 +1302,7 @@ public:
   const char* name() const override { return "post_obj"; }
   RGWOpType get_type() override { return RGW_OP_POST_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_POST_OBJ); }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -1409,6 +1438,7 @@ public:
   const char* name() const override { return "delete_obj"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_DELETE_OBJ); }
   virtual bool need_object_expiration() { return false; }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
@@ -1504,6 +1534,7 @@ public:
   const char* name() const override { return "copy_obj"; }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_COPY_OBJ); }
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
 };
 
@@ -1522,6 +1553,7 @@ public:
   const char* name() const override { return "get_acls"; }
   RGWOpType get_type() override { return RGW_OP_GET_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_ACL, RGW_S3MASK_ACL_GET); }
 };
 
 class RGWPutACLs : public RGWOp {
@@ -1543,6 +1575,7 @@ public:
   const char* name() const override { return "put_acls"; }
   RGWOpType get_type() override { return RGW_OP_PUT_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_ACL, RGW_S3MASK_ACL_PUT); }
 };
 
 class RGWGetLC : public RGWOp {
@@ -1560,6 +1593,7 @@ public:
   const char* name() const override { return "get_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_GET_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_LC, RGW_S3MASK_LC_GET); }
 };
 
 class RGWPutLC : public RGWOp {
@@ -1593,6 +1627,7 @@ public:
   const char* name() const override { return "put_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_PUT_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_LC, RGW_S3MASK_LC_PUT); }
 };
 
 class RGWDeleteLC : public RGWOp {
@@ -1606,6 +1641,7 @@ public:
   const char* name() const override { return "delete_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_LC, RGW_S3MASK_LC_DELETE); }
 };
 
 class RGWGetCORS : public RGWOp {
@@ -1621,6 +1657,7 @@ public:
   const char* name() const override { return "get_cors"; }
   RGWOpType get_type() override { return RGW_OP_GET_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_CORS, RGW_S3MASK_CORS_GET); }
 };
 
 class RGWPutCORS : public RGWOp {
@@ -1640,6 +1677,7 @@ public:
   const char* name() const override { return "put_cors"; }
   RGWOpType get_type() override { return RGW_OP_PUT_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_CORS, RGW_S3MASK_CORS_PUT); }
 };
 
 class RGWDeleteCORS : public RGWOp {
@@ -1655,6 +1693,7 @@ public:
   const char* name() const override { return "delete_cors"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_CORS, RGW_S3MASK_CORS_DELETE); }
 };
 
 class RGWOptionsCORS : public RGWOp {
@@ -1675,6 +1714,7 @@ public:
   const char* name() const override { return "options_cors"; }
   RGWOpType get_type() override { return RGW_OP_OPTIONS_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_CORS, RGW_S3MASK_CORS_OPTIONS); }
 };
 
 class RGWGetRequestPayment : public RGWOp {
@@ -1692,6 +1732,7 @@ public:
   const char* name() const override { return "get_request_payment"; }
   RGWOpType get_type() override { return RGW_OP_GET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_REQUEST_PAYMENT, RGW_S3MASK_REQPAYMENT_GET); }
 };
 
 class RGWSetRequestPayment : public RGWOp {
@@ -1711,6 +1752,7 @@ public:
   const char* name() const override { return "set_request_payment"; }
   RGWOpType get_type() override { return RGW_OP_SET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_REQUEST_PAYMENT, RGW_S3MASK_REQPAYMENT_SET); }
 };
 
 class RGWInitMultipart : public RGWOp {
@@ -1734,6 +1776,7 @@ public:
   const char* name() const override { return "init_multipart"; }
   RGWOpType get_type() override { return RGW_OP_INIT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_MULTIPARTS, RGW_S3MASK_MULTIPARTS_INIT); }
   virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
 };
 
@@ -1779,6 +1822,7 @@ public:
   const char* name() const override { return "complete_multipart"; }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_MULTIPARTS, RGW_S3MASK_MULTIPARTS_COMPLETE); }
 };
 
 class RGWAbortMultipart : public RGWOp {
@@ -1793,6 +1837,7 @@ public:
   const char* name() const override { return "abort_multipart"; }
   RGWOpType get_type() override { return RGW_OP_ABORT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_MULTIPARTS, RGW_S3MASK_MULTIPARTS_ABORT); }
 };
 
 class RGWListMultipart : public RGWOp {
@@ -1824,6 +1869,7 @@ public:
   const char* name() const override { return "list_multipart"; }
   RGWOpType get_type() override { return RGW_OP_LIST_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_MULTIPARTS, RGW_S3MASK_MULTIPARTS_LIST); }
 };
 
 struct RGWMultipartUploadEntry {
@@ -1872,6 +1918,7 @@ public:
   const char* name() const override { return "list_bucket_multiparts"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET_MULTIPARTS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_MULTIPARTS, RGW_S3MASK_MULTIPARTS_LIST_BUCKET); }
 };
 
 
@@ -1949,6 +1996,7 @@ public:
   const char* name() const override { return "multi_object_delete"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_MULTI_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_MULTIPARTS, RGW_S3MASK_MULTIPARTS_DELETE); }
 };
 
 class RGWInfo: public RGWOp {
@@ -2191,6 +2239,7 @@ public:
   const char* name() const override { return "get_obj_layout"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_OBJ_LAYOUT; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_GET_OBJ_LAYOUT); }
 };
 
 class RGWPutBucketPolicy : public RGWOp {
@@ -2204,6 +2253,7 @@ public:
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_POLICY, RGW_S3MASK_POLICY_PUT); }
   void execute() override;
   int get_params();
   const char* name() const override { return "put_bucket_policy"; }
@@ -2221,6 +2271,7 @@ public:
   uint32_t op_mask() override {
     return RGW_OP_TYPE_READ;
   }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_POLICY, RGW_S3MASK_POLICY_GET); }
   void execute() override;
   const char* name() const override { return "get_bucket_policy"; }
   RGWOpType get_type() override {
@@ -2236,6 +2287,7 @@ public:
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_POLICY, RGW_S3MASK_POLICY_DELETE); }
   void execute() override;
   int get_params();
   const char* name() const override { return "delete_bucket_policy"; }
@@ -2347,6 +2399,7 @@ public:
   const char* name() const override { return "config_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_METASEARCH, RGW_S3MASK_METASEARCH_CONFIG); }
 };
 
 class RGWGetBucketMetaSearch : public RGWOp {
@@ -2360,6 +2413,7 @@ public:
   const char* name() const override { return "get_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_METASEARCH, RGW_S3MASK_METASEARCH_GET); }
 };
 
 class RGWDelBucketMetaSearch : public RGWOp {
@@ -2373,6 +2427,7 @@ public:
   const char* name() const override { return "delete_bucket_meta_search"; }
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWAPIMask api_mask() override { return RGWAPIMask(TYPE_S3MASK_OP_METASEARCH, RGW_S3MASK_METASEARCH_DELETE); }
 };
 
 class RGWGetClusterStat : public RGWOp {

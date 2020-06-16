@@ -359,13 +359,19 @@ static struct rgw_flags_desc rgw_perms[] = {
 };
 
 template <class T>
-static void mask_to_str(T *mask_list, uint32_t mask, char *buf, int len)
+static void mask_to_str(T *mask_list, uint32_t mask, char *buf, int len, bool join = false)
 {
   const char *sep = "";
   int pos = 0;
   if (!mask) {
+    if(join)
+      return;
     snprintf(buf, len, "<none>");
     return;
+  }
+  if(join) {
+    sep = ", ";
+    pos = strlen(buf);
   }
   while (mask) {
     uint32_t orig_mask = mask;
@@ -401,6 +407,121 @@ static struct rgw_flags_desc op_type_flags[] = {
 extern void op_type_to_str(uint32_t mask, char *buf, int len)
 {
   return mask_to_str(op_type_flags, mask, buf, len);
+}
+
+/*s3api mask*/
+/*basic*/
+static struct rgw_flags_desc s3api_mask_basic_flags[] = {
+  {RGW_S3MASK_BASIC_LIST_BUCKET, RGW_S3MASKNM_BASIC_LIST_BUCKET},
+  {RGW_S3MASK_BASIC_CREATE_BUCKET, RGW_S3MASKNM_BASIC_CREATE_BUCKET},
+  {RGW_S3MASK_BASIC_DELETE_BUCKET, RGW_S3MASKNM_BASIC_DELETE_BUCKET},
+  {RGW_S3MASK_BASIC_POST_OBJ, RGW_S3MASKNM_BASIC_POST_OBJ},
+  {RGW_S3MASK_BASIC_PUT_OBJ, RGW_S3MASKNM_BASIC_PUT_OBJ},
+  {RGW_S3MASK_BASIC_COPY_OBJ, RGW_S3MASKNM_BASIC_COPY_OBJ},
+  {RGW_S3MASK_BASIC_GET_OBJ, RGW_S3MASKNM_BASIC_GET_OBJ},
+  {RGW_S3MASK_BASIC_DELETE_OBJ, RGW_S3MASKNM_BASIC_DELETE_OBJ},
+  {RGW_S3MASK_BASIC_GET_OBJ_LAYOUT, RGW_S3MASKNM_BASIC_GET_OBJ_LAYOUT},
+  {RGW_S3MASK_BASIC_LIST_BUCKETS, RGW_S3MASKNM_BASIC_LIST_BUCKETS},
+  {RGW_S3MASK_BASIC_STAT_BUCKET, RGW_S3MASKNM_BASIC_STAT_BUCKET},
+  {0, NULL}
+};
+/*Logging*/
+static struct rgw_flags_desc s3api_mask_logging_flags[] = {
+  {RGW_S3MASK_LOGGING_GET, RGW_S3MASKNM_LOGGING_GET},
+  {0, NULL}};
+/*Location*/
+static struct rgw_flags_desc s3api_mask_location_flags[] = {
+  {RGW_S3MASK_LOCATION_GET, RGW_S3MASKNM_LOCATION_GET},
+  {0, NULL}};
+/*Versioning*/
+static struct rgw_flags_desc s3api_mask_versioning_flags[] = {
+  {RGW_S3MASK_VERSIONING_GET, RGW_S3MASKNM_VERSIONING_GET},
+  {RGW_S3MASK_VERSIONING_SET, RGW_S3MASKNM_VERSIONING_SET},
+  {0, NULL}};
+/*WebSite*/
+static struct rgw_flags_desc s3api_mask_website_flags[] = {
+  {RGW_S3MASK_WEBSITE_GET, RGW_S3MASKNM_WEBSITE_GET},
+  {RGW_S3MASK_WEBSITE_SET, RGW_S3MASKNM_WEBSITE_SET},
+  {RGW_S3MASK_WEBSITE_DELETE, RGW_S3MASKNM_WEBSITE_DELETE},
+  {0, NULL}};
+/*MetaSearch*/
+static struct rgw_flags_desc s3api_mask_metasearch_flags[] = {
+  {RGW_S3MASK_METASEARCH_GET, RGW_S3MASKNM_METASEARCH_GET},
+  {RGW_S3MASK_METASEARCH_DELETE, RGW_S3MASKNM_METASEARCH_DELETE},
+  {RGW_S3MASK_METASEARCH_CONFIG, RGW_S3MASKNM_METASEARCH_CONFIG},
+  {0, NULL}};
+/*ACL*/
+static struct rgw_flags_desc s3api_mask_acl_flags[] = {
+  {RGW_S3MASK_ACL_GET, RGW_S3MASKNM_ACL_GET},
+  {RGW_S3MASK_ACL_PUT, RGW_S3MASKNM_ACL_PUT},
+  {0, NULL}};
+/*CORS*/
+static struct rgw_flags_desc s3api_mask_cors_flags[] = {
+  {RGW_S3MASK_CORS_GET, RGW_S3MASKNM_CORS_GET},
+  {RGW_S3MASK_CORS_PUT, RGW_S3MASKNM_CORS_PUT},
+  {RGW_S3MASK_CORS_DELETE, RGW_S3MASKNM_CORS_DELETE},
+  {RGW_S3MASK_CORS_OPTIONS, RGW_S3MASKNM_CORS_OPTIONS},
+  {0, NULL}};
+/*RequestPayment*/
+static struct rgw_flags_desc s3api_mask_reqpayment_flags[] = {
+  {RGW_S3MASK_REQPAYMENT_GET,RGW_S3MASKNM_REQPAYMENT_GET},
+  {RGW_S3MASK_REQPAYMENT_SET, RGW_S3MASKNM_REQPAYMENT_SET},
+  {0, NULL}};
+/*LC*/
+static struct rgw_flags_desc s3api_mask_lc_flags[] = {
+  {RGW_S3MASK_LC_GET,RGW_S3MASKNM_LC_GET},
+  {RGW_S3MASK_LC_PUT,RGW_S3MASKNM_LC_PUT},
+  {RGW_S3MASK_LC_DELETE, RGW_S3MASKNM_LC_DELETE},
+  {0, NULL}};
+/*Policy*/
+static struct rgw_flags_desc s3api_mask_policy_flags[] = {
+  {RGW_S3MASK_POLICY_GET,RGW_S3MASKNM_POLICY_GET},
+  {RGW_S3MASK_POLICY_PUT,RGW_S3MASKNM_POLICY_PUT},
+  {RGW_S3MASK_POLICY_DELETE,RGW_S3MASKNM_POLICY_DELETE},
+  {0, NULL}};
+/*Multiparts*/
+static struct rgw_flags_desc s3api_mask_multiparts_flags[] = {
+  {RGW_S3MASK_MULTIPARTS_LIST_BUCKET,RGW_S3MASKNM_MULTIPARTS_LIST_BUCKET},
+  {RGW_S3MASK_MULTIPARTS_DELETE,RGW_S3MASKNM_MULTIPARTS_DELETE},
+  {RGW_S3MASK_MULTIPARTS_INIT,RGW_S3MASKNM_MULTIPARTS_INIT},
+  {RGW_S3MASK_MULTIPARTS_ABORT,RGW_S3MASKNM_MULTIPARTS_ABORT},
+  {RGW_S3MASK_MULTIPARTS_COMPLETE,RGW_S3MASKNM_MULTIPARTS_COMPLETE},
+  {RGW_S3MASK_MULTIPARTS_LIST,RGW_S3MASKNM_MULTIPARTS_LIST},
+  {0, NULL}};
+/*Tags*/
+static struct rgw_flags_desc s3api_mask_tags_flags[] = {
+  {RGW_S3MASK_TAGS_GET,RGW_S3MASKNM_TAGS_GET},
+  {RGW_S3MASK_TAGS_PUT,RGW_S3MASKNM_TAGS_PUT},
+  {RGW_S3MASK_TAGS_DELETE,RGW_S3MASKNM_TAGS_DELETE},
+  {0, NULL}};
+
+static void s3api_mask_to_str(RGWS3IFMask mask, char *buf, int len) {
+  int usage = 0;
+  mask_to_str(s3api_mask_basic_flags, mask.get_basic(), buf+usage, len-usage);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_logging_flags, mask.get_logging(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_location_flags, mask.get_location(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_versioning_flags, mask.get_versioning(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_website_flags, mask.get_website(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_metasearch_flags, mask.get_metasearch(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_acl_flags, mask.get_acl(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_cors_flags, mask.get_cors(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_reqpayment_flags, mask.get_req_payment(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_lc_flags, mask.get_lc(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_policy_flags, mask.get_policy(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_multiparts_flags, mask.get_multiparts(), buf+usage, len-usage, true);
+  usage = strlen(buf);
+  mask_to_str(s3api_mask_tags_flags, mask.get_tags(), buf+usage, len-usage, true);
 }
 
 void RGWSubUser::dump(Formatter *f) const
@@ -483,6 +604,10 @@ void RGWUserInfo::dump(Formatter *f) const
   char buf[256];
   op_type_to_str(op_mask, buf, sizeof(buf));
   encode_json("op_mask", (const char *)buf, f);
+
+  char s3api_mask_buf[1024];
+  s3api_mask_to_str(s3api_mask, s3api_mask_buf, sizeof(s3api_mask_buf));
+  encode_json("api_mask", (const char *)s3api_mask_buf, f);
 
   if (system) { /* no need to show it for every user */
     encode_json("system", (bool)system, f);

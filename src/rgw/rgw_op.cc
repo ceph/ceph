@@ -1015,6 +1015,17 @@ void populate_metadata_in_request(req_state* s, std::map<std::string, bufferlist
   }
 }
 
+int RGWOp::verify_api_mask()
+{
+  RGWAPIMask api = api_mask();
+
+  ldout(s->cct, 20) << "required api mask , type : " << (int)(api.get_type()) << " mask: " << api.get_mask() << dendl;
+  if(!s->user->s3api_mask.is_allow(api.get_type(), api.get_mask())) {
+    return -EPERM;
+  }
+  return 0;
+}
+
 int RGWOp::verify_op_mask()
 {
   uint32_t required_mask = op_mask();

@@ -45,6 +45,19 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.user_id = RGW_USER_ANON_ID;
   info.display_name.clear();
   info.access_keys.clear();
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_BASIC, RGW_S3MASK_BASIC_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_LOGGING, RGW_S3MASK_LOGGING_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_LOCATION, RGW_S3MASK_LOCATION_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_VERSIONING, RGW_S3MASK_VERSIONING_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_WEBSITE, RGW_S3MASK_WEBSITE_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_METASEARCH, RGW_S3MASK_METASEARCH_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_ACL, RGW_S3MASK_ACL_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_CORS, RGW_S3MASK_CORS_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_REQUEST_PAYMENT, RGW_S3MASK_REQPAYMENT_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_LC, RGW_S3MASK_LC_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_POLICY, RGW_S3MASK_POLICY_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_MULTIPARTS, RGW_S3MASK_MULTIPARTS_ALL);
+  info.s3api_mask.set_mask(TYPE_S3MASK_OP_TAGS, RGW_S3MASK_TAGS_ALL);
 }
 
 int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id)
@@ -406,6 +419,9 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   char buf[256];
   op_type_to_str(info.op_mask, buf, sizeof(buf));
   encode_json("op_mask", (const char *)buf, f);
+  char apibuf[1024];
+  s3api_mask_to_str(info.s3api_mask, apibuf, sizeof(apibuf));
+  encode_json("api_mask", (const char *)apibuf, f);
   encode_json("system", (bool)info.system, f);
   encode_json("admin", (bool)info.admin, f);
   encode_json("default_placement", info.default_placement.name, f);
@@ -1754,6 +1770,9 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
 
+  if (op_state.s3api_mask_specified)
+    user_info.s3api_mask = op_state.s3api_mask;
+
   if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
   } else {
@@ -2010,6 +2029,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
+
+  if (op_state.has_s3api_mask())
+    user_info.s3api_mask = op_state.s3api_mask;
 
   if (op_state.has_bucket_quota())
     user_info.bucket_quota = op_state.get_bucket_quota();

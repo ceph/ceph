@@ -122,6 +122,13 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     return ret;
   }
 
+  // verify api mask
+  ldpp_dout(op, 2) << "verifying api mask" << dendl;
+  ret = op->verify_api_mask();
+  if (ret < 0) {
+    return ret;
+  }
+
   ldpp_dout(op, 2) << "verifying op mask" << dendl;
   ret = op->verify_op_mask();
   if (ret < 0) {

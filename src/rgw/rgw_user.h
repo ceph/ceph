@@ -160,6 +160,7 @@ struct RGWUserAdminOpState {
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask;
+  RGWS3IFMask s3api_mask;
   map<int, string> temp_url_keys;
 
   // subuser attributes
@@ -193,6 +194,7 @@ struct RGWUserAdminOpState {
   bool max_buckets_specified;
   bool perm_specified;
   bool op_mask_specified;
+  bool s3api_mask_specified;
   bool caps_specified;
   bool suspension_op;
   bool admin_specified = false;
@@ -317,6 +319,11 @@ struct RGWUserAdminOpState {
     op_mask_specified = true;
   }
 
+  void set_s3api_mask(RGWS3IFMaskOpType type, uint32_t mask) {
+    s3api_mask.set_mask(type, mask);
+    s3api_mask_specified = true;
+  }
+
   void set_temp_url_key(const string& key, int index) {
     temp_url_keys[index] = key;
     temp_url_key_specified = true;
@@ -429,6 +436,7 @@ struct RGWUserAdminOpState {
   bool has_suspension_op() { return suspension_op; }
   bool has_subuser_perm() { return perm_specified; }
   bool has_op_mask() { return op_mask_specified; }
+  bool has_s3api_mask() { return s3api_mask_specified; }
   bool will_gen_access() { return gen_access; }
   bool will_gen_secret() { return gen_secret; }
   bool will_gen_subuser() { return gen_subuser; }
@@ -451,6 +459,7 @@ struct RGWUserAdminOpState {
   uint32_t get_subuser_perm() { return perm_mask; }
   int32_t get_max_buckets() { return max_buckets; }
   uint32_t get_op_mask() { return op_mask; }
+  RGWS3IFMask& get_s3api_mask() { return s3api_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
   set<string>& get_mfa_ids() { return mfa_ids; }

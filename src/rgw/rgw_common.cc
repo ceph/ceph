@@ -1688,6 +1688,258 @@ string rgw_trim_quotes(const string& val)
   return s;
 }
 
+static int parse_list_of_flags(struct rgw_name_to_flag *mapping,
+                               const string& str, uint32_t *perm)
+{
+  list<string> strs;
+  get_str_list(str, strs);
+  list<string>::iterator iter;
+  uint32_t v = 0;
+  for (iter = strs.begin(); iter != strs.end(); ++iter) {
+    string& s = *iter;
+    for (int i = 0; mapping[i].type_name; i++) {
+      if (s.compare(mapping[i].type_name) == 0)
+        v |= mapping[i].flag;
+    }
+  }
+
+  *perm = v;
+  return 0;
+}
+
+/*s3api mask*/
+// basic
+static struct rgw_name_to_flag s3api_mask_basic[] = { {"*", RGW_S3MASK_BASIC_ALL},
+   {RGW_S3MASKNM_BASIC_LIST_BUCKET, RGW_S3MASK_BASIC_LIST_BUCKET},
+   {RGW_S3MASKNM_BASIC_CREATE_BUCKET, RGW_S3MASK_BASIC_CREATE_BUCKET},
+   {RGW_S3MASKNM_BASIC_DELETE_BUCKET, RGW_S3MASK_BASIC_DELETE_BUCKET},
+   {RGW_S3MASKNM_BASIC_POST_OBJ, RGW_S3MASK_BASIC_POST_OBJ},
+   {RGW_S3MASKNM_BASIC_PUT_OBJ, RGW_S3MASK_BASIC_PUT_OBJ},
+   {RGW_S3MASKNM_BASIC_COPY_OBJ, RGW_S3MASK_BASIC_COPY_OBJ},
+   {RGW_S3MASKNM_BASIC_GET_OBJ, RGW_S3MASK_BASIC_GET_OBJ},
+   {RGW_S3MASKNM_BASIC_DELETE_OBJ, RGW_S3MASK_BASIC_DELETE_OBJ},
+   {RGW_S3MASKNM_BASIC_GET_OBJ_LAYOUT, RGW_S3MASK_BASIC_GET_OBJ_LAYOUT},
+   {RGW_S3MASKNM_BASIC_LIST_BUCKETS, RGW_S3MASK_BASIC_LIST_BUCKETS},
+   {RGW_S3MASKNM_BASIC_STAT_BUCKET, RGW_S3MASK_BASIC_STAT_BUCKET},
+   {NULL, 0}};
+int rgw_parse_s3api_mask_type_basic(const string& str, uint32_t *perm)
+{
+  return parse_list_of_flags(s3api_mask_basic, str, perm);
+}
+// logging
+static struct rgw_name_to_flag s3api_mask_logging[] = {
+  {RGW_S3MASKNM_LOGGING_GET, RGW_S3MASK_LOGGING_GET},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_logging(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_logging, str, perm);
+}
+/*Location*/
+static struct rgw_name_to_flag s3api_mask_location[] = {
+  {RGW_S3MASKNM_LOCATION_GET, RGW_S3MASK_LOCATION_GET},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_location(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_location, str, perm);
+}
+/*Versioning*/
+static struct rgw_name_to_flag s3api_mask_versioning[] = {
+  {RGW_S3MASKNM_VERSIONING_GET, RGW_S3MASK_VERSIONING_GET},
+  {RGW_S3MASKNM_VERSIONING_SET, RGW_S3MASK_VERSIONING_SET},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_versioning(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_versioning, str, perm);
+}
+/*WebSite*/
+static struct rgw_name_to_flag s3api_mask_website[] = {
+  {RGW_S3MASKNM_WEBSITE_GET, RGW_S3MASK_WEBSITE_GET},
+  {RGW_S3MASKNM_WEBSITE_SET, RGW_S3MASK_WEBSITE_SET},
+  {RGW_S3MASKNM_WEBSITE_DELETE, RGW_S3MASK_WEBSITE_DELETE},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_website(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_website, str, perm);
+}
+/*MetaSearch*/
+static struct rgw_name_to_flag s3api_mask_metasearch[] = {
+  {RGW_S3MASKNM_METASEARCH_GET, RGW_S3MASK_METASEARCH_GET},
+  {RGW_S3MASKNM_METASEARCH_DELETE, RGW_S3MASK_METASEARCH_DELETE},
+  {RGW_S3MASKNM_METASEARCH_CONFIG, RGW_S3MASK_METASEARCH_CONFIG},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_metasearch(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_metasearch, str, perm);
+}
+/*ACL*/
+static struct rgw_name_to_flag s3api_mask_acl[] = {
+  {RGW_S3MASKNM_ACL_GET, RGW_S3MASK_ACL_GET},
+  {RGW_S3MASKNM_ACL_PUT, RGW_S3MASK_ACL_PUT},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_acl(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_acl, str, perm);
+}
+/*CORS*/
+static struct rgw_name_to_flag s3api_mask_cors[] = {
+  {RGW_S3MASKNM_CORS_GET, RGW_S3MASK_CORS_GET},
+  {RGW_S3MASKNM_CORS_PUT, RGW_S3MASK_CORS_PUT},
+  {RGW_S3MASKNM_CORS_DELETE, RGW_S3MASK_CORS_DELETE},
+  {RGW_S3MASKNM_CORS_OPTIONS, RGW_S3MASK_CORS_OPTIONS},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_cors(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_cors, str, perm);
+}
+/*RequestPayment*/
+static struct rgw_name_to_flag s3api_mask_reqpayment[] = {
+  {RGW_S3MASKNM_REQPAYMENT_GET, RGW_S3MASK_REQPAYMENT_GET},
+  {RGW_S3MASKNM_REQPAYMENT_SET, RGW_S3MASK_REQPAYMENT_SET},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_reqpayment(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_reqpayment, str, perm);
+}
+/*LC*/
+static struct rgw_name_to_flag s3api_mask_lc[] = {
+  {RGW_S3MASKNM_LC_GET, RGW_S3MASK_LC_GET},
+  {RGW_S3MASKNM_LC_PUT, RGW_S3MASK_LC_PUT},
+  {RGW_S3MASKNM_LC_DELETE, RGW_S3MASK_LC_DELETE},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_lc(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_lc, str, perm);
+}
+/*Policy*/
+static struct rgw_name_to_flag s3api_mask_policy[] = {
+  {RGW_S3MASKNM_POLICY_GET, RGW_S3MASK_POLICY_GET},
+  {RGW_S3MASKNM_POLICY_PUT, RGW_S3MASK_POLICY_PUT},
+  {RGW_S3MASKNM_POLICY_DELETE, RGW_S3MASK_POLICY_DELETE},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_policy(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_policy, str, perm);
+}
+/*Multiparts*/
+static struct rgw_name_to_flag s3api_mask_multiparts[] = {
+  {RGW_S3MASKNM_MULTIPARTS_LIST_BUCKET, RGW_S3MASK_MULTIPARTS_LIST_BUCKET},
+  {RGW_S3MASKNM_MULTIPARTS_DELETE, RGW_S3MASK_MULTIPARTS_DELETE},
+  {RGW_S3MASKNM_MULTIPARTS_INIT, RGW_S3MASK_MULTIPARTS_INIT},
+  {RGW_S3MASKNM_MULTIPARTS_ABORT, RGW_S3MASK_MULTIPARTS_ABORT},
+  {RGW_S3MASKNM_MULTIPARTS_COMPLETE, RGW_S3MASK_MULTIPARTS_COMPLETE},
+  {RGW_S3MASKNM_MULTIPARTS_LIST, RGW_S3MASK_MULTIPARTS_LIST},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_multiparts(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_multiparts, str, perm);
+}
+/*Tags*/
+static struct rgw_name_to_flag s3api_mask_tags[] = {
+  {RGW_S3MASKNM_TAGS_GET, RGW_S3MASK_TAGS_GET},
+  {RGW_S3MASKNM_TAGS_PUT, RGW_S3MASK_TAGS_PUT},
+  {RGW_S3MASKNM_TAGS_DELETE, RGW_S3MASK_TAGS_DELETE},
+  {NULL, 0}};
+int rgw_parse_s3api_mask_type_tags(const string& str, uint32_t *perm) {
+  return parse_list_of_flags(s3api_mask_tags, str, perm);
+}
+
+uint32_t RGWS3IFMask::get_basic() {
+  return basic;
+}
+uint32_t RGWS3IFMask::get_logging() {
+  return logging;
+}
+uint32_t RGWS3IFMask::get_location() {
+  return location;
+}
+uint32_t RGWS3IFMask::get_versioning() {
+  return versioning;
+}
+uint32_t RGWS3IFMask::get_website() {
+  return website;
+}
+uint32_t RGWS3IFMask::get_metasearch() {
+  return metasearch;
+}
+uint32_t RGWS3IFMask::get_acl() {
+  return acl;
+}
+uint32_t RGWS3IFMask::get_cors() {
+  return cors;
+}
+uint32_t RGWS3IFMask::get_req_payment() {
+  return req_payment;
+}
+uint32_t RGWS3IFMask::get_lc() {
+  return lc;
+}
+uint32_t RGWS3IFMask::get_policy() {
+  return policy;
+}
+uint32_t RGWS3IFMask::get_multiparts() {
+  return multiparts;
+}
+uint32_t RGWS3IFMask::get_tags() {
+  return tags;
+}
+uint32_t* RGWS3IFMask::get_mask_ref(RGWS3IFMaskOpType type) {
+  uint32_t *op_mask = nullptr;
+  switch(type) {
+    case TYPE_S3MASK_OP_BASIC:
+      op_mask = &basic;
+      break;
+    case TYPE_S3MASK_OP_LOGGING:
+      op_mask = &logging;
+      break;
+    case TYPE_S3MASK_OP_LOCATION:
+      op_mask = &location;
+      break;
+    case TYPE_S3MASK_OP_VERSIONING:
+      op_mask = &versioning;
+      break;
+    case TYPE_S3MASK_OP_WEBSITE:
+      op_mask = &website;
+      break;
+    case TYPE_S3MASK_OP_METASEARCH:
+      op_mask = &metasearch;
+      break;
+    case TYPE_S3MASK_OP_ACL:
+      op_mask = &acl;
+      break;
+    case TYPE_S3MASK_OP_CORS:
+      op_mask = &cors;
+      break;
+    case TYPE_S3MASK_OP_REQUEST_PAYMENT:
+      op_mask = &req_payment;
+      break;
+    case TYPE_S3MASK_OP_LC:
+      op_mask = &lc;
+      break;
+    case TYPE_S3MASK_OP_POLICY:
+      op_mask = &policy;
+      break;
+    case TYPE_S3MASK_OP_MULTIPARTS:
+      op_mask = &multiparts;
+      break;
+    case TYPE_S3MASK_OP_TAGS:
+      op_mask = &tags;
+      break;
+    default:
+      op_mask = nullptr;
+  }
+  return op_mask;
+}
+void RGWS3IFMask::set_mask(RGWS3IFMaskOpType type, uint32_t mask, bool clear, bool overwrite) {
+    uint32_t* op_mask = get_mask_ref(type);
+    if (op_mask == nullptr)
+      return;
+    if(clear)
+      (*op_mask) &= (~mask);
+    else
+      (*op_mask) |= mask;
+    if(overwrite)
+      (*op_mask) = mask;
+}
+
+bool RGWS3IFMask::is_allow(RGWS3IFMaskOpType type, uint32_t mask) {
+    uint32_t* op_mask = get_mask_ref(type);
+    if(op_mask == nullptr)
+      return false;
+    if((*op_mask & mask) == mask)
+      return true;
+    else
+      return false;
+}
+
 static struct rgw_name_to_flag cap_names[] = { {"*",     RGW_CAP_ALL},
                   {"read",  RGW_CAP_READ},
 		  {"write", RGW_CAP_WRITE},

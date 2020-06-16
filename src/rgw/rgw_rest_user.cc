@@ -116,6 +116,7 @@ void RGWOp_User_Create::execute()
   std::string caps;
   std::string tenant_name;
   std::string op_mask_str;
+  std::string api_mask;
   std::string default_placement_str;
   std::string placement_tags_str;
 
@@ -146,6 +147,7 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
+  RESTArgs::get_string(s, "api-mask", api_mask, &api_mask);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
 
@@ -178,6 +180,113 @@ void RGWOp_User_Create::execute()
     op_state.set_op_mask(op_mask);
   }
 
+  if (!api_mask.empty()) {
+    uint32_t api_mask_val = 0;
+    // basic
+    int ret = rgw_parse_s3api_mask_type_basic(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[basic]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_BASIC, api_mask_val);
+    // logging
+    ret = rgw_parse_s3api_mask_type_logging(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[logging]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_LOGGING, api_mask_val);
+    // location
+    ret = rgw_parse_s3api_mask_type_location(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[location]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_LOCATION, api_mask_val);
+    // versioning
+    ret = rgw_parse_s3api_mask_type_versioning(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[versioning]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_VERSIONING, api_mask_val);
+    // website
+    ret = rgw_parse_s3api_mask_type_website(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[website]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_WEBSITE, api_mask_val);
+    // metasearch
+    ret = rgw_parse_s3api_mask_type_metasearch(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[metasearch]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_METASEARCH, api_mask_val);
+    // acl
+    ret = rgw_parse_s3api_mask_type_acl(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[acl]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_ACL, api_mask_val);
+    // cors
+    ret = rgw_parse_s3api_mask_type_cors(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[cors]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_CORS, api_mask_val);
+    // reqpayment
+    ret = rgw_parse_s3api_mask_type_reqpayment(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[reqpayment]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_REQUEST_PAYMENT, api_mask_val);
+    // lc
+    ret = rgw_parse_s3api_mask_type_lc(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[lc]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_LC, api_mask_val);
+    // policy
+    ret = rgw_parse_s3api_mask_type_policy(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[policy]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_POLICY, api_mask_val);
+    // multiparts
+    ret = rgw_parse_s3api_mask_type_multiparts(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[multiparts]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_MULTIPARTS, api_mask_val);
+    // tags
+    ret = rgw_parse_s3api_mask_type_tags(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[tags]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_TAGS, api_mask_val);
+  }
   if (!key_type_str.empty()) {
     int32_t key_type = KEY_TYPE_UNDEFINED;
     if (key_type_str.compare("swift") == 0)
@@ -258,6 +367,7 @@ void RGWOp_User_Modify::execute()
   std::string key_type_str;
   std::string caps;
   std::string op_mask_str;
+  std::string api_mask;
   std::string default_placement_str;
   std::string placement_tags_str;
 
@@ -285,6 +395,7 @@ void RGWOp_User_Modify::execute()
 
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
+  RESTArgs::get_string(s, "api-mask", api_mask, &api_mask);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
 
@@ -331,6 +442,114 @@ void RGWOp_User_Modify::execute()
         return;
     }   
     op_state.set_op_mask(op_mask);
+  }
+
+  if (!api_mask.empty()) {
+    uint32_t api_mask_val = 0;
+    // basic
+    int ret = rgw_parse_s3api_mask_type_basic(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[basic]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_BASIC, api_mask_val);
+    // logging
+    ret = rgw_parse_s3api_mask_type_logging(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[logging]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_LOGGING, api_mask_val);
+    // location
+    ret = rgw_parse_s3api_mask_type_location(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[location]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_LOCATION, api_mask_val);
+    // versioning
+    ret = rgw_parse_s3api_mask_type_versioning(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[versioning]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_VERSIONING, api_mask_val);
+    // website
+    ret = rgw_parse_s3api_mask_type_website(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[website]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_WEBSITE, api_mask_val);
+    // metasearch
+    ret = rgw_parse_s3api_mask_type_metasearch(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[metasearch]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_METASEARCH, api_mask_val);
+    // acl
+    ret = rgw_parse_s3api_mask_type_acl(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[acl]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_ACL, api_mask_val);
+    // cors
+    ret = rgw_parse_s3api_mask_type_cors(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[cors]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_CORS, api_mask_val);
+    // reqpayment
+    ret = rgw_parse_s3api_mask_type_reqpayment(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[reqpayment]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_REQUEST_PAYMENT, api_mask_val);
+    // lc
+    ret = rgw_parse_s3api_mask_type_lc(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[lc]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_LC, api_mask_val);
+    // policy
+    ret = rgw_parse_s3api_mask_type_policy(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[policy]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_POLICY, api_mask_val);
+    // multiparts
+    ret = rgw_parse_s3api_mask_type_multiparts(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[multiparts]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_MULTIPARTS, api_mask_val);
+    // tags
+    ret = rgw_parse_s3api_mask_type_tags(api_mask, &api_mask_val);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "failed to parse s3api_mask[tags]: " << cpp_strerror(-ret) << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+    op_state.set_s3api_mask(TYPE_S3MASK_OP_TAGS, api_mask_val);
   }
 
   if (s->info.args.exists("suspended"))

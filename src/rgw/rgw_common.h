@@ -164,6 +164,122 @@ using ceph::crypto::MD5;
 #define RGW_OP_TYPE_MODIFY       (RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
 #define RGW_OP_TYPE_ALL          (RGW_OP_TYPE_READ | RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
 
+/*s3api mask*/
+/*basic*/
+#define RGW_S3MASK_BASIC_LIST_BUCKET        (0x1 << 0)
+#define RGW_S3MASK_BASIC_CREATE_BUCKET      (0x1 << 1)
+#define RGW_S3MASK_BASIC_DELETE_BUCKET      (0x1 << 2)
+#define RGW_S3MASK_BASIC_POST_OBJ           (0x1 << 3)
+#define RGW_S3MASK_BASIC_PUT_OBJ            (0x1 << 4)
+#define RGW_S3MASK_BASIC_COPY_OBJ           (0x1 << 5)
+#define RGW_S3MASK_BASIC_GET_OBJ            (0x1 << 6)
+#define RGW_S3MASK_BASIC_DELETE_OBJ         (0x1 << 7)
+#define RGW_S3MASK_BASIC_GET_OBJ_LAYOUT     (0x1 << 8)
+#define RGW_S3MASK_BASIC_LIST_BUCKETS       (0x1 << 9)
+#define RGW_S3MASK_BASIC_STAT_BUCKET        (0x1 << 10)
+#define RGW_S3MASK_BASIC_ALL                (RGW_S3MASK_BASIC_LIST_BUCKETS|RGW_S3MASK_BASIC_STAT_BUCKET|RGW_S3MASK_BASIC_LIST_BUCKET|RGW_S3MASK_BASIC_CREATE_BUCKET|RGW_S3MASK_BASIC_DELETE_BUCKET|RGW_S3MASK_BASIC_POST_OBJ|RGW_S3MASK_BASIC_PUT_OBJ|RGW_S3MASK_BASIC_COPY_OBJ|RGW_S3MASK_BASIC_GET_OBJ|RGW_S3MASK_BASIC_DELETE_OBJ|RGW_S3MASK_BASIC_GET_OBJ_LAYOUT)
+#define RGW_S3MASKNM_BASIC_LIST_BUCKET      "ListBucket"
+#define RGW_S3MASKNM_BASIC_CREATE_BUCKET    "CreateBucket"
+#define RGW_S3MASKNM_BASIC_DELETE_BUCKET    "DeleteBucket"
+#define RGW_S3MASKNM_BASIC_POST_OBJ         "PostObj"
+#define RGW_S3MASKNM_BASIC_PUT_OBJ          "PutObj"
+#define RGW_S3MASKNM_BASIC_COPY_OBJ         "CopyObj"
+#define RGW_S3MASKNM_BASIC_GET_OBJ          "GetObj"
+#define RGW_S3MASKNM_BASIC_DELETE_OBJ       "DeleteObj"
+#define RGW_S3MASKNM_BASIC_GET_OBJ_LAYOUT   "GetObjLayout"
+#define RGW_S3MASKNM_BASIC_LIST_BUCKETS     "ListBuckets"
+#define RGW_S3MASKNM_BASIC_STAT_BUCKET      "StatBucket"
+/*Logging*/
+#define RGW_S3MASK_LOGGING_GET              (0x01 << 0)
+#define RGW_S3MASK_LOGGING_ALL              (RGW_S3MASK_LOGGING_GET)
+#define RGW_S3MASKNM_LOGGING_GET            "GetLogging"
+/*Location*/
+#define RGW_S3MASK_LOCATION_GET             (0x01 << 0)
+#define RGW_S3MASK_LOCATION_ALL             (RGW_S3MASK_LOCATION_GET)
+#define RGW_S3MASKNM_LOCATION_GET           "GetLocation"
+/*Versioning*/
+#define RGW_S3MASK_VERSIONING_GET           (0x01 << 0)
+#define RGW_S3MASK_VERSIONING_SET           (0x01 << 1)
+#define RGW_S3MASK_VERSIONING_ALL           (RGW_S3MASK_VERSIONING_GET|RGW_S3MASK_VERSIONING_SET)
+#define RGW_S3MASKNM_VERSIONING_GET         "GetVersioning"
+#define RGW_S3MASKNM_VERSIONING_SET         "SetVersioning"
+/*WebSite*/
+#define RGW_S3MASK_WEBSITE_GET              (0x01 << 0)
+#define RGW_S3MASK_WEBSITE_SET              (0x01 << 1)
+#define RGW_S3MASK_WEBSITE_DELETE           (0x01 << 2)
+#define RGW_S3MASK_WEBSITE_ALL              (RGW_S3MASK_WEBSITE_GET|RGW_S3MASK_WEBSITE_SET|RGW_S3MASK_WEBSITE_DELETE)
+#define RGW_S3MASKNM_WEBSITE_GET            "GetWebsite"
+#define RGW_S3MASKNM_WEBSITE_SET            "SetWebsite"
+#define RGW_S3MASKNM_WEBSITE_DELETE         "DeleteWebsite"
+/*MetaSearch*/
+#define RGW_S3MASK_METASEARCH_GET           (0x01 << 0)
+#define RGW_S3MASK_METASEARCH_DELETE        (0x01 << 1)
+#define RGW_S3MASK_METASEARCH_CONFIG        (0x01 << 2)
+#define RGW_S3MASK_METASEARCH_ALL           (RGW_S3MASK_METASEARCH_GET|RGW_S3MASK_METASEARCH_DELETE|RGW_S3MASK_METASEARCH_CONFIG)
+#define RGW_S3MASKNM_METASEARCH_GET         "GetMetasearch"
+#define RGW_S3MASKNM_METASEARCH_DELETE      "DeleteMetasearch"
+#define RGW_S3MASKNM_METASEARCH_CONFIG      "ConfigMetasearch"
+/*ACL*/
+#define RGW_S3MASK_ACL_GET                  (0x01 << 0)
+#define RGW_S3MASK_ACL_PUT                  (0x01 << 1)
+#define RGW_S3MASK_ACL_ALL                  (RGW_S3MASK_ACL_GET|RGW_S3MASK_ACL_PUT)
+#define RGW_S3MASKNM_ACL_GET                "GetACL"
+#define RGW_S3MASKNM_ACL_PUT                "PutACL"
+/*CORS*/
+#define RGW_S3MASK_CORS_GET                 (0x01 << 0)
+#define RGW_S3MASK_CORS_PUT                 (0x01 << 1)
+#define RGW_S3MASK_CORS_DELETE              (0x01 << 2)
+#define RGW_S3MASK_CORS_OPTIONS             (0x01 << 3)
+#define RGW_S3MASK_CORS_ALL                 (RGW_S3MASK_CORS_GET|RGW_S3MASK_CORS_PUT|RGW_S3MASK_CORS_DELETE|RGW_S3MASK_CORS_OPTIONS)
+#define RGW_S3MASKNM_CORS_GET               "GetCORS"
+#define RGW_S3MASKNM_CORS_PUT               "PutCORS"
+#define RGW_S3MASKNM_CORS_DELETE            "DeleteCORS"
+#define RGW_S3MASKNM_CORS_OPTIONS           "OptionsCORS"
+/*RequestPayment*/
+#define RGW_S3MASK_REQPAYMENT_GET           (0x01 << 0)
+#define RGW_S3MASK_REQPAYMENT_SET           (0x01 << 1)
+#define RGW_S3MASK_REQPAYMENT_ALL           (RGW_S3MASK_REQPAYMENT_GET|RGW_S3MASK_REQPAYMENT_SET)
+#define RGW_S3MASKNM_REQPAYMENT_GET         "GetReqPayment"
+#define RGW_S3MASKNM_REQPAYMENT_SET         "SetReqPayment"
+/*LC*/
+#define RGW_S3MASK_LC_GET                   (0x01 << 0)
+#define RGW_S3MASK_LC_PUT                   (0x01 << 1)
+#define RGW_S3MASK_LC_DELETE                (0x01 << 2)
+#define RGW_S3MASK_LC_ALL                   (RGW_S3MASK_LC_GET|RGW_S3MASK_LC_PUT|RGW_S3MASK_LC_DELETE)
+#define RGW_S3MASKNM_LC_GET                 "GetLC"
+#define RGW_S3MASKNM_LC_PUT                 "PutLC"
+#define RGW_S3MASKNM_LC_DELETE              "DeleteLC"
+/*Policy*/
+#define RGW_S3MASK_POLICY_GET               (0x01 << 0)
+#define RGW_S3MASK_POLICY_PUT               (0x01 << 1)
+#define RGW_S3MASK_POLICY_DELETE            (0x01 << 2)
+#define RGW_S3MASK_POLICY_ALL               (RGW_S3MASK_POLICY_GET|RGW_S3MASK_POLICY_PUT|RGW_S3MASK_POLICY_DELETE)
+#define RGW_S3MASKNM_POLICY_GET             "GetPolicy"
+#define RGW_S3MASKNM_POLICY_PUT             "PutPolicy"
+#define RGW_S3MASKNM_POLICY_DELETE          "DeletePolicy"
+/*Multiparts*/
+#define RGW_S3MASK_MULTIPARTS_LIST_BUCKET   (0x01 << 0)
+#define RGW_S3MASK_MULTIPARTS_DELETE        (0x01 << 1)
+#define RGW_S3MASK_MULTIPARTS_INIT          (0x01 << 2)
+#define RGW_S3MASK_MULTIPARTS_ABORT         (0x01 << 3)
+#define RGW_S3MASK_MULTIPARTS_COMPLETE      (0x01 << 4)
+#define RGW_S3MASK_MULTIPARTS_LIST          (0x01 << 5)
+#define RGW_S3MASK_MULTIPARTS_ALL           (RGW_S3MASK_MULTIPARTS_LIST_BUCKET|RGW_S3MASK_MULTIPARTS_DELETE|RGW_S3MASK_MULTIPARTS_INIT|RGW_S3MASK_MULTIPARTS_ABORT|RGW_S3MASK_MULTIPARTS_COMPLETE|RGW_S3MASK_MULTIPARTS_LIST)
+#define RGW_S3MASKNM_MULTIPARTS_LIST_BUCKET "ListBucketMultiparts"
+#define RGW_S3MASKNM_MULTIPARTS_DELETE      "DeleteMultipart"
+#define RGW_S3MASKNM_MULTIPARTS_INIT        "InitMultipart"
+#define RGW_S3MASKNM_MULTIPARTS_ABORT       "AbortMultipart"
+#define RGW_S3MASKNM_MULTIPARTS_COMPLETE    "CompleteMultipart"
+#define RGW_S3MASKNM_MULTIPARTS_LIST        "ListMultipart"
+/*Tags*/
+#define RGW_S3MASK_TAGS_GET                 (0x01 << 0)
+#define RGW_S3MASK_TAGS_PUT                 (0x01 << 1)
+#define RGW_S3MASK_TAGS_DELETE              (0x01 << 2)
+#define RGW_S3MASK_TAGS_ALL                 (RGW_S3MASK_TAGS_GET|RGW_S3MASK_TAGS_PUT|RGW_S3MASK_TAGS_DELETE)
+#define RGW_S3MASKNM_TAGS_GET               "GetTags"
+#define RGW_S3MASKNM_TAGS_PUT               "PutTags"
+#define RGW_S3MASKNM_TAGS_DELETE            "DeleteTags"
+
 #define RGW_DEFAULT_MAX_BUCKETS 1000
 
 #define RGW_DEFER_TO_BUCKET_ACLS_RECURSE 1
@@ -663,6 +779,97 @@ enum RGWIdentityType
   TYPE_WEB=5,
 };
 
+enum RGWS3IFMaskOpType
+{
+  TYPE_S3MASK_OP_BASIC = 0,
+  TYPE_S3MASK_OP_LOGGING,
+  TYPE_S3MASK_OP_LOCATION,
+  TYPE_S3MASK_OP_VERSIONING,
+  TYPE_S3MASK_OP_WEBSITE,
+  TYPE_S3MASK_OP_METASEARCH,
+  TYPE_S3MASK_OP_ACL,
+  TYPE_S3MASK_OP_CORS,
+  TYPE_S3MASK_OP_REQUEST_PAYMENT,
+  TYPE_S3MASK_OP_LC,
+  TYPE_S3MASK_OP_POLICY,
+  TYPE_S3MASK_OP_MULTIPARTS,
+  TYPE_S3MASK_OP_TAGS
+};
+
+class RGWS3IFMask
+{
+  uint32_t basic;
+  uint32_t logging;
+  uint32_t location;
+  uint32_t versioning;
+  uint32_t website;
+  uint32_t metasearch;
+  uint32_t acl;
+  uint32_t cors;
+  uint32_t req_payment;
+  uint32_t lc;
+  uint32_t policy;
+  uint32_t multiparts;
+  uint32_t tags;
+
+  uint32_t* get_mask_ref(RGWS3IFMaskOpType type);
+public:
+  RGWS3IFMask()
+    : basic(0), logging(0), location(0), versioning(0), website(0), metasearch(0), acl(0), cors(0), req_payment(0), lc(0), policy(0), multiparts(0), tags(0){
+  }
+  uint32_t get_basic();
+  uint32_t get_logging();
+  uint32_t get_location();
+  uint32_t get_versioning();
+  uint32_t get_website();
+  uint32_t get_metasearch();
+  uint32_t get_acl();
+  uint32_t get_cors();
+  uint32_t get_req_payment();
+  uint32_t get_lc();
+  uint32_t get_policy();
+  uint32_t get_multiparts();
+  uint32_t get_tags();
+  void set_mask(RGWS3IFMaskOpType type, uint32_t mask = 0, bool clear = false, bool overwrite = false);
+  bool is_allow(RGWS3IFMaskOpType type, uint32_t mask = 0);
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1,1,bl);
+    encode(basic, bl);
+    encode(logging, bl);
+    encode(location, bl);
+    encode(versioning, bl);
+    encode(website, bl);
+    encode(metasearch, bl);
+    encode(acl, bl);
+    encode(cors, bl);
+    encode(req_payment, bl);
+    encode(lc, bl);
+    encode(policy, bl);
+    encode(multiparts, bl);
+    encode(tags, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1,bl);
+    decode(basic, bl);
+    decode(logging, bl);
+    decode(location, bl);
+    decode(versioning, bl);
+    decode(website, bl);
+    decode(metasearch, bl);
+    decode(acl, bl);
+    decode(cors, bl);
+    decode(req_payment, bl);
+    decode(lc, bl);
+    decode(policy, bl);
+    decode(multiparts, bl);
+    decode(tags, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWS3IFMask)
+
 static string RGW_STORAGE_CLASS_STANDARD = "STANDARD";
 
 struct rgw_placement_rule {
@@ -787,6 +994,7 @@ struct RGWUserInfo
   __u8 suspended;
   int32_t max_buckets;
   uint32_t op_mask;
+  RGWS3IFMask s3api_mask;
   RGWUserCaps caps;
   __u8 admin;
   __u8 system;
@@ -820,7 +1028,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(21, 9, bl);
+     ENCODE_START(22, 9, bl);
      encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
@@ -863,10 +1071,11 @@ struct RGWUserInfo
      encode(type, bl);
      encode(mfa_ids, bl);
      encode(assumed_role_arn, bl);
+     encode(s3api_mask, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(21, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(22, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -946,6 +1155,9 @@ struct RGWUserInfo
     }
     if (struct_v >= 21) {
       decode(assumed_role_arn, bl);
+    }
+    if (struct_v >= 22) {
+      decode(s3api_mask, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -2338,6 +2550,21 @@ extern std::string calc_hash_sha256_close_stream(ceph::crypto::SHA256** phash);
 extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
+
+/*s3api mask*/
+extern int rgw_parse_s3api_mask_type_basic(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_logging(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_location(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_versioning(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_website(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_metasearch(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_acl(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_cors(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_reqpayment(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_lc(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_policy(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_multiparts(const string& str, uint32_t *perm);
+extern int rgw_parse_s3api_mask_type_tags(const string& str, uint32_t *perm);
 
 static constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
 static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
