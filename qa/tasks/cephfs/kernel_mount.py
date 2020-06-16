@@ -210,10 +210,10 @@ class KernelMount(CephFSMount):
             print(json.dumps(get_id_to_dir()))
             """)
 
-        p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO(), timeout=(5*60))
-        client_id_to_dir = json.loads(p.stdout.getvalue())
+        output = self.client_remote.sh([
+            'sudo', 'python3', '-c', pyscript
+        ], timeout=(5*60))
+        client_id_to_dir = json.loads(output)
 
         try:
             return client_id_to_dir[self.client_id]

@@ -146,13 +146,13 @@ class CephFSMount(object):
             'sudo', 'rm', '-f', os.path.join(self.mountpoint, filename)
         ])
 
-    def _run_python(self, pyscript, py_version='python'):
+    def _run_python(self, pyscript, py_version='python3'):
         return self.client_remote.run(
                args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',
                      py_version, '-c', pyscript], wait=False, stdin=run.PIPE,
                stdout=StringIO())
 
-    def run_python(self, pyscript, py_version='python'):
+    def run_python(self, pyscript, py_version='python3'):
         p = self._run_python(pyscript, py_version)
         p.wait()
         return six.ensure_str(p.stdout.getvalue().strip())
@@ -342,7 +342,7 @@ class CephFSMount(object):
 
         log.info("check lock on file {0}".format(basename))
         self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
+            'sudo', 'python3', '-c', pyscript
         ])
 
     def write_background(self, basename="background_file", loop=False):
@@ -359,10 +359,10 @@ class CephFSMount(object):
             import os
             import time
 
-            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0644)
+            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0o644)
             try:
                 while True:
-                    os.write(fd, 'content')
+                    os.write(fd, b'content')
                     time.sleep(1)
                     if not {loop}:
                         break
