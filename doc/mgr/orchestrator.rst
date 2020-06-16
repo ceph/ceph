@@ -73,6 +73,8 @@ Add and remove hosts::
     ceph orch host add <hostname> [<addr>] [<labels>...]
     ceph orch host rm <hostname>
 
+For cephadm, see also :ref:`cephadm-fqdn`.
+
 Host Specification
 ------------------
 
