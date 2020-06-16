@@ -508,8 +508,8 @@ class FSExport(object):
                 return 0, "Successfully deleted export", ""
             return 0, "", "Export does not exist"
         except Exception as e:
-            log.warning("Failed to delete exports")
-            return -errno.EINVAL, "", str(e)
+            log.exception(f"Failed to delete {pseudo_path} export for {cluster_id}")
+            return getattr(e, 'errno', -1), "", str(e)
 
     def format_path(self, path):
         if path:
@@ -560,7 +560,7 @@ class FSExport(object):
                 return (0, json.dumps(result, indent=4), '')
             return 0, "", "Export already exists"
         except Exception as e:
-            log.warning("Failed to create exports")
+            log.exception(f"Failed to create {pseudo_path} export for {cluster_id}")
             return -errno.EINVAL, "", str(e)
 
     @export_cluster_checker
@@ -570,15 +570,16 @@ class FSExport(object):
     def delete_all_exports(self, cluster_id):
         try:
             export_list = list(self.exports[cluster_id])
-            self.rados_namespace = cluster_id
-            for export in export_list:
-               ret, out, err = self._delete_export(cluster_id=cluster_id, pseudo_path=None,
-                                                   export_obj=export)
-               if ret != 0:
-                   raise Exception(f"Failed to delete exports: {err} and {ret}")
-            log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
         except KeyError:
             log.info("No exports to delete")
+            return
+        self.rados_namespace = cluster_id
+        for export in export_list:
+            ret, out, err = self._delete_export(cluster_id=cluster_id, pseudo_path=None,
+                                                export_obj=export)
+            if ret != 0:
+                raise Exception(f"Failed to delete exports: {err} and {ret}")
+        log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
 
     @export_cluster_checker
     def list_exports(self, cluster_id, detailed):
@@ -592,8 +593,8 @@ class FSExport(object):
             log.warning(f"No exports to list for {cluster_id}")
             return 0, '', ''
         except Exception as e:
-            log.error(f"Failed to list exports for {cluster_id}")
-            return -errno.EINVAL, "", str(e)
+            log.exception(f"Failed to list exports for {cluster_id}")
+            return getattr(e, 'errno', -1), "", str(e)
 
     @export_cluster_checker
     def get_export(self, cluster_id, pseudo_path):
@@ -604,8 +605,8 @@ class FSExport(object):
             log.warning(f"No {pseudo_path} export to show for {cluster_id}")
             return 0, '', ''
         except Exception as e:
-            log.error(f"Failed to get {pseudo_path} export for {cluster_id}")
-            return -errno.EINVAL, "", str(e)
+            log.exception(f"Failed to get {pseudo_path} export for {cluster_id}")
+            return getattr(e, 'errno', -1), "", str(e)
 
 
 class NFSCluster:
@@ -670,8 +671,8 @@ class NFSCluster:
                 return 0, "NFS Cluster Created Successfully", ""
             return 0, "", f"{cluster_id} cluster already exists"
         except Exception as e:
-            log.warning("NFS Cluster could not be created")
-            return -errno.EINVAL, "", str(e)
+            log.exception(f"NFS Cluster {cluster_id} could not be created")
+            return getattr(e, 'errno', -1), "", str(e)
 
     @cluster_setter
     def update_nfs_cluster(self, cluster_id, placement):
@@ -681,8 +682,8 @@ class NFSCluster:
                 return 0, "NFS Cluster Updated Successfully", ""
             return -errno.ENOENT, "", "Cluster does not exist"
         except Exception as e:
-            log.warning("NFS Cluster could not be updated")
-            return -errno.EINVAL, "", str(e)
+            log.exception(f"NFS Cluster {cluster_id} could not be updated")
+            return getattr(e, 'errno', -1), "", str(e)
 
     @cluster_setter
     def delete_nfs_cluster(self, cluster_id):
@@ -698,12 +699,12 @@ class NFSCluster:
                 return 0, "NFS Cluster Deleted Successfully", ""
             return 0, "", "Cluster does not exist"
         except Exception as e:
-            log.warning("Failed to delete NFS Cluster")
-            return -errno.EINVAL, "", str(e)
+            log.exception(f"Failed to delete NFS Cluster {cluster_id}")
+            return getattr(e, 'errno', -1), "", str(e)
 
     def list_nfs_cluster(self):
         try:
             return 0, '\n'.join(available_clusters(self.mgr)), ""
         except Exception as e:
-            log.warning("Failed to list NFS Cluster")
-            return -errno.EINVAL, "", str(e)
+            log.exception("Failed to list NFS Cluster")
+            return getattr(e, 'errno', -1), "", str(e)
