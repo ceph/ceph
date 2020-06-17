@@ -833,6 +833,16 @@ Per mapping (block device) `rbd device map` options:
   require-osd-release octopus").  Otherwise it should be limited to read-only
   workloads such as images mapped read-only everywhere or snapshots.
 
+* compression_hint=none - Don't set compression hints (since 5.8, default).
+
+* compression_hint=compressible - Hint to the underlying OSD object store
+  backend that the data is compressible, enabling compression in passive mode
+  (since 5.8).
+
+* compression_hint=incompressible - Hint to the underlying OSD object store
+  backend that the data is incompressible, disabling compression in aggressive
+  mode (since 5.8).
+
 `rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
