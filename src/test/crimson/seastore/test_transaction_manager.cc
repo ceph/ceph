@@ -146,6 +146,11 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
     return extent;
   }
 
+  void replay() {
+    tm.close().unsafe_get();
+    tm.mount().unsafe_get();
+  }
+
   void check_mappings() {
     auto t = create_transaction();
     check_mappings(t);
@@ -169,16 +174,16 @@ struct transaction_manager_test_t : public seastar_test_suite_t {
     return ext;
   }
 
+  test_block_mutator_t mutator;
   TestBlockRef mutate_extent(
     test_transaction_t &t,
-    TestBlockRef ref,
-    char contents) {
+    TestBlockRef ref) {
     ceph_assert(t.mappings.count(ref->get_laddr()));
     ceph_assert(t.mappings[ref->get_laddr()].desc.len == ref->get_length());
     auto ext = tm.get_mutable_extent(*t.t, ref)->cast<TestBlock>();
     EXPECT_EQ(ext->get_laddr(), ref->get_laddr());
     EXPECT_EQ(ext->get_desc(), ref->get_desc());
-    ext->set_contents(contents);
+    mutator.mutate(*ext);
     t.mappings[ext->get_laddr()].update(ext->get_desc());
     return ext;
   }
@@ -255,18 +260,21 @@ TEST_F(transaction_manager_test_t, mutate)
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
     {
       auto t = create_transaction();
       auto ext = get_extent(
 	t,
 	ADDR,
 	SIZE);
-      auto mut = mutate_extent(t, ext, 'c');
+      auto mut = mutate_extent(t, ext);
       check_mappings(t);
       check_mappings();
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
+    check_mappings();
   });
 }
 
@@ -288,6 +296,7 @@ TEST_F(transaction_manager_test_t, inc_dec_ref)
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
     {
       auto t = create_transaction();
       inc_ref(t, ADDR);
@@ -304,6 +313,7 @@ TEST_F(transaction_manager_test_t, inc_dec_ref)
       submit_transaction(std::move(t));
       check_mappings();
     }
+    replay();
     {
       auto t = create_transaction();
       dec_ref(t, ADDR);

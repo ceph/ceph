@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <random>
+
 #include "crimson/os/seastore/transaction_manager.h"
 
 namespace crimson::os::seastore {
@@ -20,6 +22,21 @@ struct test_extent_desc_t {
   }
 };
 
+struct test_block_delta_t {
+  int8_t val = 0;
+  uint16_t offset = 0;
+  uint16_t len = 0;
+
+
+  DENC(test_block_delta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.val, p);
+    denc(v.offset, p);
+    denc(v.len, p);
+    DENC_FINISH(p);
+  }
+};
+
 inline std::ostream &operator<<(
   std::ostream &lhs, const test_extent_desc_t &rhs) {
   return lhs << "test_extent_desc_t(len=" << rhs.len
@@ -30,8 +47,12 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   constexpr static segment_off_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<TestBlock>;
 
-  TestBlock(ceph::bufferptr &&ptr) : LogicalCachedExtent(std::move(ptr)) {}
-  TestBlock(const TestBlock &other) : LogicalCachedExtent(other) {}
+  std::vector<test_block_delta_t> delta = {};
+
+  TestBlock(ceph::bufferptr &&ptr)
+    : LogicalCachedExtent(std::move(ptr)) {}
+  TestBlock(const TestBlock &other)
+    : LogicalCachedExtent(other) {}
 
   CachedExtentRef duplicate_for_write() final {
     return CachedExtentRef(new TestBlock(*this));
@@ -42,12 +63,15 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
     return TYPE;
   }
 
-  ceph::bufferlist get_delta() final {
-    return ceph::bufferlist();
+  ceph::bufferlist get_delta() final;
+
+  void set_contents(char c, uint16_t offset, uint16_t len) {
+    ::memset(get_bptr().c_str() + offset, c, len);
+    delta.push_back({c, offset, len});
   }
 
   void set_contents(char c) {
-    ::memset(get_bptr().c_str(), c, get_length());
+    set_contents(c, 0, get_length());
   }
 
   int checksum() {
@@ -61,10 +85,37 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
     return { get_length(), get_crc32c(1) };
   }
 
-  void apply_delta(const ceph::bufferlist &bl) final {
-    ceph_assert(0 == "TODO");
-  }
+  void apply_delta(const ceph::bufferlist &bl) final;
 };
 using TestBlockRef = TCachedExtentRef<TestBlock>;
 
+struct test_block_mutator_t {
+  std::uniform_int_distribution<int8_t>
+  contents_distribution = std::uniform_int_distribution<int8_t>(
+    std::numeric_limits<int8_t>::min(),
+    std::numeric_limits<int8_t>::max());
+
+  std::uniform_int_distribution<uint16_t>
+  offset_distribution = std::uniform_int_distribution<uint16_t>(
+    0, TestBlock::SIZE - 1);
+
+  std::default_random_engine generator = std::default_random_engine(0);
+
+  std::uniform_int_distribution<uint16_t> length_distribution(uint16_t offset) {
+    return std::uniform_int_distribution<uint16_t>(
+      0, TestBlock::SIZE - offset - 1);
+  }
+
+
+  void mutate(TestBlock &block) {
+    auto offset = offset_distribution(generator);
+    block.set_contents(
+      contents_distribution(generator),
+      offset,
+      length_distribution(offset)(generator));
+  }
+};
+
 }
+
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::test_block_delta_t)
