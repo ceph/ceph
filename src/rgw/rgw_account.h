@@ -55,9 +55,8 @@ class RGWAccountInfo {
   std::string tenant;
   AccountQuota account_quota;
 
-  std::atomic<uint16_t> users_count = {0};
-  std::atomic<uint16_t> roles_count = {0};
 public:
+  RGWAccountInfo() = default;
   explicit RGWAccountInfo(std::string&& _id) : id(std::move(_id)) {}
   explicit RGWAccountInfo(const std::string& _id): id(_id) {}
 
@@ -94,6 +93,7 @@ public:
 
   void dump(Formatter * const f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWAccountInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
