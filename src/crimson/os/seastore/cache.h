@@ -142,7 +142,7 @@ using TransactionRef = std::unique_ptr<Transaction>;
  */
 class Cache {
 public:
-  Cache(SegmentManager &segment_manager) : segment_manager(segment_manager) {}
+  Cache(SegmentManager &segment_manager);
   ~Cache();
 
   TransactionRef get_transaction() {
@@ -326,6 +326,11 @@ public:
   );
 
   /**
+   * init
+   */
+  void init();
+
+  /**
    * mkfs
    *
    * Alloc initial root node and add to t.  The intention is for other
@@ -350,8 +355,6 @@ public:
    * Intended for use in Journal::delta. For each delta, should decode delta,
    * read relevant block from disk or cache (using correct type), and call
    * CachedExtent::apply_delta marking the extent dirty.
-   *
-   * TODO: currently only handles the ROOT_LOCATION delta.
    */
   using replay_delta_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;

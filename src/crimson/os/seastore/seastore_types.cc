@@ -37,8 +37,6 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 std::ostream &operator<<(std::ostream &out, extent_types_t t)
 {
   switch (t) {
-  case extent_types_t::ROOT_LOCATION:
-    return out << "ROOT_LOCATION";
   case extent_types_t::ROOT:
     return out << "ROOT";
   case extent_types_t::LADDR_INTERNAL:

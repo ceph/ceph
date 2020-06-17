@@ -23,17 +23,17 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
   Transaction &t)
 {
   logger().debug("BtreeLBAManager::mkfs");
-  return cache.get_root(t).safe_then([this, &t](auto root) {
+  return cache.get_root(t).safe_then([this, &t](auto croot) {
     auto root_leaf = cache.alloc_new_extent<LBALeafNode>(
       t,
       LBA_BLOCK_SIZE);
     root_leaf->set_size(0);
-    root->get_lba_root() =
-      btree_lba_root_t{
+    croot->get_lba_root() =
+      root_t{
         0,
         0,
-        root_leaf->get_paddr() - root->get_paddr(),
-        paddr_t{}};
+        root_leaf->get_paddr(),
+        make_record_relative_paddr(0)};
     return mkfs_ertr::now();
   });
 }
@@ -41,19 +41,17 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
 BtreeLBAManager::get_root_ret
 BtreeLBAManager::get_root(Transaction &t)
 {
-  return cache.get_root(t).safe_then([this, &t](auto root) {
-    paddr_t root_addr = root->get_lba_root().lba_root_addr;
-    root_addr = root_addr.maybe_relative_to(root->get_paddr());
+  return cache.get_root(t).safe_then([this, &t](auto croot) {
     logger().debug(
       "BtreeLBAManager::get_root: reading root at {} depth {}",
-      root->get_lba_root().lba_root_addr,
-      root->get_lba_root().lba_depth);
+      paddr_t{croot->get_lba_root().lba_root_addr},
+      unsigned(croot->get_lba_root().lba_depth));
     return get_lba_btree_extent(
       cache,
       t,
-      root->get_lba_root().lba_depth,
-      root->get_lba_root().lba_root_addr,
-      root->get_paddr());
+      croot->get_lba_root().lba_depth,
+      croot->get_lba_root().lba_root_addr,
+      paddr_t());
   });
 }
 

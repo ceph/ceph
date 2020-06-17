@@ -17,6 +17,9 @@ namespace {
 
 namespace crimson::os::seastore {
 
+Cache::Cache(SegmentManager &segment_manager) :
+  segment_manager(segment_manager) {}
+
 Cache::~Cache()
 {
   for (auto &i: extents) {
@@ -76,17 +79,16 @@ CachedExtentRef Cache::duplicate_for_write(
     return i;
 
   auto ret = i->duplicate_for_write();
-  ret->version++;
-  ret->last_committed_crc = i->last_committed_crc;
-  ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
-
   if (ret->get_type() == extent_types_t::ROOT) {
     t.root = ret->cast<RootBlock>();
+  } else {
+    ret->last_committed_crc = i->last_committed_crc;
+    t.add_to_retired_set(i);
+    t.add_mutated_extent(ret);
   }
 
-  t.add_to_retired_set(i);
-  t.add_mutated_extent(ret);
-
+  ret->version++;
+  ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
   return ret;
 }
 
@@ -134,6 +136,19 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     i->last_committed_crc = final_crc;
   }
 
+  if (t.root) {
+    record.deltas.push_back(
+      delta_info_t{
+	extent_types_t::ROOT,
+	paddr_t{},
+	0,
+	0,
+	0,
+	t.root->get_version() - 1,
+	t.root->get_delta()
+      });
+  }
+
   record.extents.reserve(t.fresh_block_list.size());
   for (auto &i: t.fresh_block_list) {
     logger().debug("try_construct_record: fresh block {}", *i);
@@ -141,16 +156,7 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     i->prepare_write();
     bl.append(i->get_bptr());
     if (i->get_type() == extent_types_t::ROOT) {
-      record.deltas.push_back(
-	delta_info_t{
-	  extent_types_t::ROOT_LOCATION,
-	  i->get_paddr(),
-	  0,
-	  0,
-	  0,
-	  0,
-	  bufferlist()
-	});
+      assert(0 == "ROOT never gets written as a fresh block");
     }
     record.extents.push_back(extent_t{std::move(bl)});
   }
@@ -163,8 +169,12 @@ void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start)
 {
-  if (t.root)
+  if (t.root) {
     root = t.root;
+    root->on_delta_write(final_block_start);
+    root->state = CachedExtent::extent_state_t::DIRTY;
+    logger().debug("complete_commit: new root {}", *t.root);
+  }
 
   paddr_t cur = final_block_start;
   for (auto &i: t.fresh_block_list) {
@@ -189,15 +199,19 @@ void Cache::complete_commit(
   }
 }
 
+void Cache::init() {
+  root = new RootBlock();
+  root->state = CachedExtent::extent_state_t::DIRTY;
+}
+
 Cache::mkfs_ertr::future<> Cache::mkfs(Transaction &t)
 {
-  t.root = alloc_new_extent<RootBlock>(t, RootBlock::SIZE);
+  duplicate_for_write(t, root);
   return mkfs_ertr::now();
 }
 
 Cache::close_ertr::future<> Cache::close()
 {
-  retire_extent(root);
   root.reset();
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
@@ -210,44 +224,30 @@ Cache::close_ertr::future<> Cache::close()
 Cache::replay_delta_ret
 Cache::replay_delta(paddr_t record_base, const delta_info_t &delta)
 {
-  if (delta.type == extent_types_t::ROOT_LOCATION) {
-    auto root_location = delta.paddr.is_relative()
-      ? record_base.add_record_relative(delta.paddr)
-      : delta.paddr;
-    logger().debug("replay_delta: found root addr {}", root_location);
+  if (delta.type == extent_types_t::ROOT) {
+    logger().debug("replay_delta: found root delta");
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
-    return get_extent<RootBlock>(
-      root_location,
-      RootBlock::SIZE
-    ).safe_then([this, root_location](auto ref) {
-      logger().debug("replay_delta: finished reading root at {}", root_location);
-      root = ref;
-      return root->complete_load();
-    }).safe_then([root_location] {
-      logger().debug("replay_delta: finished loading root at {}", root_location);
-      return replay_delta_ret(replay_delta_ertr::ready_future_marker{});
-    });
+    return replay_delta_ertr::now();
+  } else {
+    return get_extent_by_type(
+      delta.type,
+      delta.paddr,
+      delta.length).safe_then([this, record_base, delta](auto extent) {
+	logger().debug(
+	  "replay_delta: replaying {} on {}",
+	  *extent,
+	  delta);
+
+	assert(extent->version == delta.pversion);
+
+	assert(extent->last_committed_crc == delta.prev_crc);
+	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+	assert(extent->last_committed_crc == delta.final_crc);
+
+	extent->version++;
+	mark_dirty(extent);
+      });
   }
-
-  return get_extent_by_type(
-    delta.type,
-    delta.paddr,
-    delta.length).safe_then([this, record_base, delta](auto extent) {
-      /* TODO asserts about version */
-      logger().debug(
-	"replay_delta: replaying {} on {}",
-	*extent,
-	delta);
-
-      assert(extent->version == delta.pversion);
-
-      assert(extent->last_committed_crc == delta.prev_crc);
-      extent->apply_delta_and_adjust_crc(record_base, delta.bl);
-      assert(extent->last_committed_crc == delta.final_crc);
-
-      extent->version++;
-      mark_dirty(extent);
-    });
 }
 
 Cache::get_root_ret Cache::get_root(Transaction &t)
@@ -272,15 +272,9 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   segment_off_t length)
 {
   switch (type) {
-  case extent_types_t::ROOT_LOCATION: {
-    ceph_assert(0 == "root location deltas are handled specially");
-    return get_extent_ertr::make_ready_future<CachedExtentRef>();
-  }
   case extent_types_t::ROOT:
-    return get_extent<RootBlock>(offset, length
-    ).safe_then([](auto extent) {
-      return CachedExtentRef(extent.detach(), false /* add_ref */);
-    });
+    assert(0 == "ROOT is never directly read");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
   case extent_types_t::LADDR_INTERNAL:
     return get_extent<lba_manager::btree::LBAInternalNode>(offset, length
     ).safe_then([](auto extent) {

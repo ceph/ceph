@@ -208,11 +208,10 @@ std::ostream &operator<<(std::ostream &out, const paddr_list_t &rhs);
  * Cache::get_extent_by_type in cache.cc
  */
 enum class extent_types_t : uint8_t {
-  ROOT_LOCATION = 0, // delta only
-  ROOT = 1,
-  LADDR_INTERNAL = 2,
-  LADDR_LEAF = 3,
-  ONODE_BLOCK = 4,
+  ROOT = 0,
+  LADDR_INTERNAL = 1,
+  LADDR_LEAF = 2,
+  ONODE_BLOCK = 3,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,

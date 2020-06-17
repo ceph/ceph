@@ -74,6 +74,7 @@ struct cache_test_t : public seastar_test_suite_t {
 	return seastar::do_with(
 	  TransactionRef(new Transaction()),
 	  [this](auto &transaction) {
+	    cache.init();
 	    return cache.mkfs(*transaction).safe_then(
 	      [this, &transaction] {
 		return submit_transaction(std::move(transaction)).then(
@@ -90,7 +91,8 @@ struct cache_test_t : public seastar_test_suite_t {
   }
 
   seastar::future<> tear_down_fut() final {
-    return seastar::now();
+    return cache.close().handle_error(
+      Cache::close_ertr::assert_all{});
   }
 };
 

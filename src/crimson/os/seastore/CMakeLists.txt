@@ -14,7 +14,6 @@ add_library(crimson-seastore
   onode_manager/simple-fltree/onode_delta.cc
   onode_manager/simple-fltree/onode_node.cc
   seastore.cc
-  root_block.cc
 	)
 target_link_libraries(crimson-seastore
   crimson)
