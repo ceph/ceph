@@ -12,11 +12,7 @@ FuturizedStore::create(const std::string& type,
   if (type == "memstore") {
     return std::make_unique<crimson::os::CyanStore>(data);
   } else if (type == "bluestore") {
-#ifdef SEASTAR_DEFAULT_ALLOCATOR
     return std::make_unique<crimson::os::AlienStore>(data, values);
-#else
-    #warning please define SEASTAR_DEFAULT_ALLOCATOR for using alien store
-#endif
   } else {
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
     return {};
