@@ -55,14 +55,14 @@ public:
 			 std::map<std::string, bufferlist> * const pattrs,
 			 optional_yield y) override;
 
-  int read_account_info(RGWSI_MetaBackend::Context *ctx,
+  int read_account_info(const DoutPrefixProvider *dpp,
+                        RGWSI_MetaBackend::Context *ctx,
   			const std::string& account_id,
   			RGWAccountInfo *info,
   			RGWObjVersionTracker * const objv_tracker,
-  			rgw_cache_entry_info * const cache_info,
+			real_time * const pmtime,
   			std::map<std::string, bufferlist> * const pattrs,
-  			optional_yield y) override
-  { return -ERR_NOT_IMPLEMENTED; }
+  			optional_yield y) override;
 
   int remove_account_info(RGWSI_MetaBackend::Context *ctx,
   			  const RGWAccountInfo& info,

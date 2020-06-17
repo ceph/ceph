@@ -33,11 +33,12 @@ public:
 
   virtual RGWSI_MetaBackend_Handler *get_be_handler() = 0;
 
-  virtual int read_account_info(RGWSI_MetaBackend::Context *ctx,
+  virtual int read_account_info(const DoutPrefixProvider *dpp,
+				RGWSI_MetaBackend::Context *ctx,
 				const std::string& account_id,
 				RGWAccountInfo *info,
 				RGWObjVersionTracker * const objv_tracker,
-				rgw_cache_entry_info * const cache_info,
+				real_time * const pmtime,
 				std::map<std::string, bufferlist> * const pattrs,
 				optional_yield y) = 0;
 
