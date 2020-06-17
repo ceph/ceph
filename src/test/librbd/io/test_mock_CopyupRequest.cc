@@ -175,23 +175,19 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
   void expect_get_parent_overlap(MockTestImageCtx& mock_image_ctx,
                                  librados::snap_t snap_id, uint64_t overlap,
                                  int r) {
-    if (mock_image_ctx.object_map != nullptr) {
-      EXPECT_CALL(mock_image_ctx, get_parent_overlap(snap_id, _))
-        .WillOnce(WithArg<1>(Invoke([overlap, r](uint64_t *o) {
-                               *o = overlap;
-                               return r;
-                             })));
-    }
+    EXPECT_CALL(mock_image_ctx, get_parent_overlap(snap_id, _))
+      .WillOnce(WithArg<1>(Invoke([overlap, r](uint64_t *o) {
+                             *o = overlap;
+                             return r;
+                           })));
   }
 
   void expect_prune_parent_extents(MockTestImageCtx& mock_image_ctx,
                                    uint64_t overlap, uint64_t object_overlap) {
-    if (mock_image_ctx.object_map != nullptr) {
-      EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, overlap))
-        .WillOnce(WithoutArgs(Invoke([object_overlap]() {
-                                return object_overlap;
-                              })));
-    }
+    EXPECT_CALL(mock_image_ctx, prune_parent_extents(_, overlap))
+      .WillOnce(WithoutArgs(Invoke([object_overlap]() {
+                              return object_overlap;
+                            })));
   }
 
   void expect_read_parent(MockTestImageCtx& mock_image_ctx,
