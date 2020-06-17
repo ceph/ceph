@@ -186,7 +186,7 @@ int OpInfo::set_from_op(
         if (is_promote)
           set_promote();
         add_class(std::move(cname), std::move(mname), is_read, is_write,
-                      cls->whitelisted);
+                      cls->allowed);
 	break;
       }
 
@@ -258,6 +258,6 @@ int OpInfo::set_from_op(
 ostream& operator<<(ostream& out, const OpInfo::ClassInfo& i)
 {
   out << "class " << i.class_name << " method " << i.method_name
-      << " rd " << i.read << " wr " << i.write << " wl " << i.whitelisted;
+      << " rd " << i.read << " wr " << i.write << " allowed " << i.allowed;
   return out;
 }
