@@ -185,7 +185,7 @@ def main(args):
         ifn = os.path.join(ctx.archive, 'info.yaml')
         if os.path.exists(ifn):
             with open(ifn, 'r') as fd:
-                info = yaml.load(fd.read())
+                info = yaml.safe_load(fd.read())
         if not ctx.pid:
             ctx.pid = info.get('pid')
             if not ctx.pid:
