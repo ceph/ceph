@@ -34,6 +34,15 @@ def humansize(nbytes):
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
+    def setUp(self):
+        super(TestCephFSShell, self).setUp()
+
+        conf_contents = "[cephfs-shell]\ncolors = False\ndebug = True\n"
+        confpath = self.mount_a.run_shell(args=['mktemp']).stdout.\
+            getvalue().strip()
+        sudo_write_file(self.mount_a.client_remote, confpath, conf_contents)
+        self.default_shell_conf_path = confpath
+
     def run_cephfs_shell_cmd(self, cmd, mount_x=None, shell_conf_path=None,
                              opts=None, stdout=None, stderr=None, stdin=None,
                              check_status=True):
@@ -41,13 +50,12 @@ class TestCephFSShell(CephFSTestCase):
         stderr = stderr or StringIO()
         if mount_x is None:
             mount_x = self.mount_a
-
         if isinstance(cmd, list):
             cmd = " ".join(cmd)
+        if not shell_conf_path:
+            shell_conf_path = self.default_shell_conf_path
 
-        args = ["cephfs-shell"]
-        if shell_conf_path:
-            args += ["-c", shell_conf_path]
+        args = ["cephfs-shell", "-c", shell_conf_path]
         if opts:
             args += opts
         args.extend(("--", cmd))
