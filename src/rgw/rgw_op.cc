@@ -361,7 +361,7 @@ static int get_obj_head(rgw::sal::RGWRadosStore *store, struct req_state *s,
 
   ret = read_op.read(0, s->cct->_conf->rgw_max_chunk_size, *pbl, s->yield);
 
-  return 0;
+  return ret;
 }
 
 struct multipart_upload_info
