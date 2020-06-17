@@ -33,9 +33,7 @@ First install the non-PyPI dependencies::
 
 Next, clone its `git repository <https://github.com/ceph/teuthology/>`__,
 create a `virtualenv <http://virtualenv.readthedocs.org/en/latest/>`__, and
-install dependencies. For python3, the instructions are given below. For
-python2, replace the ``requirements3.txt`` with ``requirements2.txt``, and
-replace ``python3`` with ``python2``::
+install dependencies. The instructions are given below::
 
     git clone https://github.com/ceph/teuthology/
     cd teuthology

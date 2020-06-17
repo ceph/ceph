@@ -155,22 +155,15 @@ if [ -z "$NO_CLOBBER" ] || [ ! -e ./$VENV ]; then
     virtualenv --python=$PYTHON $VENV
 fi
 
-PVER=$(./$VENV/bin/python --version 2>&1 | grep Python)
-LVER=${PVER#* }
-SVER=${LVER%%.*}
 
 # Upgrade pip first
 ./$VENV/bin/pip install --upgrade pip
 
 # Ensure setuptools is installed
-if [ "$SVER" = "2" ]; then
-    ./$VENV/bin/pip install setuptools==44
-else
-    ./$VENV/bin/pip install setuptools --upgrade
-fi
+./$VENV/bin/pip install setuptools --upgrade
 
 # Install all requirements
-./$VENV/bin/pip install --upgrade -r requirements${SVER}.txt
+./$VENV/bin/pip install --upgrade -r requirements3.txt
 
 # Check to make sure requirements are met
 ./$VENV/bin/pip check
