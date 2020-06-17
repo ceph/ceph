@@ -8,7 +8,6 @@ import tempfile
 import logging
 import getpass
 
-from six import ensure_str
 
 from teuthology import beanstalk
 from teuthology import report
@@ -240,9 +239,9 @@ def nuke_targets(targets_dict, owner):
         nuke_args,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT)
-    for line in iter(proc.stdout.readline, b''):
+    for line in proc.stdout:
         line = line.replace(b'\r', b'').replace(b'\n', b'')
-        log.info(ensure_str(line))
+        log.info(line.decode())
         sys.stdout.flush()
 
     os.unlink(target_file.name)
