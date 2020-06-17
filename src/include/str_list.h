@@ -117,9 +117,9 @@ inline std::string str_join(const std::vector<std::string>& v, const std::string
 {
   if (v.empty())
     return std::string();
-  std::vector<std::string>::const_iterator i = v.begin();
+  auto i = v.cbegin();
   std::string r = *i;
-  for (++i; i != v.end(); ++i) {
+  for (++i; i != v.cend(); ++i) {
     r += sep;
     r += *i;
   }
