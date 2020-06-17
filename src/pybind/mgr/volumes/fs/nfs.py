@@ -359,7 +359,7 @@ class FSExport(object):
             for export in export_list:
                ret, out, err = self.delete_export(cluster_id, None, export)
                if ret != 0:
-                   raise Exception("Failed to delete exports: {err} and {ret}")
+                   raise Exception(f"Failed to delete exports: {err} and {ret}")
             log.info(f"All exports successfully deleted for cluster id: {cluster_id}")
         except KeyError:
             log.info("No exports to delete")
