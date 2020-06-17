@@ -515,6 +515,7 @@ void RocksDBStore::add_column_family(const std::string& cf_name, uint32_t hash_l
   if (column.handles.size() <= shard_idx)
     column.handles.resize(shard_idx + 1);
   column.handles[shard_idx] = handle;
+  cf_ids_to_prefix.emplace(handle->GetID(), cf_name);
 }
 
 bool RocksDBStore::is_column_family(const std::string& prefix) {
@@ -1175,6 +1176,71 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
 }
 
+struct RocksDBStore::RocksWBHandler: public rocksdb::WriteBatch::Handler {
+  RocksWBHandler(const RocksDBStore& db) : db(db) {}
+  const RocksDBStore& db;
+  std::stringstream seen;
+  int num_seen = 0;
+
+  void dump(const char* op_name,
+	    uint32_t column_family_id,
+	    const rocksdb::Slice& key_in,
+	    const rocksdb::Slice* value = nullptr) {
+    string prefix;
+    string key;
+    ssize_t size = value ? value->size() : -1;
+    seen << std::endl << op_name << "(";
+
+    if (column_family_id == 0) {
+      db.split_key(key_in, &prefix, &key);
+    } else {
+      auto it = db.cf_ids_to_prefix.find(column_family_id);
+      ceph_assert(it != db.cf_ids_to_prefix.end());
+      prefix = it->second;
+      key = key_in.ToString();
+    }
+    seen << " prefix = " << prefix;
+    seen << " key = " << pretty_binary_string(key);
+    if (size != -1)
+      seen << " value size = " << std::to_string(size);
+    seen << ")";
+    num_seen++;
+  }
+  void Put(const rocksdb::Slice& key,
+	   const rocksdb::Slice& value) override {
+    dump("Put", 0, key, &value);
+  }
+  rocksdb::Status PutCF(uint32_t column_family_id, const rocksdb::Slice& key,
+			const rocksdb::Slice& value) override {
+    dump("PutCF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
+  }
+  void SingleDelete(const rocksdb::Slice& key) override {
+    dump("SingleDelete", 0, key);
+  }
+  rocksdb::Status SingleDeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    dump("SingleDeleteCF", column_family_id, key);
+    return rocksdb::Status::OK();
+  }
+  void Delete(const rocksdb::Slice& key) override {
+    dump("Delete", 0, key);
+  }
+  rocksdb::Status DeleteCF(uint32_t column_family_id, const rocksdb::Slice& key) override {
+    dump("DeleteCF", column_family_id, key);
+    return rocksdb::Status::OK();
+  }
+  void Merge(const rocksdb::Slice& key,
+	     const rocksdb::Slice& value) override {
+    dump("Merge", 0, key, &value);
+  }
+  rocksdb::Status MergeCF(uint32_t column_family_id, const rocksdb::Slice& key,
+			  const rocksdb::Slice& value) override {
+    dump("MergeCF", column_family_id, key, &value);
+    return rocksdb::Status::OK();
+  }
+  bool Continue() override { return num_seen < 50; }
+};
+
 int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t) 
 {
   // enable rocksdb breakdown
@@ -1188,16 +1254,16 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
     static_cast<RocksDBTransactionImpl *>(t.get());
   woptions.disableWAL = disableWAL;
   lgeneric_subdout(cct, rocksdb, 30) << __func__;
-  RocksWBHandler bat_txc;
+  RocksWBHandler bat_txc(*this);
   _t->bat.Iterate(&bat_txc);
-  *_dout << " Rocksdb transaction: " << bat_txc.seen << dendl;
+  *_dout << " Rocksdb transaction: " << bat_txc.seen.str() << dendl;
   
   rocksdb::Status s = db->Write(woptions, &_t->bat);
   if (!s.ok()) {
-    RocksWBHandler rocks_txc;
+    RocksWBHandler rocks_txc(*this);
     _t->bat.Iterate(&rocks_txc);
     derr << __func__ << " error: " << s.ToString() << " code = " << s.code()
-         << " Rocksdb transaction: " << rocks_txc.seen << dendl;
+         << " Rocksdb transaction: " << rocks_txc.seen.str() << dendl;
   }
 
   if (cct->_conf->rocksdb_perf) {
