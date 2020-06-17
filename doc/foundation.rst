@@ -45,7 +45,6 @@ General
 -------
 
 * `ARM <http://www.arm.com/>`_
-* `BoCloud <http://bocloud.com.cn/>`_
 * `Catalyst Cloud <https://catalystcloud.nz/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `Clyso <https://www.clyso.com/en/>`_
