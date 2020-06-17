@@ -10,7 +10,6 @@ import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 
-import { OrchestratorDocModalComponent } from '../../shared/components/orchestrator-doc-modal/orchestrator-doc-modal.component';
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
@@ -50,19 +49,6 @@ import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
 
 @NgModule({
-  entryComponents: [
-    OsdDetailsComponent,
-    OsdScrubModalComponent,
-    OsdFlagsModalComponent,
-    OsdRecvSpeedModalComponent,
-    OsdReweightModalComponent,
-    OsdPgScrubModalComponent,
-    OsdReweightModalComponent,
-    SilenceMatcherModalComponent,
-    OsdDevicesSelectionModalComponent,
-    OsdCreationPreviewModalComponent,
-    OrchestratorDocModalComponent
-  ],
   imports: [
     CommonModule,
     PerformanceCounterModule,

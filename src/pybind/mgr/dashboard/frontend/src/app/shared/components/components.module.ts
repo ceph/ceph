@@ -105,12 +105,6 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     AlertPanelComponent,
     PwdExpirationNotificationComponent,
     OrchestratorDocPanelComponent
-  ],
-  entryComponents: [
-    ModalComponent,
-    CriticalConfirmationModalComponent,
-    ConfirmationModalComponent,
-    FormModalComponent
   ]
 })
 export class ComponentsModule {}

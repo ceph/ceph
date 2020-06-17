@@ -2,6 +2,7 @@ import { DebugElement, LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
+import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { configureTestSuite } from 'ng-bullet';
@@ -23,8 +24,18 @@ import {
   PrometheusRule
 } from '../app/shared/models/prometheus-alerts';
 
-export function configureTestBed(configuration: any) {
-  configureTestSuite(() => TestBed.configureTestingModule(configuration));
+export function configureTestBed(configuration: any, entryComponents?: any) {
+  configureTestSuite(() => {
+    if (entryComponents) {
+      // Declare entryComponents without having to add them to a module
+      // This is needed since Jest doesn't yet support not declaring entryComponents
+      TestBed.configureTestingModule(configuration).overrideModule(BrowserDynamicTestingModule, {
+        set: { entryComponents: entryComponents }
+      });
+    } else {
+      TestBed.configureTestingModule(configuration);
+    }
+  });
 }
 
 export class PermissionHelper {
