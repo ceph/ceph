@@ -1119,7 +1119,7 @@ void Journal<I>::create_journaler() {
     m_image_ctx.config.template get_val<uint64_t>("rbd_journal_max_concurrent_object_sets");
   // TODO: a configurable filter to exclude certain peers from being
   // disconnected.
-  settings.whitelisted_laggy_clients = {IMAGE_CLIENT_ID};
+  settings.allowlisted_laggy_clients = {IMAGE_CLIENT_ID};
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
