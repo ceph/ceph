@@ -10,4 +10,4 @@ overrides:
         mon osdmap full prune txsize: 2
 tasks:
 - install:
-- ceph:
+- cephadm:
