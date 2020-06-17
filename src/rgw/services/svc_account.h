@@ -35,7 +35,7 @@ public:
 				const std::string& account_id,
 				RGWAccountInfo *info,
 				RGWObjVersionTracker * const objv_tracker,
-				rgw_cache_entry_info * const cache_info,
+				real_time * const pmtime,
 				map<std::string, bufferlist> * const pattrs,
 				optional_yield y) = 0;
 
