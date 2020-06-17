@@ -1,6 +1,5 @@
 import logging
 from copy import deepcopy
-from six import string_types as basestring
 
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider as lc_Provider
@@ -41,7 +40,7 @@ class Provisioner(object):
             self, provider, name, os_type=None, os_version=None,
             conf=None, user='ubuntu',
     ):
-        if isinstance(provider, basestring):
+        if isinstance(provider, str):
             provider = teuthology.provision.cloud.get_provider(provider)
         self.provider = provider
         self.name = decanonicalize_hostname(name)
