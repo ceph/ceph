@@ -3091,8 +3091,8 @@ int main(int argc, const char **argv)
   map<int, string> temp_url_keys;
   string bucket_id;
   string new_bucket_name;
-  Formatter *formatter = NULL;
-  Formatter *zone_formatter = nullptr;
+  std::unique_ptr<Formatter> formatter;
+  std::unique_ptr<Formatter> zone_formatter;
   int purge_data = false;
   int pretty_format = false;
   int show_log_entries = true;
@@ -3754,21 +3754,21 @@ int main(int argc, const char **argv)
   }
 
   if (format ==  "xml")
-    formatter = new XMLFormatter(pretty_format);
+    formatter = make_unique<XMLFormatter>(new XMLFormatter(pretty_format));
   else if (format == "json")
-    formatter = new JSONFormatter(pretty_format);
+    formatter = make_unique<JSONFormatter>(new JSONFormatter(pretty_format));
   else {
     cerr << "unrecognized format: " << format << std::endl;
     exit(1);
   }
 
-  zone_formatter = new JSONFormatter_PrettyZone(pretty_format);
+  zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(new JSONFormatter_PrettyZone(pretty_format));
 
   realm_name = g_conf()->rgw_realm;
   zone_name = g_conf()->rgw_zone;
   zonegroup_name = g_conf()->rgw_zonegroup;
 
-  RGWStreamFlusher f(formatter, cout);
+  RGWStreamFlusher f(formatter.get(), cout);
 
   // not a raw op if 'period update' needs to commit to master
   bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
@@ -3946,7 +3946,7 @@ int main(int argc, const char **argv)
 	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("period", period, formatter);
+	encode_json("period", period, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -3957,7 +3957,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 	formatter->open_object_section("period_get_current");
-	encode_json("current_period", period_id, formatter);
+	encode_json("current_period", period_id, formatter.get());
 	formatter->close_section();
 	formatter->flush(cout);
       }
@@ -3971,7 +3971,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 	formatter->open_object_section("periods_list");
-	encode_json("periods", periods, formatter);
+	encode_json("periods", periods, formatter.get());
 	formatter->close_section();
 	formatter->flush(cout);
       }
@@ -3980,7 +3980,7 @@ int main(int argc, const char **argv)
       {
         int ret = update_period(realm_id, realm_name, period_id, period_epoch,
                                 commit, remote, url, access_key, secret_key,
-                                formatter, yes_i_really_mean_it);
+                                formatter.get(), yes_i_really_mean_it);
 	if (ret < 0) {
 	  return -ret;
 	}
@@ -4026,7 +4026,7 @@ int main(int argc, const char **argv)
           return -ret;
         }
 
-        encode_json("period", period, formatter);
+        encode_json("period", period, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -4069,16 +4069,16 @@ int main(int argc, const char **argv)
           set_quota_info(period_config.bucket_quota, opt_cmd,
                          max_size, max_objects,
                          have_max_size, have_max_objects);
-          encode_json("bucket quota", period_config.bucket_quota, formatter);
+          encode_json("bucket quota", period_config.bucket_quota, formatter.get());
         } else if (quota_scope == "user") {
           set_quota_info(period_config.user_quota, opt_cmd,
                          max_size, max_objects,
                          have_max_size, have_max_objects);
-          encode_json("user quota", period_config.user_quota, formatter);
+          encode_json("user quota", period_config.user_quota, formatter.get());
         } else if (quota_scope.empty() && opt_cmd == OPT::GLOBAL_QUOTA_GET) {
           // if no scope is given for GET, print both
-          encode_json("bucket quota", period_config.bucket_quota, formatter);
-          encode_json("user quota", period_config.user_quota, formatter);
+          encode_json("bucket quota", period_config.bucket_quota, formatter.get());
+          encode_json("user quota", period_config.user_quota, formatter.get());
         } else {
           cerr << "ERROR: invalid quota scope specification. Please specify "
               "either --quota-scope=bucket, or --quota-scope=user" << std::endl;
@@ -4128,7 +4128,7 @@ int main(int argc, const char **argv)
           }
         }
 
-	encode_json("realm", realm, formatter);
+	encode_json("realm", realm, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4164,7 +4164,7 @@ int main(int argc, const char **argv)
           }
 	  return -ret;
 	}
-	encode_json("realm", realm, formatter);
+	encode_json("realm", realm, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4198,8 +4198,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 	formatter->open_object_section("realms_list");
-	encode_json("default_info", default_id, formatter);
-	encode_json("realms", realms, formatter);
+	encode_json("default_info", default_id, formatter.get());
+	encode_json("realms", realms, formatter.get());
 	formatter->close_section();
 	formatter->flush(cout);
       }
@@ -4217,8 +4217,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 	formatter->open_object_section("realm_periods_list");
-	encode_json("current_period", period_id, formatter);
-	encode_json("periods", periods, formatter);
+	encode_json("current_period", period_id, formatter.get());
+	encode_json("periods", periods, formatter.get());
 	formatter->close_section();
 	formatter->flush(cout);
       }
@@ -4297,7 +4297,7 @@ int main(int argc, const char **argv)
             cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
-	encode_json("realm", realm, formatter);
+	encode_json("realm", realm, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4386,7 +4386,7 @@ int main(int argc, const char **argv)
           }
         }
 
-        encode_json("realm", realm, formatter);
+        encode_json("realm", realm, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -4446,7 +4446,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        encode_json("zonegroup", zonegroup, formatter);
+        encode_json("zonegroup", zonegroup, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -4478,7 +4478,7 @@ int main(int argc, const char **argv)
           }
         }
 
-	encode_json("zonegroup", zonegroup, formatter);
+	encode_json("zonegroup", zonegroup, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4531,7 +4531,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-	encode_json("zonegroup", zonegroup, formatter);
+	encode_json("zonegroup", zonegroup, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4556,8 +4556,8 @@ int main(int argc, const char **argv)
 	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
 	}
 	formatter->open_object_section("zonegroups_list");
-	encode_json("default_info", default_zonegroup, formatter);
-	encode_json("zonegroups", zonegroups, formatter);
+	encode_json("default_info", default_zonegroup, formatter.get());
+	encode_json("zonegroups", zonegroups, formatter.get());
 	formatter->close_section();
 	formatter->flush(cout);
       }
@@ -4629,7 +4629,7 @@ int main(int argc, const char **argv)
           }
         }
 
-        encode_json("zonegroup", zonegroup, formatter);
+        encode_json("zonegroup", zonegroup, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -4676,7 +4676,7 @@ int main(int argc, const char **argv)
           }
         }
 
-	encode_json("zonegroup", zonegroup, formatter);
+	encode_json("zonegroup", zonegroup, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4714,7 +4714,7 @@ int main(int argc, const char **argv)
           return -ret;
         }
 
-        encode_json("zonegroup", zonegroup, formatter);
+        encode_json("zonegroup", zonegroup, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -4750,7 +4750,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-	encode_json("placement_targets", zonegroup.placement_targets, formatter);
+	encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4773,7 +4773,7 @@ int main(int argc, const char **argv)
 	  cerr << "failed to find a zonegroup placement target named '" << placement_id << "'" << std::endl;
 	  return -ENOENT;
 	}
-	encode_json("placement_targets", p->second, formatter);
+	encode_json("placement_targets", p->second, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -4849,7 +4849,7 @@ int main(int argc, const char **argv)
           return -ret;
         }
 
-        encode_json("placement_targets", zonegroup.placement_targets, formatter);
+        encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -4924,7 +4924,7 @@ int main(int argc, const char **argv)
           }
         }
 
-	encode_json("zone", zone, formatter);
+	encode_json("zone", zone, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -5001,7 +5001,7 @@ int main(int argc, const char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("zone", zone, formatter);
+	encode_json("zone", zone, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -5084,7 +5084,7 @@ int main(int argc, const char **argv)
           }
         }
 
-	encode_json("zone", zone, formatter);
+	encode_json("zone", zone, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -5109,8 +5109,8 @@ int main(int argc, const char **argv)
 	  cerr << "could not determine default zone: " << cpp_strerror(-ret) << std::endl;
 	}
 	formatter->open_object_section("zones_list");
-	encode_json("default_info", default_zone, formatter);
-	encode_json("zones", zones, formatter);
+	encode_json("default_info", default_zone, formatter.get());
+	encode_json("zones", zones, formatter.get());
 	formatter->close_section();
 	formatter->flush(cout);
       }
@@ -5211,7 +5211,7 @@ int main(int argc, const char **argv)
           }
         }
 
-        encode_json("zone", zone, formatter);
+        encode_json("zone", zone, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -5355,7 +5355,7 @@ int main(int argc, const char **argv)
           return -ret;
         }
 
-        encode_json("zone", zone, formatter);
+        encode_json("zone", zone, formatter.get());
         formatter->flush(cout);
       }
       break;
@@ -5367,7 +5367,7 @@ int main(int argc, const char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("placement_pools", zone.placement_pools, formatter);
+	encode_json("placement_pools", zone.placement_pools, formatter.get());
 	formatter->flush(cout);
       }
       break;
@@ -5389,7 +5389,7 @@ int main(int argc, const char **argv)
 	  cerr << "ERROR: zone placement target '" << placement_id << "' not found" << std::endl;
 	  return -ENOENT;
 	}
-	encode_json("placement_pools", p->second, formatter);
+	encode_json("placement_pools", p->second, formatter.get());
 	formatter->flush(cout);
       }
     default:
@@ -5702,7 +5702,7 @@ int main(int argc, const char **argv)
     {
       int ret = update_period(realm_id, realm_name, period_id, period_epoch,
                               commit, remote, url, access_key, secret_key,
-                              formatter, yes_i_really_mean_it);
+                              formatter.get(), yes_i_really_mean_it);
       if (ret < 0) {
 	return -ret;
       }
@@ -5730,7 +5730,7 @@ int main(int argc, const char **argv)
         return -ret;
       }
 
-      encode_json("period", period, formatter);
+      encode_json("period", period, formatter.get());
       formatter->flush(cout);
     }
     return 0;
@@ -5757,7 +5757,7 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role, formatter);
+      show_role_info(role, formatter.get());
       return 0;
     }
   case OPT::ROLE_DELETE:
@@ -5785,7 +5785,7 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role, formatter);
+      show_role_info(role, formatter.get());
       return 0;
     }
   case OPT::ROLE_MODIFY:
@@ -5828,7 +5828,7 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      show_roles_info(result, formatter);
+      show_roles_info(result, formatter.get());
       return 0;
     }
   case OPT::ROLE_POLICY_PUT:
@@ -5881,7 +5881,7 @@ int main(int argc, const char **argv)
         return -ret;
       }
       std::vector<string> policy_names = role.get_role_policy_names();
-      show_policy_names(policy_names, formatter);
+      show_policy_names(policy_names, formatter.get());
       return 0;
     }
   case OPT::ROLE_POLICY_GET:
@@ -5905,7 +5905,7 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      show_perm_policy(perm_policy, formatter);
+      show_perm_policy(perm_policy, formatter.get());
       return 0;
     }
   case OPT::ROLE_POLICY_DELETE:
@@ -5947,7 +5947,7 @@ int main(int argc, const char **argv)
       cerr << "could not fetch user info: " << err_msg << std::endl;
       return -ret;
     }
-    show_user_info(info, formatter);
+    show_user_info(info, formatter.get());
   }
 
   if (opt_cmd == OPT::POLICY) {
@@ -6061,7 +6061,7 @@ int main(int argc, const char **argv)
 
         for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
           rgw_bucket_dir_entry& entry = *iter;
-          encode_json("entry", entry, formatter);
+          encode_json("entry", entry, formatter.get());
         }
         formatter->flush(cout);
       } while (truncated && count < max_entries);
@@ -6245,7 +6245,7 @@ int main(int argc, const char **argv)
 
         if (show_log_entries) {
 
-	  rgw_format_ops_log_entry(entry, formatter);
+	  rgw_format_ops_log_entry(entry, formatter.get());
 	  formatter->flush(cout);
         }
 next:
@@ -6426,7 +6426,7 @@ next:
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    encode_json("olh", olh, formatter);
+    encode_json("olh", olh, formatter.get());
     formatter->flush(cout);
   }
 
@@ -6456,8 +6456,8 @@ next:
       return -ret;
     }
     formatter->open_object_section("result");
-    encode_json("is_truncated", is_truncated, formatter);
-    encode_json("log", log, formatter);
+    encode_json("is_truncated", is_truncated, formatter.get());
+    encode_json("log", log, formatter.get());
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -6490,7 +6490,7 @@ next:
       return -ret;
     }
 
-    encode_json("entry", entry, formatter);
+    encode_json("entry", entry, formatter.get());
     formatter->flush(cout);
   }
 
@@ -6568,7 +6568,7 @@ next:
         list<rgw_cls_bi_entry>::iterator iter;
         for (iter = entries.begin(); iter != entries.end(); ++iter) {
           rgw_cls_bi_entry& entry = *iter;
-          encode_json("entry", entry, formatter);
+          encode_json("entry", entry, formatter.get());
           marker = entry.idx;
         }
         formatter->flush(cout);
@@ -6889,7 +6889,7 @@ next:
     }
 
     return br.execute(num_shards, max_entries,
-                      verbose, &cout, formatter);
+                      verbose, &cout, formatter.get());
   }
 
   if (opt_cmd == OPT::RESHARD_ADD) {
@@ -6951,7 +6951,7 @@ next:
         }
         for (auto iter=entries.begin(); iter != entries.end(); ++iter) {
           cls_rgw_reshard_entry& entry = *iter;
-          encode_json("entry", entry, formatter);
+          encode_json("entry", entry, formatter.get());
           entry.get_key(&marker);
         }
         count += entries.size();
@@ -6992,7 +6992,7 @@ next:
       return -r;
     }
 
-    show_reshard_status(status, formatter);
+    show_reshard_status(status, formatter.get());
   }
 
   if (opt_cmd == OPT::RESHARD_PROCESS) {
@@ -7115,17 +7115,17 @@ next:
       bufferlist& bl = iter->second;
       bool handled = false;
       if (iter->first == RGW_ATTR_MANIFEST) {
-        handled = decode_dump<RGWObjManifest>("manifest", bl, formatter);
+        handled = decode_dump<RGWObjManifest>("manifest", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_ACL) {
-        handled = decode_dump<RGWAccessControlPolicy>("policy", bl, formatter);
+        handled = decode_dump<RGWAccessControlPolicy>("policy", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_ID_TAG) {
-        handled = dump_string("tag", bl, formatter);
+        handled = dump_string("tag", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_ETAG) {
-        handled = dump_string("etag", bl, formatter);
+        handled = dump_string("etag", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_COMPRESSION) {
-        handled = decode_dump<RGWCompressionInfo>("compression", bl, formatter);
+        handled = decode_dump<RGWCompressionInfo>("compression", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_DELETE_AT) {
-        handled = decode_dump<utime_t>("delete_at", bl, formatter);
+        handled = decode_dump<utime_t>("delete_at", bl, formatter.get());
       }
 
       if (!handled)
@@ -7134,7 +7134,7 @@ next:
 
     formatter->open_object_section("attrs");
     for (iter = other_attrs.begin(); iter != other_attrs.end(); ++iter) {
-      dump_string(iter->first.c_str(), iter->second, formatter);
+      dump_string(iter->first.c_str(), iter->second, formatter.get());
     }
     formatter->close_section();
     formatter->close_section();
@@ -7147,7 +7147,7 @@ next:
         cerr << "ERROR: need to specify bucket name" << std::endl;
         return EINVAL;
       }
-      do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter);
+      do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
     } else {
       RGWBucketAdminOp::check_index(store, bucket_op, f, null_yield);
     }
@@ -7192,7 +7192,7 @@ next:
 	cls_rgw_obj_chain& chain = info.chain;
 	for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
 	  cls_rgw_obj& obj = *liter;
-          encode_json("obj", obj, formatter);
+          encode_json("obj", obj, formatter.get());
 	}
 	formatter->close_section(); // objs
 	formatter->close_section(); // obj_chain
@@ -7279,7 +7279,7 @@ next:
       return -EIO;
     }
 
-    encode_json("result", config, formatter);
+    encode_json("result", config, formatter.get());
     formatter->flush(cout);
   }
 
@@ -7400,7 +7400,7 @@ next:
       if (!extra_info){
 	formatter->dump_string("job-id",it.first);
       } else {
-	encode_json("orphan_search_state", it.second, formatter);
+	encode_json("orphan_search_state", it.second, formatter.get());
       }
     }
     formatter->close_section();
@@ -7476,17 +7476,17 @@ next:
 
     {
       Formatter::ObjectSection os(*formatter, "result");
-      encode_json("stats", stats, formatter);
+      encode_json("stats", stats, formatter.get());
       utime_t last_sync_ut(last_stats_sync);
-      encode_json("last_stats_sync", last_sync_ut, formatter);
+      encode_json("last_stats_sync", last_sync_ut, formatter.get());
       utime_t last_update_ut(last_stats_update);
-      encode_json("last_stats_update", last_update_ut, formatter);
+      encode_json("last_stats_update", last_update_ut, formatter.get());
     }
     formatter->flush(cout);
   }
 
   if (opt_cmd == OPT::METADATA_GET) {
-    int ret = store->ctl()->meta.mgr->get(metadata_key, formatter, null_yield);
+    int ret = store->ctl()->meta.mgr->get(metadata_key, formatter.get(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7557,10 +7557,10 @@ next:
     formatter->close_section();
 
     if (max_entries_specified) {
-      encode_json("truncated", truncated, formatter);
-      encode_json("count", count, formatter);
+      encode_json("truncated", truncated, formatter.get());
+      encode_json("count", count, formatter.get());
       if (truncated) {
-        encode_json("marker", store->ctl()->meta.mgr->get_marker(handle), formatter);
+        encode_json("marker", store->ctl()->meta.mgr->get_marker(handle), formatter.get());
       }
       formatter->close_section();
     }
@@ -7609,7 +7609,7 @@ next:
 
         for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
           cls_log_entry& entry = *iter;
-          store->ctl()->meta.mgr->dump_log_entry(entry, formatter);
+          store->ctl()->meta.mgr->dump_log_entry(entry, formatter.get());
         }
         formatter->flush(cout);
       } while (truncated);
@@ -7644,7 +7644,7 @@ next:
       RGWMetadataLogInfo info;
       meta_log->get_info(i, &info);
 
-      ::encode_json("info", info, formatter);
+      ::encode_json("info", info, formatter.get());
 
       if (specified_shard_id)
         break;
@@ -7709,11 +7709,11 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_INFO) {
-    sync_info(opt_effective_zone_id, opt_bucket, zone_formatter);
+    sync_info(opt_effective_zone_id, opt_bucket, zone_formatter.get());
   }
 
   if (opt_cmd == OPT::SYNC_STATUS) {
-    sync_status(formatter);
+    sync_status(formatter.get());
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
@@ -7733,7 +7733,7 @@ next:
     }
 
     formatter->open_object_section("summary");
-    encode_json("sync_status", sync_status, formatter);
+    encode_json("sync_status", sync_status, formatter.get());
 
     uint64_t full_total = 0;
     uint64_t full_complete = 0;
@@ -7748,8 +7748,8 @@ next:
     }
 
     formatter->open_object_section("full_sync");
-    encode_json("total", full_total, formatter);
-    encode_json("complete", full_complete, formatter);
+    encode_json("total", full_total, formatter.get());
+    encode_json("complete", full_complete, formatter.get());
     formatter->close_section();
     formatter->close_section();
 
@@ -7814,10 +7814,10 @@ next:
         return -ret;
       }
       formatter->open_object_section("summary");
-      encode_json("shard_id", shard_id, formatter);
-      encode_json("marker", sync_marker, formatter);
-      encode_json("pending_buckets", pending_buckets, formatter);
-      encode_json("recovering_buckets", recovering_buckets, formatter);
+      encode_json("shard_id", shard_id, formatter.get());
+      encode_json("marker", sync_marker, formatter.get());
+      encode_json("pending_buckets", pending_buckets, formatter.get());
+      encode_json("recovering_buckets", recovering_buckets, formatter.get());
       formatter->close_section();
       formatter->flush(cout);
     } else {
@@ -7828,7 +7828,7 @@ next:
       }
 
       formatter->open_object_section("summary");
-      encode_json("sync_status", sync_status, formatter);
+      encode_json("sync_status", sync_status, formatter.get());
 
       uint64_t full_total = 0;
       uint64_t full_complete = 0;
@@ -7843,8 +7843,8 @@ next:
       }
 
       formatter->open_object_section("full_sync");
-      encode_json("total", full_total, formatter);
-      encode_json("complete", full_complete, formatter);
+      encode_json("total", full_total, formatter.get());
+      encode_json("complete", full_complete, formatter.get());
       formatter->close_section();
       formatter->close_section();
 
@@ -8017,7 +8017,7 @@ next:
 
     map<int, rgw_bucket_shard_sync_info>& sync_status = sync.get_sync_status();
 
-    encode_json("sync_status", sync_status, formatter);
+    encode_json("sync_status", sync_status, formatter.get());
     formatter->flush(cout);
   }
 
@@ -8079,7 +8079,7 @@ next:
 
       for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
-        encode_json("entry", entry, formatter);
+        encode_json("entry", entry, formatter.get());
 
         marker = entry.id;
       }
@@ -8114,7 +8114,7 @@ next:
 
     for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
       formatter->open_object_section("shard");
-      encode_json("shard_id", shard_id, formatter);
+      encode_json("shard_id", shard_id, formatter.get());
       formatter->open_array_section("entries");
 
       int count = 0;
@@ -8146,11 +8146,11 @@ next:
             continue;
           }
           formatter->open_object_section("entry");
-          encode_json("id", cls_entry.id, formatter);
-          encode_json("section", cls_entry.section, formatter);
-          encode_json("name", cls_entry.name, formatter);
-          encode_json("timestamp", cls_entry.timestamp, formatter);
-          encode_json("info", log_entry, formatter);
+          encode_json("id", cls_entry.id, formatter.get());
+          encode_json("section", cls_entry.section, formatter.get());
+          encode_json("name", cls_entry.name, formatter.get());
+          encode_json("timestamp", cls_entry.timestamp, formatter.get());
+          encode_json("info", log_entry, formatter.get());
           formatter->close_section();
           formatter->flush(cout);
         }
@@ -8231,7 +8231,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, zone_formatter, cout);
+    show_result(sync_policy, zone_formatter.get(), cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_GET) {
@@ -8245,7 +8245,7 @@ next:
     auto& groups = sync_policy.groups;
 
     if (!opt_group_id) {
-      show_result(groups, zone_formatter, cout);
+      show_result(groups, zone_formatter.get(), cout);
     } else {
       auto iter = sync_policy.groups.find(*opt_group_id);
       if (iter == sync_policy.groups.end()) {
@@ -8253,7 +8253,7 @@ next:
         return ENOENT;
       }
 
-      show_result(iter->second, zone_formatter, cout);
+      show_result(iter->second, zone_formatter.get(), cout);
     }
   }
 
@@ -8275,8 +8275,8 @@ next:
     }
 
     {
-      Formatter::ObjectSection os(*zone_formatter, "result");
-      encode_json("sync_policy", sync_policy, zone_formatter);
+      Formatter::ObjectSection os(*zone_formatter.get(), "result");
+      encode_json("sync_policy", sync_policy, zone_formatter.get());
     }
 
     zone_formatter->flush(cout);
@@ -8329,7 +8329,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, zone_formatter, cout);
+    show_result(sync_policy, zone_formatter.get(), cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_FLOW_REMOVE) {
@@ -8369,7 +8369,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, zone_formatter, cout);
+    show_result(sync_policy, zone_formatter.get(), cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_CREATE ||
@@ -8452,7 +8452,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, zone_formatter, cout);
+    show_result(sync_policy, zone_formatter.get(), cout);
   }
 
   if (opt_cmd == OPT::SYNC_GROUP_PIPE_REMOVE) {
@@ -8511,7 +8511,7 @@ next:
       return -ret;
     }
 
-    show_result(sync_policy, zone_formatter, cout);
+    show_result(sync_policy, zone_formatter.get(), cout);
   }
 
   if (opt_cmd == OPT::SYNC_POLICY_GET) {
@@ -8522,7 +8522,7 @@ next:
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    show_result(sync_policy, zone_formatter, cout);
+    show_result(sync_policy, zone_formatter.get(), cout);
   }
 
   if (opt_cmd == OPT::BILOG_TRIM) {
@@ -8561,7 +8561,7 @@ next:
       return -ret;
     }
     formatter->open_object_section("entries");
-    encode_json("markers", markers, formatter);
+    encode_json("markers", markers, formatter.get());
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -8628,12 +8628,12 @@ next:
       for (list<rgw_data_change_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_data_change_log_entry& entry = *iter;
         if (!extra_info) {
-          encode_json("entry", entry.entry, formatter);
+          encode_json("entry", entry.entry, formatter.get());
         } else {
-          encode_json("entry", entry, formatter);
+          encode_json("entry", entry, formatter.get());
         }
       }
-      formatter->flush(cout);
+      formatter.get()->flush(cout);
     } while (truncated && count < max_entries);
 
     formatter->close_section();
@@ -8650,7 +8650,7 @@ next:
       RGWDataChangesLogInfo info;
       store->svc()->datalog_rados->get_info(i, &info);
 
-      ::encode_json("info", info, formatter);
+      ::encode_json("info", info, formatter.get());
 
       if (specified_shard_id)
         break;
@@ -8860,7 +8860,7 @@ next:
       return -ret;
     }
     formatter->open_object_section("result");
-    encode_json("entry", result, formatter);
+    encode_json("entry", result, formatter.get());
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -8878,7 +8878,7 @@ next:
       return -ret;
     }
     formatter->open_object_section("result");
-    encode_json("entries", result, formatter);
+    encode_json("entries", result, formatter.get());
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -9025,7 +9025,7 @@ next:
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-      encode_json("result", result, formatter);
+      encode_json("result", result, formatter.get());
     } else {
       rgw_pubsub_user_topics result;
       int ret = ups.get_user_topics(&result);
@@ -9033,7 +9033,7 @@ next:
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-      encode_json("result", result, formatter);
+      encode_json("result", result, formatter.get());
     }
     formatter->flush(cout);
   }
@@ -9056,7 +9056,7 @@ next:
       cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    encode_json("topic", topic, formatter);
+    encode_json("topic", topic, formatter.get());
     formatter->flush(cout);
   }
 
@@ -9103,7 +9103,7 @@ next:
       cerr << "ERROR: could not get subscription info: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    encode_json("sub", sub_conf, formatter);
+    encode_json("sub", sub_conf, formatter.get());
     formatter->flush(cout);
   }
 
@@ -9156,7 +9156,7 @@ next:
       cerr << "ERROR: could not list events: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    encode_json("result", *sub, formatter);
+    encode_json("result", *sub, formatter.get());
     formatter->flush(cout);
  }
 
