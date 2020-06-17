@@ -49,7 +49,7 @@ function(distutils_add_cython_module target name src)
   string(STRIP "${CMAKE_CXX_COMPILER_ARG1}" cxx_compiler_arg1)
   # Note: no quotes, otherwise distutils will execute "/usr/bin/ccache gcc"
   # CMake's implicit conversion between strings and lists is wonderful, isn't it?
-  string(REPLACE " " ";" cflags ${CMAKE_C_FLAGS})
+  set(cflags ${COMPILE_OPTIONS})
   list(APPEND cflags -iquote${CMAKE_SOURCE_DIR}/src/include -w)
   # This little bit of magic wipes out __Pyx_check_single_interpreter()
   # Note: this is reproduced in distutils_install_cython_module
