@@ -5,6 +5,7 @@ import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
@@ -97,6 +98,7 @@ describe('OsdListComponent', () => {
       ToastrModule.forRoot(),
       CephModule,
       ReactiveFormsModule,
+      NgbDropdownModule,
       RouterTestingModule,
       CoreModule,
       RouterTestingModule
@@ -360,7 +362,7 @@ describe('OsdListComponent', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
       const toClassName = TestBed.inject(TableActionsComponent).toClassName;
       const getActionClasses = (action: CdTableAction) =>
-        tableActionElement.query(By.css(`.${toClassName(action.name)} .dropdown-item`)).classes;
+        tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action.name)}`)).classes;
 
       component.tableActions.forEach((action) => {
         if (action.name === 'Create') {

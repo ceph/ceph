@@ -5,7 +5,6 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
 import { SharedModule } from '../../shared/shared.module';
@@ -25,7 +24,6 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     SharedModule,
     RouterModule,
     ReactiveFormsModule,
-    BsDropdownModule,
     NgbTooltipModule,
     BlockModule,
     NgBootstrapFormValidationModule

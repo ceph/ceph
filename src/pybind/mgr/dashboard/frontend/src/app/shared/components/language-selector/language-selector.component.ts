@@ -16,17 +16,18 @@ export class LanguageSelectorComponent implements OnInit {
   @Input()
   isDropdown = true;
 
-  supportedLanguages: Record<string, any> = SupportedLanguages;
+  supportedLanguages: Record<string, any> = {};
   selectedLanguage: string;
 
   constructor(private localeService: BsLocaleService, private languageService: LanguageService) {}
 
   ngOnInit() {
     this.selectedLanguage = this.languageService.getLocale();
+
     this.defineUsedLanguage();
 
     this.languageService.getLanguages().subscribe((langs) => {
-      this.supportedLanguages = _.pick(this.supportedLanguages, langs) as Object;
+      this.supportedLanguages = _.pick(SupportedLanguages, langs) as Object;
     });
   }
 

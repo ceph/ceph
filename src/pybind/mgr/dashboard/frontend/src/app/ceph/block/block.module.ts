@@ -7,7 +7,6 @@ import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { TreeModule } from 'angular-tree-component';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
@@ -59,7 +58,6 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     FormsModule,
     ReactiveFormsModule,
     NgbNavModule,
-    BsDropdownModule.forRoot(),
     BsDatepickerModule.forRoot(),
     NgbTooltipModule,
     ModalModule.forRoot(),

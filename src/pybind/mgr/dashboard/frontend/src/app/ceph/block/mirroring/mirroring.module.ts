@@ -5,7 +5,6 @@ import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 
 import { SharedModule } from '../../../shared/shared.module';
@@ -38,7 +37,6 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     FormsModule,
     ReactiveFormsModule,
     NgbProgressbarModule,
-    BsDropdownModule.forRoot(),
     ModalModule.forRoot(),
     NgBootstrapFormValidationModule
   ],
