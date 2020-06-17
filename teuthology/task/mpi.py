@@ -5,7 +5,6 @@ import logging
 import re
 
 from teuthology import misc as teuthology
-from six import string_types as basestring
 
 log = logging.getLogger(__name__)
 
@@ -92,7 +91,7 @@ def task(ctx, config):
     remotes = []
     master_remote = None
     if 'nodes' in config:
-        if isinstance(config['nodes'], basestring) and config['nodes'] == 'all':
+        if isinstance(config['nodes'], str) and config['nodes'] == 'all':
             for role in  teuthology.all_roles(ctx.cluster):
                 (remote,) = ctx.cluster.only(role).remotes.keys()
                 ip,port = remote.ssh.get_transport().getpeername()

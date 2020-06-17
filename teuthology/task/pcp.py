@@ -13,9 +13,6 @@ from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 
 from teuthology import misc
-
-from six import string_types as basestring
-
 from teuthology.task import Task
 
 log = logging.getLogger(__name__)
@@ -56,7 +53,7 @@ class PCPArchive(PCPDataSource):
 
     @staticmethod
     def _format_time(seconds):
-        if isinstance(seconds, basestring):
+        if isinstance(seconds, str):
             return seconds
         return "@ %s" % time.asctime(time.gmtime(seconds))
 
@@ -91,7 +88,7 @@ class GrafanaGrapher(PCPGrapher):
 
     @staticmethod
     def _format_time(seconds):
-        if isinstance(seconds, basestring):
+        if isinstance(seconds, str):
             return seconds
         seconds = int(seconds)
         dt = datetime.datetime.fromtimestamp(seconds, dateutil.tz.tzutc())
