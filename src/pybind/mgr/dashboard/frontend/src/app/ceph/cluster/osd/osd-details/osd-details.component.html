@@ -7,16 +7,14 @@
       <a ngbNavLink
          i18n>Devices</a>
       <ng-template ngbNavContent>
-        <cd-device-list *ngIf="osd.loaded && osd.id !== null"
-                        [osdId]="osd.id"></cd-device-list>
+        <cd-device-list [osdId]="osd?.id"></cd-device-list>
       </ng-template>
     </li>
     <li ngbNavItem>
       <a ngbNavLink
          i18n>Attributes (OSD map)</a>
       <ng-template ngbNavContent>
-        <cd-table-key-value *ngIf="osd.loaded"
-                            [data]="osd.details.osd_map">
+        <cd-table-key-value [data]="osd?.details?.osd_map">
         </cd-table-key-value>
       </ng-template>
     </li>
@@ -24,9 +22,9 @@
       <a ngbNavLink
          i18n>Metadata</a>
       <ng-template ngbNavContent>
-        <cd-table-key-value *ngIf="osd.loaded && osd.details.osd_metadata; else noMetaData"
+        <cd-table-key-value *ngIf="osd?.details?.osd_metadata; else noMetaData"
                             (fetchData)="refresh()"
-                            [data]="osd.details.osd_metadata">
+                            [data]="osd?.details?.osd_metadata">
         </cd-table-key-value>
         <ng-template #noMetaData>
           <cd-alert-panel type="warning"
@@ -38,16 +36,16 @@
       <a ngbNavLink
          i18n>Device health</a>
       <ng-template ngbNavContent>
-        <cd-smart-list [osdId]="osd.id"></cd-smart-list>
+        <cd-smart-list [osdId]="osd?.id"></cd-smart-list>
       </ng-template>
     </li>
     <li ngbNavItem>
       <a ngbNavLink
          i18n>Performance counter</a>
       <ng-template ngbNavContent>
-        <cd-table-performance-counter *ngIf="osd.loaded"
+        <cd-table-performance-counter *ngIf="osd?.details"
                                       serviceType="osd"
-                                      [serviceId]="osd.id">
+                                      [serviceId]="osd?.id">
         </cd-table-performance-counter>
       </ng-template>
     </li>
@@ -55,20 +53,20 @@
       <a ngbNavLink
          i18n>Histogram</a>
       <ng-template ngbNavContent>
-        <cd-alert-panel *ngIf="osd.loaded && osd.histogram_failed"
+        <cd-alert-panel *ngIf="osd?.histogram_failed"
                         type="warning"
-                        i18n>Histogram not available: {{ osd.histogram_failed }}</cd-alert-panel>
+                        i18n>Histogram not available: {{ osd?.histogram_failed }}</cd-alert-panel>
 
         <div class="row"
-             *ngIf="osd.loaded && osd.details.histogram">
+             *ngIf="osd?.details?.histogram">
           <div class="col-md-6">
             <h4 i18n>Writes</h4>
-            <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_w_latency_in_bytes_histogram">
+            <cd-osd-performance-histogram [histogram]="osd?.details?.histogram?.osd?.op_w_latency_in_bytes_histogram">
             </cd-osd-performance-histogram>
           </div>
           <div class="col-md-6">
             <h4 i18n>Reads</h4>
-            <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_r_latency_out_bytes_histogram">
+            <cd-osd-performance-histogram [histogram]="osd?.details?.histogram?.osd?.op_r_latency_out_bytes_histogram">
             </cd-osd-performance-histogram>
           </div>
         </div>
