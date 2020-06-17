@@ -1,5 +1,6 @@
 import { DatePipe } from '@angular/common';
-import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { HostService } from '../../../shared/api/host.service';
 import { OsdService } from '../../../shared/api/osd.service';
@@ -12,7 +13,7 @@ import { CdDevice } from '../../../shared/models/devices';
   templateUrl: './device-list.component.html',
   styleUrls: ['./device-list.component.scss']
 })
-export class DeviceListComponent implements OnInit {
+export class DeviceListComponent implements OnChanges, OnInit {
   @Input()
   hostname = '';
   @Input()
@@ -40,12 +41,6 @@ export class DeviceListComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    const updateDevicesFn = (devices: CdDevice[]) => (this.devices = devices);
-    if (this.hostname) {
-      this.hostService.getDevices(this.hostname).subscribe(updateDevicesFn);
-    } else if (this.osdId !== null) {
-      this.osdService.getDevices(this.osdId).subscribe(updateDevicesFn);
-    }
     this.columns = [
       { prop: 'devid', name: this.i18n('Device ID'), minWidth: 200 },
       {
@@ -78,5 +73,14 @@ export class DeviceListComponent implements OnInit {
       { prop: 'location', name: this.i18n('Device Name'), cellTemplate: this.locationTemplate },
       { prop: 'readableDaemons', name: this.i18n('Daemons') }
     ];
+  }
+
+  ngOnChanges() {
+    const updateDevicesFn = (devices: CdDevice[]) => (this.devices = devices);
+    if (this.hostname) {
+      this.hostService.getDevices(this.hostname).subscribe(updateDevicesFn);
+    } else if (this.osdId !== null) {
+      this.osdService.getDevices(this.osdId).subscribe(updateDevicesFn);
+    }
   }
 }
