@@ -1,7 +1,6 @@
 include(GetGitRevisionDescription)
 include(CheckCXXCompilerFlag)
 
-include(GNUInstallDirs)
 # for erasure and compressor plugins
 set(CEPH_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
 set(CEPH_INSTALL_FULL_PKGLIBDIR ${CMAKE_INSTALL_FULL_LIBDIR}/${PROJECT_NAME})
