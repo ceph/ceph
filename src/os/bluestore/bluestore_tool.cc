@@ -193,7 +193,10 @@ void log_dump(
   const string& path,
   const vector<string>& devs)
 {
-  BlueFS* fs = open_bluefs(cct, path, devs);
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+
+  add_devices(fs, cct, devs);
   int r = fs->log_dump();
   if (r < 0) {
     cerr << "log_dump failed" << ": "
