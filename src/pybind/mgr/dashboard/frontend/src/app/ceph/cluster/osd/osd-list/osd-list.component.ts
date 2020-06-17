@@ -418,7 +418,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
           this.osdService.update(selectedOsd.id, values.deviceClass).subscribe(() => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Updated OSD "{{id}}"', {
+              this.i18n(`Updated OSD '{{id}}'`, {
                 id: selectedOsd.id
               })
             );

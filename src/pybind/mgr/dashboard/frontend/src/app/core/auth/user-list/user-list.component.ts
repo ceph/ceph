@@ -137,7 +137,7 @@ export class UserListComponent implements OnInit {
         this.modalRef.hide();
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Deleted user "{{username}}"', { username: username })
+          this.i18n(`Deleted user '{{username}}'`, { username: username })
         );
       },
       () => {
@@ -152,8 +152,8 @@ export class UserListComponent implements OnInit {
     if (sessionUsername === username) {
       this.notificationService.show(
         NotificationType.error,
-        this.i18n('Failed to delete user "{{username}}"', { username: username }),
-        this.i18n('You are currently logged in as "{{username}}".', { username: username })
+        this.i18n(`Failed to delete user '{{username}}'`, { username: username }),
+        this.i18n(`You are currently logged in as '{{username}}'.`, { username: username })
       );
       return;
     }

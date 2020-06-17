@@ -189,7 +189,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Updated Object Gateway bucket "{{bid}}".', values)
+              this.i18n(`Updated Object Gateway bucket '{{bid}}'.`, values)
             );
             this.goToListView();
           },
@@ -215,7 +215,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit {
           () => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Created Object Gateway bucket "{{bid}}"', values)
+              this.i18n(`Created Object Gateway bucket '{{bid}}'`, values)
             );
             this.goToListView();
           },

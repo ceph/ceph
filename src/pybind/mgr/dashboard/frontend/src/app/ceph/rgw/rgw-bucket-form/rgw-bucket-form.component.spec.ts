@@ -204,7 +204,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Created Object Gateway bucket ""'
+        `Created Object Gateway bucket ''`
       );
     });
 
@@ -215,7 +215,7 @@ describe('RgwBucketFormComponent', () => {
       component.submit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Updated Object Gateway bucket "".'
+        `Updated Object Gateway bucket ''.`
       );
     });
   });
