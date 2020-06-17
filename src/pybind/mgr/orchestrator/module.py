@@ -885,7 +885,6 @@ Usage:
             placement=PlacementSpec.from_string(placement),
         )
 
-        spec.validate_add()
         completion = self.add_nfs(spec)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
