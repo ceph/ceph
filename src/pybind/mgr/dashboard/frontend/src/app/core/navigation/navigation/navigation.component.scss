@@ -161,7 +161,7 @@ $sidebar-width: 200px;
     bottom: 0;
     left: 0;
     z-index: 999;
-    color: #fff;
+    color: $color-solid-white;
     transition: all 0.3s;
 
     &.active {
@@ -175,7 +175,7 @@ $sidebar-width: 200px;
       }
 
       p {
-        color: #fff;
+        color: $color-solid-white;
         padding: 10px;
       }
 
@@ -183,10 +183,10 @@ $sidebar-width: 200px;
         padding: 10px;
         font-size: 1.1em;
         display: block;
-        color: #fff;
+        color: $color-solid-white;
 
         &:hover {
-          color: #fff;
+          color: $color-solid-white;
           background: $color-primary;
         }
 
@@ -199,7 +199,7 @@ $sidebar-width: 200px;
 
       li.active > a,
       li > a a[aria-expanded='true'] {
-        color: #fff;
+        color: $color-solid-white;
       }
     }
   }
