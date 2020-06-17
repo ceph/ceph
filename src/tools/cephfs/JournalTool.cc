@@ -700,7 +700,7 @@ int JournalTool::recover_dentries(
 
   // Replay fullbits (dentry+inode)
   for (const auto& frag : metablob.lump_order) {
-    EMetaBlob::dirlump const &lump = metablob.lump_map.find(frag)->second;
+    EMetaBlob::dirlump const &lump = metablob.lm_get(frag);
     lump._decode_bits();
     object_t frag_oid = InodeStore::get_object_name(frag.ino, frag.frag, "");
 

@@ -291,7 +291,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 
   while (true) {
     // already have this dir?  (we must always add in order)
-    if (lump_map.count(dir->dirfrag())) {
+    if (lm_exists(dir->dirfrag())) {
       dout(20) << "EMetaBlob::add_dir_context(" << dir << ") have lump " << dir->dirfrag() << dendl;
       break;
     }
@@ -769,9 +769,10 @@ void EMetaBlob::dirlump::generate_test_instances(std::list<dirlump*>& ls)
  */
 void EMetaBlob::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   encode(lump_order, bl);
   encode(lump_map, bl, features);
+//  encode(lump_vec, bl, features);
   encode(roots, bl, features);
   encode(table_tids, bl);
   encode(opened_ino, bl);
@@ -801,7 +802,12 @@ void EMetaBlob::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
   decode(lump_order, bl);
-  decode(lump_map, bl);
+  if (struct_v >= 9) {
+    decode(lump_map, bl);
+//    decode(lump_vec, bl);
+  } else {
+    ceph_assert(0 == "don't bother handling this yet");
+  }
   if (struct_v >= 4) {
     decode(roots, bl);
   } else {
@@ -859,7 +865,7 @@ void EMetaBlob::get_inodes(
     std::set<inodeno_t> &inodes) const
 {
   // For all dirlumps in this metablob
-  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+  for (auto i = lump_map.begin(); i != lump_map.end(); ++i) {
     // Record inode of dirlump
     inodeno_t const dir_ino = i->first.ino;
     inodes.insert(dir_ino);
@@ -887,7 +893,7 @@ void EMetaBlob::get_inodes(
  */
 void EMetaBlob::get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries) const
 {
-  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+  for (auto i = lump_map.begin(); i != lump_map.end(); ++i) {
     dirlump const &dl = i->second;
     dirfrag_t const &df = i->first;
 
@@ -929,7 +935,7 @@ void EMetaBlob::get_paths(
   std::map<inodeno_t, Location> ino_locations;
 
   // Special case: operations on root inode populate roots but not dirlumps
-  if (lump_map.empty() && !roots.empty()) {
+  if (lm_empty() && !roots.empty()) {
     paths.push_back("/");
     return;
   }
@@ -937,7 +943,7 @@ void EMetaBlob::get_paths(
   // First pass
   // ==========
   // Build a tiny local metadata cache for the path structure in this metablob
-  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+  for (auto i = lump_map.begin(); i != lump_map.end(); ++i) {
     inodeno_t const dir_ino = i->first.ino;
     dirlump const &dl = i->second;
     dl._decode_bits();
@@ -964,7 +970,7 @@ void EMetaBlob::get_paths(
   // Second pass
   // ===========
   // Output paths for all childless nodes in the metablob
-  for (std::map<dirfrag_t, dirlump>::const_iterator i = lump_map.begin(); i != lump_map.end(); ++i) {
+  for (auto i = lump_map.begin(); i != lump_map.end(); ++i) {
     inodeno_t const dir_ino = i->first.ino;
     dirlump const &dl = i->second;
     dl._decode_bits();
@@ -1017,7 +1023,7 @@ void EMetaBlob::dump(Formatter *f) const
     f->dump_stream("dirfrag") << d;
     f->close_section(); // dirfrag
     f->open_object_section("dirlump");
-    lump_map.at(d).dump(f);
+    lm_get(d).dump(f);
     f->close_section(); // dirlump
     f->close_section(); // lump
   }
@@ -1097,7 +1103,7 @@ void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
 
 void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 {
-  dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
+  dout(10) << "EMetaBlob.replay " << lm_size() << " dirlumps by " << client_name << dendl;
 
   ceph_assert(logseg);
 
@@ -1127,7 +1133,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
     int nnull = 0;
     for (const auto& lp : lump_order) {
-      dirlump &lump = lump_map[lp];
+      dirlump &lump = lm_get_or_add(lp);
       if (lump.nnull) {
 	dout(10) << "EMetaBlob.replay found null dentry in dir " << lp << dendl;
 	nnull += lump.nnull;
@@ -1144,7 +1150,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   int count = 0;
   for (const auto& lp : lump_order) {
     dout(10) << "EMetaBlob.replay dir " << lp << dendl;
-    dirlump &lump = lump_map[lp];
+    dirlump &lump = lm_get_or_add(lp);
 
     // the dir 
     CDir *dir = mds->mdcache->get_force_dirfrag(lp, true);

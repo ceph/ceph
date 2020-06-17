@@ -214,8 +214,8 @@ public:
 
   public:
     dirlump() : state(0), nfull(0), nremote(0), nnull(0), dn_decoded(true) { }
-    dirlump(const dirlump&) = delete;
-    dirlump& operator=(const dirlump&) = delete;
+//    dirlump(const dirlump&) = delete;
+//    dirlump& operator=(const dirlump&) = delete;
     
     bool is_complete() const { return state & STATE_COMPLETE; }
     void mark_complete() { state |= STATE_COMPLETE; }
@@ -304,7 +304,9 @@ public:
 
   // my lumps.  preserve the order we added them in a list.
   vector<dirfrag_t>         lump_order;
-  map<dirfrag_t, dirlump> lump_map;
+//  map<dirfrag_t, dirlump> lump_map;
+//  vector<pair<dirfrag_t, dirlump>> lump_vec;
+  unordered_map<dirfrag_t, dirlump> lump_map;
   list<fullbit> roots;
 public:
   vector<pair<__u8,version_t> > table_tids;  // tableclient transactions
@@ -359,9 +361,77 @@ private:
   ~EMetaBlob() { }
   EMetaBlob& operator=(const EMetaBlob&) = delete;
 
+  dirlump& lm_get_or_add(const dirfrag_t& df) {
+    return lump_map[df];
+/*
+    auto it = find_if(
+        lump_vec.begin(),
+        lump_vec.end(),
+        [&df](const std::pair<dirfrag_t, dirlump>& element) { return element.first == df;}
+    );
+    if (it == lump_vec.end()) {
+      lump_vec.push_back(make_pair(df, dirlump()));
+      return lump_vec.back().second;
+    }
+    return it->second;
+*/
+}
+
+  dirlump& lm_get(const dirfrag_t& df) {
+    return lump_map.at(df);
+/*
+    auto it = find_if(
+	lump_vec.begin(),
+	lump_vec.end(),
+        [&df](const std::pair<dirfrag_t, dirlump>& element) { return element.first == df;}
+    );
+    if (it == lump_vec.end()) {
+      throw std::out_of_range("");
+    }
+    return it->second;
+*/
+  }
+
+  const dirlump& lm_get(const dirfrag_t& df) const {
+    return lump_map.at(df);
+/*
+    auto it = find_if(
+        lump_vec.begin(),
+        lump_vec.end(),
+        [&df](const std::pair<dirfrag_t, dirlump>& element) { return element.first == df;}
+    );
+    if (it == lump_vec.end()) {
+      throw std::out_of_range("");
+    }
+    return it->second;
+*/
+  }
+
+  int lm_size() const {
+    return lump_map.size();
+//    return lump_vec.size();
+  }
+
+  bool lm_exists(const dirfrag_t& df) const {
+    return (lump_map.count(df) > 0);
+/*
+    auto it = find_if(
+        lump_vec.begin(),
+        lump_vec.end(),
+        [&df](const std::pair<dirfrag_t, dirlump>& element) { return element.first == df;}
+    );
+    return it != lump_vec.end();
+*/
+  }
+
+  bool lm_empty() const {
+    return lump_map.empty();
+//    return lump_vec.empty();
+  }
+
   void print(ostream& out) {
     for (const auto &p : lump_order)
-      lump_map[p].print(p, out);
+      lm_get_or_add(p).print(p, out);
   }
 
   void add_client_req(metareqid_t r, uint64_t tid=0) {
@@ -545,10 +615,10 @@ private:
   dirlump& add_dir(dirfrag_t df, const fnode_t *pf, version_t pv, bool dirty,
 		   bool complete=false, bool isnew=false,
 		   bool importing=false, bool dirty_dft=false) {
-    if (lump_map.count(df) == 0)
+    if (!lm_exists(df))
       lump_order.push_back(df);
 
-    dirlump& l = lump_map[df];
+    dirlump& l = lm_get_or_add(df);
     l.fnode = *pf;
     l.fnode.version = pv;
     if (complete) l.mark_complete();
@@ -574,7 +644,7 @@ private:
   void print(ostream& out) const {
     out << "[metablob";
     if (!lump_order.empty()) 
-      out << " " << lump_order.front() << ", " << lump_map.size() << " dirs";
+      out << " " << lump_order.front() << ", " << lm_size() << " dirs";
     if (!table_tids.empty())
       out << " table_tids=" << table_tids;
     if (allocated_ino || preallocated_inos.size()) {
