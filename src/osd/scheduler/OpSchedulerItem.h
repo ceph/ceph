@@ -293,7 +293,7 @@ public:
   }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGSnapTrim(pgid=" << get_pgid()
-	       << "epoch_queued=" << epoch_queued
+	       << " epoch_queued=" << epoch_queued
 	       << ")";
   }
   void run(
@@ -341,8 +341,8 @@ public:
   }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecovery(pgid=" << get_pgid()
-	       << "epoch_queued=" << epoch_queued
-	       << "reserved_pushes=" << reserved_pushes
+	       << " epoch_queued=" << epoch_queued
+	       << " reserved_pushes=" << reserved_pushes
 	       << ")";
   }
   uint64_t get_reserved_pushes() const final {
