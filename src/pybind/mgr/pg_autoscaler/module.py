@@ -407,7 +407,7 @@ class PgAutoscaler(MgrModule):
         for pool_id in list(self._event):
             ev = self._event[pool_id]
             pool_data = pools.get(pool_id)
-            if pool_data is None or pool_data['pg_num'] == pool_data['pg_num_target']:
+            if pool_data is None or pool_data['pg_num'] == pool_data['pg_num_target'] or ev.pg_num == ev.pg_num_target:
                 # pool is gone or we've reached our target
                 self.remote('progress', 'complete', ev.ev_id)
                 del self._event[pool_id]
