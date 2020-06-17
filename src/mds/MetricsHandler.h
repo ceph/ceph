@@ -97,6 +97,7 @@ private:
   void handle_payload(Session *session, const UnknownPayload &payload);
 
   void set_next_seq(version_t seq);
+  void reset_seq();
 
   void handle_client_metrics(const cref_t<MClientMetrics> &m);
   void handle_mds_ping(const cref_t<MMDSPing> &m);
