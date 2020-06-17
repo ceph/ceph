@@ -434,7 +434,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   }
 
   private getModalQuotaTitle(action: string, path: string): string {
-    return this.i18n("{{action}} CephFS {{quotaName}} quota for '{{path}}'", {
+    return this.i18n(`{{action}} CephFS {{quotaName}} quota for '{{path}}'`, {
       action,
       quotaName: this.getQuotaName(),
       path
@@ -450,7 +450,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   }
 
   private getQuotaValueFromPathMsg(value: number, path: string): string {
-    return this.i18n("{{quotaName}} quota {{value}} from '{{path}}'", {
+    return this.i18n(`{{quotaName}} quota {{value}} from '{{path}}'`, {
       value: this.isBytesQuotaSelected() ? this.dimlessBinaryPipe.transform(value) : value,
       quotaName: this.getQuotaName(),
       path
@@ -526,7 +526,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
                 ? this.i18n('in order to inherit {{quotaValue}}', {
                     quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
                   })
-                : this.i18n("which isn't used because of the inheritance of {{quotaValue}}", {
+                : this.i18n(`which isn't used because of the inheritance of {{quotaValue}}`, {
                     quotaValue: this.getQuotaValueFromPathMsg(nextMax.value, nextMax.path)
                   })
               : this.i18n('in order to have no quota on the directory')
@@ -556,7 +556,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           this.cephfsService.mkSnapshot(this.id, path, values.name).subscribe((name) => {
             this.notificationService.show(
               NotificationType.success,
-              this.i18n('Created snapshot "{{name}}" for "{{path}}"', {
+              this.i18n(`Created snapshot '{{name}}' for '{{path}}'`, {
                 name: name,
                 path: path
               })
@@ -690,7 +690,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
       this.cephfsService.rmSnapshot(this.id, path, name).subscribe(() => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Deleted snapshot "{{name}}" for "{{path}}"', {
+          this.i18n(`Deleted snapshot '{{name}}' for '{{path}}'`, {
             name: name,
             path: path
           })

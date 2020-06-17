@@ -296,7 +296,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Created Object Gateway user ""'
+        `Created Object Gateway user ''`
       );
     });
 
@@ -307,7 +307,7 @@ describe('RgwUserFormComponent', () => {
       component.onSubmit();
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        'Updated Object Gateway user ""'
+        `Updated Object Gateway user ''`
       );
     });
   });
