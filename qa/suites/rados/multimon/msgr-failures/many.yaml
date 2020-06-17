@@ -5,5 +5,5 @@ overrides:
         ms inject socket failures: 1000
         mon client directed command retry: 5
         mon mgr beacon grace: 90
-    log-whitelist:
+    log-ignorelist:
       - \(OSD_SLOW_PING_TIME

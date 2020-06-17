@@ -200,13 +200,13 @@ def ceph_log(ctx, config):
             return None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-whitelist')) is not None:
+                             config.get('log-ignorelist')) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-whitelist'])
+                    match = first_in_ceph_log(pattern, config['log-ignorelist'])
                     if match is not None:
                         ctx.summary['failure_reason'] = \
                             '"{match}" in cluster log'.format(

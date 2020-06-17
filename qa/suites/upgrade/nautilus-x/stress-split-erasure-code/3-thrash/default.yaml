@@ -4,7 +4,7 @@ meta:
    small chance to increase the number of pgs
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
     - but it is still running
     - wrongly marked me down
     - objects unfound and apparently lost

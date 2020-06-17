@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - OSD full dropping all updates
       - OSD near full
       - pausewr flag

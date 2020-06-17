@@ -1092,13 +1092,13 @@ def cluster(ctx, config):
             return stdout or None
 
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config['log_whitelist']) is not None:
+                             config['log_ignorelist']) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log_whitelist'])
+                    match = first_in_ceph_log(pattern, config['log_ignorelist'])
                     if match is not None:
                         ctx.summary['failure_reason'] = \
                             '"{match}" in cluster log'.format(
@@ -1724,7 +1724,7 @@ def task(ctx, config):
 
         tasks:
         - ceph:
-            log-whitelist: ['foo.*bar', 'bad message']
+            log-ignorelist: ['foo.*bar', 'bad message']
 
     To run multiple ceph clusters, use multiple ceph tasks, and roles
     with a cluster name prefix, e.g. cluster1.client.0. Roles with no
@@ -1796,7 +1796,7 @@ def task(ctx, config):
             mkfs_options=config.get('mkfs_options', None),
             mount_options=config.get('mount_options', None),
             skip_mgr_daemons=config.get('skip_mgr_daemons', False),
-            log_whitelist=config.get('log-whitelist', []),
+            log_ignorelist=config.get('log-ignorelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
             cluster=config['cluster'],
             mon_bind_msgr2=config.get('mon_bind_msgr2', True),

@@ -8,7 +8,7 @@ tasks:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     fs: xfs
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_

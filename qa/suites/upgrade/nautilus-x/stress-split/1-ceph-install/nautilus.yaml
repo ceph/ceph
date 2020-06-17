@@ -14,7 +14,7 @@ tasks:
         bluestore_warn_on_legacy_statfs: false
         bluestore warn on no per pool omap: false
         mon pg warn min per osd: 0
-    log-whitelist:
+    log-ignorelist:
       - Not found or unloadable
 - exec:
     osd.0:

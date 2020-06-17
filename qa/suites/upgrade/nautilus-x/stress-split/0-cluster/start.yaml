@@ -8,7 +8,7 @@ overrides:
     mon_bind_msgr2: false
     mon_bind_addrvec: false
     fs: xfs
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(MGR_DOWN\)

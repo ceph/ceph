@@ -23,7 +23,7 @@ tasks:
         debug ms: 1
         debug objecter: 20
         debug rados: 20
-    log-whitelist:
+    log-ignorelist:
       - objects unfound and apparently lost
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)

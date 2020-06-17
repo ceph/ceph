@@ -20,7 +20,7 @@ overrides:
       osd:
         mon max pg per osd : 1
         osd max pg per osd hard ratio : 1
-    log-whitelist:
+    log-ignorelist:
       - \(TOO_FEW_PGS\)
       - \(PG_
       - \(PENDING_CREATING_PGS\)

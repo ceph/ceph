@@ -3,7 +3,7 @@ meta:
    librados C and C++ api tests
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - reached quota
       - \(REQUEST_SLOW\)
 tasks:
