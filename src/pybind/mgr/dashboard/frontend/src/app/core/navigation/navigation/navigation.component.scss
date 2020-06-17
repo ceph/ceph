@@ -42,16 +42,16 @@
     }
 
     .cd-navbar-utility > .active > a {
-      color: $color-nav-links;
       background-color: $color-nav-links-hover;
+      color: $color-nav-links;
     }
 
     .cd-navbar-utility > li > .open > a,
     .cd-navbar-utility > li > .open > a:focus,
     .cd-navbar-utility > li > .open > a:hover {
-      color: $color-nav-links;
-      border-color: transparent;
       background-color: transparent;
+      border-color: transparent;
+      color: $color-nav-links;
     }
   }
 
@@ -59,10 +59,10 @@
   .navbar-nav > li > .cd-navbar > a,
   .navbar-nav > li > a {
     color: $color-nav-links;
+    display: block;
     line-height: 1;
     padding: 13.5px 18px !important;
     position: relative;
-    display: block;
     text-decoration: none;
   }
 
@@ -88,18 +88,18 @@
   .navbar-nav > .open > a,
   .navbar-nav > .open > a:focus,
   .navbar-nav > .open > a:hover {
-    color: $color-nav-links;
-    border-color: transparent;
     background-color: transparent;
+    border-color: transparent;
+    color: $color-nav-links;
   }
 
   @media (min-width: $screen-md-min) {
     .cd-navbar-utility {
       border-bottom: 0;
+      font-size: 1.1rem;
       position: absolute;
       right: 0;
       top: 0;
-      font-size: 1.1rem;
     }
   }
 
@@ -112,15 +112,15 @@
       }
 
       .open .dropdown-menu {
-        border: 0;
-        padding-top: 0;
-        padding-bottom: 0;
         background-color: $color-nav-open-bg;
+        border: 0;
+        padding-bottom: 0;
+        padding-top: 0;
       }
 
       .open .dropdown-menu > li > a {
-        padding: 5px 15px 5px 35px;
         color: $color-nav-links;
+        padding: 5px 15px 5px 35px;
       }
 
       .open .dropdown-menu > .active > a {
@@ -143,9 +143,9 @@ $sidebar-width: 200px;
 .cd-navbar-primary .active > a,
 .cd-navbar-primary > .active > a:focus,
 .cd-navbar-primary > .active > a:hover {
-  color: $color-nav-links !important;
   background-color: $color-nav-links-hover !important;
   border: 0 !important;
+  color: $color-nav-links !important;
 }
 
 .wrapper {
@@ -153,16 +153,16 @@ $sidebar-width: 200px;
   width: 100%;
 
   #sidebar {
-    width: $sidebar-width;
-    top: $navbar-height;
     background: $color-navbar-bg;
+    bottom: 0;
+    color: $color-solid-white;
+    left: 0;
     overflow-y: auto;
     position: fixed;
-    bottom: 0;
-    left: 0;
-    z-index: 999;
-    color: $color-solid-white;
+    top: $navbar-height;
     transition: all 0.3s;
+    width: $sidebar-width;
+    z-index: 999;
 
     &.active {
       margin-left: -$sidebar-width;
@@ -170,8 +170,8 @@ $sidebar-width: 200px;
 
     ul {
       &.component {
-        padding: 20px 0;
         margin: 0;
+        padding: 20px 0;
       }
 
       p {
@@ -180,21 +180,21 @@ $sidebar-width: 200px;
       }
 
       li a {
-        padding: 10px;
-        font-size: 1.1em;
-        display: block;
         color: $color-solid-white;
+        display: block;
+        font-size: 1.1em;
+        padding: 10px;
+
+        text-decoration: none;
 
         &:hover {
-          color: $color-solid-white;
           background: $color-primary;
+          color: $color-solid-white;
         }
 
         & > .badge {
           margin-left: 5px;
         }
-
-        text-decoration: none;
       }
 
       li.active > a,
@@ -208,12 +208,12 @@ $sidebar-width: 200px;
     position: relative;
 
     &::after {
-      position: absolute;
-      right: 20px;
+      border: 0;
       content: '\f054';
       font-family: 'ForkAwesome';
-      border: 0;
       font-size: 1rem;
+      position: absolute;
+      right: 20px;
       transition: transform 0.3s ease-in-out;
     }
 
@@ -223,9 +223,9 @@ $sidebar-width: 200px;
   }
 
   ul ul a {
+    background: lighten($color-navbar-bg, 10);
     font-size: 0.9em !important;
     padding-left: 30px !important;
-    background: lighten($color-navbar-bg, 10);
   }
 
   .cd-navbar-primary a:focus {
@@ -242,12 +242,12 @@ $sidebar-width: 200px;
 --------------------------------------------------- */
 
 #content {
-  width: calc(100% - #{$sidebar-width});
-  transition: all 0.3s;
-  position: absolute;
-  top: $navbar-height;
   bottom: 0;
+  position: absolute;
   right: 0;
+  top: $navbar-height;
+  transition: all 0.3s;
+  width: calc(100% - #{$sidebar-width});
 
   &.active {
     width: 100vw;

@@ -2,12 +2,12 @@
 
 ::ng-deep cd-login {
   h1 {
-    margin: 0 0 30px 0;
+    margin: 0 0 30px;
   }
 
   .form-group {
-    border-left: 4px solid $color-solid-white;
     background-color: $color-password-toggle-bg;
+    border-left: 4px solid $color-solid-white;
     height: auto;
     margin-bottom: 2rem;
 
@@ -24,13 +24,13 @@
   .btn-password:focus,
   .form-control,
   .form-control:focus {
+    background-color: $color-password-toggle-bg;
     border: none;
-    outline: none;
     -webkit-box-shadow: none;
     box-shadow: none;
     color: $color-password-toggle-text;
-    background-color: $color-password-toggle-bg;
     filter: none;
+    outline: none;
   }
 
   .placeholder {
@@ -45,16 +45,16 @@
 // This will override the colors applied by chrome
 @keyframes autofill {
   to {
-    color: $color-password-toggle-text;
     background-color: $color-password-toggle-bg;
+    color: $color-password-toggle-text;
   }
 }
 
 input:-webkit-autofill {
-  animation-name: autofill;
   animation-fill-mode: both;
-  box-shadow: 0 0 0px 1000px $color-password-toggle-bg inset;
+  animation-name: autofill;
+  border-radius: 0;
+  box-shadow: 0 0 0 1000px $color-password-toggle-bg inset;
   -webkit-text-fill-color: $color-password-toggle-text;
   transition-property: none;
-  border-radius: 0px;
 }

@@ -6,32 +6,32 @@ $card-font-min-size: 12px;
 $card-font-max-size: 21px;
 
 .card {
-  height: 100%;
-  border: 0.5px solid $color-info-card-border;
-  border-radius: 3px;
-  box-shadow: 0 1px 1px $color-shadow-gray;
   @include fluid-font-size(
     $card-font-min-width,
     $card-font-max-width,
     $card-font-min-size,
     $card-font-max-size
   );
+  border: 0.5px solid $color-info-card-border;
+  border-radius: 3px;
+  box-shadow: 0 1px 1px $color-shadow-gray;
+  height: 100%;
 
   .card-body {
     padding-top: 40px !important;
 
     .card-title {
-      position: absolute;
       left: 0;
+      position: absolute;
       top: 0;
     }
   }
 }
 
 .no-center {
+  left: unset;
   position: unset;
   top: unset;
-  left: unset;
   transform: unset;
 }
 

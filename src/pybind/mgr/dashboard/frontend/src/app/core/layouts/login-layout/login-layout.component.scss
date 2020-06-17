@@ -1,11 +1,12 @@
 @import 'defaults.scss';
 
 ::ng-deep .login {
-  color: $color-login-row-text;
   background-color: $color-login-row-bg;
   background-image: url('assets/ceph_background.gif');
   background-position: right bottom;
   background-repeat: no-repeat;
+  color: $color-login-row-text;
+
   header {
     position: absolute;
     width: 100vw;
@@ -27,7 +28,7 @@
 
   section {
     display: inline-flex;
-    width: 100vw;
     min-height: 100vh;
+    width: 100vw;
   }
 }

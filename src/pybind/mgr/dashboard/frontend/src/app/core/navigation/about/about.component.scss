@@ -8,30 +8,37 @@
   color: $color-solid-white;
   text-shadow: 1px 1px $color-secondary;
 }
+
 .product-versions {
   margin-top: 30px;
 }
+
 .product-versions strong {
   margin-right: 10px;
 }
+
 .modal-header {
   border-bottom: none;
 }
+
 .modal-header .close {
   color: $color-solid-white;
   font-size: 2em;
 }
+
 .modal-body {
   padding-left: 80px;
   padding-right: 80px;
 }
+
 .ceph-logo {
-  width: 25%;
   margin-bottom: 30px;
   object-position: -20px 0;
+  width: 25%;
 }
+
 .modal-footer {
-  display: block;
   border-top: none;
-  padding: 15px 80px 35px 80px;
+  display: block;
+  padding: 15px 80px 35px;
 }

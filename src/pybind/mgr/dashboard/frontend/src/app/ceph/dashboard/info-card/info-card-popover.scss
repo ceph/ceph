@@ -1,13 +1,13 @@
 @import 'defaults.scss';
 
 .info-card-popover-cluster-status {
-  max-width: 23vw;
   max-height: 20vh;
+  max-width: 23vw;
 
   .popover-body {
-    max-width: 100%;
-    max-height: 19vh;
     font-size: 12px;
+    max-height: 19vh;
+    max-width: 100%;
   }
 }
 
@@ -29,14 +29,14 @@
 }
 
 .info-card-content-clickable {
+  border: 1px solid;
+  border-color: $color-shade-gray;
+  border-radius: 3px;
   cursor: pointer;
   padding: 7px;
-  border: 1px solid;
-  border-radius: 3px;
-  border-color: $color-shade-gray;
 }
 
 .info-card-content-clickable:hover {
-  border-color: $color-light-gray;
   background-color: $color-light-shade-gray;
+  border-color: $color-light-gray;
 }
