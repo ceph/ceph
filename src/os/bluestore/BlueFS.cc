@@ -1289,7 +1289,6 @@ int BlueFS::device_migrate_to_existing(
 	ceph_assert(cur_len > 0);
 	cur.substr_of(bl, off, cur_len);
 	int r = bdev[dev_target]->write(i.offset, cur, buffered);
-	cur.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
 	ceph_assert(r == 0);
 	off += cur_len;
       }
@@ -1552,6 +1551,7 @@ int BlueFS::_read_random(
   logger->inc(l_bluefs_read_random_bytes, len);
 
   std::shared_lock s_lock(h->lock);
+  buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   while (len > 0) {
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
       s_lock.unlock();
@@ -1602,7 +1602,6 @@ int BlueFS::_read_random(
       buf->pos += r;
     }
   }
-  buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   dout(20) << __func__ << " got " << ret << dendl;
   --h->file->num_reading;
   return ret;
@@ -1651,6 +1650,7 @@ int BlueFS::_read(
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
       s_lock.unlock();
       std::unique_lock u_lock(h->lock);
+      buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
       if (off < buf->bl_off || off >= buf->get_buf_end()) {
         // if precondition hasn't changed during locking upgrade.
         buf->bl.clear();
@@ -1713,7 +1713,6 @@ int BlueFS::_read(
     buf->pos += r;
   }
 
-  buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   dout(20) << __func__ << " got " << ret << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
   --h->file->num_reading;
@@ -2944,7 +2943,6 @@ int BlueFS::open_for_write(
     }
   }
 
-  (*h)->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
@@ -2963,6 +2961,7 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 void BlueFS::_close_writer(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " type " << h->writer_type << dendl;
+  h->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
   for (unsigned i=0; i<MAX_BDEV; ++i) {
     if (bdev[i]) {
       if (h->iocv[i]) {
