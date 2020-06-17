@@ -40,18 +40,6 @@ import { RbdTrashPurgeModalComponent } from './rbd-trash-purge-modal/rbd-trash-p
 import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-trash-restore-modal.component';
 
 @NgModule({
-  entryComponents: [
-    RbdDetailsComponent,
-    RbdNamespaceFormModalComponent,
-    RbdSnapshotFormModalComponent,
-    RbdTrashMoveModalComponent,
-    RbdTrashRestoreModalComponent,
-    RbdTrashPurgeModalComponent,
-    IscsiTargetDetailsComponent,
-    IscsiTargetImageSettingsModalComponent,
-    IscsiTargetIqnSettingsModalComponent,
-    IscsiTargetDiscoveryModalComponent
-  ],
   imports: [
     CommonModule,
     MirroringModule,

@@ -18,7 +18,6 @@ import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 
 @NgModule({
-  entryComponents: [AboutComponent],
   imports: [
     CommonModule,
     AuthModule,
