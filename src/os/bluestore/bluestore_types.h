@@ -938,7 +938,6 @@ struct bluestore_onode_t {
   uint64_t size = 0;                   ///< object size
   // FIXME: bufferptr does not have a mempool
   std::map<mempool::bluestore_cache_meta::string, ceph::buffer::ptr> attrs;
-//  mempool::bluestore_cache_onode::map<string, bufferptr> attrs;     ///< attrs
 
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
