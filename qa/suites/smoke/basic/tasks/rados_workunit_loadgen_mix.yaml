@@ -2,7 +2,7 @@ tasks:
 - install:
 - ceph:
     fs: ext4
-    log-whitelist:
+    log-ignorelist:
     - but it is still running
     - overall HEALTH_
     - \(POOL_APP_NOT_ENABLED\)

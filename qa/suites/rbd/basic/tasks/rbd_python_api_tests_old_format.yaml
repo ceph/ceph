@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - \(SLOW_OPS\)
       - slow request
 tasks:

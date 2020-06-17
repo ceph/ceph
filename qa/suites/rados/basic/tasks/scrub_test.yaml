@@ -1,7 +1,7 @@
 overrides:
   ceph:
     wait-for-scrub: false
-    log-whitelist:
+    log-ignorelist:
     - '!= data_digest'
     - '!= omap_digest'
     - '!= size'

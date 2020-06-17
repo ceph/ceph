@@ -1,7 +1,7 @@
 overrides:
   ceph:
     mon_bind_msgr2: false
-    log-whitelist:
+    log-ignorelist:
       - \(MON_DOWN\)
     conf:
       global:
