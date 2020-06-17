@@ -1,7 +1,6 @@
 import jinja2
 import logging
 import os
-import six
 import sys
 import time
 import types
@@ -207,8 +206,8 @@ def build_email_body(ctx, stack, sleep_time_sec):
     email_template_path = os.path.dirname(__file__) + \
             '/templates/email-sleep-before-teardown.jinja2'
 
-    with open(email_template_path, 'r') as f:
-        template_text = six.ensure_str(f.read())
+    with open(email_template_path) as f:
+        template_text = f.read()
 
     email_template = jinja2.Template(template_text)
     archive_path = ctx.config.get('archive_path')
