@@ -243,7 +243,7 @@ struct OSDCap {
    * @param object name of the object we are accessing
    * @param op_may_read whether the operation may need to read
    * @param op_may_write whether the operation may need to write
-   * @param classes (class-name, rd, wr, whitelisted-flag) tuples
+   * @param classes (class-name, rd, wr, allowed-flag) tuples
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(const std::string& pool_name, const std::string& ns,

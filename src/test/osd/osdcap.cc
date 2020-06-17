@@ -177,7 +177,7 @@ TEST(OSDCap, AllowAll) {
   ASSERT_TRUE(cap.is_capable("foo", "anamespace", {{"application", {{"key", "value"}}}}, "asdf", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "asdf", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "anamespace", {{"application", {{"key", "value"}}}}, "asdf", true, true, {{"cls", "", true, true, true}}, addr));
-  // 'allow *' overrides whitelist
+  // 'allow *' overrides allow list
   ASSERT_TRUE(cap.is_capable("foo", "", {}, "asdf", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "anamespace", {}, "asdf", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "asdf", true, true, {{"cls", "", true, true, false}}, addr));
@@ -198,7 +198,7 @@ TEST(OSDCap, AllowPool) {
   ASSERT_TRUE(cap.is_capable("foo", "ns", {}, "", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "ns", {{"application", {{"key", "value"}}}}, "", true, true, {{"cls", "", true, true, true}}, addr));
-  // true->false for classes not on whitelist
+  // true->false for classes not on allow list
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "", true, true, {{"cls", "", true, true, false}}, addr));
@@ -221,7 +221,7 @@ TEST(OSDCap, AllowPools) {
   ASSERT_TRUE(cap.is_capable("foo", "ns", {}, "", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "ns", {{"application", {{"key", "value"}}}}, "", true, true, {{"cls", "", true, true, true}}, addr));
-  // true-false for classes not on whitelist
+  // true-false for classes not on allow list
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "", true, true, {{"cls", "", true, true, false}}, addr));
@@ -250,7 +250,7 @@ TEST(OSDCap, AllowPools2) {
   ASSERT_TRUE(r);
 
   ASSERT_TRUE(cap.is_capable("foo", "", {}, "", true, true, {{"cls", "", true, true, true}}, addr));
-  // true-false for classes not on whitelist
+  // true-false for classes not on allow list
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "", true, true, {{"cls", "", true, true, true}}, addr));
 
@@ -266,7 +266,7 @@ TEST(OSDCap, ObjectPrefix) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "food", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo_bar", true, true, {{"cls", "", true, true, true}}, addr));
-  // true-false for classes not on whitelist
+  // true-false for classes not on allow list
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "food", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo_bar", true, true, {{"cls", "", true, true, false}}, addr));
@@ -285,7 +285,7 @@ TEST(OSDCap, ObjectPoolAndPrefix) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "food", true, true, {{"cls", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo_bar", true, true, {{"cls", "", true, true, true}}, addr));
-  // true-false for classes not on whitelist
+  // true-false for classes not on allow list
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "food", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo_bar", true, true, {{"cls", "", true, true, false}}, addr));
@@ -353,7 +353,7 @@ TEST(OSDCap, BasicX) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, true, true}}, addr));
-  // true->false when class not on whitelist
+  // true->false when class not on allow list
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
@@ -387,7 +387,7 @@ TEST(OSDCap, BasicRX) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, true, true}}, addr));
-  // true->false for class not on whitelist
+  // true->false for class not on allow list
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, true, false}}, addr));
@@ -405,7 +405,7 @@ TEST(OSDCap, BasicWX) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, true, {{"cls", "", true, true, true}}, addr));
-  // true->false for class not on whitelist
+  // true->false for class not on allow list
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, true, {{"cls", "", false, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -427,7 +427,7 @@ TEST(OSDCap, BasicRWX) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
-  // true->false for class not on whitelist
+  // true->false for class not on allow list
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -449,7 +449,7 @@ TEST(OSDCap, BasicRWClassRClassW) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -464,7 +464,7 @@ TEST(OSDCap, ClassR) {
   ASSERT_TRUE(cap.parse("allow class-read", NULL));
 
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
 
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
@@ -479,7 +479,7 @@ TEST(OSDCap, ClassW) {
   ASSERT_TRUE(cap.parse("allow class-write", NULL));
 
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, false}}, addr));
 
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
@@ -496,7 +496,7 @@ TEST(OSDCap, ClassRW) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, true, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", false, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
@@ -516,7 +516,7 @@ TEST(OSDCap, BasicRClassR) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "foo", true, false, {}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
@@ -530,7 +530,7 @@ TEST(OSDCap, BasicRClassR) {
   ASSERT_TRUE(cap.is_capable("bar", "any", {}, "foo", false, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "any", {}, "foo", true, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "any", {}, "foo", true, false, {}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "any", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "any", {}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "any", {{"application", {{"key", "value"}}}}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
@@ -551,7 +551,7 @@ TEST(OSDCap, PoolClassR) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "foo", true, false, {}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
@@ -566,7 +566,7 @@ TEST(OSDCap, PoolClassR) {
   ASSERT_TRUE(cap.is_capable("bar", "ns", {}, "foo", true, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "ns", {}, "foo", true, false, {}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "ns", {{"application", {{"key", "value"}}}}, "foo", true, false, {}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "ns", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "ns", {}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "ns", {{"application", {{"key", "value"}}}}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
@@ -586,7 +586,7 @@ TEST(OSDCap, PoolClassR) {
   ASSERT_TRUE(cap.is_capable("foo", "", {}, "foo", true, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -604,7 +604,7 @@ TEST(OSDCap, PoolClassR) {
   ASSERT_TRUE(cap.is_capable("foo", "ns", {}, "foo", true, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "ns", {}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "ns", {{"application", {{"key", "value"}}}}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -633,7 +633,7 @@ TEST(OSDCap, PoolClassRNS) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, false, {}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "foo", true, false, {}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "foo", true, false, {{"cls", "", true, false, false}}, addr));
@@ -674,7 +674,7 @@ TEST(OSDCap, PoolClassRNS) {
   ASSERT_TRUE(cap.is_capable("foo", "ns", {}, "foo", true, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "ns", {}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "ns", {{"application", {{"key", "value"}}}}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "ns", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -708,7 +708,7 @@ TEST(OSDCap, NSClassR) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {{"application", {{"key", "value"}}}}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -726,7 +726,7 @@ TEST(OSDCap, NSClassR) {
   ASSERT_TRUE(cap.is_capable("foo", "", {}, "foo", true, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", true, true, {{"cls", "", true, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "foo", false, false, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "foo", true, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
@@ -794,7 +794,7 @@ TEST(OSDCap, PoolTagBasic) {
   ASSERT_TRUE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", false, true, {{"cls", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", false, true, {{"cls", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", false, true, {{"cls", "", false, false, true}}, addr));
-  // true->false when class not whitelisted
+  // true->false when class not allow listed
   ASSERT_FALSE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", false, true, {{"cls", "", false, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", false, true, {{"cls", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("foo", "", {{"application", {{"key", "value"}}}}, "foo", false, true, {{"cls", "", true, false, false}}, addr));
@@ -968,7 +968,7 @@ TEST(OSDCap, AllowClass) {
   OSDCap cap;
   ASSERT_TRUE(cap.parse("allow class foo", NULL));
 
-  // can call any method on class foo regardless of whitelist status
+  // can call any method on class foo regardless of allow list status
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}}, addr));
@@ -990,7 +990,7 @@ TEST(OSDCap, AllowClassMethod) {
   OSDCap cap;
   ASSERT_TRUE(cap.parse("allow class foo xyz", NULL));
 
-  // can call the xyz method on class foo regardless of whitelist status
+  // can call the xyz method on class foo regardless of allow list status
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "xyz", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "xyz", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "xyz", true, true, true}}, addr));
@@ -1038,7 +1038,7 @@ TEST(OSDCap, AllowClassRWX) {
   OSDCap cap;
   ASSERT_TRUE(cap.parse("allow rwx, allow class foo", NULL));
 
-  // can call any method on class foo regardless of whitelist status
+  // can call any method on class foo regardless of allow list status
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}}, addr));
@@ -1051,7 +1051,7 @@ TEST(OSDCap, AllowClassRWX) {
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"bar", "", false, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"bar", "", true, true, false}}, addr));
 
-  // allows class bar if it is whitelisted
+  // allows class bar if it is allow listed
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"bar", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"bar", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"bar", "", true, true, true}}, addr));
@@ -1063,7 +1063,7 @@ TEST(OSDCap, AllowClassMulti) {
   ASSERT_TRUE(cap.parse("allow class foo", NULL));
 
   // can call any method on foo, but not bar, so the entire op is rejected
-  // bar with whitelist is rejected because it still needs rwx/class-read,write
+  // bar with allow list is rejected because it still needs rwx/class-read,write
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", true, true, true}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", true, false, true}}, addr));
@@ -1128,7 +1128,7 @@ TEST(OSDCap, AllowClassMulti) {
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", false, false, false}, {"bar", "", false, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", false, false, false}, {"bar", "", false, false, false}}, addr));
 
-  // these are OK because 'bar' is on the whitelist BUT the calls don't read or write
+  // these are OK because 'bar' is on the allow list BUT the calls don't read or write
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", false, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, false}, {"bar", "", false, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, false, true}, {"bar", "", false, false, true}}, addr));
@@ -1138,7 +1138,7 @@ TEST(OSDCap, AllowClassMulti) {
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", false, false, true}, {"bar", "", false, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", false, false, false}, {"bar", "", false, false, true}}, addr));
 
-  // can call any method on foo or bar regardless of whitelist status
+  // can call any method on foo or bar regardless of allow list status
   OSDCap cap2;
   ASSERT_TRUE(cap2.parse("allow class foo, allow class bar", NULL));
 
@@ -1220,13 +1220,13 @@ TEST(OSDCap, AllowClassMultiRWX) {
   OSDCap cap;
   ASSERT_TRUE(cap.parse("allow rwx, allow class foo", NULL));
 
-  // can call anything on foo, but only whitelisted methods on bar
+  // can call anything on foo, but only allow listed methods on bar
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", true, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", true, false, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", false, true, true}}, addr));
   ASSERT_TRUE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", false, false, true}}, addr));
 
-  // fails because bar not whitelisted
+  // fails because bar not allow listed
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", true, true, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", true, false, false}}, addr));
   ASSERT_FALSE(cap.is_capable("bar", "", {}, "foo", false, false, {{"foo", "", true, true, true}, {"bar", "", false, true, false}}, addr));

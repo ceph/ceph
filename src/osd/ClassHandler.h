@@ -59,7 +59,7 @@ public:
     ClassHandler *handler = nullptr;
     void *handle = nullptr;
 
-    bool whitelisted = false;
+    bool allowed = false;
 
     std::map<std::string, ClassMethod> methods_map;
     std::map<std::string, ClassFilter> filters_map;
