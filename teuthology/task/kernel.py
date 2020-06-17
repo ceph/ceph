@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import shlex
-from six import (ensure_str, StringIO)
+from io import StringIO
 
 from teuthology.util.compat import urljoin
 
