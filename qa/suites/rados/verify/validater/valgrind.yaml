@@ -16,7 +16,7 @@ overrides:
         osd fast shutdown: false
         debug bluestore: 1
         debug bluefs: 1
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
 # valgrind is slow.. we might get PGs stuck peering etc
       - \(PG_

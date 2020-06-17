@@ -22,7 +22,7 @@ tasks:
 - ceph:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
-    log-whitelist:
+    log-ignorelist:
     - but it is still running
     - missing primary copy of
     - objects unfound and apparently lost

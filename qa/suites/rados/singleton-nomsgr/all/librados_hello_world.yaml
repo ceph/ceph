@@ -2,7 +2,7 @@ roles:
 - [mon.a, mds.a, mgr.x, osd.0, osd.1, client.0]
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - install:
