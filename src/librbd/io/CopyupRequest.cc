@@ -6,6 +6,7 @@
 #include "common/ceph_mutex.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -154,10 +155,8 @@ void CopyupRequest<I>::read_from_parent() {
   if (m_image_ctx->parent == nullptr) {
     ldout(cct, 5) << "parent detached" << dendl;
 
-    m_image_ctx->op_work_queue->queue(
-      util::create_context_callback<
-        CopyupRequest<I>, &CopyupRequest<I>::handle_read_from_parent>(this),
-      -ENOENT);
+    m_image_ctx->asio_engine->post(
+      [this]() { handle_read_from_parent(-ENOENT); });
     return;
   } else if (is_deep_copy()) {
     deep_copy();
@@ -470,21 +469,28 @@ template <typename I>
 void CopyupRequest<I>::handle_copyup(int r) {
   auto cct = m_image_ctx->cct;
   unsigned pending_copyups;
+  int copyup_ret_val = r;
   {
     std::lock_guard locker{m_lock};
     ceph_assert(m_pending_copyups > 0);
     pending_copyups = --m_pending_copyups;
+    if (m_copyup_ret_val < 0) {
+      copyup_ret_val = m_copyup_ret_val;
+    } else if (r < 0) {
+      m_copyup_ret_val = r;
+    }
   }
 
   ldout(cct, 20) << "r=" << r << ", "
                  << "pending=" << pending_copyups << dendl;
 
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "failed to copyup object: " << cpp_strerror(r) << dendl;
-    complete_requests(false, r);
-  }
-
   if (pending_copyups == 0) {
+    if (copyup_ret_val < 0 && copyup_ret_val != -ENOENT) {
+      lderr(cct) << "failed to copyup object: " << cpp_strerror(copyup_ret_val)
+                 << dendl;
+      complete_requests(false, copyup_ret_val);
+    }
+
     finish(0);
   }
 }
@@ -603,6 +609,7 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
       deep_copied.insert(it.second.front());
     }
   }
+  ldout(m_image_ctx->cct, 15) << "deep_copied=" << deep_copied << dendl;
 
   std::copy_if(m_image_ctx->snaps.rbegin(), m_image_ctx->snaps.rend(),
                std::back_inserter(m_snap_ids),

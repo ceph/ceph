@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/AsioEngine.h"
+#include "include/Context.h"
 #include "include/stringify.h"
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
@@ -39,6 +40,14 @@ AsioEngine::AsioEngine(librados::IoCtx& io_ctx)
 
 AsioEngine::~AsioEngine() {
   ldout(m_cct, 20) << dendl;
+}
+
+void AsioEngine::dispatch(Context* ctx, int r) {
+  dispatch([ctx, r]() { ctx->complete(r); });
+}
+
+void AsioEngine::post(Context* ctx, int r) {
+  post([ctx, r]() { ctx->complete(r); });
 }
 
 } // namespace librbd

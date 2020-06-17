@@ -99,6 +99,7 @@ private:
   ceph::mutex m_lock = ceph::make_mutex("CopyupRequest", false);
   WriteRequests m_pending_requests;
   unsigned m_pending_copyups = 0;
+  int m_copyup_ret_val = 0;
 
   WriteRequests m_restart_requests;
   bool m_append_request_permitted = true;

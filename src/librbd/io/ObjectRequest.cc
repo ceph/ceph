@@ -10,11 +10,11 @@
 #include "include/err.h"
 #include "osd/osd_types.h"
 
+#include "librbd/AsioEngine.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/CopyupRequest.h"
 #include "librbd/io/ImageRequest.h"
@@ -165,8 +165,7 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
 template <typename I>
 void ObjectRequest<I>::async_finish(int r) {
   ldout(m_ictx->cct, 20) << "r=" << r << dendl;
-  m_ictx->op_work_queue->queue(util::create_context_callback<
-    ObjectRequest<I>, &ObjectRequest<I>::finish>(this), r);
+  m_ictx->asio_engine->post([this, r]() { finish(r); });
 }
 
 template <typename I>
@@ -203,9 +202,7 @@ void ObjectReadRequest<I>::read_object() {
     std::shared_lock image_locker{image_ctx->image_lock};
     if (image_ctx->object_map != nullptr &&
         !image_ctx->object_map->object_may_exist(this->m_object_no)) {
-      image_ctx->op_work_queue->queue(new LambdaContext([this](int r) {
-          read_parent();
-        }), 0);
+      image_ctx->asio_engine->post([this]() { read_parent(); });
       return;
     }
   }

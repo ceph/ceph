@@ -157,8 +157,8 @@ void AioCompletion::queue_complete() {
   add_request();
 
   // ensure completion fires in clean lock context
-  boost::asio::post(ictx->asio_engine, boost::asio::bind_executor(
-    ictx->asio_engine.get_api_strand(), [this]() {
+  boost::asio::post(*ictx->asio_engine, boost::asio::bind_executor(
+    ictx->asio_engine->get_api_strand(), [this]() {
       complete_request(0);
     }));
 }
@@ -261,8 +261,8 @@ void AioCompletion::complete_external_callback() {
 
   // ensure librbd external users never experience concurrent callbacks
   // from multiple librbd-internal threads.
-  boost::asio::dispatch(ictx->asio_engine, boost::asio::bind_executor(
-    ictx->asio_engine.get_api_strand(), [this]() {
+  boost::asio::dispatch(*ictx->asio_engine, boost::asio::bind_executor(
+    ictx->asio_engine->get_api_strand(), [this]() {
       complete_cb(rbd_comp, complete_arg);
       complete_event_socket();
       put();
