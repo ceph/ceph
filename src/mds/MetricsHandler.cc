@@ -226,6 +226,8 @@ void MetricsHandler::notify_mdsmap(const MDSMap &mdsmap) {
     return;
   }
 
+  dout(10) << ": rank0 is mds." << mdsmap.get_mds_info((mds_rank_t)0).name << dendl;
+
   auto new_rank0_addr = mdsmap.get_addrs((mds_rank_t)0);
   if (addr_rank0 != new_rank0_addr) {
     dout(10) << ": rank0 addr is now " << new_rank0_addr << dendl;
