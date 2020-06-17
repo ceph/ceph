@@ -1646,7 +1646,9 @@ static inline vector<int> random_sequence(uint32_t n)
     [ix = 0]() mutable {
       return ix++;
     });
-  std::random_shuffle(v.begin(), v.end());
+  std::random_device rd;
+  std::default_random_engine rng{rd()};
+  std::shuffle(v.begin(), v.end(), rd);
   return v;
 }
 
