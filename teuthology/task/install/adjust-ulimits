@@ -8,7 +8,7 @@ set -e
 if [ "$USER" = "root" ]
 then
     # Enable large number of open files
-    ulimit -n 16384
+    ulimit -n 65536
 fi
 
 # Enable core dumps for everything
