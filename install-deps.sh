@@ -369,12 +369,10 @@ else
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-                    $SUDO dnf copr enable -y ktdreyer/ceph-el8
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     $SUDO subscription-manager repos --enable "codeready-builder-for-rhel-8-*-rpms"
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-		    $SUDO dnf copr enable -y ktdreyer/ceph-el8
                 fi
                 ;;
         esac
