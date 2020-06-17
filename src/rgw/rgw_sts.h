@@ -15,11 +15,11 @@ protected:
   static constexpr uint64_t MIN_POLICY_SIZE = 1;
   static constexpr uint64_t MAX_POLICY_SIZE = 2048;
   static constexpr uint64_t DEFAULT_DURATION_IN_SECS = 3600;
-  static constexpr uint64_t MIN_DURATION_IN_SECS = 900;
   static constexpr uint64_t MIN_ROLE_ARN_SIZE = 2;
   static constexpr uint64_t MAX_ROLE_ARN_SIZE = 2048;
   static constexpr uint64_t MIN_ROLE_SESSION_SIZE = 2;
   static constexpr uint64_t MAX_ROLE_SESSION_SIZE = 64;
+  uint64_t MIN_DURATION_IN_SECS;
   uint64_t MAX_DURATION_IN_SECS;
   CephContext* cct;
   uint64_t duration;
