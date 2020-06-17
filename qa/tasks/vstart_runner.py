@@ -355,9 +355,12 @@ class LocalRemote(object):
     def run(self, **kwargs):
         return self._do_run(**kwargs)
 
+    # XXX: omit_sudo is set to True since using sudo can change the ownership
+    # of files which becomes problematic for following executions of
+    # vstart_runner.py.
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
-                env=None, timeout=None, omit_sudo=False):
+                env=None, timeout=None, omit_sudo=True):
         args = self._perform_checks_and_return_list_of_args(args, omit_sudo)
 
         # We have to use shell=True if any run.Raw was present, e.g. &&
