@@ -3458,23 +3458,24 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
-void PrimaryLogPG::dec_refcount(ObjectContextRef obc, const object_info_t& oi, 
-				const object_ref_delta_t& refs)
+void PrimaryLogPG::dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs)
 {
   for (auto p = refs.begin(); p != refs.end(); ++p) {
-    dout(10) << __func__ << ": decrement reference on offset oid: " << p->first << dendl;
-    object_locator_t target_oloc(p->first);
-    refcount_manifest(obc, obc->obs.oi.soid, target_oloc, p->first, 
-		      SnapContext(), refcount_t::DECREMENT_REF, NULL);
+    int dec_ref_count = p->second;
+    while (dec_ref_count < 0) {
+      dout(10) << __func__ << ": decrement reference on offset oid: " << p->first << dendl;
+      refcount_manifest(obc->obs.oi.soid, p->first, 
+			refcount_t::DECREMENT_REF, NULL);
+      dec_ref_count++;
+    }
   }
 }
 
 
-void PrimaryLogPG::dec_all_refcount_head_manifest(object_info_t& oi, OpContext* ctx, const hobject_t &coid)
+void PrimaryLogPG::dec_all_refcount_manifest(object_info_t& oi, OpContext* ctx)
 {
   SnapSetContext* ssc = ctx->obc->ssc;
   ceph_assert(oi.has_manifest());
-  ceph_assert(oi.soid.is_head());
   // has snapshot
   if (ssc && ssc->snapset.clones.size() > 0) {
     ceph_assert(ssc);
@@ -3486,11 +3487,11 @@ void PrimaryLogPG::dec_all_refcount_head_manifest(object_info_t& oi, OpContext* 
     SnapSet& snapset = ssc->snapset;
 
     // check adjacent clones
-    auto s = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
+    auto s = std::find(snapset.clones.begin(), snapset.clones.end(), oi.soid.snap);
     int index = std::distance(snapset.clones.begin(), s);
     snapid_t l = *snapset.clones.begin(), g = CEPH_NOSNAP;
     object_manifest_t* manifest_g = nullptr, * manifest_l = nullptr;
-    hobject_t t_oid = coid;
+    hobject_t t_oid = oi.soid;
 
     auto get_context = [this](const hobject_t & oid) 
       -> ObjectContextRef {
@@ -3507,24 +3508,22 @@ void PrimaryLogPG::dec_all_refcount_head_manifest(object_info_t& oi, OpContext* 
       manifest_l = &get_context(t_oid)->obs.oi.manifest;
     } 
 
-    if (*s != snapset.clones.back() && s != snapset.clones.end()) {
+    if (snapset.clones.size() != 0 && s != snapset.clones.end() 
+	&& *s != snapset.clones.back()) {
       g = snapset.clones[index + 1];
       t_oid.snap = g;
       manifest_g = &get_context(t_oid)->obs.oi.manifest;
     } else if (*s == snapset.clones.back()) {
-      manifest_g = &oi.manifest;
+      manifest_g = &get_context(oi.soid.get_head())->obs.oi.manifest;
     }
     
-    if (!manifest_g) {
-      oi.manifest.calc_refs_to_drop_on_removal(manifest_g, manifest_l, refs);
-    } else {
-      get_context(coid)->obs.oi.manifest.calc_refs_to_drop_on_removal(manifest_g, manifest_l, refs);
-    }
+    
+    oi.manifest.calc_refs_to_drop_on_removal(manifest_g, manifest_l, refs);
 
     if (!refs.is_empty()) {
       ctx->register_on_commit(
-	[oi, ctx, this, refs](){
-	  dec_refcount(ctx->obc, oi, refs);
+	[ctx, this, refs](){
+	  dec_refcount(ctx->obc, refs);
       });
     }
     return;
@@ -3533,19 +3532,17 @@ void PrimaryLogPG::dec_all_refcount_head_manifest(object_info_t& oi, OpContext* 
   // no snapshot
   if ((oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE) && oi.manifest.is_redirect()) {
     ctx->register_on_commit(
-      [oi, ctx, this](){
-      object_locator_t target_oloc(oi.manifest.redirect_target);
-      refcount_manifest(ctx->obc, oi.soid, target_oloc, oi.manifest.redirect_target, 
-			SnapContext(), refcount_t::DECREMENT_REF, NULL);
+      [oi, this](){
+      refcount_manifest(oi.soid, oi.manifest.redirect_target, 
+			refcount_t::DECREMENT_REF, NULL);
     });
   } else if (oi.manifest.is_chunked()) {
     ctx->register_on_commit(
-      [oi, ctx, this](){
+      [oi, this](){
       for (auto p : oi.manifest.chunk_map) {
 	if (p.second.has_reference()) {
-	  object_locator_t target_oloc(p.second.oid);
-	  refcount_manifest(ctx->obc, oi.soid, target_oloc, p.second.oid, 
-			    SnapContext(), refcount_t::DECREMENT_REF, NULL);
+	  refcount_manifest(oi.soid, p.second.oid, 
+			    refcount_t::DECREMENT_REF, NULL);
 	}
       }
     });
@@ -3554,8 +3551,8 @@ void PrimaryLogPG::dec_all_refcount_head_manifest(object_info_t& oi, OpContext* 
   }
 }
 
-void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, hobject_t src_soid, object_locator_t oloc,
-				     hobject_t tgt_soid, SnapContext snapc, refcount_t type, RefCountCallback* cb)
+void PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type, 
+				     RefCountCallback* cb)
 {
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
                    CEPH_OSD_FLAG_RWORDERED;                      
@@ -3580,17 +3577,20 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, hobject_t src_soid, o
   Context *c = nullptr;
   if (cb) {
     C_SetManifestRefCountDone *fin =
-      new C_SetManifestRefCountDone(cb, obc->obs.oi.soid);
+      new C_SetManifestRefCountDone(cb, src_soid);
     c = new C_OnFinisher(fin, osd->get_objecter_finisher(get_pg_shard()));
   }
 
+  object_locator_t oloc(tgt_soid);
+  ObjectContextRef src_obc = get_object_context(src_soid, false, NULL);
+  ceph_assert(src_obc);
   auto tid = osd->objecter->mutate(
-    tgt_soid.oid, oloc, obj_op, snapc,
-    ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+    tgt_soid.oid, oloc, obj_op, SnapContext(),
+    ceph::real_clock::from_ceph_timespec(src_obc->obs.oi.mtime),
     flags, c);
   if (cb) {
-    manifest_ops[obc->obs.oi.soid] = std::make_shared<ManifestOp>(cb, tid);
-    obc->start_block();
+    manifest_ops[src_soid] = std::make_shared<ManifestOp>(cb, tid);
+    src_obc->start_block();
   }
 }  
 
@@ -4548,7 +4548,7 @@ int PrimaryLogPG::trim_object(
     if (coi.is_cache_pinned())
       ctx->delta_stats.num_objects_pinned--;
     if (coi.has_manifest()) {
-      dec_all_refcount_head_manifest(head_obc->obs.oi, ctx.get(), coid);
+      dec_all_refcount_manifest(coi, ctx.get());
       ctx->delta_stats.num_objects_manifest--;
     }
     obc->obs.exists = false;
@@ -4651,7 +4651,7 @@ int PrimaryLogPG::trim_object(
     }
     if (oi.has_manifest()) {
       ctx->delta_stats.num_objects_manifest--;
-      dec_all_refcount_head_manifest(oi, ctx.get(), hobject_t());
+      dec_all_refcount_manifest(oi, ctx.get());
     }
     head_obc->obs.exists = false;
     head_obc->obs.oi = object_info_t(head_oid);
@@ -6928,8 +6928,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
 	  RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
-	  refcount_manifest(ctx->obc, ctx->obc->obs.oi.soid, target_oloc, target, 
-			    SnapContext(), refcount_t::INCREMENT_REF, fin);
+	  refcount_manifest(ctx->obc->obs.oi.soid, target, 
+			    refcount_t::INCREMENT_REF, fin);
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -7058,8 +7058,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
 	  RefCountCallback *fin = new RefCountCallback(ctx, osd_op);
-	  refcount_manifest(ctx->obc, ctx->obc->obs.oi.soid, tgt_oloc, target, 
-			    SnapContext(), refcount_t::INCREMENT_REF, fin);
+	  refcount_manifest(ctx->obc->obs.oi.soid, target, 
+			    refcount_t::INCREMENT_REF, fin);
 	  result = -EINPROGRESS;
 	} else {
 	  if (op_finisher) {
@@ -7215,7 +7215,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
-	dec_all_refcount_head_manifest(oi, ctx, hobject_t());
+	dec_all_refcount_manifest(oi, ctx);
 
 	oi.clear_flag(object_info_t::FLAG_MANIFEST);
 	oi.manifest = object_manifest_t();
@@ -7996,7 +7996,7 @@ inline int PrimaryLogPG::_delete_oid(
 
   if (oi.has_manifest()) {
     ctx->delta_stats.num_objects_manifest--;
-    dec_all_refcount_head_manifest(oi, ctx, hobject_t());
+    dec_all_refcount_manifest(oi, ctx);
   }
 
   if (whiteout) {

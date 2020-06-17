@@ -1499,11 +1499,10 @@ protected:
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 			     uint64_t offset, uint64_t last_offset, epoch_t lpr);
   void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
-  void refcount_manifest(ObjectContextRef obc, hobject_t src_soid, object_locator_t oloc,
-			 hobject_t tgt_soid, SnapContext snapc, refcount_t type, RefCountCallback* cb);
-  void dec_all_refcount_head_manifest(object_info_t& oi, OpContext* ctx, const hobject_t &coid);
-  void dec_refcount(ObjectContextRef obc, const object_info_t& oi, 
-		    const object_ref_delta_t& refs);
+  void refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
+			 RefCountCallback* cb);
+  void dec_all_refcount_manifest(object_info_t& oi, OpContext* ctx);
+  void dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
