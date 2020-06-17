@@ -365,7 +365,10 @@ int cls_cxx_map_remove_range(cls_method_context_t hctx,
                              const std::string& key_begin,
                              const std::string& key_end)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_OMAPRMKEYRANGE};
+  encode(key_begin, op.indata);
+  encode(key_end, op.indata);
+  return execute_osd_op(hctx, op);
 }
 
 int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key)
