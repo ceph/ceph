@@ -1006,8 +1006,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     ceph_assert(a.empty());
   }
 
+  log_file->fnode = super.log_fnode;
   if (!noop) {
-    log_file->fnode = super.log_fnode;
     log_file->vselector_hint =
       vselector->get_hint_for_log();
   } else {
@@ -1031,11 +1031,13 @@ int BlueFS::_replay(bool noop, bool to_stdout)
   boost::dynamic_bitset<uint64_t> used_blocks[MAX_BDEV];
   boost::dynamic_bitset<uint64_t> owned_blocks[MAX_BDEV];
 
-  if (cct->_conf->bluefs_log_replay_check_allocations) {
-    for (size_t i = 0; i < MAX_BDEV; ++i) {
-      if (alloc_size[i] != 0 && bdev[i] != nullptr) {
-        used_blocks[i].resize(round_up_to(bdev[i]->get_size(), alloc_size[i]) / alloc_size[i]);
-        owned_blocks[i].resize(round_up_to(bdev[i]->get_size(), alloc_size[i]) / alloc_size[i]);
+  if (!noop) {
+    if (cct->_conf->bluefs_log_replay_check_allocations) {
+      for (size_t i = 0; i < MAX_BDEV; ++i) {
+	if (alloc_size[i] != 0 && bdev[i] != nullptr) {
+	  used_blocks[i].resize(round_up_to(bdev[i]->get_size(), alloc_size[i]) / alloc_size[i]);
+	  owned_blocks[i].resize(round_up_to(bdev[i]->get_size(), alloc_size[i]) / alloc_size[i]);
+	}
       }
     }
   }
@@ -1553,8 +1555,9 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     ++log_seq;
     log_file->fnode.size = log_reader->buf.pos;
   }
-  vselector->add_usage(log_file->vselector_hint, log_file->fnode);
-
+  if (!noop) {
+    vselector->add_usage(log_file->vselector_hint, log_file->fnode);
+  }
   if (!noop && first_log_check &&
         cct->_conf->bluefs_log_replay_check_allocations) {
     int r = _check_new_allocations(log_file->fnode,
@@ -1585,7 +1588,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     }
   }
 
-  for (unsigned id = 0; id < MAX_BDEV; ++id) {
+  for (unsigned id = 0; id < block_unused_too_granular.size(); ++id) {
     dout(10) << __func__ << " block_unused_too_granular " << id << ": "
 	     << block_unused_too_granular[id] << dendl;
   }
@@ -1596,13 +1599,20 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 int BlueFS::log_dump()
 {
   // only dump log file's content
-  int r = _replay(true, true);
+  ceph_assert(log_writer == nullptr && "cannot log_dump on mounted BlueFS");
+  int r = _open_super();
   if (r < 0) {
-    derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
     return r;
   }
-
-  return 0;
+  _init_logger();
+  r = _replay(true, true);
+  if (r < 0) {
+    derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
+  }
+  _shutdown_logger();
+  super = bluefs_super_t();
+  return r;
 }
 
 int BlueFS::device_migrate_to_existing(
