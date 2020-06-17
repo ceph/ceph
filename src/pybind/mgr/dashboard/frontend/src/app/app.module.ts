@@ -12,8 +12,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ToastrModule } from 'ngx-toastr';
 
 import { AppRoutingModule } from './app-routing.module';
@@ -45,7 +43,6 @@ export function jwtTokenGetter() {
     CoreModule,
     SharedModule,
     CephModule,
-    BsDropdownModule.forRoot(),
     JwtModule.forRoot({
       config: {
         tokenGetter: jwtTokenGetter

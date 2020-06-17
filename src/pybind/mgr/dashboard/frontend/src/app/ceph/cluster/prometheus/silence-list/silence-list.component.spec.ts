@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
@@ -30,7 +29,6 @@ describe('SilenceListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      BsDropdownModule.forRoot(),
       ModalModule.forRoot(),
       ToastrModule.forRoot(),
       RouterTestingModule,

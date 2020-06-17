@@ -6,35 +6,26 @@
          name="token" />
 </form>
 
-<div class="btn-group"
-     dropdown>
-  <a dropdownToggle
-     class="dropdown-toggle"
+<div ngbDropdown
+     placement="bottom-right">
+  <a ngbDropdownToggle
      i18n-title
      title="Help">
     <i [ngClass]="[icons.questionCircle]"></i>
     <span i18n
           class="d-md-none">Help</span>
   </a>
-  <ul *dropdownMenu
-      class="dropdown-menu dropdown-menu-right"
-      role="menu">
-    <li>
-      <a i18n
-         class="dropdown-item"
-         [ngClass]="{'disabled': !docsUrl}"
-         href="{{ docsUrl }}"
-         target="_blank">Documentation</a>
-    </li>
-    <li>
-      <a i18n
-         class="dropdown-item"
-         (click)="goToApiDocs()">API</a>
-    </li>
-    <li>
-      <a i18n
-         class="dropdown-item"
-         (click)="openAboutModal()">About</a>
-    </li>
-  </ul>
+  <div ngbDropdownMenu>
+    <a ngbDropdownItem
+       [ngClass]="{'disabled': !docsUrl}"
+       href="{{ docsUrl }}"
+       target="_blank"
+       i18n>Documentation</a>
+    <button ngbDropdownItem
+            (click)="goToApiDocs()"
+            i18n>API</button>
+    <button ngbDropdownItem
+            (click)="openAboutModal()"
+            i18n>About</button>
+  </div>
 </div>

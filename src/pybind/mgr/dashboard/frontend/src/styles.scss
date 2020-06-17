@@ -168,6 +168,10 @@ option {
 .dropdown-menu {
   min-width: 50px;
   z-index: 999999;
+
+  button.dropdown-item:focus {
+    outline: none;
+  }
 }
 .dropdown-menu > li > a {
   color: $color-dropdown-menu;

@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -20,7 +19,6 @@ describe('PoolListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      BsDropdownModule.forRoot(),
       HttpClientTestingModule,
       RouterTestingModule,
       ToastrModule.forRoot()

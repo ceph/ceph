@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -19,7 +18,6 @@ describe('ImageListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      BsDropdownModule.forRoot(),
       NgbNavModule,
       NgbProgressbarModule,
       HttpClientTestingModule

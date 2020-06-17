@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
@@ -43,7 +42,6 @@ describe('RbdListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      BsDropdownModule.forRoot(),
       NgbNavModule,
       ModalModule.forRoot(),
       NgbTooltipModule,
