@@ -22,7 +22,7 @@ def test_git_branch_exists(m_check_output, project_or_url):
     m_check_output.return_value = ''
     assert False == util.git_branch_exists(
         project_or_url, 'nobranchnowaycanthappen')
-    m_check_output.return_value = 'HHH branch'
+    m_check_output.return_value = b'HHH branch'
     assert True == util.git_branch_exists(project_or_url, 'master')
 
 

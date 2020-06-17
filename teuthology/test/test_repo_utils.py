@@ -106,7 +106,7 @@ class TestRepoUtils(object):
         process_mock = mock.Mock()
         attrs = {
             'wait.return_value': 1,
-            'stdout.read.return_value': "%s %s" % (git_str, branch_name),
+            'stdout.read.return_value': f"{git_str} {branch_name}".encode(),
         }
         process_mock.configure_mock(**attrs)
         mock_popen.return_value = process_mock

@@ -1146,12 +1146,13 @@ def _ssh_keyscan(hostname):
         stderr=subprocess.PIPE,
     )
     p.wait()
-    for line in p.stderr.readlines():
-        line = ensure_str(line.strip())
+    for line in p.stderr:
+        line = line.decode()
+        line = line.strip()
         if line and not line.startswith('#'):
             log.error(line)
-    for line in p.stdout.readlines():
-        host, key = ensure_str(line.strip()).split(' ', 1)
+    for line in p.stdout:
+        host, key = line.strip().decode().split(' ', 1)
         return key
 
 
@@ -1320,8 +1321,8 @@ def sh(command, log_limit=1024, cwd=None, env=None):
     lines = []
     truncated = False
     with proc.stdout:
-        for line in iter(proc.stdout.readline, b''):
-            line = ensure_str(line)
+        for line in proc.stdout:
+            line = line.decode()
             lines.append(line)
             line = line.strip()
             if len(line) > log_limit:
