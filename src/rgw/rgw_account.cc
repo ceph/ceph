@@ -54,3 +54,8 @@ void RGWAccountInfo::dump(Formatter * const f) const
   account_quota.dump(f);
   f->close_section();
 }
+
+void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
+{
+  o.push_back(new RGWAccountInfo("tenant1","account1"));
+}

@@ -138,4 +138,7 @@ TYPE(rgw_data_sync_status)
 #include "rgw/rgw_bucket_encryption.h"
 TYPE(RGWBucketEncryptionConfig)
 
+#include "rgw/rgw_account.h"
+TYPE(RGWAccountInfo)
+
 #endif
