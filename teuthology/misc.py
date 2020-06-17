@@ -28,8 +28,6 @@ from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.opsys import DEFAULT_OS_VERSION
 
-from six import ensure_str
-
 
 log = logging.getLogger(__name__)
 
@@ -647,7 +645,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
     on when the main site goes up and down.
     """
     # read in the specified file
-    in_data = ensure_str(get_file(remote, path, False))
+    in_data = get_file(remote, path, False).decode()
     out_data = ""
 
     first_line = True
@@ -685,7 +683,7 @@ def append_lines_to_file(remote, path, lines, sudo=False):
 
     temp_file_path = remote.mktemp()
 
-    data = ensure_str(get_file(remote, path, sudo))
+    data = get_file(remote, path, sudo).decode()
 
     # add the additional data and write it back out, using a temp file
     # in case of connectivity of loss, and then mv it to the
@@ -705,7 +703,7 @@ def prepend_lines_to_file(remote, path, lines, sudo=False):
 
     temp_file_path = remote.mktemp()
 
-    data = ensure_str(get_file(remote, path, sudo))
+    data = get_file(remote, path, sudo).decode()
 
     # add the additional data and write it back out, using a temp file
     # in case of connectivity of loss, and then mv it to the
@@ -810,7 +808,7 @@ def get_scratch_devices(remote):
     """
     devs = []
     try:
-        file_data = ensure_str(get_file(remote, "/scratch_devs"))
+        file_data = get_file(remote, "/scratch_devs").decode()
         devs = file_data.split()
     except Exception:
         devs = remote.sh('ls /dev/[sv]d?').strip().split('\n')
