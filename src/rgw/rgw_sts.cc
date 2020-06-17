@@ -169,12 +169,14 @@ int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
   return 0;
 }
 
-AssumeRoleRequestBase::AssumeRoleRequestBase( const string& duration,
+AssumeRoleRequestBase::AssumeRoleRequestBase( CephContext* cct,
+                                              const string& duration,
                                               const string& iamPolicy,
                                               const string& roleArn,
                                               const string& roleSessionName)
   : iamPolicy(iamPolicy), roleArn(roleArn), roleSessionName(roleSessionName)
 {
+  MIN_DURATION_IN_SECS = cct->_conf->rgw_sts_min_session_duration;
   if (duration.empty()) {
     this->duration = DEFAULT_DURATION_IN_SECS;
   } else {

@@ -479,7 +479,7 @@ void RGWSTSAssumeRoleWithWebIdentity::execute()
     return;
   }
 
-  STS::AssumeRoleWithWebIdentityRequest req(duration, providerId, policy, roleArn,
+  STS::AssumeRoleWithWebIdentityRequest req(s->cct, duration, providerId, policy, roleArn,
                         roleSessionName, iss, sub, aud);
   STS::AssumeRoleWithWebIdentityResponse response = sts.assumeRoleWithWebIdentity(req);
   op_ret = std::move(response.assumeRoleResp.retCode);
@@ -538,7 +538,7 @@ void RGWSTSAssumeRole::execute()
     return;
   }
 
-  STS::AssumeRoleRequest req(duration, externalId, policy, roleArn,
+  STS::AssumeRoleRequest req(s->cct, duration, externalId, policy, roleArn,
                         roleSessionName, serialNumber, tokenCode);
   STS::AssumeRoleResponse response = sts.assumeRole(req);
   op_ret = std::move(response.retCode);
