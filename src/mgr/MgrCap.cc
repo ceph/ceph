@@ -186,7 +186,7 @@ void MgrCapGrant::expand_profile(std::ostream *err) const {
       perms = mgr_rwxa_t{MGR_CAP_R | MGR_CAP_W};
     }
 
-    // whitelist all 'rbd_support' commands (restricted by optional
+    // allow all 'rbd_support' commands (restricted by optional
     // pool/namespace constraints)
     profile_grants.push_back({{}, "rbd_support", {}, {},
                               std::move(filtered_arguments), perms});

@@ -3184,7 +3184,7 @@ void Monitor::handle_tell_command(MonOpRequestRef op)
 				"please check usage and/or man page");
     }
   }
-  // see if command is whitelisted
+  // see if command is allowed
   if (!session->caps.is_capable(
       g_ceph_context,
       session->entity_name,
@@ -4253,7 +4253,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
    * tick() will periodically send them back through so we can send
    * the client elsewhere if we don't think we're getting back in.
    *
-   * But we whitelist a few sorts of messages:
+   * But we allow a few sorts of messages:
    * 1) Monitors can talk to us at any time, of course.
    * 2) auth messages. It's unlikely to go through much faster, but
    * it's possible we've just lost our quorum status and we want to take...

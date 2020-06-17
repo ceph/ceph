@@ -24,7 +24,7 @@
 
 
 /*
- * whitelist utility. Config string is a list of entries, where an entry is either an item,
+ * allowlist utility. Config string is a list of entries, where an entry is either an item,
  * a prefix, or a suffix. An item would be the name of the entity that we'd look up,
  * a prefix would be a string ending with an asterisk, a suffix would be a string starting
  * with an asterisk. For example:

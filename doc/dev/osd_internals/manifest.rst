@@ -455,7 +455,7 @@ Operations:
   Clears manifest chunks or redirect.  Lazily releases references, may
   leak.
 
-  do_osd_ops seems not to include it in the user_modify=false whitelist,
+  do_osd_ops seems not to include it in the user_modify=false ignorelist,
   and so will trigger a snapshot.  Note, this will be true even for a
   redirect though SET_REDIRECT does not flip user_modify.  This should
   be fixed -- unset-manifest should not be a user_modify.
@@ -468,7 +468,7 @@ Operations:
 
         rados -p base_pool tier-flush <obj-name>
 
-  Included in the user_modify=false whitelist, does not trigger a clone.
+  Included in the user_modify=false ignorelist, does not trigger a clone.
 
   Does not evict the extents.
 
