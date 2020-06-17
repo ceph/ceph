@@ -3,9 +3,9 @@
 
 #include "librbd/io/ObjectDispatch.h"
 #include "common/dout.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -28,7 +28,7 @@ void ObjectDispatch<I>::shut_down(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  m_image_ctx->op_work_queue->queue(on_finish, 0);
+  m_image_ctx->asio_engine->post(on_finish, 0);
 }
 
 template <typename I>

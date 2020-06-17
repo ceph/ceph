@@ -4,9 +4,9 @@
 #include "librbd/io/SimpleSchedulerObjectDispatch.h"
 #include "common/Timer.h"
 #include "common/errno.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"
@@ -505,12 +505,11 @@ void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
       ldout(cct, 20) << "running timer task " << m_timer_task << dendl;
 
       m_timer_task = nullptr;
-      m_image_ctx->op_work_queue->queue(
-          new LambdaContext(
-            [this, object_no](int r) {
-	      std::lock_guard locker{m_lock};
-              dispatch_delayed_requests(object_no);
-            }), 0);
+      m_image_ctx->asio_engine->post(
+        [this, object_no]() {
+          std::lock_guard locker{m_lock};
+          dispatch_delayed_requests(object_no);
+        });
     });
 
   ldout(cct, 20) << "scheduling task " << m_timer_task << " at "

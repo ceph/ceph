@@ -4,9 +4,9 @@
 #include "librbd/io/QueueImageDispatch.h"
 #include "common/dout.h"
 #include "common/Cond.h"
+#include "librbd/AsioEngine.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 
@@ -115,7 +115,7 @@ bool QueueImageDispatch<I>::enqueue(
   }
 
   *dispatch_result = DISPATCH_RESULT_CONTINUE;
-  m_image_ctx->op_work_queue->queue(on_dispatched, 0);
+  m_image_ctx->asio_engine->post(on_dispatched, 0);
   return true;
 }
 
