@@ -7,5 +7,5 @@ overrides:
         ms inject delay probability: .005
         ms inject delay max: 1
         mon client directed command retry: 5
-    log-whitelist:
+    log-ignorelist:
       - \(OSD_SLOW_PING_TIME

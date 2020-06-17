@@ -9,7 +9,7 @@ overrides:
   ceph:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
-    log-whitelist:
+    log-ignorelist:
     - but it is still running
     - overall HEALTH_
     - \(POOL_APP_NOT_ENABLED\)

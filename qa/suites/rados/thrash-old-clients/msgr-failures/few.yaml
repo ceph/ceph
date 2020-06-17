@@ -6,5 +6,5 @@ overrides:
         mon client directed command retry: 5
       osd:
         osd heartbeat use min delay socket: true
-    log-whitelist:
+    log-ignorelist:
       - \(OSD_SLOW_PING_TIME

@@ -16,7 +16,7 @@ tasks:
 - ceph:
     mon_bind_addrvec: false
     mon_bind_msgr2: false
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(FS_
       - \(MDS_

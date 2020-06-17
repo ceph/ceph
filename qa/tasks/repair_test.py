@@ -251,7 +251,7 @@ def task(ctx, config):
 
     The config should be as follows:
 
-      Must include the log-whitelist below
+      Must include the log-ignorelist below
       Must enable filestore_debug_inject_read_err config
 
     example:
@@ -260,7 +260,7 @@ def task(ctx, config):
     - chef:
     - install:
     - ceph:
-        log-whitelist:
+        log-ignorelist:
           - 'candidate had a stat error'
           - 'candidate had a read error'
           - 'deep-scrub 0 missing, 1 inconsistent objects'

@@ -18,7 +18,7 @@ overrides:
       osd:
         mon max pg per osd : 2
         osd max pg per osd hard ratio : 1
-    log-whitelist:
+    log-ignorelist:
       - \(TOO_FEW_PGS\)
       - \(PENDING_CREATING_PGS\)
 tasks:

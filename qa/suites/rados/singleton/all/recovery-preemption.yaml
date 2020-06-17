@@ -23,7 +23,7 @@ tasks:
         osd max pg log entries: 1000
         osd_target_pg_log_entries_per_osd: 0
         osd pg log trim min: 10
-    log-whitelist:
+    log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
       - \(OSDMAP_FLAGS\)
       - \(OSD_
