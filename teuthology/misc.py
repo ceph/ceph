@@ -9,7 +9,6 @@ import configobj
 import getpass
 import socket
 import subprocess
-import sys
 import tarfile
 import time
 import yaml
@@ -29,7 +28,8 @@ from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.opsys import DEFAULT_OS_VERSION
 
-from six import (reraise, ensure_str)
+from six import ensure_str
+
 
 log = logging.getLogger(__name__)
 
@@ -1179,17 +1179,17 @@ def stop_daemons_of_type(ctx, type_, cluster='ceph'):
     :param type_: type of daemons to be stopped.
     """
     log.info('Shutting down %s daemons...' % type_)
-    exc_info = (None, None, None)
+    exc = None
     for daemon in ctx.daemons.iter_daemons_of_role(type_, cluster):
         try:
             daemon.stop()
         except (CommandFailedError,
                 CommandCrashedError,
-                ConnectionLostError):
-            exc_info = sys.exc_info()
+                ConnectionLostError) as e:
+            exc = e
             log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
-    if exc_info != (None, None, None):
-        reraise(*exc_info)
+    if exc is not None:
+        raise exc
 
 
 def get_system_type(remote, distro=False, version=False):
