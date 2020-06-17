@@ -4,8 +4,8 @@ import yaml
 
 import pytest
 
-from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, RGWSpec, NFSServiceSpec, \
-    servicespec_validate_add, ServiceSpec, ServiceSpecValidationError
+from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
+    ServiceSpec, ServiceSpecValidationError, RGWSpec, NFSServiceSpec, IscsiServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 
 
@@ -83,6 +83,7 @@ def test_parse_host_placement_specs_raises_wrong_format(test_input):
         ("mds", ServiceSpec, 'test'),
         ("rgw", RGWSpec, 'realm.zone'),
         ("nfs", NFSServiceSpec, 'test'),
+        ("iscsi", IscsiServiceSpec, 'test'),
         ("osd", DriveGroupSpec, 'test'),
     ])
 def test_servicespec_map_test(s_type, o_spec, s_id):
@@ -92,6 +93,12 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
         "placement":
             dict(hosts=["host1:1.1.1.1"])
     }
+    if s_type == 'nfs':
+        dict_spec['pool'] = 'pool'
+    elif s_type == 'iscsi':
+        dict_spec['pool'] = 'pool'
+        dict_spec['api_user'] = 'api_user'
+        dict_spec['api_password'] = 'api_password'
     spec = ServiceSpec.from_json(dict_spec)
     assert isinstance(spec, o_spec)
     assert isinstance(spec.placement, PlacementSpec)
@@ -99,6 +106,6 @@ def test_servicespec_map_test(s_type, o_spec, s_id):
     assert spec.placement.hosts[0].hostname == 'host1'
     assert spec.placement.hosts[0].network == '1.1.1.1'
     assert spec.placement.hosts[0].name == ''
-    assert servicespec_validate_add(spec) is None
+    assert spec.validate() is None
     ServiceSpec.from_json(spec.to_json())
 
