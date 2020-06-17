@@ -1095,7 +1095,7 @@ void JournalMetadata::schedule_laggy_clients_disconnect(Context *on_finish) {
     for (auto &c : m_registered_clients) {
       if (c.state == cls::journal::CLIENT_STATE_DISCONNECTED ||
           c.id == m_client_id ||
-          m_settings.whitelisted_laggy_clients.count(c.id) > 0) {
+          m_settings.allowlisted_laggy_clients.count(c.id) > 0) {
         continue;
       }
       const std::string &client_id = c.id;
