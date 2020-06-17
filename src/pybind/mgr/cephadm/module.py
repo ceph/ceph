@@ -141,7 +141,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
     instance = None
     NATIVE_OPTIONS = []  # type: List[Any]
-    MODULE_OPTIONS = [
+    MODULE_OPTIONS: List[dict] = [
         {
             'name': 'ssh_config_file',
             'type': 'str',
@@ -499,20 +499,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     def config_notify(self):
         """
         This method is called whenever one of our config options is changed.
+
+        TODO: this method should be moved into mgr_module.py
         """
+        module_options_changed: List[str] = []
         for opt in self.MODULE_OPTIONS:
+            old_val = getattr(self, opt['name'], None)
+            new_val = self.get_module_option(opt['name'])
             setattr(self,
                     opt['name'],  # type: ignore
-                    self.get_module_option(opt['name']))  # type: ignore
+                    new_val)  # type: ignore
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
+            if old_val != new_val:
+                module_options_changed.append(opt['name'])
         for opt in self.NATIVE_OPTIONS:
             setattr(self,
                     opt,  # type: ignore
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
 
+        for what in module_options_changed:
+            self.config_notify_one(what)
+
         self.event.set()
+
+    def config_notify_one(self, what):
+        pass
 
     def notify(self, notify_type, notify_id):
         pass
