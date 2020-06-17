@@ -40,7 +40,7 @@ install dependencies. The instructions are given below::
     virtualenv --python python3 ./virtualenv
     source virtualenv/bin/activate
     pip install --upgrade pip
-    pip install -r requirements3.txt
+    pip install -r requirements.txt
     python setup.py develop
 
 
@@ -65,12 +65,12 @@ interacting with the services to schedule tests and to report the test results.
 Update Dependencies
 -------------------
 
-We track the dependencies using ``requirements2.txt`` and ``requirements3.txt`` 
+We track the dependencies using ``requirements.txt`` 
 for python2 and python3 respectively. These packages are tested, and should work 
 with teuthology. But if you want to bump up the versions of them, please use the 
 following command to update these files. For python3 ::
 
-  pip-compile -qo- | sed '/^-e / d' > requirements3.txt
+  pip-compile -qo- | sed '/^-e / d' > requirements.txt
 
 Please upgrade pip-tool using following command ::
 

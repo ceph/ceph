@@ -163,7 +163,7 @@ fi
 ./$VENV/bin/pip install setuptools --upgrade
 
 # Install all requirements
-./$VENV/bin/pip install --upgrade -r requirements3.txt
+./$VENV/bin/pip install --upgrade -r requirements.txt
 
 # Check to make sure requirements are met
 ./$VENV/bin/pip check
