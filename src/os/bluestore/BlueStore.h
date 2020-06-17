@@ -1283,7 +1283,7 @@ public:
 
   private:
     /// forward lookups
-    mempool::bluestore_cache_onode::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     friend class Collection; // for split_cache()
 
@@ -2166,6 +2166,7 @@ private:
           mempool::bluestore_Extent::allocated_bytes() +
           mempool::bluestore_cache_meta::allocated_bytes() +
           mempool::bluestore_cache_other::allocated_bytes() +
+	   mempool::bluestore_cache_onode::allocated_bytes() +
           mempool::bluestore_SharedBlob::allocated_bytes() +
           mempool::bluestore_inline_bl::allocated_bytes();
       }
