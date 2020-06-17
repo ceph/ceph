@@ -2,8 +2,6 @@
 Support for paramiko remote objects.
 """
 
-from six import ensure_str
-
 import teuthology.lock.query
 import teuthology.lock.util
 from teuthology.orchestra import run
@@ -247,9 +245,12 @@ class Remote(object):
             kwargs['stdout'] = BytesIO()
         if 'args' not in kwargs:
             kwargs['args'] = script
-        proc=self.run(**kwargs)
-        out=proc.stdout.getvalue()
-        return ensure_str(out)
+        proc = self.run(**kwargs)
+        out = proc.stdout.getvalue()
+        if isinstance(out, bytes):
+            return out.decode()
+        else:
+            return out
 
     def sh_file(self, script, label="script", sudo=False, **kwargs):
         """
