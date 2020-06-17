@@ -792,6 +792,47 @@ Per mapping (block device) `rbd device map` options:
   solid-state drives).  For filestore with filestore_punch_hole = false, the
   recommended setting is image object size (typically 4M).
 
+* crush_location=x - Specify the location of the client in terms of CRUSH
+  hierarchy (since 5.8).  This is a set of key-value pairs separated from
+  each other by '|', with keys separated from values by ':'.  Note that '|'
+  may need to be quoted or escaped to avoid it being interpreted as a pipe
+  by the shell.  The key is the bucket type name (e.g. rack, datacenter or
+  region with default bucket types) and the value is the bucket name.  For
+  example, to indicate that the client is local to rack "myrack", data center
+  "mydc" and region "myregion"::
+
+    crush_location=rack:myrack|datacenter:mydc|region:myregion
+
+  Each key-value pair stands on its own: "myrack" doesn't need to reside in
+  "mydc", which in turn doesn't need to reside in "myregion".  The location
+  is not a path to the root of the hierarchy but rather a set of nodes that
+  are matched independently, owning to the fact that bucket names are unique
+  within a CRUSH map.  "Multipath" locations are supported, so it is possible
+  to indicate locality for multiple parallel hierarchies::
+
+    crush_location=rack:myrack1|rack:myrack2|datacenter:mydc
+
+* read_from_replica=no - Disable replica reads, always pick the primary OSD
+  (since 5.8, default).
+
+* read_from_replica=balance - When issued a read on a replicated pool, pick
+  a random OSD for serving it (since 5.8).
+
+  This mode is safe for general use only since Octopus (i.e. after "ceph osd
+  require-osd-release octopus").  Otherwise it should be limited to read-only
+  workloads such as images mapped read-only everywhere or snapshots.
+
+* read_from_replica=localize - When issued a read on a replicated pool, pick
+  the most local OSD for serving it (since 5.8).  The locality metric is
+  calculated against the location of the client given with crush_location;
+  a match with the lowest-valued bucket type wins.  For example, with default
+  bucket types, an OSD in a matching rack is closer than an OSD in a matching
+  data center, which in turn is closer than an OSD in a matching region.
+
+  This mode is safe for general use only since Octopus (i.e. after "ceph osd
+  require-osd-release octopus").  Otherwise it should be limited to read-only
+  workloads such as images mapped read-only everywhere or snapshots.
+
 `rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
