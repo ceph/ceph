@@ -367,6 +367,9 @@ RADOS pool *nfs-ganesha* and namespace *nfs-ns*,::
 
   # ceph orch apply nfs foo nfs-ganesha nfs-ns
 
+.. note::
+   Create the *nfs-ganesha* pool first if it doesn't exist.
+
 See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
 
 Deploying custom containers
