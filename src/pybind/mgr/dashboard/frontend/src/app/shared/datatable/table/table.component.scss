@@ -1,26 +1,27 @@
 @import 'defaults.scss';
 
 @mixin row-details-icon {
+  color: $gray-900;
   font-family: 'ForkAwesome', sans-serif;
   font-size: 1rem;
-  color: $gray-900;
   line-height: 1;
 }
 
 .dataTables_wrapper {
   margin-bottom: 25px;
+
   .separator {
-    height: 30px;
     border-left: 1px solid $color-table-seperator-border;
-    padding-left: 5px;
-    margin-left: 5px;
     display: inline-block;
+    height: 30px;
+    margin-left: 5px;
+    padding-left: 5px;
     vertical-align: middle;
   }
 
   .widget-toolbar {
-    float: right;
     border-left: 1px solid $color-table-seperator-border;
+    float: right;
     padding: 0 8px;
 
     .form-check {
@@ -33,42 +34,51 @@
     text-align: right;
   }
 }
+
 .dataTables_header {
   background-color: $color-table-header-bg;
   border: 1px solid $color-table-header-border;
   border-bottom: none;
   padding: 5px;
   position: relative;
+
   .cd-datatable-actions {
     float: left;
   }
+
   ::ng-deep .table-filters {
-    float: right;
     border-left: 1px solid $color-table-seperator-border;
+    float: right;
     padding-left: 8px;
   }
+
   ::ng-deep .table-filters label {
     margin-right: 4px;
   }
+
   .form-group {
     padding-left: 8px;
   }
+
   .input-group {
-    float: right;
     border-left: 1px solid $color-table-input-border;
+    float: right;
+    max-width: 250px;
     padding-left: 8px;
     padding-right: 8px;
     width: 40%;
-    max-width: 250px;
+
     .form-control {
       height: 30px;
     }
   }
+
   .input-group.dataTables_paginate {
-    width: 8%;
     min-width: 85px;
     padding-right: 8px;
+    width: 8%;
   }
+
   .filter-chips {
     float: right;
     padding: 0 8px;
@@ -82,33 +92,33 @@
 
   .progress-linear {
     display: block;
+    height: 5px;
+    margin: 0;
+    padding: 0;
     position: relative;
     width: 100%;
-    height: 5px;
-    padding: 0;
-    margin: 0;
 
     .container {
       background-color: $color-table-active-row;
 
       .bar {
-        left: 0;
-        height: 100%;
-        width: 100%;
-        position: absolute;
-        overflow: hidden;
         background-color: $color-table-active-row;
+        height: 100%;
+        left: 0;
+        overflow: hidden;
+        position: absolute;
+        width: 100%;
       }
 
-      .bar:before {
-        display: block;
-        position: absolute;
-        content: '';
-        left: -200px;
-        width: 200px;
-        height: 100%;
-        background-color: $color-table-progress-bar-active;
+      .bar::before {
         animation: progress-loading 3s linear infinite;
+        background-color: $color-table-progress-bar-active;
+        content: '';
+        display: block;
+        height: 100%;
+        left: -200px;
+        position: absolute;
+        width: 200px;
       }
     }
   }
@@ -141,12 +151,12 @@
 
     .datatable-header-cell {
       @include table-cell;
-
-      text-align: left;
       font-weight: bold;
 
+      text-align: left;
+
       .datatable-header-cell-label {
-        &:after {
+        &::after {
           font-family: ForkAwesome;
           font-weight: 400;
           height: 9px;
@@ -159,16 +169,16 @@
       }
 
       &.sortable {
-        .datatable-header-cell-label:after {
+        .datatable-header-cell-label::after {
           content: ' \f0dc';
         }
 
         &.sort-active {
-          &.sort-asc .datatable-header-cell-label:after {
+          &.sort-asc .datatable-header-cell-label::after {
             content: ' \f160';
           }
 
-          &.sort-desc .datatable-header-cell-label:after {
+          &.sort-desc .datatable-header-cell-label::after {
             content: ' \f161';
           }
         }
@@ -179,69 +189,84 @@
       }
     }
   }
+
   .datatable-body {
     margin-bottom: -6px;
 
     .empty-row {
       background-color: $color-table-empty-row;
-      text-align: center;
-      font-weight: bold;
       font-style: italic;
-      padding-top: 5px;
+      font-weight: bold;
       padding-bottom: 5px;
+      padding-top: 5px;
+      text-align: center;
     }
+
     .datatable-body-row {
       &.clickable:hover .datatable-row-group {
         background-color: $color-table-hover-row;
-        transition-property: background;
         transition-duration: 0.3s;
+        transition-property: background;
         transition-timing-function: linear;
       }
+
       &.datatable-row-even {
         background-color: $color-table-even-row-bg;
       }
+
       &.datatable-row-odd {
         background-color: $color-table-odd-row-bg;
       }
+
       &.active,
       &.active:hover {
         background-color: $color-table-active-row-hover;
       }
+
       .datatable-body-cell {
         @include table-cell;
+
         &:first-child {
           border-left: none;
         }
+
         .datatable-body-cell-label {
           display: block;
           height: 100%;
         }
       }
     }
+
     .datatable-row-detail {
-      padding: 20px;
       border-bottom: 2px solid $color-table-header-border;
       overflow-y: visible !important;
+      padding: 20px;
     }
+
     .expand-collapse-icon {
       display: block;
       height: 100%;
       text-align: center;
+
       &:hover {
         text-decoration: none;
       }
     }
-    .expand-collapse-icon-right:before {
+
+    .expand-collapse-icon-right::before {
       @include row-details-icon;
       content: '\f105';
     }
-    .expand-collapse-icon-down:before {
+
+    .expand-collapse-icon-down::before {
       @include row-details-icon;
       content: '\f107';
     }
   }
+
   .datatable-footer {
     display: unset !important;
+
     .selected-count,
     .page-count {
       font-style: italic;
@@ -259,18 +284,23 @@
     left: -200px;
     width: 15%;
   }
+
   50% {
     width: 30%;
   }
+
   70% {
     width: 70%;
   }
+
   80% {
     left: 50%;
   }
+
   95% {
     left: 120%;
   }
+
   to {
     left: 100%;
   }

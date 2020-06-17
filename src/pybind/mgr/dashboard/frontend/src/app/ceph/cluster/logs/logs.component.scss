@@ -14,8 +14,8 @@ p {
   }
 
   .timestamp {
-    font-weight: bold;
     flex-shrink: 0;
+    font-weight: bold;
   }
 
   .priority {
@@ -41,9 +41,9 @@ p {
 
 ::ng-deep timepicker table tbody tr td {
   input.bs-timepicker-field {
-    width: 3.5rem !important;
     font-size: 1rem;
     padding: 4px 6px;
+    width: 3.5rem !important;
   }
 }
 
