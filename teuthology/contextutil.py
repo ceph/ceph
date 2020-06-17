@@ -7,7 +7,6 @@ import itertools
 from teuthology.config import config
 from teuthology.exceptions import MaxWhileTries
 
-from six import reraise
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +52,7 @@ def nested(*managers):
             # Don't rely on sys.exc_info() still containing
             # the right information. Another exception may
             # have been raised and caught by an exit method
-            reraise(*exc)
+            raise exc[1]
 
 
 class safe_while(object):

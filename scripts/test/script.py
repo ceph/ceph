@@ -1,6 +1,5 @@
 import subprocess
 from pytest import raises
-from six import ensure_str
 
 
 class Script(object):
@@ -8,7 +7,7 @@ class Script(object):
 
     def test_help(self):
         args = (self.script_name, '--help')
-        out = ensure_str(subprocess.check_output(args))
+        out = subprocess.check_output(args).decode()
         assert out.startswith('usage')
 
     def test_invalid(self):

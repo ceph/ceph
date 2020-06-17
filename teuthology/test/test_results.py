@@ -3,7 +3,7 @@ from teuthology.config import config
 from teuthology import results
 from teuthology import report
 
-from mock import patch, DEFAULT
+from unittest.mock import patch, DEFAULT
 
 
 class TestResultsEmail(object):

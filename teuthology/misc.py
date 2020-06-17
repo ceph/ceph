@@ -9,7 +9,6 @@ import configobj
 import getpass
 import socket
 import subprocess
-import sys
 import tarfile
 import time
 import yaml
@@ -29,7 +28,6 @@ from teuthology.config import config
 from teuthology.contextutil import safe_while
 from teuthology.orchestra.opsys import DEFAULT_OS_VERSION
 
-from six import (reraise, ensure_str)
 
 log = logging.getLogger(__name__)
 
@@ -647,7 +645,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
     on when the main site goes up and down.
     """
     # read in the specified file
-    in_data = ensure_str(get_file(remote, path, False))
+    in_data = get_file(remote, path, False).decode()
     out_data = ""
 
     first_line = True
@@ -685,7 +683,7 @@ def append_lines_to_file(remote, path, lines, sudo=False):
 
     temp_file_path = remote.mktemp()
 
-    data = ensure_str(get_file(remote, path, sudo))
+    data = get_file(remote, path, sudo).decode()
 
     # add the additional data and write it back out, using a temp file
     # in case of connectivity of loss, and then mv it to the
@@ -705,7 +703,7 @@ def prepend_lines_to_file(remote, path, lines, sudo=False):
 
     temp_file_path = remote.mktemp()
 
-    data = ensure_str(get_file(remote, path, sudo))
+    data = get_file(remote, path, sudo).decode()
 
     # add the additional data and write it back out, using a temp file
     # in case of connectivity of loss, and then mv it to the
@@ -810,7 +808,7 @@ def get_scratch_devices(remote):
     """
     devs = []
     try:
-        file_data = ensure_str(get_file(remote, "/scratch_devs"))
+        file_data = get_file(remote, "/scratch_devs").decode()
         devs = file_data.split()
     except Exception:
         devs = remote.sh('ls /dev/[sv]d?').strip().split('\n')
@@ -1148,12 +1146,13 @@ def _ssh_keyscan(hostname):
         stderr=subprocess.PIPE,
     )
     p.wait()
-    for line in p.stderr.readlines():
-        line = ensure_str(line.strip())
+    for line in p.stderr:
+        line = line.decode()
+        line = line.strip()
         if line and not line.startswith('#'):
             log.error(line)
-    for line in p.stdout.readlines():
-        host, key = ensure_str(line.strip()).split(' ', 1)
+    for line in p.stdout:
+        host, key = line.strip().decode().split(' ', 1)
         return key
 
 
@@ -1179,17 +1178,17 @@ def stop_daemons_of_type(ctx, type_, cluster='ceph'):
     :param type_: type of daemons to be stopped.
     """
     log.info('Shutting down %s daemons...' % type_)
-    exc_info = (None, None, None)
+    exc = None
     for daemon in ctx.daemons.iter_daemons_of_role(type_, cluster):
         try:
             daemon.stop()
         except (CommandFailedError,
                 CommandCrashedError,
-                ConnectionLostError):
-            exc_info = sys.exc_info()
+                ConnectionLostError) as e:
+            exc = e
             log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
-    if exc_info != (None, None, None):
-        reraise(*exc_info)
+    if exc is not None:
+        raise exc
 
 
 def get_system_type(remote, distro=False, version=False):
@@ -1322,8 +1321,8 @@ def sh(command, log_limit=1024, cwd=None, env=None):
     lines = []
     truncated = False
     with proc.stdout:
-        for line in iter(proc.stdout.readline, b''):
-            line = ensure_str(line)
+        for line in proc.stdout:
+            line = line.decode()
             lines.append(line)
             line = line.strip()
             if len(line) > log_limit:

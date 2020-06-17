@@ -298,7 +298,7 @@ class CephAnsible(Task):
                               if role.startswith('osd')])
             if teuth_config.get('ceph_ansible') and \
                     self.ctx.machine_type in teuth_config['ceph_ansible']['has_lvm_scratch_disks']:
-                devices = get_file(remote, "/scratch_devs").split()
+                devices = get_file(remote, "/scratch_devs").decode().split()
                 vols = []
 
                 for dev in devices:

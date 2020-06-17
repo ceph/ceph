@@ -5,7 +5,6 @@ import requests
 import smtplib
 import socket
 import subprocess
-import six
 import sys
 
 from email.mime.text import MIMEText
@@ -462,7 +461,7 @@ def find_git_parent(project, sha1):
         resp = requests.get(url)
         if not resp.ok:
             log.error('git refresh failed for %s: %s',
-                      project, six.ensure_str(resp.content))
+                      project, resp.content.decode())
 
     def get_sha1s(project, committish, count):
         url = '/'.join((base_url, '%s.git' % project,

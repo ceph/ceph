@@ -1,6 +1,6 @@
 from teuthology import timer
 
-from mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch, mock_open
 from time import time
 
 

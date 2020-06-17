@@ -21,7 +21,7 @@ def test_get_user_ssh_pubkey(path, exists):
         with patch('teuthology.provision.cloud.util.open', mock_open(), create=True) as m_open:
             util.get_user_ssh_pubkey(path)
             if exists:
-                m_open.assert_called_once_with(path, 'rb')
+                m_open.assert_called_once_with(path)
 
 
 @mark.parametrize(

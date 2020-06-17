@@ -33,16 +33,14 @@ First install the non-PyPI dependencies::
 
 Next, clone its `git repository <https://github.com/ceph/teuthology/>`__,
 create a `virtualenv <http://virtualenv.readthedocs.org/en/latest/>`__, and
-install dependencies. For python3, the instructions are given below. For
-python2, replace the ``requirements3.txt`` with ``requirements2.txt``, and
-replace ``python3`` with ``python2``::
+install dependencies. The instructions are given below::
 
     git clone https://github.com/ceph/teuthology/
     cd teuthology
     virtualenv --python python3 ./virtualenv
     source virtualenv/bin/activate
     pip install --upgrade pip
-    pip install -r requirements3.txt
+    pip install -r requirements.txt
     python setup.py develop
 
 
@@ -67,12 +65,12 @@ interacting with the services to schedule tests and to report the test results.
 Update Dependencies
 -------------------
 
-We track the dependencies using ``requirements2.txt`` and ``requirements3.txt`` 
+We track the dependencies using ``requirements.txt`` 
 for python2 and python3 respectively. These packages are tested, and should work 
 with teuthology. But if you want to bump up the versions of them, please use the 
 following command to update these files. For python3 ::
 
-  pip-compile -qo- | sed '/^-e / d' > requirements3.txt
+  pip-compile -qo- | sed '/^-e / d' > requirements.txt
 
 Please upgrade pip-tool using following command ::
 

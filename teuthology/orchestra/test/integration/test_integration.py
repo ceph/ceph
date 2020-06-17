@@ -1,7 +1,7 @@
 from teuthology.orchestra import monkey
 monkey.patch_all()
 
-from six import StringIO
+from io import StringIO
 
 import os
 from teuthology.orchestra import connection, remote, run

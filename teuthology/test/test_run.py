@@ -1,7 +1,7 @@
 import pytest
 import docopt
 
-from mock import patch, call, Mock
+from unittest.mock import patch, call, Mock
 
 from teuthology import run
 from scripts import run as scripts_run

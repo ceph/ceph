@@ -4,16 +4,14 @@ import dateutil.parser
 import json
 import os
 
-from six import ensure_str
-
 from teuthology.util.flock import FileLock
 
 def get_user_ssh_pubkey(path='~/.ssh/id_rsa.pub'):
     full_path = os.path.expanduser(path)
     if not os.path.exists(full_path):
         return
-    with open(full_path, 'rb') as f:
-        return ensure_str(f.read()).strip()
+    with open(full_path) as f:
+        return f.read().strip()
 
 
 def combine_dicts(list_of_dicts, func):

@@ -5,7 +5,6 @@ import gevent
 import gevent.pool
 import gevent.queue
 
-from six import reraise
 
 log = logging.getLogger(__name__)
 
@@ -28,13 +27,11 @@ def capture_traceback(func, *args, **kwargs):
 
 def resurrect_traceback(exc):
     if isinstance(exc, ExceptionHolder):
-        exc_info = exc.exc_info
+        raise exc.exc_info[1]
     elif isinstance(exc, BaseException):
-        exc_info = (type(exc), exc, None)
+        raise exc
     else:
         return
-
-    reraise(*exc_info)
 
 
 class parallel(object):

@@ -13,8 +13,6 @@ import pipes
 import logging
 import shutil
 
-from teuthology.util.compat import PY3
-
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
                                    ConnectionLostError)
@@ -274,38 +272,16 @@ def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):
         f._flags += ChannelFile.FLAG_BINARY
     for line in f:
         if capture:
-            #out = ensure_str(line)
-            if PY3:
-                if isinstance(capture, io.StringIO):
-                    if isinstance(line, str):
-                        capture.write(line)
-                    else:
-                        capture.write(line.decode('utf-8', 'replace'))
-                elif isinstance(capture, io.BytesIO):
-                    if isinstance(line, str):
-                        capture.write(line.encode())
-                    else:
-                        capture.write(line)
-            else:
-                if isinstance(capture, io.StringIO):
-                    if isinstance(line, str):
-                        capture.write(line.decode('utf-8', 'replace'))
-                    else:
-                        capture.write(line)
-                elif isinstance(capture, io.BytesIO):
-                    if isinstance(line, str):
-                        capture.write(line)
-                    else:
-                        capture.write(line.encode())
+            if isinstance(capture, io.StringIO):
+                if isinstance(line, str):
+                    capture.write(line)
                 else:
-                    # isinstance does not work with cStringIO.StringIO and
-                    # fails with error:
-                    #   TypeError: isinstance() arg 2 must be a class, type,
-                    #   or tuple of classes and types
-                    if isinstance(line, str):
-                        capture.write(line)
-                    else:
-                        capture.write(line.encode())
+                    capture.write(line.decode('utf-8', 'replace'))
+            elif isinstance(capture, io.BytesIO):
+                if isinstance(line, str):
+                    capture.write(line.encode())
+                else:
+                    capture.write(line)
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
         try:
@@ -324,11 +300,6 @@ def copy_and_close(src, fdst):
         if isinstance(src, bytes):
             src = io.BytesIO(src)
         elif isinstance(src, str):
-            if PY3:
-                src = io.StringIO(src)
-            else:
-                src = io.BytesIO(src)
-        elif not PY3 and isinstance(src, unicode):  # noqa: F821
             src = io.StringIO(src)
         shutil.copyfileobj(src, fdst)
     fdst.close()

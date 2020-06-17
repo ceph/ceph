@@ -1,7 +1,5 @@
 import logging
 
-from six import string_types as basestring
-
 from teuthology.misc import deep_merge
 from teuthology.orchestra.cluster import Cluster
 
@@ -76,7 +74,7 @@ class Task(object):
             if len(role_matches.remotes) > 0:
                 for (remote, roles) in role_matches.remotes.items():
                     cluster.add(remote, roles)
-            elif isinstance(host_spec, basestring):
+            elif isinstance(host_spec, str):
                 for (remote, roles) in self.ctx.cluster.remotes.items():
                     if remote.name.split('@')[-1] == host_spec or \
                             remote.shortname == host_spec:

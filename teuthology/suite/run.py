@@ -6,7 +6,6 @@ import re
 import time
 import yaml
 
-from six.moves import input
 from humanfriendly import format_timespan
 
 from datetime import datetime
