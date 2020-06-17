@@ -78,6 +78,15 @@ static std::string map_option_read_from_replica_cb(const char *value_char)
   return "";
 }
 
+static std::string map_option_compression_hint_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "none") || !strcmp(value_char, "compressible") ||
+      !strcmp(value_char, "incompressible")) {
+    return value_char;
+  }
+  return "";
+}
+
 static void put_map_option(const std::string &key, const std::string &val)
 {
   map_options[key] = val;
@@ -174,6 +183,10 @@ static int parse_map_options(const std::string &options_string)
     } else if (!strcmp(this_char, "read_from_replica")) {
       if (put_map_option_value("read_from_replica", value_char,
                                map_option_read_from_replica_cb))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "compression_hint")) {
+      if (put_map_option_value("compression_hint", value_char,
+                               map_option_compression_hint_cb))
         return -EINVAL;
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
