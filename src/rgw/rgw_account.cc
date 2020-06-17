@@ -36,3 +36,24 @@ int RGWAccountCtl::store_info(const RGWAccountInfo& info,
                                           y);
                           });
 }
+
+int RGWAccountCtl::read_info(const std::string& account_id,
+                             RGWAccountInfo* info,
+                             RGWObjVersionTracker * const objv_tracker,
+                             real_time * const pmtime,
+                             map<std::string, bufferlist> * pattrs,
+                             optional_yield y)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+                            return svc.account->read_account_info(op->ctx(),
+                                                                  account_id,
+                                                                  info,
+                                                                  objv_tracker,
+                                                                  pmtime,
+                                                                  pattrs,
+                                                                  y
+                                                                  );
+
+                          }
+    );
+}

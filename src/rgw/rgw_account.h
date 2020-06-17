@@ -124,10 +124,6 @@ public:
   int remove_user(const rgw_user& user);
   int remove_role(const RGWRole& role);
 
-  int get_info_by_id(const std::string& id,
-		     RGWAccountInfo* info,
-		     optional_yield y);
-
   int store_info(const RGWAccountInfo& info,
 		 RGWObjVersionTracker *objv_tracker,
 		 const real_time& mtime,
@@ -135,7 +131,11 @@ public:
 		 map<string, bufferlist> *pattrs,
 		 optional_yield y);
 
-  int read_info(RGWAccountInfo* info,
+  int read_info(const std::string& account_id,
+		RGWAccountInfo* info,
+		RGWObjVersionTracker * const objv_tracker,
+		real_time * const pmtime,
+		map<std::string, bufferlist> * pattrs,
 		optional_yield y);
 
   int remove_info(const RGWAccountInfo& info,
