@@ -49,7 +49,7 @@ void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& 
   } else if (!redirect_info.replace_key_with.empty()) {
     *new_url += redirect_info.replace_key_with;
   } else {
-    *new_url += key;
+    *new_url += key + "/";
   }
 
   if(redirect.http_redirect_code > 0) 
@@ -107,7 +107,7 @@ bool RGWBucketWebsiteConf::should_redirect(const string& key, const int http_err
   return true;
 }
 
-bool RGWBucketWebsiteConf::get_effective_key(const string& key, string *effective_key, bool is_file) const
+bool RGWBucketWebsiteConf::get_effective_key(const string& key, string *effective_key) const
 {
   if (index_doc_suffix.empty()) {
     return false;
@@ -117,8 +117,6 @@ bool RGWBucketWebsiteConf::get_effective_key(const string& key, string *effectiv
     *effective_key = index_doc_suffix;
   } else if (key[key.size() - 1] == '/') {
     *effective_key = key + index_doc_suffix;
-  } else if (! is_file) {
-    *effective_key = key + "/" + index_doc_suffix; 
   } else {
     *effective_key = key;
   }

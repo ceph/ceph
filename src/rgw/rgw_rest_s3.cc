@@ -4873,27 +4873,44 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
   return handler;
 }
 
-bool RGWHandler_REST_S3Website::web_dir() const {
-  std::string subdir_name = url_decode(s->object.name);
+bool RGWHandler_REST_S3Website::redirect_to_index_doc(const std::string index_doc_suffix, boost::optional<int> &http_ret) const {
+  std::string redirect_object_name = original_object_name;
 
-  if (subdir_name.empty()) {
-    return false;
-  } else if (subdir_name.back() == '/') {
-    subdir_name.pop_back();
+  if (redirect_object_name.back() != '/') {
+    redirect_object_name += '/' + index_doc_suffix;
   }
 
-  rgw_obj obj(s->bucket, subdir_name);
+  rgw_obj redirect_obj(s->bucket, redirect_object_name);
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
-  obj_ctx.set_prefetch_data(obj);
+  RGWObjectCtx& redirect_obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  redirect_obj_ctx.set_atomic(redirect_obj);
+  redirect_obj_ctx.set_prefetch_data(redirect_obj);
 
   RGWObjState* state = nullptr;
-  if (store->getRados()->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false, s->yield) < 0) {
+  if (store->getRados()->get_obj_state(&redirect_obj_ctx, s->bucket_info, redirect_obj, &state, false, s->yield) < 0) {
     return false;
   }
   if (! state->exists) {
     return false;
+  }
+
+  if (original_object_name.back() != '/' && state->exists) {
+    RGWAccessControlPolicy policy(s->cct);
+    auto iter = state->attrset.find(RGW_ATTR_ACL);
+    if (iter == state->attrset.end()) {
+      return false;
+    }
+    bufferlist::const_iterator bliter = iter->second.begin();
+    try {
+      policy.decode(bliter);
+    } catch (buffer::error& err) {
+      return false;
+    }
+    if (! policy.verify_permission(s, *s->auth.identity, s->perm_mask, RGW_PERM_READ)) {
+      http_ret = -EACCES;
+      return false;
+    }
+    return true;
   }
   return state->exists;
 }
@@ -4929,7 +4946,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   }
 
   rgw_obj_key new_obj;
-  bool get_res = s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
+  bool get_res = s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
   if (!get_res) {
     s->err.message = "The IndexDocument Suffix is not configurated or not well formed!";
     ldpp_dout(s, 5) << s->err.message << dendl;
@@ -4940,8 +4957,10 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
 		    << new_obj << dendl;
 
   RGWBWRoutingRule rrule;
+  std::string index_doc_suffix = s->bucket_info.website_conf.index_doc_suffix;
+  boost::optional<int> extra_http_ret;
   bool should_redirect =
-    s->bucket_info.website_conf.should_redirect(new_obj.name, 0, &rrule);
+    s->bucket_info.website_conf.should_redirect(s->object.name, 0, &rrule) || redirect_to_index_doc(index_doc_suffix, extra_http_ret);
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
@@ -4950,13 +4969,17 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect,
 		    &redirect_code);
-    // APply a custom HTTP response code
+    // Apply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
     ldpp_dout(s, 10) << "retarget redirect code=" << redirect_code
 		      << " proto+host:" << protocol << "://" << hostname
 		      << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
+  }
+
+  if (extra_http_ret) {
+    return extra_http_ret.get();
   }
 
   /*
@@ -5062,9 +5085,11 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   ldpp_dout(s, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 
   RGWBWRoutingRule rrule;
+  std::string index_doc_suffix = s->bucket_info.website_conf.index_doc_suffix;
+  boost::optional<int> extra_http_ret;
   bool should_redirect =
     s->bucket_info.website_conf.should_redirect(original_object_name,
-                                                http_error_code, &rrule);
+                                                http_error_code, &rrule) || redirect_to_index_doc(index_doc_suffix, extra_http_ret);
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
