@@ -760,6 +760,7 @@ enum class OPT {
   PUBSUB_SUB_PULL,
   PUBSUB_EVENT_RM,
   ACCOUNT_CREATE,
+  ACCOUNT_GET,
 };
 
 }
@@ -973,6 +974,7 @@ static SimpleCmd::Commands all_cmds = {
   { "subscription pull", OPT::PUBSUB_SUB_PULL },
   { "subscription ack", OPT::PUBSUB_EVENT_RM },
   { "account create", OPT::ACCOUNT_CREATE },
+  { "account get", OPT::ACCOUNT_GET },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -9196,23 +9198,51 @@ next:
     }
   }
 
- if (opt_cmd == OPT::ACCOUNT_CREATE) {
+
+ if (opt_cmd == OPT::ACCOUNT_CREATE ||
+     opt_cmd == OPT::ACCOUNT_GET) {
    if (account_id.empty()) {
      cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
    }
 
-   RGWAccountInfo account_info(account_id, tenant);
+   if (opt_cmd == OPT::ACCOUNT_CREATE) {
+     RGWAccountInfo account_info(account_id, tenant);
+     RGWObjVersionTracker objv_tracker;
 
-   RGWObjVersionTracker objv_tracker;
-   ret = store->ctl()->account->store_info(account_info, &objv_tracker, real_time(),
-					true, nullptr, null_yield);
-   if (ret < 0) {
-     cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
-     return -ret;
+     ret = store->ctl()->account->store_info(account_info, &objv_tracker, real_time(),
+					     true, nullptr, null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+
+     encode_json("AccountInfo", account_info, formatter);
+     formatter->flush(cout);
    }
 
-   encode_json("AccountInfo", account_info, formatter);
-   formatter->flush(cout);
+   if (opt_cmd == OPT::ACCOUNT_GET) {
+     RGWObjVersionTracker objv_tracker;
+     real_time mtime;
+     RGWAccountInfo account_info;
+     map<std::string, bufferlist> attrs;
+
+     ret = store->ctl()->account->read_info(account_id,
+					    &account_info,
+					    &objv_tracker,
+					    &mtime,
+					    &attrs,
+					    null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not get account " << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+
+     encode_json("AccountInfo", account_info, formatter);
+     formatter->flush(cout);
+
+   }
+
  }
+
   return 0;
 }
