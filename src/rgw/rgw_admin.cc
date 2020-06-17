@@ -827,6 +827,7 @@ enum class OPT {
   SCRIPT_PACKAGE_RM,
   SCRIPT_PACKAGE_LIST,
   ACCOUNT_CREATE,
+  ACCOUNT_GET,
 };
 
 }
@@ -1061,6 +1062,7 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
   { "account create", OPT::ACCOUNT_CREATE },
+  { "account get", OPT::ACCOUNT_GET },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -10468,23 +10470,43 @@ next:
 #endif
   }
 
-  if (opt_cmd == OPT::ACCOUNT_CREATE) {
+  if (opt_cmd == OPT::ACCOUNT_CREATE ||
+      opt_cmd == OPT::ACCOUNT_GET) {
     if (account_id.empty()) {
       cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
     }
 
-    RGWAccountInfo account_info(account_id, tenant);
+    if (opt_cmd == OPT::ACCOUNT_CREATE) {
+      RGWAccountInfo account_info(account_id, tenant);
+      RGWObjVersionTracker objv_tracker;
 
-    RGWObjVersionTracker objv_tracker;
-    ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
-        dpp(), account_info, &objv_tracker, real_time(), true, nullptr, null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->store_info(
+          dpp(), account_info, &objv_tracker, real_time(), true, nullptr, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: could not store account " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("AccountInfo", account_info, formatter.get());
+      formatter->flush(cout);
     }
 
-    encode_json("AccountInfo", account_info, formatter.get());
-    formatter->flush(cout);
+    if (opt_cmd == OPT::ACCOUNT_GET) {
+      RGWObjVersionTracker objv_tracker;
+      real_time mtime;
+      RGWAccountInfo account_info;
+      map<std::string, bufferlist> attrs;
+
+      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->read_info(
+          dpp(), account_id, &account_info, &objv_tracker, &mtime, &attrs, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: could not get account " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      encode_json("AccountInfo", account_info, formatter.get());
+      formatter->flush(cout);
+    }
   }
   return 0;
 }
