@@ -19,6 +19,8 @@
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+warnings=10
+
 function run() {
     local dir=$1
     shift
@@ -32,7 +34,8 @@ function run() {
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         setup $dir || return 1
-        run_mon $dir a || return 1
+	# set warning amount in case default changes
+        run_mon $dir a --mon_osd_warn_num_repaired=$warnings || return 1
 	run_mgr $dir x || return 1
 	ceph osd pool create foo 8 || return 1
 
@@ -167,6 +170,86 @@ function TEST_rados_get_with_eio() {
     create_pool $poolname 1 1 || return 1
     wait_for_clean || return 1
     rados_get_data eio $dir || return 1
+
+    delete_pool $poolname
+}
+
+function TEST_rados_repair_warning() {
+    local dir=$1
+    local OBJS=$(expr $warnings + 1)
+
+    setup_osds 4 || return 1
+
+    local poolname=pool-rep
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    local poolname=pool-rep
+    local obj-base=obj-warn-
+    local inject=eio
+
+   for i in $(seq 1 $OBJS)
+    do
+      rados_put $dir $poolname ${objbase}-$i || return 1
+      inject_$inject rep data $poolname ${objbase}-$i $dir 0 || return 1
+      rados_get $dir $poolname ${objbase}-$i || return 1
+    done
+    local pgid=$(get_pg $poolname ${objbase}-1)
+
+    local object_osds=($(get_osds $poolname ${objbase}-1))
+    local primary=${object_osds[0]}
+    local bad_peer=${object_osds[1]}
+
+    COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "$OBJS" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
+    test "$COUNT" = "$OBJS" || return 1
+
+    ceph health | grep -q "Too many repaired reads on 1 OSDs" || return 1
+    ceph health detail | grep -q "osd.$primary had $OBJS reads repaired" || return 1
+
+    ceph health mute OSD_TOO_MANY_REPAIRS
+    set -o pipefail
+    # Should mute this
+    ceph health | $(! grep -q "Too many repaired reads on 1 OSDs") || return 1
+    set +o pipefail
+
+    for i in $(seq 1 $OBJS)
+     do
+       inject_$inject rep data $poolname ${objbase}-$i $dir 0 || return 1
+       inject_$inject rep data $poolname ${objbase}-$i $dir 1 || return 1
+       # Force primary to pull from the bad peer, so we can repair it too!
+       set_config osd $primary osd_debug_feed_pullee $bad_peer || return 1
+       rados_get $dir $poolname ${objbase}-$i || return 1
+    done
+
+    COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "$(expr $OBJS \* 2)" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
+    test "$COUNT" = "$(expr $OBJS \* 3)" || return 1
+
+    # Give mon a chance to notice additional OSD and unmute
+    # The default tick time is 5 seconds
+    CHECKTIME=10
+    LOOPS=0
+    while(true)
+    do
+      sleep 1
+      if ceph health | grep -q "Too many repaired reads on 2 OSDs"
+      then
+	      break
+      fi
+      LOOPS=$(expr $LOOPS + 1)
+      if test "$LOOPS" = "$CHECKTIME"
+      then
+	      echo "Too many repaired reads not seen after $CHECKTIME seconds"
+	      return 1
+      fi
+    done
+    ceph health detail | grep -q "osd.$primary had $(expr $OBJS \* 2) reads repaired" || return 1
+    ceph health detail | grep -q "osd.$bad_peer had $OBJS reads repaired" || return 1
 
     delete_pool $poolname
 }
