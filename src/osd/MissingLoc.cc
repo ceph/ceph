@@ -12,8 +12,9 @@ using std::set;
 
 bool MissingLoc::readable_with_acting(
   const hobject_t &hoid,
-  const set<pg_shard_t> &acting) const {
-  if (!needs_recovery(hoid))
+  const set<pg_shard_t> &acting,
+  eversion_t* v) const {
+  if (!needs_recovery(hoid, v))
     return true;
   if (is_deleted(hoid))
     return false;

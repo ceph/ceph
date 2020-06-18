@@ -5,6 +5,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
+#include <seastar/core/weak_ptr.hh>
 #include "include/buffer_fwd.h"
 #include "osd/osd_types.h"
 
@@ -23,6 +24,7 @@ public:
 		    crimson::osd::ShardServices& shard_services);
   void got_rep_op_reply(const MOSDRepOpReply& reply) final;
   seastar::future<> stop() final;
+  void on_actingset_changed(peering_info_t pi) final;
 private:
   ll_read_errorator::future<ceph::bufferlist> _read(const hobject_t& hoid,
 					            uint64_t off,
@@ -39,7 +41,8 @@ private:
   const pg_shard_t whoami;
   crimson::osd::ShardServices& shard_services;
   ceph_tid_t next_txn_id = 0;
-  struct pending_on_t {
+  class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
+  public:
     pending_on_t(size_t pending)
       : pending{static_cast<unsigned>(pending)}
     {}

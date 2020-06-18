@@ -259,8 +259,8 @@ size_t PGRecovery::start_backfill_ops(
   size_t max_to_start,
   std::vector<crimson::osd::blocking_future<>> *out)
 {
-  assert(!pg->get_peering_state().get_backfill_targets().empty());
-
+  if (pg->get_peering_state().get_backfill_targets().empty())
+    return 0;
   ceph_abort("not implemented!");
 }
 
@@ -332,7 +332,7 @@ void PGRecovery::on_local_recover(
       obc->obs.oi = recovery_info.oi;
       // obc is loaded the excl lock
       obc->put_lock_type(RWState::RWEXCL);
-      assert(obc->get_recovery_read());
+      assert(obc->get_recovery_read().get0());
     }
     if (!pg->is_unreadable_object(soid)) {
       pg->get_recovery_backend()->get_recovering(soid).set_readable();

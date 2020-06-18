@@ -18,6 +18,19 @@ public:
   }
 };
 
+class actingset_changed final : public std::exception {
+public:
+  actingset_changed(bool sp) : still_primary(sp) {}
+  const char* what() const noexcept final {
+    return "acting set changed";
+  }
+  bool is_primary() const {
+    return still_primary;
+  }
+private:
+  const bool still_primary;
+};
+
 template<typename Func, typename... Args>
 inline seastar::future<> handle_system_shutdown(Func&& func, Args&&... args)
 {
