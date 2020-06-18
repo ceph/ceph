@@ -64,7 +64,7 @@ describe('CrushRuleFormComponent', () => {
     failureDomains: (nodes: CrushNode[], types: string[]) => {
       const expectation = {};
       types.forEach((type) => (expectation[type] = nodes.filter((node) => node.type === type)));
-      const keys = component.failureDomainKeys();
+      const keys = component.failureDomainKeys;
       expect(keys).toEqual(types);
       keys.forEach((key) => {
         expect(component.failureDomains[key].length).toBe(expectation[key].length);
@@ -156,7 +156,7 @@ describe('CrushRuleFormComponent', () => {
   it('calls listing to get rules on ngInit', () => {
     expect(crushRuleService.getInfo).toHaveBeenCalled();
     expect(component.names.length).toBe(2);
-    expect(component['nodes'].length).toBe(12);
+    expect(component.buckets.length).toBe(5);
   });
 
   describe('lists', () => {

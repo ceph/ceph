@@ -7,16 +7,18 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import * as _ from 'lodash';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-import { BsModalService } from 'ngx-bootstrap/modal';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { TabsetComponent, TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders
+  i18nProviders,
+  modalServiceShow
 } from '../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../core/not-found/not-found.component';
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
@@ -146,6 +148,9 @@ describe('PoolFormComponent', () => {
       pg_autoscale_modes: ['off', 'warn', 'on'],
       used_rules: {
         used_rule: ['some.pool.uses.it']
+      },
+      used_profiles: {
+        ecp1: ['some.other.pool.uses.it']
       }
     };
   };
@@ -165,6 +170,7 @@ describe('PoolFormComponent', () => {
   configureTestBed({
     declarations: [NotFoundComponent],
     imports: [
+      BrowserAnimationsModule,
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
       ToastrModule.forRoot(),
@@ -174,6 +180,7 @@ describe('PoolFormComponent', () => {
     ],
     providers: [
       ErasureCodeProfileService,
+      BsModalRef,
       SelectBadgesComponent,
       { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } },
       i18nProviders
@@ -799,6 +806,21 @@ describe('PoolFormComponent', () => {
       fixture.detectChanges();
     });
 
+    it('should select the newly created rule', () => {
+      expect(form.getValue('crushRule').rule_name).toBe('rep1');
+      const name = 'awesomeRule';
+      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+        return {
+          content: {
+            submitAction: of({ name })
+          }
+        };
+      });
+      infoReturn.crush_rules_replicated.push(createCrushRule({ id: 8, name }));
+      component.addCrushRule();
+      expect(form.getValue('crushRule').rule_name).toBe(name);
+    });
+
     it('should not show info per default', () => {
       fixtureHelper.expectElementVisible('#crushRule', true);
       fixtureHelper.expectElementVisible('#crush-info-block', false);
@@ -837,30 +859,32 @@ describe('PoolFormComponent', () => {
 
       const expectSuccessfulDeletion = (name: string) => {
         expect(crushRuleService.delete).toHaveBeenCalledWith(name);
-        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith({
-          task: {
-            name: 'crushRule/delete',
-            metadata: {
-              name: name
+        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith(
+          expect.objectContaining({
+            task: {
+              name: 'crushRule/delete',
+              metadata: {
+                name: name
+              }
             }
-          },
-          call: undefined // because of stub
-        });
+          })
+        );
       };
 
       beforeEach(() => {
         modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
-          (deletionClass, config) => {
+          (deletionClass: any, config: any) => {
             deletion = Object.assign(new deletionClass(), config.initialState);
             return {
               content: deletion
             };
           }
         );
-        deleteSpy = spyOn(crushRuleService, 'delete').and.callFake((name) => {
+        deleteSpy = spyOn(crushRuleService, 'delete').and.callFake((name: string) => {
           const rules = infoReturn.crush_rules_replicated;
           const index = _.findIndex(rules, (rule) => rule.rule_name === name);
           rules.splice(index, 1);
+          return of(undefined);
         });
         taskWrapper = TestBed.get(TaskWrapperService);
         spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
@@ -956,45 +980,145 @@ describe('PoolFormComponent', () => {
       fixtureHelper.expectIdElementsVisible(['erasureProfile', 'ecp-info-block'], true);
     });
 
+    it('should select the newly created profile', () => {
+      spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
+      expect(form.getValue('erasureProfile').name).toBe('ecp1');
+      const name = 'awesomeProfile';
+      spyOn(TestBed.get(BsModalService), 'show').and.callFake(() => {
+        return {
+          content: {
+            submitAction: of({ name })
+          }
+        };
+      });
+      const ecp2 = new ErasureCodeProfile();
+      ecp2.name = name;
+      infoReturn.erasure_code_profiles.push(ecp2);
+      component.addErasureCodeProfile();
+      expect(form.getValue('erasureProfile').name).toBe(name);
+    });
+
     describe('ecp deletion', () => {
       let taskWrapper: TaskWrapperService;
       let deletion: CriticalConfirmationModalComponent;
+      let deleteSpy: jasmine.Spy;
+      let modalSpy: jasmine.Spy;
+      let modal: any;
 
-      const callDeletion = () => {
+      const callEcpDeletion = () => {
         component.deleteErasureCodeProfile();
-        deletion.submitActionObservable();
+        modal.ref.content.callSubmitAction();
       };
 
-      const testPoolDeletion = (name: string) => {
+      const expectSuccessfulEcpDeletion = (name: string) => {
         setSelectedEcp(name);
-        callDeletion();
+        callEcpDeletion();
         expect(ecpService.delete).toHaveBeenCalledWith(name);
-        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith({
-          task: {
-            name: 'ecp/delete',
-            metadata: {
-              name: name
+        expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith(
+          expect.objectContaining({
+            task: {
+              name: 'ecp/delete',
+              metadata: {
+                name: name
+              }
             }
-          },
-          call: undefined // because of stub
-        });
+          })
+        );
       };
 
       beforeEach(() => {
-        spyOn(TestBed.get(BsModalService), 'show').and.callFake((deletionClass, config) => {
-          deletion = Object.assign(new deletionClass(), config.initialState);
-          return {
-            content: deletion
-          };
+        deletion = undefined;
+        modalSpy = spyOn(TestBed.get(BsModalService), 'show').and.callFake(
+          (comp: any, init: any) => {
+            modal = modalServiceShow(comp, init);
+            return modal.ref;
+          }
+        );
+        deleteSpy = spyOn(ecpService, 'delete').and.callFake((name: string) => {
+          const profiles = infoReturn.erasure_code_profiles;
+          const index = _.findIndex(profiles, (profile) => profile.name === name);
+          profiles.splice(index, 1);
+          return of({ status: 202 });
         });
-        spyOn(ecpService, 'delete').and.stub();
         taskWrapper = TestBed.get(TaskWrapperService);
         spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
+
+        const ecp2 = new ErasureCodeProfile();
+        ecp2.name = 'someEcpName';
+        infoReturn.erasure_code_profiles.push(ecp2);
+
+        const ecp3 = new ErasureCodeProfile();
+        ecp3.name = 'aDifferentEcpName';
+        infoReturn.erasure_code_profiles.push(ecp3);
       });
 
       it('should delete two different erasure code profiles', () => {
-        testPoolDeletion('someEcpName');
-        testPoolDeletion('aDifferentEcpName');
+        expectSuccessfulEcpDeletion('someEcpName');
+        expectSuccessfulEcpDeletion('aDifferentEcpName');
+      });
+
+      describe('with unused profile', () => {
+        beforeEach(() => {
+          expectSuccessfulEcpDeletion('someEcpName');
+        });
+
+        it('should not open the tooltip nor the crush info', () => {
+          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+          expect(component.data.erasureInfo).toBe(false);
+        });
+
+        it('should reload the rules after deletion', () => {
+          const expected = infoReturn.erasure_code_profiles;
+          const currentProfiles = component.info.erasure_code_profiles;
+          expect(currentProfiles.length).toBe(expected.length);
+          expect(currentProfiles).toEqual(expected);
+        });
+      });
+
+      describe('rule in use', () => {
+        beforeEach(() => {
+          spyOn(global, 'setTimeout').and.callFake((fn: Function) => fn());
+          component.ecpInfoTabs = { tabs: [{}, {}] } as TabsetComponent; // Mock it
+          deleteSpy.calls.reset();
+          setSelectedEcp('ecp1');
+          component.deleteErasureCodeProfile();
+        });
+
+        it('should not open the modal', () => {
+          expect(deletion).toBe(undefined);
+        });
+
+        it('should not have called delete and opened the tooltip', () => {
+          expect(ecpService.delete).not.toHaveBeenCalled();
+          expect(component.ecpDeletionBtn.isOpen).toBe(true);
+          expect(component.data.erasureInfo).toBe(true);
+        });
+
+        it('should open the third crush info tab', () => {
+          expect(component.ecpInfoTabs).toEqual({
+            tabs: [{}, { active: true }]
+          } as TabsetComponent);
+        });
+
+        it('should hide the tooltip when clicking on delete again', () => {
+          component.deleteErasureCodeProfile();
+          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+        });
+
+        it('should hide the tooltip when clicking on add', () => {
+          modalSpy.and.callFake((): any => ({
+            content: {
+              submitAction: of('someProfile')
+            }
+          }));
+          component.addErasureCodeProfile();
+          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+        });
+
+        it('should hide the tooltip when changing the crush rule', () => {
+          setSelectedEcp('someEcpName');
+          expect(component.ecpDeletionBtn.isOpen).toBe(false);
+        });
       });
     });
   });

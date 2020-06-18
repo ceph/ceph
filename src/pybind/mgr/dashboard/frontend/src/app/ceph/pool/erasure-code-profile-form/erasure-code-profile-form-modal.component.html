@@ -61,7 +61,7 @@
         <div class="form-group row">
           <label for="k"
                  class="cd-col-form-label">
-            <span [ngClass]="{'required': requiredControls.includes('k')}"
+            <span class="required"
                   i18n>Data chunks (k)</span>
             <cd-helper [html]="tooltips.k">
             </cd-helper>
@@ -80,13 +80,25 @@
             <span class="invalid-feedback"
                   *ngIf="form.showError('k', frm, 'min')"
                   i18n>Must be equal to or greater than 2.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'max')"
+                  i18n>Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'unequal')"
+                  i18n>For an equal distribution k has to be a multiple of (k+m)/l.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('k', frm, 'kLowerM')"
+                  i18n>K has to be equal to or greater than m in order to recover data correctly through c.</span>
+            <span *ngIf="plugin === 'lrc'"
+                  class="form-text text-muted"
+                  i18n>Distribution factor: {{lrcMultiK}}</span>
           </div>
         </div>
 
         <div class="form-group row">
           <label for="m"
                  class="cd-col-form-label">
-            <span [ngClass]="{'required': requiredControls.includes('m')}"
+            <span class="required"
                   i18n>Coding chunks (m)</span>
             <cd-helper [html]="tooltips.m">
             </cd-helper>
@@ -104,6 +116,9 @@
             <span class="invalid-feedback"
                   *ngIf="form.showError('m', frm, 'min')"
                   i18n>Must be equal to or greater than 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('m', frm, 'max')"
+                  i18n>Chunks (k+m) have exceeded the available OSDs of {{deviceCount}}.</span>
           </div>
         </div>
 
@@ -111,7 +126,8 @@
              *ngIf="plugin === 'shec'">
           <label for="c"
                  class="cd-col-form-label">
-            <ng-container i18n>Durability estimator (c)</ng-container>
+            <span class="required"
+                  i18n>Durability estimator (c)</span>
             <cd-helper [html]="tooltips.plugins.shec.c">
             </cd-helper>
           </label>
@@ -125,6 +141,9 @@
             <span class="invalid-feedback"
                   *ngIf="form.showError('c', frm, 'min')"
                   i18n>Must be equal to or greater than 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('c', frm, 'cGreaterM')"
+                  i18n>C has to be equal to or lower than m as m defines the amount of chunks that can be used.</span>
           </div>
         </div>
 
@@ -150,6 +169,11 @@
             <span class="invalid-feedback"
                   *ngIf="form.showError('l', frm, 'min')"
                   i18n>Must be equal to or greater than 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('l', frm, 'unequal')"
+                  i18n>Can't split up chunks (k+m) correctly with the current locality.</span>
+            <span class="form-text text-muted"
+                  i18n>Locality groups: {{lrcGroups}}</span>
           </div>
         </div>
 
@@ -168,9 +192,9 @@
               <option *ngIf="!failureDomains"
                       ngValue=""
                       i18n>Loading...</option>
-              <option *ngFor="let domain of failureDomains"
+              <option *ngFor="let domain of failureDomainKeys"
                       [ngValue]="domain">
-                {{ domain }}
+                {{ domain }} ( {{failureDomains[domain].length}} )
               </option>
             </select>
           </div>
@@ -192,12 +216,12 @@
               <option *ngIf="!failureDomains"
                       ngValue=""
                       i18n>Loading...</option>
-              <option *ngIf="failureDomains && failureDomains.length > 0"
+              <option *ngIf="failureDomainKeys.length > 0"
                       ngValue=""
                       i18n>None</option>
-              <option *ngFor="let domain of failureDomains"
+              <option *ngFor="let domain of failureDomainKeys"
                       [ngValue]="domain">
-                {{ domain }}
+                {{ domain }} ( {{failureDomains[domain].length}} )
               </option>
             </select>
           </div>
@@ -253,12 +277,18 @@
             </cd-helper>
           </label>
           <div class="cd-col-form-input">
-            <input type="text"
-                   id="crushRoot"
-                   name="crushRoot"
-                   class="form-control"
-                   placeholder="root..."
-                   formControlName="crushRoot">
+            <select class="form-control custom-select"
+                    id="crushRoot"
+                    name="crushRoot"
+                    formControlName="crushRoot">
+              <option *ngIf="!buckets"
+                      ngValue=""
+                      i18n>Loading...</option>
+              <option *ngFor="let bucket of buckets"
+                      [ngValue]="bucket">
+                {{ bucket.name }}
+              </option>
+            </select>
           </div>
         </div>
 
@@ -275,12 +305,14 @@
                     name="crushDeviceClass"
                     formControlName="crushDeviceClass">
               <option ngValue=""
-                      i18n>any</option>
+                      i18n>Let Ceph decide</option>
               <option *ngFor="let deviceClass of devices"
                       [ngValue]="deviceClass">
                 {{ deviceClass }}
               </option>
             </select>
+            <span class="form-text text-muted"
+                  i18n>Available OSDs: {{deviceCount}}</span>
           </div>
         </div>
 

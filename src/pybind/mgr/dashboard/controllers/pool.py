@@ -229,16 +229,23 @@ class PoolUi(Pool):
                     for o in options
                     if o['name'] == conf_name][0]
 
+        profiles = CephService.get_erasure_code_profiles()
         used_rules = {}
+        used_profiles = {}
         pool_names = []
         for p in self._pool_list():
             name = p['pool_name']
-            rule = p['crush_rule']
             pool_names.append(name)
+            rule = p['crush_rule']
             if rule in used_rules:
                 used_rules[rule].append(name)
             else:
                 used_rules[rule] = [name]
+            profile = p['erasure_code_profile']
+            if profile in used_profiles:
+                used_profiles[profile].append(name)
+            else:
+                used_profiles[profile] = [name]
 
         mgr_config = mgr.get('config')
         return {
@@ -252,6 +259,7 @@ class PoolUi(Pool):
             "compression_modes": get_config_option_enum('bluestore_compression_mode'),
             "pg_autoscale_default_mode": mgr_config['osd_pool_default_pg_autoscale_mode'],
             "pg_autoscale_modes": get_config_option_enum('osd_pool_default_pg_autoscale_mode'),
-            "erasure_code_profiles": CephService.get_erasure_code_profiles(),
-            "used_rules": used_rules
+            "erasure_code_profiles": profiles,
+            "used_rules": used_rules,
+            "used_profiles": used_profiles,
         }

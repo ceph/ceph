@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, ViewChild } from '@angular/core';
+import { Component, EventEmitter, OnInit, Type, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -7,7 +7,7 @@ import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsetComponent } from 'ngx-bootstrap/tabs';
 import { TooltipDirective } from 'ngx-bootstrap/tooltip';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 
 import { CrushRuleService } from '../../../shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
@@ -22,7 +22,7 @@ import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField
 } from '../../../shared/models/configuration';
-import { CrushRule, CrushRuleConfig } from '../../../shared/models/crush-rule';
+import { CrushRule } from '../../../shared/models/crush-rule';
 import { CrushStep } from '../../../shared/models/crush-step';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -54,6 +54,8 @@ interface FormFieldDescription {
 export class PoolFormComponent implements OnInit {
   @ViewChild('crushInfoTabs', { static: false }) crushInfoTabs: TabsetComponent;
   @ViewChild('crushDeletionBtn', { static: false }) crushDeletionBtn: TooltipDirective;
+  @ViewChild('ecpInfoTabs', { static: false }) ecpInfoTabs: TabsetComponent;
+  @ViewChild('ecpDeletionBtn', { static: false }) ecpDeletionBtn: TooltipDirective;
 
   permission: Permission;
   form: CdFormGroup;
@@ -78,6 +80,7 @@ export class PoolFormComponent implements OnInit {
   icons = Icons;
   pgAutoscaleModes: string[];
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
+  ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
 
   private modalSubscription: Subscription;
 
@@ -341,8 +344,15 @@ export class PoolFormComponent implements OnInit {
       // The size can only be changed if type 'replicated' is set.
       this.pgCalc();
     });
-    this.form.get('erasureProfile').valueChanges.subscribe(() => {
+    this.form.get('erasureProfile').valueChanges.subscribe((profile) => {
       // The ec profile can only be changed if type 'erasure' is set.
+      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen) {
+        this.ecpDeletionBtn.hide();
+      }
+      if (!profile) {
+        return;
+      }
+      this.ecpIsUsedBy(profile.name);
       this.pgCalc();
     });
     this.form.get('mode').valueChanges.subscribe(() => {
@@ -542,94 +552,173 @@ export class PoolFormComponent implements OnInit {
   }
 
   addErasureCodeProfile() {
-    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
-    this.bsModalService.show(ErasureCodeProfileFormModalComponent);
+    this.addModal(ErasureCodeProfileFormModalComponent, (name) => this.reloadECPs(name));
   }
 
-  private reloadECPs() {
-    this.ecpService.list().subscribe((profiles: ErasureCodeProfile[]) => this.initEcp(profiles));
-    this.modalSubscription.unsubscribe();
+  private addModal(modalComponent: Type<any>, reload: (name: string) => void) {
+    this.hideOpenTooltips();
+    const modalRef = this.bsModalService.show(modalComponent);
+    modalRef.content.submitAction.subscribe((item: any) => {
+      reload(item.name);
+    });
+  }
+
+  private hideOpenTooltips() {
+    const hideTooltip = (btn: TooltipDirective) => btn && btn.isOpen && btn.hide();
+    hideTooltip(this.ecpDeletionBtn);
+    hideTooltip(this.crushDeletionBtn);
+  }
+
+  private reloadECPs(profileName?: string) {
+    this.reloadList({
+      newItemName: profileName,
+      getInfo: () => this.ecpService.list(),
+      initInfo: (profiles) => this.initEcp(profiles),
+      findNewItem: () => this.ecProfiles.find((p) => p.name === profileName),
+      controlName: 'erasureProfile'
+    });
+  }
+
+  private reloadList({
+    newItemName,
+    getInfo,
+    initInfo,
+    findNewItem,
+    controlName
+  }: {
+    newItemName: string;
+    getInfo: () => Observable<any>;
+    initInfo: (items: any) => void;
+    findNewItem: () => any;
+    controlName: string;
+  }) {
+    if (this.modalSubscription) {
+      this.modalSubscription.unsubscribe();
+    }
+    getInfo().subscribe((items: any) => {
+      initInfo(items);
+      if (!newItemName) {
+        return;
+      }
+      const item = findNewItem();
+      if (item) {
+        this.form.get(controlName).setValue(item);
+      }
+    });
   }
 
   deleteErasureCodeProfile() {
-    const ecp = this.form.getValue('erasureProfile');
-    if (!ecp) {
+    this.deletionModal({
+      value: this.form.getValue('erasureProfile'),
+      usage: this.ecpUsage,
+      deletionBtn: this.ecpDeletionBtn,
+      dataName: 'erasureInfo',
+      getTabs: () => this.ecpInfoTabs,
+      tabPosition: 1,
+      nameAttribute: 'name',
+      itemDescription: this.i18n('erasure code profile'),
+      reloadFn: () => this.reloadECPs(),
+      deleteFn: (name) => this.ecpService.delete(name),
+      taskName: 'ecp/delete'
+    });
+  }
+
+  private deletionModal({
+    value,
+    usage,
+    deletionBtn,
+    dataName,
+    getTabs,
+    tabPosition,
+    nameAttribute,
+    itemDescription,
+    reloadFn,
+    deleteFn,
+    taskName
+  }: {
+    value: any;
+    usage: string[];
+    deletionBtn: TooltipDirective;
+    dataName: string;
+    getTabs: () => TabsetComponent;
+    tabPosition: number;
+    nameAttribute: string;
+    itemDescription: string;
+    reloadFn: Function;
+    deleteFn: (name: string) => Observable<any>;
+    taskName: string;
+  }) {
+    if (!value) {
       return;
     }
-    const name = ecp.name;
-    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
+    if (usage) {
+      deletionBtn.toggle();
+      this.data[dataName] = true;
+      setTimeout(() => {
+        const tabs = getTabs();
+        if (tabs) {
+          tabs.tabs[tabPosition].active = true;
+        }
+      }, 50);
+      return;
+    }
+    const name = value[nameAttribute];
     this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
-        itemDescription: this.i18n('erasure code profile'),
+        itemDescription,
         itemNames: [name],
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('ecp/delete', { name: name }),
-            call: this.ecpService.delete(name)
-          })
+        submitActionObservable: () => {
+          const deletion = deleteFn(name);
+          deletion.subscribe(() => reloadFn());
+          return this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask(taskName, { name: name }),
+            call: deletion
+          });
+        }
       }
     });
   }
 
   addCrushRule() {
-    if (this.crushDeletionBtn.isOpen) {
-      this.crushDeletionBtn.hide();
-    }
-    const modalRef = this.bsModalService.show(CrushRuleFormModalComponent);
-    modalRef.content.submitAction.subscribe((rule: CrushRuleConfig) => {
-      this.reloadCrushRules(rule.name);
-    });
+    this.addModal(CrushRuleFormModalComponent, (name) => this.reloadCrushRules(name));
   }
 
   private reloadCrushRules(ruleName?: string) {
-    if (this.modalSubscription) {
-      this.modalSubscription.unsubscribe();
-    }
-    this.poolService.getInfo().subscribe((info: PoolFormInfo) => {
-      this.initInfo(info);
-      this.poolTypeChange('replicated');
-      if (!ruleName) {
-        return;
-      }
-      const newRule = this.info.crush_rules_replicated.find((rule) => rule.rule_name === ruleName);
-      if (newRule) {
-        this.form.get('crushRule').setValue(newRule);
-      }
+    this.reloadList({
+      newItemName: ruleName,
+      getInfo: () => this.poolService.getInfo(),
+      initInfo: (info) => {
+        this.initInfo(info);
+        this.poolTypeChange('replicated');
+      },
+      findNewItem: () =>
+        this.info.crush_rules_replicated.find((rule) => rule.rule_name === ruleName),
+      controlName: 'crushRule'
     });
   }
 
   deleteCrushRule() {
-    const rule = this.form.getValue('crushRule');
-    if (!rule) {
-      return;
-    }
-    if (this.crushUsage) {
-      this.crushDeletionBtn.toggle();
-      this.data.crushInfo = true;
-      setTimeout(() => {
-        if (this.crushInfoTabs) {
-          this.crushInfoTabs.tabs[2].active = true;
-        }
-      }, 50);
-      return;
-    }
-    const name = rule.rule_name;
-    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadCrushRules());
-    this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: this.i18n('crush rule'),
-        itemNames: [name],
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('crushRule/delete', { name: name }),
-            call: this.crushRuleService.delete(name)
-          })
-      }
+    this.deletionModal({
+      value: this.form.getValue('crushRule'),
+      usage: this.crushUsage,
+      deletionBtn: this.crushDeletionBtn,
+      dataName: 'crushInfo',
+      getTabs: () => this.crushInfoTabs,
+      tabPosition: 2,
+      nameAttribute: 'rule_name',
+      itemDescription: this.i18n('crush rule'),
+      reloadFn: () => this.reloadCrushRules(),
+      deleteFn: (name) => this.crushRuleService.delete(name),
+      taskName: 'crushRule/delete'
     });
   }
 
   crushRuleIsUsedBy(ruleName: string) {
     this.crushUsage = ruleName ? this.info.used_rules[ruleName] : undefined;
+  }
+
+  ecpIsUsedBy(profileName: string) {
+    this.ecpUsage = profileName ? this.info.used_profiles[profileName] : undefined;
   }
 
   submit() {
