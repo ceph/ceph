@@ -23,8 +23,7 @@ from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, mon_command, match_glob, with_host
-from cephadm.module import CephadmOrchestrator
-
+from cephadm.module import CephadmOrchestrator, CEPH_DATEFMT
 
 """
 TODOs:
@@ -161,7 +160,9 @@ class TestCephadm(object):
             )
         ])
     ))
-    def test_daemon_action(self, cephadm_module):
+    #@mock.patch("mgr_module.MgrModule._ceph_get")
+    @mock.patch("ceph_module.BaseMgrModule._ceph_get")
+    def test_daemon_action(self, _ceph_get, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
@@ -172,6 +173,11 @@ class TestCephadm(object):
             for what in ('start', 'stop', 'restart'):
                 c = cephadm_module.daemon_action(what, 'rgw', 'myrgw.foobar')
                 assert wait(cephadm_module, c) == [what + " rgw.myrgw.foobar from host 'test'"]
+
+            now = datetime.datetime.utcnow().strftime(CEPH_DATEFMT)
+            _ceph_get.return_value = {'modified': now}
+
+            cephadm_module._check_daemons()
 
             assert_rm_daemon(cephadm_module, 'rgw.myrgw.foobar', 'test')
 
