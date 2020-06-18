@@ -75,7 +75,11 @@ def _config_user(s3tests_conf, section, user):
     Configure users for this section by stashing away keys, ids, and
     email addresses.
     """
-    s3tests_conf[section].setdefault('user_id', user)
+    if section == 's3 subuser':
+        s3tests_conf[section].setdefault('user_id', user.split(":")[0])
+        s3tests_conf[section].setdefault('subuser', user.split(":")[1])
+    else:
+        s3tests_conf[section].setdefault('subuser', '')
     s3tests_conf[section].setdefault('email', '{user}+test@test.test'.format(user=user))
     s3tests_conf[section].setdefault('display_name', 'Mr. {user}'.format(user=user))
     s3tests_conf[section].setdefault('access_key',
@@ -202,7 +206,7 @@ def create_users(ctx, config):
                     )
 
     else:
-        users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser'}
+        users = {'s3 main': 'foo', 's3 alt': 'bar', 's3 tenant': 'testx$tenanteduser', 's3 subuser': 'testsub:subuser'}
         for client in config['clients']:
             s3tests_conf = config['s3tests_conf'][client]
             s3tests_conf.setdefault('fixtures', {})
@@ -213,39 +217,55 @@ def create_users(ctx, config):
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
                 client_with_id = daemon_type + '.' + client_id
                 ctx.cluster.only(client).run(
+                    args=[
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'radosgw-admin',
+                        '-n', client_with_id,
+                        'user', 'create',
+                        '--uid', s3tests_conf[section]['user_id'],
+                        '--subuser', s3tests_conf[section]['subuser'],
+                        '--display-name', s3tests_conf[section]['display_name'],
+                        '--access-key', s3tests_conf[section]['access_key'],
+                        '--secret', s3tests_conf[section]['secret_key'],
+                        '--email', s3tests_conf[section]['email'],
+                        '--caps', 'user-policy=*',
+                        '--cluster', cluster_name,
+                    ],
+                )
+                # Add full control access to subuser
+                if section == 's3 subuser':
+                    ctx.cluster.only(client).run(
                         args=[
                             'adjust-ulimits',
                             'ceph-coverage',
                             '{tdir}/archive/coverage'.format(tdir=testdir),
                             'radosgw-admin',
                             '-n', client_with_id,
-                            'user', 'create',
+                            'subuser', 'modify',
                             '--uid', s3tests_conf[section]['user_id'],
-                            '--display-name', s3tests_conf[section]['display_name'],
-                            '--access-key', s3tests_conf[section]['access_key'],
-                            '--secret', s3tests_conf[section]['secret_key'],
-                            '--email', s3tests_conf[section]['email'],
-                            '--caps', 'user-policy=*',
-                            '--cluster', cluster_name,
+                            '--subuser', s3tests_conf[section]['subuser'],
+                            '--access', 'full',
                         ],
                     )
                 ctx.cluster.only(client).run(
-                        args=[
-                            'adjust-ulimits',
-                            'ceph-coverage',
-                            '{tdir}/archive/coverage'.format(tdir=testdir),
-                            'radosgw-admin',
-                            '-n', client_with_id,
-                            'mfa', 'create',
-                            '--uid', s3tests_conf[section]['user_id'],
-                            '--totp-serial', s3tests_conf[section]['totp_serial'],
-                            '--totp-seed', s3tests_conf[section]['totp_seed'],
-                            '--totp-seconds', s3tests_conf[section]['totp_seconds'],
-                            '--totp-window', '8',
-                            '--totp-seed-type', 'base32',
-                            '--cluster', cluster_name,
-                        ],
-                    )
+                    args=[
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'radosgw-admin',
+                        '-n', client_with_id,
+                        'mfa', 'create',
+                        '--uid', s3tests_conf[section]['user_id'],
+                        '--totp-serial', s3tests_conf[section]['totp_serial'],
+                        '--totp-seed', s3tests_conf[section]['totp_seed'],
+                        '--totp-seconds', s3tests_conf[section]['totp_seconds'],
+                        '--totp-window', '8',
+                        '--totp-seed-type', 'base32',
+                        '--cluster', cluster_name,
+                    ],
+                )
 
     if "TOKEN" in os.environ:
         s3tests_conf.setdefault('webidentity', {})
