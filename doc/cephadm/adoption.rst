@@ -137,6 +137,9 @@ Adoption process
 
    where *<placement>* can be a simple daemon count, or a list of
    specific hosts (see :ref:`orchestrator-cli-placement-spec`).
+   Example::
+   
+     # ceph orch apply rgw myorg us-east-1 --placement="2 myhost1 myhost2"
 
    Once the daemons have started and you have confirmed they are functioning,
    stop and remove the old legacy daemons::
