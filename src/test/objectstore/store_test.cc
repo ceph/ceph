@@ -8239,6 +8239,7 @@ void doManySetAttr(ObjectStore* store,
   test_obj.wait_for_done();
 
   std::cout << "done" << std::endl;
+  do_check_fn(store);
   AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
   ceph_assert(admin_socket);
 
@@ -8252,7 +8253,6 @@ void doManySetAttr(ObjectStore* store,
     cerr << "failure querying " << std::endl;
   }
   std::cout << std::string(out.c_str(), out.length()) << std::endl;
-  do_check_fn(store);
   test_obj.shutdown();
 }
 
@@ -8272,6 +8272,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
 
       BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
       ceph_assert(bstore);
+      bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       //experimentally it was discovered that this case results in 400+MB spillover
       //using lower 300MB threshold just to be safe enough
@@ -8300,6 +8301,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
 
       BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
       ceph_assert(bstore);
+      bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       ASSERT_EQ(0, logger->get(l_bluefs_slow_used_bytes));
     }
@@ -8325,6 +8327,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
 
       BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
       ceph_assert(bstore);
+      bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       ASSERT_LE(logger->get(l_bluefs_slow_used_bytes), 300 * 1024 * 1024); // see SpilloverTest for 300MB choice rationale
     }
