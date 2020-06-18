@@ -1,0 +1,17 @@
+{
+    "service_type": "osd",
+    "service_id": "dashboard-admin-1586509411014",
+    "host_pattern": "*",
+    "data_devices": {
+        "rotational": true
+    },
+    "wal_devices": {
+        "rotational": false,
+        "size": "15G"
+    },
+    "db_devices": {
+        "rotational": false,
+        "size": "10G"
+    },
+    "encrypted": true
+}

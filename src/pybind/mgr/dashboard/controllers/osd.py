@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+import copy
 import json
 import logging
 import time
@@ -331,6 +332,61 @@ class Osd(RESTController):
     def devices(self, svc_id):
         # (str) -> dict
         return CephService.send_command('mon', 'device ls-by-daemon', who='osd.{}'.format(svc_id))
+
+    def _merge_with_inventory(self, host_previews):
+        """Merge previews with inventory."""
+        osd_previews = []
+        orch = OrchClient.instance()
+        hosts = [host_preview['host'] for host_preview in host_previews]
+        inventory_nodes = [node.to_json() for node in orch.inventory.list(
+            hosts=hosts, refresh=True)]
+        for host_preview in host_previews:
+            hostname = host_preview['host']
+            nodes = [node for node in inventory_nodes if node['name'] == hostname]
+            assert len(nodes) == 1
+            inventory = nodes[0]
+            for osd in host_preview['data']['osds']:
+                preview = {
+                    'hostname': host_preview['host'],
+                    'data': {},
+                    'wal': {},
+                    'db': {}
+                }
+                data = copy.deepcopy(osd['data'])
+                data['devices'] = list(filter(lambda dev, d=data: dev['path'] == d['path'],
+                                              inventory['devices']))
+                preview['data'] = data
+                wal = copy.deepcopy(osd.get('block.wal', {}))
+                if wal:
+                    devices = [dev.strip() for dev in host_preview['data']
+                               ['wal_vg']['devices'].split(',')]
+                    wal['vg'] = copy.copy(host_preview['data']['wal_vg'])
+                    wal['vg']['devices'] = list(
+                        filter(lambda dev, devs=devices: dev['path'] in devs, inventory['devices']))
+                    preview['wal'] = wal
+
+                db = copy.deepcopy(osd.get('block.db', {}))
+                if db:
+                    devices = [dev.strip() for dev in host_preview['data']
+                               ['vg']['devices'].split(',')]
+                    db['vg'] = copy.copy(host_preview['data']['vg'])
+                    db['vg']['devices'] = list(
+                        filter(lambda dev, devs=devices: dev['path'] in devs, inventory['devices']))
+                    preview['db'] = db
+                osd_previews.append(preview)
+        return osd_previews
+
+    @Endpoint('POST')
+    @ReadPermission
+    @raise_if_no_orchestrator
+    @handle_orchestrator_error('osd')
+    def preview(self, drive_groups):
+        orch = OrchClient.instance()
+        try:
+            dg_specs = [DriveGroupSpec.from_json(dg) for dg in drive_groups]
+            return self._merge_with_inventory(orch.osds.preview(dg_specs))
+        except (ValueError, TypeError, DriveGroupValidationError) as e:
+            raise DashboardException(e, component='osd')
 
 
 @ApiController('/osd/flags', Scope.OSD)

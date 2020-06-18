@@ -7,6 +7,24 @@ import { OsdService } from './osd.service';
 describe('OsdService', () => {
   let service: OsdService;
   let httpTesting: HttpTestingController;
+  const dgs = [
+    {
+      service_name: 'osd',
+      service_id: 'all_hdd',
+      host_pattern: '*',
+      data_devices: {
+        rotational: true
+      }
+    },
+    {
+      service_name: 'osd',
+      service_id: 'host1_ssd',
+      host_pattern: 'host1',
+      data_devices: {
+        rotational: false
+      }
+    }
+  ];
 
   configureTestBed({
     providers: [OsdService, i18nProviders],
@@ -29,28 +47,21 @@ describe('OsdService', () => {
   it('should call create', () => {
     const post_data = {
       method: 'drive_groups',
-      data: [
-        {
-          service_name: 'osd',
-          service_id: 'all_hdd',
-          host_pattern: '*',
-          data_devices: {
-            rotational: true
-          }
-        },
-        {
-          service_name: 'osd',
-          service_id: 'host1_ssd',
-          host_pattern: 'host1',
-          data_devices: {
-            rotational: false
-          }
-        }
-      ],
+      data: dgs,
       tracking_id: 'all_hdd, host1_ssd'
     };
     service.create(post_data.data).subscribe();
     const req = httpTesting.expectOne('api/osd');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(post_data);
+  });
+
+  it('should call preview', () => {
+    const post_data = {
+      drive_groups: dgs
+    };
+    service.preview(post_data.drive_groups).subscribe();
+    const req = httpTesting.expectOne('api/osd/preview');
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(post_data);
   });

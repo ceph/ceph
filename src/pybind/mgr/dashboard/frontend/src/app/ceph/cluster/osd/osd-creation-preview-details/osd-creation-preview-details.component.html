@@ -1,0 +1,79 @@
+<tabset *ngIf="osd">
+  <tab i18n-heading
+       heading="Details">
+    <table class="table table-striped table-bordered">
+      <tbody>
+        <tr>
+          <td i18n
+              class="bold w-25">Hostname</td>
+          <td class="w-75">{{ osd.hostname }}</td>
+        </tr>
+        <ng-container *ngTemplateOutlet="primaryTpl; context:{primary: osd.data}"></ng-container>
+        <ng-container *ngIf="!isEmpty(osd.wal)">
+          <ng-container *ngTemplateOutlet="sharedTpl; context:{type: 'WAL', share: osd.wal}"></ng-container>
+        </ng-container>
+        <ng-container *ngIf="!isEmpty(osd.db)">
+          <ng-container *ngTemplateOutlet="sharedTpl; context:{type: 'DB', share: osd.db}"></ng-container>
+        </ng-container>
+      </tbody>
+    </table>
+  </tab>
+</tabset>
+
+<ng-template #primaryTpl
+             let-primary="primary">
+  <tr>
+    <td i18n
+        class="bold w-25">Primary devices</td>
+    <td class="w-75">
+      <ng-container *ngTemplateOutlet="devicesTpl; context:{devices: primary.devices}"></ng-container>
+    </td>
+  </tr>
+  <tr>
+    <td i18n
+        class="bold w-25">Size</td>
+    <td class="w-75">{{ primary.human_readable_size }}</td>
+  </tr>
+</ng-template>
+
+<ng-template #sharedTpl
+             let-type="type"
+             let-share="share">
+  <tr>
+    <td i18n
+        class="bold w-25">{{ type }} volume group</td>
+    <td class="w-75">
+      <dl>
+        <dt i18n>Devices</dt>
+        <dd >
+          <ng-container *ngTemplateOutlet="devicesTpl; context:{type: type, devices: share.vg.devices}"></ng-container>
+        </dd>
+        <dt i18n>Size</dt>
+        <dd>
+          {{ share.vg.human_readable_size }}
+        </dd>
+        <dt i18n>Parts</dt>
+        <dd>
+          {{ share.vg.parts }}
+        </dd>
+      </dl>
+    </td>
+  </tr>
+  <tr>
+    <td i18n
+        class="bold w-25">{{ type }} size</td>
+    <td class="w-75">{{ share.human_readable_size }}</td>
+  </tr>
+</ng-template>
+
+<ng-template #devicesTpl
+             let-devices="devices">
+  <div *ngFor="let device of devices; first as first"
+       [ngClass]="first ? undefined : 'mt-1'">
+    <span class="badge"
+          [ngClass]="device.human_readable_type == 'hdd' ? 'badge-hdd' : 'badge-ssd'">
+        {{ device.human_readable_type | uppercase}}
+    </span>
+    {{ device.path }} ({{ device.sys_api.vendor }}-{{ device.sys_api.model }}, {{ device.sys_api.human_readable_size }})
+  </div>
+</ng-template>

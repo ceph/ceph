@@ -5,7 +5,10 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { map } from 'rxjs/operators';
 
 import * as _ from 'lodash';
+import { Observable } from 'rxjs';
+
 import { CdDevice } from '../models/devices';
+import { OSDPreview } from '../models/osd-preview.interface';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
 import { ApiModule } from './api.module';
@@ -70,6 +73,13 @@ export class OsdService {
       tracking_id: _.join(_.map(driveGroups, 'service_id'), ', ')
     };
     return this.http.post(this.path, request, { observe: 'response' });
+  }
+
+  preview(driveGroups: any[]): Observable<OSDPreview[]> {
+    const request = {
+      drive_groups: driveGroups
+    };
+    return this.http.post<[OSDPreview]>(`${this.path}/preview`, request);
   }
 
   getList() {

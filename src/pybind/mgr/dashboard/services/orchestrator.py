@@ -104,6 +104,9 @@ class ServiceManager(ResourceManager):
 
 
 class OsdManager(ResourceManager):
+    def preview(self, drive_group_specs):
+        return self.api.preview_drivegroups(dg_specs=drive_group_specs)
+
     @wait_api_result
     def create(self, drive_group_specs):
         return self.api.apply_drivegroups(drive_group_specs)

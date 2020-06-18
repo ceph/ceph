@@ -209,6 +209,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
     const user = this.authStorageService.getUsername();
     this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
     const modalRef = this.bsModalService.show(OsdCreationPreviewModalComponent, {
+      class: 'modal-xl',
       initialState: { driveGroups: [this.driveGroup.spec] }
     });
     modalRef.content.submitAction.subscribe(() => {
