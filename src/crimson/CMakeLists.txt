@@ -167,7 +167,6 @@ set(crimson_net_srcs
   net/ProtocolV2.cc
   net/chained_dispatchers.cc)
 set(crimson_thread_srcs
-  thread/ThreadPool.cc
   thread/Throttle.cc)
 add_library(crimson STATIC
   ${crimson_auth_srcs}

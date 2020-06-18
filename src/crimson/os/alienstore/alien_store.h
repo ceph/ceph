@@ -10,9 +10,9 @@
 #include "os/ObjectStore.h"
 #include "osd/osd_types.h"
 
+#include "crimson/os/alienstore/thread_pool.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
-#include "crimson/thread/ThreadPool.h"
 
 namespace ceph::os {
 class Transaction;
@@ -38,7 +38,7 @@ public:
     ObjectMap::ObjectMapIterator iter;
     AlienStore* store;
   };
-  mutable std::unique_ptr<crimson::thread::ThreadPool> tp;
+  mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   AlienStore(const std::string& path, const ConfigValues& values);
   ~AlienStore() final;
 
