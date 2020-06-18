@@ -1881,6 +1881,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
     # cmd
     data_dir = get_data_dir(fsid, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f:
+        f.write('set -e\n')
         # pre-start cmd(s)
         if daemon_type == 'osd':
             # osds have a pre-start step
@@ -1917,10 +1918,10 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
             f.write('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=fsid, uid=uid, gid=gid))
 
         # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
-        f.write(' '.join(c.rm_cmd()) + '\n')
+        f.write('! '+ ' '.join(c.rm_cmd()) + '\n')
         # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
         if 'podman' in container_path:
-            f.write(' '.join(c.rm_cmd(storage=True)) + '\n')
+            f.write('! '+ ' '.join(c.rm_cmd(storage=True)) + '\n')
 
         # container run command
         f.write(' '.join(c.run_cmd()) + '\n')
