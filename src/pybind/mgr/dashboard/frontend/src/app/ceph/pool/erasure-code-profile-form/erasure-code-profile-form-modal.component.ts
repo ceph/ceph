@@ -319,16 +319,15 @@ export class ErasureCodeProfileFormModalComponent extends CrushNodeSelectionClas
         task: new FinishedTask('ecp/create', { name: profile.name }),
         call: this.ecpService.create(profile)
       })
-      .subscribe(
-        undefined,
-        () => {
+      .subscribe({
+        error: () => {
           this.form.setErrors({ cdSubmitButton: true });
         },
-        () => {
+        complete: () => {
           this.bsModalRef.hide();
           this.submitAction.emit(profile);
         }
-      );
+      });
   }
 
   private createJson() {

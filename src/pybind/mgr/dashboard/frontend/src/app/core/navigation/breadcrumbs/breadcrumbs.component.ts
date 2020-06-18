@@ -25,8 +25,8 @@ THE SOFTWARE.
 import { Component, Injector, OnDestroy } from '@angular/core';
 import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '@angular/router';
 
-import { from, Observable, of, Subscription } from 'rxjs';
-import { concat, distinct, filter, first, flatMap, toArray } from 'rxjs/operators';
+import { concat, from, Observable, of, Subscription } from 'rxjs';
+import { distinct, filter, first, flatMap, toArray } from 'rxjs/operators';
 
 import { BreadcrumbsResolver, IBreadcrumb } from '../../../shared/models/breadcrumbs';
 
@@ -90,7 +90,7 @@ export class BreadcrumbsComponent implements OnDestroy {
       let resolver: BreadcrumbsResolver;
 
       if (data.breadcrumbs.prototype instanceof BreadcrumbsResolver) {
-        resolver = this.injector.get(data.breadcrumbs);
+        resolver = this.injector.get<BreadcrumbsResolver>(data.breadcrumbs);
       } else {
         resolver = this.defaultResolver;
       }
@@ -102,7 +102,7 @@ export class BreadcrumbsComponent implements OnDestroy {
     }
 
     if (route.firstChild) {
-      crumbs$ = crumbs$.pipe(concat(this._resolveCrumbs(route.firstChild)));
+      crumbs$ = concat<IBreadcrumb[]>(crumbs$, this._resolveCrumbs(route.firstChild));
     }
 
     return crumbs$;

@@ -1,8 +1,8 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import * as _ from 'lodash';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { FinishedTask } from '../models/finished-task';

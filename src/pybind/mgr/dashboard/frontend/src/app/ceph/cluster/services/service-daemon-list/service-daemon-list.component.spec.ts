@@ -102,13 +102,13 @@ describe('ServiceDaemonListComponent', () => {
 
   it('should list daemons by host', () => {
     component.hostname = 'mon0';
-    component.getDaemons(new CdTableFetchDataContext(() => {}));
+    component.getDaemons(new CdTableFetchDataContext(() => undefined));
     expect(component.daemons.length).toBe(1);
   });
 
   it('should list daemons by service', () => {
     component.serviceName = 'osd';
-    component.getDaemons(new CdTableFetchDataContext(() => {}));
+    component.getDaemons(new CdTableFetchDataContext(() => undefined));
     expect(component.daemons.length).toBe(3);
   });
 });

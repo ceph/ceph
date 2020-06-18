@@ -1,5 +1,12 @@
-import { Component, ElementRef, OnChanges, OnInit, SimpleChanges, ViewChild } from '@angular/core';
-import { Input } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Input,
+  OnChanges,
+  OnInit,
+  SimpleChanges,
+  ViewChild
+} from '@angular/core';
 
 import { ChartTooltip } from '../../models/chart-tooltip';
 import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';

@@ -130,22 +130,21 @@ export class RgwBucketListComponent extends ListWithDetails {
               this.selection.selected.map((bucket: any) => {
                 return this.rgwBucketService.delete(bucket.bid);
               })
-            ).subscribe(
-              null,
-              (error) => {
+            ).subscribe({
+              error: (error) => {
                 // Forward the error to the observer.
                 observer.error(error);
                 // Reload the data table content because some deletions might
                 // have been executed successfully in the meanwhile.
                 this.table.refreshBtn();
               },
-              () => {
+              complete: () => {
                 // Notify the observer that we are done.
                 observer.complete();
                 // Reload the data table content.
                 this.table.refreshBtn();
               }
-            );
+            });
           });
         }
       }

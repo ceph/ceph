@@ -45,13 +45,12 @@ export class EditSiteNameModalComponent implements OnInit {
       call: this.rbdMirroringService.setSiteName(this.editSiteNameForm.getValue('siteName'))
     });
 
-    action.subscribe(
-      undefined,
-      () => this.editSiteNameForm.setErrors({ cdSubmitButton: true }),
-      () => {
+    action.subscribe({
+      error: () => this.editSiteNameForm.setErrors({ cdSubmitButton: true }),
+      complete: () => {
         this.rbdMirroringService.refresh();
         this.modalRef.hide();
       }
-    );
+    });
   }
 }

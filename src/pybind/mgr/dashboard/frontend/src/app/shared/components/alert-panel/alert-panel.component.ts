@@ -1,5 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { Icons } from '../../enum/icons.enum';
 
 @Component({

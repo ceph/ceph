@@ -6,8 +6,6 @@ import { saveAs } from 'file-saver';
   providedIn: 'root'
 })
 export class TextToDownloadService {
-  constructor() {}
-
   download(downloadText: string, filename?: string) {
     saveAs(new Blob([downloadText]), filename);
   }

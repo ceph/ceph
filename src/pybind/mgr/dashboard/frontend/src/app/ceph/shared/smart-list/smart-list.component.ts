@@ -130,16 +130,22 @@ smartmontools is required to successfully retrieve data.`,
     this.loading = true;
 
     if (this.osdId !== null) {
-      this.osdService.getSmartData(this.osdId).subscribe(this.fetchData.bind(this), (error) => {
-        error.preventDefault();
-        this.error = error;
-        this.loading = false;
+      this.osdService.getSmartData(this.osdId).subscribe({
+        next: this.fetchData.bind(this),
+        error: (error) => {
+          error.preventDefault();
+          this.error = error;
+          this.loading = false;
+        }
       });
     } else if (this.hostname !== null) {
-      this.hostService.getSmartData(this.hostname).subscribe(this.fetchData.bind(this), (error) => {
-        error.preventDefault();
-        this.error = error;
-        this.loading = false;
+      this.hostService.getSmartData(this.hostname).subscribe({
+        next: this.fetchData.bind(this),
+        error: (error) => {
+          error.preventDefault();
+          this.error = error;
+          this.loading = false;
+        }
       });
     }
   }

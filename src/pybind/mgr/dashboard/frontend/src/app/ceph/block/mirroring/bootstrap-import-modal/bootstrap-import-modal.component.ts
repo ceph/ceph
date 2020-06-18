@@ -174,9 +174,12 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       task: new FinishedTask('rbd/mirroring/bootstrap/import', {}),
       call: apiActionsObs
     });
-    taskObs.subscribe(undefined, finishHandler, () => {
-      finishHandler();
-      this.modalRef.hide();
+    taskObs.subscribe({
+      error: finishHandler,
+      complete: () => {
+        finishHandler();
+        this.modalRef.hide();
+      }
     });
   }
 }

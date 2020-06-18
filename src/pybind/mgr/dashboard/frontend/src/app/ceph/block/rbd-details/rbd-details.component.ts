@@ -20,6 +20,4 @@ export class RbdDetailsComponent {
 
   @ViewChild(NgbNav, { static: true })
   nav: NgbNav;
-
-  constructor() {}
 }

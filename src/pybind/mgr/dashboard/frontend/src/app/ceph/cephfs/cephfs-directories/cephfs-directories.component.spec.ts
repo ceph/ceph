@@ -1063,7 +1063,7 @@ describe('CephfsDirectoriesComponent', () => {
       });
 
       it('should set an indicator to true during load', () => {
-        lsDirSpy.and.callFake(() => Observable.create((): null => null));
+        lsDirSpy.and.callFake(() => new Observable((): null => null));
         component.refreshAllDirectories();
         expect(Object.values(component.loading).every((b) => b)).toBe(true);
         expect(component.loadingIndicator).toBe(true);

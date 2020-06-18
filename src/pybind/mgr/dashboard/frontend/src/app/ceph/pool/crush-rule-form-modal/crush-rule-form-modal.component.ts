@@ -97,15 +97,14 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
         task: new FinishedTask('crushRule/create', rule),
         call: this.crushRuleService.create(rule)
       })
-      .subscribe(
-        undefined,
-        () => {
+      .subscribe({
+        error: () => {
           this.form.setErrors({ cdSubmitButton: true });
         },
-        () => {
+        complete: () => {
           this.bsModalRef.hide();
           this.submitAction.emit(rule);
         }
-      );
+      });
   }
 }

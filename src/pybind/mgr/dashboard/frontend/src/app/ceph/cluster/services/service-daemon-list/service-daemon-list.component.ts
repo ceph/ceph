@@ -10,11 +10,11 @@ import {
   ViewChild,
   ViewChildren
 } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import * as _ from 'lodash';
-
 import { Observable, Subscription } from 'rxjs';
+
 import { CephServiceService } from '../../../../shared/api/ceph-service.service';
 import { HostService } from '../../../../shared/api/host.service';
 import { OrchestratorService } from '../../../../shared/api/orchestrator.service';

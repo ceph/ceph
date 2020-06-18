@@ -1,9 +1,9 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import * as _ from 'lodash';
-
 import { BsModalService, ModalOptions } from 'ngx-bootstrap/modal';
+
 import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
 import { InventoryDevice } from '../../inventory/inventory-devices/inventory-device.model';
