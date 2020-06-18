@@ -30,11 +30,14 @@ add_executable(unittest_async_echo
   test_async_echo.cc)
 target_link_libraries(unittest_async_echo ceph-common global)
 
-add_executable(unittest_seastar_thread_pool
-  test_thread_pool.cc)
-add_ceph_test(unittest_seastar_thread_pool
-  unittest_seastar_thread_pool --memory 256M --smp 1)
-target_link_libraries(unittest_seastar_thread_pool crimson)
+add_executable(unittest_seastar_alienstore_thread_pool
+  test_alienstore_thread_pool.cc)
+add_ceph_test(unittest_seastar_alienstore_thread_pool
+  unittest_seastar_alienstore_thread_pool --memory 256M --smp 1)
+target_link_libraries(unittest_seastar_alienstore_thread_pool
+  crimson
+  crimson-os
+  crimson-common)
 
 add_executable(unittest_seastar_config
   test_config.cc)

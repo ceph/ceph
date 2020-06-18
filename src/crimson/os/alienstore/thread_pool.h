@@ -14,7 +14,7 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
 
-namespace crimson::thread {
+namespace crimson::os {
 
 struct WorkItem {
   virtual ~WorkItem() {}
@@ -128,4 +128,4 @@ public:
   }
 };
 
-} // namespace crimson::thread
+} // namespace crimson::os
