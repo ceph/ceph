@@ -658,7 +658,7 @@ Examples:
             if unmanaged is not None:
                 return HandleCommandResult(-errno.EINVAL, stderr=usage)
             try:
-                drivegroups = yaml.load_all(inbuf)
+                drivegroups = yaml.safe_load_all(inbuf)
                 dg_specs = [DriveGroupSpec.from_json(dg) for dg in drivegroups]
                 # This acts weird when abstracted to a function
                 completion = self.apply_drivegroups(dg_specs)
@@ -995,7 +995,7 @@ Usage:
         if inbuf:
             if service_type or placement or unmanaged:
                 raise OrchestratorValidationError(usage)
-            content: Iterator = yaml.load_all(inbuf)
+            content: Iterator = yaml.safe_load_all(inbuf)
             specs: List[GenericSpec] = [json_to_generic_spec(s) for s in content]
 
         else:
