@@ -1,6 +1,6 @@
 import os
 
-from util import copy_directory_recursively
+from tasks.util import copy_directory_recursively
 
 
 class Scripts:

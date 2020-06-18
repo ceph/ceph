@@ -8,18 +8,19 @@ import logging
 import argparse
 import uuid
 
-from salt_manager import SaltManager
-from scripts import Scripts
 from teuthology import misc
-from util import (
+from teuthology.exceptions import ConfigError
+from teuthology.orchestra.daemon import DaemonGroup
+from teuthology.task import Task
+
+from tasks.ceph import get_mons
+from tasks.salt_manager import SaltManager
+from tasks.scripts import Scripts
+from tasks.util import (
     introspect_roles,
     remote_exec,
     )
 
-from teuthology.exceptions import ConfigError
-from teuthology.task import Task
-from teuthology.orchestra.daemon import DaemonGroup
-from tasks.ceph import get_mons
 
 log = logging.getLogger(__name__)
 ceph_salt_ctx = {}
