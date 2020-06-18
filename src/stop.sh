@@ -156,7 +156,8 @@ if [ $stop_all -eq 1 ]; then
         fi
     fi
 
-    if [ "$($CEPHADM_DIR_PATH/cephadm ls)" != "[]" ]; then
+    daemons="$($CEPHADM_DIR_PATH/cephadm ls 2> /dev/null)"
+    if [ $? -eq 0 -a "$daemons" != "[]" ]; then
         do_killcephadm
     fi
 
