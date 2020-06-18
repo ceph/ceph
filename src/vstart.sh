@@ -175,6 +175,7 @@ fi
 filestore_path=
 kstore_path=
 bluestore_dev=
+ganesha_path=/usr/bin/ganesha.nfsd
 
 VSTART_SEC="client.vstart.sh"
 
@@ -233,6 +234,7 @@ usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
+usage=$usage"\t--ganesha-path: path to ganesha.nfsd binary (defaults to $ganesha_path)\n"
 
 usage_exit() {
     printf "$usage"
@@ -443,6 +445,10 @@ case $1 in
         ;;
     --bluestore-zoned )
         zoned_enabled=1
+        ;;
+    --ganesha-path)
+        ganesha_path="$2"
+        shift
         ;;
     * )
         usage_exit
@@ -1132,20 +1138,20 @@ start_ganesha() {
         RADOS_URLS {
 	   Userid = $test_user;
 	   watch_url = \"$url\";
-        }" > "$ganesha_dir/ganesha.conf"
+        }" > "$ganesha_dir/ganesha-$name.conf"
 	wconf <<EOF
 [ganesha.$name]
         host = $HOSTNAME
         ip = $IP
         port = $port
         ganesha data = $ganesha_dir
-        pid file = $ganesha_dir/ganesha.pid
+        pid file = $ganesha_dir/ganesha-$name.pid
 EOF
 
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
-        prun env CEPH_CONF="${conf_fn}" /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" $ganesha_path -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
@@ -1153,7 +1159,7 @@ EOF
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
         if $with_mgr_dashboard; then
-            $CEPH_BIN/rados -p $pool_name put "conf-$name" "$ganesha_dir/ganesha.conf"
+            $CEPH_BIN/rados -p $pool_name put "conf-$name" "$ganesha_dir/ganesha-$name.conf"
         fi
 
         echo "$test_user ganesha daemon $name started on port: $port"
