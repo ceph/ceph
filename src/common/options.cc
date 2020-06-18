@@ -4658,11 +4658,23 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_avl_alloc_bf_threshold", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(131072)
-    .set_description(""),
+    .set_description("Sets threshold at which shrinking max free chunk size triggers enabling best-fit mode.")
+    .set_long_description("AVL allocator works in two modes: near-fit and best-fit. By default, it uses very fast near-fit mode, "
+			  "in which it tries to fit a new block near the last allocated block of similar size. The second mode "
+			  "is much slower best-fit mode, in which it tries to find an exact match for the requested allocation. "
+			  "This mode is used when either the device gets fragmented or when it is low on free space. "
+			  "When the largest free block is smaller than 'bluestore_avl_alloc_bf_threshold', best-fit mode is used.")
+    .add_see_also("bluestore_avl_alloc_bf_free_pct"),
 
     Option("bluestore_avl_alloc_bf_free_pct", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(4)
-    .set_description(""),
+    .set_description("Sets threshold at which shrinking free space (in %, integer) triggers enabling best-fit mode.")
+    .set_long_description("AVL allocator works in two modes: near-fit and best-fit. By default, it uses very fast near-fit mode, "
+			  "in which it tries to fit a new block near the last allocated block of similar size. The second mode "
+			  "is much slower best-fit mode, in which it tries to find an exact match for the requested allocation. "
+			  "This mode is used when either the device gets fragmented or when it is low on free space. "
+			  "When free space is smaller than 'bluestore_avl_alloc_bf_free_pct', best-fit mode is used.")
+    .add_see_also("bluestore_avl_alloc_bf_threshold"),
 
     Option("bluestore_hybrid_alloc_mem_cap", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(64_M)
