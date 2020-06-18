@@ -6,8 +6,8 @@ Linter:
 '''
 import logging
 
-from salt_manager import SaltManager
-from util import remote_exec
+from tasks.salt_manager import SaltManager
+from tasks.util import remote_exec
 from teuthology.exceptions import ConfigError
 from teuthology.misc import (
     delete_file,
