@@ -430,7 +430,8 @@ class LocalRemote(object):
 
         return proc
 
-    # XXX: for compatibility keep this method same teuthology.orchestra.remote.sh
+    # XXX: for compatibility keep this method same as teuthology.orchestra.remote.sh
+    # BytesIO is being used just to keep things identical
     def sh(self, script, **kwargs):
         """
         Shortcut for run method.
@@ -439,13 +440,18 @@ class LocalRemote(object):
             my_name = remote.sh('whoami')
             remote_date = remote.sh('date')
         """
+        from io import BytesIO
+
         if 'stdout' not in kwargs:
-            kwargs['stdout'] = StringIO()
+            kwargs['stdout'] = BytesIO()
         if 'args' not in kwargs:
             kwargs['args'] = script
         proc = self.run(**kwargs)
-        return proc.stdout.getvalue()
-
+        out = proc.stdout.getvalue()
+        if isinstance(out, bytes):
+            return out.decode()
+        else:
+            return out
 
 class LocalDaemon(object):
     def __init__(self, daemon_type, daemon_id):
