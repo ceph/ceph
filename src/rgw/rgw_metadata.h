@@ -299,4 +299,21 @@ void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::s
 void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
 void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
 
+template <typename T>
+struct CompleteInfo {
+  T info;
+  std::map<std::string, bufferlist> attrs;
+  bool has_attrs {false};
+
+  void dump(Formatter * const f) const {
+    info.dump(f);
+    encode_json("attrs", attrs, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    decode_json_obj(info, obj);
+    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
+  }
+};
+
 #endif
