@@ -694,21 +694,44 @@ class Module(MgrModule):
 
         # Parse rbd_stats_pools option, which is a comma or space separated
         # list of pool[/namespace] entries. If no namespace is specifed the
-        # stats are collected for every namespace in the pool.
+        # stats are collected for every namespace in the pool. The wildcard
+        # '*' can be used to indicate all pools or namespaces
         pools_string = self.get_localized_module_option('rbd_stats_pools', '')
-        pools = {}
-        for p in [x for x in re.split('[\s,]+', pools_string) if x]:
-            s = p.split('/', 2)
+        pool_keys = []
+        for x in re.split('[\s,]+', pools_string):
+            if not x:
+                continue
+
+            s = x.split('/', 2)
             pool_name = s[0]
-            if len(s) == 1:
+            namespace_name = None
+            if len(s) == 2:
+                namespace_name = s[1]
+
+            if pool_name == "*":
+                # collect for all pools
+                osd_map = self.get('osd_map')
+                for pool in osd_map['pools']:
+                    if 'rbd' not in pool.get('application_metadata', {}):
+                        continue
+                    pool_keys.append((pool['pool_name'], namespace_name))
+            else:
+                pool_keys.append((pool_name, namespace_name))
+
+        pools = {}
+        for pool_key in pool_keys:
+            pool_name = pool_key[0]
+            namespace_name = pool_key[1]
+            if not namespace_name or namespace_name == "*":
                 # empty set means collect for all namespaces
                 pools[pool_name] = set()
                 continue
+
             if pool_name not in pools:
                 pools[pool_name] = set()
             elif not pools[pool_name]:
                 continue
-            pools[pool_name].add(s[1])
+            pools[pool_name].add(namespace_name)
 
         rbd_stats_pools = {}
         for pool_id in list(self.rbd_stats['pools']):
