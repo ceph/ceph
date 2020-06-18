@@ -792,21 +792,7 @@ public:
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
-struct RGWUserCompleteInfo {
-  RGWUserInfo info;
-  map<string, bufferlist> attrs;
-  bool has_attrs{false};
-
-  void dump(Formatter * const f) const {
-    info.dump(f);
-    encode_json("attrs", attrs, f);
-  }
-
-  void decode_json(JSONObj *obj) {
-    decode_json_obj(info, obj);
-    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
-  }
-};
+using RGWUserCompleteInfo = CompleteInfo<RGWUserInfo>;
 
 class RGWUserMetadataObject : public RGWMetadataObject {
   RGWUserCompleteInfo uci;
