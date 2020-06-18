@@ -3,6 +3,7 @@ import json
 import time
 import errno
 import logging
+import unittest
 from io import BytesIO
 
 from tasks.mgr.mgr_test_case import MgrTestCase
@@ -95,17 +96,20 @@ class TestNFS(MgrTestCase):
         if b'export-' in rados_obj_ls or (conf_obj and b'conf-nfs' in rados_obj_ls):
             raise RuntimeError("Delete export failed")
 
-    def test_create_and_delete_cluster(self):
+    # @unittest.skip("https://tracker.ceph.com/issues/46046")
+    def _disabled_test_create_and_delete_cluster(self):
         self._test_create_cluster()
         self._test_delete_cluster()
 
-    def test_export_create_and_delete(self):
+    # @unittest.skip("https://tracker.ceph.com/issues/46046")
+    def _disabled_test_export_create_and_delete(self):
         self._create_default_export()
         self._delete_export()
         self._check_export_obj_deleted()
         self._test_delete_cluster()
 
-    def test_create_multiple_exports(self):
+    # @unittest.skip("https://tracker.ceph.com/issues/46046")
+    def _disabled_test_create_multiple_exports(self):
         #Export-1 with default values
         self._create_default_export()
         #Export-2 with r only
