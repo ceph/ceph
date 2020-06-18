@@ -302,9 +302,7 @@ public:
   void on_role_change() final {
     // Not needed yet
   }
-  void on_change(ceph::os::Transaction &t) final {
-    recovery_backend->on_peering_interval_change(t);
-  }
+  void on_change(ceph::os::Transaction &t) final;
   void on_activate(interval_set<snapid_t> to_trim) final;
   void on_activate_complete() final;
   void on_new_interval() final {
@@ -556,7 +554,7 @@ private:
 public:
   cached_map_t get_osdmap() { return osdmap; }
   eversion_t next_version() {
-    return eversion_t(projected_last_update.epoch,
+    return eversion_t(get_osdmap_epoch(),
 		      ++projected_last_update.version);
   }
   ShardServices& get_shard_services() final {
@@ -661,10 +659,11 @@ private:
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }
-  bool is_unreadable_object(const hobject_t &oid) const final {
+  bool is_unreadable_object(const hobject_t &oid,
+			    eversion_t* v = 0) const final {
     return is_missing_object(oid) ||
       !peering_state.get_missing_loc().readable_with_acting(
-	oid, get_actingset());
+	oid, get_actingset(), v);
   }
   const set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();

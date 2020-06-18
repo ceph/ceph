@@ -20,6 +20,7 @@ public:
   seastar::future<> stop() final {
     return seastar::now();
   }
+  void on_actingset_changed(peering_info_t pi) final {}
 private:
   ll_read_errorator::future<ceph::bufferlist> _read(const hobject_t& hoid,
                                                     uint64_t off,
