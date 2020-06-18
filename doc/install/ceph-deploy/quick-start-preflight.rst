@@ -302,7 +302,7 @@ Once you have finished configuring ``iptables``, ensure that you make the
 changes persistent on each node so that they will be in effect when your nodes
 reboot. For example::
 
-	/sbin/service iptables save
+	/sbin/service iptables-save
 
 TTY
 ---
