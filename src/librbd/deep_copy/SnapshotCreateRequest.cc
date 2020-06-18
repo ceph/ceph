@@ -80,10 +80,11 @@ void SnapshotCreateRequest<I>::send_create_snap() {
       handle_create_snap(r);
       finish_op_ctx->complete(0);
     });
+  uint64_t flags = SNAP_CREATE_FLAG_SKIP_OBJECT_MAP |
+                   SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE;
   std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
   m_dst_image_ctx->operations->execute_snap_create(
-      m_snap_namespace, m_snap_name.c_str(), ctx, 0U,
-      SNAP_CREATE_FLAG_SKIP_OBJECT_MAP, m_prog_ctx);
+      m_snap_namespace, m_snap_name.c_str(), ctx, 0U, flags, m_prog_ctx);
 }
 
 template <typename I>

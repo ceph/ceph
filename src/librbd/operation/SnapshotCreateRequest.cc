@@ -36,6 +36,7 @@ SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
     m_snap_namespace(snap_namespace), m_snap_name(snap_name),
     m_skip_object_map(flags & SNAP_CREATE_FLAG_SKIP_OBJECT_MAP),
     m_skip_notify_quiesce(flags & SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE),
+    m_ignore_notify_quiesce_error(flags & SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR),
     m_prog_ctx(prog_ctx) {
 }
 
@@ -64,8 +65,8 @@ void SnapshotCreateRequest<I>::send_notify_quiesce() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  m_request_id = image_ctx.image_watcher->notify_quiesce(
-    m_prog_ctx, create_async_context_callback(
+  image_ctx.image_watcher->notify_quiesce(
+      &m_request_id, m_prog_ctx, create_async_context_callback(
       image_ctx, create_context_callback<SnapshotCreateRequest<I>,
       &SnapshotCreateRequest<I>::handle_notify_quiesce>(this)));
 }
@@ -76,10 +77,12 @@ Context *SnapshotCreateRequest<I>::handle_notify_quiesce(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  if (*result < 0) {
+  if (*result < 0 && !m_ignore_notify_quiesce_error) {
     lderr(cct) << "failed to notify quiesce: " << cpp_strerror(*result)
                << dendl;
-    return this->create_context_finisher(*result);
+    save_result(result);
+    send_notify_unquiesce();
+    return nullptr;
   }
 
   std::shared_lock owner_locker{image_ctx.owner_lock};
@@ -132,6 +135,8 @@ Context *SnapshotCreateRequest<I>::handle_suspend_aio(int *result) {
     save_result(result);
     return send_notify_unquiesce();
   }
+
+  m_writes_blocked = true;
 
   send_append_op_event();
   return nullptr;
@@ -355,13 +360,16 @@ template <typename I>
 Context *SnapshotCreateRequest<I>::send_notify_unquiesce() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  image_ctx.io_image_dispatcher->unblock_writes();
+  if (m_writes_blocked) {
+    image_ctx.io_image_dispatcher->unblock_writes();
+  }
 
   if (m_skip_notify_quiesce) {
     return this->create_context_finisher(m_ret_val);
   }
+
+  ldout(cct, 5) << this << " " << __func__ << dendl;
 
   image_ctx.image_watcher->notify_unquiesce(
     m_request_id, create_context_callback<

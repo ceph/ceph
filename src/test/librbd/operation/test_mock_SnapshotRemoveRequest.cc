@@ -446,8 +446,9 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, TrashCloneParent) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  NoOpProgressContext prog_ctx;
   ASSERT_EQ(0, ictx->operations->snap_create(
-                 {cls::rbd::TrashSnapshotNamespace{}}, "snap1"));
+                 {cls::rbd::TrashSnapshotNamespace{}}, "snap1", 0, prog_ctx));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);

@@ -218,8 +218,9 @@ public:
   void expect_snap_create(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(_, StrEq(snap_name), _,
-                                                                op_tid, 0, _))
+    EXPECT_CALL(*mock_image_ctx.operations,
+                execute_snap_create(_, StrEq(snap_name), _, op_tid,
+                                    SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE, _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }

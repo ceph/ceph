@@ -38,7 +38,9 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY,
                  RBD_MIRROR_PEER_DIRECTION_RX, RBD_MIRROR_PEER_DIRECTION_RX_TX,
                  RBD_SNAP_REMOVE_UNPROTECT, RBD_SNAP_MIRROR_STATE_PRIMARY,
-                 RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)
+                 RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED,
+                 RBD_SNAP_CREATE_SKIP_QUIESCE,
+                 RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
 
 rados = None
 ioctx = None
@@ -783,6 +785,14 @@ class TestImage(object):
     def test_create_snap_exists(self):
         self.image.create_snap('snap1')
         assert_raises(ImageExists, self.image.create_snap, 'snap1')
+        self.image.remove_snap('snap1')
+
+    def test_create_snap_flags(self):
+        self.image.create_snap('snap1', 0)
+        self.image.remove_snap('snap1')
+        self.image.create_snap('snap1', RBD_SNAP_CREATE_SKIP_QUIESCE)
+        self.image.remove_snap('snap1')
+        self.image.create_snap('snap1', RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR)
         self.image.remove_snap('snap1')
 
     def test_list_snaps(self):
@@ -2126,7 +2136,8 @@ class TestMirroring(object):
         info['mode'] = RBD_MIRROR_IMAGE_MODE_SNAPSHOT;
         eq(info, entries[self.image.id()])
 
-        snap_id = self.image.mirror_image_create_snapshot()
+        snap_id = self.image.mirror_image_create_snapshot(
+            RBD_SNAP_CREATE_SKIP_QUIESCE)
 
         snaps = list(self.image.list_snaps())
         eq(2, len(snaps))

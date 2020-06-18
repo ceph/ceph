@@ -37,6 +37,7 @@ public:
   void notify_snap_create(uint64_t request_id,
                           const cls::rbd::SnapshotNamespace &snap_namespace,
 			  const std::string &snap_name,
+                          uint64_t flags,
                           ProgressContext &prog_ctx,
 			  Context *on_finish);
   void notify_snap_rename(const snapid_t &src_snap_id,
@@ -72,7 +73,8 @@ public:
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
 
-  uint64_t notify_quiesce(ProgressContext &prog_ctx, Context *on_finish);
+  void notify_quiesce(uint64_t *request_id, ProgressContext &prog_ctx,
+                      Context *on_finish);
   void notify_unquiesce(uint64_t request_id, Context *on_finish);
 
 private:

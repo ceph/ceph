@@ -8210,7 +8210,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
     void handle_quiesce() {
       ASSERT_EQ(quiesce_count, unquiesce_count);
       quiesce_count++;
-      rbd_quiesce_complete(image);
+      rbd_quiesce_complete(image, 0);
     }
     void handle_unquiesce() {
       unquiesce_count++;
@@ -8280,7 +8280,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
       void handle_quiesce() override {
         ASSERT_EQ(quiesce_count, unquiesce_count);
         quiesce_count++;
-        image.quiesce_complete();
+        image.quiesce_complete(0);
       }
       void handle_unquiesce() override {
         unquiesce_count++;
@@ -8317,6 +8317,82 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
     ASSERT_EQ(0, image1.snap_remove("snap1"));
     ASSERT_EQ(0, image1.snap_remove("snap2"));
     ASSERT_EQ(0, image1.snap_remove("snap3"));
+  }
+
+  ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
+  ioctx.close();
+}
+
+TEST_F(TestLibRBD, QuiesceWatchError)
+{
+  librbd::RBD rbd;
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t size = 2 << 20;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  {
+    librbd::Image image1, image2;
+    ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+    ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+    struct Watcher : public librbd::QuiesceWatchCtx {
+      librbd::Image &image;
+      int r;
+      size_t quiesce_count = 0;
+      size_t unquiesce_count = 0;
+
+      Watcher(librbd::Image &image, int r) : image(image), r(r) {
+      }
+
+      void handle_quiesce() override {
+        quiesce_count++;
+        image.quiesce_complete(r);
+      }
+
+      void handle_unquiesce() override {
+        unquiesce_count++;
+      }
+    } watcher1(image1, -EINVAL), watcher2(image2, 0);
+    uint64_t handle1, handle2;
+
+    ASSERT_EQ(0, image1.quiesce_watch(&watcher1, &handle1));
+    ASSERT_EQ(0, image2.quiesce_watch(&watcher2, &handle2));
+
+    ASSERT_EQ(-EINVAL, image1.snap_create("snap1"));
+    ASSERT_LT(0U, watcher1.quiesce_count);
+    ASSERT_EQ(0U, watcher1.unquiesce_count);
+    ASSERT_EQ(1U, watcher2.quiesce_count);
+    ASSERT_EQ(1U, watcher2.unquiesce_count);
+
+    PrintProgress prog_ctx;
+    watcher1.quiesce_count = 0;
+    ASSERT_EQ(0, image2.snap_create2("snap2",
+                                     RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
+                                     prog_ctx));
+    ASSERT_LT(0U, watcher1.quiesce_count);
+    ASSERT_EQ(0U, watcher1.unquiesce_count);
+    ASSERT_EQ(2U, watcher2.quiesce_count);
+    ASSERT_EQ(2U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image1.quiesce_unwatch(handle1));
+
+    ASSERT_EQ(0, image1.snap_create("snap3"));
+    ASSERT_EQ(3U, watcher2.quiesce_count);
+    ASSERT_EQ(3U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image2.snap_create2("snap4", RBD_SNAP_CREATE_SKIP_QUIESCE,
+                                     prog_ctx));
+    ASSERT_EQ(3U, watcher2.quiesce_count);
+    ASSERT_EQ(3U, watcher2.unquiesce_count);
+
+    ASSERT_EQ(0, image2.quiesce_unwatch(handle2));
+
+    ASSERT_EQ(0, image1.snap_remove("snap2"));
+    ASSERT_EQ(0, image1.snap_remove("snap3"));
+    ASSERT_EQ(0, image1.snap_remove("snap4"));
   }
 
   ASSERT_EQ(0, rbd.remove(ioctx, name.c_str()));
@@ -8388,7 +8464,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
     thread quiesce1([&image, &watcher]() {
       watcher.wait_for_quiesce_count(1);
       sleep(8);
-      image.quiesce_complete();
+      image.quiesce_complete(0);
     });
 
     ASSERT_EQ(0, image.snap_create("snap1"));
@@ -8406,7 +8482,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
         std::cerr << "waiting for timed out ... " << i << std::endl;
         sleep(1);
       }
-      image.quiesce_complete();
+      image.quiesce_complete(0);
     });
 
     ASSERT_EQ(-ETIMEDOUT, image.snap_create("snap2"));
@@ -8418,7 +8494,7 @@ TEST_F(TestLibRBD, QuiesceWatchTimeout)
 
     thread quiesce3([&image, &watcher]() {
       watcher.wait_for_quiesce_count(3);
-      image.quiesce_complete();
+      image.quiesce_complete(0);
     });
 
     std::cerr << "test retry succeeds" << std::endl;

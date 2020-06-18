@@ -100,8 +100,9 @@ enum ImageReadOnlyFlag {
 };
 
 enum SnapCreateFlag {
-  SNAP_CREATE_FLAG_SKIP_OBJECT_MAP     = 1 << 0,
-  SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE = 1 << 1,
+  SNAP_CREATE_FLAG_SKIP_OBJECT_MAP             = 1 << 0,
+  SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE         = 1 << 1,
+  SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR = 1 << 2,
 };
 
 struct MigrationInfo {

@@ -29,12 +29,12 @@ public:
    *            <start>
    *               |
    *               v
-   *           STATE_NOTIFY_QUIESCE
-   *               |
-   *               v
-   *           STATE_SUSPEND_REQUESTS
-   *               |
-   *               v
+   *           STATE_NOTIFY_QUIESCE  * * * * * * * * * * * * *
+   *               |                                         *
+   *               v                                         *
+   *           STATE_SUSPEND_REQUESTS                        *
+   *               |                                         *
+   *               v                                         *
    *           STATE_SUSPEND_AIO * * * * * * * * * * * * * * *
    *               |                                         *
    *               v                                         *
@@ -90,10 +90,12 @@ private:
   std::string m_snap_name;
   bool m_skip_object_map;
   bool m_skip_notify_quiesce;
+  bool m_ignore_notify_quiesce_error;
   ProgressContext &m_prog_ctx;
 
   uint64_t m_request_id = 0;
   int m_ret_val = 0;
+  bool m_writes_blocked = false;
 
   uint64_t m_snap_id = CEPH_NOSNAP;
   uint64_t m_size;
