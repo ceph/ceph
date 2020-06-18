@@ -90,6 +90,8 @@ static void usage()
        << "  --convert-filestore\n"
        << "                    run any pending upgrade operations\n"
        << "  --flush-journal   flush all data out of journal\n"
+       << "  --osdspec-affinity\n"
+       << "                    set affinity to an osdspec\n"
        << "  --dump-journal    dump all data of journal\n"
        << "  --mkjournal       initialize a new journal\n"
        << "  --check-wants-journal\n"
@@ -148,6 +150,7 @@ int main(int argc, const char **argv)
   bool get_device_fsid = false;
   string device_path;
   std::string dump_pg_log;
+  std::string osdspec_affinity;
 
   std::string val;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
@@ -155,6 +158,8 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--osdspec-affinity", (char*)NULL)) {
+     osdspec_affinity = val;
     } else if (ceph_argparse_flag(args, i, "--mkjournal", (char*)NULL)) {
       mkjournal = true;
     } else if (ceph_argparse_flag(args, i, "--check-allows-journal", (char*)NULL)) {
@@ -347,6 +352,7 @@ int main(int argc, const char **argv)
 	derr << "created new key in keyring " << keyring_path << dendl;
     }
   }
+
   if (mkfs) {
     common_init_finish(g_ceph_context);
 
@@ -356,7 +362,7 @@ int main(int argc, const char **argv)
     }
 
     int err = OSD::mkfs(g_ceph_context, store, g_conf().get_val<uuid_d>("fsid"),
-                        whoami);
+                        whoami, osdspec_affinity);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
 	   << data_path << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
@@ -441,7 +447,6 @@ flushjournal_out:
 	 << dendl;
     forker.exit(0);
   }
-
 
   if (convertfilestore) {
     int err = store->mount();
