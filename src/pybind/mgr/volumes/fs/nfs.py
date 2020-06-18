@@ -7,6 +7,7 @@ from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
 import cephfs
 import orchestrator
 from .fs_util import create_pool
+from rados import TimedOut
 
 log = logging.getLogger(__name__)
 
@@ -198,6 +199,13 @@ class FSExport(object):
         self.export_conf_blocks = []
         self.exports = {}
 
+    @staticmethod
+    def _check_rados_notify(ioctx, obj):
+        try:
+            ioctx.notify(obj)
+        except TimedOut:
+            log.exception(f"Ganesha timed out")
+
     def check_fs(self, fs_name):
         fs_map = self.mgr.get('fs_map')
         return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
@@ -253,7 +261,7 @@ class FSExport(object):
                 ioctx.set_namespace(self.rados_namespace)
             if append:
                 ioctx.append(obj, raw_config.encode('utf-8'))
-                ioctx.notify(obj)
+                FSExport._check_rados_notify(ioctx, obj)
             else:
                 ioctx.write_full(obj, raw_config.encode('utf-8'))
             log.debug(
@@ -271,7 +279,7 @@ class FSExport(object):
             export_urls = export_urls.replace(url.encode('utf-8'), b'')
             ioctx.remove_object(export_name)
             ioctx.write_full(obj, export_urls)
-            ioctx.notify(obj)
+            FSExport._check_rados_notify(ioctx, obj)
             log.debug("Export deleted: {}".format(url))
 
     def _update_common_conf(self, cluster_id, ex_id):
