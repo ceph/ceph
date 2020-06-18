@@ -4448,7 +4448,7 @@ def _get_parser():
         help='ceph.keyring to pass through to the container')
     parser_shell.add_argument(
         '--mount', '-m',
-        help='file or directory path that will be mounted in container /mnt')
+        help='mount a file or directory under /mnt in the container')
     parser_shell.add_argument(
         '--env', '-e',
         action='append',
