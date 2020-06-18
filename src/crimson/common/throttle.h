@@ -10,7 +10,7 @@
 
 #include "common/ThrottleInterface.h"
 
-namespace crimson::thread {
+namespace crimson::common {
 
 class Throttle final : public ThrottleInterface {
   size_t max = 0;
@@ -36,4 +36,4 @@ private:
   bool _should_wait(size_t c) const;
 };
 
-} // namespace crimson::thread
+} // namespace crimson::common

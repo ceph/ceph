@@ -19,7 +19,8 @@ set(crimson_common_srcs
   common/config_proxy.cc
   common/formatter.cc
   common/perf_counters_collection.cc
-  common/log.cc)
+  common/log.cc
+  common/throttle.cc)
 
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
@@ -166,14 +167,11 @@ set(crimson_net_srcs
   net/ProtocolV1.cc
   net/ProtocolV2.cc
   net/chained_dispatchers.cc)
-set(crimson_thread_srcs
-  thread/Throttle.cc)
 add_library(crimson STATIC
   ${crimson_auth_srcs}
   ${crimson_mgr_srcs}
   ${crimson_mon_srcs}
   ${crimson_net_srcs}
-  ${crimson_thread_srcs}
   ${CMAKE_SOURCE_DIR}/src/common/buffer_seastar.cc)
 target_compile_options(crimson PUBLIC
   "-ftemplate-backtrace-limit=0")

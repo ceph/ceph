@@ -17,8 +17,8 @@
 #include <seastar/core/future.hh>
 
 #include "Fwd.h"
+#include "crimson/common/throttle.h"
 #include "crimson/net/chained_dispatchers.h"
-#include "crimson/thread/Throttle.h"
 #include "msg/Message.h"
 #include "msg/Policy.h"
 
@@ -35,7 +35,7 @@ namespace crimson::net {
 class Interceptor;
 #endif
 
-using Throttle = crimson::thread::Throttle;
+using Throttle = crimson::common::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
 
 class Messenger {
