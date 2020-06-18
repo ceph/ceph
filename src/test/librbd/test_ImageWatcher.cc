@@ -293,7 +293,7 @@ struct SnapCreateTask {
     std::shared_lock l{ictx->owner_lock};
     C_SaferCond ctx;
     ictx->image_watcher->notify_snap_create(0, cls::rbd::UserSnapshotNamespace(),
-                                            "snap", *progress_context, &ctx);
+                                            "snap", 0, *progress_context, &ctx);
     ASSERT_EQ(0, ctx.wait());
   }
 };
@@ -486,7 +486,7 @@ TEST_F(TestImageWatcher, NotifySnapCreateError) {
   C_SaferCond notify_ctx;
   librbd::NoOpProgressContext prog_ctx;
   ictx->image_watcher->notify_snap_create(0, cls::rbd::UserSnapshotNamespace(),
-       "snap", prog_ctx, &notify_ctx);
+                                          "snap", 0, prog_ctx, &notify_ctx);
   ASSERT_EQ(-EEXIST, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;

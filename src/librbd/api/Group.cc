@@ -467,8 +467,8 @@ int notify_quiesce(std::vector<I*> &ictxs, ProgressContext &prog_ctx,
   for (int i = 0; i < image_count; ++i) {
     auto ictx = ictxs[i];
 
-    (*requests)[i] = ictx->image_watcher->notify_quiesce(prog_ctx,
-                                                         &on_finishes[i]);
+    ictx->image_watcher->notify_quiesce(&(*requests)[i], prog_ctx,
+                                        &on_finishes[i]);
   }
 
   int ret_code = 0;

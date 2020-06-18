@@ -10,6 +10,7 @@
 #include "librbd/Operations.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/RefreshRequest.h"
+#include "librbd/internal.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -72,8 +73,9 @@ public:
     TestMockFixture::SetUp();
 
     ASSERT_EQ(0, open_image(m_image_name, &image_ctx));
+    NoOpProgressContext prog_ctx;
     ASSERT_EQ(0, image_ctx->operations->snap_create(
-                   cls::rbd::UserSnapshotNamespace{}, "snap"));
+                   cls::rbd::UserSnapshotNamespace{}, "snap", 0, prog_ctx));
     if (is_feature_enabled(RBD_FEATURE_LAYERING)) {
       ASSERT_EQ(0, image_ctx->operations->snap_protect(
                      cls::rbd::UserSnapshotNamespace{}, "snap"));

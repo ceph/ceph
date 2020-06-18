@@ -201,7 +201,7 @@ void add_snap_spec_options(po::options_description *pos,
   pos->add_options()
     ((get_name_prefix(modifier) + SNAPSHOT_SPEC).c_str(),
      (get_description_prefix(modifier) + "snapshot specification\n" +
-      "(example: [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)").c_str());
+      "(example: [<pool-name>/[<namespace>/]]<image-name>@<snap-name>)").c_str());
   add_pool_option(opt, modifier);
   add_namespace_option(opt, modifier);
   add_image_option(opt, modifier);
@@ -319,6 +319,13 @@ void add_flatten_option(boost::program_options::options_description *opt) {
   opt->add_options()
     (IMAGE_FLATTEN.c_str(), po::bool_switch(),
      "fill clone with parent data (make it independent)");
+}
+
+void add_snap_create_options(po::options_description *opt) {
+  opt->add_options()
+    (SKIP_QUIESCE.c_str(), po::bool_switch(), "do not run quiesce hooks")
+    (IGNORE_QUIESCE_ERROR.c_str(), po::bool_switch(),
+     "ignore quiesce hook error");
 }
 
 std::string get_short_features_help(bool append_suffix) {

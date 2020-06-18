@@ -113,7 +113,8 @@ void SyncPointCreateRequest<I>::send_create_snap() {
     SyncPointCreateRequest<I>, &SyncPointCreateRequest<I>::handle_create_snap>(
       this);
   m_remote_image_ctx->operations->snap_create(
-    cls::rbd::UserSnapshotNamespace(), sync_point.snap_name.c_str(), ctx);
+    cls::rbd::UserSnapshotNamespace(), sync_point.snap_name.c_str(),
+    librbd::SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE, m_prog_ctx, ctx);
 }
 
 template <typename I>

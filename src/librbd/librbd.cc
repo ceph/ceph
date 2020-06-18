@@ -28,6 +28,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Group.h"
@@ -2180,8 +2181,19 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    int r = ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					  snap_name);
+    auto flags = librbd::util::get_default_snap_create_flags(ictx);
+    librbd::NoOpProgressContext prog_ctx;
+    int r = librbd::api::Snapshot<>::create(ictx, snap_name, flags, prog_ctx);
+    tracepoint(librbd, snap_create_exit, r);
+    return r;
+  }
+
+  int Image::snap_create2(const char *snap_name, uint32_t flags,
+                          ProgressContext& prog_ctx)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
+    int r = librbd::api::Snapshot<>::create(ictx, snap_name, flags, prog_ctx);
     tracepoint(librbd, snap_create_exit, r);
     return r;
   }
@@ -2836,7 +2848,14 @@ namespace librbd {
   int Image::mirror_image_create_snapshot(uint64_t *snap_id)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::api::Mirror<>::image_snapshot_create(ictx, snap_id);
+    auto flags = librbd::util::get_default_snap_create_flags(ictx);
+    return librbd::api::Mirror<>::image_snapshot_create(ictx, flags, snap_id);
+  }
+
+  int Image::mirror_image_create_snapshot2(uint32_t flags, uint64_t *snap_id)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Mirror<>::image_snapshot_create(ictx, flags, snap_id);
   }
 
   int Image::mirror_image_get_info(mirror_image_info_t *mirror_image_info,
@@ -3036,9 +3055,9 @@ namespace librbd {
     return r;
   }
 
-  void Image::quiesce_complete() {
+  void Image::quiesce_complete(int r) {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    ictx->state->quiesce_complete();
+    ictx->state->quiesce_complete(r);
   }
 
 } // namespace librbd
@@ -5221,8 +5240,21 @@ extern "C" int rbd_snap_create(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-  int r = ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					snap_name);
+  auto flags = librbd::util::get_default_snap_create_flags(ictx);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::api::Snapshot<>::create(ictx, snap_name, flags, prog_ctx);
+  tracepoint(librbd, snap_create_exit, r);
+  return r;
+}
+
+extern "C" int rbd_snap_create2(rbd_image_t image, const char *snap_name,
+                                uint32_t flags, librbd_progress_fn_t cb,
+                                void *cbdata)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  int r = librbd::api::Snapshot<>::create(ictx, snap_name, flags, prog_ctx);
   tracepoint(librbd, snap_create_exit, r);
   return r;
 }
@@ -6307,7 +6339,16 @@ extern "C" int rbd_mirror_image_create_snapshot(rbd_image_t image,
                                                 uint64_t *snap_id)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::api::Mirror<>::image_snapshot_create(ictx, snap_id);
+  auto flags = librbd::util::get_default_snap_create_flags(ictx);
+  return librbd::api::Mirror<>::image_snapshot_create(ictx, flags, snap_id);
+}
+
+extern "C" int rbd_mirror_image_create_snapshot2(rbd_image_t image,
+                                                 uint32_t flags,
+                                                 uint64_t *snap_id)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Mirror<>::image_snapshot_create(ictx, flags, snap_id);
 }
 
 extern "C" int rbd_mirror_image_get_info(rbd_image_t image,
@@ -7162,8 +7203,8 @@ extern "C" int rbd_quiesce_unwatch(rbd_image_t image, uint64_t handle)
   return r;
 }
 
-extern "C" void rbd_quiesce_complete(rbd_image_t image)
+extern "C" void rbd_quiesce_complete(rbd_image_t image, int r)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  ictx->state->quiesce_complete();
+  ictx->state->quiesce_complete(r);
 }

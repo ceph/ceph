@@ -262,12 +262,14 @@ protected:
 
 struct SnapCreatePayload : public SnapPayloadBase {
   AsyncRequestId async_request_id;
+  uint64_t flags = 0;
 
   SnapCreatePayload() {}
   SnapCreatePayload(const AsyncRequestId &id,
                     const cls::rbd::SnapshotNamespace &snap_namespace,
-		    const std::string &name)
-    : SnapPayloadBase(snap_namespace, name), async_request_id(id) {
+		    const std::string &name, uint64_t flags)
+    : SnapPayloadBase(snap_namespace, name), async_request_id(id),
+      flags(flags) {
   }
 
   NotifyOp get_notify_op() const override {

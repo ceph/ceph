@@ -57,7 +57,7 @@ public:
   int unregister_quiesce_watcher(uint64_t handle);
   void notify_quiesce(Context *on_finish);
   void notify_unquiesce(Context *on_finish);
-  void quiesce_complete();
+  void quiesce_complete(int r);
 
 private:
   enum State {

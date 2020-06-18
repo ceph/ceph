@@ -10,9 +10,10 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Image.h"
-#include <boost/variant.hpp>
 #include "include/Context.h"
 #include "common/Cond.h"
+
+#include <boost/variant.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -307,6 +308,23 @@ int Snapshot<I>::exists(I *ictx, const cls::rbd::SnapshotNamespace& snap_namespa
   std::shared_lock l{ictx->image_lock};
   *exists = ictx->get_snap_id(snap_namespace, snap_name) != CEPH_NOSNAP;
   return 0;
+}
+
+template <typename I>
+int Snapshot<I>::create(I *ictx, const char *snap_name, uint32_t flags,
+                        ProgressContext& pctx) {
+  ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name
+                       << " flags: " << flags << dendl;
+
+  uint64_t internal_flags = 0;
+  int r = util::snap_create_flags_api_to_internal(ictx->cct, flags,
+                                                  &internal_flags);
+  if (r < 0) {
+    return r;
+  }
+
+  return ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+                                       snap_name, internal_flags, pctx);
 }
 
 template <typename I>

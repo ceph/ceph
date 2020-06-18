@@ -239,7 +239,9 @@ public:
   int create_snap(librbd::ImageCtx *image_ctx,
                   const cls::rbd::SnapshotNamespace& snap_ns,
                   const std::string &snap_name, bool protect) {
-    int r = image_ctx->operations->snap_create(snap_ns, snap_name.c_str());
+    NoOpProgressContext prog_ctx;
+    int r = image_ctx->operations->snap_create(snap_ns, snap_name.c_str(), 0,
+                                               prog_ctx);
     if (r < 0) {
       return r;
     }
