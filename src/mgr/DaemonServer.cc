@@ -1855,6 +1855,12 @@ bool DaemonServer::_handle_command(
     int r = 0;
     string name;
     if (cmd_getval(cmdctx->cmdmap, "key", name)) {
+      // handle special options
+      if (name == "fsid") {
+       cmdctx->odata.append(stringify(monc->get_fsid()) + "\n");
+       cmdctx->reply(r, ss);
+       return true;
+      }
       auto p = daemon->config.find(name);
       if (p != daemon->config.end() &&
 	  !p->second.empty()) {
