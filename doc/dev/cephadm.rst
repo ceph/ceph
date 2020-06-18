@@ -61,18 +61,18 @@ To start a test cluster::
 The last line of this will be a line you can cut+paste to update the
 container image.  For instance::
 
-  sudo ../src/script/cpach -t quay.io/ceph-ci/ceph:8f509f4e
+  sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e
 
 By default, cpatch will patch everything it can think of from the local
 build dir into the container image.  If you are working on a specific
 part of the system, though, can you get away with smaller changes so that
 cpatch runs faster.  For instance::
 
-  sudo ../src/script/cpach -t quay.io/ceph-ci/ceph:8f509f4e --py
+  sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e --py
 
 will update the mgr modules (minus the dashboard).  Or::
 
-  sudo ../src/script/cpach -t quay.io/ceph-ci/ceph:8f509f4e --core
+  sudo ../src/script/cpatch -t quay.io/ceph-ci/ceph:8f509f4e --core
 
 will do most binaries and libraries.  Pass ``-h`` to cpatch for all options.
 
