@@ -4,10 +4,10 @@
 #include "messages/MPing.h"
 #include "common/ceph_argparse.h"
 #include "crimson/auth/DummyAuth.h"
+#include "crimson/common/throttle.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/thread/Throttle.h"
 
 #include <seastar/core/alien.hh>
 #include <seastar/core/app-template.hh>
@@ -38,7 +38,7 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
 };
 
 struct Server {
-  crimson::thread::Throttle byte_throttler;
+  crimson::common::Throttle byte_throttler;
   crimson::net::MessengerRef msgr;
   crimson::auth::DummyAuthClientServer dummy_auth;
   struct ServerDispatcher : crimson::net::Dispatcher {
@@ -64,7 +64,7 @@ struct Server {
 };
 
 struct Client {
-  crimson::thread::Throttle byte_throttler;
+  crimson::common::Throttle byte_throttler;
   crimson::net::MessengerRef msgr;
   crimson::auth::DummyAuthClientServer dummy_auth;
   struct ClientDispatcher : crimson::net::Dispatcher {
