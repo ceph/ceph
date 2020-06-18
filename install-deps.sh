@@ -364,6 +364,10 @@ else
 			  --enable rhel-server-rhscl-7-rpms \
 			  --enable rhel-7-server-devtools-rpms
                     dts_ver=8
+                elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
+                    $SUDO dnf config-manager --set-enabled PowerTools
+                elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
+                    $SUDO subscription-manager repos --enable "codeready-builder-for-rhel-8-*-rpms"
                 fi
                 ;;
         esac
