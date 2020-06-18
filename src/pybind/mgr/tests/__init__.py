@@ -51,6 +51,10 @@ if 'UNITTEST' in os.environ:
         def _ceph_set_module_option(self, module, key, val):
             return self._ceph_set_store(f'{module}/{key}', val)
 
+        def _ceph_get(self, *args):
+            return mock.MagicMock()
+
+
         def __init__(self, *args):
             self._store = {}
 
@@ -62,7 +66,6 @@ if 'UNITTEST' in os.environ:
 
             super(M, self).__init__()
             self._ceph_get_version = mock.Mock()
-            self._ceph_get = mock.MagicMock()
             self._ceph_get_option = mock.MagicMock()
             self._ceph_get_context = mock.MagicMock()
             self._ceph_register_client = mock.MagicMock()
