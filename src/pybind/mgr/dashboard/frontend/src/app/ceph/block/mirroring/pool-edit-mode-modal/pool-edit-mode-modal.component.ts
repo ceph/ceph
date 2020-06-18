@@ -93,13 +93,12 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
       call: this.rbdMirroringService.updatePool(this.poolName, request)
     });
 
-    action.subscribe(
-      undefined,
-      () => this.editModeForm.setErrors({ cdSubmitButton: true }),
-      () => {
+    action.subscribe({
+      error: () => this.editModeForm.setErrors({ cdSubmitButton: true }),
+      complete: () => {
         this.rbdMirroringService.refresh();
         this.modalRef.hide();
       }
-    );
+    });
   }
 }

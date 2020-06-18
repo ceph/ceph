@@ -142,14 +142,13 @@ export class PoolListComponent implements OnInit, OnDestroy {
                 }),
                 call: this.rbdMirroringService.deletePeer(poolName, peerUUID)
               })
-              .subscribe(
-                undefined,
-                (resp) => observer.error(resp),
-                () => {
+              .subscribe({
+                error: (resp) => observer.error(resp),
+                complete: () => {
                   this.rbdMirroringService.refresh();
                   observer.complete();
                 }
-              );
+              });
           })
       }
     });

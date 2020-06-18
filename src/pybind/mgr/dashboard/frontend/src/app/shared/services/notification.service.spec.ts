@@ -1,9 +1,9 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import * as _ from 'lodash';
 import { ToastrService } from 'ngx-toastr';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { RbdService } from '../api/rbd.service';
 import { NotificationType } from '../enum/notification-type.enum';

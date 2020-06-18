@@ -88,8 +88,10 @@ export class RbdTrashMoveModalComponent implements OnInit {
         }),
         call: this.rbdService.moveTrash(this.imageSpec, delay)
       })
-      .subscribe(undefined, undefined, () => {
-        this.modalRef.hide();
+      .subscribe({
+        complete: () => {
+          this.modalRef.hide();
+        }
       });
   }
 }

@@ -19,9 +19,9 @@ describe('ApiInterceptorService', () => {
   let router: Router;
   const url = 'api/xyz';
 
-  const httpError = (error: any, errorOpts: object, done = (_resp: any) => {}) => {
+  const httpError = (error: any, errorOpts: object, done = (_resp: any): any => undefined) => {
     httpClient.get(url).subscribe(
-      () => {},
+      () => true,
       (resp) => {
         // Error must have been forwarded by the interceptor.
         expect(resp instanceof HttpErrorResponse).toBeTruthy();

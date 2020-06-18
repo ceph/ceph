@@ -528,11 +528,10 @@ export class NfsFormComponent extends CdForm implements OnInit {
       });
     }
 
-    action.subscribe(
-      undefined,
-      () => this.nfsForm.setErrors({ cdSubmitButton: true }),
-      () => this.router.navigate(['/nfs'])
-    );
+    action.subscribe({
+      error: () => this.nfsForm.setErrors({ cdSubmitButton: true }),
+      complete: () => this.router.navigate(['/nfs'])
+    });
   }
 
   _buildRequest() {

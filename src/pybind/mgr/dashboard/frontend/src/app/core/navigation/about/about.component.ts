@@ -3,6 +3,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { detect } from 'detect-browser';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
+
 import { environment } from '../../../../environments/environment';
 import { UserService } from '../../../shared/api/user.service';
 import { AppConstants } from '../../../shared/constants/app.constants';
