@@ -511,12 +511,12 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
                 try:
                     info = remote.sh(cmd, wait=True)
                 except CommandFailedError as e:
-                    log.error("Failure of --op info command with {ret}".
-                              format(e.exitstatus))
+                    log.error("Failure of --op info command with %s",
+                              e.exitstatus)
                     ERRORS += 1
                     continue
                 if not str(pg) in info:
-                    log.error("Bad data from info: {info}".format(info=info))
+                    log.error("Bad data from info: %s", info)
                     ERRORS += 1
 
     log.info("Test pg logging")

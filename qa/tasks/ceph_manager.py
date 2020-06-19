@@ -26,7 +26,6 @@ from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
 from tasks.thrasher import Thrasher
-from six import StringIO
 
 try:
     from subprocess import DEVNULL # py3k
@@ -39,7 +38,6 @@ log = logging.getLogger(__name__)
 
 # this is for cephadm clusters
 def shell(ctx, cluster_name, remote, args, name=None, **kwargs):
-    testdir = teuthology.get_testdir(ctx)
     extra_args = []
     if name:
         extra_args = ['-n', name]

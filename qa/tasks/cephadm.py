@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 
 def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
-    testdir = teuthology.get_testdir(ctx)
+    teuthology.get_testdir(ctx)
     return remote.run(
         args=[
             'sudo',
@@ -769,12 +769,9 @@ def ceph_rgw(ctx, config):
 @contextlib.contextmanager
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
-    testdir = teuthology.get_testdir(ctx)
 
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
-    testdir = teuthology.get_testdir(ctx)
-    coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
     for remote, roles_for_host in clients.remotes.items():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'client',
                                                      cluster_name):
@@ -1121,8 +1118,6 @@ def task(ctx, config):
     teuthology.deep_merge(config, overrides.get('ceph', {}))
     teuthology.deep_merge(config, overrides.get('cephadm', {}))
     log.info('Config: ' + str(config))
-
-    testdir = teuthology.get_testdir(ctx)
 
     # set up cluster context
     if not hasattr(ctx, 'ceph'):
