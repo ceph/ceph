@@ -125,6 +125,11 @@ public:
 	return next->get_key();
     }
 
+    void set_val(V val) const {
+      static_assert(!is_const);
+      node->get_val_ptr()[offset] = VINT(val);
+    }
+
     V get_val() const {
       return V(node->get_val_ptr()[offset]);
     };
@@ -143,11 +148,6 @@ public:
       KINT lb;
       lb = _lb;
       node->get_key_ptr()[offset] = lb;
-    }
-
-    void set_val(V val) const {
-      static_assert(!is_const);
-      node->get_val_ptr()[offset] = VINT(val);
     }
 
     typename maybe_const_t<char, is_const>::type get_key_ptr() const {
@@ -401,6 +401,15 @@ public:
     return *layout.template Pointer<0>(buf);
   }
 
+  /**
+   * set_size
+   *
+   * Set size representation to match size
+   */
+  void set_size(uint16_t size) {
+    *layout.template Pointer<0>(buf) = size;
+  }
+
   constexpr static size_t get_capacity() {
     return CAPACITY;
   }
@@ -603,16 +612,6 @@ private:
   const VINT *get_val_ptr() const {
     return layout.template Pointer<2>(buf);
   }
-
-  /**
-   * set_size
-   *
-   * Set size representation to match size
-   */
-  void set_size(uint16_t size) {
-    *layout.template Pointer<0>(buf) = size;
-  }
-
 
   /**
    * copy_from_foreign
