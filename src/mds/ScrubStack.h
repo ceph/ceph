@@ -35,8 +35,7 @@ public:
     clog(clog),
     finisher(finisher_),
     scrub_stack(member_offset(MDSCacheObject, item_scrub)),
-    scrub_waiting(member_offset(MDSCacheObject, item_scrub)),
-    scrub_kick(this) {}
+    scrub_waiting(member_offset(MDSCacheObject, item_scrub)) {}
   ~ScrubStack() {
     ceph_assert(scrub_stack.empty());
     ceph_assert(!scrubs_in_progress);
@@ -47,8 +46,7 @@ public:
    * @param in The inode to scrub
    * @param header The ScrubHeader propagated from wherever this scrub
    */
-  void enqueue(CInode *in, ScrubHeaderRef& header,
-	       MDSContext *on_finish, bool top);
+  void enqueue(CInode *in, ScrubHeaderRef& header, bool top);
   /**
    * Abort an ongoing scrub operation. The abort operation could be
    * delayed if there are in-progress scrub operations on going. The
@@ -123,24 +121,6 @@ protected:
   };
   std::map<CInode*, scrub_remote_t> remote_scrubs;
 
-  class C_KickOffScrubs : public MDSInternalContext {
-  public:
-    C_KickOffScrubs(ScrubStack *s);
-    void finish(int r) override { }
-    void complete(int r) override {
-      if (r == -ECANCELED) {
-        return;
-      }
-
-      stack->scrubs_in_progress--;
-      stack->kick_off_scrubs();
-      // don't delete self
-    }
-  private:
-    ScrubStack *stack;
-  };
-  C_KickOffScrubs scrub_kick;
-
   friend class C_RetryScrub;
 private:
   // scrub abort is _not_ a state, rather it's an operation that's
@@ -155,8 +135,7 @@ private:
 
   friend class C_InodeValidated;
 
-  void _enqueue(MDSCacheObject *obj, ScrubHeaderRef& header,
-		MDSContext *on_finish, bool top);
+  int _enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top);
   /**
    * Remove the inode/dirfrag from the stack.
    */

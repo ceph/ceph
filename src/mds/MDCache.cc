@@ -12718,12 +12718,6 @@ public:
   C_MDS_EnqueueScrub(std::string_view tag, Formatter *f, Context *fin) :
     tag(tag), formatter(f), on_finish(fin), header(nullptr) {}
 
-  Context *take_finisher() {
-    Context *fin = on_finish;
-    on_finish = NULL;
-    return fin;
-  }
-
   void finish(int r) override {
     if (r == 0) {
       // since recursive scrub is asynchronous, dump minimal output
@@ -12772,8 +12766,7 @@ void MDCache::enqueue_scrub(
   }
 
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
-  cs->header = std::make_shared<ScrubHeader>(
-    tag_str, is_internal, force, recursive, repair, f);
+  cs->header = std::make_shared<ScrubHeader>(tag_str, is_internal, force, recursive, repair);
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
@@ -12790,57 +12783,11 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
   ScrubHeaderRef header = cs->header;
-
-  // Cannot scrub same dentry twice at same time
-  if (in->scrub_is_in_progress()) {
-    mds->server->respond_to_request(mdr, -EBUSY);
-    return;
-  } else {
-    in->scrub_info();
-  }
-
   header->set_origin(in);
 
-  Context *fin = nullptr;
-  if (!header->get_recursive())
-    fin = cs->take_finisher();
+  int r = mds->scrubstack->enqueue(in, header, !header->get_recursive());
 
-  // If the scrub did some repair, then flush the journal at the end of
-  // the scrub.  Otherwise in the case of e.g. rewriting a backtrace
-  // the on disk state will still look damaged.
-  auto scrub_finish = new LambdaContext([this, header, fin](int r){
-    if (!header->get_repaired()) {
-      if (fin)
-        fin->complete(r);
-      return;
-    }
-
-    auto flush_finish = new LambdaContext([this, fin](int r){
-      dout(4) << "Expiring log segments because scrub did some repairs" << dendl;
-      mds->mdlog->trim_all();
-
-      if (fin) {
-	MDSGatherBuilder gather(g_ceph_context);
-	auto& expiring_segments = mds->mdlog->get_expiring_segments();
-	for (auto logseg : expiring_segments)
-	  logseg->wait_for_expiry(gather.new_sub());
-	ceph_assert(gather.has_subs());
-	gather.set_finisher(new MDSInternalContextWrapper(mds, fin));
-	gather.activate();
-      }
-    });
-
-    dout(4) << "Flushing journal because scrub did some repairs" << dendl;
-    mds->mdlog->start_new_segment();
-    mds->mdlog->flush();
-    mds->mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, flush_finish));
-  });
-
-  mds->scrubstack->enqueue(in, header,
-			   new MDSInternalContextWrapper(mds, scrub_finish),
-			   !header->get_recursive());
-
-  mds->server->respond_to_request(mdr, 0);
+  mds->server->respond_to_request(mdr, r);
   return;
 }
 

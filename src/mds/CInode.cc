@@ -5109,31 +5109,26 @@ void CInode::scrub_maybe_delete_info()
   }
 }
 
-void CInode::scrub_initialize(ScrubHeaderRef& header,
-			      MDSContext *f)
+void CInode::scrub_initialize(ScrubHeaderRef& header)
 {
   dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
 
   scrub_info();
-  scrub_infop->on_finish = f;
   scrub_infop->scrub_in_progress = true;
   scrub_infop->queued_frags.clear();
   scrub_infop->header = header;
   // right now we don't handle remote inodes
 }
 
-void CInode::scrub_aborted(MDSContext **c) {
+void CInode::scrub_aborted() {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
-
-  *c = nullptr;
-  std::swap(*c, scrub_infop->on_finish);
 
   scrub_infop->scrub_in_progress = false;
   scrub_maybe_delete_info();
 }
 
-void CInode::scrub_finished(MDSContext **c) {
+void CInode::scrub_finished() {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
 
@@ -5141,16 +5136,6 @@ void CInode::scrub_finished(MDSContext **c) {
   scrub_infop->last_scrub_stamp = ceph_clock_now();
   scrub_infop->last_scrub_dirty = true;
   scrub_infop->scrub_in_progress = false;
-
-  *c = scrub_infop->on_finish;
-  scrub_infop->on_finish = NULL;
-
-  if (scrub_infop->header->get_origin() == this) {
-    // We are at the point that a tagging scrub was initiated
-    LogChannelRef clog = mdcache->mds->clog;
-    clog->info() << "scrub complete with tag '"
-                 << scrub_infop->header->get_tag() << "'";
-  }
 }
 
 int64_t CInode::get_backtrace_pool() const

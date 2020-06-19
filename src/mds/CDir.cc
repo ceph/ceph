@@ -3473,30 +3473,26 @@ void CDir::scrub_info_create() const
   me->scrub_infop.swap(si);
 }
 
-void CDir::scrub_initialize(const ScrubHeaderRef& header, MDSContext* f)
+void CDir::scrub_initialize(const ScrubHeaderRef& header)
 {
   ceph_assert(header);
   // FIXME: weird implicit construction, is someone else meant
   // to be calling scrub_info_create first?
   scrub_info();
   scrub_infop->header = header;
-  scrub_infop->on_finish = f;
   scrub_infop->directory_scrubbing = true;
 }
 
-void CDir::scrub_aborted(MDSContext **c) {
+void CDir::scrub_aborted() {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
-
-  *c = scrub_infop->on_finish;
-  scrub_infop->on_finish = nullptr;
 
   scrub_infop->directory_scrubbing = false;
   scrub_infop->last_scrub_dirty = false;
   scrub_infop.reset();
 }
 
-void CDir::scrub_finished(MDSContext **c)
+void CDir::scrub_finished()
 {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
@@ -3508,9 +3504,6 @@ void CDir::scrub_finished(MDSContext **c)
     scrub_infop->last_recursive = scrub_infop->last_local;
 
   scrub_infop->last_scrub_dirty = true;
-
-  *c = scrub_infop->on_finish;
-  scrub_infop->on_finish = nullptr;
 }
 
 void CDir::scrub_maybe_delete_info()
