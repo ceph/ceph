@@ -63,9 +63,15 @@ class SystemDState(DaemonState):
         def parse_line(line):
             key, value = line.strip().split('=', 1)
             return {key.strip(): value.strip()}
+
         show_dict = dict()
+
         for line in output.split('\n'):
+            # skip empty and commented string
+            if not line or line.startswith("#"):
+                continue
             show_dict.update(parse_line(line))
+
         active_state = show_dict['ActiveState']
         sub_state = show_dict['SubState']
         if active_state == 'active':
