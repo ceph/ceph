@@ -200,13 +200,11 @@ class TestVolumes(CephFSTestCase):
         subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
 
         reg_file = "regfile.0"
-        reg_path = os.path.join(subvolpath, reg_file)
         dir_path = os.path.join(subvolpath, "dir.0")
         sym_path1 = os.path.join(subvolpath, "sym.0")
         # this symlink's ownership would be changed
         sym_path2 = os.path.join(dir_path, "sym.0")
 
-        #self.mount_a.write_n_mb(reg_path, TestVolumes.DEFAULT_FILE_SIZE)
         self.mount_a.run_shell(["sudo", "mkdir", dir_path], omit_sudo=False)
         self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path1], omit_sudo=False)
         self.mount_a.run_shell(["sudo", "ln", "-s", "./{}".format(reg_file), sym_path2], omit_sudo=False)

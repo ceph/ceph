@@ -12,7 +12,6 @@ from IPy import IP
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import Filesystem
-import platform
 
 log = logging.getLogger(__name__)
 
@@ -69,8 +68,6 @@ class CephFSMount(object):
 
     @netns_name.setter
     def netns_name(self, name):
-        if not isinstance(path, str):
-            raise RuntimeError('path should be of str type.')
         self._netns_name = name
 
     def is_mounted(self):

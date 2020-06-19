@@ -1,11 +1,7 @@
 import json
 import logging
-import time
 from textwrap import dedent
 from teuthology.orchestra.run import CommandFailedError
-from teuthology import misc
-
-from teuthology.orchestra import remote as orchestra_remote
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
 from tasks.cephfs.mount import CephFSMount
