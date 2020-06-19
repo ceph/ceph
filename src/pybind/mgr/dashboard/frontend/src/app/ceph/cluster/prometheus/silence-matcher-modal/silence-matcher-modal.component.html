@@ -38,6 +38,9 @@
                  i18n>Value</label>
           <div class="cd-col-form-input">
             <input id="value"
+                   (focus)="valueFocus.next($any($event).target.value)"
+                   (click)="valueClick.next($any($event).target.value)"
+                   container="body"
                    class="form-control"
                    type="text"
                    [ngbTypeahead]="search"
