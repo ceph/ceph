@@ -7,7 +7,7 @@ Vcs-Browser: https://github.com/ceph/ceph
 Maintainer: Ceph Maintainers <ceph-maintainers@lists.ceph.com>
 Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>,
-Build-Depends: cmake (>= 3.5),
+Build-Depends: cmake (>= 3.10.2),
                cpio,
                cryptsetup-bin | cryptsetup,
                cython,
