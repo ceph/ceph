@@ -3482,16 +3482,18 @@ void CDir::scrub_initialize(const ScrubHeaderRef& header)
   // FIXME: weird implicit construction, is someone else meant
   // to be calling scrub_info_create first?
   scrub_info();
-  scrub_infop->header = header;
   scrub_infop->directory_scrubbing = true;
+  scrub_infop->header = header;
+  header->inc_num_pending();
 }
 
 void CDir::scrub_aborted() {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
 
-  scrub_infop->directory_scrubbing = false;
   scrub_infop->last_scrub_dirty = false;
+  scrub_infop->directory_scrubbing = false;
+  scrub_infop->header->dec_num_pending();
   scrub_infop.reset();
 }
 
@@ -3499,7 +3501,6 @@ void CDir::scrub_finished()
 {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
-  scrub_infop->directory_scrubbing = false;
 
   scrub_infop->last_local.time = ceph_clock_now();
   scrub_infop->last_local.version = get_version();
@@ -3507,6 +3508,9 @@ void CDir::scrub_finished()
     scrub_infop->last_recursive = scrub_infop->last_local;
 
   scrub_infop->last_scrub_dirty = true;
+
+  scrub_infop->directory_scrubbing = false;
+  scrub_infop->header->dec_num_pending();
 }
 
 void CDir::scrub_maybe_delete_info()

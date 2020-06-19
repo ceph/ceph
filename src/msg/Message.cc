@@ -146,6 +146,7 @@
 #include "messages/MMDSOpenInoReply.h"
 #include "messages/MMDSSnapUpdate.h"
 #include "messages/MMDSScrub.h"
+#include "messages/MMDSScrubStats.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -763,6 +764,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_SCRUB:
     m = make_message<MMDSScrub>();
+    break;
+
+  case MSG_MDS_SCRUB_STATS:
+    m = make_message<MMDSScrubStats>();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:

@@ -24,6 +24,7 @@
 #include "common/LogClient.h"
 #include "include/elist.h"
 #include "messages/MMDSScrub.h"
+#include "messages/MMDSScrubStats.h"
 
 class MDCache;
 class Finisher;
@@ -46,7 +47,7 @@ public:
    * @param in The inode to scrub
    * @param header The ScrubHeader propagated from wherever this scrub
    */
-  void enqueue(CInode *in, ScrubHeaderRef& header, bool top);
+  int enqueue(CInode *in, ScrubHeaderRef& header, bool top);
   /**
    * Abort an ongoing scrub operation. The abort operation could be
    * delayed if there are in-progress scrub operations on going. The
@@ -94,6 +95,8 @@ public:
 
   bool is_scrubbing() const { return !scrub_stack.empty(); }
 
+  void advance_scrub_status();
+
   void handle_mds_failure(mds_rank_t mds);
 
   void dispatch(const cref_t<Message> &m);
@@ -120,6 +123,17 @@ protected:
     std::set<mds_rank_t> gather_set;
   };
   std::map<CInode*, scrub_remote_t> remote_scrubs;
+
+  unsigned scrub_epoch = 2;
+  unsigned scrub_epoch_fully_acked = 0;
+
+  struct scrub_stat_t {
+    unsigned epoch_acked = 0;
+    std::set<std::string> scrubbing_tags;
+  };
+  std::vector<scrub_stat_t> mds_scrub_stats;
+
+  std::map<std::string, ScrubHeaderRef> scrubbing_map;
 
   friend class C_RetryScrub;
 private:
@@ -241,6 +255,7 @@ private:
   void clog_scrub_summary(CInode *in=nullptr);
 
   void handle_scrub(const cref_t<MMDSScrub> &m);
+  void handle_scrub_stats(const cref_t<MMDSScrubStats> &m);
 
   State state = STATE_IDLE;
   bool clear_stack = false;
@@ -248,10 +263,6 @@ private:
   // list of pending context completions for asynchronous scrub
   // control operations.
   std::vector<Context *> control_ctxs;
-
-  // list of inodes for which scrub operations are running -- used
-  // to diplay out in `scrub status`.
-  std::set<CInode *> scrub_origins;
 };
 
 #endif /* SCRUBSTACK_H_ */
