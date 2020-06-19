@@ -96,8 +96,6 @@ public:
 
     scrub_info_t() {}
 
-    MDSContext *on_finish = nullptr;
-
     scrub_stamps last_recursive; // when we last finished a recursive scrub
     scrub_stamps last_local; // when we last did a local scrub
 
@@ -299,7 +297,7 @@ public:
    * @pre The CDir is marked complete.
    * @post It has set up its internal scrubbing state.
    */
-  void scrub_initialize(const ScrubHeaderRef& header, MDSContext* f);
+  void scrub_initialize(const ScrubHeaderRef& header);
   ScrubHeaderRef get_scrub_header() {
     return scrub_infop ? scrub_infop->header : nullptr;
   }
@@ -312,9 +310,9 @@ public:
    * Call this once all CDentries have been scrubbed, according to
    * scrub_dentry_next's listing. It finalizes the scrub statistics.
    */
-  void scrub_finished(MDSContext **c);
+  void scrub_finished();
 
-  void scrub_aborted(MDSContext **c);
+  void scrub_aborted();
   /**
    * Tell the CDir to do a local scrub of itself.
    * @pre The CDir is_complete().

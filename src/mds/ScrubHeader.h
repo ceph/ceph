@@ -35,9 +35,9 @@ class CInode;
 class ScrubHeader {
 public:
   ScrubHeader(std::string_view tag_, bool is_tag_internal_, bool force_,
-              bool recursive_, bool repair_, ceph::Formatter *f_)
+              bool recursive_, bool repair_)
     : tag(tag_), is_tag_internal(is_tag_internal_), force(force_),
-      recursive(recursive_), repair(repair_), formatter(f_) {}
+      recursive(recursive_), repair(repair_) {}
 
   // Set after construction because it won't be known until we've
   // started resolving path and locking
@@ -49,7 +49,6 @@ public:
   bool is_internal_tag() const { return is_tag_internal; }
   CInode *get_origin() const { return origin; }
   const std::string& get_tag() const { return tag; }
-  ceph::Formatter& get_formatter() const { return *formatter; }
 
   bool get_repaired() const { return repaired; }
   void set_repaired() { repaired = true; }
@@ -60,7 +59,6 @@ protected:
   const bool force;
   const bool recursive;
   const bool repair;
-  ceph::Formatter* const formatter;
   CInode *origin = nullptr;
 
   bool repaired = false;  // May be set during scrub if repairs happened
