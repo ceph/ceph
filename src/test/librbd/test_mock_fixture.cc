@@ -55,6 +55,17 @@ void TestMockFixture::expect_unlock_exclusive_lock(librbd::ImageCtx &ictx) {
   EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
               exec(_, _, StrEq("lock"), StrEq("unlock"), _, _, _, _))
                 .WillRepeatedly(DoDefault());
+  if (ictx.test_features(RBD_FEATURE_DIRTY_CACHE)) {
+    EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
+                exec(ictx.header_oid, _, StrEq("rbd"), StrEq("set_features"), _, _, _, _))
+                  .WillOnce(DoDefault());
+    EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
+                exec(ictx.header_oid, _, StrEq("rbd"), StrEq("metadata_set"), _, _, _, _))
+                  .WillOnce(DoDefault());
+    EXPECT_CALL(get_mock_io_ctx(ictx.md_ctx),
+                exec(ictx.header_oid, _, StrEq("rbd"), StrEq("metadata_remove"), _, _, _, _))
+                  .WillOnce(DoDefault());
+  }
 }
 
 void TestMockFixture::expect_op_work_queue(librbd::MockImageCtx &mock_image_ctx) {

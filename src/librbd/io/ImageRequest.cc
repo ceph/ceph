@@ -754,7 +754,7 @@ void ImageFlushRequest<I>::send_image_cache_request() {
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->set_request_count(1);
   C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-  image_ctx.image_cache->aio_flush(librbd::io::FLUSH_SOURCE_USER, req_comp);
+  image_ctx.image_cache->aio_flush(m_flush_source, req_comp);
 }
 
 template <typename I>
