@@ -7,12 +7,11 @@ import { map } from 'rxjs/operators';
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { ImageSpec } from '../models/image-spec';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
-import { ApiModule } from './api.module';
 import { RbdPool } from './rbd.model';
 
 @cdEncode
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class RbdService {
   constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {}

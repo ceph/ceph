@@ -5,8 +5,6 @@ import * as _ from 'lodash';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-import { ApiModule } from './api.module';
-
 class SettingResponse {
   name: string;
   default: any;
@@ -15,7 +13,7 @@ class SettingResponse {
 }
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class SettingsService {
   constructor(private http: HttpClient) {}

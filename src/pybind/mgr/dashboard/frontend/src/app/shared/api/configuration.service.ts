@@ -2,10 +2,9 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { ConfigFormCreateRequestModel } from '../../ceph/cluster/configuration/configuration-form/configuration-form-create-request.model';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class ConfigurationService {
   constructor(private http: HttpClient) {}

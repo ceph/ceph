@@ -6,11 +6,10 @@ import { Observable } from 'rxjs';
 
 import { cdEncode } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
-import { ApiModule } from './api.module';
 
 @cdEncode
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class CephfsService {
   baseURL = 'api/cephfs';
