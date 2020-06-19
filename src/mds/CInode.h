@@ -298,8 +298,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   public:
     scrub_info_t() {}
 
-    MDSContext *on_finish = nullptr;
-
     version_t last_scrub_version = 0;
     utime_t last_scrub_stamp;
 
@@ -445,7 +443,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @param scrub_version What version are we scrubbing at (usually, parent
    * directory's get_projected_version())
    */
-  void scrub_initialize(ScrubHeaderRef& header, MDSContext *f);
+  void scrub_initialize(ScrubHeaderRef& header);
   /**
    * Call this once the scrub has been completed, whether it's a full
    * recursive scrub on a directory or simply the data on a file (or
@@ -453,18 +451,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @param c An out param which is filled in with a Context* that must
    * be complete()ed.
    */
-  void scrub_finished(MDSContext **c);
+  void scrub_finished();
 
-  void scrub_aborted(MDSContext **c);
+  void scrub_aborted();
 
   fragset_t& scrub_queued_frags() {
     ceph_assert(scrub_infop);
     return scrub_infop->queued_frags;
-  }
-
-  void scrub_set_finisher(MDSContext *c) {
-    ceph_assert(!scrub_infop->on_finish);
-    scrub_infop->on_finish = c;
   }
 
   bool is_multiversion() const {
