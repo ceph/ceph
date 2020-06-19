@@ -30,6 +30,7 @@
     box-shadow: none;
     color: $color-password-toggle-text;
     background-color: $color-password-toggle-bg;
+    filter: none;
   }
 
   .placeholder {
@@ -52,4 +53,8 @@
 input:-webkit-autofill {
   animation-name: autofill;
   animation-fill-mode: both;
+  box-shadow: 0 0 0px 1000px $color-password-toggle-bg inset;
+  -webkit-text-fill-color: $color-password-toggle-text;
+  transition-property: none;
+  border-radius: 0px;
 }
