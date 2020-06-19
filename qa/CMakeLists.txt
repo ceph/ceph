@@ -5,5 +5,5 @@ endif()
 
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(qa TOX_ENVS flake8-py3 import-tasks)
+  add_tox_test(qa TOX_ENVS flake8 import-tasks)
 endif()
