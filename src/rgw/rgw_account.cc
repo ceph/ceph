@@ -201,3 +201,13 @@ int RGWAccountMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
   RGWMetadataHandlerPut_Account put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
 }
+
+int RGWAccountMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
+                                         std::string& entry,
+                                         RGWObjVersionTracker& objv_tracker,
+                                         optional_yield y,
+                                         const DoutPrefixProvider* dpp)
+{
+  // TODO find out if we need to error if the key doesn't exist?
+  return svc.account->remove_account_info(dpp, op->ctx(), entry, &objv_tracker, y);
+}

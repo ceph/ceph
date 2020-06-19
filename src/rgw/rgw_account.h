@@ -197,8 +197,7 @@ public:
   int do_remove(RGWSI_MetaBackend_Handler::Op *op,
                 std::string& entry,
                 RGWObjVersionTracker& objv_tracker,
-                optional_yield y, const DoutPrefixProvider* dpp) override
-  { return -ERR_NOT_IMPLEMENTED; }
+                optional_yield y, const DoutPrefixProvider* dpp) override;
 
   RGWMetadataObject *get_meta_obj(JSONObj *jo,
 				  const obj_version& objv,
