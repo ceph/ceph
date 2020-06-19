@@ -1,7 +1,6 @@
 <cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>{mode, select, edit {Edit} other {Add}}
-  pool mirror peer</ng-container>
+  <span class="modal-title"
+        i18n>{mode, select, edit {Edit} other {Add}} pool mirror peer</span>
 
   <ng-container class="modal-content">
     <form name="editPeerForm"
@@ -11,9 +10,9 @@
           novalidate>
       <div class="modal-body">
         <p>
-          <ng-container i18n>{mode, select, edit {Edit} other {Add}} the pool
+          <span i18n>{mode, select, edit {Edit} other {Add}} the pool
           mirror peer attributes for pool <kbd>{{ poolName }}</kbd> and click
-          <kbd>Submit</kbd>.</ng-container>
+          <kbd>Submit</kbd>.</span>
         </p>
 
         <div class="form-group">

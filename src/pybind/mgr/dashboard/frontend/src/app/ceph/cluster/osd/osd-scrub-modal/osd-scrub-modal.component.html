@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>OSDs {deep, select, 1 {Deep }}Scrub</ng-container>
+  <span class="modal-title"
+        i18n>OSDs {deep, select, true {Deep } other {}}Scrub</span>
 
   <ng-container class="modal-content">
     <form name="scrubForm"
@@ -8,7 +8,7 @@
           [formGroup]="scrubForm"
           novalidate>
       <div class="modal-body">
-        <p i18n>You are about to apply a {deep, select, 1 {deep }}scrub to
+        <p i18n>You are about to apply a {deep, select, true {deep } other {}}scrub to
           the OSD(s): <strong>{{ selected | join }}</strong>.</p>
       </div>
 
