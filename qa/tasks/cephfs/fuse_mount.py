@@ -2,7 +2,6 @@ from io import StringIO
 import json
 import time
 import logging
-import re
 import six
 
 from textwrap import dedent
@@ -100,8 +99,6 @@ class FuseMount(CephFSMount):
         run_cmd.extend(fuse_cmd)
 
         def list_connections():
-            from teuthology.misc import get_system_type
-
             conn_dir = "/sys/fs/fuse/connections"
 
             self.client_remote.run(args=['sudo', 'modprobe', 'fuse'],

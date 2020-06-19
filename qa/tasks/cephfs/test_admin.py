@@ -89,7 +89,7 @@ class TestAdminCommands(CephFSTestCase):
 
         n = "test_add_data_pool_ec"
         self._setup_ec_pools(n, metadata=False)
-        p = self.fs.add_data_pool(n+"-data", create=False)
+        self.fs.add_data_pool(n+"-data", create=False)
 
     def test_new_default_ec(self):
         """
