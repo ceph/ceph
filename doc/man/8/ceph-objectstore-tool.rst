@@ -1,17 +1,44 @@
 :orphan:
 
-===============================================
-ceph-objectstore-tool - modify the state of OSD
-===============================================
+=============================================================
+ceph-objectstore-tool - modify or examine the state of an OSD
+=============================================================
 
 Synopsis
 ========
 
-**ceph-objectstore-tool** provides two main modes: (1) a mode that specifies the "--op" argument (for example, **ceph-objectstore-tool** --data-path $PATH_TO_OSD --op $SELECT_OPERATION [--pgid $PGID] [--dry-run]), and (2) a mode for positional object operations. If the second mode is used, the object can be specified by ID or by the JSON output of the --op list. 
 
 | **ceph-objectstore-tool** --data-path *path to osd* [--op *list* ]
 
-Possible -op specifications:
+
+
+Possible object operations:
+
+* (get|set)-bytes [file]
+* set-(attr|omap) [file]
+* (get|rm)-attr|omap)
+* get-omaphdr
+* set-omaphdr [file]
+* list-attrs
+* list-omap
+* remove|removeall
+* dump
+* set-size
+* clear-data-digest
+* remove-clone-metadata 
+
+
+Description
+===========
+
+**ceph-objectstore-tool** is a tool for modifying the state of an OSD. It facilitates manipulating an object's content, removing an object, listing the omap, manipulating the omap header, manipulating the omap key, listing object attributes, and manipulating object attribute keys.
+
+**ceph-objectstore-tool** provides two main modes: (1) a mode that specifies the "--op" argument (for example, **ceph-objectstore-tool** --data-path $PATH_TO_OSD --op $SELECT_OPERATION [--pgid $PGID] [--dry-run]), and (2) a mode for positional object operations. If the second mode is used, the object can be specified by ID or by the JSON output of the --op list. 
+
+| **ceph-objectstore-tool** --data-path *path to osd* [--pgid *$PG_ID* ][--op *command*]
+| **ceph-objectstore-tool** --data-path *path to osd* [ --op *list $OBJECT_ID*]
+
+Possible -op commands::
 
 * info
 * log
@@ -41,30 +68,6 @@ Possible -op specifications:
 * update-mon-db
 * dump-export
 * trim-pg-log
-
-| **ceph-objectstore-tool** --data-path *path to osd* [--pgid *$PG_ID* ][--op *list-lost*]
-| **ceph-objectstore-tool** --data-path *path to osd* [ --op *list $OBJECT_ID*]
-
-Possible object operations:
-
-* (get|set)-bytes [file]
-* set-(attr|omap) [file]
-* (get|rm)-attr|omap)
-* get-omaphdr
-* set-omaphdr [file]
-* list-attrs
-* list-omap
-* remove|removeall
-* dump
-* set-size
-* clear-data-digest
-* remove-clone-metadata 
-
-
-Description
-===========
-
-**ceph-objectstore-tool** is a tool for modifying the state of an OSD. It facilitates manipulating an object's content, removing an object, listing the omap, manipulating the omap header, manipulating the omap key, listing object attributes, and manipulating object attribute keys.
 
 Installation
 ============
@@ -101,33 +104,6 @@ Identify all objects within a placement group::
 Identify the placement group (PG) that an object belongs to::
 
    ceph-objectstore-tool --data-path $PATH_TO_OSD --op list $OBJECT_ID
-
-
-Listing Lost Objects 
---------------------
-
-An OSD can mark objects as "lost" or "unfound". Use the ceph-objectstore-tool to list the lost and unfound objects stored in an OSD.
-
-Make sure that the target OSD is down::
-
-   systemctl status ceph-osd@$OSD_NUMBER
-
-List all lost objects, regardless of placement group::
-
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --op list-lost
-
-List all lost objects within a given placement group::
-
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID --op list-lost
-
-List a lost object by its identifier::
-
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --op list-lost $OBJECT_ID
-
-List legacy lost objects::
- 
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --op fix-lost --dry-run
-
 
 
 Fixing Lost Objects   
@@ -505,28 +481,6 @@ Options
    Specify corrupting object removal 'snapmap' or 'nosnapmap' - TESTING USE ONLY
 
 
-Positional Syntax
-=================
-::
-
-   ceph-objectstore-tool ... <object> (get|set)-bytes [file]
-   ceph-objectstore-tool ... <object> set-(attr|omap) <key> [file]
-   ceph-objectstore-tool ... <object> (get|rm)-(attr|omap) <key>
-   ceph-objectstore-tool ... <object> get-omaphdr
-   ceph-objectstore-tool ... <object> set-omaphdr [file]
-   ceph-objectstore-tool ... <object> list-attrs
-   ceph-objectstore-tool ... <object> list-omap
-   ceph-objectstore-tool ... <object> remove|removeall
-   ceph-objectstore-tool ... <object> dump
-   ceph-objectstore-tool ... <object> set-size
-   ceph-objectstore-tool ... <object> clear-data-digest
-   ceph-objectstore-tool ... <object> remove-clone-metadata <cloneid>
-
-`<object>` can be a JSON object description as displayed by --op list.
-`<object>` can be an object name which will be looked up in all the OSD's PGs.
-`<object>` can be the empty string ('') which, with a provided pgid, specifies the pgmeta object
-
-The optional [file] argument will read stdin or write stdout if not specified or if '-' is specified.
 
 Error Codes
 ===========
