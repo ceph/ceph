@@ -11,7 +11,11 @@ namespace util {
 
 template <typename T>
 bool is_rwl_enabled(T& image_ctx) {
+#if defined(WITH_RBD_RWL)
   return image_ctx.config.template get_val<bool>("rbd_rwl_enabled");
+#else
+  return false;
+#endif
 }
 
 } // namespace util

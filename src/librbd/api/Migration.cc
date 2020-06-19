@@ -401,6 +401,7 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
     return -ENOSYS;
   }
   features &= ~RBD_FEATURES_INTERNAL;
+  features &= ~RBD_FEATURE_DIRTY_CACHE;
   features |= RBD_FEATURE_MIGRATING;
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 

@@ -26,6 +26,8 @@ int create_image_data_pool(librados::Rados &rados, std::string &data_pool, bool 
 
 bool is_librados_test_stub(librados::Rados &rados);
 
+bool is_rbd_rwl_enabled(ceph::common::CephContext *ctx);
+
 #define REQUIRE(x) {			  \
   if (!(x)) {				  \
     std::cout << "SKIPPING" << std::endl; \

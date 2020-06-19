@@ -234,6 +234,7 @@ TEST_F(TestMockObjectMapUpdateRequest, BatchUpdate) {
                                         no_progress));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
+  expect_unlock_exclusive_lock(*ictx);
   InSequence seq;
   expect_update(ictx, CEPH_NOSNAP, 0, 262144, OBJECT_NONEXISTENT, OBJECT_EXISTS,
                 0);
@@ -241,7 +242,6 @@ TEST_F(TestMockObjectMapUpdateRequest, BatchUpdate) {
                 OBJECT_EXISTS, 0);
   expect_update(ictx, CEPH_NOSNAP, 524288, 712312, OBJECT_NONEXISTENT,
                 OBJECT_EXISTS, 0);
-  expect_unlock_exclusive_lock(*ictx);
 
   ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
