@@ -148,6 +148,28 @@ public:
 			 optional_yield y);
 };
 
+using RGWAccountCompleteInfo = CompleteInfo<RGWAccountInfo>;
+
+class RGWAccountMetadataObject : public RGWMetadataObject {
+  RGWAccountCompleteInfo aci;
+public:
+  RGWAccountMetadataObject() = default;
+  RGWAccountMetadataObject(const RGWAccountCompleteInfo& _aci,
+			   const obj_version& v,
+			   real_time m) : aci(_aci) {
+    objv = v;
+    mtime = m;
+  }
+
+  void dump(Formatter *f) const override {
+    aci.dump(f);
+  }
+
+  RGWAccountCompleteInfo& get_aci() {
+    return aci;
+  }
+};
+
 class RGWAccountMetadataHandler: public RGWMetadataHandler_GenericMetaBE {
 public:
   struct Svc {
@@ -161,16 +183,14 @@ public:
   int do_get(RGWSI_MetaBackend_Handler::Op *op,
              std::string& entry,
              RGWMetadataObject **obj,
-             optional_yield y, const DoutPrefixProvider* dpp) override
-  { return -ERR_NOT_IMPLEMENTED; }
+             optional_yield y, const DoutPrefixProvider* dpp) override;
 
   int do_put(RGWSI_MetaBackend_Handler::Op *op,
              std::string& entry,
              RGWMetadataObject *obj,
              RGWObjVersionTracker& objv_tracker,
              optional_yield y, const DoutPrefixProvider* dpp,
-             RGWMDLogSyncType type, bool from_remote_zone) override
-  { return -ERR_NOT_IMPLEMENTED; }
+             RGWMDLogSyncType type, bool from_remote_zone) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op,
                 std::string& entry,
@@ -180,7 +200,5 @@ public:
 
   RGWMetadataObject *get_meta_obj(JSONObj *jo,
 				  const obj_version& objv,
-				  const ceph::real_time& mtime) override {
-    return nullptr;
-  }
+				  const ceph::real_time& mtime) override;
 };
