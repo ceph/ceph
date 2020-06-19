@@ -3872,18 +3872,20 @@ int CrushWrapper::_choose_type_stack(
   //      are careful to pick one that has the same parent.)
   vector<set<int>> underfull_buckets; // level -> set of buckets with >0 underfull item(s)
   underfull_buckets.resize(stack.size() - 1);
-  for (auto osd : underfull) {
-    int item = osd;
-    for (int j = (int)stack.size() - 2; j >= 0; --j) {
-      int type = stack[j].first;
-      item = get_parent_of_type(item, type, rule);
-      ldout(cct, 10) << __func__ << " underfull " << osd << " type " << type
-		     << " is " << item << dendl;
-      if (!subtree_contains(root_bucket, item)) {
-        ldout(cct, 20) << __func__ << " not in root subtree " << root_bucket << dendl;
-        continue;
+  for (auto& ls : { underfull, more_underfull }) {
+    for (auto osd : ls) {
+      int item = osd;
+      for (int j = (int)stack.size() - 2; j >= 0; --j) {
+        int type = stack[j].first;
+        item = get_parent_of_type(item, type, rule);
+        ldout(cct, 10) << __func__ << " underfull " << osd << " type " << type
+		       << " is " << item << dendl;
+        if (!subtree_contains(root_bucket, item)) {
+          ldout(cct, 20) << __func__ << " not in root subtree " << root_bucket << dendl;
+          continue;
+        }
+        underfull_buckets[j].insert(item);
       }
-      underfull_buckets[j].insert(item);
     }
   }
   ldout(cct, 20) << __func__ << " underfull_buckets " << underfull_buckets << dendl;
@@ -3923,34 +3925,9 @@ int CrushWrapper::_choose_type_stack(
 	  // leaf
 	  bool replaced = false;
 	  if (overfull.count(*i)) {
-	    for (auto item : underfull) {
-	      ldout(cct, 10) << __func__ << " pos " << pos
-			     << " was " << *i << " considering " << item
-			     << dendl;
-	      if (used.count(item)) {
-		ldout(cct, 20) << __func__ << "   in used " << used << dendl;
-		continue;
-	      }
-	      if (!subtree_contains(from, item)) {
-		ldout(cct, 20) << __func__ << "   not in subtree " << from << dendl;
-		continue;
-	      }
-	      if (std::find(orig.begin(), orig.end(), item) != orig.end()) {
-		ldout(cct, 20) << __func__ << "   in orig " << orig << dendl;
-		continue;
-	      }
-	      o.push_back(item);
-	      used.insert(item);
-	      ldout(cct, 10) << __func__ << " pos " << pos << " replace "
-			     << *i << " -> " << item << dendl;
-	      replaced = true;
-              ceph_assert(i != orig.end());
-	      ++i;
-	      break;
-	    }
-	      if (!replaced) {
-	      for (auto item : more_underfull) {
-	        ldout(cct, 10) << __func__ << " more underfull pos " << pos
+	    for (auto& ls : { underfull, more_underfull }) {
+              for (auto item : ls) {
+	        ldout(cct, 10) << __func__ << " pos " << pos
 			       << " was " << *i << " considering " << item
 			       << dendl;
 	        if (used.count(item)) {
@@ -3973,7 +3950,9 @@ int CrushWrapper::_choose_type_stack(
                 assert(i != orig.end());
 	        ++i;
 	        break;
-	      }
+              }
+              if (replaced)
+                break;
 	    }
 	  }
 	  if (!replaced) {
