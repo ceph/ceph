@@ -28,8 +28,8 @@ class RGWSI_Account;
 class RGWSI_MetaBackend_Handler;
 
 struct AccountQuota {
-  uint16_t max_users {1000};
-  uint16_t max_roles {1000};
+  uint32_t max_users {1000};
+  uint32_t max_roles {1000};
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1,1,bl);
