@@ -53,6 +53,7 @@ public:
     encode(ino, payload);
     encode(frags, payload);
     encode(tag, payload);
+    encode(origin, payload);
     encode(flags, payload);
   }
   void decode_payload() override {
@@ -62,6 +63,7 @@ public:
     decode(ino, p);
     decode(frags, p);
     decode(tag, p);
+    decode(origin, p);
     decode(flags, p);
   }
   inodeno_t get_ino() const {
@@ -72,6 +74,9 @@ public:
   }
   const std::string& get_tag() const {
     return tag;
+  }
+  inodeno_t get_origin() const {
+    return origin;
   }
   int get_op() const {
     return op;
@@ -93,12 +98,12 @@ protected:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
-  MMDSScrub() : SafeMessage(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
+  MMDSScrub() : MMDSOp(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
   MMDSScrub(int o, inodeno_t i, fragset_t&& _frags, std::string_view _tag,
-	    bool internal_tag=false, bool force=false,
-	    bool recursive=false, bool repair=false)
-    : SafeMessage(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION),
-    op(o), ino(i), frags(std::move(_frags)), tag(_tag) {
+	    inodeno_t _origin=inodeno_t(), bool internal_tag=false,
+	    bool force=false, bool recursive=false, bool repair=false)
+    : MMDSOp(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    op(o), ino(i), frags(std::move(_frags)), tag(_tag), origin(_origin) {
     if (internal_tag) flags |= FLAG_INTERNAL_TAG;
     if (force) flags |= FLAG_FORCE;
     if (recursive) flags |= FLAG_RECURSIVE;
@@ -119,6 +124,7 @@ private:
   inodeno_t ino;
   fragset_t frags;
   std::string tag;
+  inodeno_t origin;
   unsigned flags = 0;
 };
 #endif // CEPH_MMDSSCRUB_H
