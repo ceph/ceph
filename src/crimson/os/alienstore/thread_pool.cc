@@ -1,4 +1,4 @@
-#include "ThreadPool.h"
+#include "thread_pool.h"
 
 #include <chrono>
 #include <pthread.h>
@@ -9,7 +9,7 @@
 
 using crimson::common::local_conf;
 
-namespace crimson::thread {
+namespace crimson::os {
 
 ThreadPool::ThreadPool(size_t n_threads,
                        size_t queue_sz,
@@ -76,4 +76,4 @@ seastar::future<> ThreadPool::stop()
   });
 }
 
-} // namespace crimson::thread
+} // namespace crimson::os

@@ -1,6 +1,6 @@
-#include "Throttle.h"
+#include "throttle.h"
 
-namespace crimson::thread {
+namespace crimson::common {
 
 int64_t Throttle::take(int64_t c)
 {
@@ -56,4 +56,4 @@ bool Throttle::_should_wait(size_t c) const {
           (c >= max && count > max));      // except for large c
 }
 
-} // namespace crimson::thread
+} // namespace crimson::common
