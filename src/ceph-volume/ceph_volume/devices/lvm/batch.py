@@ -523,7 +523,7 @@ class Batch(object):
                         'block_wal_size': self.very_fast[2],
                     })
             if self.id_:
-                plan.update({'osd_id': self.osd_id})
+                plan.update({'osd_id': self.id_})
             return plan
 
         def get_args(self, defaults):
