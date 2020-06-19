@@ -1118,7 +1118,9 @@ you may want to run:
     def _refresh_hosts_and_daemons(self):
         bad_hosts = []
         failures = []
-        for host in self.cache.get_hosts():
+
+        @forall_hosts
+        def refresh(host):
             if self.cache.host_needs_check(host):
                 r = self._check_host(host)
                 if r is not None:
@@ -1139,7 +1141,8 @@ you may want to run:
                 r = self._refresh_host_osdspec_previews(host)
                 if r:
                     failures.append(r)
-
+                    
+        refresh(self.cache.get_hosts())
 
         health_changed = False
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
