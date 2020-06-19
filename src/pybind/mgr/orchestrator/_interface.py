@@ -1309,7 +1309,7 @@ class DaemonDescription(object):
         if self.daemon_type in ['mds', 'nfs', 'iscsi', 'rgw']:
             return _match()
 
-        return self.daemon_id
+        return ''
 
     def service_name(self):
         if self.daemon_type in ['rgw', 'mds', 'nfs', 'iscsi']:

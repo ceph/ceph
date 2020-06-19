@@ -479,13 +479,26 @@ def test_spec_octopus():
         ),
         True
     ),
+    (
+        # There is only one MON cluster
+        ServiceSpec(
+            service_type='mon',
+            service_id='',
+        ),
+        DaemonDescription(
+            daemon_type='mon',
+            daemon_id="host1",
+            hostname="host1",
+        ),
+        True
+    )
 ])
 def test_daemon_description_service_name(spec: ServiceSpec,
                                          dd: DaemonDescription,
                                          valid: bool):
     if valid:
         assert spec.service_name() == dd.service_name()
+        assert spec.service_id == dd.service_id()
     else:
         with pytest.raises(OrchestratorError):
             dd.service_name()
-
