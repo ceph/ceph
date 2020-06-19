@@ -129,7 +129,7 @@ export class MgrModuleFormComponent extends CdForm implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Updated options for module "{{name}}".', { name: this.moduleName })
+          this.i18n(`Updated options for module '{{name}}'.`, { name: this.moduleName })
         );
         this.goToListView();
       },

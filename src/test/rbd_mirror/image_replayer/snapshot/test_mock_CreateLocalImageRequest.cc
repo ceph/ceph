@@ -48,7 +48,7 @@ template <>
 struct Threads<librbd::MockTestImageCtx> {
   ceph::mutex &timer_lock;
   SafeTimer *timer;
-  ContextWQ *work_queue;
+  librbd::asio::ContextWQ *work_queue;
 
   Threads(Threads<librbd::ImageCtx> *threads)
     : timer_lock(threads->timer_lock), timer(threads->timer),
@@ -142,10 +142,11 @@ public:
   }
 
   void snap_create(librbd::ImageCtx *image_ctx, const std::string &snap_name) {
+    librbd::NoOpProgressContext prog_ctx;
     ASSERT_EQ(0, image_ctx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					            snap_name.c_str()));
+					            snap_name, 0, prog_ctx));
     ASSERT_EQ(0, image_ctx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
-						     snap_name.c_str()));
+						     snap_name));
     ASSERT_EQ(0, image_ctx->state->refresh());
   }
 

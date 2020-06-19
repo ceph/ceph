@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
@@ -7,13 +7,11 @@ import { BsModalRef } from 'ngx-bootstrap/modal';
   templateUrl: './orchestrator-doc-modal.component.html',
   styleUrls: ['./orchestrator-doc-modal.component.scss']
 })
-export class OrchestratorDocModalComponent implements OnInit {
+export class OrchestratorDocModalComponent {
   actionDescription: string;
   itemDescription: string;
 
   constructor(public bsModalRef: BsModalRef) {}
-
-  ngOnInit() {}
 
   onSubmit() {
     this.bsModalRef.hide();

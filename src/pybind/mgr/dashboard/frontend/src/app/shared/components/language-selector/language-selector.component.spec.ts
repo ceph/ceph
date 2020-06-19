@@ -1,10 +1,10 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
 import { listLocales } from 'ngx-bootstrap/chronos';
 import { BsLocaleService } from 'ngx-bootstrap/datepicker';
 
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { LanguageSelectorComponent } from './language-selector.component';
 

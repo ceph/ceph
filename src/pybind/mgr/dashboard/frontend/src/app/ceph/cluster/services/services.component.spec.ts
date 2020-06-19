@@ -87,7 +87,7 @@ describe('ServicesComponent', () => {
   });
 
   it('should return all services', () => {
-    component.getServices(new CdTableFetchDataContext(() => {}));
+    component.getServices(new CdTableFetchDataContext(() => undefined));
     expect(component.services.length).toBe(2);
   });
 });

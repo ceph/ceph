@@ -29,7 +29,7 @@ public:
   virtual const pg_shard_t& get_pg_whoami() const = 0;
   virtual const spg_t& get_pgid() const = 0;
   virtual RecoveryBackend* get_recovery_backend() = 0;
-  virtual bool is_unreadable_object(const hobject_t&) const = 0;
+  virtual bool is_unreadable_object(const hobject_t&, eversion_t* v = 0) const = 0;
   virtual bool has_reset_since(epoch_t) const = 0;
   virtual std::vector<pg_shard_t> get_replica_recovery_order() const = 0;
   virtual seastar::future<> stop() = 0;

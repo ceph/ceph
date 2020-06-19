@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
+
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
-
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Observable, Subscriber } from 'rxjs';
 

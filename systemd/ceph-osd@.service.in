@@ -9,7 +9,7 @@ Environment=CLUSTER=ceph
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
 ExecReload=/bin/kill -HUP $MAINPID
 ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
-ExecStartPre=/usr/lib/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+ExecStartPre=@CMAKE_INSTALL_FULL_LIBEXECDIR@/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
 LimitNOFILE=1048576
 LimitNPROC=1048576
 LockPersonality=true

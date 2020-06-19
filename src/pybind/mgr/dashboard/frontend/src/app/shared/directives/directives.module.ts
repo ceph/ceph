@@ -1,7 +1,5 @@
 import { NgModule } from '@angular/core';
 
-import { AlertPanelComponent } from '../components/alert-panel/alert-panel.component';
-import { LoadingPanelComponent } from '../components/loading-panel/loading-panel.component';
 import { AutofocusDirective } from './autofocus.directive';
 import { Copy2ClipboardButtonDirective } from './copy2clipboard-button.directive';
 import { DimlessBinaryPerSecondDirective } from './dimless-binary-per-second.directive';
@@ -35,8 +33,6 @@ import { TrimDirective } from './trim.directive';
     MillisecondsDirective,
     IopsDirective,
     FormLoadingDirective
-  ],
-  providers: [],
-  entryComponents: [LoadingPanelComponent, AlertPanelComponent]
+  ]
 })
 export class DirectivesModule {}

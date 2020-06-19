@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
-
 import { RefreshIntervalService } from '../../services/refresh-interval.service';
 import { RefreshSelectorComponent } from './refresh-selector.component';
 

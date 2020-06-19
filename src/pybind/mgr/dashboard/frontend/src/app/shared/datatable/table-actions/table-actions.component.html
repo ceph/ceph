@@ -1,5 +1,4 @@
-<div class="btn-group"
-     dropdown>
+<div class="btn-group">
   <ng-container *ngIf="getCurrentButton() as action">
     <button type="button"
             class="btn btn-{{btnColor}}"
@@ -7,33 +6,36 @@
             (click)="useClickAction(action)"
             [routerLink]="useRouterLink(action)"
             [preserveFragment]="action.preserveFragment ? '' : null">
-      <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
+
+      <i [ngClass]="[action.icon]"></i>
+      <span>{{ action.name }}</span>
     </button>
   </ng-container>
-  <button type="button"
-          dropdownToggle
-          *ngIf="showDropDownActions()"
-          class="btn btn-{{btnColor}} dropdown-toggle dropdown-toggle-split">
-    <ng-container *ngIf="dropDownOnly">{{ dropDownOnly }} </ng-container>
-    <span *ngIf="!dropDownOnly"
-          class="sr-only"></span>
-  </button>
-  <ul *dropdownMenu
-      class="dropdown-menu"
-      role="menu">
-    <ng-container *ngFor="let action of dropDownActions">
-      <li role="menuitem"
-          class="{{ toClassName(action['name']) }}"
-          data-toggle="tooltip"
-          title="{{ useDisableDesc(action) }}">
-        <a class="dropdown-item"
-           (click)="useClickAction(action)"
-           [routerLink]="useRouterLink(action)"
-           [preserveFragment]="action.preserveFragment ? '' : null"
-           [ngClass]="{'disabled': disableSelectionAction(action)}">
-          <i [ngClass]="[action.icon]"></i><span>{{ action.name }}</span>
-        </a>
-      </li>
-    </ng-container>
-  </ul>
+  <div class="btn-group"
+       ngbDropdown
+       placement="bottom-right"
+       role="group"
+       aria-label="Button group with nested dropdown">
+    <button class="btn btn-{{btnColor}} dropdown-toggle-split"
+            *ngIf="showDropDownActions()"
+            ngbDropdownToggle>
+      <ng-container *ngIf="dropDownOnly">{{ dropDownOnly }} </ng-container>
+      <span *ngIf="!dropDownOnly"
+            class="sr-only"></span>
+    </button>
+    <div class="dropdown-menu"
+         ngbDropdownMenu>
+      <ng-container *ngFor="let action of dropDownActions">
+        <button ngbDropdownItem
+                class="{{ toClassName(action['name']) }}"
+                (click)="useClickAction(action)"
+                [routerLink]="useRouterLink(action)"
+                [preserveFragment]="action.preserveFragment ? '' : null"
+                [disabled]="disableSelectionAction(action)">
+          <i [ngClass]="[action.icon]"></i>
+          <span>{{ action.name }}</span>
+        </button>
+      </ng-container>
+    </div>
+  </div>
 </div>

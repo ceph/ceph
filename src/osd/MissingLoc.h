@@ -157,7 +157,8 @@ class MissingLoc {
   }
   bool readable_with_acting(
     const hobject_t &hoid,
-    const std::set<pg_shard_t> &acting) const;
+    const std::set<pg_shard_t> &acting,
+    eversion_t* v = 0) const;
   uint64_t num_unfound() const {
     uint64_t ret = 0;
     for (std::map<hobject_t, pg_missing_item>::const_iterator i =

@@ -37,7 +37,6 @@
 #include "include/ceph_fuse.h"
 
 #include "fuse_ll.h"
-#include <fuse.h>
 #include <fuse_lowlevel.h>
 
 #define dout_context g_ceph_context
@@ -1262,7 +1261,14 @@ int CephFuse::Handle::loop()
   auto fuse_multithreaded = client->cct->_conf.get_val<bool>(
     "fuse_multithreaded");
   if (fuse_multithreaded) {
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 1)
+    {
+      struct fuse_loop_config conf = { 0 };
+
+      conf.clone_fd = opts.clone_fd;
+      return fuse_session_loop_mt(se, &conf);
+    }
+#elif FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
     return fuse_session_loop_mt(se, opts.clone_fd);
 #else
     return fuse_session_loop_mt(se);

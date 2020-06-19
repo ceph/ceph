@@ -7,6 +7,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
@@ -17,7 +18,6 @@
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
 #include "common/perf_counters.h"
-#include "common/WorkQueue.h"
 #include "osdc/Striper.h"
 #include <algorithm>
 #include <functional>

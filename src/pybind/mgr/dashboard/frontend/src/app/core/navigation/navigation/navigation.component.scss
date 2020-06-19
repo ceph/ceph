@@ -55,7 +55,7 @@
     }
   }
 
-  .navbar-nav > li > .cd-navbar > [dropdown] > a,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a,
   .navbar-nav > li > .cd-navbar > a,
   .navbar-nav > li > a {
     color: $color-nav-links;
@@ -71,16 +71,16 @@
     color: $color-nav-links;
   }
 
-  .navbar-nav > li > .cd-navbar > [dropdown] > a:hover,
-  .navbar-nav > li > .cd-navbar > [dropdown].open > a,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown] > a:hover,
+  .navbar-nav > li > .cd-navbar > [ngbDropdown].open > a,
   .navbar-nav > li > .cd-navbar > a:hover,
   .navbar-nav > li > a:hover,
   .navbar-nav > li:hover {
     background-color: $color-nav-links-hover;
   }
 
-  .navbar-nav > .open > .cd-navbar > [dropdown] > a,
-  .navbar-nav > .open > .cd-navbar > [dropdown] > a:hover,
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a,
+  .navbar-nav > .open > .cd-navbar > [ngbDropdown] > a:hover,
   .navbar-nav > .open > .cd-navbar > a,
   .navbar-nav > .open > .cd-navbar > a:focus,
   .navbar-nav > .open > .cd-navbar > a:hover,
@@ -161,7 +161,7 @@ $sidebar-width: 200px;
     bottom: 0;
     left: 0;
     z-index: 999;
-    color: #fff;
+    color: $color-solid-white;
     transition: all 0.3s;
 
     &.active {
@@ -175,7 +175,7 @@ $sidebar-width: 200px;
       }
 
       p {
-        color: #fff;
+        color: $color-solid-white;
         padding: 10px;
       }
 
@@ -183,10 +183,10 @@ $sidebar-width: 200px;
         padding: 10px;
         font-size: 1.1em;
         display: block;
-        color: #fff;
+        color: $color-solid-white;
 
         &:hover {
-          color: #fff;
+          color: $color-solid-white;
           background: $color-primary;
         }
 
@@ -199,7 +199,7 @@ $sidebar-width: 200px;
 
       li.active > a,
       li > a a[aria-expanded='true'] {
-        color: #fff;
+        color: $color-solid-white;
       }
     }
   }

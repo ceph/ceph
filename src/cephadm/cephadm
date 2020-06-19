@@ -385,6 +385,17 @@ class CephIscsi(object):
         return mounts
 
     @staticmethod
+    def get_container_binds():
+        # type: () -> List[List[str]]
+        binds = []
+        lib_modules = ['type=bind',
+                       'source=/lib/modules',
+                       'destination=/lib/modules',
+                       'ro=true']
+        binds.append(lib_modules)
+        return binds
+
+    @staticmethod
     def get_version(container_id):
         # type: (str) -> Optional[str]
         version = None
@@ -392,7 +403,7 @@ class CephIscsi(object):
             [container_path, 'exec', container_id,
              '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"])
         if code == 0:
-            version = out
+            version = out.strip()
         return version
 
     def validate(self):
@@ -765,9 +776,10 @@ def call(command,  # type: List[str]
         end_time = start_time + timeout
     while not stop:
         if end_time and (time.time() >= end_time):
-            logger.info(desc + ':timeout after %s seconds' % timeout)
             stop = True
-            process.kill()
+            if process.poll() is None:
+                logger.info(desc + ':timeout after %s seconds' % timeout)
+                process.kill()
         if reads and process.poll() is not None:
             # we want to stop, but first read off anything remaining
             # on stdout/stderr
@@ -814,6 +826,8 @@ def call(command,  # type: List[str]
                     assert False
             except (IOError, OSError):
                 pass
+        logger.debug(desc + ':profile rt=%s, stop=%s, exit=%s, reads=%s'
+                % (time.time()-start_time, stop, process.poll(), reads))
 
     returncode = process.wait()
 
@@ -1072,11 +1086,16 @@ def infer_fsid(func):
         fsids = set()
         daemon_list = list_daemons(detail=False)
         for daemon in daemon_list:
-            if 'name' not in args or not args.name:
+            if not is_fsid(daemon['fsid']):
+                # 'unknown' fsid
+                continue
+            elif 'name' not in args or not args.name:
+                # args.name not specified
                 fsids.add(daemon['fsid'])
             elif daemon['name'] == args.name:
+                # args.name is a match
                 fsids.add(daemon['fsid'])
-        fsids = list(fsids)
+        fsids = sorted(fsids)
 
         if not fsids:
             # some commands do not always require an fsid
@@ -1599,6 +1618,16 @@ def get_config_and_keyring():
 
     return (config, keyring)
 
+def get_container_binds(fsid, daemon_type, daemon_id):
+    # type: (str, str, Union[int, str, None]) -> List[List[str]]
+    binds = list()
+
+    if daemon_type == CephIscsi.daemon_type:
+        assert daemon_id
+        binds.extend(CephIscsi.get_container_binds())
+
+    return binds
+
 def get_container_mounts(fsid, daemon_type, daemon_id,
                          no_config=False):
     # type: (str, str, Union[int, str, None], Optional[bool]) -> Dict[str, str]
@@ -1749,6 +1778,7 @@ def get_container(fsid, daemon_type, daemon_id,
         args=ceph_args + get_daemon_args(fsid, daemon_type, daemon_id),
         container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+        bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
         envs=envs,
         privileged=privileged,
@@ -1870,6 +1900,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 ],
                 privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+                bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
             )
             f.write(' '.join(prestart.run_cmd()) + '\n')
@@ -1887,6 +1918,9 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
 
         # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
         f.write(' '.join(c.rm_cmd()) + '\n')
+        # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
+        if 'podman' in container_path:
+            f.write(' '.join(c.rm_cmd(storage=True)) + '\n')
 
         # container run command
         f.write(' '.join(c.run_cmd()) + '\n')
@@ -1907,6 +1941,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 ],
                 privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+                bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                                     daemon_id),
             )
@@ -2119,8 +2154,9 @@ class CephContainer:
                  container_args=[],
                  envs=None,
                  privileged=False,
-                 ptrace=False):
-        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool) -> None
+                 ptrace=False,
+                 bind_mounts=None):
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool, Optional[List[List[str]]]) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
@@ -2130,12 +2166,14 @@ class CephContainer:
         self.envs = envs
         self.privileged = privileged
         self.ptrace = ptrace
+        self.bind_mounts = bind_mounts if bind_mounts else []
 
     def run_cmd(self):
         # type: () -> List[str]
         vols = [] # type: List[str]
         envs = [] # type: List[str]
         cname = [] # type: List[str]
+        binds = [] # type: List[str]
         entrypoint = [] # type: List[str]
         if self.entrypoint:
             entrypoint = ['--entrypoint', self.entrypoint]
@@ -2150,6 +2188,8 @@ class CephContainer:
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
+        binds = sum([['--mount', '{}'.format(','.join(bind))]
+                     for bind in self.bind_mounts],[])
         envs = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
@@ -2166,7 +2206,7 @@ class CephContainer:
             '--ipc=host',
         ] + self.container_args + priv + \
         cname + envs + \
-        vols + entrypoint + \
+        vols + binds + entrypoint + \
         [
             self.image
         ] + self.args # type: ignore
@@ -2182,6 +2222,9 @@ class CephContainer:
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
+        binds = [] # type: List[str]
+        binds = sum([['--mount', '{}'.format(','.join(bind))]
+                     for bind in self.bind_mounts], [])
         envs = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
@@ -2198,7 +2241,7 @@ class CephContainer:
             '--rm',
             '--net=host',
             '--ipc=host',
-        ] + self.container_args + priv + envs + vols + [
+        ] + self.container_args + priv + envs + vols + binds + [
             '--entrypoint', cmd[0],
             self.image
         ] + cmd[1:]
@@ -2212,13 +2255,16 @@ class CephContainer:
             self.cname,
         ] + cmd
 
-    def rm_cmd(self):
-        # type: () -> List[str]
-        return [
+    def rm_cmd(self, storage=False):
+        # type: (bool) -> List[str]
+        ret = [
             str(container_path),
             'rm', '-f',
-            self.cname
         ]
+        if storage:
+            ret.append('--storage')
+        ret.append(self.cname)
+        return ret
 
     def run(self, timeout=DEFAULT_TIMEOUT):
         # type: (Optional[int]) -> str
@@ -2509,7 +2555,7 @@ def command_bootstrap():
     # wait for the service to become available
     def is_mon_available():
         # type: () -> bool
-        timeout=args.timeout if args.timeout else 30 # seconds
+        timeout=args.timeout if args.timeout else 60 # seconds
         out, err, ret = call(c.run_cmd(),
                              desc=c.entrypoint,
                              timeout=timeout)
@@ -2568,7 +2614,7 @@ def command_bootstrap():
     logger.info('Waiting for mgr to start...')
     def is_mgr_available():
         # type: () -> bool
-        timeout=args.timeout if args.timeout else 30 # seconds
+        timeout=args.timeout if args.timeout else 60 # seconds
         try:
             out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
             j = json.loads(out)
@@ -2650,7 +2696,10 @@ def command_bootstrap():
 
         host = get_hostname()
         logger.info('Adding host %s...' % host)
-        cli(['orch', 'host', 'add', host])
+        try:
+            cli(['orch', 'host', 'add', host])
+        except RuntimeError as e:
+            raise Error('Failed to add host <%s>: %s' % (host, e))
 
         if not args.orphan_initial_daemons:
             for t in ['mon', 'mgr', 'crash']:
@@ -2876,6 +2925,7 @@ def command_shell():
     container_args = [] # type: List[str]
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
                                   no_config=True if args.config else False)
+    binds = get_container_binds(args.fsid, daemon_type, daemon_id)
     if args.config:
         mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
     if args.keyring:
@@ -2911,6 +2961,7 @@ def command_shell():
         args=[],
         container_args=container_args,
         volume_mounts=mounts,
+        bind_mounts=binds,
         envs=args.env,
         privileged=True)
     command = c.shell_cmd(command)
@@ -4431,7 +4482,7 @@ def _get_parser():
         help='ceph.keyring to pass through to the container')
     parser_shell.add_argument(
         '--mount', '-m',
-        help='file or directory path that will be mounted in container /mnt')
+        help='mount a file or directory under /mnt in the container')
     parser_shell.add_argument(
         '--env', '-e',
         action='append',

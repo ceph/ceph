@@ -4,10 +4,9 @@ import { Injectable } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { CrushRuleConfig } from '../models/crush-rule';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class CrushRuleService {
   apiPath = 'api/crush_rule';

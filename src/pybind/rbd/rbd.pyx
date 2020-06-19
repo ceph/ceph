@@ -98,6 +98,9 @@ cdef extern from "rbd/librbd.h" nogil:
         RBD_MAX_BLOCK_NAME_SIZE
         RBD_MAX_IMAGE_NAME_SIZE
 
+        _RBD_SNAP_CREATE_SKIP_QUIESCE "RBD_SNAP_CREATE_SKIP_QUIESCE"
+        _RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR "RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR"
+
         _RBD_SNAP_REMOVE_UNPROTECT "RBD_SNAP_REMOVE_UNPROTECT"
         _RBD_SNAP_REMOVE_FLATTEN "RBD_SNAP_REMOVE_FLATTEN"
         _RBD_SNAP_REMOVE_FORCE "RBD_SNAP_REMOVE_FORCE"
@@ -507,7 +510,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
                       int *max_snaps)
     void rbd_snap_list_end(rbd_snap_info_t *snaps)
-    int rbd_snap_create(rbd_image_t image, const char *snapname)
+    int rbd_snap_create2(rbd_image_t image, const char *snapname, uint32_t flags,
+			 librbd_progress_fn_t cb, void *cbdata)
     int rbd_snap_remove(rbd_image_t image, const char *snapname)
     int rbd_snap_remove2(rbd_image_t image, const char *snapname, uint32_t flags,
 			 librbd_progress_fn_t cb, void *cbdata)
@@ -599,7 +603,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_promote(rbd_image_t image, bint force)
     int rbd_mirror_image_demote(rbd_image_t image)
     int rbd_mirror_image_resync(rbd_image_t image)
-    int rbd_mirror_image_create_snapshot(rbd_image_t image, uint64_t *snap_id)
+    int rbd_mirror_image_create_snapshot2(rbd_image_t image, uint32_t flags,
+                                          uint64_t *snap_id)
     int rbd_mirror_image_get_info(rbd_image_t image,
                                   rbd_mirror_image_info_t *mirror_image_info,
                                   size_t info_size)
@@ -799,6 +804,9 @@ RBD_POOL_STAT_OPTION_TRASH_IMAGES = _RBD_POOL_STAT_OPTION_TRASH_IMAGES
 RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES
 RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES
 RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS = _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS
+
+RBD_SNAP_CREATE_SKIP_QUIESCE = _RBD_SNAP_CREATE_SKIP_QUIESCE
+RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR = _RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR
 
 RBD_SNAP_REMOVE_UNPROTECT = _RBD_SNAP_REMOVE_UNPROTECT
 RBD_SNAP_REMOVE_FLATTEN = _RBD_SNAP_REMOVE_FLATTEN
@@ -3928,18 +3936,21 @@ cdef class Image(object):
         return SnapIterator(self)
 
     @requires_not_closed
-    def create_snap(self, name):
+    def create_snap(self, name, flags=0):
         """
         Create a snapshot of the image.
 
         :param name: the name of the snapshot
         :type name: str
-        :raises: :class:`ImageExists`
+        :raises: :class:`ImageExists`, :class:`InvalidArgument`
         """
         name = cstr(name, 'name')
-        cdef char *_name = name
+        cdef:
+            char *_name = name
+            uint32_t _flags = flags
+            librbd_progress_fn_t prog_cb = &no_op_progress_callback
         with nogil:
-            ret = rbd_snap_create(self.image, _name)
+            ret = rbd_snap_create2(self.image, _name, _flags, prog_cb, NULL)
         if ret != 0:
             raise make_ex(ret, 'error creating snapshot %s from %s' % (name, self.name))
 
@@ -4804,7 +4815,7 @@ written." % (self.name, ret, length))
             raise make_ex(ret, 'error to resync image %s' % self.name)
 
     @requires_not_closed
-    def mirror_image_create_snapshot(self):
+    def mirror_image_create_snapshot(self, flags=0):
         """
         Create mirror snapshot.
 
@@ -4813,9 +4824,11 @@ written." % (self.name, ret, length))
         :returns: int - the snapshot Id
         """
         cdef:
+            uint32_t _flags = flags
             uint64_t snap_id
         with nogil:
-            ret = rbd_mirror_image_create_snapshot(self.image, &snap_id)
+            ret = rbd_mirror_image_create_snapshot2(self.image, _flags,
+                                                    &snap_id)
         if ret < 0:
             raise make_ex(ret, 'error creating mirror snapshot for image %s' %
                           self.name)

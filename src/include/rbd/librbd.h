@@ -117,6 +117,9 @@ typedef struct {
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
+#define RBD_SNAP_CREATE_SKIP_QUIESCE		1 << 0
+#define RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR	1 << 1
+
 #define RBD_SNAP_REMOVE_UNPROTECT	1 << 0
 #define RBD_SNAP_REMOVE_FLATTEN		1 << 1
 #define RBD_SNAP_REMOVE_FORCE		(RBD_SNAP_REMOVE_UNPROTECT | RBD_SNAP_REMOVE_FLATTEN)
@@ -780,6 +783,9 @@ CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
 CEPH_RBD_API void rbd_snap_list_end(rbd_snap_info_t *snaps);
 CEPH_RBD_API int rbd_snap_exists(rbd_image_t image, const char *snapname, bool *exists);
 CEPH_RBD_API int rbd_snap_create(rbd_image_t image, const char *snapname);
+CEPH_RBD_API int rbd_snap_create2(rbd_image_t image, const char *snap_name,
+                                  uint32_t flags, librbd_progress_fn_t cb,
+                                  void *cbdata);
 CEPH_RBD_API int rbd_snap_remove(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove2(rbd_image_t image, const char *snap_name,
                                   uint32_t flags, librbd_progress_fn_t cb,
@@ -1198,6 +1204,9 @@ CEPH_RBD_API int rbd_mirror_image_demote(rbd_image_t image);
 CEPH_RBD_API int rbd_mirror_image_resync(rbd_image_t image);
 CEPH_RBD_API int rbd_mirror_image_create_snapshot(rbd_image_t image,
                                                   uint64_t *snap_id);
+CEPH_RBD_API int rbd_mirror_image_create_snapshot2(rbd_image_t image,
+                                                   uint32_t flags,
+                                                   uint64_t *snap_id);
 CEPH_RBD_API int rbd_mirror_image_get_info(rbd_image_t image,
                                            rbd_mirror_image_info_t *mirror_image_info,
                                            size_t info_size);
@@ -1385,9 +1394,9 @@ CEPH_RBD_API int rbd_quiesce_watch(rbd_image_t image,
  * Notify quiesce is complete
  *
  * @param image the image to notify
- * @returns 0 on success
+ * @param r the return code
  */
-CEPH_RADOS_API void rbd_quiesce_complete(rbd_image_t image);
+CEPH_RADOS_API void rbd_quiesce_complete(rbd_image_t image, int r);
 
 /**
  * Unregister a quiesce/unquiesce watcher.

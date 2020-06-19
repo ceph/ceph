@@ -1157,7 +1157,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
   ASSERT_EQ(0, ictx2->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					      "snap1"));
+					      "snap1", 0, no_op));
 
   bufferlist write_full_bl;
   write_full_bl.append(std::string(1 << ictx2->order, '2'));

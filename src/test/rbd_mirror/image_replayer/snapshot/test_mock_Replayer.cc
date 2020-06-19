@@ -2198,7 +2198,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkRemoteSnapshot) {
   ASSERT_EQ(0, init_ctx.wait());
 
   // wait for sync to complete
-  ASSERT_EQ(0, wait_for_notification(2));
+  ASSERT_EQ(0, wait_for_notification(3));
 
   // shut down
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,

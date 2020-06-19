@@ -1,6 +1,7 @@
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 set(crimson_alien_srcs
-    alien_store.cc)
+    alien_store.cc
+    thread_pool.cc)
 
 list(APPEND crimson_alien_srcs
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc

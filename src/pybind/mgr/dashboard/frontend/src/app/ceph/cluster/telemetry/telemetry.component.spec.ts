@@ -11,7 +11,7 @@ import { of as observableOf } from 'rxjs';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { MgrModuleService } from '../../../shared/api/mgr-module.service';
 import { TelemetryService } from '../../../shared/api/telemetry.service';
-
+import { LoadingPanelComponent } from '../../../shared/components/loading-panel/loading-panel.component';
 import { TextToDownloadService } from '../../../shared/services/text-to-download.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { TelemetryComponent } from './telemetry.component';
@@ -47,17 +47,20 @@ describe('TelemetryComponent', () => {
     'url'
   ];
 
-  configureTestBed({
-    declarations: [TelemetryComponent],
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      SharedModule,
-      ToastrModule.forRoot()
-    ],
-    providers: i18nProviders
-  });
+  configureTestBed(
+    {
+      declarations: [TelemetryComponent],
+      imports: [
+        HttpClientTestingModule,
+        ReactiveFormsModule,
+        RouterTestingModule,
+        SharedModule,
+        ToastrModule.forRoot()
+      ],
+      providers: i18nProviders
+    },
+    [LoadingPanelComponent]
+  );
 
   describe('configForm', () => {
     beforeEach(() => {

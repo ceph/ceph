@@ -839,7 +839,7 @@ void get_group_snap_rename_arguments(po::options_description *positional,
 
   positional->add_options()
     (at::DEST_SNAPSHOT_NAME.c_str(),
-     "destination snapshot name\n(example: <snapshot-name>)");
+     "destination snapshot name\n(example: <snap-name>)");
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_DEST);
 }
 

@@ -193,6 +193,8 @@ Resume cephadm work with::
 
   ceph orch resume
 
+.. _cephadm-stray-host:
+
 CEPHADM_STRAY_HOST
 ------------------
 
@@ -215,6 +217,9 @@ managed by *cephadm*.
 You can also disable this warning entirely with::
 
   ceph config set mgr mgr/cephadm/warn_on_stray_hosts false
+
+See :ref:`cephadm-fqdn` for more information about host names and
+domain names.
 
 CEPHADM_STRAY_DAEMON
 --------------------

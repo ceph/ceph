@@ -15,7 +15,6 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
-import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -50,7 +49,6 @@ describe('RbdSnapshotListComponent', () => {
   configureTestBed({
     declarations: [RbdSnapshotListComponent, RbdTabsComponent],
     imports: [
-      ApiModule,
       BrowserAnimationsModule,
       ComponentsModule,
       DataTableModule,

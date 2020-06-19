@@ -60,14 +60,13 @@ export class RbdTrashPurgeModalComponent implements OnInit {
         }),
         call: this.rbdService.purgeTrash(poolName)
       })
-      .subscribe(
-        undefined,
-        () => {
+      .subscribe({
+        error: () => {
           this.purgeForm.setErrors({ cdSubmitButton: true });
         },
-        () => {
+        complete: () => {
           this.modalRef.hide();
         }
-      );
+      });
   }
 }

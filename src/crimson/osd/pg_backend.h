@@ -137,11 +137,17 @@ public:
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
+  struct peering_info_t {
+    bool is_primary;
+  };
+  virtual void on_actingset_changed(peering_info_t pi) = 0;
+  virtual void on_activate_complete();
 protected:
   const shard_id_t shard;
   CollectionRef coll;
   crimson::os::FuturizedStore* store;
   bool stopping = false;
+  std::optional<peering_info_t> peering;
 public:
   struct loaded_object_md_t {
     ObjectState os;

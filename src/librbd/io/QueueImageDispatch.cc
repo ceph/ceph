@@ -4,9 +4,9 @@
 #include "librbd/io/QueueImageDispatch.h"
 #include "common/dout.h"
 #include "common/Cond.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
 

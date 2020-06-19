@@ -463,7 +463,7 @@ signal:
 
       wait_inflight_io();
 
-      image.quiesce_complete();
+      image.quiesce_complete(0); // TODO: return quiesce hook exit code
 
       wait_unquiesce();
 

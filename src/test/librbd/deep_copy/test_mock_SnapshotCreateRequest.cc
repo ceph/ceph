@@ -76,16 +76,14 @@ public:
   typedef SnapshotCreateRequest<librbd::MockTestImageCtx> MockSnapshotCreateRequest;
 
   librbd::ImageCtx *m_image_ctx;
-  ThreadPool *m_thread_pool;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
 
   void SetUp() override {
     TestMockFixture::SetUp();
 
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
 
-    librbd::ImageCtx::get_thread_pool_instance(m_image_ctx->cct, &m_thread_pool,
-                                               &m_work_queue);
+    librbd::ImageCtx::get_work_queue(m_image_ctx->cct, &m_work_queue);
   }
 
   void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
@@ -107,9 +105,10 @@ public:
 
   void expect_snap_create(librbd::MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id, int r) {
+    uint64_t flags = SNAP_CREATE_FLAG_SKIP_OBJECT_MAP |
+                     SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE;
     EXPECT_CALL(*mock_image_ctx.operations,
-                execute_snap_create(_, StrEq(snap_name), _, 0,
-                                    SNAP_CREATE_FLAG_SKIP_OBJECT_MAP, _))
+                execute_snap_create(_, StrEq(snap_name), _, 0, flags, _))
                   .WillOnce(DoAll(InvokeWithoutArgs([&mock_image_ctx, snap_id, snap_name]() {
                                     inject_snap(mock_image_ctx, snap_id, snap_name);
                                   }),

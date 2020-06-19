@@ -907,16 +907,15 @@ export class PoolFormComponent extends CdForm implements OnInit {
         }),
         call: this.poolService[this.editing ? URLVerbs.UPDATE : URLVerbs.CREATE](pool)
       })
-      .subscribe(
-        undefined,
-        (resp) => {
+      .subscribe({
+        error: (resp) => {
           if (_.isObject(resp.error) && resp.error.code === '34') {
             this.form.get('pgNum').setErrors({ '34': true });
           }
           this.form.setErrors({ cdSubmitButton: true });
         },
-        () => this.router.navigate(['/pool'])
-      );
+        complete: () => this.router.navigate(['/pool'])
+      });
   }
 
   appSelection() {

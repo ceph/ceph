@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ManagedLock.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/managed_lock/AcquireRequest.h"
 #include "librbd/managed_lock/BreakRequest.h"
 #include "librbd/managed_lock/GetLockerRequest.h"
@@ -15,7 +16,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"
-#include "common/WorkQueue.h"
 #include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -63,7 +63,7 @@ using managed_lock::util::decode_lock_cookie;
 using managed_lock::util::encode_lock_cookie;
 
 template <typename I>
-ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, ContextWQ *work_queue,
+ManagedLock<I>::ManagedLock(librados::IoCtx &ioctx, asio::ContextWQ *work_queue,
                             const string& oid, Watcher *watcher, Mode mode,
                             bool blacklist_on_break_lock,
                             uint32_t blacklist_expire_seconds)

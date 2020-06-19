@@ -3,6 +3,7 @@ import stat
 import uuid
 import errno
 import logging
+from datetime import datetime
 
 import cephfs
 
@@ -221,6 +222,25 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "snapshot '{0}' is protected".format(snapname))
         snappath = self.snapshot_path(snapname)
         rmsnap(self.fs, snappath)
+
+    def snapshot_info(self, snapname):
+        snappath = self.snapshot_path(snapname)
+        snap_info = {}
+        try:
+            snap_attrs = {'created_at':'ceph.snap.btime', 'size':'ceph.dir.rbytes',
+                          'data_pool':'ceph.dir.layout.pool'}
+            for key, val in snap_attrs.items():
+                snap_info[key] = self.fs.getxattr(snappath, val)
+            return {'size': int(snap_info['size']),
+                    'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
+                    'data_pool': snap_info['data_pool'].decode('utf-8'),
+                    'protected': "yes" if self.is_snapshot_protected(snapname) else "no",
+                    'has_pending_clones': "yes" if self.has_pending_clones(snapname) else "no"}
+        except cephfs.Error as e:
+            if e.errno == errno.ENOENT:
+                raise VolumeException(-errno.ENOENT,
+                                      "snapshot '{0}' doesnot exist".format(snapname))
+            raise VolumeException(-e.args[0], e.args[1])
 
     def list_snapshots(self):
         try:

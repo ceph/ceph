@@ -175,6 +175,7 @@ fi
 filestore_path=
 kstore_path=
 bluestore_dev=
+ganesha_path=/usr/bin/ganesha.nfsd
 
 VSTART_SEC="client.vstart.sh"
 
@@ -233,6 +234,7 @@ usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
+usage=$usage"\t--ganesha-path: path to ganesha.nfsd binary (defaults to $ganesha_path)\n"
 
 usage_exit() {
     printf "$usage"
@@ -443,6 +445,10 @@ case $1 in
         ;;
     --bluestore-zoned )
         zoned_enabled=1
+        ;;
+    --ganesha-path)
+        ganesha_path="$2"
+        shift
         ;;
     * )
         usage_exit
@@ -1066,8 +1072,8 @@ EOF
 # Ganesha Daemons requires nfs-ganesha nfs-ganesha-ceph nfs-ganesha-rados-grace
 # nfs-ganesha-rados-urls (version 2.8.3 and above) packages installed. On
 # Fedora>=31 these packages can be installed directly with 'dnf'. For CentOS>=8
-# the packages need to be downloaded first from
-# https://download.nfs-ganesha.org/2.8/2.8.3/CentOS and then installed.
+# the packages are available at
+# https://wiki.centos.org/SpecialInterestGroup/Storage
 # Similarly for Ubuntu 16.04 follow the instructions on
 # https://launchpad.net/~nfs-ganesha/+archive/ubuntu/nfs-ganesha-2.8
 
@@ -1132,28 +1138,28 @@ start_ganesha() {
         RADOS_URLS {
 	   Userid = $test_user;
 	   watch_url = \"$url\";
-        }" > "$ganesha_dir/ganesha.conf"
+        }" > "$ganesha_dir/ganesha-$name.conf"
 	wconf <<EOF
 [ganesha.$name]
         host = $HOSTNAME
         ip = $IP
         port = $port
         ganesha data = $ganesha_dir
-        pid file = $ganesha_dir/ganesha.pid
+        pid file = $ganesha_dir/ganesha-$name.pid
 EOF
 
-        prun ganesha-rados-grace -p $pool_name -n $namespace add $name
-        prun ganesha-rados-grace -p $pool_name -n $namespace
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
-        prun env CEPH_CONF="${conf_fn}" /usr/bin/ganesha.nfsd -L "$ganesha_dir/ganesha.log" -f "$ganesha_dir/ganesha.conf" -p "$ganesha_dir/ganesha.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" $ganesha_path -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_DEBUG
 
         # Wait few seconds for grace period to be removed
         sleep 2
 
-        prun ganesha-rados-grace -p $pool_name -n $namespace
+        prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
         if $with_mgr_dashboard; then
-            $CEPH_BIN/rados -p $pool_name put "conf-$name" "$ganesha_dir/ganesha.conf"
+            $CEPH_BIN/rados -p $pool_name put "conf-$name" "$ganesha_dir/ganesha-$name.conf"
         fi
 
         echo "$test_user ganesha daemon $name started on port: $port"

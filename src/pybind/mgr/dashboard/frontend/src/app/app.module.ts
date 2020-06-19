@@ -12,10 +12,9 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
-
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ToastrModule } from 'ngx-toastr';
 
+import { environment } from '../environments/environment';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
@@ -23,8 +22,6 @@ import { CoreModule } from './core/core.module';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
-
-import { environment } from '../environments/environment';
 
 export function jwtTokenGetter() {
   return localStorage.getItem('access_token');
@@ -45,7 +42,6 @@ export function jwtTokenGetter() {
     CoreModule,
     SharedModule,
     CephModule,
-    BsDropdownModule.forRoot(),
     JwtModule.forRoot({
       config: {
         tokenGetter: jwtTokenGetter

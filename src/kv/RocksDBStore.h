@@ -116,6 +116,7 @@ private:
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
   };
   std::unordered_map<std::string, prefix_shards> cf_handles;
+  std::unordered_map<uint32_t, std::string> cf_ids_to_prefix;
 
   void add_column_family(const std::string& cf_name, uint32_t hash_l, uint32_t hash_h,
 			 size_t shard_idx, rocksdb::ColumnFamilyHandle *handle);
@@ -260,50 +261,7 @@ public:
 
   int64_t estimate_prefix_size(const std::string& prefix,
 			       const std::string& key_prefix) override;
-
-  struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
-    std::string seen ;
-    int num_seen = 0;
-    void Put(const rocksdb::Slice& key,
-                    const rocksdb::Slice& value) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nPut( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) 
-            + " Value size = " + std::to_string(size) + ")";
-      num_seen++;
-    }
-    void SingleDelete(const rocksdb::Slice& key) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      seen += "\nSingleDelete(Prefix = "+ prefix + " Key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-      num_seen++;
-    }
-    void Delete(const rocksdb::Slice& key) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      seen += "\nDelete( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + ")";
-
-      num_seen++;
-    }
-    void Merge(const rocksdb::Slice& key,
-                      const rocksdb::Slice& value) override {
-      std::string prefix ((key.ToString()).substr(0,1));
-      std::string key_to_decode ((key.ToString()).substr(2, std::string::npos));
-      uint64_t size = (value.ToString()).size();
-      seen += "\nMerge( Prefix = " + prefix + " key = " 
-            + pretty_binary_string(key_to_decode) + " Value size = " 
-            + std::to_string(size) + ")";
-
-      num_seen++;
-    }
-    bool Continue() override { return num_seen < 50; }
-
-  };
-
+  struct RocksWBHandler;
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch bat;

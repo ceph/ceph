@@ -1,4 +1,5 @@
 import { IndividualConfig } from 'ngx-toastr';
+
 import { Icons } from '../enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
 

@@ -353,7 +353,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   _initUserConfigAutoSave() {
-    const source: Observable<any> = Observable.create(this._initUserConfigProxy.bind(this));
+    const source: Observable<any> = new Observable(this._initUserConfigProxy.bind(this));
     this.saveSubscriber = source.subscribe(this._saveUserConfig.bind(this));
   }
 
@@ -693,11 +693,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.updateSelection.emit(_.clone(this.selection));
   }
 
-  toggleColumn($event: any) {
-    const prop: TableColumnProp = $event.target.name;
-    const hide = !$event.target.checked;
+  toggleColumn(column: CdTableColumn) {
+    const prop: TableColumnProp = column.prop;
+    const hide = !column.isHidden;
     if (hide && this.tableColumns.length === 1) {
-      $event.target.checked = true;
+      column.isHidden = true;
       return;
     }
     _.find(this.localColumns, (c: CdTableColumn) => c.prop === prop).isHidden = hide;
