@@ -53,23 +53,40 @@ class TestNFS(MgrTestCase):
         return self._orch_cmd('ls', 'nfs')
 
     def _test_idempotency(self, cmd_func, cmd_args):
+        '''
+        Test idempotency of commands. It first runs the TestNFS test method
+        for a command and then checks the result of command run again. TestNFS
+        test method has required checks to verify that command works.
+        :param cmd_func: TestNFS method
+        :param cmd_args: nfs command arguments to be run
+        '''
         cmd_func()
         ret = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd_args)
         if ret != 0:
-            raise RuntimeError("Idempotency test failed")
+            self.fail("Idempotency test failed")
 
     def _test_create_cluster(self):
+        '''
+        Test single nfs cluster deployment.
+        '''
+        # Disable any running nfs ganesha daemon
         self._check_nfs_server_status()
         self._nfs_cmd('cluster', 'create', self.export_type, self.cluster_id)
+        # Wait for few seconds as ganesha daemon take few seconds to be deployed
         time.sleep(8)
         orch_output = self._check_nfs_status()
         expected_status = '1/1'
+        # Check for expected status and daemon name (nfs.ganesha-<cluster_id>)
         if self.expected_name not in orch_output or expected_status not in orch_output:
-            raise RuntimeError("NFS Ganesha cluster could not be deployed")
+            self.fail("NFS Ganesha cluster could not be deployed")
 
     def _test_delete_cluster(self):
+        '''
+        Test deletion of a single nfs cluster.
+        '''
         self._nfs_cmd('cluster', 'delete', self.cluster_id)
         expected_output = "No services reported\n"
+        # Wait for few seconds as ganesha daemon takes few seconds to be deleted
         wait_time = 10
         while wait_time <= 60:
             time.sleep(wait_time)
@@ -80,6 +97,11 @@ class TestNFS(MgrTestCase):
         self.fail("NFS Ganesha cluster could not be deleted")
 
     def _test_list_cluster(self, empty=False):
+        '''
+        Test listing of deployed nfs clusters. If nfs cluster is deployed then
+        it checks for expected cluster id. Otherwise checks nothing is listed.
+        :param empty: If true it denotes no cluster is deployed.
+        '''
         if empty:
             cluster_id = ''
         else:
@@ -88,6 +110,12 @@ class TestNFS(MgrTestCase):
         self.assertEqual(cluster_id, nfs_output.strip())
 
     def _create_export(self, export_id, create_fs=False, extra_cmd=None):
+        '''
+        Test creation of a single export.
+        :param export_id: Denotes export number
+        :param create_fs: If false filesytem exists. Otherwise create it.
+        :param extra_cmd: List of extra arguments for creating export.
+        '''
         if create_fs:
             self._cmd('fs', 'volume', 'create', self.fs_name)
         export_cmd = ['nfs', 'export', 'create', 'cephfs', self.fs_name, self.cluster_id]
@@ -95,30 +123,48 @@ class TestNFS(MgrTestCase):
             export_cmd.extend(extra_cmd)
         else:
             export_cmd.append(self.pseudo_path)
-
+        # Runs the nfs export create command
         self._cmd(*export_cmd)
-        res = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'get', f'export-{export_id}', '-'])
+        res = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'get',
+                             f'export-{export_id}', '-'])
+        # Check if export object is created
         if res == b'':
-            raise RuntimeError("Export cannot be created")
+            self.fail("Export cannot be created")
 
     def _create_default_export(self):
-            self._test_create_cluster()
-            self._create_export(export_id='1', create_fs=True)
+        '''
+        Deploy a single nfs cluster and create export with default options.
+        '''
+        self._test_create_cluster()
+        self._create_export(export_id='1', create_fs=True)
 
     def _delete_export(self):
+        '''
+        Delete an export.
+        '''
         self._nfs_cmd('export', 'delete', self.cluster_id, self.pseudo_path)
 
     def _test_list_export(self):
+        '''
+        Test listing of created exports.
+        '''
         nfs_output = json.loads(self._nfs_cmd('export', 'ls', self.cluster_id))
         self.assertIn(self.pseudo_path, nfs_output)
 
     def _check_export_obj_deleted(self, conf_obj=False):
+        '''
+        Test if export or config object are deleted successfully.
+        :param conf_obj: It denotes config object needs to be checked
+        '''
         rados_obj_ls = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'ls'])
 
         if b'export-' in rados_obj_ls or (conf_obj and b'conf-nfs' in rados_obj_ls):
-            raise RuntimeError("Delete export failed")
+            self.fail("Delete export failed")
 
     def test_create_and_delete_cluster(self):
+        '''
+        Test successful creation and deletion of the nfs cluster.
+        '''
         self._test_create_cluster()
         self._test_list_cluster()
         self._test_delete_cluster()
@@ -126,13 +172,19 @@ class TestNFS(MgrTestCase):
         self._test_list_cluster(empty=True)
 
     def test_create_delete_cluster_idempotency(self):
+        '''
+        Test idempotency of cluster create and delete commands.
+        '''
         self._test_idempotency(self._test_create_cluster, ['nfs', 'cluster', 'create', self.export_type,
                                                            self.cluster_id])
         self._test_idempotency(self._test_delete_cluster, ['nfs', 'cluster', 'delete', self.cluster_id])
 
     def test_create_cluster_with_invalid_cluster_id(self):
+        '''
+        Test nfs cluster deployment failure with invalid cluster id.
+        '''
         try:
-            invalid_cluster_id = '/cluster_test'
+            invalid_cluster_id = '/cluster_test'  # Only [A-Za-z0-9-_.] chars are valid
             self._nfs_cmd('cluster', 'create', self.export_type, invalid_cluster_id)
             self.fail(f"Cluster successfully created with invalid cluster id {invalid_cluster_id}")
         except CommandFailedError as e:
@@ -141,6 +193,9 @@ class TestNFS(MgrTestCase):
                 raise
 
     def test_create_cluster_with_invalid_export_type(self):
+        '''
+        Test nfs cluster deployment failure with invalid export type.
+        '''
         try:
             invalid_export_type = 'rgw'  # Only cephfs is valid
             self._nfs_cmd('cluster', 'create', invalid_export_type, self.cluster_id)
@@ -151,12 +206,19 @@ class TestNFS(MgrTestCase):
                 raise
 
     def test_export_create_and_delete(self):
+        '''
+        Test successful creation and deletion of the cephfs export.
+        '''
         self._create_default_export()
         self._delete_export()
+        # Check if rados export object is deleted
         self._check_export_obj_deleted()
         self._test_delete_cluster()
 
     def test_create_delete_export_idempotency(self):
+        '''
+        Test idempotency of export create and delete commands.
+        '''
         self._test_idempotency(self._create_default_export, ['nfs', 'export', 'create', 'cephfs',
                                                              self.fs_name, self.cluster_id,
                                                              self.pseudo_path])
@@ -164,7 +226,10 @@ class TestNFS(MgrTestCase):
                                                      self.pseudo_path])
 
     def test_create_multiple_exports(self):
-        #Export-1 with default values
+        '''
+        Test creating multiple exports with different access type and path.
+        '''
+        #Export-1 with default values (access type = rw and path = '\')
         self._create_default_export()
         #Export-2 with r only
         self._create_export(export_id='2', extra_cmd=[self.pseudo_path+'1', '--readonly'])
@@ -175,18 +240,26 @@ class TestNFS(MgrTestCase):
         #Export-4 for subvolume
         self._create_export(export_id='4', extra_cmd=[self.pseudo_path+'3', fs_path.strip()])
         self._test_delete_cluster()
+        # Check if rados ganesha conf object is deleted
         self._check_export_obj_deleted(conf_obj=True)
 
     def test_exports_on_mgr_restart(self):
+        '''
+        Test export availability on restarting mgr.
+        '''
         self._create_default_export()
-        # This will restart the mgr
+        # unload and load module will restart the mgr
         self._unload_module("cephadm")
         self._load_module("cephadm")
         self._orch_cmd("set", "backend", "cephadm")
+        # Checks if created export is listed
         self._test_list_export()
         self._delete_export()
 
     def test_export_create_with_non_existing_fsname(self):
+        '''
+        Test creating export with non-existing filesystem.
+        '''
         try:
             fs_name = 'nfs-test'
             self._test_create_cluster()
@@ -200,6 +273,9 @@ class TestNFS(MgrTestCase):
             self._test_delete_cluster()
 
     def test_export_create_with_non_existing_clusterid(self):
+        '''
+        Test creating cephfs export with non-existing nfs cluster.
+        '''
         try:
             cluster_id = 'invalidtest'
             self._nfs_cmd('export', 'create', 'cephfs', self.fs_name, cluster_id, self.pseudo_path)
