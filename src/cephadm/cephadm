@@ -385,6 +385,17 @@ class CephIscsi(object):
         return mounts
 
     @staticmethod
+    def get_container_binds():
+        # type: () -> List[List[str]]
+        binds = []
+        lib_modules = ['type=bind',
+                       'source=/lib/modules',
+                       'destination=/lib/modules',
+                       'ro=true']
+        binds.append(lib_modules)
+        return binds
+
+    @staticmethod
     def get_version(container_id):
         # type: (str) -> Optional[str]
         version = None
@@ -1607,6 +1618,16 @@ def get_config_and_keyring():
 
     return (config, keyring)
 
+def get_container_binds(fsid, daemon_type, daemon_id):
+    # type: (str, str, Union[int, str, None]) -> List[List[str]]
+    binds = list()
+
+    if daemon_type == CephIscsi.daemon_type:
+        assert daemon_id
+        binds.extend(CephIscsi.get_container_binds())
+
+    return binds
+
 def get_container_mounts(fsid, daemon_type, daemon_id,
                          no_config=False):
     # type: (str, str, Union[int, str, None], Optional[bool]) -> Dict[str, str]
@@ -1757,6 +1778,7 @@ def get_container(fsid, daemon_type, daemon_id,
         args=ceph_args + get_daemon_args(fsid, daemon_type, daemon_id),
         container_args=container_args,
         volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+        bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
         cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
         envs=envs,
         privileged=privileged,
@@ -1878,6 +1900,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 ],
                 privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+                bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
             )
             f.write(' '.join(prestart.run_cmd()) + '\n')
@@ -1918,6 +1941,7 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
                 ],
                 privileged=True,
                 volume_mounts=get_container_mounts(fsid, daemon_type, daemon_id),
+                bind_mounts=get_container_binds(fsid, daemon_type, daemon_id),
                 cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                                     daemon_id),
             )
@@ -2130,8 +2154,9 @@ class CephContainer:
                  container_args=[],
                  envs=None,
                  privileged=False,
-                 ptrace=False):
-        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool) -> None
+                 ptrace=False,
+                 bind_mounts=None):
+        # type: (str, str, List[str], Dict[str, str], str, List[str], Optional[List[str]], bool, bool, Optional[List[List[str]]]) -> None
         self.image = image
         self.entrypoint = entrypoint
         self.args = args
@@ -2141,12 +2166,14 @@ class CephContainer:
         self.envs = envs
         self.privileged = privileged
         self.ptrace = ptrace
+        self.bind_mounts = bind_mounts if bind_mounts else []
 
     def run_cmd(self):
         # type: () -> List[str]
         vols = [] # type: List[str]
         envs = [] # type: List[str]
         cname = [] # type: List[str]
+        binds = [] # type: List[str]
         entrypoint = [] # type: List[str]
         if self.entrypoint:
             entrypoint = ['--entrypoint', self.entrypoint]
@@ -2161,6 +2188,8 @@ class CephContainer:
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
+        binds = sum([['--mount', '{}'.format(','.join(bind))]
+                     for bind in self.bind_mounts],[])
         envs = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
@@ -2177,7 +2206,7 @@ class CephContainer:
             '--ipc=host',
         ] + self.container_args + priv + \
         cname + envs + \
-        vols + entrypoint + \
+        vols + binds + entrypoint + \
         [
             self.image
         ] + self.args # type: ignore
@@ -2193,6 +2222,9 @@ class CephContainer:
         vols = sum(
             [['-v', '%s:%s' % (host_dir, container_dir)]
              for host_dir, container_dir in self.volume_mounts.items()], [])
+        binds = [] # type: List[str]
+        binds = sum([['--mount', '{}'.format(','.join(bind))]
+                     for bind in self.bind_mounts], [])
         envs = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
@@ -2209,7 +2241,7 @@ class CephContainer:
             '--rm',
             '--net=host',
             '--ipc=host',
-        ] + self.container_args + priv + envs + vols + [
+        ] + self.container_args + priv + envs + vols + binds + [
             '--entrypoint', cmd[0],
             self.image
         ] + cmd[1:]
@@ -2893,6 +2925,7 @@ def command_shell():
     container_args = [] # type: List[str]
     mounts = get_container_mounts(args.fsid, daemon_type, daemon_id,
                                   no_config=True if args.config else False)
+    binds = get_container_binds(args.fsid, daemon_type, daemon_id)
     if args.config:
         mounts[pathify(args.config)] = '/etc/ceph/ceph.conf:z'
     if args.keyring:
@@ -2928,6 +2961,7 @@ def command_shell():
         args=[],
         container_args=container_args,
         volume_mounts=mounts,
+        bind_mounts=binds,
         envs=args.env,
         privileged=True)
     command = c.shell_cmd(command)
