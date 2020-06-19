@@ -138,7 +138,8 @@ public:
 		map<std::string, bufferlist> * pattrs,
 		optional_yield y);
 
-  int remove_info(const RGWAccountInfo& info,
+  int remove_info(const std::string& account_id,
+		  RGWObjVersionTracker *objv_tracker,
 		  optional_yield y);
   // TODO
   int get_info_by_tenant(const std::string& tenant,
@@ -193,8 +194,7 @@ public:
   int do_remove(RGWSI_MetaBackend_Handler::Op *op,
                 std::string& entry,
                 RGWObjVersionTracker& objv_tracker,
-                optional_yield y) override
-  { return -ERR_NOT_IMPLEMENTED; }
+                optional_yield y) override;
 
   RGWMetadataObject *get_meta_obj(JSONObj *jo,
 				  const obj_version& objv,
