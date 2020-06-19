@@ -41,17 +41,27 @@ public:
 
   // Set after construction because it won't be known until we've
   // started resolving path and locking
-  void set_origin(CInode *origin_) { origin = origin_; }
+  void set_origin(inodeno_t ino) { origin = ino; }
 
   bool get_recursive() const { return recursive; }
   bool get_repair() const { return repair; }
   bool get_force() const { return force; }
   bool is_internal_tag() const { return is_tag_internal; }
-  CInode *get_origin() const { return origin; }
+  inodeno_t get_origin() const { return origin; }
   const std::string& get_tag() const { return tag; }
 
   bool get_repaired() const { return repaired; }
   void set_repaired() { repaired = true; }
+
+  void set_epoch_last_forwarded(unsigned epoch) { epoch_last_forwarded = epoch; }
+  unsigned get_epoch_last_forwarded() const { return epoch_last_forwarded; }
+
+  void inc_num_pending() { ++num_pending; }
+  void dec_num_pending() {
+    ceph_assert(num_pending > 0);
+    --num_pending;
+  }
+  unsigned get_num_pending() const { return num_pending; }
 
 protected:
   const std::string tag;
@@ -59,9 +69,11 @@ protected:
   const bool force;
   const bool recursive;
   const bool repair;
-  CInode *origin = nullptr;
+  inodeno_t origin;
 
   bool repaired = false;  // May be set during scrub if repairs happened
+  unsigned epoch_last_forwarded = 0;
+  unsigned num_pending = 0;
 };
 
 typedef std::shared_ptr<ScrubHeader> ScrubHeaderRef;
