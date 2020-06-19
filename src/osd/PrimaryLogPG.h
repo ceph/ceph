@@ -1501,7 +1501,7 @@ protected:
   void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
   void refcount_manifest(hobject_t src_soid, hobject_t tgt_soid, refcount_t type,
 			 RefCountCallback* cb);
-  void dec_all_refcount_manifest(object_info_t& oi, OpContext* ctx);
+  void dec_all_refcount_manifest(const object_info_t& oi, OpContext* ctx);
   void dec_refcount(ObjectContextRef obc, const object_ref_delta_t& refs);
 
   friend struct C_ProxyChunkRead;
