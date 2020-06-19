@@ -129,3 +129,18 @@ int RGWSI_Account_RADOS::read_account_info(const DoutPrefixProvider* dpp,
 
   return 0;
 }
+
+int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
+                                             RGWSI_MetaBackend::Context *ctx,
+                                             const std::string& account_id,
+                                             RGWObjVersionTracker *objv_tracker,
+                                             optional_yield y)
+{
+  RGWSI_MBSObj_RemoveParams params;
+  int ret = svc.meta_be->remove(ctx, account_id, params, objv_tracker, y, dpp);
+  if (ret <0 && ret != -ENOENT && ret != -ECANCELED) {
+    ldpp_dout(dpp, 0) << "ERROR: could not remove account: " << account_id << dendl;
+    return ret;
+  }
+  return 0;
+}
