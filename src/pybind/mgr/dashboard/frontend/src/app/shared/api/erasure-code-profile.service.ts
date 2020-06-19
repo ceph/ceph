@@ -5,10 +5,9 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Observable } from 'rxjs';
 
 import { ErasureCodeProfile } from '../models/erasure-code-profile';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class ErasureCodeProfileService {
   apiPath = 'api/erasure_code_profile';

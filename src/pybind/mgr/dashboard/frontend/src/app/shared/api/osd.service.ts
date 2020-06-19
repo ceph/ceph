@@ -8,10 +8,9 @@ import { map } from 'rxjs/operators';
 import { CdDevice } from '../models/devices';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
-import { ApiModule } from './api.module';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class OsdService {
   private path = 'api/osd';

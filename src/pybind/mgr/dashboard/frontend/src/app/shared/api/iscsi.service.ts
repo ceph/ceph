@@ -2,11 +2,10 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { cdEncode } from '../decorators/cd-encode';
-import { ApiModule } from './api.module';
 
 @cdEncode
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class IscsiService {
   constructor(private http: HttpClient) {}
