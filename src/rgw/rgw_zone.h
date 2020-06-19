@@ -430,9 +430,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(roles_pool, bl);
     encode(reshard_pool, bl);
     encode(otp_pool, bl);
-    encode(account_pool, bl);
     encode(tier_config, bl);
     encode(oidc_pool, bl);
+    encode(account_pool, bl);
     ENCODE_FINISH(bl);
   }
 
