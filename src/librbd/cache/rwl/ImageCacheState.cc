@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/cache/Types.h"
+#include "librbd/cache/Utils.h"
 #include "librbd/cache/rwl/ImageCacheState.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Operations.h"
@@ -111,7 +112,7 @@ ImageCacheState<I>* ImageCacheState<I>::get_image_cache_state(
                              IMAGE_CACHE_STATE, &cache_state_str);
   }
 
-  bool rwl_enabled = image_ctx->config.template get_val<bool>("rbd_rwl_enabled");
+  bool rwl_enabled = cache::util::is_rwl_enabled(*image_ctx);
   bool cache_desired = rwl_enabled;
   cache_desired &= !image_ctx->read_only;
   cache_desired &= !image_ctx->test_features(RBD_FEATURE_MIGRATING);

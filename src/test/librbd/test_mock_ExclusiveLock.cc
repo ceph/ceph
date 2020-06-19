@@ -262,7 +262,8 @@ public:
   void expect_set_require_lock(MockExclusiveLockImageCtx &mock_image_ctx,
                                MockImageDispatch &mock_image_dispatch) {
     if (mock_image_ctx.clone_copy_on_read ||
-        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
+        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0 ||
+        is_rbd_rwl_enabled(mock_image_ctx.cct)) {
       expect_set_require_lock(mock_image_dispatch, io::DIRECTION_BOTH);
     } else {
       expect_set_require_lock(mock_image_dispatch, io::DIRECTION_WRITE);
