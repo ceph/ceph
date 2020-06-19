@@ -25,6 +25,7 @@ from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host
 
 from mgr_module import MgrModule, HandleCommandResult
+from mgr_util import to_yaml_or_json
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
     CLICommandMeta
@@ -843,6 +844,33 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                 if item.startswith('host %s ' % host):
                     self.event.set()
         return 0, '%s (%s) ok' % (host, addr), err
+
+    @orchestrator._cli_read_command(
+        'cephadm generate-service-specs',
+        desc='Generates a YAML description of existing daemons without services')
+    def _generate_service_specs(self):
+        """
+        When doing an adoption from an existing cluster, the daemons get adopted, but
+        no sevice specs are generated. Leaving cephadm in an odd state.
+
+        This command cannot be properly implemented, cuase of:
+
+        * we don't know the exact placement specifier for MONs
+        * specs can't be deduced. Like port numbers, passwords etc.
+
+        """
+        if not self.cache.daemon_cache_filled():
+            return HandleCommandResult(retval=errno.EBUSY, stderr='Daemon Cache still incomplete.')
+
+        known_dds: List[orchestrator.DaemonDescription] = sum(
+            (self.cache.get_daemons_by_service(s.service_name()) for s in
+             self.spec_store.specs.values()), [])
+
+        specs = utils.generate_specs_for_daemons(self.cache.get_daemons(), known_dds)
+
+        return HandleCommandResult(
+            stdout=to_yaml_or_json([s.to_json() for s in specs], 'yaml')
+        )
 
     def _get_connection(self, host):
         """

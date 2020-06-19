@@ -492,10 +492,15 @@ class ServiceSpec(object):
             self.placement.validate()
 
     def __repr__(self):
-        return "{}({!r})".format(self.__class__.__name__, self.__dict__)
+        return "ServiceSpec.from_json({!r})".format(self.to_json())
 
     def one_line_str(self):
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())
+
+    def __eq__(self, other):
+        if self.__class__ != other.__class__:
+            return False
+        return self.to_json() == other.to_json()
 
 
 class NFSServiceSpec(ServiceSpec):

@@ -4,6 +4,7 @@ import pytest
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     ServiceSpecValidationError, IscsiServiceSpec, PlacementSpec
+from cephadm.utils import generate_specs_for_daemons
 
 from orchestrator import DaemonDescription, OrchestratorError
 
@@ -502,3 +503,116 @@ def test_daemon_description_service_name(spec: ServiceSpec,
     else:
         with pytest.raises(OrchestratorError):
             dd.service_name()
+
+
+def test_generate_specs_for_daemons():
+    all_dds = [
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='realm.zone.host1',
+            hostname='host1',
+        ),
+        DaemonDescription(
+            daemon_type='rgw',
+            daemon_id='realm.zone.host2',
+            hostname='host1',
+        ),
+        DaemonDescription.from_json(
+            {
+                "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+                "created": "2020-06-19T09:33:32.265147",
+                "daemon_id": "ubuntu",
+                "daemon_type": "mon",
+                "hostname": "ubuntu",
+                "last_refresh": "2020-06-19T09:33:50.400690",
+                "status": -1,
+                "status_desc": "unknown"
+            }
+        ),
+        DaemonDescription.from_json(
+            {
+                "container_id": "8c00d50397fd",
+                "container_image_id": "74803e884bea289d2d2d3ebdf6d37cd560499e955595695b1390a89800f4e37a",
+                "container_image_name": "docker.io/ceph/daemon-base:latest-master-devel",
+                "created": "2020-06-19T10:15:22.927302",
+                "daemon_id": "ubuntu.uxsnuk",
+                "daemon_type": "mgr",
+                "hostname": "ubuntu",
+                "last_refresh": "2020-06-19T10:15:25.763212",
+                "started": "2020-06-19T10:15:23.053042",
+                "status": 1,
+                "status_desc": "running",
+                "version": "16.0.0-901-g713ef3c"
+            }
+        ),
+        DaemonDescription.from_json(
+            {
+                "container_id": "d176c4cf08bb",
+                "container_image_id": "de242295e2257c37c8cadfd962369228f8f10b2d48a44259b65fef44ad4f6490",
+                "container_image_name": "docker.io/prom/prometheus:v2.18.1",
+                "created": "2020-06-19T10:19:25.968255",
+                "daemon_id": "ubuntu",
+                "daemon_type": "prometheus",
+                "hostname": "ubuntu",
+                "last_refresh": "2020-06-19T10:19:27.724052",
+                "started": "2020-06-19T10:19:26.093273",
+                "status": 1,
+                "status_desc": "running",
+                "version": "2.18.1"
+            }
+        )
+    ]
+    assert generate_specs_for_daemons(all_dds, []) == [
+        ServiceSpec.from_json(
+            {
+                'service_type': 'rgw',
+                'service_id': 'realm.zone',
+                'service_name': 'rgw.realm.zone',
+                'placement': {
+                    'hosts': [
+                        {'hostname': 'host1', 'network': '', 'name': 'realm.zone.host1'},
+                        {'hostname': 'host1', 'network': '', 'name': 'realm.zone.host2'}
+                    ]
+                },
+                'unmanaged': True,
+                'rgw_realm': 'realm',
+                'rgw_zone': 'zone',
+            }),
+        ServiceSpec.from_json(
+            {
+                "service_type": "mon",
+                "service_id": "",
+                "placement": {
+                    "hosts": [
+                        {
+                            "hostname": "ubuntu",
+                            "name": "ubuntu",
+                            "network": ""
+                        }
+                    ]
+                },
+                "service_name": "mon",
+                "unmanaged": True
+            }
+
+        ),
+        ServiceSpec.from_json(
+            {
+                'service_type': 'mgr',
+                'service_name': 'mgr',
+                'placement': {
+                    'hosts': [{'hostname': 'ubuntu', 'network': '', 'name': 'ubuntu.uxsnuk'}]},
+                'unmanaged': True,
+            }
+        ),
+        ServiceSpec.from_json(
+            {
+                'service_type': 'prometheus',
+                'service_name': 'prometheus',
+                'placement': {
+                    'hosts': [{'hostname': 'ubuntu', 'network': '', 'name': 'ubuntu'}]
+                },
+                'unmanaged': True,
+            }
+        )
+    ]

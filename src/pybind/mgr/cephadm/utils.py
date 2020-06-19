@@ -1,6 +1,11 @@
+import logging
 import re
+from typing import List, Dict, Iterable
 
-from orchestrator import OrchestratorError
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, HostPlacementSpec
+from orchestrator import OrchestratorError, DaemonDescription
+
+logger = logging.getLogger(__name__)
 
 def name_to_config_section(name):
     """
@@ -28,3 +33,41 @@ def name_to_auth_entity(name) -> str:
         return name
     else:
         raise OrchestratorError("unknown auth entity name")
+
+
+def generate_specs_for_daemons(all_dds: List[DaemonDescription], known_dds: List[DaemonDescription]) -> Iterable[ServiceSpec]:
+
+    def dd_to_hpl(dd: DaemonDescription) -> HostPlacementSpec:
+        return HostPlacementSpec(
+            hostname=dd.hostname,
+            name=dd.daemon_id,
+            network=''
+        )
+
+    specs: Dict[str, ServiceSpec] = {}
+    for dd in all_dds:
+        if dd in known_dds:
+            continue
+        try:
+            # This is going to be problematic, as it is impossible to
+            # implement service_id() correctly for all cases.
+            service_id = dd.service_id()
+            service_name = dd.service_name()
+        except Exception:
+            logger.warning(f"Failed to generate service spec for {dd.name()}")
+            continue
+
+        if service_name not in specs:
+            specs[service_name] = ServiceSpec(
+                service_type=dd.daemon_type,
+                service_id=service_id,
+                placement=PlacementSpec(
+                    hosts=[dd_to_hpl(dd)],
+                ),
+                unmanaged=True
+            )
+        else:
+            placement = specs[service_name].placement
+            placement.hosts.append(dd_to_hpl(dd))
+
+    return list(specs.values())
