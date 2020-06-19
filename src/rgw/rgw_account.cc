@@ -46,6 +46,12 @@ void AccountQuota::dump(Formatter * const f) const
   f->close_section();
 }
 
+void AccountQuota::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("max_users", max_users, obj);
+  JSONDecoder::decode_json("max_roles", max_roles, obj);
+}
+
 void RGWAccountInfo::dump(Formatter * const f) const
 {
   f->open_object_section("RGWAccountInfo");
@@ -53,6 +59,13 @@ void RGWAccountInfo::dump(Formatter * const f) const
   encode_json("tenant", tenant, f);
   account_quota.dump(f);
   f->close_section();
+}
+
+void RGWAccountInfo::decode_json(JSONObj* obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
+  JSONDecoder::decode_json("quota", account_quota, obj);
 }
 
 void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
