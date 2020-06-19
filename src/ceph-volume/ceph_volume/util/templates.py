@@ -12,7 +12,7 @@ osd_reused_id = """
 
 
 osd_component = """
-  {_type: <15} {path: <55} {size: <15} {percent:.2%}%"""
+  {_type: <15} {path: <55} {size: <15} {percent:.2%}"""
 
 
 total_osds = """
