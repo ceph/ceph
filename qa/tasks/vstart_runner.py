@@ -48,7 +48,6 @@ from IPy import IP
 from unittest import suite, loader
 import unittest
 import platform
-from teuthology import misc
 from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import Remote
@@ -1257,9 +1256,9 @@ def exec_test():
             opt_brxnet=f.split('=')[1]
             try:  
                 IP(opt_brxnet)  
-                if IP(opt_brxnet).iptype() is 'PUBLIC':
+                if IP(opt_brxnet).iptype() == 'PUBLIC':
                     raise RuntimeError('is public')
-            except Exception as  e:  
+            except Exception as e:
                 log.error("Invalid ip '{0}' {1}".format(opt_brxnet, e))
                 sys.exit(-1)
         else:
