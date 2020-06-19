@@ -1,4 +1,3 @@
-import cephfs
 import contextlib
 import datetime
 import errno
@@ -8,16 +7,17 @@ import time
 import logging
 import sys
 from threading import Lock, Condition, Event
-from typing import no_type_check
+from typing import Tuple, no_type_check, Any
+
 if sys.version_info >= (3, 3):
     from threading import Timer
 else:
     from threading import _Timer as Timer
 
-try:
-    from typing import Tuple
-except ImportError:
-    TYPE_CHECKING = False  # just for type checking
+import cephfs
+import json
+import yaml
+
 
 (
     BLACK,
@@ -318,6 +318,23 @@ def format_dimless(n, width, colored=False):
 
 def format_bytes(n, width, colored=False):
     return format_units(n, width, colored, decimal=False)
+
+
+def to_yaml_or_json(what: Any, format: str) -> str:
+    """
+    >>> to_yaml_or_json({'a': 1}, 'json')
+    '{"a": 1}'
+
+    >>> to_yaml_or_json([{'a': 1}], 'yaml')
+    'a: 1\\n'
+    """
+    if format == 'json':
+        return json.dumps(what, sort_keys=True)
+    elif format == 'json-pretty':
+        return json.dumps(what, indent=2, sort_keys=True)
+    elif format == 'yaml':
+        return yaml.safe_dump_all(what, default_flow_style=False)
+    assert False, f'{format} unsupported.'
 
 
 def merge_dicts(*args):

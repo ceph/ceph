@@ -13,7 +13,7 @@ from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 
-from mgr_util import format_bytes, to_pretty_timedelta
+from mgr_util import format_bytes, to_pretty_timedelta, to_yaml_or_json
 from mgr_module import MgrModule, HandleCommandResult
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
@@ -28,15 +28,6 @@ def nice_delta(now, t, suffix=''):
         return to_pretty_timedelta(now - t) + suffix
     else:
         return '-'
-
-
-def to_format(what, format):
-    if format == 'json':
-        return json.dumps(what, sort_keys=True)
-    elif format == 'json-pretty':
-        return json.dumps(what, indent=2, sort_keys=True)
-    elif format == 'yaml':
-        return yaml.safe_dump_all(what, default_flow_style=False)
 
 
 @six.add_metaclass(CLICommandMeta)
@@ -218,7 +209,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         if format != 'plain':
             hosts = [host.to_json()
                      for host in completion.result]
-            output = to_format(hosts, format)
+            output = to_yaml_or_json(hosts, format)
         else:
             table = PrettyTable(
                 ['HOST', 'ADDR', 'LABELS', 'STATUS'],
@@ -277,7 +268,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
 
         if format != 'plain':
             data = [n.to_json() for n in completion.result]
-            return HandleCommandResult(stdout=to_format(data, format))
+            return HandleCommandResult(stdout=to_yaml_or_json(data, format))
         else:
             out = []
 
@@ -352,7 +343,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                 data = [s.spec.to_json() for s in services]
             else:
                 data = [s.to_json() for s in services]
-            return HandleCommandResult(stdout=to_format(data, format))
+            return HandleCommandResult(stdout=to_yaml_or_json(data, format))
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
@@ -417,7 +408,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(stdout="No daemons reported")
         elif format != 'plain':
             data = [s.to_json() for s in daemons]
-            return HandleCommandResult(stdout=to_format(data, format))
+            return HandleCommandResult(stdout=to_yaml_or_json(data, format))
         else:
             now = datetime.datetime.utcnow()
             table = PrettyTable(
@@ -536,7 +527,7 @@ Examples:
 
         def print_preview(previews, format_to):
             if format != 'plain':
-                return to_format(previews, format_to)
+                return to_yaml_or_json(previews, format_to)
             else:
                 table = PrettyTable(
                     ['NAME', 'HOST', 'DATA', 'DB', 'WAL'],
