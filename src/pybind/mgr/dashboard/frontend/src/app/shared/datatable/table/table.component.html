@@ -116,19 +116,20 @@
         </a>
         <ul *dropdownMenu
             class="dropdown-menu px-3">
-          <li *ngFor="let column of columns">
-
-            <div class="custom-control custom-checkbox">
-              <input class="custom-control-input"
-                     type="checkbox"
-                     (change)="toggleColumn($event)"
-                     [name]="column.prop"
-                     [id]="column.prop"
-                     [checked]="!column.isHidden">
-              <label class="custom-control-label"
-                     [for]="column.prop">{{ column.name }}</label>
-            </div>
-          </li>
+          <ng-container *ngFor="let column of columns">
+            <li *ngIf="column.name !== ''" >
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       type="checkbox"
+                       (change)="toggleColumn($event)"
+                       [name]="column.prop"
+                       [id]="column.prop"
+                       [checked]="!column.isHidden">
+                <label class="custom-control-label"
+                       [for]="column.prop">{{ column.name }}</label>
+              </div>
+            </li>
+          </ng-container>
         </ul>
       </div>
     </div>
@@ -188,6 +189,18 @@
                  [loadingIndicator]="loadingIndicator"
                  [rowIdentity]="rowIdentity()"
                  [rowHeight]="'auto'">
+
+    <!-- Row Detail Template -->
+    <ngx-datatable-row-detail rowHeight="auto"
+                              #detailRow>
+      <ng-template let-row="row"
+                   let-expanded="expanded"
+                   ngx-datatable-row-detail-template>
+        <!-- Table Details -->
+        <ng-content select="[cdTableDetail]"></ng-content>
+      </ng-template>
+    </ngx-datatable-row-detail>
+
     <ngx-datatable-footer>
       <ng-template ngx-datatable-footer-template
                    let-rowCount="rowCount"
@@ -221,9 +234,6 @@
     </ngx-datatable-footer>
   </ngx-datatable>
 </div>
-
-<!-- Table Details -->
-<ng-content select="[cdTableDetail]"></ng-content>
 
 <!-- cell templates that can be accessed from outside -->
 <ng-template #tableCellBoldTpl
@@ -296,4 +306,18 @@
              let-value="value">
   <span data-toggle="tooltip"
         [title]="value">{{ value | truncate:column?.customTemplateConfig?.length:column?.customTemplateConfig?.omission }}</span>
+</ng-template>
+
+<ng-template #rowDetailsTpl
+             let-row="row"
+             let-isExpanded="expanded"
+             ngx-datatable-cell-template>
+  <a href="javascript:void(0)"
+     [class.expand-collapse-icon-right]="!isExpanded"
+     [class.expand-collapse-icon-down]="isExpanded"
+     class="expand-collapse-icon tc_expand-collapse"
+     title="Expand/Collapse Row"
+     i18n-title
+     (click)="toggleExpandRow(row, isExpanded)">
+  </a>
 </ng-template>

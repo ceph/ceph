@@ -3,6 +3,8 @@
           [columns]="columns"
           [extraFilterableColumns]="filters"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"
                     [permission]="permission"
@@ -10,7 +12,7 @@
                     [tableActions]="tableActions">
   </cd-table-actions>
   <cd-configuration-details cdTableDetail
-                            [selection]="selection">
+                            [selection]="expandedRow">
   </cd-configuration-details>
 </cd-table>
 

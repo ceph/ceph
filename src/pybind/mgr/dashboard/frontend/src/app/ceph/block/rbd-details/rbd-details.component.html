@@ -2,7 +2,7 @@
   <ng-container i18n>Only available for RBD images with <strong>fast-diff</strong> enabled</ng-container>
 </ng-template>
 
-<tabset *ngIf="selection?.hasSingleSelection">
+<tabset *ngIf="selection">
   <tab i18n-heading
        heading="Details">
     <table class="table table-striped table-bordered">
@@ -10,43 +10,43 @@
         <tr>
           <td i18n
               class="bold w-25">Name</td>
-          <td class="w-75">{{ selectedItem.name }}</td>
+          <td class="w-75">{{ selection.name }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Pool</td>
-          <td>{{ selectedItem.pool_name }}</td>
+          <td>{{ selection.pool_name }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Data Pool</td>
-          <td>{{ selectedItem.data_pool | empty }}</td>
+          <td>{{ selection.data_pool | empty }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Created</td>
-          <td>{{ selectedItem.timestamp | cdDate }}</td>
+          <td>{{ selection.timestamp | cdDate }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Size</td>
-          <td>{{ selectedItem.size | dimlessBinary }}</td>
+          <td>{{ selection.size | dimlessBinary }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Objects</td>
-          <td>{{ selectedItem.num_objs | dimless }}</td>
+          <td>{{ selection.num_objs | dimless }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Object size</td>
-          <td>{{ selectedItem.obj_size | dimlessBinary }}</td>
+          <td>{{ selection.obj_size | dimlessBinary }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Features</td>
           <td>
-            <span *ngFor="let feature of selectedItem.features_name">
+            <span *ngFor="let feature of selection.features_name">
               <span class="badge badge-dark mr-2">{{ feature }}</span>
             </span>
           </td>
@@ -55,14 +55,14 @@
           <td i18n
               class="bold">Provisioned</td>
           <td>
-            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
+            <span *ngIf="selection.features_name?.indexOf('fast-diff') === -1">
               <span class="form-text text-muted"
                     [tooltip]="usageNotAvailableTooltipTpl"
                     placement="right"
                     i18n>N/A</span>
             </span>
-            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') !== -1">
-              {{ selectedItem.disk_usage | dimlessBinary }}
+            <span *ngIf="selection.features_name?.indexOf('fast-diff') !== -1">
+              {{ selection.disk_usage | dimlessBinary }}
             </span>
           </td>
         </tr>
@@ -70,59 +70,59 @@
           <td i18n
               class="bold">Total provisioned</td>
           <td>
-            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
+            <span *ngIf="selection.features_name?.indexOf('fast-diff') === -1">
               <span class="form-text text-muted"
                     [tooltip]="usageNotAvailableTooltipTpl"
                     placement="right"
                     i18n>N/A</span>
             </span>
-            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') !== -1">
-              {{ selectedItem.total_disk_usage | dimlessBinary }}
+            <span *ngIf="selection.features_name?.indexOf('fast-diff') !== -1">
+              {{ selection.total_disk_usage | dimlessBinary }}
             </span>
           </td>
         </tr>
         <tr>
           <td i18n
               class="bold">Striping unit</td>
-          <td>{{ selectedItem.stripe_unit | dimlessBinary }}</td>
+          <td>{{ selection.stripe_unit | dimlessBinary }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Striping count</td>
-          <td>{{ selectedItem.stripe_count }}</td>
+          <td>{{ selection.stripe_count }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Parent</td>
           <td>
-            <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}<span *ngIf="selectedItem.parent.pool_namespace">/{{ selectedItem.parent.pool_namespace }}</span>/{{ selectedItem.parent.image_name }}@{{ selectedItem.parent.snap_name }}</span>
-            <span *ngIf="!selectedItem.parent">-</span>
+            <span *ngIf="selection.parent">{{ selection.parent.pool_name }}<span *ngIf="selection.parent.pool_namespace">/{{ selection.parent.pool_namespace }}</span>/{{ selection.parent.image_name }}@{{ selection.parent.snap_name }}</span>
+            <span *ngIf="!selection.parent">-</span>
           </td>
         </tr>
         <tr>
           <td i18n
               class="bold">Block name prefix</td>
-          <td>{{ selectedItem.block_name_prefix }}</td>
+          <td>{{ selection.block_name_prefix }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Order</td>
-          <td>{{ selectedItem.order }}</td>
+          <td>{{ selection.order }}</td>
         </tr>
       </tbody>
     </table>
   </tab>
   <tab i18n-heading
        heading="Snapshots">
-    <cd-rbd-snapshot-list [snapshots]="selectedItem.snapshots"
-                          [featuresName]="selectedItem.features_name"
-                          [poolName]="selectedItem.pool_name"
-                          [namespace]="selectedItem.namespace"
-                          [rbdName]="selectedItem.name"></cd-rbd-snapshot-list>
+    <cd-rbd-snapshot-list [snapshots]="selection.snapshots"
+                          [featuresName]="selection.features_name"
+                          [poolName]="selection.pool_name"
+                          [namespace]="selection.namespace"
+                          [rbdName]="selection.name"></cd-rbd-snapshot-list>
   </tab>
   <tab i18n-heading
        heading="Configuration">
-    <cd-rbd-configuration-table [data]="selectedItem['configuration']"></cd-rbd-configuration-table>
+    <cd-rbd-configuration-table [data]="selection['configuration']"></cd-rbd-configuration-table>
   </tab>
 </tabset>
 

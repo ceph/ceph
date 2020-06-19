@@ -1,4 +1,4 @@
-<tabset *ngIf="selection.hasSingleSelection">
+<tabset *ngIf="selection">
   <tab i18n-heading
        heading="Details">
     <cd-table-key-value [data]="metadata"
@@ -14,7 +14,7 @@
   <tab i18n-heading
        *ngIf="grafanaPermission.read"
        heading="Performance Details">
-    <cd-grafana [grafanaPath]="'rgw-instance-detail?var-rgw_servers=rgw.' + this.selection.first().id"
+    <cd-grafana [grafanaPath]="'rgw-instance-detail?var-rgw_servers=rgw.' + this.serviceId"
                 uid="x5ARzZtmk"
                 grafanaStyle="one">
     </cd-grafana>

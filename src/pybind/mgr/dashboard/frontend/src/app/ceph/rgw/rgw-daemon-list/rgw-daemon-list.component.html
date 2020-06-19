@@ -4,11 +4,11 @@
     <cd-table [data]="daemons"
               [columns]="columns"
               columnMode="flex"
-              selectionType="single"
-              (updateSelection)="updateSelection($event)"
+              [hasDetails]="true"
+              (setExpandedRow)="setExpandedRow($event)"
               (fetchData)="getDaemonList($event)">
       <cd-rgw-daemon-details cdTableDetail
-                             [selection]="selection">
+                             [selection]="expandedRow">
       </cd-rgw-daemon-details>
     </cd-table>
   </tab>

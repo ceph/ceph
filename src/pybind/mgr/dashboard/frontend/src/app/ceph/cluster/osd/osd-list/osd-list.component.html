@@ -2,10 +2,13 @@
   <tab i18n-heading
        heading="OSDs List">
 
-    <cd-table [data]="osds"
+    <cd-table [autoReload]="false"
+              [data]="osds"
               (fetchData)="getOsdList()"
               [columns]="columns"
               selectionType="multiClick"
+              [hasDetails]="true"
+              (setExpandedRow)="setExpandedRow($event)"
               (updateSelection)="updateSelection($event)"
               [updateSelectionOnRefresh]="'never'">
 
@@ -27,7 +30,7 @@
       </div>
 
       <cd-osd-details cdTableDetail
-                      [selection]="selection">
+                      [selection]="expandedRow">
       </cd-osd-details>
     </cd-table>
 

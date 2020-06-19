@@ -5,6 +5,8 @@
           identifier="id"
           forceIdentifier="true"
           selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
     <cd-table-actions class="btn-group"
@@ -15,7 +17,7 @@
   </div>
 
   <cd-nfs-details cdTableDetail
-                  [selection]="selection">
+                  [selection]="expandedRow">
   </cd-nfs-details>
 </cd-table>
 

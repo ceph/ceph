@@ -7,6 +7,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { OsdService } from '../../../../shared/api/osd.service';
+import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
@@ -40,7 +41,7 @@ const BASE_URL = 'osd';
   styleUrls: ['./osd-list.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class OsdListComponent implements OnInit {
+export class OsdListComponent extends ListWithDetails implements OnInit {
   @ViewChild('osdUsageTpl', { static: true })
   osdUsageTpl: TemplateRef<any>;
   @ViewChild('markOsdConfirmationTpl', { static: true })
@@ -89,6 +90,7 @@ export class OsdListComponent implements OnInit {
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {

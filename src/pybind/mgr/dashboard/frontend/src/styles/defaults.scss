@@ -2,6 +2,10 @@
 
 @import 'vendor.variables';
 
+// Bootstrap defaults
+
+$gray-900: #212529 !default;
+
 $screen-sm-min: 576px !default;
 $screen-md-min: 768px !default;
 $screen-lg-min: 992px !default;

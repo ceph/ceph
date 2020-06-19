@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
+import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
@@ -40,7 +41,7 @@ const BASE_URL = 'block/rbd';
     { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
   ]
 })
-export class RbdListComponent implements OnInit {
+export class RbdListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   @ViewChild('usageTpl', { static: false })
@@ -108,6 +109,7 @@ export class RbdListComponent implements OnInit {
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
       this.selection.first() &&
