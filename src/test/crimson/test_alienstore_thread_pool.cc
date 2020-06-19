@@ -4,11 +4,11 @@
 #include <seastar/core/app-template.hh>
 #include "common/ceph_argparse.h"
 #include "crimson/common/config_proxy.h"
-#include "crimson/thread/ThreadPool.h"
+#include "crimson/os/alienstore/thread_pool.h"
 #include "include/msgr.h"
 
 using namespace std::chrono_literals;
-using ThreadPool = crimson::thread::ThreadPool;
+using ThreadPool = crimson::os::ThreadPool;
 using crimson::common::local_conf;
 
 seastar::future<> test_accumulate(ThreadPool& tp) {
@@ -50,7 +50,7 @@ int main(int argc, char** argv)
     .then([conf_file_list] {
       return local_conf().parse_config_files(conf_file_list);
     }).then([] {
-      return seastar::do_with(std::make_unique<crimson::thread::ThreadPool>(2, 128, 0),
+      return seastar::do_with(std::make_unique<crimson::os::ThreadPool>(2, 128, 0),
                               [](auto& tp) {
         return tp->start().then([&tp] {
           return test_accumulate(*tp);
