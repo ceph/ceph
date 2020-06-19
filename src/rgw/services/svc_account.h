@@ -40,7 +40,7 @@ public:
 				optional_yield y) = 0;
 
   virtual int remove_account_info(RGWSI_MetaBackend::Context *ctx,
-				  const RGWAccountInfo& info,
+				  const std::string& account_id,
 				  RGWObjVersionTracker *objv_tracker,
 				  optional_yield y) = 0;
 
