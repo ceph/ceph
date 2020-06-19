@@ -196,10 +196,9 @@ class TestSessionMap(CephFSTestCase):
             self.skipTest("Requires FUSE client to use is_blacklisted()")
 
         self.fs.set_max_mds(2)
-        self.fs.wait_for_daemons()
-        status = self.fs.status()
+        status = self.fs.wait_for_daemons()
 
-        self.mount_a.run_shell(["mkdir", "d0", "d1"])
+        self.mount_a.run_shell_payload("mkdir {d0,d1} && touch {d0,d1}/file")
         self.mount_a.setfattr("d0", "ceph.dir.pin", "0")
         self.mount_a.setfattr("d1", "ceph.dir.pin", "1")
         self._wait_subtrees([('/d0', 0), ('/d1', 1)], status=status)
