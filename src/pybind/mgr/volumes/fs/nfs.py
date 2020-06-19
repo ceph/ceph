@@ -4,7 +4,6 @@ import logging
 
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
 
-import cephfs
 import orchestrator
 from .fs_util import create_pool
 from rados import TimedOut
