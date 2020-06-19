@@ -1,9 +1,7 @@
 import errno
 import json
 import logging
-from time import sleep
 
-from teuthology.exceptions import CommandFailedError
 
 from .mgr_test_case import MgrTestCase
 
