@@ -233,7 +233,7 @@ class Batch(object):
         )
         parser.add_argument(
             '--block-db-size',
-            type=int,
+            type=disk.Size.parse,
             help='Set (or override) the "bluestore_block_db_size" value, in bytes'
         )
         parser.add_argument(
@@ -243,7 +243,7 @@ class Batch(object):
         )
         parser.add_argument(
             '--block-wal-size',
-            type=int,
+            type=disk.Size.parse,
             help='Set (or override) the "bluestore_block_wal_size" value, in bytes'
         )
         parser.add_argument(
@@ -253,7 +253,7 @@ class Batch(object):
         )
         parser.add_argument(
             '--journal-size',
-            type=int,
+            type=disk.Size.parse,
             help='Override the "osd_journal_size" value, in megabytes'
         )
         parser.add_argument(
@@ -556,4 +556,6 @@ class Batch(object):
             return report
 
         def report_json(self):
-            return self._get_osd_plan()
+            # cast all values to string so that the report can be dumped in to
+            # json.dumps
+            return {k: str(v) for k, v in self._get_osd_plan().items()}
