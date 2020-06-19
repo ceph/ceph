@@ -92,6 +92,17 @@ int RGWAccountCtl::read_info(const DoutPrefixProvider* dpp,
     );
 }
 
+int RGWAccountCtl::remove_info(const DoutPrefixProvider* dpp,
+                               const std::string& account_id,
+                               RGWObjVersionTracker *objv_tracker,
+                               optional_yield y)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+      return svc.account->remove_account_info(dpp, op->ctx(), account_id,
+                                              objv_tracker, y);
+    });
+}
+
 RGWMetadataObject* RGWAccountMetadataHandler::get_meta_obj(JSONObj *jo,
                                                             const obj_version& objv,
                                                             const ceph::real_time& mtime)

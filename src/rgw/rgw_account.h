@@ -140,7 +140,9 @@ public:
 		std::map<std::string, bufferlist> * pattrs,
 		optional_yield y);
 
-  int remove_info(const RGWAccountInfo& info,
+  int remove_info(const DoutPrefixProvider* dpp,
+		  const std::string& account_id,
+		  RGWObjVersionTracker *objv_tracker,
 		  optional_yield y);
   // TODO
   int get_info_by_tenant(const std::string& tenant,
