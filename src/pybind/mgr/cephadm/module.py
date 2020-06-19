@@ -674,7 +674,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         """
         The cephadm orchestrator is always available.
         """
-        return self.can_run()
+        ok, err = self.can_run()
+        if not ok:
+            return ok, err
+        if not self.ssh_key or not self.ssh_pub:
+            return False, 'SSH keys not set. Use `ceph cephadm set-priv-key` and `ceph cephadm set-pub-key` or `ceph cephadm generate-key`'
+        return True, ''
 
     def process(self, completions):
         """
