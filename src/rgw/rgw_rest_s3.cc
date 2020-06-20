@@ -190,6 +190,15 @@ int decode_attr_bl_single_value(map<string, bufferlist>& attrs, const char *attr
   return 0;
 }
 
+inline bool str_has_cntrl(const std::string s) {
+  return std::any_of(s.begin(), s.end(), ::iscntrl);
+}
+
+inline bool str_has_cntrl(const char* s) {
+  std::string _s(s);
+  return str_has_cntrl(_s);
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
@@ -299,6 +308,24 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       bool exists;
       string val = s->info.args.get(p->param, &exists);
       if (exists) {
+	/* reject unauthenticated response header manipulation, see
+	 * https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html */
+	if (s->auth.identity->is_anonymous()) {
+	  return -ERR_INVALID_REQUEST;
+	}
+        /* HTTP specification says no control characters should be present in
+         * header values: https://tools.ietf.org/html/rfc7230#section-3.2
+         *      field-vchar    = VCHAR / obs-text
+         *
+         * Failure to validate this permits a CRLF injection in HTTP headers,
+         * whereas S3 GetObject only permits specific headers.
+         */
+        if(str_has_cntrl(val)) {
+          /* TODO: return a more distinct error in future;
+           * stating what the problem is */
+          return -ERR_INVALID_REQUEST;
+        }
+
 	if (strcmp(p->param, "response-content-type") != 0) {
 	  response_attrs[p->http_attr] = val;
 	} else {
