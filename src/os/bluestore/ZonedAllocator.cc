@@ -120,13 +120,18 @@ void ZonedAllocator::init_add_free(uint64_t offset, uint64_t length) {
   ldout(cct, 10) << __func__ << " set zone " << std::hex
 		 << zone << " write pointer to 0x" << offset << dendl;
 
-  length -= zone_size - offset;
-  ceph_assert(length % zone_size == 0);
-
-  for ( ; length; length -= zone_size) {
-    write_pointers[++zone] = 0;
-    ldout(cct, 30) << __func__ << " set zone 0x" << std::hex
-		   << zone << " write pointer to 0x" << 0 << dendl;
+  if (length > zone_size - offset) {
+    length -= zone_size - offset;
+    for (++zone; length >= zone_size; length -= zone_size) {
+      ldout(cct, 30) << __func__ << " set zone 0x" << std::hex
+		     << zone << " write pointer to 0x" << 0 << dendl;
+      write_pointers[zone++] = 0;
+    }
+    if (length > 0) {
+      ldout(cct, 20) << __func__ << " set zone 0x" << std::hex
+		     << zone << " write pointer to 0x" << 0 << dendl;
+      write_pointers[zone] = length;
+    }
   }
 }
 
