@@ -8,7 +8,7 @@ if((CMAKE_CXX_COMPILER_ID STREQUAL GNU AND CMAKE_CXX_COMPILER_VERSION VERSION_GR
 endif()
 set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_COMPILE_DEFINITIONS "${crimson_cflag_definitions}"
-  INTERFACE_COMPILE_OPTIONS "-Wno-non-virtual-dtor"
+  INTERFACE_COMPILE_OPTIONS $<$<COMPILE_LANGUAGE:CXX>:-Wno-non-virtual-dtor>
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
