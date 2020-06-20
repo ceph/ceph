@@ -284,7 +284,7 @@ else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     source /etc/os-release
     case "$ID" in
-    debian|ubuntu|devuan)
+    debian|ubuntu|devuan|elementary)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
