@@ -1,12 +1,8 @@
-import os
-import json
 import time
-import errno
 import logging
 from io import BytesIO
 
 from tasks.mgr.mgr_test_case import MgrTestCase
-from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
