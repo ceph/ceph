@@ -997,7 +997,7 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
     ERRORS += test_failure(cmd, "file: {FOO}: No such file or directory".format(FOO=OTHERFILE))
 
-    cmd = "{path}/ceph-objectstore-tool --no-mon-config --data-path BAD_DATA_PATH --op list".format(osd=ONEOSD, path=CEPH_BIN)
+    cmd = "{path}/ceph-objectstore-tool --no-mon-config --data-path BAD_DATA_PATH --op list".format(path=CEPH_BIN)
     ERRORS += test_failure(cmd, "data-path: BAD_DATA_PATH: No such file or directory")
 
     cmd = (CFSD_PREFIX + "--journal-path BAD_JOURNAL_PATH --op list").format(osd=ONEOSD)
@@ -1020,7 +1020,7 @@ def main(argv):
     ERRORS += test_failure(cmd, "Unable to create store of type foobar")
 
     # Don't specify a data-path
-    cmd = "{path}/ceph-objectstore-tool --no-mon-config --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG, path=CEPH_BIN)
+    cmd = "{path}/ceph-objectstore-tool --no-mon-config --type memstore --op list --pgid {pg}".format(pg=ONEPG, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     cmd = (CFSD_PREFIX + "--op remove --pgid 2.0").format(osd=ONEOSD)
