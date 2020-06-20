@@ -119,17 +119,14 @@ class CBT(Task):
                 self.first_mon.run(
                     args=['sudo', 'apt-get', '-y', 'purge', 'openjdk-11*'])
                 # use our own version of cosbench
-                cosbench_version = 'cosbench-0.4.2.c3.1'
                 # contains additional parameter "-N" to nc
-                cosbench_location = 'http://drop.ceph.com/qa/cosbench-0.4.2.c3.1.zip'
-                cosbench_dir = os.path.join(testdir, cosbench_version)
-                self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', cosbench_dir])
+                fname = 'cosbench-0.4.2.c3.1.zip'
+                cosbench_location = f'http://drop.ceph.com/qa/{fname}'
                 self.first_mon.run(
                     args=[
                         'cd', testdir, run.Raw('&&'),
-                        'wget',
-                        cosbench_location, run.Raw('&&'),
-                        'unzip', '{name}.zip'.format(name=cosbench_version), '-d', cosbench_version
+                        'wget', cosbench_location, run.Raw('&&'),
+                        'unzip', '-q', fname
                     ]
                 )
             else:
