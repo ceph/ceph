@@ -210,8 +210,8 @@ RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *
 
 RGWCoroutinesStack::~RGWCoroutinesStack()
 {
-  for (auto op : ops) {
-    op->put();
+  while (!ops.empty()) {
+    ops.pop_back();
   }
 
   for (auto stack : spawned.entries) {
