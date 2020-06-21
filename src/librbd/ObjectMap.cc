@@ -163,8 +163,14 @@ void ObjectMap<I>::close(Context *on_finish) {
     return;
   }
 
-  auto req = object_map::UnlockRequest<I>::create(m_image_ctx, ctx);
-  req->send();
+  ctx = new LambdaContext([this, ctx](int r) {
+      auto req = object_map::UnlockRequest<I>::create(m_image_ctx, ctx);
+      req->send();
+    });
+
+  // ensure the block guard for aio updates is empty before unlocking
+  // the object map
+  m_async_op_tracker.wait_for_ops(ctx);
 }
 
 template <typename I>
@@ -276,6 +282,7 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
     lderr(cct) << "failed to detain object map update: " << cpp_strerror(r)
                << dendl;
     m_image_ctx.op_work_queue->queue(op.on_finish, r);
+    m_async_op_tracker.finish_op();
     return;
   } else if (r > 0) {
     ldout(cct, 20) << "detaining object map update due to in-flight update: "
@@ -315,6 +322,7 @@ void ObjectMap<I>::handle_detained_aio_update(BlockGuardCell *cell, int r,
   }
 
   on_finish->complete(r);
+  m_async_op_tracker.finish_op();
 }
 
 template <typename I>
