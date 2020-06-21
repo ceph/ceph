@@ -12,20 +12,6 @@ Synopsis
 
 
 
-Possible object operations:
-
-* (get|set)-bytes [file]
-* set-(attr|omap) [file]
-* (get|rm)-attr|omap)
-* get-omaphdr
-* set-omaphdr [file]
-* list-attrs
-* list-omap
-* remove|removeall
-* dump
-* set-size
-* clear-data-digest
-* remove-clone-metadata 
 
 
 Description
@@ -35,7 +21,7 @@ Description
 
 **ceph-objectstore-tool** provides two main modes: (1) a mode that specifies the "--op" argument (for example, **ceph-objectstore-tool** --data-path $PATH_TO_OSD --op $SELECT_OPERATION [--pgid $PGID] [--dry-run]), and (2) a mode for positional object operations. If the second mode is used, the object can be specified by ID or by the JSON output of the --op list. 
 
-| **ceph-objectstore-tool** --data-path *path to osd* [--pgid *$PG_ID* ][--op *command*]
+| **ceph-objectstore-tool** --data-path *path to osd* [--pgid *$PG_ID* ] --op *op_command*
 | **ceph-objectstore-tool** --data-path *path to osd* [ --op *list $OBJECT_ID*]
 
 Possible -op commands::
@@ -68,6 +54,21 @@ Possible -op commands::
 * update-mon-db
 * dump-export
 * trim-pg-log
+
+Possible object operations:
+
+* (get|set)-bytes [file]
+* set-(attr|omap) [file]
+* (get|rm)-attr|omap)
+* get-omaphdr
+* set-omaphdr [file]
+* list-attrs
+* list-omap
+* remove|removeall
+* dump
+* set-size
+* clear-data-digest
+* remove-clone-metadata 
 
 Installation
 ============
@@ -173,8 +174,7 @@ Remove an object (syntax)::
 
 Remove an object (example)::
 
-[root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' remove
-
+[root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash": 235010478,"max":0,"pool":1,"namespace":"","max":0}]
 
 Listing the Object Map
 ----------------------
@@ -196,7 +196,7 @@ Use the ceph-objectstore-tool to list the contents of the object map (OMAP). The
 
    Syntax::
 
-    ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT list-omap
+    ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT list-omap
 
    Example::
 
@@ -462,7 +462,7 @@ Options
 
 .. option:: --skip-mount-omap
 
-   Disable mounting of omap
+   Disable mounting of omap. This applies only to FileStore.
 
 .. option:: --head
 
@@ -470,7 +470,11 @@ Options
 
 .. option:: --dry-run
 
-   Don't modify the objectstore
+   If run in conjunction with --skip-journal-replay, this command prevents
+   the objectstore from being written to. If this command is run by itself,
+   a dry-run of the operation specified occurs. **ceph-objectstore-tool**
+   'mounts' the objectstore, which might cause a journal replay. See also
+   **--skip-journal-replay**.
 
 .. option:: --namespace arg
 
