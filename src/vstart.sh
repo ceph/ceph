@@ -1168,7 +1168,6 @@ EOF
     if $with_mgr_dashboard; then
         ceph_adm dashboard set-ganesha-clusters-rados-pool-namespace $pool_name
     fi
-    echo "Mount using: mount -t nfs -o port=<ganesha-port-num> <address>:<ganesha pseudo path>"
 }
 
 if [ "$debug" -eq 0 ]; then
@@ -1377,14 +1376,17 @@ fi
 
 # Ganesha Daemons
 if [ $GANESHA_DAEMON_NUM -gt 0 ]; then
+    pseudo_path="/cephfs"
     if [ "$cephadm" -gt 0 ]; then
         cluster_id="vstart"
         prun ceph_adm nfs cluster create cephfs $cluster_id
-        prun ceph_adm nfs export create cephfs "a" $cluster_id "/cephfs"
-        echo "Mount using: mount -t nfs -o port=2049 <address>:/cephfs"
+        prun ceph_adm nfs export create cephfs "a" $cluster_id $pseudo_path
+        port="2049"
     else
         start_ganesha
+        port="<ganesha-port-num>"
     fi
+    echo "Mount using: mount -t nfs -o port=$port $IP:$pseudo_path mountpoint"
 fi
 
 do_cache() {
