@@ -873,3 +873,55 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 add_subdirectory(script)
+
+# add doxygen target
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+  set(DOXYGEN_FILE_PATTERNS *.cc *.c *.cpp *.C *.cxx *.c++ *.CC *.H *.h *.hh *.hpp)
+  set(DOXYGEN_SOURCE_BROWSER YES)
+  set(DOXYGEN_WARN_IF_UNDOCUMENTED NO)
+  set(DOXYGEN_CLANG_ASSISTED_PARSING YES)
+  set(DOXYGEN_CLANG_DATABASE_PATH .)
+  set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
+  set(DOXYGEN_RECURSIVE YES)
+  set(DOXYGEN_QUIET YES)
+  set(DOXYGEN_GENERATE_LATEX NO)
+  doxygen_add_docs(doxygen
+    auth
+    client
+    cls
+    common
+    compressor
+    crimson
+    crush
+    crypto
+    erasure-code
+    global
+    include
+    journal
+    json_spirit
+    key_value_store
+    kv
+    librados
+    libradosstriper
+    librbd
+    log
+    lua
+    mds
+    messages
+    mgr
+    mon
+    mount
+    msg
+    objclass
+    objsync
+    os
+    osd
+    osdc
+    perfglue
+    rbd_fuse
+    rbd_replay
+    rgw
+    COMMENT "Generate C++ documentation")
+endif()
+
