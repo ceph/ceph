@@ -47,7 +47,7 @@ template<typename T, const unsigned base = 10, const unsigned width = 1>
 static inline
 char* ritoa(T u, char *buf)
 {
-  static_assert(std::is_unsigned<T>::value, "signed types are not supported");
+  static_assert(std::is_unsigned_v<T>, "signed types are not supported");
   static_assert(base <= 16, "extend character map below to support higher bases");
   unsigned digits = 0;
   while (u) {
