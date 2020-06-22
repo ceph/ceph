@@ -1,4 +1,5 @@
 from io import BytesIO
+from io import StringIO
 import json
 import time
 import logging
@@ -94,13 +95,19 @@ class FuseMount(CephFSMount):
         run_cmd.extend(fuse_cmd)
 
         def list_connections():
+            from teuthology.misc import get_system_type
+
+            conn_dir = "/sys/fs/fuse/connections"
+
+            self.client_remote.run(args=['sudo', 'modprobe', 'fuse'],
+                                   check_status=False)
             self.client_remote.run(
-                args=["sudo", "mount", "-t", "fusectl", "/sys/fs/fuse/connections", "/sys/fs/fuse/connections"],
-                check_status=False,
-                timeout=(15*60)
-            )
+                args=["sudo", "mount", "-t", "fusectl", conn_dir, conn_dir],
+                check_status=False, timeout=(30))
+
             try:
-                ls_str = self.client_remote.sh("ls /sys/fs/fuse/connections",
+                ls_str = self.client_remote.sh("ls " + conn_dir,
+                                               stdout=StringIO(),
                                                timeout=(15*60)).strip()
             except CommandFailedError:
                 return []
@@ -447,14 +454,16 @@ print(find_socket("{client_name}"))
             client_name="client.{0}".format(self.client_id))
 
         # Find the admin socket
-        asok_path = self.client_remote.sh([
-            'sudo', 'python3', '-c', pyscript
-        ], timeout=(15*60)).strip()
+        asok_path = self.client_remote.sh(
+            ['sudo', 'python3', '-c', pyscript],
+            stdout=StringIO(),
+            timeout=(15*60)).strip()
         log.info("Found client admin socket at {0}".format(asok_path))
 
         # Query client ID from admin socket
         json_data = self.client_remote.sh(
             ['sudo', self._prefix + 'ceph', '--admin-daemon', asok_path] + args,
+            stdout=StringIO(),
             timeout=(15*60))
         return json.loads(json_data)
 
