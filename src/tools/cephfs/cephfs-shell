@@ -64,6 +64,7 @@ shell = None    # holds instance of class CephFSShell
 #
 #######################################################################
 
+
 def poutput(s, end='\n'):
     shell.poutput(s, end=end)
 
@@ -111,12 +112,13 @@ def to_bytes(param):
     elif isinstance(param, str):
         return bytes(param, encoding='utf-8')
     elif isinstance(param, list):
-        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for \
+        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for
                 i in param]
     elif isinstance(param, int) or isinstance(param, float):
         return str(param).encode('utf-8')
     elif param is None:
         return None
+
 
 def ls(path, opts=''):
     # opts tries to be like /bin/ls opts
@@ -133,6 +135,7 @@ def ls(path, opts=''):
     except libcephfs.ObjectNotFound as e:
         perror(e)
         shell.exit_code = e.get_error_code()
+
 
 def glob(path, pattern):
     paths = []
@@ -197,11 +200,11 @@ def print_long(path, is_dir, human_readable):
         poutput('{}\t{:10s} {} {} {} {}'.format(
             mode_notation(info.st_mode),
             humansize(info.st_size), info.st_uid,
-            info.st_gid, info.st_mtime, pretty, sep='\t'))
+            info.st_gid, info.st_mtime, pretty))
     else:
         poutput('{} {:12d} {} {} {} {}'.format(
             mode_notation(info.st_mode), info.st_size, info.st_uid,
-            info.st_gid, info.st_mtime, pretty, sep='\t'))
+            info.st_gid, info.st_mtime, pretty))
 
 
 def word_len(word):
@@ -361,7 +364,7 @@ class CephFSShell(Cmd):
             return None
         doc_lines = getattr(
             self, 'do_' + command).__doc__.expandtabs().splitlines()
-        if ''in doc_lines:
+        if '' in doc_lines:
             blank_idx = doc_lines.index('')
             usage = doc_lines[:blank_idx]
             description = doc_lines[blank_idx + 1:]
@@ -698,7 +701,7 @@ class CephFSShell(Cmd):
         elif is_file_exists(args.remote_path):
             copy_to_local(root_src_dir,
                           root_dst_dir + b'/' + root_src_dir)
-        elif b'/'in root_src_dir and is_file_exists(fname[1], fname[0]):
+        elif b'/' in root_src_dir and is_file_exists(fname[1], fname[0]):
             copy_to_local(root_src_dir, root_dst_dir)
         else:
             files = list(reversed(sorted(dirwalk(root_src_dir))))
@@ -1132,12 +1135,12 @@ class CephFSShell(Cmd):
             try:
                 statfs = cephfs.statfs(file)
                 stat = cephfs.stat(file)
-                block_size = statfs['f_blocks']*statfs['f_bsize'] // 1024
+                block_size = (statfs['f_blocks'] * statfs['f_bsize']) // 1024
                 available = block_size - stat.st_size
                 use = 0
 
                 if block_size > 0:
-                    use = (stat.st_size*100 // block_size)
+                    use = (stat.st_size * 100) // block_size
 
                 if header:
                     header = False
@@ -1220,7 +1223,7 @@ class CephFSShell(Cmd):
                     if f[0] is ord('/'):
                         f = b'.' + f
                     poutput('{:10s} {}'.format(humansize(dusage),
-                        f.decode('utf-8')))
+                            f.decode('utf-8')))
                 except libcephfs.Error as e:
                     perror(e)
                     self.exit_code = e.get_error_code()
@@ -1354,7 +1357,7 @@ class CephFSShell(Cmd):
         else:
             self.perror("snapshot can only be created or deleted; check - "
                         "help snap")
-            self.exit_code = e.get_error_code()
+            self.exit_code = 1
 
     def do_help(self, line):
         """
@@ -1399,12 +1402,15 @@ class CephFSShell(Cmd):
 
                 poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n"
                         "Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: "
-                        "{:o}/{}\tUid: {:d}\tGid: {:d}\n\Access: {}\nModify: "
+                        "{:o}/{}\tUid: {:d}\tGid: {:d}\nAccess: {}\nModify: "
                         "{}\nChange: {}".format(path.decode('utf-8'),
-                        stat.st_size, stat.st_blocks, stat.st_blksize,
-                        stat.st_dev, stat.st_ino, stat.st_nlink, stat.st_mode,
-                        mode_notation(stat.st_mode), stat.st_uid, stat.st_gid,
-                        atime, mtime, ctime))
+                                                stat.st_size, stat.st_blocks,
+                                                stat.st_blksize, stat.st_dev,
+                                                stat.st_ino, stat.st_nlink,
+                                                stat.st_mode,
+                                                mode_notation(stat.st_mode),
+                                                stat.st_uid, stat.st_gid, atime,
+                                                mtime, ctime))
             except libcephfs.Error as e:
                 perror(e)
                 self.exit_code = e.get_error_code()
@@ -1485,12 +1491,13 @@ def setup_cephfs(config_file):
     try:
         cephfs = libcephfs.LibCephFS(conffile=config_file)
         cephfs.mount()
-    except libcephfs.ObjectNotFound as e:
+    except libcephfs.ObjectNotFound:
         print('couldn\'t find ceph configuration not found')
         sys.exit(1)
     except libcephfs.Error as e:
         print(e)
         sys.exit(1)
+
 
 def get_bool_vals_for_boolopts(val):
     if not isinstance(val, str):
@@ -1504,27 +1511,29 @@ def get_bool_vals_for_boolopts(val):
     else:
         return val
 
+
 def read_ceph_conf(shell, config_file):
     try:
-        shell.debug = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('debug_shell'))
-        shell.allow_ansi = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('allow_ansi'))
+        shell.debug = get_bool_vals_for_boolopts(cephfs.
+                                                 conf_get('debug_shell'))
+        shell.allow_ansi = get_bool_vals_for_boolopts(cephfs.
+                                                      conf_get('allow_ansi'))
         shell.echo = get_bool_vals_for_boolopts(cephfs.conf_get('echo'))
-        shell.continuation_prompt = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('continuation_prompt'))
+        shell.continuation_prompt = get_bool_vals_for_boolopts(cephfs.
+                                                               conf_get('continuation_prompt'))
         shell.colors = get_bool_vals_for_boolopts(cephfs.conf_get('colors'))
         shell.editor = get_bool_vals_for_boolopts(cephfs.conf_get('editor'))
-        shell.feedback_to_output = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('feedback_to_output'))
-        shell.max_completion_items = get_bool_vals_for_boolopts(cephfs.\
-            conf_get('max_completion_items'))
+        shell.feedback_to_output = get_bool_vals_for_boolopts(cephfs.
+                                                              conf_get('feedback_to_output'))
+        shell.max_completion_items = get_bool_vals_for_boolopts(cephfs.
+                                                                conf_get('max_completion_items'))
         shell.prompt = get_bool_vals_for_boolopts(cephfs.conf_get('prompt'))
         shell.quiet = get_bool_vals_for_boolopts(cephfs.conf_get('quiet'))
         shell.timing = get_bool_vals_for_boolopts(cephfs.conf_get('timing'))
     except (OSError, libcephfs.Error) as e:
         perror(e)
         shell.exit_code = e.get_error_code()
+
 
 if __name__ == '__main__':
     config_file = ''
@@ -1548,7 +1557,7 @@ if __name__ == '__main__':
         if LooseVersion(cmd2_version) <= LooseVersion("0.9.13"):
             args.commands = ['load ' + args.batch, ',quit']
         else:
-            args.commands = ['run_script ' +  args.batch, ',quit']
+            args.commands = ['run_script ' + args.batch, ',quit']
     if args.test:
         args.commands.extend(['-t,'] + [arg + ',' for arg in args.test])
 
