@@ -50,7 +50,7 @@ def _get_manpages():
             try:
                 description = _get_description(path, base)
             except UnicodeDecodeError as e:
-                print(f"unable to decode {path}", file=sys.stderr)
+                print("unable to decode {path}".format(path=path), file=sys.stderr)
                 raise e
             yield (
                 os.path.join(section, base),
