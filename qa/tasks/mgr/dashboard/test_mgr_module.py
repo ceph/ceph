@@ -31,6 +31,23 @@ class MgrModuleTestCase(DashboardTestCase):
 
 
 class MgrModuleTest(MgrModuleTestCase):
+
+    __options_schema = JObj({
+        'name': str,
+        'type': str,
+        'level': str,
+        'flags': int,
+        'default_value': JAny(none=True),
+        'min': JAny(none=False),
+        'max': JAny(none=False),
+        'enum_allowed': JList(str),
+        'desc': str,
+        'long_desc': str,
+        'tags': JList(str),
+        'see_also': JList(str)
+    })    
+
+
     def test_list_disabled_module(self):
         self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'])
         self.wait_until_rest_api_accessible()
@@ -120,8 +137,41 @@ class MgrModuleTest(MgrModuleTestCase):
                     'organization': str,
                     'proxy': str,
                     'url': str
-                }))
-
+                }))            
+                
+    def test_module_options(self):
+        data = self._get('/api/mgr/module/telemetry/options')
+        self.assertStatus(200)
+        schema = JObj({
+            'channel_basic': self.__options_schema,
+            'channel_crash': self.__options_schema,
+            'channel_device': self.__options_schema,
+            'channel_ident': self.__options_schema,
+            'contact': self.__options_schema,
+            'description': self.__options_schema,
+            'device_url': self.__options_schema,
+            'enabled': self.__options_schema,
+            'interval': self.__options_schema,
+            'last_opt_revision': self.__options_schema,
+            'leaderboard': self.__options_schema,
+            'log_level': self.__options_schema,
+            'log_to_cluster': self.__options_schema,
+            'log_to_cluster_level': self.__options_schema,
+            'log_to_file': self.__options_schema,
+            'organization': self.__options_schema,
+            'proxy': self.__options_schema,
+            'url': self.__options_schema
+        })
+        self.assertSchema(data, schema)
+        
+    def test_module_enable(self):
+        self._post('/api/mgr/module/telemetry/enable')
+        self.assertStatus(200)       
+                                         
+    def test_disable(self):
+        self._post('/api/mgr/module/iostat/disable')
+        self.assertStatus(200)   
+        
     def test_put(self):
         self.set_config_key('config/mgr/mgr/iostat/log_level', 'critical')
         self.set_config_key('config/mgr/mgr/iostat/log_to_cluster', 'False')
