@@ -60,6 +60,19 @@ class OsdTest(DashboardTestCase):
 
         self._post('/api/osd/0/scrub?deep=True')
         self.assertStatus(200)
+        
+    def test_safe_to_delete(self):
+        data = self._get('/api/osd/safe_to_delete?svc_ids=0')
+        self.assertStatus(200)
+        self.assertSchema(data, JObj({
+             'is_safe_to_delete': JAny(none=True),
+             'message': str
+             }))
+        self.assertTrue(data['is_safe_to_delete'])
+        
+    def test_osd_smart(self):
+        data = self._get('/api/osd/0/smart')
+        self.assertStatus(200)       
 
     def test_mark_out_and_in(self):
         self._post('/api/osd/0/mark_out')
