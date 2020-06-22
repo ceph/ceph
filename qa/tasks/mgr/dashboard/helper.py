@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import json
 import logging
+import re
 import time
 from collections import namedtuple
 
@@ -11,6 +12,8 @@ import requests
 from tasks.mgr.mgr_test_case import MgrTestCase
 from teuthology.exceptions import \
     CommandFailedError  # pylint: disable=import-error
+
+from . import DEFAULT_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -268,16 +271,19 @@ class DashboardTestCase(MgrTestCase):
     def tearDownClass(cls):
         super(DashboardTestCase, cls).tearDownClass()
 
-    # pylint: disable=inconsistent-return-statements
+    # pylint: disable=inconsistent-return-statements, too-many-arguments
     @classmethod
-    def _request(cls, url, method, data=None, params=None):
-        cls.update_base_uri()
+    def _request(cls, url, method, data=None, params=None, version=DEFAULT_VERSION):
         url = "{}{}".format(cls._base_uri, url)
         log.info("Request %s to %s", method, url)
         headers = {}
         if cls._token:
             headers['Authorization'] = "Bearer {}".format(cls._token)
 
+        if version is None:
+            headers['Accept'] = 'application/json'
+        else:
+            headers['Accept'] = 'application/vnd.ceph.api.v{}+json'.format(version)
         if method == 'GET':
             cls._resp = cls._session.get(url, params=params, verify=False,
                                          headers=headers)
@@ -297,7 +303,8 @@ class DashboardTestCase(MgrTestCase):
                 # Output response for easier debugging.
                 log.error("Request response: %s", cls._resp.text)
             content_type = cls._resp.headers['content-type']
-            if content_type == 'application/json' and cls._resp.text and cls._resp.text != "":
+            if re.match(r'^application/.*json',
+                        content_type) and cls._resp.text and cls._resp.text != "":
                 return cls._resp.json()
             return cls._resp.text
         except ValueError as ex:
@@ -305,15 +312,15 @@ class DashboardTestCase(MgrTestCase):
             raise ex
 
     @classmethod
-    def _get(cls, url, params=None):
-        return cls._request(url, 'GET', params=params)
+    def _get(cls, url, params=None, version=DEFAULT_VERSION):
+        return cls._request(url, 'GET', params=params, version=version)
 
     @classmethod
     def _view_cache_get(cls, url, retries=5):
         retry = True
         while retry and retries > 0:
             retry = False
-            res = cls._get(url)
+            res = cls._get(url, version=DEFAULT_VERSION)
             if isinstance(res, dict):
                 res = [res]
             for view in res:
@@ -327,16 +334,16 @@ class DashboardTestCase(MgrTestCase):
         return res
 
     @classmethod
-    def _post(cls, url, data=None, params=None):
-        cls._request(url, 'POST', data, params)
+    def _post(cls, url, data=None, params=None, version=DEFAULT_VERSION):
+        cls._request(url, 'POST', data, params, version=version)
 
     @classmethod
-    def _delete(cls, url, data=None, params=None):
-        cls._request(url, 'DELETE', data, params)
+    def _delete(cls, url, data=None, params=None, version=DEFAULT_VERSION):
+        cls._request(url, 'DELETE', data, params, version=version)
 
     @classmethod
-    def _put(cls, url, data=None, params=None):
-        cls._request(url, 'PUT', data, params)
+    def _put(cls, url, data=None, params=None, version=DEFAULT_VERSION):
+        cls._request(url, 'PUT', data, params, version=version)
 
     @classmethod
     def _assertEq(cls, v1, v2):
@@ -355,8 +362,8 @@ class DashboardTestCase(MgrTestCase):
 
     # pylint: disable=too-many-arguments
     @classmethod
-    def _task_request(cls, method, url, data, timeout):
-        res = cls._request(url, method, data)
+    def _task_request(cls, method, url, data, timeout, version=DEFAULT_VERSION):
+        res = cls._request(url, method, data, version=version)
         cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 400, 403, 404])
 
         if cls._resp.status_code == 403:
@@ -378,7 +385,7 @@ class DashboardTestCase(MgrTestCase):
             log.info("task (%s, %s) is still executing", task_name,
                      task_metadata)
             time.sleep(1)
-            _res = cls._get('/api/task?name={}'.format(task_name))
+            _res = cls._get('/api/task?name={}'.format(task_name), version=version)
             cls._assertEq(cls._resp.status_code, 200)
             executing_tasks = [task for task in _res['executing_tasks'] if
                                task['metadata'] == task_metadata]
@@ -408,16 +415,16 @@ class DashboardTestCase(MgrTestCase):
         return res_task['exception']
 
     @classmethod
-    def _task_post(cls, url, data=None, timeout=60):
-        return cls._task_request('POST', url, data, timeout)
+    def _task_post(cls, url, data=None, timeout=60, version=DEFAULT_VERSION):
+        return cls._task_request('POST', url, data, timeout, version=version)
 
     @classmethod
-    def _task_delete(cls, url, timeout=60):
-        return cls._task_request('DELETE', url, None, timeout)
+    def _task_delete(cls, url, timeout=60, version=DEFAULT_VERSION):
+        return cls._task_request('DELETE', url, None, timeout, version=version)
 
     @classmethod
-    def _task_put(cls, url, data=None, timeout=60):
-        return cls._task_request('PUT', url, data, timeout)
+    def _task_put(cls, url, data=None, timeout=60, version=DEFAULT_VERSION):
+        return cls._task_request('PUT', url, data, timeout, version=version)
 
     @classmethod
     def cookies(cls):
