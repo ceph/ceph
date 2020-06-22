@@ -38,7 +38,6 @@ public:
     ObjectMap::ObjectMapIterator iter;
     AlienStore* store;
   };
-  mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   AlienStore(const std::string& path, const ConfigValues& values);
   ~AlienStore() final;
 
@@ -115,6 +114,7 @@ public:
   static void configure_thread_memory();
 private:
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
+  mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string path;
   uint64_t used_bytes = 0;
   uuid_d osd_fsid;
