@@ -236,12 +236,12 @@ struct Option {
 
   // bool is an integer, but we don't think so. teach it the hard way.
   template<typename T>
-  using is_not_integer = std::enable_if<!std::is_integral<T>::value ||
-					std::is_same<T, bool>::value, int>;
+  using is_not_integer_t =
+      std::enable_if_t<!std::is_integral_v<T> || std::is_same_v<T, bool>, int>;
   template<typename T>
-  using is_integer = std::enable_if<std::is_integral<T>::value &&
-				    !std::is_same<T, bool>::value, int>;
-  template<typename T, typename is_not_integer<T>::type = 0>
+  using is_integer_t =
+      std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, int>;
+  template<typename T, typename = is_not_integer_t<T>>
   Option& set_value(value_t& v, const T& new_value) {
     v = new_value;
     return *this;
@@ -250,7 +250,7 @@ struct Option {
   // For potentially ambiguous types, inspect Option::type and
   // do some casting.  This is necessary to make sure that setting
   // a float option to "0" actually sets the double part of variant.
-  template<typename T, typename is_integer<T>::type = 0>
+  template<typename T, typename = is_integer_t<T>>
   Option& set_value(value_t& v, T new_value) {
     switch (type) {
     case TYPE_INT:
