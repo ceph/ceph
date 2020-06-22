@@ -111,7 +111,7 @@ struct Option {
   }
 
   enum flag_t {
-    FLAG_RUNTIME = 0x1,         ///< option can change changed at runtime
+    FLAG_RUNTIME = 0x1,         ///< option can be changed at runtime
     FLAG_NO_MON_UPDATE = 0x2,   ///< option cannot be changed via mon config
     FLAG_STARTUP = 0x4,         ///< option can only take effect at startup
     FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
