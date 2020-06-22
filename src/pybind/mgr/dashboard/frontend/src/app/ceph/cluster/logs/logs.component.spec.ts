@@ -34,9 +34,9 @@ describe('LogsComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('abstractfilters', () => {
-    it('after initializaed', () => {
-      const filters = component.abstractfilters();
+  describe('abstractFilters', () => {
+    it('after initialized', () => {
+      const filters = component.abstractFilters();
       expect(filters.priority).toBe('All');
       expect(filters.key).toBe('');
       expect(filters.yearMonthDay).toBe('');
@@ -47,7 +47,7 @@ describe('LogsComponent', () => {
       component.selectedDate = { year: 2019, month: 1, day: 1 };
       component.startTime = { hour: 1, minute: 10 };
       component.endTime = { hour: 12, minute: 10 };
-      const filters = component.abstractfilters();
+      const filters = component.abstractFilters();
       expect(filters.yearMonthDay).toBe('2019-01-01');
       expect(filters.sTime).toBe(70);
       expect(filters.eTime).toBe(730);

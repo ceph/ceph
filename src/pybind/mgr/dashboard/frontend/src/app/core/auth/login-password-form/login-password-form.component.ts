@@ -40,7 +40,7 @@ export class LoginPasswordFormComponent extends UserPasswordFormComponent {
   onPasswordChange() {
     // Logout here because changing the password will change the
     // session token which will finally lead to a 401 when calling
-    // the REST API the next time. The API HTTP inteceptor will
+    // the REST API the next time. The API HTTP interceptor will
     // then also redirect to the login page immediately.
     this.authService.logout();
   }
