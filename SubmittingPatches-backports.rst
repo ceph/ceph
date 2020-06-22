@@ -334,14 +334,19 @@ Once the backport PR is open, the first order of business is to set the
 Milestone tag to the stable release the backport PR is targeting. For example,
 if the PR is targeting "nautilus", set the Milestone tag to "nautilus".
 
-If you don't have sufficient GitHub permissions to set the Milestone, add
-a comment to the PR with the following content::
+If you don't have sufficient GitHub permissions to set the Milestone, don't
+worry. Members of the `Stable Releases and Backports team`_ periodically run
+a script (``ceph-backport.sh --milestones``) which scans all PRs targetting stable
+branches and automatically adds the correct Milestone tag if it is missing.
 
-    @ceph/backport-admins
+Next, check which component label was applied to the master PR corresponding to
+this backport, and double-check that that label is applied to the backport PR as
+well. For example, if the master PR carries the component label "core", the
+backport PR should also get that label.
 
-This will alert the `Stable Releases and Backports team`_ to your PR, and
-someone will ensure your PR gets the proper labels.
-
+In general, it is the responsibility of the `Stable Releases and Backports
+team`_ to ensure that backport PRs are properly labelled. If in doubt, just
+leave the labelling to them.
 
 .. _`backport PR reviewing`:
 .. _`backport PR testing`:
