@@ -1066,6 +1066,9 @@ struct error_code;
 
     void claim(list& bl);
     void claim_append(list& bl);
+    void claim_append(list&& bl) {
+      claim_append(bl);
+    }
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);
 
