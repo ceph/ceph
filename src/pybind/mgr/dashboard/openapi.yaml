@@ -30,8 +30,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -67,7 +73,7 @@ paths:
       responses:
         '201':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   permissions:
@@ -98,6 +104,9 @@ paths:
                 type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -116,8 +125,14 @@ paths:
       parameters: []
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -142,7 +157,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -212,8 +227,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -234,6 +255,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -253,6 +277,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -280,7 +307,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -335,8 +362,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -369,8 +402,14 @@ paths:
           type: boolean
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -406,8 +445,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -432,8 +477,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -457,6 +508,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -494,8 +548,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -550,8 +610,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -576,8 +642,14 @@ paths:
           type: string
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -614,8 +686,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -650,8 +728,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -681,8 +765,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -721,8 +811,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -780,8 +876,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -811,8 +913,14 @@ paths:
           type: string
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -839,7 +947,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   mirror_mode:
@@ -880,8 +988,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -919,8 +1033,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -945,8 +1065,14 @@ paths:
           type: string
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -971,6 +1097,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1011,8 +1140,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1042,8 +1177,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1072,6 +1213,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1114,8 +1258,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1136,7 +1286,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   site_name:
@@ -1174,8 +1324,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1196,7 +1352,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   content_data:
@@ -1294,6 +1450,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1327,8 +1486,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1358,8 +1523,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1379,6 +1550,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1403,6 +1577,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1432,8 +1609,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1458,6 +1641,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1485,6 +1671,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1526,6 +1715,9 @@ paths:
           type: integer
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1555,6 +1747,9 @@ paths:
           type: integer
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1591,7 +1786,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   max_bytes:
@@ -1646,8 +1841,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1685,8 +1886,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1727,8 +1934,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1760,8 +1973,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1797,8 +2016,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1818,6 +2043,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1849,8 +2077,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1879,8 +2113,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -1907,7 +2147,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -2014,8 +2254,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2039,6 +2285,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2059,7 +2308,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   max_size:
@@ -2131,8 +2380,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2157,8 +2412,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2182,6 +2443,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2202,7 +2466,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -2262,8 +2526,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2288,8 +2558,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2313,6 +2589,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2333,7 +2612,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   cephfs:
@@ -2382,8 +2661,14 @@ paths:
       parameters: []
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2404,7 +2689,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   instance:
@@ -2438,6 +2723,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2457,6 +2745,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2477,7 +2768,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   client_perf:
@@ -2865,7 +3156,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   addr:
@@ -2955,8 +3246,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -2981,8 +3278,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3008,6 +3311,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3045,8 +3351,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3071,6 +3383,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3095,6 +3410,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3119,6 +3437,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3139,7 +3460,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -3228,8 +3549,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3250,6 +3577,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3290,8 +3620,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3316,8 +3652,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3341,6 +3683,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3386,8 +3731,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3408,7 +3759,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   audit_log:
@@ -3505,7 +3856,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -3619,6 +3970,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3656,8 +4010,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3685,8 +4045,14 @@ paths:
           type: string
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3714,8 +4080,14 @@ paths:
           type: string
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3744,6 +4116,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -3764,7 +4139,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   in_quorum:
@@ -4146,7 +4521,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -4192,7 +4567,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -4414,7 +4789,7 @@ paths:
       responses:
         '201':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   access_type:
@@ -4515,6 +4890,9 @@ paths:
                 type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -4553,8 +4931,14 @@ paths:
           type: boolean
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -4587,7 +4971,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   access_type:
@@ -4815,7 +5199,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   access_type:
@@ -4916,6 +5300,9 @@ paths:
                 type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -4937,7 +5324,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   available:
@@ -4991,8 +5378,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5022,6 +5415,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5042,7 +5438,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   available:
@@ -5075,6 +5471,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5109,8 +5508,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5131,7 +5536,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   list_of_flags:
@@ -5181,7 +5586,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   list_of_flags:
@@ -5194,6 +5599,9 @@ paths:
                 type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5215,7 +5623,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   flags:
@@ -5283,7 +5691,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   added:
@@ -5308,6 +5716,9 @@ paths:
                 type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5334,6 +5745,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5361,7 +5775,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   active:
@@ -5429,8 +5843,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5456,6 +5876,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5489,8 +5912,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5519,8 +5948,14 @@ paths:
           type: string
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5545,6 +5980,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5570,6 +6008,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5607,8 +6048,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5636,8 +6083,14 @@ paths:
           type: string
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5680,8 +6133,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5720,8 +6179,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5746,6 +6211,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5766,7 +6234,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   mon.a:
@@ -5832,6 +6300,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5856,6 +6327,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5880,6 +6354,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5904,6 +6381,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5928,6 +6408,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5952,6 +6435,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -5976,6 +6462,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6008,7 +6497,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -6332,8 +6821,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6358,8 +6853,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6393,6 +6894,9 @@ paths:
           type: boolean
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6428,8 +6932,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6454,6 +6964,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6473,6 +6986,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6492,6 +7008,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6511,6 +7030,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6530,8 +7052,14 @@ paths:
       parameters: []
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6556,8 +7084,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6577,6 +7111,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6601,6 +7138,9 @@ paths:
           type: boolean
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6645,8 +7185,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6676,8 +7222,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6701,6 +7253,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6751,8 +7306,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6773,7 +7334,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -6817,6 +7378,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6841,6 +7405,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6861,7 +7428,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   available:
@@ -6895,7 +7462,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   list_of_users:
@@ -6950,8 +7517,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6971,6 +7544,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -6995,8 +7571,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7020,6 +7602,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7057,8 +7642,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7093,8 +7684,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7131,8 +7728,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7172,8 +7775,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7215,8 +7824,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7241,6 +7856,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7283,8 +7901,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7332,8 +7956,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7371,8 +8001,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7393,7 +8029,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -7455,8 +8091,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7481,8 +8123,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7506,6 +8154,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7539,8 +8190,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7575,8 +8232,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7601,6 +8264,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7635,8 +8301,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7658,6 +8330,9 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7684,8 +8359,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7709,6 +8390,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7733,6 +8417,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7763,7 +8450,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 items:
                   properties:
@@ -7805,8 +8492,14 @@ paths:
       parameters: []
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7831,8 +8524,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7860,6 +8559,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7893,8 +8595,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -7915,7 +8623,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   executing_tasks:
@@ -8037,7 +8745,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   executing_tasks:
@@ -8133,8 +8841,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -8157,7 +8871,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   device_report:
@@ -8893,7 +9607,7 @@ paths:
       responses:
         '200':
           content:
-            application/json:
+            application/vnd.ceph.api.v1.0+json:
               schema:
                 properties:
                   email:
@@ -8975,8 +9689,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -9016,8 +9736,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -9042,8 +9768,14 @@ paths:
           type: string
       responses:
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource deleted.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -9067,6 +9799,9 @@ paths:
           type: string
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -9111,8 +9846,14 @@ paths:
               type: object
       responses:
         '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource updated.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -9150,8 +9891,14 @@ paths:
               type: object
       responses:
         '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Resource created.
         '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
           description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
