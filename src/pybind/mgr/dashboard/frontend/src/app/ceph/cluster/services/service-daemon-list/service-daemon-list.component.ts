@@ -7,6 +7,7 @@ import {
   OnInit,
   QueryList,
   TemplateRef,
+  ViewChild,
   ViewChildren
 } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -29,6 +30,9 @@ import { Daemon } from '../../../../shared/models/daemon.interface';
   styleUrls: ['./service-daemon-list.component.scss']
 })
 export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewInit, OnDestroy {
+  @ViewChild('statusTpl', { static: true })
+  statusTpl: TemplateRef<any>;
+
   @ViewChildren('daemonsTable')
   daemonsTableTpls: QueryList<TemplateRef<TableComponent>>;
 
@@ -107,15 +111,10 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       },
       {
         name: this.i18n('Status'),
-        prop: 'status',
-        flexGrow: 1,
-        filterable: true
-      },
-      {
-        name: this.i18n('Status Description'),
         prop: 'status_desc',
         flexGrow: 1,
-        filterable: true
+        filterable: true,
+        cellTemplate: this.statusTpl
       },
       {
         name: this.i18n('Last Refreshed'),
@@ -147,6 +146,18 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     if (this.daemonsTableTplsSub) {
       this.daemonsTableTplsSub.unsubscribe();
     }
+  }
+
+  getStatusClass(status: number) {
+    return _.get(
+      {
+        '-1': 'badge-danger',
+        '0': 'badge-warning',
+        '1': 'badge-success'
+      },
+      status,
+      'badge-dark'
+    );
   }
 
   getDaemons(context: CdTableFetchDataContext) {

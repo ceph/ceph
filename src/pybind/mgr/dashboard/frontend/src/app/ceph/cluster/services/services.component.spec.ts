@@ -79,7 +79,11 @@ describe('ServicesComponent', () => {
   });
 
   it('should have columns that are sortable', () => {
-    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+    expect(
+      component.columns
+        .filter((column) => !(column.cellClass === 'cd-datatable-expand-collapse'))
+        .every((column) => Boolean(column.prop))
+    ).toBeTruthy();
   });
 
   it('should return all services', () => {
