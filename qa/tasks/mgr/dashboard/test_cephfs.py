@@ -134,6 +134,16 @@ class CephfsTest(DashboardTestCase):
         cephfs = data[0]
         self.assertToHave(cephfs, 'id')
         self.assertToHave(cephfs, 'mdsmap')
+        
+    def test_cephfs_get_quotas(self):
+        fs_id = self.get_fs_id()
+        data = self._get("/api/cephfs/{}/get_quotas?path=/".format(fs_id))
+        self.assertStatus(200)
+        self.assertSchema(data, JObj({
+            'max_bytes': int,
+            'max_files': int
+        }))
+             
 
     def test_cephfs_tabs(self):
         fs_id = self.get_fs_id()
