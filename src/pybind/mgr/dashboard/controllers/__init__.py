@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=protected-access,too-many-branches
+# pylint: disable=protected-access,too-many-branches,too-many-lines
 from __future__ import absolute_import
 
 import collections
@@ -17,6 +17,7 @@ from urllib.parse import unquote
 # pylint: disable=wrong-import-position
 import cherrypy
 
+from .. import DEFAULT_VERSION
 from ..api.doc import SchemaInput, SchemaType
 from ..exceptions import PermissionNotValid, ScopeNotValid
 from ..plugins import PLUGIN_MANAGER
@@ -200,7 +201,7 @@ class UiApiController(Controller):
 
 
 def Endpoint(method=None, path=None, path_params=None, query_params=None,  # noqa: N802
-             json_response=True, proxy=False, xml=False):
+             json_response=True, proxy=False, xml=False, version=DEFAULT_VERSION):
 
     if method is None:
         method = 'GET'
@@ -251,7 +252,8 @@ def Endpoint(method=None, path=None, path_params=None, query_params=None,  # noq
             'query_params': query_params,
             'json_response': json_response,
             'proxy': proxy,
-            'xml': xml
+            'xml': xml,
+            'version': version
         }
         return func
     return _wrapper
@@ -514,7 +516,8 @@ class BaseController(object):
         def function(self):
             return self.ctrl._request_wrapper(self.func, self.method,
                                               self.config['json_response'],
-                                              self.config['xml'])
+                                              self.config['xml'],
+                                              self.config['version'])
 
         @property
         def method(self):
@@ -663,9 +666,11 @@ class BaseController(object):
         return result
 
     @staticmethod
-    def _request_wrapper(func, method, json_response, xml):  # pylint: disable=unused-argument
+    def _request_wrapper(func, method, json_response, xml,  # pylint: disable=unused-argument
+                         version):
         @wraps(func)
         def inner(*args, **kwargs):
+            req_version = None
             for key, value in kwargs.items():
                 if isinstance(value, str):
                     kwargs[key] = unquote(value)
@@ -674,14 +679,35 @@ class BaseController(object):
             params = get_request_body_params(cherrypy.request)
             kwargs.update(params)
 
-            ret = func(*args, **kwargs)
+            if version is not None:
+                accept_header = cherrypy.request.headers.get('Accept')
+                if accept_header and accept_header.startswith('application/vnd.ceph.api.v'):
+                    req_match = re.search(r"\d\.\d", accept_header)
+                    if req_match:
+                        req_version = req_match[0]
+                else:
+                    raise cherrypy.HTTPError(415, "Unable to find version in request header")
+
+                if req_version and req_version == version:
+                    ret = func(*args, **kwargs)
+                else:
+                    raise cherrypy.HTTPError(415,
+                                             "Incorrect version: "
+                                             "{} requested but {} is expected"
+                                             "".format(req_version, version))
+            else:
+                ret = func(*args, **kwargs)
             if isinstance(ret, bytes):
                 ret = ret.decode('utf-8')
             if xml:
                 cherrypy.response.headers['Content-Type'] = 'application/xml'
                 return ret.encode('utf8')
             if json_response:
-                cherrypy.response.headers['Content-Type'] = 'application/json'
+                if version:
+                    cherrypy.response.headers['Content-Type'] = \
+                        'application/vnd.ceph.api.v{}+json'.format(version)
+                else:
+                    cherrypy.response.headers['Content-Type'] = 'application/json'
                 ret = json.dumps(ret).encode('utf8')
             return ret
         return inner
@@ -792,6 +818,7 @@ class RESTController(BaseController):
             method = None
             query_params = None
             path = ""
+            version = DEFAULT_VERSION
             sec_permissions = hasattr(func, '_security_permissions')
             permission = None
 
@@ -818,6 +845,7 @@ class RESTController(BaseController):
                 status = func._collection_method_['status']
                 method = func._collection_method_['method']
                 query_params = func._collection_method_['query_params']
+                version = func._collection_method_['version']
                 if not sec_permissions:
                     permission = cls._permission_map[method]
 
@@ -833,6 +861,7 @@ class RESTController(BaseController):
                         path += "/{}".format(func.__name__)
                 status = func._resource_method_['status']
                 method = func._resource_method_['method']
+                version = func._resource_method_['version']
                 query_params = func._resource_method_['query_params']
                 if not sec_permissions:
                     permission = cls._permission_map[method]
@@ -857,7 +886,7 @@ class RESTController(BaseController):
 
             func = cls._status_code_wrapper(func, status)
             endp_func = Endpoint(method, path=path,
-                                 query_params=query_params)(func)
+                                 query_params=query_params, version=version)(func)
             if permission:
                 _set_func_permissions(endp_func, [permission])
             result.append(cls.Endpoint(cls, endp_func))
@@ -874,7 +903,8 @@ class RESTController(BaseController):
         return wrapper
 
     @staticmethod
-    def Resource(method=None, path=None, status=None, query_params=None):  # noqa: N802
+    def Resource(method=None, path=None, status=None, query_params=None,  # noqa: N802
+                 version=DEFAULT_VERSION):
         if not method:
             method = 'GET'
 
@@ -886,13 +916,15 @@ class RESTController(BaseController):
                 'method': method,
                 'path': path,
                 'status': status,
-                'query_params': query_params
+                'query_params': query_params,
+                'version': version
             }
             return func
         return _wrapper
 
     @staticmethod
-    def Collection(method=None, path=None, status=None, query_params=None):  # noqa: N802
+    def Collection(method=None, path=None, status=None, query_params=None,  # noqa: N802
+                   version=DEFAULT_VERSION):
         if not method:
             method = 'GET'
 
@@ -904,7 +936,8 @@ class RESTController(BaseController):
                 'method': method,
                 'path': path,
                 'status': status,
-                'query_params': query_params
+                'query_params': query_params,
+                'version': version
             }
             return func
         return _wrapper

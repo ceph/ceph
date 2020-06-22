@@ -1,6 +1,7 @@
 # # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from .. import DEFAULT_VERSION
 from ..api.doc import SchemaType
 from ..controllers import ApiController, ControllerDoc, Endpoint, EndpointDoc, RESTController
 from ..controllers.docs import Docs
@@ -82,7 +83,7 @@ class DocsTest(ControllerTestCase):
 
         expected_response_content = {
             '200': {
-                'application/json': {
+                'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION): {
                     'schema': {'type': 'array',
                                'items': {'type': 'object', 'properties': {
                                    'my_prop': {
@@ -90,7 +91,7 @@ class DocsTest(ControllerTestCase):
                                        'description': '200 property desc.'}}},
                                'required': ['my_prop']}}},
             '202': {
-                'application/json': {
+                'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION): {
                     'schema': {'type': 'object',
                                'properties': {'my_prop': {
                                    'type': 'string',
