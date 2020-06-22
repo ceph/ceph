@@ -310,6 +310,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "List NFS Clusters",
             'perm': 'r'
         },
+        {
+            'cmd': 'nfs cluster info '
+                   'name=clusterid,type=CephString,req=false ',
+            'desc': "Displays NFS Cluster info",
+            'perm': 'r'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -525,3 +531,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _cmd_nfs_cluster_ls(self, inbuf, cmd):
         return self.nfs.list_nfs_cluster()
+
+    def _cmd_nfs_cluster_info(self, inbuf, cmd):
+        return self.nfs.show_nfs_cluster_info(cluster_id=cmd.get('clusterid', None))
