@@ -601,6 +601,11 @@ public:
     std::lock_guard l(lock);
     return _truncate(h, offset);
   }
+  int do_replay_recovery_read(FileReader *log,
+			      size_t log_pos,
+			      size_t read_offset,
+			      size_t read_len,
+			      bufferlist* bl);
 
   /// test purpose methods
   void debug_inject_duplicate_gift(unsigned bdev, uint64_t offset, uint64_t len);
