@@ -10,9 +10,12 @@
              let-value="value">
 
   <div [ngSwitch]="value">
-    <span *ngSwitchCase="'global'" i18n>{{ value | titlecase }}</span>
-    <strong *ngSwitchCase="'image'" i18n>{{ value | titlecase }}</strong>
-    <strong *ngSwitchCase="'pool'" i18n>{{ value | titlecase }}</strong>
+    <span *ngSwitchCase="'global'"
+          i18n>Global</span>
+    <strong *ngSwitchCase="'image'"
+            i18n>Image</strong>
+    <strong *ngSwitchCase="'pool'"
+            i18n>Pool</strong>
   </div>
 </ng-template>
 
