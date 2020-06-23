@@ -119,7 +119,14 @@ class SubvolumeV2(SubvolumeV1):
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
             self.fs.mkdirs(subvol_path, mode)
-            self.set_attrs(subvol_path, size, isolate_nspace, pool, uid, gid)
+            attrs = {
+                'uid': uid,
+                'gid': gid,
+                'data_pool': pool,
+                'pool_namespace': self.namespace if isolate_nspace else None,
+                'quota': size
+            }
+            self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
@@ -151,20 +158,18 @@ class SubvolumeV2(SubvolumeV1):
         retained = self._is_retained()
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
         try:
-            stx = self.fs.statx(source_subvolume.snapshot_data_path(snapname),
-                                cephfs.CEPH_STATX_MODE | cephfs.CEPH_STATX_UID | cephfs.CEPH_STATX_GID,
-                                cephfs.AT_SYMLINK_NOFOLLOW)
-            uid = stx.get('uid')
-            gid = stx.get('gid')
-            stx_mode = stx.get('mode')
-            if stx_mode is not None:
-                mode = stx_mode & ~stat.S_IFMT(stx_mode)
-            else:
-                mode = None
+            # source snapshot attrs are used to create clone subvolume
+            # attributes of subvolume's content though, are synced during the cloning process.
+            attrs = source_subvolume.get_attrs(source_subvolume.snapshot_data_path(snapname))
+
+            # override snapshot pool setting, if one is provided for the clone
+            if pool is not None:
+                attrs["data_pool"] = pool
+                attrs["pool_namespace"] = None
 
             # create directory and set attributes
-            self.fs.mkdirs(subvol_path, mode)
-            self.set_attrs(subvol_path, None, None, pool, uid, gid)
+            self.fs.mkdirs(subvol_path, attrs.get("mode"))
+            self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
             qpath = subvol_path.decode('utf-8')
