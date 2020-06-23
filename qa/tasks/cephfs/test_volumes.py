@@ -227,6 +227,7 @@ class TestVolumes(CephFSTestCase):
         self.vol_created = False
         self._enable_multi_fs()
         self._create_or_reuse_test_volume()
+        self.config_set('mon', 'mon_allow_pool_delete', True)
 
     def tearDown(self):
         if self.vol_created:
@@ -332,6 +333,33 @@ class TestVolumes(CephFSTestCase):
         pools = json.loads(self._raw_cmd("osd", "pool", "ls", "--format=json-pretty"))
         for pool in vol_status["pools"]:
             self.assertNotIn(pool["name"], pools)
+
+    def test_volume_rm_when_mon_delete_pool_false(self):
+        """
+        That the volume can only be removed when mon_allowd_pool_delete is set
+        to true and verify that the pools are removed after volume deletion.
+        """
+        self.config_set('mon', 'mon_allow_pool_delete', False)
+        try:
+            self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EPERM,
+                             "expected the 'fs volume rm' command to fail with EPERM, "
+                             "but it failed with {0}".format(ce.exitstatus))
+        vol_status = json.loads(self._fs_cmd("status", self.volname, "--format=json-pretty"))
+        self.config_set('mon', 'mon_allow_pool_delete', True)
+        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+
+        #check if fs is gone
+        volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
+        volnames = [volume['name'] for volume in volumes]
+        self.assertNotIn(self.volname, volnames,
+                         "volume {0} exists after removal".format(self.volname))
+        #check if pools are gone
+        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "--format=json-pretty"))
+        for pool in vol_status["pools"]:
+            self.assertNotIn(pool["name"], pools,
+                             "pool {0} exists after volume removal".format(pool["name"]))
 
     ### basic subvolume operations
 
