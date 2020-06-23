@@ -618,7 +618,7 @@ public:
       explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
       NotifyAck(uint64_t notify_id, uint64_t cookie, ceph::buffer::list& rbl)
 	: watch_cookie(cookie), notify_id(notify_id) {
-	reply_bl.claim(rbl);
+	reply_bl = std::move(rbl);
       }
     };
     std::list<NotifyAck> notify_acks;

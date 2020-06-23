@@ -398,7 +398,7 @@ public:
   void set_payload(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    payload.claim(bl);
+    payload = std::move(bl);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
@@ -406,7 +406,7 @@ public:
   void set_middle(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(middle.length());
-    middle.claim(bl);
+    middle = std::move(bl);
     if (byte_throttler)
       byte_throttler->take(middle.length());
   }
@@ -425,7 +425,7 @@ public:
   void claim_data(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    bl.claim(data);
+    bl = std::move(data);
   }
   off_t get_data_len() const { return data.length(); }
 

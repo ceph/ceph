@@ -451,7 +451,7 @@ private:
 struct MDSlaveUpdate {
   MDSlaveUpdate(int oo, ceph::buffer::list &rbl) :
     origop(oo) {
-    rollback.claim(rbl);
+    rollback = std::move(rbl);
   }
   ~MDSlaveUpdate() {
     if (waiter)

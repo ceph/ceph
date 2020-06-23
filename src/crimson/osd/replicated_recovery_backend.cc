@@ -645,11 +645,12 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
 			    [this, &pop, &pi, first, t, response]
 			    (auto& data_zeros, auto& data,
 			     auto& usable_intervals) {
-      data = pop.data;
-      ceph::bufferlist usable_data;
-      trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, data,
-	  &usable_intervals, &usable_data);
-      data.claim(usable_data);
+      {
+        ceph::bufferlist usable_data;
+        trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, pop.data,
+	    &usable_intervals, &usable_data);
+        data = std::move(usable_data);
+      }
       pi.recovery_progress = pop.after_progress;
       logger().debug("new recovery_info {}, new progress {}",
 	  pi.recovery_info, pi.recovery_progress);

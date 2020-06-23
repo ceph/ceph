@@ -108,8 +108,7 @@ struct bl_split_merge {
     return true;
   }
   ceph::buffer::list merge(ceph::buffer::list &&left, ceph::buffer::list &&right) const {
-    ceph::buffer::list bl;
-    bl.claim(left);
+    ceph::buffer::list bl{std::move(left)};
     bl.claim_append(right);
     return bl;
   }
