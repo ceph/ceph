@@ -322,6 +322,9 @@ protected:
 
   void _mark_l1_on_l0(int64_t l0_pos, int64_t l0_pos_end);
   void _mark_alloc_l0(int64_t l0_pos_start, int64_t l0_pos_end);
+  uint64_t _claim_free_to_left_l0(int64_t l0_pos_start);
+  uint64_t _claim_free_to_right_l0(int64_t l0_pos_start);
+
 
   void _mark_alloc_l1_l0(int64_t l0_pos_start, int64_t l0_pos_end)
   {
@@ -424,6 +427,34 @@ protected:
     return l0_granularity * (l0_pos_end - l0_pos_start);
   }
 
+  uint64_t claim_free_to_left_l1(uint64_t offs)
+  {
+    uint64_t l0_pos_end = offs / l0_granularity;
+    uint64_t l0_pos_start = _claim_free_to_left_l0(l0_pos_end);
+    if (l0_pos_start < l0_pos_end) {
+      _mark_l1_on_l0(
+        p2align(l0_pos_start, uint64_t(bits_per_slotset)),
+        p2roundup(l0_pos_end, uint64_t(bits_per_slotset)));
+      return l0_granularity * (l0_pos_end - l0_pos_start);
+    }
+    return 0;
+  }
+
+  uint64_t claim_free_to_right_l1(uint64_t offs)
+  {
+    uint64_t l0_pos_start = offs / l0_granularity;
+    uint64_t l0_pos_end = _claim_free_to_right_l0(l0_pos_start);
+
+    if (l0_pos_start < l0_pos_end) {
+      _mark_l1_on_l0(
+        p2align(l0_pos_start, uint64_t(bits_per_slotset)),
+        p2roundup(l0_pos_end, uint64_t(bits_per_slotset)));
+      return l0_granularity * (l0_pos_end - l0_pos_start);
+    }
+    return 0;
+  }
+
+
 public:
   uint64_t debug_get_allocated(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
@@ -522,7 +553,31 @@ public:
       std::lock_guard l(lock);
       l1.collect_stats(bins_overall);
   }
+  uint64_t claim_free_to_left(uint64_t offset) {
+    std::lock_guard l(lock);
+    auto allocated = l1.claim_free_to_left_l1(offset);
+    ceph_assert(available >= allocated);
+    available -= allocated;
 
+    uint64_t l2_pos = (offset - allocated) / l2_granularity;
+    uint64_t l2_pos_end =
+      p2roundup(int64_t(offset), int64_t(l2_granularity)) / l2_granularity;
+    _mark_l2_on_l1(l2_pos, l2_pos_end);
+    return allocated;
+  }
+
+  uint64_t claim_free_to_right(uint64_t offset) {
+    std::lock_guard l(lock);
+    auto allocated = l1.claim_free_to_right_l1(offset);
+    ceph_assert(available >= allocated);
+    available -= allocated;
+
+    uint64_t l2_pos = (offset) / l2_granularity;
+    int64_t end = offset + allocated;
+    uint64_t l2_pos_end = p2roundup(end, int64_t(l2_granularity)) / l2_granularity;
+    _mark_l2_on_l1(l2_pos, l2_pos_end);
+    return allocated;
+  }
 protected:
   ceph::mutex lock = ceph::make_mutex("AllocatorLevel02::lock");
   L1 l1;
@@ -634,7 +689,6 @@ protected:
   {
     uint64_t prev_allocated = *allocated;
     uint64_t d = L1_ENTRIES_PER_SLOT;
-    ceph_assert(isp2(min_length));
     ceph_assert(min_length <= l2_granularity);
     ceph_assert(max_length == 0 || max_length >= min_length);
     ceph_assert(max_length == 0 || (max_length % min_length) == 0);
