@@ -252,7 +252,7 @@ def get_branch_info(project, branch, project_owner='ceph'):
 
 
 def package_version_for_hash(hash, kernel_flavor='basic', distro='rhel',
-                             distro_version='7.0', machine_type='smithi'):
+                             distro_version='8.0', machine_type='smithi'):
     """
     Does what it says on the tin. Uses gitbuilder repos.
 
