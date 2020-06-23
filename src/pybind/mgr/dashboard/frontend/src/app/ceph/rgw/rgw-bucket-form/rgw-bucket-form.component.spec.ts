@@ -43,7 +43,7 @@ describe('RgwBucketFormComponent', () => {
     component = fixture.componentInstance;
     rgwBucketService = TestBed.get(RgwBucketService);
     rgwBucketServiceGetSpy = spyOn(rgwBucketService, 'get');
-    getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'getPlacementTargets');
+    getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'get');
     formHelper = new FormHelper(component.bucketForm);
   });
 
