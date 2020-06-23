@@ -64,9 +64,15 @@ class TestNFS(MgrTestCase):
 
     def _test_delete_cluster(self):
         self._nfs_cmd('cluster', 'delete', self.cluster_id)
-        time.sleep(8)
-        orch_output = self._check_nfs_status()
-        self.assertEqual("No services reported\n", orch_output)
+        expected_output = "No services reported\n"
+        wait_time = 10
+        while wait_time <= 60:
+            time.sleep(wait_time)
+            orch_output = self._check_nfs_status()
+            if expected_output == orch_output:
+                return
+            wait_time += 10
+        self.fail("NFS Ganesha cluster could not be deleted")
 
     def _create_export(self, export_id, create_fs=False, extra_cmd=None):
         if create_fs:
