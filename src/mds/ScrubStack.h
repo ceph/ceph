@@ -126,10 +126,14 @@ protected:
 
   unsigned scrub_epoch = 2;
   unsigned scrub_epoch_fully_acked = 0;
+  unsigned scrub_epoch_last_abort = 2;
+  // check if any mds is aborting scrub after mds.0 starts
+  bool scrub_any_peer_aborting = true;
 
   struct scrub_stat_t {
     unsigned epoch_acked = 0;
     std::set<std::string> scrubbing_tags;
+    bool aborting = false;
   };
   std::vector<scrub_stat_t> mds_scrub_stats;
 
@@ -230,6 +234,11 @@ private:
    * @param r return value to complete contexts.
    */
   void complete_control_contexts(int r);
+
+  /**
+   * ask peer mds (rank > 0) to abort/pause/resume scrubs
+   */
+  void send_state_message(int op);
 
   /**
    * Abort pending scrubs for inodes waiting in the inode stack.

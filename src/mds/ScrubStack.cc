@@ -691,55 +691,82 @@ void ScrubStack::abort_pending_scrubs() {
   clear_stack = false;
 }
 
+void ScrubStack::send_state_message(int op) {
+  MDSRank *mds = mdcache->mds;
+  set<mds_rank_t> up_mds;
+  mds->get_mds_map()->get_up_mds_set(up_mds);
+  for (auto& r : up_mds) {
+    if (r == 0)
+      continue;
+    auto m = make_message<MMDSScrub>(op);
+    mds->send_message_mds(m, r);
+  }
+}
+
 void ScrubStack::scrub_abort(Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
-  ceph_assert(on_finish != nullptr);
 
   dout(10) << __func__ << ": aborting with " << scrubs_in_progress
            << " scrubs in progress and " << stack_size << " in the"
            << " stack" << dendl;
 
+  if (mdcache->mds->get_nodeid() == 0) {
+    scrub_epoch_last_abort = scrub_epoch;
+    scrub_any_peer_aborting = true;
+    send_state_message(MMDSScrub::OP_ABORT);
+  }
+
   clear_stack = true;
   if (scrub_in_transition_state()) {
-    control_ctxs.push_back(on_finish);
+    if (on_finish)
+      control_ctxs.push_back(on_finish);
     return;
   }
 
   abort_pending_scrubs();
-  if (state != STATE_PAUSED) {
+  if (state != STATE_PAUSED)
     set_state(STATE_IDLE);
-  }
-  on_finish->complete(0);
+
+  if (on_finish)
+    on_finish->complete(0);
 }
 
 void ScrubStack::scrub_pause(Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
-  ceph_assert(on_finish != nullptr);
 
   dout(10) << __func__ << ": pausing with " << scrubs_in_progress
            << " scrubs in progress and " << stack_size << " in the"
            << " stack" << dendl;
 
+  if (mdcache->mds->get_nodeid() == 0)
+    send_state_message(MMDSScrub::OP_PAUSE);
+
   // abort is in progress
   if (clear_stack) {
-    on_finish->complete(-EINVAL);
+    if (on_finish)
+      on_finish->complete(-EINVAL);
     return;
   }
 
   bool done = scrub_in_transition_state();
   if (done) {
     set_state(STATE_PAUSING);
-    control_ctxs.push_back(on_finish);
+    if (on_finish)
+      control_ctxs.push_back(on_finish);
     return;
   }
 
   set_state(STATE_PAUSED);
-  on_finish->complete(0);
+  if (on_finish)
+    on_finish->complete(0);
 }
 
 bool ScrubStack::scrub_resume() {
   ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
   dout(20) << __func__ << ": state=" << state << dendl;
+
+  if (mdcache->mds->get_nodeid() == 0)
+    send_state_message(MMDSScrub::OP_RESUME);
 
   int r = 0;
 
@@ -925,6 +952,15 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
       }
     }
     break;
+  case MMDSScrub::OP_ABORT:
+    scrub_abort(nullptr);
+    break;
+  case MMDSScrub::OP_PAUSE:
+    scrub_pause(nullptr);
+    break;
+  case MMDSScrub::OP_RESUME:
+    scrub_resume();
+    break;
   default:
     derr << " scrub stack unknown scrub operation " << m->get_op() << dendl_impl;
     ceph_abort_msg("scrub stack unknown scrub operation");
@@ -965,7 +1001,8 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
 
     scrub_epoch = m->get_epoch();
 
-    auto ack = make_message<MMDSScrubStats>(scrub_epoch, std::move(scrubbing_tags));
+    auto ack = make_message<MMDSScrubStats>(scrub_epoch,
+					    std::move(scrubbing_tags), clear_stack);
     mdcache->mds->send_message_mds(ack, 0);
 
     if (any_finished)
@@ -978,13 +1015,14 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
       auto& stat = mds_scrub_stats[from];
       stat.epoch_acked = m->get_epoch();
       stat.scrubbing_tags = m->get_scrubbing_tags();
+      stat.aborting = m->is_aborting();
     }
   }
 }
 
 void ScrubStack::advance_scrub_status()
 {
-  if (scrubbing_map.empty())
+  if (!scrub_any_peer_aborting && scrubbing_map.empty())
     return;
 
   MDSRank *mds = mdcache->mds;
@@ -998,16 +1036,22 @@ void ScrubStack::advance_scrub_status()
 
   if (up_max == 0) {
     update_scrubbing = true;
+    scrub_any_peer_aborting = false;
   } else if (mds_scrub_stats.size() > (size_t)(up_max)) {
+    bool any_aborting = false;
     bool fully_acked = true;
     for (const auto& stat : mds_scrub_stats) {
+      if (stat.aborting || stat.epoch_acked <= scrub_epoch_last_abort)
+	any_aborting = true;
       if (stat.epoch_acked != scrub_epoch) {
 	fully_acked = false;
-	break;
+	continue;
       }
       scrubbing_tags.insert(stat.scrubbing_tags.begin(),
 			    stat.scrubbing_tags.end());
     }
+    if (!any_aborting)
+      scrub_any_peer_aborting = false;
     if (fully_acked) {
       // handle_scrub_stats() reports scrub is still in-progress if it has
       // forwarded any object to other mds since previous epoch. Let's assume,
@@ -1064,6 +1108,11 @@ void ScrubStack::advance_scrub_status()
 
 void ScrubStack::handle_mds_failure(mds_rank_t mds)
 {
+  if (mds == 0) {
+    scrub_abort(nullptr);
+    return;
+  }
+
   bool kick = false;
   for (auto it = remote_scrubs.begin(); it != remote_scrubs.end(); ) {
     if (it->second.gather_set.erase(mds) &&
