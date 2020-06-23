@@ -57,6 +57,7 @@ export abstract class PageHelper {
       this.navigateTo();
       this.getFirstTableCell(name).click();
     }
+    cy.contains('Creating...').should('not.exist');
     cy.contains('button', 'Edit').click();
     this.expectBreadcrumbText('Edit');
   }
