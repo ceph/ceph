@@ -94,7 +94,7 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         },
         disable: (selection: CdTableSelection) =>
           !selection.hasSingleSelection || !selection.first().sources.orchestrator,
-        disableDesc: () => this.getEditDisableDesc()
+        disableDesc: this.getEditDisableDesc.bind(this)
       },
       {
         name: this.actionLabels.DELETE,
@@ -189,12 +189,8 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     });
   }
 
-  getEditDisableDesc(): string | undefined {
-    if (
-      this.selection &&
-      this.selection.hasSingleSelection &&
-      !this.selection.first().sources.orchestrator
-    ) {
+  getEditDisableDesc(selection: CdTableSelection): string | undefined {
+    if (selection && selection.hasSingleSelection && !selection.first().sources.orchestrator) {
       return this.i18n('Host editing is disabled because the host is not managed by Orchestrator.');
     }
     return undefined;

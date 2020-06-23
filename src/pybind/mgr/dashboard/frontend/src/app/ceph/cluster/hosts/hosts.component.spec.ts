@@ -103,7 +103,7 @@ describe('HostsComponent', () => {
     });
 
     it('should return undefined (no selection)', () => {
-      expect(component.getEditDisableDesc()).toBeUndefined();
+      expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
     });
 
     it('should return undefined (managed by Orchestrator)', () => {
@@ -113,7 +113,7 @@ describe('HostsComponent', () => {
           orchestrator: true
         }
       });
-      expect(component.getEditDisableDesc()).toBeUndefined();
+      expect(component.getEditDisableDesc(component.selection)).toBeUndefined();
     });
   });
 });
