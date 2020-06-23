@@ -761,6 +761,7 @@ enum class OPT {
   PUBSUB_EVENT_RM,
   ACCOUNT_CREATE,
   ACCOUNT_GET,
+  ACCOUNT_RM,
 };
 
 }
@@ -975,6 +976,7 @@ static SimpleCmd::Commands all_cmds = {
   { "subscription ack", OPT::PUBSUB_EVENT_RM },
   { "account create", OPT::ACCOUNT_CREATE },
   { "account get", OPT::ACCOUNT_GET },
+  { "account rm", OPT::ACCOUNT_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -9200,14 +9202,15 @@ next:
 
 
  if (opt_cmd == OPT::ACCOUNT_CREATE ||
-     opt_cmd == OPT::ACCOUNT_GET) {
+     opt_cmd == OPT::ACCOUNT_GET ||
+     opt_cmd == OPT::ACCOUNT_RM) {
    if (account_id.empty()) {
      cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
    }
+   RGWObjVersionTracker objv_tracker;
 
    if (opt_cmd == OPT::ACCOUNT_CREATE) {
      RGWAccountInfo account_info(account_id, tenant);
-     RGWObjVersionTracker objv_tracker;
 
      ret = store->ctl()->account->store_info(account_info, &objv_tracker, real_time(),
 					     true, nullptr, null_yield);
@@ -9221,7 +9224,6 @@ next:
    }
 
    if (opt_cmd == OPT::ACCOUNT_GET) {
-     RGWObjVersionTracker objv_tracker;
      real_time mtime;
      RGWAccountInfo account_info;
      map<std::string, bufferlist> attrs;
@@ -9242,6 +9244,15 @@ next:
 
    }
 
+   if (opt_cmd == OPT::ACCOUNT_RM) {
+     ret = store->ctl()->account->remove_info(account_id,
+					      &objv_tracker,
+					      null_yield);
+     if (ret < 0) {
+       cerr << "ERROR: could not remove account " << cpp_strerror(-ret) << std::endl;
+       return -ret;
+     }
+   }
  }
 
   return 0;
