@@ -74,6 +74,21 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         }
       },
       {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => {
+          this.depCheckerService.checkOrchestratorOrModal(
+            this.actionLabels.EDIT,
+            this.i18n('Host'),
+            () => this.editAction()
+          );
+        },
+        disable: (selection: CdTableSelection) =>
+          !selection.hasSingleSelection || !selection.first().sources.orchestrator,
+        disableDesc: this.getEditDisableDesc.bind(this)
+      },
+      {
         name: this.actionLabels.DELETE,
         permission: 'delete',
         icon: Icons.destroy,
@@ -121,7 +136,59 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     this.selection = selection;
   }
 
-  deleteHostModal() {
+  editAction() {
+    this.hostService.getLabels().subscribe((resp: string[]) => {
+      const host = this.selection.first();
+      const allLabels = resp.map((label) => {
+        return { enabled: true, name: label };
+      });
+      this.modalService.show(FormModalComponent, {
+        initialState: {
+          titleText: this.i18n('Edit Host: {{hostname}}', host),
+          fields: [
+            {
+              type: 'select-badges',
+              name: 'labels',
+              value: host['labels'],
+              label: this.i18n('Labels'),
+              typeConfig: {
+                customBadges: true,
+                options: allLabels,
+                messages: new SelectMessages(
+                  {
+                    empty: this.i18n('There are no labels.'),
+                    filter: this.i18n('Filter or add labels'),
+                    add: this.i18n('Add label')
+                  },
+                  this.i18n
+                )
+              }
+            }
+          ],
+          submitButtonText: this.i18n('Edit Host'),
+          onSubmit: (values: any) => {
+            this.hostService.update(host['hostname'], values.labels).subscribe(() => {
+              this.notificationService.show(
+                NotificationType.success,
+                this.i18n('Updated Host "{{hostname}}"', host)
+              );
+              // Reload the data table content.
+              this.table.refreshBtn();
+            });
+          }
+        }
+      });
+    });
+  }
+
+  getEditDisableDesc(selection: CdTableSelection): string | undefined {
+    if (selection && selection.hasSingleSelection && !selection.first().sources.orchestrator) {
+      return this.i18n('Host editing is disabled because the host is not managed by Orchestrator.');
+    }
+    return undefined;
+  }
+
+  deleteAction() {
     const hostname = this.selection.first().hostname;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {

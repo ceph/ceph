@@ -148,6 +148,6 @@ export class TableActionsComponent implements OnInit {
   }
 
   useDisableDesc(action: CdTableAction) {
-    return action.disableDesc && action.disableDesc();
+    return action.disableDesc && action.disableDesc(this.selection);
   }
 }
