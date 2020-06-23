@@ -1,4 +1,3 @@
-from functools import reduce
 import pytest
 import random
 from ceph_volume.devices.lvm import batch
@@ -42,13 +41,16 @@ class TestBatch(object):
 
     def test_get_physical_osds_return_len(self, factory,
                                           mock_devices_available,
+                                          conf_ceph_stub,
                                           osds_per_device):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         args = factory(data_slots=1, osds_per_device=osds_per_device, osd_ids=[])
         osds = batch.get_physical_osds(mock_devices_available, args)
         assert len(osds) == len(mock_devices_available) * osds_per_device
 
     def test_get_physical_osds_rel_size(self, factory,
                                           mock_devices_available,
+                                          conf_ceph_stub,
                                           osds_per_device):
         args = factory(data_slots=1, osds_per_device=osds_per_device, osd_ids=[])
         osds = batch.get_physical_osds(mock_devices_available, args)
@@ -57,7 +59,9 @@ class TestBatch(object):
 
     def test_get_physical_osds_abs_size(self, factory,
                                           mock_devices_available,
+                                          conf_ceph_stub,
                                           osds_per_device):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         args = factory(data_slots=1, osds_per_device=osds_per_device, osd_ids=[])
         osds = batch.get_physical_osds(mock_devices_available, args)
         for osd, dev in zip(osds, mock_devices_available):
@@ -69,7 +73,9 @@ class TestBatch(object):
         pass
 
     def test_get_physical_fast_allocs_length(self, factory,
+                                             conf_ceph_stub,
                                              mock_devices_available):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         args = factory(block_db_slots=None, get_block_db_size=None)
         fast = batch.get_physical_fast_allocs(mock_devices_available,
                                               'block_db', 2, 2, args)
@@ -83,7 +89,9 @@ class TestBatch(object):
                                                       slots,
                                                       occupied_prior,
                                                       factory,
+                                                      conf_ceph_stub,
                                                       mock_device_generator):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         occupied_prior = min(occupied_prior, slots)
         devs = [mock_device_generator() for _ in range(num_devs)]
         already_assigned = 0
