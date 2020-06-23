@@ -2114,11 +2114,9 @@ void AccountQuota::decode_json(JSONObj *obj)
 
 void RGWAccountInfo::dump(Formatter * const f) const
 {
-  f->open_object_section("RGWAccountInfo");
   encode_json("id", id, f);
   encode_json("tenant", tenant, f);
   account_quota.dump(f);
-  f->close_section();
 }
 
 void RGWAccountInfo::decode_json(JSONObj* obj)
