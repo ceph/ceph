@@ -161,9 +161,14 @@ class VolumeClient(CephfsClient):
                     try:
                         with open_subvol(fs_handle, self.volspec, group, subvolname, SubvolumeOpType.CREATE) as subvolume:
                             # idempotent creation -- valid. Attributes set is supported.
-                            uid = uid if uid else subvolume.uid
-                            gid = gid if gid else subvolume.gid
-                            subvolume.set_attrs(subvolume.path, size, isolate_nspace, pool, uid, gid)
+                            attrs = {
+                                'uid': uid if uid else subvolume.uid,
+                                'gid': gid if gid else subvolume.gid,
+                                'data_pool': pool,
+                                'pool_namespace': subvolume.namespace if isolate_nspace else None,
+                                'quota': size
+                            }
+                            subvolume.set_attrs(subvolume.path, attrs)
                     except VolumeException as ve:
                         if ve.errno == -errno.ENOENT:
                             self._create_subvolume(fs_handle, volname, group, subvolname, **kwargs)
