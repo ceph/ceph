@@ -475,8 +475,8 @@ class TestBuilderProject(object):
         assert gp.distro == expected
 
     DISTRO_MATRIX_NOVER = [
-        ('rhel', None, None, 'centos7'),
-        ('centos', None, None, 'centos7'),
+        ('rhel', None, None, 'centos8'),
+        ('centos', None, None, 'centos8'),
         ('fedora', None, None, 'fedora25'),
         ('ubuntu', None, None, 'bionic'),
         ('debian', None, None, 'jessie'),
@@ -501,6 +501,7 @@ class TestBuilderProject(object):
         ('centos', '6.5', None, 'el6'),
         ('centos', '7.0', None, 'el7'),
         ('centos', '7.1', None, 'el7'),
+        ('centos', '8.1', None, 'el8'),
         ('fedora', '20', None, 'fc20'),
         ('debian', '7.0', None, 'debian'),
         ('debian', '7', None, 'debian'),
@@ -602,6 +603,7 @@ class TestGitbuilderProject(TestBuilderProject):
         ('centos', '6.5', None, 'centos6'),
         ('centos', '7.0', None, 'centos7'),
         ('centos', '7.1', None, 'centos7'),
+        ('centos', '8.1', None, 'centos8'),
         ('fedora', '20', None, 'fedora20'),
         ('ubuntu', '14.04', 'trusty', 'trusty'),
         ('ubuntu', '14.04', None, 'trusty'),
@@ -741,6 +743,7 @@ class TestShamanProject(TestBuilderProject):
         ('centos', '6.5', None, 'centos/6'),
         ('centos', '7.0', None, 'centos/7'),
         ('centos', '7.1', None, 'centos/7'),
+        ('centos', '8.1', None, 'centos/8'),
         ('fedora', '20', None, 'fedora/20'),
         ('ubuntu', '14.04', 'trusty', 'ubuntu/14.04'),
         ('ubuntu', '14.04', None, 'ubuntu/14.04'),
@@ -752,8 +755,8 @@ class TestShamanProject(TestBuilderProject):
     ]
 
     DISTRO_MATRIX_NOVER = [
-        ('rhel', None, None, 'centos/7'),
-        ('centos', None, None, 'centos/7'),
+        ('rhel', None, None, 'centos/8'),
+        ('centos', None, None, 'centos/8'),
         ('fedora', None, None, 'fedora/25'),
         ('ubuntu', None, None, 'ubuntu/18.04'),
         ('debian', None, None, 'debian/8.0'),
