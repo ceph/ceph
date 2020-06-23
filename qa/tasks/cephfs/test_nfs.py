@@ -52,6 +52,18 @@ class TestNFS(MgrTestCase):
     def _check_nfs_status(self):
         return self._orch_cmd('ls', 'nfs')
 
+    def _check_auth_ls(self, export_id=1, check_in=False):
+        '''
+        Tests export user id creation or deletion.
+        :param export_id: Denotes export number
+        :param check_in: Check specified export id
+        '''
+        output = self._cmd('auth', 'ls')
+        if check_in:
+            self.assertIn(f'client.{self.cluster_id}{export_id}', output)
+        else:
+            self.assertNotIn(f'client-{self.cluster_id}', output)
+
     def _test_idempotency(self, cmd_func, cmd_args):
         '''
         Test idempotency of commands. It first runs the TestNFS test method
@@ -125,6 +137,8 @@ class TestNFS(MgrTestCase):
             export_cmd.append(self.pseudo_path)
         # Runs the nfs export create command
         self._cmd(*export_cmd)
+        # Check if user id for export is created
+        self._check_auth_ls(export_id, check_in=True)
         res = self._sys_cmd(['rados', '-p', 'nfs-ganesha', '-N', self.cluster_id, 'get',
                              f'export-{export_id}', '-'])
         # Check if export object is created
@@ -143,6 +157,7 @@ class TestNFS(MgrTestCase):
         Delete an export.
         '''
         self._nfs_cmd('export', 'delete', self.cluster_id, self.pseudo_path)
+        self._check_auth_ls()
 
     def _test_list_export(self):
         '''
@@ -242,6 +257,7 @@ class TestNFS(MgrTestCase):
         self._test_delete_cluster()
         # Check if rados ganesha conf object is deleted
         self._check_export_obj_deleted(conf_obj=True)
+        self._check_auth_ls()
 
     def test_exports_on_mgr_restart(self):
         '''
