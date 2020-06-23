@@ -26,6 +26,9 @@ public:
   static constexpr int OP_QUEUEDIR_ACK	= -1;
   static constexpr int OP_QUEUEINO	= 2;
   static constexpr int OP_QUEUEINO_ACK 	= -2;
+  static constexpr int OP_ABORT		= 3;
+  static constexpr int OP_PAUSE		= 4;
+  static constexpr int OP_RESUME	= 5;
 
   static const char *get_opname(int o) {
     switch (o) {
@@ -33,6 +36,9 @@ public:
     case OP_QUEUEDIR_ACK: return "queue_dir_ack";
     case OP_QUEUEINO: return "queue_ino";
     case OP_QUEUEINO_ACK: return "queue_ino_ack";
+    case OP_ABORT: return "abort";
+    case OP_PAUSE: return "pause";
+    case OP_RESUME: return "resume";
     default: ceph_abort(); return nullptr;
     }
   }
@@ -99,6 +105,8 @@ protected:
   static constexpr int COMPAT_VERSION = 1;
 
   MMDSScrub() : MMDSOp(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
+  MMDSScrub(int o)
+    : MMDSOp(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION), op(o) {}
   MMDSScrub(int o, inodeno_t i, fragset_t&& _frags, std::string_view _tag,
 	    inodeno_t _origin=inodeno_t(), bool internal_tag=false,
 	    bool force=false, bool recursive=false, bool repair=false)
