@@ -117,8 +117,9 @@ const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
 const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
-const string PREFIX_ZONED_META = "Z";  // (see ZonedFreelistManager)
-const string PREFIX_ZONED_INFO = "z";  // (see ZonedFreelistManager)
+const string PREFIX_ZONED_FM_META = "Z";  // (see ZonedFreelistManager)
+const string PREFIX_ZONED_FM_PERZONE_INFO = "z";  // (see ZonedFreelistManager)
+const string PREFIX_ZONED_GC_PERZONE_INFO = "G";  // (per-zone cleaner info)
 
 const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
@@ -5732,6 +5733,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
   std::string& kv_backend=*_kv_backend;
   fn = path + "/db";
   std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
+  std::shared_ptr<StringAppendOperator> append_op(new StringAppendOperator);
 
   if (create) {
     kv_backend = cct->_conf->bluestore_kvbackend;
@@ -5871,6 +5873,7 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
 
   FreelistManager::setup_merge_operators(db, freelist_type);
   db->set_merge_operator(PREFIX_STAT, merge_op);
+  db->set_merge_operator(PREFIX_ZONED_GC_PERZONE_INFO, append_op);
   db->set_cache_size(cache_kv_ratio * cache_size);
   return 0;
 }
@@ -11466,6 +11469,57 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
       l_bluestore_commit_lat));
 }
 
+// We maintain per-zone string in the key-value store that is made up of a
+// concatenation of <operation, object_key_size, object_key> tuples.  When an
+// object is written to the zone, a tuple with an operation ADD_OBJECT is
+// appended to the string, and when a new copy of an object currently residing
+// in the zone is written elsewhere, a tuple with an operation INVALIDATE_OBJECT
+// is appended to the string because the space occupied by the previous copy in
+// this zone is now stale and can be reclaimed.
+
+// When cleaning a zone, the cleaner will parse this string and at the end will
+// have a list of object_keys that are currently alive in this zone.  The
+// cleaner can then read these objects and write them to another zone.
+//
+// This representation can obviously be improved, but for now the aim is to get
+// things working.  Optimizations will come later.
+void BlueStore::append_to_zone_metadata(BlueStore::ZoneMetadataOp zone_op,
+					uint64_t zone_num,
+					const std::string &object_key,
+					KeyValueDB::Transaction t) {
+  string key;
+  _key_encode_u64(zone_num, &key);
+
+  char op = zone_op;
+  bufferlist bl;
+  encode(op, bl);
+
+  size_t size = object_key.size();
+  encode(size, bl);
+  bl.append(object_key.data(), size);
+
+  t->merge(PREFIX_ZONED_GC_PERZONE_INFO, key, bl);
+}
+
+void BlueStore::update_per_zone_metadata(TransContext *txc) {
+  auto zone_size = bdev->get_zone_size();
+  for (const auto &[o, offset] : txc->onode_to_offset_map) {
+    std::string key;
+    get_object_key(cct, o->oid, &key);
+    if (offset < 0) {  // object was truncated
+      uint64_t old_zone_num = -offset / zone_size;
+      append_to_zone_metadata(INVALIDATE_OBJECT, old_zone_num, key, txc->t);
+    } else {  // object was either created or overwritten
+      uint64_t new_zone_num = o->get_ondisk_offset() / zone_size;
+      append_to_zone_metadata(ADD_OBJECT, new_zone_num, key, txc->t);
+      if (offset > 0) {  // object was overwritten
+	uint64_t old_zone_num = offset / zone_size;
+	append_to_zone_metadata(INVALIDATE_OBJECT, old_zone_num, key, txc->t);
+      }
+    }
+  }
+}
+
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 {
   dout(20) << __func__ << " txc " << txc << std::hex
@@ -11509,6 +11563,10 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
     dout(20) << __func__ << " release 0x" << std::hex << p.get_start()
 	     << "~" << p.get_len() << std::dec << dendl;
     fm->release(p.get_start(), p.get_len(), t);
+  }
+
+  if (bdev->is_smr()) {
+    update_per_zone_metadata(txc);
   }
 
   _txc_update_store_statfs(txc);
@@ -14335,6 +14393,15 @@ int BlueStore::_do_write(
 			  min_alloc_size);
   }
 
+  if (bdev->is_smr()) {
+    if (wctx.old_extents.empty()) {
+      txc->note_new_object(o);
+    } else {
+      int64_t old_ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
+      txc->note_updated_object(o, old_ondisk_offset);
+    }
+  }
+
   // NB: _wctx_finish() will empty old_extents
   // so we must do gc estimation before that
   _wctx_finish(txc, c, o, &wctx);
@@ -14461,12 +14528,14 @@ void BlueStore::_do_truncate(
   if (offset == o->onode.size)
     return;
 
+  int64_t ondisk_offset = 0;
   if (offset < o->onode.size) {
     WriteContext wctx;
     uint64_t length = o->onode.size - offset;
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
     o->extent_map.dirty_range(offset, length);
+    ondisk_offset = wctx.old_extents.begin()->r.begin()->offset;
     _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
 
     // if we have shards past EOF, ask for a reshard
@@ -14482,6 +14551,13 @@ void BlueStore::_do_truncate(
   }
 
   o->onode.size = offset;
+
+  if (bdev->is_smr()) {
+    // We currently support only removing an object or truncating it to zero
+    // size, both of which fall through this code path.
+    ceph_assert(offset == 0 && ondisk_offset != 0);
+    txc->note_truncated_object(o, ondisk_offset);
+  }
 
   txc->write_onode(o);
 }

@@ -62,4 +62,22 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
   }
 };
 
+struct StringAppendOperator : public KeyValueDB::MergeOperator {
+  void merge_nonexistent(
+    const char *rdata, size_t rlen, std::string *new_value) override {
+    *new_value = std::string(rdata, rlen);
+  }
+  void merge(
+    const char *ldata, size_t llen,
+    const char *rdata, size_t rlen,
+    std::string *new_value) override {
+    new_value->reserve(llen + rlen);
+    new_value->append(ldata, llen);
+    new_value->append(rdata, rlen);
+  }
+  const char *name() const override {
+    return "string_append";
+  }
+};
+
 #endif
