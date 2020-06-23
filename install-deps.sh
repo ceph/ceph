@@ -188,31 +188,6 @@ function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
 
-function ensure_decent_gcc_on_rh {
-    local old=$(gcc -dumpversion)
-    local expected=5.1
-    local dts_ver=$1
-    if version_lt $old $expected; then
-	if test -t 1; then
-	    # interactive shell
-	    cat <<EOF
-Your GCC is too old. Please run following command to add DTS to your environment:
-
-scl enable devtoolset-8 bash
-
-Or add following line to the end of ~/.bashrc to add it permanently:
-
-source scl_source enable devtoolset-8
-
-see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
-EOF
-	else
-	    # non-interactive shell
-	    source /opt/rh/devtoolset-$dts_ver/enable
-	fi
-    fi
-}
-
 for_make_check=false
 if tty -s; then
     # interactive
@@ -349,13 +324,11 @@ else
 		    case "$ARCH" in
 			x86_64)
 			    $SUDO $yumdnf -y install centos-release-scl
-			    dts_ver=8
 			    ;;
 			aarch64)
 			    $SUDO $yumdnf -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=8
 			    ;;
 		    esac
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
@@ -363,7 +336,6 @@ else
 			  --enable rhel-server-rhscl-7-rpms \
 			  --enable rhel-7-server-optional-rpms \
 			  --enable rhel-7-server-devtools-rpms
-                    dts_ver=8
                 elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     $SUDO dnf config-manager --set-enabled PowerTools
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
@@ -381,9 +353,6 @@ else
         $SUDO $yumdnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
-	if [ -n "$dts_ver" ]; then
-            ensure_decent_gcc_on_rh $dts_ver
-	fi
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -qi "error:" && exit 1
         ;;
