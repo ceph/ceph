@@ -93,7 +93,7 @@ export class RbdSnapshotActionsModel {
   }
 
   getCloneDisableDesc(featuresName: string[]): string | undefined {
-    if (!featuresName.includes('layering')) {
+    if (!featuresName?.includes('layering')) {
       return this.i18n('Parent image must support Layering');
     }
 
