@@ -672,7 +672,8 @@ public:
   virtual int collection_list(CollectionHandle &c,
 			      const ghobject_t& start, const ghobject_t& end,
 			      int max,
-			      std::vector<ghobject_t> *ls, ghobject_t *next) = 0;
+			      std::vector<ghobject_t> *ls, ghobject_t *next,
+			      int flags) = 0;
 
 
   /// OMAP

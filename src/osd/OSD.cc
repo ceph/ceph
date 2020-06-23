@@ -4415,7 +4415,7 @@ void OSD::clear_temp_objects()
       ceph_assert(ch);
       store->collection_list(ch, next, ghobject_t::get_max(),
 			     store->get_ideal_list_max(),
-			     &objects, &next);
+			     &objects, &next, 0);
       if (objects.empty())
 	break;
       vector<ghobject_t>::iterator q;
@@ -4464,14 +4464,16 @@ void OSD::recursive_remove_collection(CephContext* cct,
   ObjectStore::Transaction t;
   SnapMapper mapper(cct, &driver, 0, 0, 0, pgid.shard);
 
-  ghobject_t next;
   int max = cct->_conf->osd_target_transaction_size;
   vector<ghobject_t> objects;
   objects.reserve(max);
   while (true) {
+    // do not preserve next to enable collection list prefetching
+    ghobject_t next;
     objects.clear();
     store->collection_list(ch, next, ghobject_t::get_max(),
-      max, &objects, &next);
+      max, &objects, &next,
+      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL);
     generic_dout(10) << __func__ << " " << objects << dendl;
     if (objects.empty())
       break;

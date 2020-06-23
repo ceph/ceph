@@ -372,7 +372,8 @@ int PGBackend::objects_list_partial(
       ghobject_t::get_max(),
       max - ls->size(),
       &objects,
-      &_next);
+      &_next,
+      0);
     if (r != 0) {
       derr << __func__ << " list collection " << ch << " got: " << cpp_strerror(r) << dendl;
       break;
@@ -407,7 +408,8 @@ int PGBackend::objects_list_range(
     ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     INT_MAX,
     &objects,
-    NULL);
+    NULL,
+    0);
   ls->reserve(objects.size());
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();

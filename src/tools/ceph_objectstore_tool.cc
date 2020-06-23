@@ -93,7 +93,8 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 				   ghobject_t::get_max(),
 				   LIST_AT_A_TIME,
 				   &list,
-				   &next);
+				   &next,
+				   0);
     if (r < 0) {
       cerr << "Error listing collection: " << coll << ", "
 	   << cpp_strerror(r) << std::endl;
@@ -864,7 +865,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
   while (!next.is_max()) {
     vector<ghobject_t> objects;
     int r = store->collection_list(ch, next, ghobject_t::get_max(), 300,
-      &objects, &next);
+      &objects, &next, 0);
     if (r < 0)
       return r;
     for (vector<ghobject_t>::iterator i = objects.begin();
@@ -2978,7 +2979,7 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
     uint64_t bytes = 0, keys = 0;
     while (true) {
       vector<ghobject_t> ls;
-      r = src->collection_list(ch, pos, ghobject_t::get_max(), 1000, &ls, &pos);
+      r = src->collection_list(ch, pos, ghobject_t::get_max(), 1000, &ls, &pos, 0);
       if (r < 0) {
 	cerr << "collection_list on " << cid << " from " << pos << " got: "
 	     << cpp_strerror(r) << std::endl;

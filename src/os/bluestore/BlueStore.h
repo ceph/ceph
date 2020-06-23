@@ -137,6 +137,7 @@ enum {
   l_bluestore_omap_lower_bound_lat,
   l_bluestore_omap_next_lat,
   l_bluestore_clist_lat,
+  l_bluestore_clist_cache_hit,
   l_bluestore_last
 };
 
@@ -1327,7 +1328,53 @@ public:
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
-    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
+    struct ColListCache {
+      vector<ghobject_t> oids;
+      size_t next_pos = 0;
+
+      void reset(size_t sz = 1) {
+	oids.clear();
+	oids.reserve(sz);
+	next_pos = 0;
+      }
+      void invalidate(CephContext* cct,
+	const mempool::bluestore_cache_other::string& object_key);
+
+      void push(ghobject_t& oid) {
+	oids.push_back(oid);
+      }
+      int get(int max, vector<ghobject_t>& ls, ghobject_t* next_oid) {
+	int res = -1;
+	int avail = (int)oids.size() - next_pos;
+	if (avail > 1) {
+	  avail = res = std::min(avail - 1, max);
+
+	  size_t target_pos = ls.size();
+	  ls.resize(ls.size() + res);
+
+	  auto i = next_pos;
+	  for (; avail > 0; ++i) {
+	    ls[target_pos++].swap(oids[i]);
+	    --avail;
+	  }
+	  *next_oid = oids[i];
+	} else if (avail == 1) {
+	  res = 0; // hit but no data to return
+	  *next_oid = oids[next_pos];
+	}
+	if (res <= 0 && max) {
+	  oids.clear();
+	  next_pos = 0;
+	}
+	return res;
+      }
+    } col_cache;
+
+    OnodeRef get_onode(const ghobject_t& oid, bool create,
+      bool is_createop = false);
+    OnodeRef get_onode(const ghobject_t& oid,
+      mempool::bluestore_cache_other::string& key,
+      bufferlist& v);
 
     // the terminology is confusing here, sorry!
     //
@@ -2440,7 +2487,7 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, std::vector<ghobject_t> *ls, ghobject_t *next);
+    int max, std::vector<ghobject_t> *ls, ghobject_t *next, int flags);
 
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
@@ -2762,7 +2809,9 @@ public:
 		      const ghobject_t& start,
 		      const ghobject_t& end,
 		      int max,
-		      std::vector<ghobject_t> *ls, ghobject_t *next) override;
+		      std::vector<ghobject_t> *ls,
+		      ghobject_t *next,
+		      int flags) override;
 
   int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid

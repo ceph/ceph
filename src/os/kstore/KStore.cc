@@ -1404,7 +1404,7 @@ int KStore::collection_empty(CollectionHandle& ch, bool *empty)
   vector<ghobject_t> ls;
   ghobject_t next;
   int r = collection_list(ch, ghobject_t(), ghobject_t::get_max(), 1,
-			  &ls, &next);
+			  &ls, &next, 0);
   if (r < 0) {
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
          << dendl;
@@ -1426,7 +1426,7 @@ int KStore::collection_bits(CollectionHandle& ch)
 
 int KStore::collection_list(
   CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
+  vector<ghobject_t> *ls, ghobject_t *pnext, int flags)
 
 {
   Collection *c = static_cast<Collection*>(c_.get());
