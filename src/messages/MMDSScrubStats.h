@@ -26,13 +26,15 @@ public:
   void print(ostream& o) const override {
     o << "mds_scrub_stats(e" << epoch;
     if (update_scrubbing)
-      o << " [" << scrubbing_tags << "])";
-    else
-      o << ")";
+      o << " [" << scrubbing_tags << "]";
+    if (aborting)
+      o << " aborting";
+    o << ")";
   }
 
   unsigned get_epoch() const { return epoch; }
   const auto& get_scrubbing_tags() const { return scrubbing_tags; }
+  bool is_aborting() const { return aborting; }
   bool is_finished(const std::string& tag) const {
     return update_scrubbing && !scrubbing_tags.count(tag);
   }
@@ -42,6 +44,7 @@ public:
     encode(epoch, payload);
     encode(scrubbing_tags, payload);
     encode(update_scrubbing, payload);
+    encode(aborting, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -49,24 +52,26 @@ public:
     decode(epoch, p);
     decode(scrubbing_tags, p);
     decode(update_scrubbing, p);
+    decode(aborting, p);
   }
 
 protected:
   MMDSScrubStats(unsigned e=0) :
     MMDSOp(MSG_MDS_SCRUB_STATS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e) {}
-  MMDSScrubStats(unsigned e, std::set<std::string>&& tags) :
+  MMDSScrubStats(unsigned e, std::set<std::string>&& tags, bool abrt=false) :
     MMDSOp(MSG_MDS_SCRUB_STATS, HEAD_VERSION, COMPAT_VERSION),
-    epoch(e), scrubbing_tags(std::move(tags)), update_scrubbing(true) {}
-  MMDSScrubStats(unsigned e, const std::set<std::string>& tags) :
+    epoch(e), scrubbing_tags(std::move(tags)), update_scrubbing(true), aborting(abrt) {}
+  MMDSScrubStats(unsigned e, const std::set<std::string>& tags, bool abrt=false) :
     MMDSOp(MSG_MDS_SCRUB_STATS, HEAD_VERSION, COMPAT_VERSION),
-    epoch(e), scrubbing_tags(tags), update_scrubbing(true) {}
+    epoch(e), scrubbing_tags(tags), update_scrubbing(true), aborting(abrt) {}
   ~MMDSScrubStats() override {}
 
 private:
   unsigned epoch;
   std::set<std::string> scrubbing_tags;
   bool update_scrubbing = false;
+  bool aborting = false;
 
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
