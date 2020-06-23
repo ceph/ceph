@@ -36,4 +36,13 @@ target_link_libraries(
   crimson::gtest
   crimson-seastore)
 
+add_executable(unittest_extmap_manager
+  test_extmap_manager.cc
+  ../gtest_seastar.cc)
+add_ceph_unittest(unittest_extmap_manager)
+target_link_libraries(
+  unittest_extmap_manager
+  ${CMAKE_DL_LIBS}
+  crimson-seastore)
+
 add_subdirectory(onode_tree)

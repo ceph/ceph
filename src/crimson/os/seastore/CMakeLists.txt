@@ -13,6 +13,9 @@ add_library(crimson-seastore
   onode_manager/simple-fltree/onode_block.cc
   onode_manager/simple-fltree/onode_delta.cc
   onode_manager/simple-fltree/onode_node.cc
+  extentmap_manager.cc
+  extentmap_manager/btree/extentmap_btree_node_impl.cc
+  extentmap_manager/btree/btree_extentmap_manager.cc
   seastore.cc
   ../../../test/crimson/seastore/test_block.cc
 	)
