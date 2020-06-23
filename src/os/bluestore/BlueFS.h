@@ -471,6 +471,12 @@ public:
     return _truncate(h, offset);
   }
 
+  int do_replay_recovery_read(FileReader *log,
+			      size_t log_pos,
+			      size_t read_offset,
+			      size_t read_len,
+			      bufferlist* bl);
+
 };
 
 #endif
