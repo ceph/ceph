@@ -466,11 +466,12 @@ print(_find_admin_socket("{client_name}"))
                 try:
                     p = self.client_remote.run(args=
                         ['sudo', self._prefix + 'ceph', '--admin-daemon', asok_path] + args,
-                        stdout=StringIO(), stderr=StringIO(),
+                        stdout=StringIO(), stderr=StringIO(), wait=False,
                         timeout=(15*60))
+                    p.wait()
                     break
                 except CommandFailedError:
-                    if "Connection refused" in stderr.getvalue():
+                    if "connection refused" in p.stderr.getvalue().lower():
                         pass
 
         return json.loads(p.stdout.getvalue().strip())
