@@ -211,12 +211,12 @@ public:
   }
   void write(uint64_t off, uint64_t len, ceph::buffer::list& bl) {
     add_simple_op(CEPH_OSD_OP_WRITE, off, len);
-    data.claim(bl);
+    data = std::move(bl);
     header.data_off = off;
   }
   void writefull(ceph::buffer::list& bl) {
     add_simple_op(CEPH_OSD_OP_WRITEFULL, 0, bl.length());
-    data.claim(bl);
+    data = std::move(bl);
     header.data_off = 0;
   }
   void zero(uint64_t off, uint64_t len) {

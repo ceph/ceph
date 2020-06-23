@@ -4584,12 +4584,12 @@ int PrimaryLogPG::trim_object(
     map <string, bufferlist> attrs;
     bl.clear();
     encode(snapset, bl);
-    attrs[SS_ATTR].claim(bl);
+    attrs[SS_ATTR] = std::move(bl);
 
     bl.clear();
     encode(head_obc->obs.oi, bl,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-    attrs[OI_ATTR].claim(bl);
+    attrs[OI_ATTR] = std::move(bl);
     t->setattrs(head_oid, attrs);
   }
 
@@ -4744,10 +4744,10 @@ int PrimaryLogPG::do_tmap2omap(OpContext *ctx, unsigned flags)
   ops[0].op.extent.length = 0;
 
   ops[1].op.op = CEPH_OSD_OP_OMAPSETHEADER;
-  ops[1].indata.claim(header);
+  ops[1].indata = std::move(header);
 
   ops[2].op.op = CEPH_OSD_OP_OMAPSETVALS;
-  ops[2].indata.claim(vals);
+  ops[2].indata = std::move(vals);
 
   return do_osd_ops(ctx, ops);
 }
@@ -5802,7 +5802,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
-	osd_op.outdata.claim(bl);
+	osd_op.outdata = std::move(bl);
 	if (r < 0)
 	  result = r;
 	else
@@ -7226,7 +7226,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.extent.truncate_seq = oi.truncate_seq;
         newop.indata = osd_op.indata;
 	result = do_osd_ops(ctx, nops);
-	osd_op.outdata.claim(newop.outdata);
+	osd_op.outdata = std::move(newop.outdata);
       }
       break;
 
@@ -7249,7 +7249,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.extent.offset = 0;
 	newop.op.extent.length = 0;
 	result = do_osd_ops(ctx, nops);
-	osd_op.outdata.claim(newop.outdata);
+	osd_op.outdata = std::move(newop.outdata);
       }
       break;
 
@@ -8570,7 +8570,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
     bufferlist bv(sizeof(ctx->new_obs.oi));
     encode(ctx->new_obs.oi, bv,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-    attrs[OI_ATTR].claim(bv);
+    attrs[OI_ATTR] = std::move(bv);
 
     // snapset
     if (soid.snap == CEPH_NOSNAP) {
@@ -8578,7 +8578,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
 	       << " in " << soid << dendl;
       bufferlist bss;
       encode(ctx->new_snapset, bss);
-      attrs[SS_ATTR].claim(bss);
+      attrs[SS_ATTR] = std::move(bss);
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
     }
@@ -13803,8 +13803,8 @@ void PrimaryLogPG::hit_set_persist()
     ctx->clean_regions.mark_data_region_dirty(0, bl.length());
   }
   map <string, bufferlist> attrs;
-  attrs[OI_ATTR].claim(boi);
-  attrs[SS_ATTR].claim(bss);
+  attrs[OI_ATTR] = std::move(boi);
+  attrs[SS_ATTR] = std::move(bss);
   setattrs_maybe_cache(ctx->obc, ctx->op_t.get(), attrs);
   ctx->log.push_back(
     pg_log_entry_t(
@@ -15445,7 +15445,7 @@ int PrimaryLogPG::getattrs_maybe_cache(
        i != out->end();
        ++i) {
     if (i->first.size() > 1 && i->first[0] == '_')
-      tmp[i->first.substr(1, i->first.size())].claim(i->second);
+      tmp[i->first.substr(1, i->first.size())] = std::move(i->second);
   }
   tmp.swap(*out);
   return r;

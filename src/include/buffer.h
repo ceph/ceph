@@ -1064,7 +1064,9 @@ struct error_code;
 
     void reserve(size_t prealloc);
 
-    void claim(list& bl);
+    [[deprecated("in favor of operator=(list&&)")]] void claim(list& bl) {
+      *this = std::move(bl);
+    }
     void claim_append(list& bl);
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);

@@ -3404,7 +3404,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << " into existing ceph::buffer of length " << op->outbl->length()
 		    << dendl;
       cb::list t;
-      t.claim(*op->outbl);
+      t = std::move(*op->outbl);
       t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
       bl.begin().copy(bl.length(), t.c_str());
       op->outbl->substr_of(t, 0, bl.length());
@@ -4002,8 +4002,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     PoolOp *op = iter->second;
     ldout(cct, 10) << "have request " << tid << " at " << op << " Op: "
 		   << ceph_pool_op_name(op->pool_op) << dendl;
-    cb::list bl;
-    bl.claim(m->response_data);
+    cb::list bl{std::move(m->response_data)};
     if (m->version > last_seen_osdmap_version)
       last_seen_osdmap_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {
@@ -4315,7 +4314,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents,
     r.assemble_result(cct, *bl, false);
   } else {
     ldout(cct, 15) << "  only one frag" << dendl;
-    bl->claim(resultbl[0]);
+    *bl = std::move(resultbl[0]);
   }
 
   // done

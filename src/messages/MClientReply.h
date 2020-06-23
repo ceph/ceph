@@ -357,7 +357,7 @@ public:
 
   // dir contents
   void set_extra_bl(ceph::buffer::list& bl) {
-    extra_bl.claim(bl);
+    extra_bl = std::move(bl);
   }
   ceph::buffer::list& get_extra_bl() {
     return extra_bl;
@@ -368,7 +368,7 @@ public:
 
   // trace
   void set_trace(ceph::buffer::list& bl) {
-    trace_bl.claim(bl);
+    trace_bl = std::move(bl);
   }
   ceph::buffer::list& get_trace_bl() {
     return trace_bl;

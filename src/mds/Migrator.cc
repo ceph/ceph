@@ -1303,7 +1303,7 @@ void Migrator::encode_export_prep_trace(bufferlist &final_bl, CDir *bound,
     cache->encode_replica_inode(cur->inode, es.peer, bl, mds->mdsmap->get_up_features());
     dout(7) << "  added " << *cur->inode << dendl;
     bl.claim_append(tracebl);
-    tracebl.claim(bl);
+    tracebl = std::move(bl);
 
     cur = cur->get_parent_dir();
     // don't repeat dirfrags
@@ -1317,7 +1317,7 @@ void Migrator::encode_export_prep_trace(bufferlist &final_bl, CDir *bound,
     cache->encode_replica_dir(cur, es.peer, bl);
     dout(7) << "  added " << *cur << dendl;
     bl.claim_append(tracebl);
-    tracebl.claim(bl);
+    tracebl = std::move(bl);
     start = 'f';  // start with dirfrag
   }
   dirfrag_t df = cur->dirfrag();
