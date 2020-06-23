@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -136,10 +136,12 @@ export class OsdService {
     return this.http.post(`${this.path}/${id}/destroy`, null);
   }
 
-  delete(id: number, force?: boolean) {
-    const options = force ? { params: new HttpParams().set('force', 'true') } : {};
-    options['observe'] = 'response';
-    return this.http.delete(`${this.path}/${id}`, options);
+  delete(id: number, preserveId?: boolean, force?: boolean) {
+    const params = {
+      preserve_id: preserveId ? 'true' : 'false',
+      force: force ? 'true' : 'false'
+    };
+    return this.http.delete(`${this.path}/${id}`, { observe: 'response', params: params });
   }
 
   safeToDestroy(ids: string) {

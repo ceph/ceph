@@ -25,6 +25,7 @@
           <ng-template #noNames>
             <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
           </ng-template>
+          <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
           <div class="form-group">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
