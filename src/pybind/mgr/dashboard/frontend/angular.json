@@ -172,11 +172,11 @@
             "pt": {
               "browserTarget": "ceph-dashboard:build:pt"
             },
-            "zh-CN": {
-              "browserTarget": "ceph-dashboard:build:zh-CN"
+            "zh-Hans": {
+              "browserTarget": "ceph-dashboard:build:zh-Hans"
             },
-            "zh-TW": {
-              "browserTarget": "ceph-dashboard:build:zh-TW"
+            "zh-Hant": {
+              "browserTarget": "ceph-dashboard:build:zh-Hant"
             }
           }
         },
