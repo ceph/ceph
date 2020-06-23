@@ -7,11 +7,7 @@ ceph-objectstore-tool - modify or examine the state of an OSD
 Synopsis
 ========
 
-
 | **ceph-objectstore-tool** --data-path *path to osd* [--op *list* ]
-
-
-
 
 
 Description
@@ -70,6 +66,7 @@ Possible object operations:
 * clear-data-digest
 * remove-clone-metadata 
 
+
 Installation
 ============
 
@@ -100,7 +97,7 @@ Identify all objects within an OSD::
 
 Identify all objects within a placement group::
 
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID --op list
+   ceph-objectstore-tool --data-path $PATH_TO_OSD --op list
 
 Identify the placement group (PG) that an object belongs to::
 
@@ -120,7 +117,7 @@ Fix all lost objects::
 
 Fix all the lost objects within a specified placement group::
 
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID --op fix-lost
+   ceph-objectstore-tool --data-path $PATH_TO_OSD --op fix-lost
 
 Fix a lost object by its identifier::
 
@@ -142,13 +139,13 @@ Manipulating an object's content
 
 3. Before setting the bytes on the object, make a backup and a working copy of the object. Here is the syntactic form of that command::
    
-    ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-bytes > $OBJECT_FILE_NAME
+    ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT get-bytes > $OBJECT_FILE_NAME
 
 For example::
 
-   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' get-bytes > zone_info.default.backup
+   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] get-bytes > zone_info.default.backup
 
-   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' get-bytes > zone_info.default.working-copy
+   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] get-bytes > zone_info.default.working-copy
 
 The first command creates the back-up copy, and the second command creates the working copy.
 
@@ -156,11 +153,11 @@ The first command creates the back-up copy, and the second command creates the w
 
 5. Set the bytes of the object::
      
-     ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT set-bytes < $OBJECT_FILE_NAME
+     ceph-objectstore-tool --data-path $PATH_TO_OSD  $OBJECT set-bytes < $OBJECT_FILE_NAME
 
 For example::
 
-   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' set-bytes < zone_info.default.working-copy
+   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] set-bytes < zone_info.default.working-copy
  
 
 Removing an Object
@@ -170,11 +167,11 @@ Use **ceph-objectstore-tool** to remove objects. When an object is removed, its 
 
 Remove an object (syntax)::
 
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT remove
+   ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT remove
 
 Remove an object (example)::
 
-[root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash": 235010478,"max":0,"pool":1,"namespace":"","max":0}]
+[root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash": 235010478,"max":0,"pool":1,"namespace":"","max":0}] remove
 
 Listing the Object Map
 ----------------------
@@ -200,8 +197,7 @@ Use the ceph-objectstore-tool to list the contents of the object map (OMAP). The
 
    Example::
 
-    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' list-omap
-
+    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] list-omap
 
 Manipulating the Object Map Header
 ----------------------------------
@@ -232,21 +228,21 @@ Procedure
 
   Syntax::
 
-        ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-omaphdr > $OBJECT_MAP_FILE_NAME
+        ceph-objectstore-tool --data-path $PATH_TO_OSD  $OBJECT get-omaphdr > $OBJECT_MAP_FILE_NAME
 
   Example::
 
-        [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}'  get-omaphdr > zone_info.default.omaphdr.txt
+        [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] get-omaphdr > zone_info.default.omaphdr.txt
 
   Set the object map header:
 
   Syntax::
 
-        ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-omaphdr < $OBJECT_MAP_FILE_NAME
+        ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT get-omaphdr < $OBJECT_MAP_FILE_NAME
 
   Example::
 
-   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}'  set-omaphdr < zone_info.default.omaphdr.txt
+   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] set-omaphdr < zone_info.default.omaphdr.txt
 
 
 Manipulating the Object Map Key
@@ -268,40 +264,44 @@ Procedure
 
     Syntax::
      
-       ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-omap $KEY > $OBJECT_MAP_FILE_NAME
+       ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT get-omap $KEY > $OBJECT_MAP_FILE_NAME
 
    Example::
 
-    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}'  get-omap "" > zone_info.default.omap.txt
+    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] get-omap "" > zone_info.default.omap.txt
 
    Set the object map key:
 
    Syntax::
 
-    ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT set-omap $KEY < $OBJECT_MAP_FILE_NAME
+    ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT set-omap $KEY < $OBJECT_MAP_FILE_NAME
 
    Example::
 
-    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' set-omap "" < zone_info.default.omap.txt
+    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] set-omap "" < zone_info.default.omap.txt
 
    Remove the object map key:
 
    Syntax::
 
-    ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT rm-omap $KEY
+    ceph-objectstore-tool --data-path $PATH_TO_OSD  $OBJECT rm-omap $KEY
 
    Example::
 
-    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' rm-omap ""
+    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] rm-omap ""
 
 
 Listing an Object's Attributes
 -------------------------------
 
 Use the **ceph-objectstore-tool** utility to list an object's attributes. The output provides you with the object’s keys and values.
-Note
 
-If you are using FileStore as the OSD backend object store and the journal is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` argument when listing an object’s attributes, where the `$PATH_TO_JOURNAL` variable is the absolute path to the OSD journal; for example `/var/lib/ceph/osd/ceph-0/journal`.
+.. note::
+        If you are using FileStore as the OSD backend object store and the journal 
+        is on a different disk, you must add the `--journal-path $PATH_TO_JOURNAL` 
+        argument when listing an object’s attributes, where the `$PATH_TO_JOURNAL` 
+        variable is the absolute path to the OSD journal; for example 
+        `/var/lib/ceph/osd/ceph-0/journal`.
 
 Prerequisites
 ^^^^^^^^^^^^^
@@ -326,11 +326,11 @@ Procedure
 
    Syntax::
 
-    ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT list-attrs
+    ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT list-attrs
 
    Example::
 
-    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' list-attrs
+    [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] list-attrs
 
 
 MANIPULATING THE OBJECT ATTRIBUTE KEY
@@ -362,31 +362,31 @@ Procedure
 
  Syntax::
 
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT get-attrs $KEY > $OBJECT_ATTRS_FILE_NAME
+   ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT get-attrs $KEY > $OBJECT_ATTRS_FILE_NAME
 
  Example::
 
-   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0  --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' get-attrs "oid" > zone_info.default.attr.txt
+   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] get-attrs "oid" > zone_info.default.attr.txt
 
  Set an object’s attributes:
 
  Syntax::
 
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT  set-attrs $KEY < $OBJECT_ATTRS_FILE_NAME
+   ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT  set-attrs $KEY < $OBJECT_ATTRS_FILE_NAME
 
  Example::
 
-   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' set-attrs "oid" < zone_info.default.attr.txt
+   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] set-attrs "oid" < zone_info.default.attr.txt
 
  Remove an object’s attributes:
 
  Syntax::
 
-   ceph-objectstore-tool --data-path $PATH_TO_OSD --pgid $PG_ID $OBJECT rm-attrs $KEY
+   ceph-objectstore-tool --data-path $PATH_TO_OSD $OBJECT rm-attrs $KEY
 
  Example::
 
-   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --pgid 0.1c '{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":11,"namespace":""}' rm-attrs "oid"
+   [root@osd ~]# ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 ["1.1c",{"oid":"zone_info.default","key":"","snapid":-2,"hash":235010478,"max":0,"pool":1,"namespace":"","max":0}] rm-attrs "oid"
 
 
 Options
