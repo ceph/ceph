@@ -1,7 +1,6 @@
 import argparse
 import json
 import logging
-import json
 from textwrap import dedent
 from ceph_volume import terminal, decorators
 from ceph_volume.util import disk, prompt_bool, arg_validators, templates
@@ -71,6 +70,26 @@ def get_physical_osds(devices, args):
     return ret
 
 
+def get_lvm_osds(lvs, args):
+    '''
+    Goes through passed LVs and assigns planned osds
+    '''
+    ret = []
+    for lv in lvs:
+        if lv.used_by_ceph:
+            continue
+        osd_id = None
+        if args.osd_ids:
+            osd_id = args.osd_ids.pop()
+        osd = Batch.OSD("{}/{}".format(lv.vg_name, lv.lv_name),
+                       100.0,
+                       disk.Size(b=int(lv.lv_size)),
+                       1,
+                       osd_id)
+        ret.append(osd)
+    return ret
+
+
 def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, args):
     requested_slots = getattr(args, '{}_slots'.format(type_))
     if not requested_slots or requested_slots < fast_slots_per_device:
@@ -115,6 +134,12 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
             occupied_slots += 1
             ret.append((dev.path, relative_size, abs_size, requested_slots))
     return ret
+
+
+def get_lvm_fast_allocs(lvs):
+    return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
+             disk.Size(b=int(d.lv_size)), 1) for d in lvs if not
+            d.used_by_ceph]
 
 
 class Batch(object):
@@ -391,37 +416,24 @@ class Batch(object):
             plan = self.get_deployment_layout(args, args.devices, args.journal_devices)
         return plan
 
-    def get_lvm_osds(self, lvs, args):
-        '''
-        Goes through passed LVs and assigns planned osds
-        '''
-        ret = []
-        for lv in lvs:
-            if lv.used_by_ceph:
-                continue
-            osd_id = None
-            if args.osd_ids:
-                osd_id = args.osd_ids.pop()
-            osd = self.OSD("{}/{}".format(lv.vg_name, lv.lv_name),
-                           100.0,
-                           disk.Size(b=int(lv.lv_size)),
-                           1,
-                           osd_id)
-            ret.append(osd)
-        return ret
-
     def get_deployment_layout(self, args, devices, fast_devices=[],
                               very_fast_devices=[]):
+        '''
+        The methods here are mostly just organization, error reporting and
+        setting up of (default) args. The hravy lifting code for the deployment
+        layout can be found in the static get_*_osds and get_*:fast_allocs
+        functions.
+        '''
         plan = []
         phys_devs = [d for d in devices if d.is_device]
         lvm_devs = [d.lvs[0] for d in list(set(devices) -
                                            set(phys_devs))]
-        mlogger.debug(('passed data_devices: {} physical, {}'
-                       ' LVM').format(len(phys_devs), len(lvm_devs)))
+        mlogger.debug(('passed data devices: {} physical,'
+                       ' {} LVM').format(len(phys_devs), len(lvm_devs)))
 
         plan.extend(get_physical_osds(phys_devs, args))
 
-        plan.extend(self.get_lvm_osds(lvm_devs, args))
+        plan.extend(get_lvm_osds(lvm_devs, args))
 
         num_osds = len(plan)
         if num_osds == 0:
@@ -463,11 +475,6 @@ class Batch(object):
                                         type_='block.wal')
         return plan
 
-    def get_lvm_fast_allocs(self, lvs):
-        return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
-                 disk.Size(b=int(d.lv_size)), 1) for d in lvs if not
-                d.used_by_ceph]
-
     def fast_allocations(self, devices, requested_osds, new_osds, type_):
         ret = []
         if not devices:
@@ -475,9 +482,14 @@ class Batch(object):
         phys_devs = [d for d in devices if d.is_device]
         lvm_devs = [d.lvs[0] for d in list(set(devices) -
                                            set(phys_devs))]
+        mlogger.debug(('passed {} devices: {} physical,'
+                       ' {} LVM').format(type_, len(phys_devs), len(lvm_devs)))
 
-        ret.extend(self.get_lvm_fast_allocs(lvm_devs))
+        ret.extend(get_lvm_fast_allocs(lvm_devs))
 
+        # fill up uneven distributions across fast devices: 5 osds and 2 fast
+        # devices? create 3 slots on each device rather then deploying
+        # heterogeneous osds
         if (requested_osds - len(lvm_devs)) % len(phys_devs):
             fast_slots_per_device = int((requested_osds - len(lvm_devs)) / len(phys_devs)) + 1
         else:
@@ -492,6 +504,10 @@ class Batch(object):
         return ret
 
     class OSD(object):
+        '''
+        This class simply stores info about to-be-deployed OSDs and provides an
+        easy way to retrieve the necessary create arguments.
+        '''
         def __init__(self, data_path, rel_size, abs_size, slots, id_):
             self.id_ = id_
             self.data = (data_path, rel_size, abs_size, slots)
