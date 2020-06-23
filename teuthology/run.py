@@ -170,7 +170,13 @@ def get_initial_tasks(lock, config, machine_type):
     overrides = config.get('overrides', {})
     having_repos = ('repo' in config.get('install', {}) or
                     'repo' in overrides.get('install', {}))
-    if not ('redhat' in config or having_repos):
+    if 'redhat' in config:
+        pass
+    elif having_repos:
+        pass
+    elif not config.get('verify_ceph_hash', True):
+        pass
+    else:
         init_tasks += [
             {'internal.check_packages': None},
             {'internal.buildpackages_prep': None},
