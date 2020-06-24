@@ -1,17 +1,33 @@
 {
+  "extends": "stylelint-config-sass-guidelines",
   "plugins": [
     "stylelint-declaration-use-variable"
   ],  
   "rules": {
+    "declaration-property-value-blacklist": null,
+    "function-parentheses-space-inside": null,
+    "indentation": null,
+    "property-no-vendor-prefix": null,
+    "selector-no-qualifying-type": null,
+    "selector-class-pattern": null,
+    "selector-pseudo-element-no-unknown": null,
+    "selector-max-id": null,
+    "selector-max-compound-selectors": null,
+    "scss/selector-no-redundant-nesting-selector": null,
+    "scss/dollar-variable-pattern": null,
+    "scss/at-extend-no-missing-placeholder": null,
+    "max-nesting-depth": null,
+    "scss/at-import-partial-extension-blacklist": null,
+    "value-no-vendor-prefix": null,
     "sh-waqar/declaration-use-variable": [
       [
         "/color/",
         {
           "ignoreValues": [
-          "inherit",
-          "initial",
-          "transparent",
-          "/darken/"
+            "inherit",
+            "initial",
+            "transparent",
+            "/darken/"
           ]
         }
       ]
