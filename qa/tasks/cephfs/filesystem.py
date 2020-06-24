@@ -1286,7 +1286,7 @@ class Filesystem(MDSCluster):
         """
         dirfrag_obj_name = "{0:x}.00000000".format(dir_ino)
         try:
-            ret = self.rados(["getomapval", dirfrag_obj_name, obj_name+"_head", out])
+            self.rados(["getomapval", dirfrag_obj_name, obj_name+"_head", out])
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(dir_ino)

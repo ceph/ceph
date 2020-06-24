@@ -8,7 +8,6 @@ import contextlib
 import logging
 import os
 import random
-import six
 import string
 
 from teuthology import misc as teuthology

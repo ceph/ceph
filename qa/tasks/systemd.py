@@ -69,7 +69,7 @@ def task(ctx, config):
         mon_role_name = 'mon.' + name
         mds_role_name = 'mds.' + name
         mgr_role_name = 'mgr.' + name
-        m_osd = re.search('--id (\d+) --setuser ceph', r.stdout.getvalue())
+        m_osd = re.search('--id (\d+) --setuser ceph', ps_eaf)
         if m_osd:
             osd_service = 'ceph-osd@{m}.service'.format(m=m_osd.group(1))
             remote.run(args=['sudo', 'systemctl', 'status',

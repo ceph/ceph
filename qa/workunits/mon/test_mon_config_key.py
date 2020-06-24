@@ -444,7 +444,8 @@ def main():
                 read_data = json.load(temp_file)
             except ValueError:
                 temp_file.seek(0)
-                assert False, "{op} output was not valid JSON:\n{filedata}".format(op, temp_file.readlines())
+                assert False, "{op} output was not valid JSON:\n{filedata}".format(
+                    op=op, filedata=temp_file.readlines())
 
             if sop == 'existing':
                 assert key in read_data, "key '{k}' not found in list/dump output".format(k=key)

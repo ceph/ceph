@@ -26,7 +26,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
 from teuthology.orchestra import run
-import tasks.ceph_client as cclient
+from tasks import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
 
@@ -1477,7 +1477,6 @@ def suppress_mon_health_to_clog(ctx, config):
     restore the tweaked option at the /end/ of 'tasks' block.
     """
     if config.get('mon-health-to-clog', 'true') == 'false':
-        saved_options = {}
         cluster = config.get('cluster', 'ceph')
         manager = ctx.managers[cluster]
         manager.raw_cluster_command(

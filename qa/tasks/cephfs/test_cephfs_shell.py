@@ -4,11 +4,9 @@ export $PATH.
 """
 from io import StringIO
 from os import path
-from os import getcwd as os_getcwd
 import crypt
 import logging
 from tempfile import mkstemp as tempfile_mkstemp
-from tempfile import mkdtemp as tempfile_mkdtemp
 import math
 from six import ensure_str
 from sys import version_info as sys_version_info
@@ -16,7 +14,6 @@ from re import search as re_search
 from time import sleep
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.misc import sudo_write_file
-from teuthology.misc import sh as misc_sh
 from teuthology.orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
