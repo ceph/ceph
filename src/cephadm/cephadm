@@ -41,6 +41,7 @@ You can invoke cephadm in two ways:
 import argparse
 import datetime
 import fcntl
+import ipaddress
 import json
 import logging
 import os
@@ -81,6 +82,9 @@ if sys.version_info >= (3, 0):
     from urllib.error import HTTPError
 else:
     from urllib2 import urlopen, HTTPError
+
+if sys.version_info > (3, 0):
+    unicode = str
 
 container_path = ''
 cached_stdin = None
@@ -2314,6 +2318,17 @@ def command_inspect_image():
 
 ##################################
 
+def is_ipv6(address):
+    # type: (str) -> bool
+    if address.startswith('[') and address.endswith(']'):
+        address = address[1:-1]
+    try:
+        return ipaddress.ip_address(unicode(address)).version == 6
+    except ValueError:
+        logger.warning("Address: {} isn't a valid IP address".format(address))
+        return False
+
+
 @default_image
 def command_bootstrap():
     # type: () -> int
@@ -2349,6 +2364,7 @@ def command_bootstrap():
     mon_id = args.mon_id or hostname
     mgr_id = args.mgr_id or generate_service_id()
     logging.info('Cluster fsid: %s' % fsid)
+    ipv6 = False
 
     l = FileLock(fsid)
     l.acquire()
@@ -2357,6 +2373,7 @@ def command_bootstrap():
     r = re.compile(r':(\d+)$')
     base_ip = None
     if args.mon_ip:
+        ipv6 = is_ipv6(args.mon_ip)
         hasport = r.findall(args.mon_ip)
         if hasport:
             port = int(hasport[0])
@@ -2380,6 +2397,7 @@ def command_bootstrap():
         if addr_arg[0] != '[' or addr_arg[-1] != ']':
             raise Error('--mon-addrv value %s must use square backets' %
                         addr_arg)
+        ipv6 = addr_arg.count('[') > 1
         for addr in addr_arg[1:-1].split(','):
             hasport = r.findall(addr)
             if not hasport:
@@ -2593,6 +2611,10 @@ def command_bootstrap():
         logger.info('Setting mon public_network...')
         cli(['config', 'set', 'mon', 'public_network', mon_network])
 
+    if ipv6:
+        logger.info('Enabling IPv6 (ms_bind_ipv6)')
+        cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
+
     # create mgr
     logger.info('Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
@@ -2749,7 +2771,7 @@ def command_bootstrap():
                         get_fqdn(), port,
                         args.initial_dashboard_user,
                         password))
-    
+
     if args.apply_spec:
         logger.info('Applying %s to cluster' % args.apply_spec)
 
@@ -4675,7 +4697,6 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')
-
 
     parser_bootstrap.add_argument(
         '--shared_ceph_folder',
