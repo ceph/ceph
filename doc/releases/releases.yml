@@ -14,6 +14,10 @@
 releases:
   octopus:
     releases:
+      - version: 15.2.3
+        released: 2020-05-29
+      - version: 15.2.2
+        released: 2020-05-18
       - version: 15.2.1
         released: 2020-04-09
       - version: 15.2.0
