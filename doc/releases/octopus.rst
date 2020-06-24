@@ -1,3 +1,18 @@
+v15.2.3 Octopus
+===============
+
+This is the third bug-fix release of the Ceph Octopus stable release series.
+This release mainly is a workaround for a potential OSD corruption in v15.2.2.
+We advise users to upgrade to v15.2.3 directly. For users running v15.2.2 please
+execute the following::
+
+  ceph config set osd bluefs_preextend_wal_files false
+
+Changelog
+---------
+* bluestore: common/options.cc: disable bluefs_preextend_wal_files (`issue#45613 <http://tracker.ceph.com/issues/45613>`_, Neha Ojha)
+
+
 v15.2.2 Octopus
 ===============
 
