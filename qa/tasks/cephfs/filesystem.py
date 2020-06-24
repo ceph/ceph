@@ -232,7 +232,7 @@ class CephCluster(object):
             log.debug(f"_json_asok output\n{pretty}")
             return j
         else:
-            log.debug(f"_json_asok output empty")
+            log.debug("_json_asok output empty")
             return None
 
 

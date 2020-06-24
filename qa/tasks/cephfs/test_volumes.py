@@ -601,7 +601,7 @@ class TestVolumes(CephFSTestCase):
         path = self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
         path = os.path.dirname(path) # get subvolume path
 
-        subtrees = self._get_subtrees(status=status, rank=1)
+        self._get_subtrees(status=status, rank=1)
         self._wait_subtrees([(path, 1)], status=status)
 
     def test_subvolumegroup_pin_distributed(self):
@@ -621,7 +621,7 @@ class TestVolumes(CephFSTestCase):
 
     def test_subvolume_pin_random(self):
         self.fs.set_max_mds(2)
-        status = self.fs.wait_for_daemons()
+        self.fs.wait_for_daemons()
         self.config_set('mds', 'mds_export_ephemeral_random', True)
 
         subvolume = self._generate_random_subvolume_name()

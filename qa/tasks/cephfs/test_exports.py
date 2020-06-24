@@ -1,10 +1,9 @@
 import logging
 import random
 import time
-import unittest
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from teuthology.orchestra.run import CommandFailedError, Raw
+from teuthology.orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -147,8 +146,8 @@ class TestExportPin(CephFSTestCase):
         That the export pin does not prevent empty (nothing in cache) subtree merging.
         """
 
-        self.mount_a.setfattr(f"1", "ceph.dir.pin", "0")
-        self.mount_a.setfattr(f"1/2", "ceph.dir.pin", "1")
+        self.mount_a.setfattr("1", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("1/2", "ceph.dir.pin", "1")
         self._wait_subtrees([('/1', 0), ('/1/2', 1)], status=self.status)
         self.mount_a.umount_wait() # release all caps
         def _drop():
@@ -167,7 +166,7 @@ class TestEphemeralPins(CephFSTestCase):
         self.config_set('mds', 'mds_export_ephemeral_distributed', True)
         self.config_set('mds', 'mds_export_ephemeral_random_max', 1.0)
 
-        self.mount_a.run_shell_payload(f"""
+        self.mount_a.run_shell_payload("""
 set -e
 
 # Use up a random number of inode numbers so the ephemeral pinning is not the same every test.
@@ -309,8 +308,8 @@ done
 
         # pin /tree so it does not export during failover
         self._setup_tree(distributed=True, export=0)
-        subtrees = self._wait_distributed_subtrees(100, status=self.status, rank="all")
-        test = [(s['dir']['path'], s['auth_first']) for s in subtrees]
+        self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        #test = [(s['dir']['path'], s['auth_first']) for s in subtrees]
         before = self.fs.ranks_perf(lambda p: p['mds']['exported'])
         log.info(f"export stats: {before}")
         self.fs.rank_fail(rank=1)
@@ -405,7 +404,7 @@ done
         self._setup_tree(count=0, random=1.0)
         self._setup_tree(path="tree/pin", count=count)
         self._wait_random_subtrees(count+1, status=self.status, rank="all")
-        self.mount_a.setfattr(f"tree/pin", "ceph.dir.pin", "1")
+        self.mount_a.setfattr("tree/pin", "ceph.dir.pin", "1")
         self._wait_subtrees([("/tree/pin", 1)], status=self.status, rank=1, path="/tree/pin")
 
     def test_ephemeral_randomness(self):
@@ -428,7 +427,7 @@ done
 
         count = 100
         self._setup_tree(count=count, random=1.0)
-        subtrees = self._wait_random_subtrees(count, status=self.status, rank="all")
+        self._wait_random_subtrees(count, status=self.status, rank="all")
         self.mount_a.umount_wait() # release all caps
         def _drop():
             self.fs.ranks_tell(["cache", "drop"], status=self.status)
