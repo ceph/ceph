@@ -273,7 +273,7 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       {
         prop: 'tree.device_class',
         name: this.i18n('Device class'),
-        flexGrow: 1,
+        flexGrow: 1.2,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
