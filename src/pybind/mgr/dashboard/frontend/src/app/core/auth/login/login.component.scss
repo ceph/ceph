@@ -25,8 +25,7 @@
   .form-control,
   .form-control:focus {
     background-color: $color-password-toggle-bg;
-    border: none;
-    -webkit-box-shadow: none;
+    border: 0;
     box-shadow: none;
     color: $color-password-toggle-text;
     filter: none;

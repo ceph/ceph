@@ -415,10 +415,6 @@ cd-modal {
 /* Notification icons */
 .toast-message .custom-icon {
   /* Display icons in white, regardless of their origin color. */
-  -webkit-filter: brightness(0) invert(1);
-  -moz-filter: brightness(0) invert(1);
-  -o-filter: brightness(0) invert(1);
-  -ms-filter: brightness(0) invert(1);
   filter: brightness(0) invert(1);
 }
 /* Block UI */

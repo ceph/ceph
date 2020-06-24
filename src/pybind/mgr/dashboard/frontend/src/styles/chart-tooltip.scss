@@ -8,9 +8,6 @@
 }
 
 canvas {
-  -moz-user-select: none;
-  -webkit-user-select: none;
-  -ms-user-select: none;
   user-select: none;
 }
 
@@ -23,9 +20,7 @@ canvas {
   pointer-events: none;
   position: absolute;
 
-  -webkit-transform: translate(-50%, 0);
   transform: translate(-50%, 0);
-  -webkit-transition: all 0.1s ease;
   transition: all 0.1s ease;
 
   &.transform-left {

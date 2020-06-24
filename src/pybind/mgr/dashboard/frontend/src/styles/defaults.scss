@@ -161,7 +161,7 @@ $color-popover-date: $color-solid-gray !default;
 $color-rgw-icon: $color-blue-gray !default;
 
 @mixin table-cell {
-  border: none;
+  border: 0;
   border-bottom: 1px solid $color-light-gray;
   border-left: 1px solid $color-light-gray;
   padding: 5px;
@@ -183,17 +183,15 @@ $color-rgw-icon: $color-blue-gray !default;
   $u4: unit($max-font-size);
 
   @if $u1 == $u2 and $u1 == $u3 and $u1 == $u4 {
-    & {
-      font-size: $min-font-size;
-      @media screen and (min-width: $min-vw) {
-        font-size: calc(
-          #{$min-font-size} + #{strip-unit($max-font-size - $min-font-size)} *
-            ((100vw - #{$min-vw}) / #{strip-unit($max-vw - $min-vw)})
-        );
-      }
-      @media screen and (min-width: $max-vw) {
-        font-size: $max-font-size;
-      }
+    font-size: $min-font-size;
+    @media screen and (min-width: $min-vw) {
+      font-size: calc(
+        #{$min-font-size} + #{strip-unit($max-font-size - $min-font-size)} *
+          ((100vw - #{$min-vw}) / #{strip-unit($max-vw - $min-vw)})
+      );
+    }
+    @media screen and (min-width: $max-vw) {
+      font-size: $max-font-size;
     }
   }
 }
