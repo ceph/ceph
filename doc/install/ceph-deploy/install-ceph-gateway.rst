@@ -144,9 +144,10 @@ execute the following as the ``root`` user::
 
  iptables-save > /etc/iptables/rules.v4
 
+.. _Using SSL with Civetweb:
+
 Using SSL with Civetweb
 -----------------------
-.. _Using SSL with Civetweb:
 
 Before using SSL with civetweb, you will need a certificate that will match
 the host name that that will be used to access the Ceph Object Gateway.
@@ -298,9 +299,10 @@ For example::
 .. note:: Mapping the index pool (for each zone, if applicable) to a CRUSH
           rule of SSD-based OSDs may also help with bucket index performance.
 
+.. _Add Wildcard to DNS:
+
 Add Wildcard to DNS
 -------------------
-.. _Add Wildcard to DNS:
 
 To use Ceph with S3-style subdomains (e.g., bucket-name.domain-name.com), you
 need to add a wildcard to the DNS record of the DNS server you use with the
