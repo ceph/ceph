@@ -65,12 +65,11 @@ interacting with the services to schedule tests and to report the test results.
 Update Dependencies
 -------------------
 
-We track the dependencies using ``requirements.txt`` 
-for python2 and python3 respectively. These packages are tested, and should work 
-with teuthology. But if you want to bump up the versions of them, please use the 
-following command to update these files. For python3 ::
+We track the dependencies using ``requirements.txt`` . These packages are
+tested, and should work  with teuthology. But if you want to bump up the
+versions of them, please use the following command to update these files::
 
-  pip-compile -qo- | sed '/^-e / d' > requirements.txt
+  ./update-requirements.sh
 
 Please upgrade pip-tool using following command ::
 
