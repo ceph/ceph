@@ -112,6 +112,58 @@ the ``val`` specifies its new value. For example, setting the pubsub control use
 
 A configuration field can be removed by using ``--tier-config-rm={key}``.
 
+
+Topic and Subscription Management via CLI
+-----------------------------------------
+
+Configuration of all topics of a user could be fetched using the following command:
+   
+::
+   
+   # radosgw-admin topic list --uid={user-id}
+
+
+Configuration of a specific topic could be fetched using:
+
+::
+   
+   # radosgw-admin topic get --uid={user-id} --topic={topic-name}
+
+
+And removed using:
+
+::
+   
+   # radosgw-admin topic rm --uid={user-id} --topic={topic-name}
+
+
+Configuration of a subscription could be fetched using:
+
+::
+   
+   # radosgw-admin subscription get --uid={user-id} --subscription={topic-name}
+
+And removed using:
+
+::
+   
+   # radosgw-admin subscription rm --uid={user-id} --subscription={topic-name}
+
+
+To fetch all of the events stored in a subcription, use:
+
+::
+   
+   # radosgw-admin subscription pull --uid={user-id} --subscription={topic-name} [--marker={last-marker}]
+
+
+To ack (and remove) an event from a subscription, use:
+
+::
+   
+   # radosgw-admin subscription ack --uid={user-id} --subscription={topic-name} --event-id={event-id}
+
+
 PubSub Performance Stats
 -------------------------
 Same counters are shared between the pubsub sync module and the notification mechanism.
