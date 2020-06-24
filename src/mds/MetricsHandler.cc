@@ -129,6 +129,16 @@ void MetricsHandler::set_next_seq(version_t seq) {
   next_seq = seq;
 }
 
+void MetricsHandler::reset_seq() {
+  dout(10) << ": last_updated_seq=" << last_updated_seq << dendl;
+
+  set_next_seq(0);
+  for (auto &[client, metrics_v] : client_metrics_map) {
+    dout(10) << ": reset last updated seq for client addr=" << client << dendl;
+    metrics_v.first = last_updated_seq;
+  }
+}
+
 void MetricsHandler::handle_payload(Session *session, const CapInfoPayload &payload) {
   dout(20) << ": session=" << session << ", hits=" << payload.cap_hits << ", misses="
            << payload.cap_misses << dendl;
@@ -214,22 +224,29 @@ void MetricsHandler::notify_mdsmap(const MDSMap &mdsmap) {
   std::set<mds_rank_t> active_set;
 
   std::scoped_lock locker(lock);
-  // reset the sequence number so that last_updated_seq starts
-  // updating when the new rank0 mds pings us.
-  set_next_seq(0);
+
+  // reset sequence number when rank0 is unavailable or a new
+  // rank0 mds is chosen -- new rank0 will assign a starting
+  // sequence number when it is ready to process metric updates.
+  // this also allows to cut-short metric remove operations to
+  // be satisfied locally in many cases.
 
   // update new rank0 address
   mdsmap.get_active_mds_set(active_set);
   if (!active_set.count((mds_rank_t)0)) {
     dout(10) << ": rank0 is unavailable" << dendl;
     addr_rank0 = boost::none;
+    reset_seq();
     return;
   }
+
+  dout(10) << ": rank0 is mds." << mdsmap.get_mds_info((mds_rank_t)0).name << dendl;
 
   auto new_rank0_addr = mdsmap.get_addrs((mds_rank_t)0);
   if (addr_rank0 != new_rank0_addr) {
     dout(10) << ": rank0 addr is now " << new_rank0_addr << dendl;
     addr_rank0 = new_rank0_addr;
+    reset_seq();
   }
 }
 
