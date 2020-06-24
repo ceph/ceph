@@ -67,7 +67,7 @@ pip-tools==4.3.0          # via teuthology
 pluggy==0.7.1             # via pytest, tox
 positional==1.1.1         # via keystoneauth1, python-keystoneclient
 prettytable==0.7.2        # via cliff, python-cinderclient, python-glanceclient, python-novaclient, teuthology
-psutil==5.2.2             # via teuthology
+psutil==5.6.6             # via teuthology
 ptyprocess==0.5.1         # via pexpect
 py==1.5.3                 # via pytest, tox
 pyasn1==0.2.3             # via teuthology
