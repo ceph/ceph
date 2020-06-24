@@ -3262,6 +3262,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_max_preemptions", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .set_min_max(0, 30)
     .set_description("Set the maximum number of times we will preempt a deep scrub due to a client operation before blocking client IO to complete the scrub"),
 
     Option("osd_deep_scrub_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
