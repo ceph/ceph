@@ -30,7 +30,6 @@ Alternative usage:
 
 """
 
-from io import BytesIO
 from io import StringIO
 from collections import defaultdict
 import getpass
