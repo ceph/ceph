@@ -1,12 +1,13 @@
-import json
 import errno
+import json
 import logging
 
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
+from rados import TimedOut
 
 import orchestrator
+
 from .fs_util import create_pool
-from rados import TimedOut
 
 log = logging.getLogger(__name__)
 
