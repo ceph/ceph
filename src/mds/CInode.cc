@@ -4639,10 +4639,6 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 	dout(20) << "validating a dirty CInode; results will be inconclusive"
 	  << dendl;
       }
-      if (in->is_symlink()) {
-	// there's nothing to do for symlinks!
-	return true;
-      }
 
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
 					    in->mdcache->mds->finisher);
