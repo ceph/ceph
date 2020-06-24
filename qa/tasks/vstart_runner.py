@@ -1082,7 +1082,6 @@ class LocalCephCluster(CephCluster):
 class LocalMDSCluster(LocalCephCluster, MDSCluster):
     def __init__(self, ctx):
         super(LocalMDSCluster, self).__init__(ctx)
-
         self.mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
         self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
@@ -1092,6 +1091,13 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
 
     def newfs(self, name='cephfs', create=True):
         return LocalFilesystem(self._ctx, name=name, create=create)
+
+    def delete_all_filesystems(self):
+        """
+        Remove all filesystems that exist, and any pools in use by them.
+        """
+        for fs in self.status().get_filesystems():
+            LocalFilesystem(ctx=self._ctx, fscid=fs['id']).destroy()
 
 
 class LocalMgrCluster(LocalCephCluster, MgrCluster):
@@ -1103,7 +1109,7 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
-    def __init__(self, ctx, fscid=None, name='cephfs', create=False, ec_profile=None):
+    def __init__(self, ctx, fscid=None, name=None, create=False, ec_profile=None):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
 
