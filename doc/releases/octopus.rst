@@ -10,7 +10,8 @@ execute the following::
 
 Changelog
 ---------
-* bluestore: common/options.cc: disable bluefs_preextend_wal_files (`issue#45613 <http://tracker.ceph.com/issues/45613>`_, Neha Ojha)
+
+* bluestore: remove preextended WAL support (`issue#45613 <http://tracker.ceph.com/issues/45613>`_, Igor Fedotov, Neha Ojha)
 
 
 v15.2.2 Octopus
