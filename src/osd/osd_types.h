@@ -1433,6 +1433,10 @@ public:
     grade_table.resize(0);
   }
 
+  bool is_stretch_pool() const {
+    return peering_crush_bucket_count != 0;
+  }
+
   uint64_t target_max_bytes;   ///< tiering: target max pool size
   uint64_t target_max_objects; ///< tiering: target max pool size
 
