@@ -1286,10 +1286,7 @@ static ceph::spinlock debug_lock;
     _len += bl._len;
     _num += bl._num;
     _buffers.splice_back(bl._buffers);
-    bl._carriage = &always_empty_bptr;
-    bl._buffers.clear_and_dispose();
-    bl._len = 0;
-    bl._num = 0;
+    bl.clear();
   }
 
   void buffer::list::claim_append_piecewise(list& bl)
