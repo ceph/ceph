@@ -113,8 +113,9 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     flags |= CACHE_FLAG_OBJV;
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
-
-  if ((cache.get(name, info, flags, cache_info) == 0) &&
+  
+  int r = cache.get(name, info, flags, cache_info);
+  if (r == 0 &&
       (!refresh_version || !info.version.compare(&(*refresh_version)))) {
     if (info.status < 0)
       return info.status;
@@ -137,9 +138,11 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     }
     return obl->length();
   }
+  if(r == -ENODATA)
+    return -ENOENT;
 
   map<string, bufferlist> unfiltered_attrset;
-  int r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
+  r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
                          obj, obl, ofs, end,
 			 (attrs ? &unfiltered_attrset : nullptr),
 			 true, /* cache unfiltered attrs */
@@ -195,7 +198,8 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 
   uint32_t flags = CACHE_FLAG_XATTRS;
 
-  if (cache.get(name, info, flags, nullptr) == 0) {
+  int r = cache.get(name, info, flags, nullptr);
+  if (r == 0) {
     if (info.status < 0)
       return info.status;
 
@@ -206,6 +210,8 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 
     *dest = iter->second;
     return dest->length();
+  } else if (r == -ENODATA) {
+    return -ENOENT;
   }
   /* don't try to cache this one */
   return RGWSI_SysObj_Core::get_attr(obj, attr_name, dest);
@@ -357,6 +363,9 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
     if (objv_tracker)
       objv_tracker->read_version = info.version;
     goto done;
+  }
+  if (r == -ENODATA) {
+    return -ENOENT;
   }
   r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &info.xattrs, first_chunk, objv_tracker);
   if (r < 0) {
