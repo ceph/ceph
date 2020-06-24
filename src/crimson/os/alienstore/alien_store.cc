@@ -5,6 +5,7 @@
 #include "alien_store.h"
 
 #include <map>
+#include <optional>
 #include <string_view>
 #include <boost/algorithm/string/trim.hpp>
 #include <fmt/format.h>
@@ -12,7 +13,9 @@
 
 #include <seastar/core/alien.hh>
 #include <seastar/core/future-util.hh>
+#include <seastar/core/memory.hh>
 #include <seastar/core/reactor.hh>
+#include <seastar/core/resource.hh>
 
 #include "common/ceph_context.h"
 #include "global/global_context.h"
@@ -522,6 +525,15 @@ ceph::buffer::list AlienStore::AlienOmapIterator::value()
 int AlienStore::AlienOmapIterator::status() const
 {
   return iter->status();
+}
+
+void AlienStore::configure_thread_memory()
+{
+  std::vector<seastar::resource::memory> layout;
+  // 1 GiB for experimenting. Perhaps we'll introduce a config option later.
+  // TODO: consider above.
+  layout.emplace_back(seastar::resource::memory{1024 * 1024 * 1024, 0});
+  seastar::memory::configure(layout, false, std::nullopt);
 }
 
 }

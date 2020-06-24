@@ -2,10 +2,10 @@
 
 #include <chrono>
 #include <pthread.h>
-#include "include/intarith.h"
 
 #include "include/ceph_assert.h"
 #include "crimson/common/config_proxy.h"
+#include "crimson/os/alienstore/alien_store.h"
 
 using crimson::common::local_conf;
 
@@ -21,6 +21,7 @@ ThreadPool::ThreadPool(size_t n_threads,
   for (size_t i = 0; i < n_threads; i++) {
     threads.emplace_back([this, cpu_id, queue_max_wait] {
       pin(cpu_id);
+      crimson::os::AlienStore::configure_thread_memory();
       loop(queue_max_wait);
     });
   }

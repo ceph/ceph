@@ -4430,6 +4430,20 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_rocksdb_cf", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+#ifdef WITH_SEASTAR
+    // This is necessary as the Seastar's allocator imposes restrictions
+    // on the number of threads that entered malloc/free/*. Unfortunately,
+    // RocksDB sharding in BlueStore dramatically lifted the number of
+    // threads spawn during RocksDB's init.
+    .set_validator([](std::string *value, std::string *error_message){
+      if (*value != "false") {
+        *error_message = "invalid BlueStore sharding configuration."
+                         " Be aware any change takes effect only on mkfs!";
+        return -EINVAL;
+      }
+      return 0;
+    })
+#endif
     .set_description("Enable use of rocksdb column families for bluestore metadata"),
 
     Option("bluestore_rocksdb_cfs", Option::TYPE_STR, Option::LEVEL_DEV)
