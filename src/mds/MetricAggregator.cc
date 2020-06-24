@@ -293,7 +293,8 @@ void MetricAggregator::notify_mdsmap(const MDSMap &mdsmap) {
 
   for (auto &rank : diff) {
     auto rank_addr = mdsmap.get_addrs(rank);
-    dout(10) << ": active rank=" << rank << " has addr=" << rank_addr << dendl;
+    dout(10) << ": active rank=" << rank << " (mds." << mdsmap.get_mds_info(rank).name
+             << ") has addr=" << rank_addr << dendl;
     active_rank_addrs.emplace(rank, rank_addr);
     clients_by_rank.emplace(rank, std::unordered_set<entity_inst_t>{});
   }
