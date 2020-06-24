@@ -188,7 +188,7 @@ class MdsService(CephadmService):
             'prefix': 'auth get-or-create',
             'entity': 'mds.' + mds_id,
             'caps': ['mon', 'profile mds',
-                     'osd', 'allow rwx',
+                     'osd', 'allow rw tag cephfs *=*',
                      'mds', 'allow'],
         })
         return self.mgr._create_daemon('mds', mds_id, host, keyring=keyring)
