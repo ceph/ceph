@@ -1,4 +1,4 @@
 tasks:
 - cephadm:
-    image: docker.io/ceph/ceph:v15.2.0
-    cephadm_branch: v15.2.0
+    image: docker.io/ceph/ceph:v15.2.2
+    cephadm_branch: v15.2.2
