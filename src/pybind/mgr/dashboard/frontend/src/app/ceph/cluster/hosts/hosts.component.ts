@@ -107,7 +107,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
             () => this.deleteAction()
           );
         },
-        disable: () => !this.selection.hasSelection
+        disable: (selection: CdTableSelection) =>
+          !selection.hasSelection ||
+          !selection.selected.every((selected) => selected.sources.orchestrator),
+        disableDesc: this.getDeleteDisableDesc.bind(this)
       }
     ];
   }
@@ -191,7 +194,9 @@ export class HostsComponent extends ListWithDetails implements OnInit {
 
   getEditDisableDesc(selection: CdTableSelection): string | undefined {
     if (selection && selection.hasSingleSelection && !selection.first().sources.orchestrator) {
-      return this.i18n('Host editing is disabled because the host is not managed by Orchestrator.');
+      return this.i18n(
+        'Host editing is disabled because the selected host is not managed by Orchestrator.'
+      );
     }
     return undefined;
   }
@@ -210,6 +215,19 @@ export class HostsComponent extends ListWithDetails implements OnInit {
           })
       }
     });
+  }
+
+  getDeleteDisableDesc(selection: CdTableSelection): string | undefined {
+    if (
+      selection &&
+      selection.hasSelection &&
+      !selection.selected.every((selected) => selected.sources.orchestrator)
+    ) {
+      return this.i18n(
+        'Host deletion is disabled because a selected host is not managed by Orchestrator.'
+      );
+    }
+    return undefined;
   }
 
   getHosts(context: CdTableFetchDataContext) {
