@@ -614,7 +614,7 @@ ln dir_1/original dir_2/linkto
 
         # Shut down rank 1
         self.fs.set_max_mds(1)
-        status = self.fs.wait_for_daemons(timeout=120)
+        self.fs.wait_for_daemons(timeout=120)
 
         # See that the stray counter on rank 0 has incremented
         self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
