@@ -1823,7 +1823,7 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
  * provided by string_ref since Boost 1.54 as it's defined outside of the std
  * namespace. I hope we'll remove it soon - just after merging the Matt's PR
  * for bundled Boost. It would allow us to forget that CentOS 7 has Boost 1.53. */
-static inline std::string to_string(const boost::string_ref& s)
+static inline std::string to_string(const std::string_view& s)
 {
   return std::string(s.data(), s.length());
 }

@@ -1,8 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <boost/utility/string_ref.hpp>
-
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
 #include "common/RefCountedObj.h"
@@ -39,6 +37,7 @@
 #include "include/random.h"
 
 #include <boost/asio/yield.hpp>
+#include <string_view>
 
 #define dout_subsys ceph_subsys_rgw
 
