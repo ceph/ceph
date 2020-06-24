@@ -167,10 +167,16 @@ def validate_tasks(config):
 
 def get_initial_tasks(lock, config, machine_type):
     init_tasks = []
-    overrides = config.get('overrides')
-    having_repos = ('install' in config and 'repos' in config.get('install')) \
-        or (overrides and 'install' in overrides and 'repos' in overrides.get('install'))
-    if not ('redhat' in config or having_repos):
+    overrides = config.get('overrides', {})
+    having_repos = ('repo' in config.get('install', {}) or
+                    'repo' in overrides.get('install', {}))
+    if 'redhat' in config:
+        pass
+    elif having_repos:
+        pass
+    elif not config.get('verify_ceph_hash', True):
+        pass
+    else:
         init_tasks += [
             {'internal.check_packages': None},
             {'internal.buildpackages_prep': None},
