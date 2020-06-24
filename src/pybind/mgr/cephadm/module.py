@@ -1193,7 +1193,7 @@ you may want to run:
                     bad_hosts.append(r)
 
         refresh(self.cache.get_hosts())
-		
+
         health_changed = False
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
             del self.health_checks['CEPHADM_HOST_CHECK_FAILED']
@@ -1710,6 +1710,7 @@ you may want to run:
                        extra_config: Optional[Dict[str, Any]] = None,
                        reconfig=False,
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
+                       ports: Optional[str] = None,
                        redeploy=False,
                        ) -> str:
 
@@ -1746,7 +1747,11 @@ you may want to run:
                     extra_ceph_config=extra_config.pop('config', ''))
             if extra_config:
                 cephadm_config.update({'files': extra_config})
-            extra_args.extend(['--config-json', '-'])
+
+            if ports:
+                extra_args.extend(['--config-json', ports])
+            else:
+                extra_args.extend(['--config-json', '-'])
 
             # osd deployments needs an --osd-uuid arg
             if daemon_type == 'osd':
@@ -1756,6 +1761,7 @@ you may want to run:
                 if not osd_uuid:
                     raise OrchestratorError('osd.%s not in osdmap' % daemon_id)
                 extra_args.extend(['--osd-fsid', osd_uuid])
+
 
         if reconfig:
             extra_args.append('--reconfig')

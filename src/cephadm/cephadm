@@ -112,6 +112,198 @@ class Ceph(object):
 
 ##################################
 
+class Firewalld(object):
+    def __init__(self):
+        # type () -> None
+        self.disabled = False
+        self.available = False
+        self.check()
+
+    def check(self):
+        # type () -> None
+        self.cmd = find_executable('firewall-cmd')
+        if not self.cmd:
+            logger.debug('firewalld does not appear to be present')
+            return
+        (enabled, state, _) = check_unit('firewalld.service')
+        if not enabled:
+            logger.debug('firewalld.service is not enabled')
+            return
+        if state != "running":
+            logger.debug('firewalld.service is not running')
+            return
+
+        logger.info("firewalld ready")
+        self.available = True
+
+    def enable_service_for(self, daemon_type):
+        # type (str) -> None
+        if self.disabled:
+            return
+        if not self.available:
+            logger.debug('Not possible to enable service <%s>. firewalld.service is not available' % daemon_type)
+            return
+
+        if daemon_type == 'mon':
+            svc = 'ceph-mon'
+        elif daemon_type in ['mgr', 'mds', 'osd']:
+            svc = 'ceph'
+        elif daemon_type == NFSGanesha.daemon_type:
+            svc = 'nfs'
+
+        out, err, ret = call([self.cmd, '--permanent', '--query-service', svc], verbose_on_failure=False)
+        if ret:
+            logger.info('Enabling firewalld service %s in current zone...' % svc)
+            out, err, ret = call([self.cmd, '--permanent', '--add-service', svc])
+            if ret:
+                raise RuntimeError(
+                    'unable to add service %s to current zone: %s' % (svc, err))
+        else:
+            logger.debug('firewalld service %s is enabled in current zone' % svc)
+
+    def open_ports(self, fw_ports):
+         # type (List[int]) -> None
+        if self.disabled:
+            return
+        if not self.available:
+            logger.debug('Not possible to open ports <%s>. firewalld.service is not available' % fw_ports)
+            return
+
+        for port in fw_ports:
+            tcp_port = str(port) + '/tcp'
+            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbose_on_failure=False)
+            if ret:
+                logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
+                out, err, ret = call([self.cmd, '--permanent', '--add-port', tcp_port])
+                if ret:
+                    raise RuntimeError('unable to add port %s to current zone: %s' %
+                                    (tcp_port, err))
+            else:
+                logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
+
+    def apply_rules(self):
+         # type () -> None
+        if self.disabled or not self.available:
+            return
+
+        call_throws([self.cmd, '--reload'])
+
+class Cli(object):
+    def __init__(self, admin_key, uid, gid, config, log_dir, timeout=None):
+        # type: (str,int, int, str,str, Optional[int]) -> None
+        self.admin_key = admin_key
+        self.uid = uid
+        self.gid = gid
+        self.config = config
+        self.log_dir = log_dir
+        self.timeout = timeout
+
+    def ceph(self, cmd, extra_mounts={}, timeout=DEFAULT_TIMEOUT):
+        # type: (List[str], Dict[str, str], Optional[int]) -> str
+
+        tmp_admin_keyring = write_tmp('[client.admin]\n'
+                            '\tkey = ' + self.admin_key + '\n',
+                             self.uid, self.gid)
+        tmp_config = write_tmp(self.config, self.uid, self.gid)
+
+        mounts = { self.log_dir: '/var/log/ceph:z',
+                   tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+                   tmp_config.name: '/etc/ceph/ceph.conf:z',
+                 }
+        mounts.update(extra_mounts)
+        timeout = timeout or self.timeout
+
+        return CephContainer(
+            image=args.image,
+            entrypoint='/usr/bin/ceph',
+            args=cmd,
+            volume_mounts=mounts,
+        ).run(timeout=timeout)
+
+##################################
+
+class BootstrapDashboardService(object):
+    """Defines the dashboard service when bootstrap a cluster"""
+    def __init__(self, args):
+    # type: (argparse.Namespace) -> None
+        self.args = args
+        self.enabled = False
+        self.ssl = True
+        self.port = 8443,
+        self.initial_dashboard_user = ""
+        self.initial_dashboard_password = ""
+        self.dashboard_key = ""
+        self.dashboard_crt = ""
+        self.dashboard_password_noupdate = False
+
+        if self.args:
+            if not self.args.skip_dashboard:
+                self.enabled = True
+                self.ssl = not self.args.dashboard_ssl_disabled
+                self.port = self.args.dashboard_port
+                self.initial_dashboard_user = self.args.initial_dashboard_user
+                self.initial_dashboard_password = self.args.initial_dashboard_password
+                if self.args.dashboard_key:
+                    self.dashboard_key = self.args.dashboard_key.name
+                if self.args.dashboard_crt:
+                    self.dashboard_crt_file = self.args.dashboard_crt.name
+                self.dashboard_password_noupdate = self.args.dashboard_password_noupdate
+
+    def apply_config(self, cli):
+        # type: (Cli) -> None
+        if self.enabled:
+            logger.info('Configuring the dashboard module...')
+
+            #Configure ports
+            cli.ceph(["config", "set",  "mgr",  "mgr/dashboard/ssl", str(self.ssl)])
+            if self.ssl:
+                dashboard_port_ms_key = "mgr/dashboard/ssl_server_port"
+            else:
+                dashboard_port_ms_key = "mgr/dashboard/server_port"
+            cli.ceph(["config", "set",  "mgr", dashboard_port_ms_key , str(self.port)])
+
+            # Enable dashboard module
+            logger.info('Enabling the dashboard module...')
+            cli.ceph(['mgr', 'module', 'enable', 'dashboard'])
+
+            # dashboard crt and key
+            if self.dashboard_key and self.dashboard_crt:
+                logger.info('Using provided dashboard certificate...')
+                mounts = {
+                    pathify(self.dashboard_crt): '/tmp/dashboard.crt:z',
+                    pathify(self.dashboard_key): '/tmp/dashboard.key:z'
+                }
+                cli.ceph(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
+                cli.ceph(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
+            else:
+                logger.info('Generating a dashboard self-signed certificate...')
+                cli.ceph(['dashboard', 'create-self-signed-cert'])
+
+            logger.info('Creating initial admin user...')
+            password = self.initial_dashboard_password or generate_password()
+            cmd = ['dashboard', 'ac-user-create', self.initial_dashboard_user, password, 'administrator', '--force-password']
+            if not self.dashboard_password_noupdate:
+                cmd.append('--pwd-update-required')
+            cli.ceph(cmd)
+
+            # Open service port
+            logger.info('Configuring firewall for dashboard service...')
+            fw = Firewalld()
+            fw.open_ports([self.port])
+            fw.apply_rules()
+
+            logger.info('Ceph Dashboard is now available at:\n\n'
+                        '\t     URL: %s://%s:%s/\n'
+                        '\t    User: %s\n'
+                        '\tPassword: %s\n' % ("https" if self.ssl else "http",
+                            get_fqdn(), self.port,
+                            self.initial_dashboard_user,
+                            password))
+        else:
+            logger.info('Dashboard module not enabled.')
+
+##################################
+
 class Monitoring(object):
     """Define the configs for the monitoring containers"""
 
@@ -588,7 +780,7 @@ class FileLock(object):
         # os.open() function.
         # This file lock is only NOT None, if the object currently holds the
         # lock.
-        self._lock_file_fd = None
+        self._lock_file_fd = -1 # type: int
         self.timeout = timeout
         # The lock counter is used for implementing the nested locking
         # mechanism. Whenever the lock is acquired, the counter is increased and
@@ -598,7 +790,7 @@ class FileLock(object):
 
     @property
     def is_locked(self):
-        return self._lock_file_fd is not None
+        return self._lock_file_fd >= 0
 
     def acquire(self, timeout=None, poll_intervall=0.05):
         """
@@ -721,7 +913,7 @@ class FileLock(object):
         #   https://github.com/benediktschmitt/py-filelock/issues/31
         #   https://stackoverflow.com/questions/17708885/flock-removing-locked-file-without-race-condition
         fd = self._lock_file_fd
-        self._lock_file_fd = None
+        self._lock_file_fd = -1
         fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
         return None
@@ -933,7 +1125,6 @@ def is_available(what, func):
         num += 1
         time.sleep(1)
 
-
 def read_config(fn):
     # type: (Optional[str]) -> ConfigParser
     # bend over backwards here because py2's ConfigParser doesn't like
@@ -1088,7 +1279,7 @@ def infer_fsid(func):
             logger.debug('Using specified fsid: %s' % args.fsid)
             return func()
 
-        fsids = set()
+        fsids_set = set()
         daemon_list = list_daemons(detail=False)
         for daemon in daemon_list:
             if not is_fsid(daemon['fsid']):
@@ -1096,11 +1287,11 @@ def infer_fsid(func):
                 continue
             elif 'name' not in args or not args.name:
                 # args.name not specified
-                fsids.add(daemon['fsid'])
+                fsids_set.add(daemon['fsid'])
             elif daemon['name'] == args.name:
                 # args.name is a match
-                fsids.add(daemon['fsid'])
-        fsids = sorted(fsids)
+                fsids_set.add(daemon['fsid'])
+        fsids = sorted(fsids_set)
 
         if not fsids:
             # some commands do not always require an fsid
@@ -1240,7 +1431,7 @@ def make_data_dir_base(fsid, uid, gid):
     return data_dir_base
 
 def make_data_dir(fsid, daemon_type, daemon_id, uid=None, gid=None):
-    # type: (str, str, Union[int, str], int, int) -> str
+    # type: (str, str, Union[int, str], Optional[int], Optional[int]) -> str
     if not uid or not gid:
         (uid, gid) = extract_uid_gid()
     make_data_dir_base(fsid, uid, gid)
@@ -1249,7 +1440,7 @@ def make_data_dir(fsid, daemon_type, daemon_id, uid=None, gid=None):
     return data_dir
 
 def make_log_dir(fsid, uid=None, gid=None):
-    # type: (str, int, int) -> str
+    # type: (str, Optional[int], Optional[int]) -> str
     if not uid or not gid:
         (uid, gid) = extract_uid_gid()
     log_dir = get_log_dir(fsid)
@@ -1262,7 +1453,7 @@ def make_var_run(fsid, uid, gid):
                  '/var/run/ceph/%s' % fsid])
 
 def copy_tree(src, dst, uid=None, gid=None):
-    # type: (List[str], str, int, int) -> None
+    # type: (List[str], str, Optional[int], Optional[int]) -> None
     """
     Copy a directory tree from src to dst
     """
@@ -1287,7 +1478,7 @@ def copy_tree(src, dst, uid=None, gid=None):
 
 
 def copy_files(src, dst, uid=None, gid=None):
-    # type: (List[str], str, int, int) -> None
+    # type: (List[str], str, Optional[int], Optional[int]) -> None
     """
     Copy a files from src to dst
     """
@@ -1306,7 +1497,7 @@ def copy_files(src, dst, uid=None, gid=None):
         os.chown(dst_file, uid, gid)
 
 def move_files(src, dst, uid=None, gid=None):
-    # type: (List[str], str, int, int) -> None
+    # type: (List[str], str, Optional[int], Optional[int]) -> None
     """
     Move files from src to dst
     """
@@ -1440,7 +1631,7 @@ def check_units(units, enabler=None):
     return False
 
 def get_legacy_config_fsid(cluster, legacy_dir=None):
-    # type: (str, str) -> Optional[str]
+    # type: (str, Optional[str]) -> Optional[str]
     config_file = '/etc/ceph/%s.conf' % cluster
     if legacy_dir is not None:
         config_file = os.path.abspath(legacy_dir + config_file)
@@ -1452,7 +1643,7 @@ def get_legacy_config_fsid(cluster, legacy_dir=None):
     return None
 
 def get_legacy_daemon_fsid(cluster, daemon_type, daemon_id, legacy_dir=None):
-    # type: (str, str, Union[int, str], str) -> Optional[str]
+    # type: (str, str, Union[int, str], Optional[str]) -> Optional[str]
     fsid = None
     if daemon_type == 'osd':
         try:
@@ -1869,8 +2060,6 @@ def deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid,
         os.fchmod(f.fileno(), 0o600)
         os.fchown(f.fileno(), uid, gid)
 
-    update_firewalld(daemon_type)
-
     if reconfig and daemon_type not in Ceph.daemons:
         # ceph daemons do not need a restart; others (presumably) do to pick
         # up the new config
@@ -1988,57 +2177,6 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
         call_throws(['systemctl', 'enable', unit_name])
     if start:
         call_throws(['systemctl', 'start', unit_name])
-
-def update_firewalld(daemon_type):
-    # type: (str) -> None
-    if args.skip_firewalld:
-        return
-    cmd = find_executable('firewall-cmd')
-    if not cmd:
-        logger.debug('firewalld does not appear to be present')
-        return
-    (enabled, state, _) = check_unit('firewalld.service')
-    if not enabled:
-        logger.debug('firewalld.service is not enabled')
-        return
-
-    fw_services = []
-    fw_ports = []
-    if daemon_type == 'mon':
-        fw_services.append('ceph-mon')
-    elif daemon_type in ['mgr', 'mds', 'osd']:
-        fw_services.append('ceph')
-    if daemon_type == 'mgr':
-        fw_ports.append(8080)  # dashboard
-        fw_ports.append(8443)  # dashboard
-        fw_ports.append(9283)  # mgr/prometheus exporter
-    elif daemon_type in Monitoring.port_map.keys():
-        fw_ports.extend(Monitoring.port_map[daemon_type])  # prometheus etc
-    elif daemon_type == NFSGanesha.daemon_type:
-        fw_services.append('nfs')
-
-    for svc in fw_services:
-        out, err, ret = call([cmd, '--permanent', '--query-service', svc])
-        if ret:
-            logger.info('Enabling firewalld service %s in current zone...' % svc)
-            out, err, ret = call([cmd, '--permanent', '--add-service', svc])
-            if ret:
-                raise RuntimeError(
-                    'unable to add service %s to current zone: %s' % (svc, err))
-        else:
-            logger.debug('firewalld service %s is enabled in current zone' % svc)
-    for port in fw_ports:
-        tcp_port = str(port) + '/tcp'
-        out, err, ret = call([cmd, '--permanent', '--query-port', tcp_port])
-        if ret:
-            logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
-            out, err, ret = call([cmd, '--permanent', '--add-port', tcp_port])
-            if ret:
-                raise RuntimeError('unable to add port %s to current zone: %s' %
-                                   (tcp_port, err))
-        else:
-            logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
-    call_throws([cmd, '--reload'])
 
 def install_base_units(fsid):
     # type: (str) -> None
@@ -2535,29 +2673,17 @@ def command_bootstrap():
     deploy_daemon(fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
 
+    # Apply firewall settings for Monitor
+    fw = Firewalld()
+    fw.enable_service_for("mon")
+    fw.open_ports([3300,6789])
+    fw.apply_rules()
+
     # client.admin key + config to issue various CLI commands
     tmp_admin_keyring = write_tmp('[client.admin]\n'
                                   '\tkey = ' + admin_key + '\n',
                                        uid, gid)
     tmp_config = write_tmp(config, uid, gid)
-
-    # a CLI helper to reduce our typing
-    def cli(cmd, extra_mounts={}, timeout=DEFAULT_TIMEOUT):
-        # type: (List[str], Dict[str, str], Optional[int]) -> str
-        mounts = {
-            log_dir: '/var/log/ceph:z',
-            tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-            tmp_config.name: '/etc/ceph/ceph.conf:z',
-        }
-        for k, v in extra_mounts.items():
-            mounts[k] = v
-        timeout = timeout or args.timeout
-        return CephContainer(
-            image=args.image,
-            entrypoint='/usr/bin/ceph',
-            args=cmd,
-            volume_mounts=mounts,
-        ).run(timeout=timeout)
 
     logger.info('Waiting for mon to start...')
     c = CephContainer(
@@ -2582,17 +2708,20 @@ def command_bootstrap():
         return ret == 0
     is_available('mon', is_mon_available)
 
+    # a CLI helper to reduce our typing
+    cli = Cli(admin_key, uid, gid, config, log_dir, timeout=DEFAULT_TIMEOUT)
+
     # assimilate and minimize config
     if not args.no_minimize_config:
         logger.info('Assimilating anything we can from ceph.conf...')
-        cli([
+        cli.ceph([
             'config', 'assimilate-conf',
             '-i', '/var/lib/ceph/mon/ceph-%s/config' % mon_id
         ], {
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id
         })
         logger.info('Generating new minimal ceph.conf...')
-        cli([
+        cli.ceph([
             'config', 'generate-minimal-conf',
             '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id
         ], {
@@ -2610,11 +2739,11 @@ def command_bootstrap():
 
     if mon_network:
         logger.info('Setting mon public_network...')
-        cli(['config', 'set', 'mon', 'public_network', mon_network])
+        cli.ceph(['config', 'set', 'mon', 'public_network', mon_network])
 
     if ipv6:
         logger.info('Enabling IPv6 (ms_bind_ipv6)')
-        cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
+        cli.ceph(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
 
     # create mgr
     logger.info('Creating mgr...')
@@ -2622,6 +2751,11 @@ def command_bootstrap():
     mgr_c = get_container(fsid, 'mgr', mgr_id)
     deploy_daemon(fsid, 'mgr', mgr_id, mgr_c, uid, gid,
                   config=config, keyring=mgr_keyring)
+
+    # Apply firewall settings for Manager
+    fw.enable_service_for("mgr")
+    fw.open_ports([9283]) # Prometheus exporter
+    fw.apply_rules()
 
     # output files
     with open(args.output_keyring, 'w') as f:
@@ -2640,7 +2774,7 @@ def command_bootstrap():
         # type: () -> bool
         timeout=args.timeout if args.timeout else 60 # seconds
         try:
-            out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
+            out = cli.ceph(['status', '-f', 'json-pretty'], timeout=timeout)
             j = json.loads(out)
             return j.get('mgrmap', {}).get('available', False)
         except Exception as e:
@@ -2651,7 +2785,7 @@ def command_bootstrap():
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart():
         # first get latest mgrmap epoch from the mon
-        out = cli(['mgr', 'dump'])
+        out = cli.ceph(['mgr', 'dump'])
         j = json.loads(out)
         epoch = j['epoch']
         # wait for mgr to have it
@@ -2659,7 +2793,7 @@ def command_bootstrap():
         def mgr_has_latest_epoch():
             # type: () -> bool
             try:
-                out = cli(['tell', 'mgr', 'mgr_status'])
+                out = cli.ceph(['tell', 'mgr', 'mgr_status'])
                 j = json.loads(out)
                 return j['mgrmap_epoch'] >= epoch
             except Exception as e:
@@ -2669,21 +2803,21 @@ def command_bootstrap():
 
     # ssh
     if not args.skip_ssh:
-        cli(['config-key', 'set', 'mgr/cephadm/ssh_user', args.ssh_user])
+        cli.ceph(['config-key', 'set', 'mgr/cephadm/ssh_user', args.ssh_user])
 
         logger.info('Enabling cephadm module...')
-        cli(['mgr', 'module', 'enable', 'cephadm'])
+        cli.ceph(['mgr', 'module', 'enable', 'cephadm'])
         wait_for_mgr_restart()
 
         logger.info('Setting orchestrator backend to cephadm...')
-        cli(['orch', 'set', 'backend', 'cephadm'])
+        cli.ceph(['orch', 'set', 'backend', 'cephadm'])
 
         if args.ssh_config:
             logger.info('Using provided ssh config...')
             mounts = {
                 pathify(args.ssh_config.name): '/tmp/cephadm-ssh-config:z',
             }
-            cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
+            cli.ceph(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
 
         if args.ssh_private_key and args.ssh_public_key:
             logger.info('Using provided ssh keys...')
@@ -2691,12 +2825,12 @@ def command_bootstrap():
                 pathify(args.ssh_private_key.name): '/tmp/cephadm-ssh-key:z',
                 pathify(args.ssh_public_key.name): '/tmp/cephadm-ssh-key.pub:z'
             }
-            cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
-            cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
+            cli.ceph(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
+            cli.ceph(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
         else:
             logger.info('Generating ssh key...')
-            cli(['cephadm', 'generate-key'])
-            ssh_pub = cli(['cephadm', 'get-pub-key'])
+            cli.ceph(['cephadm', 'generate-key'])
+            ssh_pub = cli.ceph(['cephadm', 'get-pub-key'])
 
             with open(args.output_pub_ssh_key, 'w') as f:
                 f.write(ssh_pub)
@@ -2713,7 +2847,7 @@ def command_bootstrap():
 
             if not os.path.exists(ssh_dir):
                 makedirs(ssh_dir, ssh_uid, ssh_gid, 0o700)
-                	
+
             auth_keys_file = '%s/authorized_keys' % ssh_dir
             add_newline = False
 
@@ -2735,57 +2869,25 @@ def command_bootstrap():
         host = get_hostname()
         logger.info('Adding host %s...' % host)
         try:
-            cli(['orch', 'host', 'add', host])
+            cli.ceph(['orch', 'host', 'add', host])
         except RuntimeError as e:
             raise Error('Failed to add host <%s>: %s' % (host, e))
 
         if not args.orphan_initial_daemons:
             for t in ['mon', 'mgr', 'crash']:
                 logger.info('Deploying %s service with default placement...' % t)
-                cli(['orch', 'apply', t])
+                cli.ceph(['orch', 'apply', t])
 
         if not args.skip_monitoring_stack:
             logger.info('Enabling mgr prometheus module...')
-            cli(['mgr', 'module', 'enable', 'prometheus'])
+            cli.ceph(['mgr', 'module', 'enable', 'prometheus'])
             for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
                 logger.info('Deploying %s service with default placement...' % t)
-                cli(['orch', 'apply', t])
+                cli.ceph(['orch', 'apply', t])
 
-    if not args.skip_dashboard:
-        logger.info('Enabling the dashboard module...')
-        cli(['mgr', 'module', 'enable', 'dashboard'])
-        wait_for_mgr_restart()
-
-        # dashboard crt and key
-        if args.dashboard_key and args.dashboard_crt:
-            logger.info('Using provided dashboard certificate...')
-            mounts = {
-                pathify(args.dashboard_crt.name): '/tmp/dashboard.crt:z',
-                pathify(args.dashboard_key.name): '/tmp/dashboard.key:z'
-            }
-            cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
-            cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
-        else:
-            logger.info('Generating a dashboard self-signed certificate...')
-            cli(['dashboard', 'create-self-signed-cert'])
-
-        logger.info('Creating initial admin user...')
-        password = args.initial_dashboard_password or generate_password()
-        cmd = ['dashboard', 'ac-user-create', args.initial_dashboard_user, password, 'administrator', '--force-password']
-        if not args.dashboard_password_noupdate:
-            cmd.append('--pwd-update-required')
-        cli(cmd)
-        logger.info('Fetching dashboard port number...')
-        out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
-        port = int(out)
-
-        logger.info('Ceph Dashboard is now available at:\n\n'
-                    '\t     URL: https://%s:%s/\n'
-                    '\t    User: %s\n'
-                    '\tPassword: %s\n' % (
-                        get_fqdn(), port,
-                        args.initial_dashboard_user,
-                        password))
+    # Enable and configure dashboard if it is required
+    dashboard = BootstrapDashboardService(args)
+    dashboard.apply_config(cli)
 
     if args.apply_spec:
         logger.info('Applying %s to cluster' % args.apply_spec)
@@ -2806,7 +2908,7 @@ def command_bootstrap():
         mounts = {}
         mounts[pathify(args.apply_spec)] = '/tmp/spec.yml:z'
 
-        out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
+        out = cli.ceph(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
         logger.info(out)
 
     logger.info('You can access the Ceph CLI with:\n\n'
@@ -2864,6 +2966,7 @@ def command_deploy():
     else:
         logger.info('%s daemon %s ...' % ('Deploy', args.name))
 
+    daemon_ports = []   # type: List[int]
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring()
         uid, gid = extract_uid_gid()
@@ -2875,11 +2978,16 @@ def command_deploy():
                       osd_fsid=args.osd_fsid,
                       reconfig=args.reconfig)
 
+        if args.config_json:
+            extra_config = json.loads(args.config_json)
+            if "ports" in extra_config:
+                daemon_ports = extra_config["ports"]
+
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         # Default Checks
         if not args.reconfig and not redeploy:
-            daemon_ports = Monitoring.port_map[daemon_type]  # type: List[int]
+            daemon_ports = Monitoring.port_map[daemon_type]
             if any([port_in_use(port) for port in daemon_ports]):
                 raise Error("TCP Port(s) '{}' required for {} is already in use".format(",".join(map(str, daemon_ports)), daemon_type))
 
@@ -2904,6 +3012,7 @@ def command_deploy():
     elif daemon_type == NFSGanesha.daemon_type:
         if not args.reconfig and not redeploy:
             NFSGanesha.port_in_use()
+        daemon_ports = list(NFSGanesha.port_map.values())
         config, keyring = get_config_and_keyring()
         # TODO: extract ganesha uid/gid (997, 994) ?
         uid, gid = extract_uid_gid()
@@ -2921,6 +3030,12 @@ def command_deploy():
                       reconfig=args.reconfig)
     else:
         raise Error("{} not implemented in command_deploy function".format(daemon_type))
+
+    # Firewall management
+    fw = Firewalld()
+    fw.enable_service_for(daemon_type)
+    fw.open_ports(daemon_ports)
+    fw.apply_rules()
 
 ##################################
 
@@ -3547,7 +3662,10 @@ def command_adopt_ceph(daemon_type, daemon_id, fsid):
                         enable=True,  # unconditionally enable the new unit
                         start=(state == 'running' or args.force_start),
                         osd_fsid=osd_fsid)
-    update_firewalld(daemon_type)
+
+    fw = Firewalld()
+    fw.enable_service_for(daemon_type)
+    fw.apply_rules()
 
 
 def command_adopt_prometheus(daemon_id, fsid):
@@ -3577,7 +3695,10 @@ def command_adopt_prometheus(daemon_id, fsid):
     make_var_run(fsid, uid, gid)
     c = get_container(fsid, daemon_type, daemon_id)
     deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid)
-    update_firewalld(daemon_type)
+
+    fw = Firewalld()
+    fw.open_ports(Monitoring.port_map[daemon_type])
+    fw.apply_rules
 
 def command_adopt_grafana(daemon_id, fsid):
     # type: (str, str) -> None
@@ -3631,7 +3752,10 @@ def command_adopt_grafana(daemon_id, fsid):
     make_var_run(fsid, uid, gid)
     c = get_container(fsid, daemon_type, daemon_id)
     deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid)
-    update_firewalld(daemon_type)
+
+    fw = Firewalld()
+    fw.open_ports(Monitoring.port_map[daemon_type])
+    fw.apply_rules
 
 def command_adopt_alertmanager(daemon_id, fsid):
     # type: (str, str) -> None
@@ -3660,7 +3784,10 @@ def command_adopt_alertmanager(daemon_id, fsid):
     make_var_run(fsid, uid, gid)
     c = get_container(fsid, daemon_type, daemon_id)
     deploy_daemon(fsid, daemon_type, daemon_id, c, uid, gid)
-    update_firewalld(daemon_type)
+
+    fw = Firewalld()
+    fw.open_ports(Monitoring.port_map[daemon_type])
+    fw.apply_rules
 
 def _adjust_grafana_ini(filename):
     # type: (str) -> None
@@ -4638,7 +4765,15 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--initial-dashboard-password',
         help='Initial password for the initial dashboard user')
-
+    parser_bootstrap.add_argument(
+        '--dashboard-ssl-disabled',
+        action='store_true',
+        help='Disable secured connections to the dashboard')
+    parser_bootstrap.add_argument(
+        '--dashboard-port',
+        type=int,
+        default = 8443,
+        help='Port number used to connect with dashboard')
     parser_bootstrap.add_argument(
         '--dashboard-key',
         type=argparse.FileType('r'),

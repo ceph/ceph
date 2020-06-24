@@ -1,4 +1,5 @@
 import json
+import re
 import logging
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any
@@ -32,7 +33,7 @@ class CephadmService(metaclass=ABCMeta):
         """The post actions needed to be done after daemons are checked"""
         if self.mgr.config_dashboard:
             self.config_dashboard(daemon_descrs)
-    
+
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
         """Config dashboard settings."""
         raise NotImplementedError()
@@ -238,7 +239,24 @@ class MgrService(CephadmService):
                      'mds', 'allow *'],
         })
 
-        return self.mgr._create_daemon('mgr', mgr_id, host, keyring=keyring)
+        # Retrieve ports used by manager modules
+        ports = []
+        config_ports = ''
+        ret, mgr_services, err = self.mgr.check_mon_command({
+                'prefix': 'mgr services',
+        })
+        if mgr_services:
+            mgr_endpoints = json.loads(mgr_services)
+            for end_point in mgr_endpoints.values():
+                port = re.search('\:\d+\/', end_point)
+                if port:
+                    ports.append(port[0][1:-1])
+
+        if ports:
+            config_ports = json.dumps({'ports': ports })
+
+        return self.mgr._create_daemon('mgr', mgr_id, host, keyring=keyring,
+                                       ports=config_ports)
 
 
 class MdsService(CephadmService):
@@ -359,4 +377,5 @@ class CrashService(CephadmService):
             'caps': ['mon', 'profile crash',
                      'mgr', 'profile crash'],
         })
-        return self.mgr._create_daemon('crash', daemon_id, host, keyring=keyring)
+        return self.mgr._create_daemon('crash', daemon_id, host,
+                                       keyring=keyring)
