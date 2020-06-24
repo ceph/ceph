@@ -52,6 +52,10 @@
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 
+#ifdef WITH_BLKIN
+#include "common/zipkin_trace.h"
+#endif
+
 class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
@@ -1508,8 +1512,6 @@ public:
       STATE_DONE,
     } state_t;
 
-    state_t state = STATE_PREPARE;
-
     const char *get_state_name() {
       switch (state) {
       case STATE_PREPARE: return "prepare";
@@ -1544,6 +1546,18 @@ public:
       return "???";
     }
 #endif
+
+    inline void set_state(state_t s) {
+       state = s;
+#ifdef WITH_BLKIN
+       if (trace) {
+         trace.event(get_state_name());
+       } 
+#endif
+    }
+    inline state_t get_state() {
+      return state;
+    }
 
     CollectionRef ch;
     OpSequencerRef osr;  // this should be ch->osr
@@ -1581,6 +1595,10 @@ public:
     bool tracing = false;
 #endif
 
+#ifdef WITH_BLKIN
+    ZTracer::Trace trace;
+#endif
+
     explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
 			  std::list<Context*> *on_commits)
       : ch(c),
@@ -1593,6 +1611,11 @@ public:
       }
     }
     ~TransContext() {
+#ifdef WITH_BLKIN
+      if (trace) {
+        trace.event("txc destruct");
+      }
+#endif
       delete deferred_txn;
     }
 
@@ -1619,6 +1642,8 @@ public:
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
     }
+  private:
+    state_t state = STATE_PREPARE;
   };
 
   class BlueStoreThrottle {
@@ -1822,7 +1847,7 @@ public:
       // caller must hold qlock & q.empty() must not empty
       ceph_assert(!q.empty());
       TransContext *txc = &q.back();
-      if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
+      if (txc->get_state() >= TransContext::STATE_KV_SUBMITTED) {
 	return true;
       }
       return false;
@@ -1858,7 +1883,7 @@ public:
 	} else {
 	  auto it = q.rbegin();
 	  it++;
-	  if (it->state >= TransContext::STATE_KV_SUBMITTED) {
+	  if (it->get_state() >= TransContext::STATE_KV_SUBMITTED) {
 	    --kv_submitted_waiters;
 	    return;
           }
@@ -1874,7 +1899,7 @@ public:
 	return true;
       }
       TransContext *txc = &q.back();
-      if (txc->state >= TransContext::STATE_KV_DONE) {
+      if (txc->get_state() >= TransContext::STATE_KV_DONE) {
 	return true;
       }
       txc->oncommits.push_back(c);
@@ -2237,6 +2262,10 @@ private:
     void _resize_shards(bool interval_stats);
   } mempool_thread;
 
+#ifdef WITH_BLKIN
+  ZTracer::Endpoint trace_endpoint {"0.0.0.0", 0, "BlueStore"};
+#endif
+
   // --------------------------------------------------------
   // private methods
 
@@ -2351,7 +2380,8 @@ private:
   friend void _dump_transaction(CephContext *cct, Transaction *t);
 
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
-			    std::list<Context*> *on_commits);
+			    std::list<Context*> *on_commits,
+			    TrackedOpRef osd_op=TrackedOpRef());
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);

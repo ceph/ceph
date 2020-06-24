@@ -352,6 +352,7 @@ endif()
 
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
 if(WITH_BLKIN)
+  find_package(LTTngUST REQUIRED)
   set(BLKIN_LIBRARIES blkin ${LTTNGUST_LIBRARIES} lttng-ust-fork)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
