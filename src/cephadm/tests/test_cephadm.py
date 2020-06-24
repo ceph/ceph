@@ -92,3 +92,13 @@ default via 10.3.64.1 dev eno1 proto static metric 100
     ])
     def test_parse_ip_route(self, test_input, expected):
         assert cd._parse_ip_route(test_input) == expected
+
+    def test_is_ipv6(self):
+        cd.logger = mock.Mock()
+        for good in ("[::1]", "::1",
+                     "fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"):
+            assert cd.is_ipv6(good)
+        for bad in ("127.0.0.1",
+                    "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffg",
+                    "1:2:3:4:5:6:7:8:9", "fd00::1::1", "[fg::1]"):
+            assert not cd.is_ipv6(bad)
