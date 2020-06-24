@@ -56,15 +56,18 @@ class StreamIO : public rgw::asio::ClientIO {
   spawn::yield_context yield;
   parse_buffer& buffer;
   ceph::timespan request_timeout;
+  bool& must_close;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
+           bool& must_close,
            spawn::yield_context yield,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint,
            ceph::timespan request_timeout)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        cct(cct), stream(stream), yield(yield), buffer(buffer), request_timeout(request_timeout)
+        cct(cct), stream(stream), yield(yield), buffer(buffer), request_timeout(request_timeout),
+        must_close(must_close)
   {}
 
   size_t write_data(const char* buf, size_t len) override {
@@ -103,6 +106,7 @@ class StreamIO : public rgw::asio::ClientIO {
         break;
       }
       if (ec) {
+        must_close = true;
         ldout(cct, 4) << "failed to read body: " << ec.message() << dendl;
         throw rgw::io::Exception(ec.value(), std::system_category());
       }
@@ -178,6 +182,7 @@ void handle_connection(boost::asio::io_context& context,
   static constexpr size_t header_limit = 4096;
   // don't impose a limit on the body, since we read it in pieces
   static constexpr size_t body_limit = std::numeric_limits<size_t>::max();
+  bool must_close = false;
 
   auto cct = env.store->ctx();
 
@@ -240,7 +245,8 @@ void handle_connection(boost::asio::io_context& context,
         return;
       }
 
-      StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
+      StreamIO real_client{cct, stream, parser,
+                           must_close, yield, buffer, is_ssl,
                            socket.local_endpoint(),
                            remote_endpoint,request_timeout};
 
@@ -277,7 +283,7 @@ void handle_connection(boost::asio::io_context& context,
       }
     }
 
-    if (!parser.keep_alive()) {
+    if (must_close || !parser.keep_alive()) {
       return;
     }
 
@@ -523,7 +529,7 @@ int AsioFrontend::init()
       << timeout->second.data() << " setting it to the default value: "
       << REQUEST_TIMEOUT << dendl;
     }
-  } 
+  }
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   int r = init_ssl();
   if (r < 0) {
@@ -895,7 +901,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
                           [this, &l] (boost::system::error_code ec) {
                             accept(l, ec);
                           });
-  
+
   boost::beast::tcp_stream stream(std::move(socket));
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
