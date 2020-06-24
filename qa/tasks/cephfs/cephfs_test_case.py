@@ -1,4 +1,3 @@
-import time
 import json
 import logging
 from tasks.ceph_test_case import CephTestCase
