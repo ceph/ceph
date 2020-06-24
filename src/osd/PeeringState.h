@@ -1519,6 +1519,7 @@ public:
     const std::map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,
     bool *history_les_bound) const;
+
   static void calc_ec_acting(
     std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     unsigned size,
@@ -1530,9 +1531,20 @@ public:
     std::set<pg_shard_t> *backfill,
     std::set<pg_shard_t> *acting_backfill,
     std::ostream &ss);
-  static void calc_replicated_acting(
-    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+
+  static std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
+  select_replicated_primary(
+    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     uint64_t force_auth_primary_missing_objects,
+    const std::vector<int> &up,
+    pg_shard_t up_primary,
+    const map<pg_shard_t, pg_info_t> &all_info,
+    const OSDMapRef osdmap,
+    ostream &ss);
+
+  static void calc_replicated_acting(
+    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    eversion_t oldest_auth_log_entry,
     unsigned size,
     const std::vector<int> &acting,
     const std::vector<int> &up,
@@ -1543,7 +1555,24 @@ public:
     std::set<pg_shard_t> *backfill,
     std::set<pg_shard_t> *acting_backfill,
     const OSDMapRef osdmap,
+    const PGPool& pool,
     std::ostream &ss);
+  static void calc_replicated_acting_stretch(
+    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    eversion_t oldest_auth_log_entry,
+    unsigned size,
+    const std::vector<int> &acting,
+    const std::vector<int> &up,
+    pg_shard_t up_primary,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
+    bool restrict_to_up_acting,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *backfill,
+    std::set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
+    const PGPool& pool,
+    std::ostream &ss);
+
   void choose_async_recovery_ec(
     const std::map<pg_shard_t, pg_info_t> &all_info,
     const pg_info_t &auth_info,
