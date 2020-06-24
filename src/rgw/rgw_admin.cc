@@ -271,6 +271,13 @@ void usage()
   cout << "  mfa remove                 delete MFA TOTP token\n";
   cout << "  mfa check                  check MFA TOTP token\n";
   cout << "  mfa resync                 re-sync MFA TOTP token\n";
+  cout << "  topic list                 list bucket notifications/pubsub topics\n";
+  cout << "  topic get                  get a bucket notifications/pubsub topic\n";
+  cout << "  topic rm                   remove a bucket notifications/pubsub topic\n";
+  cout << "  subscription get           get a pubsub subscription definition\n";
+  cout << "  subscription rm            remove a pubsub subscription\n";
+  cout << "  subscription pull          show events in a pubsub subscription\n";
+  cout << "  subscription ack           ack (remove) an events in a pubsub subscription\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -415,6 +422,10 @@ void usage()
   cout << "   --totp-seconds            the time resolution that is being used for TOTP generation\n";
   cout << "   --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token\n";
   cout << "   --totp-pin                the valid value of a TOTP token at a certain time\n";
+  cout << "\nBucket notifications/pubsub options:\n";
+  cout << "   --topic                   bucket notifications/pubsub topic name\n";
+  cout << "   --subscription            pubsub subscription name\n";
+  cout << "   --event-id                event id in a pubsub subscription\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -738,13 +749,10 @@ enum class OPT {
   RESHARD_STALE_INSTANCES_LIST,
   RESHARD_STALE_INSTANCES_DELETE,
   PUBSUB_TOPICS_LIST,
-  PUBSUB_TOPIC_CREATE,
+  // TODO add "subscription list" command
   PUBSUB_TOPIC_GET,
   PUBSUB_TOPIC_RM,
-  PUBSUB_NOTIFICATION_CREATE,
-  PUBSUB_NOTIFICATION_RM,
   PUBSUB_SUB_GET,
-  PUBSUB_SUB_CREATE,
   PUBSUB_SUB_RM,
   PUBSUB_SUB_PULL,
   PUBSUB_EVENT_RM,
@@ -953,17 +961,13 @@ static SimpleCmd::Commands all_cmds = {
   { "reshard stale list", OPT::RESHARD_STALE_INSTANCES_LIST },
   { "reshard stale-instances delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
   { "reshard stale delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
-  { "pubsub topics list", OPT::PUBSUB_TOPICS_LIST },
-  { "pubsub topic create", OPT::PUBSUB_TOPIC_CREATE },
-  { "pubsub topic get", OPT::PUBSUB_TOPIC_GET },
-  { "pubsub topic rm", OPT::PUBSUB_TOPIC_RM },
-  { "pubsub notification create", OPT::PUBSUB_NOTIFICATION_CREATE },
-  { "pubsub notification rm", OPT::PUBSUB_NOTIFICATION_RM },
-  { "pubsub sub get", OPT::PUBSUB_SUB_GET },
-  { "pubsub sub create", OPT::PUBSUB_SUB_CREATE },
-  { "pubsub sub rm", OPT::PUBSUB_SUB_RM },
-  { "pubsub sub pull", OPT::PUBSUB_SUB_PULL },
-  { "pubsub event rm", OPT::PUBSUB_EVENT_RM },
+  { "topic list", OPT::PUBSUB_TOPICS_LIST },
+  { "topic get", OPT::PUBSUB_TOPIC_GET },
+  { "topic rm", OPT::PUBSUB_TOPIC_RM },
+  { "subscription get", OPT::PUBSUB_SUB_GET },
+  { "subscription rm", OPT::PUBSUB_SUB_RM },
+  { "subscription pull", OPT::PUBSUB_SUB_PULL },
+  { "subscription ack", OPT::PUBSUB_EVENT_RM },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3203,9 +3207,6 @@ int main(int argc, const char **argv)
 
   string topic_name;
   string sub_name;
-  string sub_oid_prefix;
-  string sub_dest_bucket;
-  string sub_push_endpoint;
   string event_id;
 
   std::optional<string> opt_group_id;
@@ -3244,8 +3245,6 @@ int main(int argc, const char **argv)
   std::optional<int> opt_priority;
   std::optional<string> opt_mode;
   std::optional<rgw_user> opt_dest_owner;
-
-  rgw::notify::EventTypeList event_types;
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
 
@@ -3599,18 +3598,10 @@ int main(int argc, const char **argv)
       trim_delay_ms = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--topic", (char*)NULL)) {
       topic_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--sub-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--subscription", (char*)NULL)) {
       sub_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--sub-oid-prefix", (char*)NULL)) {
-      sub_oid_prefix = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--sub-dest-bucket", (char*)NULL)) {
-      sub_dest_bucket = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--sub-push-endpoint", (char*)NULL)) {
-      sub_push_endpoint = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--event-id", (char*)NULL)) {
       event_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--event-type", "--event-types", (char*)NULL)) {
-      rgw::notify::from_string_list(val, event_types);
     } else if (ceph_argparse_witharg(args, i, &val, "--group-id", (char*)NULL)) {
       opt_group_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--status", (char*)NULL)) {
@@ -3874,6 +3865,10 @@ int main(int argc, const char **argv)
 			 OPT::ROLE_POLICY_GET,
 			 OPT::RESHARD_LIST,
 			 OPT::RESHARD_STATUS,
+       OPT::PUBSUB_TOPICS_LIST,
+       OPT::PUBSUB_TOPIC_GET,
+       OPT::PUBSUB_SUB_GET,
+       OPT::PUBSUB_SUB_PULL,
   };
 
 
@@ -9012,10 +9007,6 @@ next:
  }
 
   if (opt_cmd == OPT::PUBSUB_TOPICS_LIST) {
-    if (get_tier_type(store) != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
     if (user_id.empty()) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
@@ -9054,34 +9045,7 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT::PUBSUB_TOPIC_CREATE) {
-    if (get_tier_type(store) != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    if (user_id.empty()) {
-      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
-      return EINVAL;
-    }
-    RGWUserInfo& user_info = user_op.get_user_info();
-    RGWUserPubSub ups(store, user_info.user_id);
-
-    ret = ups.create_topic(topic_name);
-    if (ret < 0) {
-      cerr << "ERROR: could not create topic: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
   if (opt_cmd == OPT::PUBSUB_TOPIC_GET) {
-    if (get_tier_type(store) != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
     if (topic_name.empty()) {
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
@@ -9096,92 +9060,14 @@ next:
     rgw_pubsub_topic_subs topic;
     ret = ups.get_topic(topic_name, &topic);
     if (ret < 0) {
-      cerr << "ERROR: could not create topic: " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     encode_json("topic", topic, formatter);
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_CREATE) {
-    if (get_tier_type(store) != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    if (user_id.empty()) {
-      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
-      return EINVAL;
-    }
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-      return EINVAL;
-    }
-    RGWUserInfo& user_info = user_op.get_user_info();
-    RGWUserPubSub ups(store, user_info.user_id);
-
-    rgw_bucket bucket;
-
-    RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    auto b = ups.get_bucket(bucket_info.bucket);
-    ret = b->create_notification(topic_name, event_types);
-    if (ret < 0) {
-      cerr << "ERROR: could not publish bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_RM) {
-    if (get_tier_type(store) != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    if (user_id.empty()) {
-      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
-      return EINVAL;
-    }
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-      return EINVAL;
-    }
-    RGWUserInfo& user_info = user_op.get_user_info();
-    RGWUserPubSub ups(store, user_info.user_id);
-
-    rgw_bucket bucket;
-
-    RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    auto b = ups.get_bucket(bucket_info.bucket);
-    ret = b->remove_notification(topic_name);
-    if (ret < 0) {
-      cerr << "ERROR: could not publish bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
   if (opt_cmd == OPT::PUBSUB_TOPIC_RM) {
-    if (get_tier_type(store) != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
     if (topic_name.empty()) {
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
@@ -9210,7 +9096,7 @@ next:
       return EINVAL;
     }
     if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --sub-name)" << std::endl;
+      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
       return EINVAL;
     }
     RGWUserInfo& user_info = user_op.get_user_info();
@@ -9228,55 +9114,6 @@ next:
     formatter->flush(cout);
   }
 
-  if (opt_cmd == OPT::PUBSUB_SUB_CREATE) {
-    if (get_tier_type(store) != "pubsub") {
-      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
-      return EINVAL;
-    }
-    if (user_id.empty()) {
-      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
-      return EINVAL;
-    }
-    if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --sub-name)" << std::endl;
-      return EINVAL;
-    }
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    RGWUserInfo& user_info = user_op.get_user_info();
-    RGWUserPubSub ups(store, user_info.user_id);
-
-    rgw_pubsub_topic_subs topic;
-    int ret = ups.get_topic(topic_name, &topic);
-    if (ret < 0) {
-      cerr << "ERROR: topic not found" << std::endl;
-      return EINVAL;
-    }
-
-    rgw_pubsub_sub_dest dest_config;
-    dest_config.bucket_name = sub_dest_bucket;
-    dest_config.oid_prefix = sub_oid_prefix;
-    dest_config.push_endpoint = sub_push_endpoint;
-
-    auto psmodule = static_cast<RGWPSSyncModuleInstance *>(store->getRados()->get_sync_module().get());
-    auto conf = psmodule->get_effective_conf();
-
-    if (dest_config.bucket_name.empty()) {
-      dest_config.bucket_name = string(conf["data_bucket_prefix"]) + user_info.user_id.to_str() + "-" + topic.topic.name;
-    }
-    if (dest_config.oid_prefix.empty()) {
-      dest_config.oid_prefix = conf["data_oid_prefix"];
-    }
-    auto sub = ups.get_sub(sub_name);
-    ret = sub->subscribe(topic_name, dest_config);
-    if (ret < 0) {
-      cerr << "ERROR: could not store subscription info: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
  if (opt_cmd == OPT::PUBSUB_SUB_RM) {
     if (get_tier_type(store) != "pubsub") {
       cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
@@ -9287,7 +9124,7 @@ next:
       return EINVAL;
     }
     if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --sub-name)" << std::endl;
+      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
       return EINVAL;
     }
     RGWUserInfo& user_info = user_op.get_user_info();
@@ -9311,7 +9148,7 @@ next:
       return EINVAL;
     }
     if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --sub-name)" << std::endl;
+      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
       return EINVAL;
     }
     RGWUserInfo& user_info = user_op.get_user_info();
@@ -9320,7 +9157,7 @@ next:
     if (!max_entries_specified) {
       max_entries = RGWUserPubSub::Sub::DEFAULT_MAX_EVENTS;
     }
-    auto sub = ups.get_sub(sub_name);
+    auto sub = ups.get_sub_with_events(sub_name);
     ret = sub->list_events(marker, max_entries);
     if (ret < 0) {
       cerr << "ERROR: could not list events: " << cpp_strerror(-ret) << std::endl;
@@ -9340,7 +9177,7 @@ next:
       return EINVAL;
     }
     if (sub_name.empty()) {
-      cerr << "ERROR: subscription name was not provided (via --sub-name)" << std::endl;
+      cerr << "ERROR: subscription name was not provided (via --subscription)" << std::endl;
       return EINVAL;
     }
     if (event_id.empty()) {
@@ -9350,7 +9187,7 @@ next:
     RGWUserInfo& user_info = user_op.get_user_info();
     RGWUserPubSub ups(store, user_info.user_id);
 
-    auto sub = ups.get_sub(sub_name);
+    auto sub = ups.get_sub_with_events(sub_name);
     ret = sub->remove_event(event_id);
     if (ret < 0) {
       cerr << "ERROR: could not remove event: " << cpp_strerror(-ret) << std::endl;
