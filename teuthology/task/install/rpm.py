@@ -82,6 +82,10 @@ def _zypper_addrepo(remote, repo_list):
                 'sudo', 'zypper', '-n', 'addrepo', '--refresh', '--no-gpgcheck',
                 repo['url'], repo['name'],
             ])
+        # Because 'zypper addrepo --check' does not work as expected
+        # we need call zypper ref in order to fail early if the repo
+        # is invalid
+        remote.run(args='sudo zypper ref ' + repo['name'])
 
 def _zypper_removerepo(remote, repo_list):
     """
