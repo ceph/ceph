@@ -40,3 +40,11 @@
 # crimson
 /src/crimson                                    @ceph/crimson
 /src/test/crimson                               @ceph/crimson
+
+# doc-writers
+AUTHORS                                         @ceph/doc-writers
+CodingStyle                                     @ceph/doc-writers
+COPYING*                                        @ceph/doc-writers
+/doc/                                           @ceph/doc-writers
+README*                                         @ceph/doc-writers
+*.rst                                           @ceph/doc-writers
