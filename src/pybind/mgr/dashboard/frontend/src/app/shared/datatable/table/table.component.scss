@@ -38,7 +38,7 @@
 .dataTables_header {
   background-color: $color-table-header-bg;
   border: 1px solid $color-table-header-border;
-  border-bottom: none;
+  border-bottom: 0;
   padding: 5px;
   position: relative;
 
@@ -126,16 +126,6 @@
   .datatable-header {
     background-clip: padding-box;
     background-color: $color-table-datatable-header;
-    background-image: -webkit-linear-gradient(
-      top,
-      $color-table-gradient-1 0,
-      $color-table-gradient-2 100%
-    );
-    background-image: -o-linear-gradient(
-      top,
-      $color-table-gradient-1 0,
-      $color-table-gradient-2 100%
-    );
     background-image: linear-gradient(
       to bottom,
       $color-table-gradient-1 0,
@@ -185,7 +175,7 @@
       }
 
       &:first-child {
-        border-left: none;
+        border-left: 0;
       }
     }
   }
@@ -227,7 +217,7 @@
         @include table-cell;
 
         &:first-child {
-          border-left: none;
+          border-left: 0;
         }
 
         .datatable-body-cell-label {

@@ -18,7 +18,7 @@
 }
 
 .modal-header {
-  border-bottom: none;
+  border-bottom: 0;
 }
 
 .modal-header .close {
@@ -38,7 +38,7 @@
 }
 
 .modal-footer {
-  border-top: none;
+  border-top: 0;
   display: block;
   padding: 15px 80px 35px;
 }

@@ -127,7 +127,7 @@
         background-color: $color-nav-active-link-bg;
       }
 
-      & > li > a:hover {
+      > li > a:hover {
         background-color: $color-nav-active-link-bg;
       }
     }
@@ -192,7 +192,7 @@ $sidebar-width: 200px;
           color: $color-solid-white;
         }
 
-        & > .badge {
+        > .badge {
           margin-left: 5px;
         }
       }
