@@ -12,6 +12,7 @@ import traceback
 
 from io import BytesIO
 from io import StringIO
+from errno import EBUSY
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -611,6 +612,37 @@ class Filesystem(MDSCluster):
 
         self.getinfo(refresh = True)
 
+    def destroy(self, reset_obj_attrs=True):
+        log.info('Destroying file system ' + self.name +  ' and related '
+                 'pools')
+
+        # make sure no MDSs are attached to given FS.
+        self.mon_manager.raw_cluster_cmd('fs', 'fail', self.name)
+        self.mon_manager.raw_cluster_cmd(
+            'fs', 'rm', self.name, '--yes-i-really-mean-it')
+
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm',
+            self.get_metadata_pool_name(), self.get_metadata_pool_name(),
+            '--yes-i-really-really-mean-it')
+        for poolname in self.get_data_pool_names():
+            try:
+                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', poolname,
+                    poolname, '--yes-i-really-really-mean-it')
+            except CommandFailedError as e:
+                # EBUSY, this data pool is used by two metadata pools, let the
+                # 2nd pass delete it
+                if e.exitstatus == EBUSY:
+                    pass
+                else:
+                    raise
+
+        if reset_obj_attrs:
+            self.id = None
+            self.name = None
+            self.metadata_pool_name = None
+            self.data_pool_name = None
+            self.data_pools = None
+
     def check_pool_application(self, pool_name):
         osd_map = self.mon_manager.get_osd_dump_json()
         for pool in osd_map['pools']:
@@ -619,7 +651,6 @@ class Filesystem(MDSCluster):
                     if not "cephfs" in pool['application_metadata']:
                         raise RuntimeError("Pool {pool_name} does not name cephfs as application!".\
                                            format(pool_name=pool_name))
-        
 
     def __del__(self):
         if getattr(self._ctx, "filesystem", None) == self:
