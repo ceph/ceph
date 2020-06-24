@@ -441,6 +441,19 @@ def task(ctx, config):
              - url: "http://location.repo"
                name: "ceph_repo"
 
+    Add repos before trying to install any package (all Shaman-related tasks
+    will be ignored):
+
+    - install:
+        repos:
+          - name: "repo-alias"
+            priority: 1
+            url: "http://location.repo"
+
+    Note: The 'repos' are supported for SUSE-based distros only, but patches
+    are welcome to add support for other distros.
+
+
     Overrides are project specific:
 
     overrides:
