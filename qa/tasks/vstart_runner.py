@@ -378,7 +378,7 @@ class LocalRemote(object):
                                              'ceph-coverage')]
 
         # Adjust binary path prefix if given a bare program name
-        if "/" not in args[0]:
+        if not isinstance(args[0], Raw) and "/" not in args[0]:
             # If they asked for a bare binary name, and it exists
             # in our built tree, use the one there.
             local_bin = os.path.join(BIN_PREFIX, args[0])
