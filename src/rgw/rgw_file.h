@@ -8,6 +8,7 @@
 
 /* internal header */
 #include <string.h>
+#include <string_view>
 #include <sys/stat.h>
 #include <stdint.h>
 
@@ -23,7 +24,6 @@
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
-#include <boost/utility/string_ref.hpp>
 #include <boost/optional.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
@@ -1387,7 +1387,7 @@ public:
       return;
     map<string, rgw::sal::RGWBucket*>& m = buckets.get_buckets();
     for (const auto& iter : m) {
-      boost::string_ref marker{iter.first};
+      std::string_view marker{iter.first};
       rgw::sal::RGWBucket* ent = iter.second;
       if (! this->operator()(ent->get_name(), marker)) {
 	/* caller cannot accept more */
@@ -1406,8 +1406,8 @@ public:
     // do nothing
   }
 
-  int operator()(const boost::string_ref& name,
-		 const boost::string_ref& marker) {
+  int operator()(const std::string_view& name,
+		 const std::string_view& marker) {
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     if (!! ioff) {
       *ioff = off;
@@ -1519,7 +1519,7 @@ public:
     return 0;
   }
 
-  int operator()(const boost::string_ref name, const rgw_obj_key& marker,
+  int operator()(const std::string_view name, const rgw_obj_key& marker,
 		 const ceph::real_time& t, const uint64_t fsz, uint8_t type) {
 
     assert(name.length() > 0); // all cases handled in callers
@@ -1562,7 +1562,7 @@ public:
     struct req_state* s = get_state();
     for (const auto& iter : objs) {
 
-      boost::string_ref sref {iter.key.name};
+      std::string_view sref {iter.key.name};
 
       lsubdout(cct, rgw, 15) << "readdir objects prefix: " << prefix
 			     << " obj: " << sref << dendl;
@@ -1617,7 +1617,7 @@ public:
       if (iter.first.back() == '/')
 	const_cast<std::string&>(iter.first).pop_back();
 
-      boost::string_ref sref{iter.first};
+      std::string_view sref{iter.first};
 
       size_t last_del = sref.find_last_of('/');
       if (last_del != string::npos)

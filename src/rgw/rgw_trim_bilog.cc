@@ -348,7 +348,7 @@ struct BucketTrimObserver {
   virtual ~BucketTrimObserver() = default;
 
   virtual void on_bucket_trimmed(std::string&& bucket_instance) = 0;
-  virtual bool trimmed_recently(const boost::string_view& bucket_instance) = 0;
+  virtual bool trimmed_recently(const std::string_view& bucket_instance) = 0;
 };
 
 /// populate the status with the minimum stable marker of each shard
@@ -1101,7 +1101,7 @@ class BucketTrimManager::Impl : public TrimCounters::Server,
     trimmed.insert(std::move(bucket_instance), clock_type::now());
   }
 
-  bool trimmed_recently(const boost::string_view& bucket_instance) override {
+  bool trimmed_recently(const std::string_view& bucket_instance) override {
     std::lock_guard<std::mutex> lock(mutex);
     return trimmed.lookup(bucket_instance);
   }
@@ -1119,14 +1119,14 @@ int BucketTrimManager::init()
   return impl->watcher.start();
 }
 
-void BucketTrimManager::on_bucket_changed(const boost::string_view& bucket)
+void BucketTrimManager::on_bucket_changed(const std::string_view& bucket)
 {
   std::lock_guard<std::mutex> lock(impl->mutex);
   // filter recently trimmed bucket instances out of bucket change counter
   if (impl->trimmed.lookup(bucket)) {
     return;
   }
-  impl->counter.insert(bucket.to_string());
+  impl->counter.insert(std::string(bucket));
 }
 
 RGWCoroutine* BucketTrimManager::create_bucket_trim_cr(RGWHTTPManager *http)

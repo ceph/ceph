@@ -6,8 +6,8 @@
 #include <string>
 #include <map>
 #include <sstream>
+#include <string_view>
 
-#include <boost/utility/string_ref.hpp>
 #include <boost/format.hpp>
 
 #include "common/errno.h"
@@ -198,8 +198,8 @@ int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *buck
 int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                 rgw_bucket *bucket, int *shard_id)
 {
-  boost::string_ref name{key};
-  boost::string_ref instance;
+  std::string_view name{key};
+  std::string_view instance;
 
   // split tenant/name
   auto pos = name.find('/');

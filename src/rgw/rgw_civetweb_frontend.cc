@@ -3,8 +3,7 @@
 
 #include <set>
 #include <string>
-
-#include <boost/utility/string_ref.hpp>
+#include <string_view>
 
 #include "rgw_frontend.h"
 #include "rgw_client_io_filters.h"
@@ -122,7 +121,7 @@ int RGWCivetWebFrontend::run()
   }
 
   /* Prepare options for CivetWeb. */
-  const std::set<boost::string_ref> rgw_opts = { "port", "prefix" };
+  const std::set<std::string_view> rgw_opts = { "port", "prefix" };
 
   std::vector<const char*> options;
 
