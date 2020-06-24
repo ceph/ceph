@@ -3173,9 +3173,12 @@ void CInode::choose_lock_state(SimpleLock *lock, int allissued)
     } else if (lock->get_state() != LOCK_MIX) {
       if (issued & (CEPH_CAP_GEXCL | CEPH_CAP_GBUFFER))
 	lock->set_state(LOCK_EXCL);
-      else if (issued & CEPH_CAP_GWR)
-	lock->set_state(LOCK_MIX);
-      else if (lock->is_dirty()) {
+      else if (issued & CEPH_CAP_GWR) {
+        if (issued & (CEPH_CAP_GCACHE | CEPH_CAP_GSHARED))
+          lock->set_state(LOCK_EXCL);
+        else
+          lock->set_state(LOCK_MIX);
+      } else if (lock->is_dirty()) {
 	if (is_replicated())
 	  lock->set_state(LOCK_MIX);
 	else
