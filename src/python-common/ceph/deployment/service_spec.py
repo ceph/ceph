@@ -58,11 +58,12 @@ class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 
         return cls(**data)
 
     def to_json(self):
-        return {
-            'hostname': self.hostname,
-            'network': self.network,
-            'name': self.name
-        }
+        ret = [self.hostname]
+        if self.network:
+            ret.append(f':{self.network}')
+        if self.name:
+            ret.append(f'={self.name}')
+        return ''.join(ret)
 
     @classmethod
     def parse(cls, host, require_network=True):
