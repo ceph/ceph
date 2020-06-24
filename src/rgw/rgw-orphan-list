@@ -8,7 +8,7 @@ export LANG=C
 
 out_dir="."
 temp_file=/tmp/temp.$$
-timestamp=$(date -u +%Y%m%d%k%M)
+timestamp=$(date -u +%Y%m%d%H%M)
 lspools_err="${out_dir}/lspools-${timestamp}.error"
 rados_out="${out_dir}/rados-${timestamp}.intermediate"
 rados_err="${out_dir}/rados-${timestamp}.error"
