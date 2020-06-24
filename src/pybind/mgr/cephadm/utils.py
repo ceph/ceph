@@ -1,9 +1,14 @@
 import logging
-import re
-from typing import List, Dict, Iterable
+from typing import List, Dict, Iterable, Tuple, TYPE_CHECKING
 
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, HostPlacementSpec
+import yaml
+
+from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec
+from mgr_util import to_yaml_or_json
 from orchestrator import OrchestratorError, DaemonDescription
+
+if TYPE_CHECKING:
+    from cephadm import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +40,7 @@ def name_to_auth_entity(name) -> str:
         raise OrchestratorError("unknown auth entity name")
 
 
-def generate_specs_for_daemons(all_dds: List[DaemonDescription], known_dds: List[DaemonDescription]) -> Iterable[ServiceSpec]:
+def generate_specs_for_daemons(mgr: "CephadmOrchestrator", all_dds: List[DaemonDescription], known_dds: List[DaemonDescription]) -> Iterable[str]:
 
     def dd_to_hpl(dd: DaemonDescription) -> HostPlacementSpec:
         return HostPlacementSpec(
@@ -44,7 +49,7 @@ def generate_specs_for_daemons(all_dds: List[DaemonDescription], known_dds: List
             network=''
         )
 
-    specs: Dict[str, ServiceSpec] = {}
+    placements: Dict[Tuple[str, str], PlacementSpec] = {}
     for dd in all_dds:
         if dd in known_dds:
             continue
@@ -57,17 +62,16 @@ def generate_specs_for_daemons(all_dds: List[DaemonDescription], known_dds: List
             logger.warning(f"Failed to generate service spec for {dd.name()}")
             continue
 
-        if service_name not in specs:
-            specs[service_name] = ServiceSpec(
-                service_type=dd.daemon_type,
-                service_id=service_id,
-                placement=PlacementSpec(
-                    hosts=[dd_to_hpl(dd)],
-                ),
-                unmanaged=True
-            )
+        if (dd.daemon_type, service_id) not in placements:
+            placements[(dd.daemon_type, service_id)] = PlacementSpec(hosts=[dd_to_hpl(dd)])
         else:
-            placement = specs[service_name].placement
-            placement.hosts.append(dd_to_hpl(dd))
+            placements[(dd.daemon_type, service_id)].hosts.append(dd_to_hpl(dd))
 
-    return list(specs.values())
+    for key, placement in placements.items():
+        service_type, service_id = key
+        context = {
+            'placement': to_yaml_or_json(placement.to_json(), 'yaml'),
+            'service_id': service_id
+        }
+        yml = mgr.template.render(f'spec_templates/{service_type}.yaml.j2', context)
+        yield yml

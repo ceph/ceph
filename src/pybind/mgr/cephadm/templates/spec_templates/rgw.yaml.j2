@@ -1,0 +1,12 @@
+service_type: rgw
+service_id: {{ service_id }}
+placement:
+{{ placement | indent(2, True) }}
+#spec:
+#  subcluster: ...
+#  rgw_frontend_port: <port>
+#  rgw_frontend_ssl_certificate: <cert>
+#  rgw_frontend_ssl_key: <key
+#  ssl: <true or false>
+unmanaged: false
+
