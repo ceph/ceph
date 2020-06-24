@@ -144,7 +144,7 @@ T strict_iec_cast(std::string_view str, std::string *err)
   std::string_view n = str;
   size_t u = str.find_first_not_of("0123456789-+");
   int m = 0;
-  // deal with unit prefix is there is one
+  // deal with unit prefix if there is one
   if (u != std::string_view::npos) {
     n = str.substr(0, u);
     unit = str.substr(u, str.length() - u);
