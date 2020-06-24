@@ -320,7 +320,7 @@ def format_bytes(n, width, colored=False):
     return format_units(n, width, colored, decimal=False)
 
 
-def to_yaml_or_json(what: Any, format: str) -> str:
+def to_yaml_or_json(what: Any, format: str, many=True) -> str:
     """
     >>> to_yaml_or_json({'a': 1}, 'json')
     '{"a": 1}'
@@ -333,7 +333,10 @@ def to_yaml_or_json(what: Any, format: str) -> str:
     elif format == 'json-pretty':
         return json.dumps(what, indent=2, sort_keys=True)
     elif format == 'yaml':
-        return yaml.safe_dump_all(what, default_flow_style=False)
+        if many:
+            return yaml.safe_dump_all(what, default_flow_style=False)
+        else:
+            return yaml.safe_dump(what, default_flow_style=False)
     assert False, f'{format} unsupported.'
 
 

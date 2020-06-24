@@ -70,8 +70,9 @@ def generate_specs_for_daemons(mgr: "CephadmOrchestrator", all_dds: List[DaemonD
     for key, placement in placements.items():
         service_type, service_id = key
         context = {
-            'placement': to_yaml_or_json(placement.to_json(), 'yaml'),
+            'placement': to_yaml_or_json(placement.to_json(), 'yaml', many=False).strip(),
             'service_id': service_id
         }
+
         yml = mgr.template.render(f'spec_templates/{service_type}.yaml.j2', context)
         yield yml

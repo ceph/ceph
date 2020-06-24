@@ -533,15 +533,18 @@ def test_generate_specs_for_daemons(cephadm_module):
     assert yamls[0] == """service_type: rgw
 service_id: realm.zone
 placement:
-  hosts
+  hosts:
+  - host1=realm.zone.host1
+  - host2=realm.zone.host1
 #spec:
-#  subcluster: ...
+#  subcluster: <subcluster>
 #  rgw_frontend_port: <port>
-#  rgw_frontend_ssl_certificate: <cert>
-#  rgw_frontend_ssl_key: <key
+#  rgw_frontend_ssl_certificate: |
+#    <cert>
+#  rgw_frontend_ssl_key: |
+#    <key>
 #  ssl: <true or false>
-unmanaged: false
-"""
+unmanaged: false"""
     ServiceSpec.from_json(yaml.load(yamls[0]))
 
     specs = [ServiceSpec.from_json(yaml.load(y)) for y in yamls]
