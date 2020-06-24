@@ -57,6 +57,16 @@ static ceph::spinlock debug_lock;
 # define bendl std::endl; }
 #endif
 
+#ifdef BUFFER_CORRUPTION_DEBUG
+  void ceph::canary_t::is_alive_or_die() const {
+    if (unlikely(cage != canary_bird)) {
+      // ceph_abort_msg is not a part of the `buffer` library, and thus
+      // we can't define the method in-class.
+      ceph_abort_msg("Canary is dead! Oops...");
+    }
+  }
+#endif
+
   static ceph::atomic<unsigned> buffer_cached_crc { 0 };
   static ceph::atomic<unsigned> buffer_cached_crc_adjusted { 0 };
   static ceph::atomic<unsigned> buffer_missed_crc { 0 };
