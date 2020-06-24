@@ -166,16 +166,11 @@ int Option::parse_value(
       *out = f;
     }
   } else if (type == Option::TYPE_BOOL) {
-    if (strcasecmp(val.c_str(), "false") == 0) {
-      *out = false;
-    } else if (strcasecmp(val.c_str(), "true") == 0) {
-      *out = true;
+    bool b = strict_strtob(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
     } else {
-      int b = strict_strtol(val.c_str(), 10, error_message);
-      if (!error_message->empty()) {
-	return -EINVAL;
-      }
-      *out = (bool)!!b;
+      *out = b;
     }
   } else if (type == Option::TYPE_ADDR) {
     entity_addr_t addr;
