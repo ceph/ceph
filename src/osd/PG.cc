@@ -2730,6 +2730,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	   * left end of the range if we are a tier because they may legitimately
 	   * not exist (see _scrub).
 	   */
+          ceph_assert(scrubber.preempt_divisor > 0);
 	  int min = std::max<int64_t>(3, cct->_conf->osd_scrub_chunk_min /
 				      scrubber.preempt_divisor);
 	  int max = std::max<int64_t>(min, cct->_conf->osd_scrub_chunk_max /
