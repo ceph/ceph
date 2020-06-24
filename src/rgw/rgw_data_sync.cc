@@ -466,10 +466,42 @@ bool RGWListRemoteDataLogCR::spawn_next() {
   return true;
 }
 
+struct bucket_instance_meta_info;
+struct read_metadata_list;
+
+class RGWDataSyncInfoCRHandler {
+protected:
+  RGWDataSyncCtx *sc;
+  RGWDataSyncEnv *sync_env;
+
+public:
+
+  RGWDataSyncInfoCRHandler(RGWDataSyncCtx *_sc) : sc(_sc),
+                                                  sync_env(_sc->env) {}
+
+  virtual ~RGWDataSyncInfoCRHandler() {}
+
+  virtual RGWCoroutine *fetch_full_cr(const string& list_marker,
+                                      read_metadata_list *result) = 0;
+
+  virtual RGWCoroutine *get_source_bucket_info_cr(const string& key,
+                                                  bucket_instance_meta_info *result) = 0;
+
+  virtual RGWCoroutine *get_inc_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) = 0;
+  virtual RGWCoroutine *fetch_inc_cr(int shard_id,
+                                     const string& marker,
+                                     list<rgw_data_change_log_entry> *result,
+                                     string *next_marker,
+                                     bool *truncated) = 0;
+};
+
+using RGWDataSyncInfoCRHandlerRef = std::shared_ptr<RGWDataSyncInfoCRHandler>;
+
 class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   static constexpr uint32_t lock_duration = 30;
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
+  RGWDataSyncInfoCRHandlerRef dsi;
   rgw::sal::RadosStore* store;
   const rgw_pool& pool;
   const uint32_t num_shards;
@@ -479,15 +511,22 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   string lock_name;
   string cookie;
   rgw_data_sync_status *status;
-  map<int, RGWDataChangesLogInfo> shards_info;
+
+  struct marker_timestamp {
+    string marker;
+    ceph::real_time timestamp;
+  };
+  vector<marker_timestamp> shards_info;
 
   RGWSyncTraceNodeRef tn;
 public:
-  RGWInitDataSyncStatusCoroutine(RGWDataSyncCtx *_sc, uint32_t num_shards,
+  RGWInitDataSyncStatusCoroutine(RGWDataSyncCtx *_sc,
+                                 uint32_t num_shards,
                                  uint64_t instance_id,
                                  RGWSyncTraceNodeRef& _tn_parent,
                                  rgw_data_sync_status *status)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env), store(sync_env->store),
+    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
+      dsi(_sc->dsi), store(sync_env->store),
       pool(sync_env->svc->zone->get_zone_params().log_pool),
       num_shards(num_shards), status(status),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "init_data_sync_status")) {
@@ -543,8 +582,9 @@ public:
           tn->log(0, SSTR("ERROR: connection to zone " << sc->source_zone << " does not exist!"));
           return set_cr_error(-EIO);
         }
+        shards_info.resize(num_shards);
         for (uint32_t i = 0; i < num_shards; i++) {
-          spawn(new RGWReadRemoteDataLogShardInfoCR(sc, i, &shards_info[i]), true);
+          spawn(dsi->get_inc_pos_cr(i, &shards_info[i].marker, &shards_info[i].timestamp), true);
         }
       }
       while (collect(&ret, NULL)) {
@@ -556,10 +596,10 @@ public:
       }
       yield {
         for (uint32_t i = 0; i < num_shards; i++) {
-          RGWDataChangesLogInfo& info = shards_info[i];
+          auto& info = shards_info[i];
           auto& marker = status->sync_markers[i];
           marker.next_step_marker = info.marker;
-          marker.timestamp = info.last_update;
+          marker.timestamp = info.timestamp;
           const auto& oid = RGWDataSyncStatusManager::shard_obj_name(sc->source_zone, i);
           using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_data_sync_marker>;
           spawn(new WriteMarkerCR(dpp, sync_env->async_rados, sync_env->svc->sysobj,
@@ -642,6 +682,7 @@ int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn, 
 {
   sync_env.init(dpp, cct, store, store->svc(), async_rados, &http_manager, _error_logger,
                 _sync_tracer, _sync_module, counters);
+
   sc.init(&sync_env, _conn, _source_zone);
 
   if (initialized) {
@@ -782,6 +823,86 @@ struct bucket_instance_meta_info {
   }
 };
 
+class RGWDataSyncInfoCRHandler_Legacy : public RGWDataSyncInfoCRHandler {
+  string path;
+
+  int num_shards;
+
+  class ReadDatalogStatusCR : public RGWCoroutine {
+    RGWDataSyncCtx *sc;
+    int shard_id;
+    string *marker;
+    ceph::real_time *timestamp;
+
+    RGWDataChangesLogInfo info;
+
+  public:
+    ReadDatalogStatusCR(RGWDataSyncCtx *_sc,
+                     int _shard_id,
+                     string *_marker,
+                     ceph::real_time *_timestamp) : RGWCoroutine(_sc->cct),
+                                                    sc(_sc),
+                                                    shard_id(_shard_id),
+                                                    marker(_marker),
+                                                    timestamp(_timestamp) {}
+
+    int operate() {
+      reenter(this) {
+        yield call(new RGWReadRemoteDataLogShardInfoCR(sc, shard_id, &info));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+        *marker = info.marker;
+        *timestamp = info.last_update;
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+public:
+
+  RGWDataSyncInfoCRHandler_Legacy(RGWDataSyncCtx *_sc) : RGWDataSyncInfoCRHandler(_sc) {
+    path = "/admin/metadata/bucket.instance";
+  }
+
+  RGWCoroutine *fetch_full_cr(const string& marker,
+                              read_metadata_list *result) override {
+    string entrypoint = string("/admin/metadata/bucket.instance");
+
+    rgw_http_param_pair pairs[] = {{"max-entries", "1000"},
+                                   {"marker", marker.c_str()},
+                                   {NULL, NULL}};
+
+    return new RGWReadRESTResourceCR<read_metadata_list>(sync_env->cct, sc->conn, sync_env->http_manager,
+                                                             entrypoint, pairs, result);
+  }
+
+  RGWCoroutine *get_source_bucket_info_cr(const string& key,
+                                          bucket_instance_meta_info *result) override {
+    rgw_http_param_pair pairs[] = {{"key", key.c_str()},
+                                   {NULL, NULL}};
+
+    return new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, result);
+  }
+
+  RGWCoroutine *get_inc_pos_cr(int shard_id, string *marker, ceph::real_time *timestamp) override {
+    return new ReadDatalogStatusCR(sc, shard_id, marker, timestamp);
+  }
+
+  RGWCoroutine *fetch_inc_cr(int shard_id,
+                             const string& marker,
+                             list<rgw_data_change_log_entry> *result,
+                             string *next_marker,
+                             bool *truncated) override {
+    return new RGWReadRemoteDataLogShardCR(sc, shard_id,
+                                           marker,
+                                           next_marker,
+                                           result,
+                                           truncated);
+  }
+};
+
 class RGWListBucketIndexesCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
@@ -831,16 +952,7 @@ public:
       yield; // yield so OmapAppendCRs can start
 
       do {
-        yield {
-          string entrypoint = string("/admin/metadata/bucket.instance");
-
-          rgw_http_param_pair pairs[] = {{"max-entries", "1000"},
-                                         {"marker", result.marker.c_str()},
-                                         {NULL, NULL}};
-
-          call(new RGWReadRESTResourceCR<read_metadata_list>(sync_env->cct, sc->conn, sync_env->http_manager,
-                                                             entrypoint, pairs, &result));
-        }
+        yield call(sc->dsi->fetch_full_cr(result.marker, &result));
         if (retcode < 0) {
           ldpp_dout(dpp, 0) << "ERROR: failed to fetch metadata for section bucket.instance" << dendl;
           return set_cr_error(retcode);
@@ -850,12 +962,7 @@ public:
           ldpp_dout(dpp, 20) << "list metadata: section=bucket.instance key=" << *iter << dendl;
           key = *iter;
 
-          yield {
-            rgw_http_param_pair pairs[] = {{"key", key.c_str()},
-                                           {NULL, NULL}};
-
-            call(new RGWReadRESTResourceCR<bucket_instance_meta_info>(sync_env->cct, sc->conn, sync_env->http_manager, path, pairs, &meta_info));
-          }
+          yield call(sc->dsi->get_source_bucket_info_cr(key, &meta_info));
 
           num_shards = meta_info.data.get_bucket_info().layout.current_index.layout.normal.num_shards;
           if (num_shards > 0) {
@@ -1431,6 +1538,17 @@ public:
   }
 };
 
+void RGWDataSyncCtx::init(RGWDataSyncEnv *_env,
+                          RGWRESTConn *_conn,
+                          const rgw_zone_id& _source_zone) {
+  cct = _env->cct;
+  env = _env;
+  conn = _conn;
+  source_zone = _source_zone;
+
+  dsi.reset(new RGWDataSyncInfoCRHandler_Legacy(this));
+}
+
 #define BUCKET_SHARD_SYNC_SPAWN_WINDOW 20
 #define DATA_SYNC_MAX_ERR_ENTRIES 10
 
@@ -1757,8 +1875,9 @@ public:
         omapvals.reset();
 
         tn->log(20, SSTR("shard_id=" << shard_id << " sync_marker=" << sync_marker.marker));
-        yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id, sync_marker.marker,
-                                                   &next_marker, &log_entries, &truncated));
+        yield call(sc->dsi->fetch_inc_cr(shard_id, sync_marker.marker,
+                                         &log_entries, &next_marker,
+                                         &truncated));
         if (retcode < 0 && retcode != -ENOENT) {
           tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
           lease_cr->go_down();
@@ -3168,8 +3287,9 @@ int RGWReadPendingBucketShardsCoroutine::operate(const DoutPrefixProvider *dpp)
     marker = sync_marker->marker;
     count = 0;
     do{
-      yield call(new RGWReadRemoteDataLogShardCR(sc, shard_id, marker,
-                                                 &next_marker, &log_entries, &truncated));
+      yield call(sc->dsi->fetch_inc_cr(shard_id, marker,
+                                       &log_entries, &next_marker,
+                                       &truncated));
 
       if (retcode == -ENOENT) {
         break;
