@@ -196,12 +196,17 @@ int64_t RGWCoroutinesManager::get_next_io_id()
   return (int64_t)++max_io_id;
 }
 
+uint64_t RGWCoroutinesManager::get_next_stack_id() {
+  return (uint64_t)++max_stack_id;
+}
+
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
                                                                                                          done_flag(false), error_flag(false), blocked_flag(false),
                                                                                                          sleep_flag(false), interval_wait_flag(false), is_scheduled(false), is_waiting_for_child(false),
 													 retcode(0), run_count(0),
 													 env(NULL), parent(NULL)
 {
+  id = ops_mgr->get_next_stack_id();
   if (start) {
     ops.push_back(start);
   }
@@ -360,7 +365,7 @@ void RGWCoroutinesStack::cancel()
   put();
 }
 
-bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
+bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id) /* returns true if needs to be called again */
 {
   bool need_retry = false;
   rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
@@ -377,6 +382,9 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack 
         ldout(cct, 20) << "collect(): s=" << (void *)this << " stack=" << (void *)stack << " explicitly skipping stack" << dendl;
       }
       continue;
+    }
+    if (stack_id) {
+      *stack_id = stack->get_id();
     }
     int r = stack->get_ret_status();
     stack->put();
@@ -426,9 +434,9 @@ bool RGWCoroutinesStack::collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesS
   return false;
 }
 
-bool RGWCoroutinesStack::collect(int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
+bool RGWCoroutinesStack::collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t  *stack_id) /* returns true if needs to be called again */
 {
-  return collect(NULL, ret, skip_stack);
+  return collect(NULL, ret, skip_stack, stack_id);
 }
 
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
@@ -884,9 +892,9 @@ RGWCoroutinesStack *RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
   return stack->spawn(this, op, wait);
 }
 
-bool RGWCoroutine::collect(int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
+bool RGWCoroutine::collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id) /* returns true if needs to be called again */
 {
-  return stack->collect(this, ret, skip_stack);
+  return stack->collect(this, ret, skip_stack, stack_id);
 }
 
 bool RGWCoroutine::collect_next(int *ret, RGWCoroutinesStack **collected_stack) /* returns true if found a stack to collect */
@@ -926,7 +934,7 @@ ostream& operator<<(ostream& out, const RGWCoroutine& cr)
 
 bool RGWCoroutine::drain_children(int num_cr_left,
                                   RGWCoroutinesStack *skip_stack,
-                                  std::optional<std::function<void(int ret)> > cb)
+                                  std::optional<std::function<void(uint64_t stack_id, int ret)> > cb)
 {
   bool done = false;
   ceph_assert(num_cr_left >= 0);
@@ -937,14 +945,15 @@ bool RGWCoroutine::drain_children(int num_cr_left,
     while (num_spawned() > (size_t)num_cr_left) {
       yield wait_for_child();
       int ret;
-      while (collect(&ret, skip_stack)) {
+      uint64_t stack_id;
+      while (collect(&ret, skip_stack, &stack_id)) {
         if (ret < 0) {
             ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
             /* we should have reported this error */
             log_error() << "ERROR: collect() returned error (ret=" << ret << ")";
         }
         if (cb) {
-          (*cb)(ret);
+          (*cb)(stack_id, ret);
         }
       }
     }
@@ -954,7 +963,7 @@ bool RGWCoroutine::drain_children(int num_cr_left,
 }
 
 bool RGWCoroutine::drain_children(int num_cr_left,
-                                  std::optional<std::function<int(int ret)> > cb)
+                                  std::optional<std::function<int(uint64_t stack_id, int ret)> > cb)
 {
   bool done = false;
   ceph_assert(num_cr_left >= 0);
@@ -963,14 +972,15 @@ bool RGWCoroutine::drain_children(int num_cr_left,
     while (num_spawned() > (size_t)num_cr_left) {
       yield wait_for_child();
       int ret;
-      while (collect(&ret, nullptr)) {
+      uint64_t stack_id;
+      while (collect(&ret, nullptr, &stack_id)) {
         if (ret < 0) {
           ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
           /* we should have reported this error */
           log_error() << "ERROR: collect() returned error (ret=" << ret << ")";
         }
         if (cb && !drain_status.should_exit) {
-          int r = (*cb)(ret);
+          int r = (*cb)(stack_id, ret);
           if (r < 0) {
             drain_status.ret = r;
             num_cr_left = 0; /* need to drain all */
