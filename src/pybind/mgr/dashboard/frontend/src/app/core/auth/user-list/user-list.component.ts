@@ -30,8 +30,6 @@ const BASE_URL = 'user-management/users';
 export class UserListComponent implements OnInit {
   @ViewChild('userRolesTpl', { static: true })
   userRolesTpl: TemplateRef<any>;
-  @ViewChild('userEnabledTpl', { static: true })
-  userEnabledTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
