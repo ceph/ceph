@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include <boost/container/static_vector.hpp>
+#include <boost/crc.hpp> 
 
 #include "common/sstring.hh"
 #include "rgw_op.h"
@@ -728,8 +729,12 @@ protected:
     return s->info.args.exists("legal-hold");
   }
 
+  bool is_select_op() const {
+    return s->info.args.exists("select-type");
+  }
+
   bool is_obj_update_op() const override {
-    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op();
+    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op() || is_select_op();
   }
   RGWOp *get_obj_op(bool get_data);
 
@@ -874,6 +879,75 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
 
   return 0;
 }
+
+namespace s3selectEngine
+{
+class s3select;
+class csv_object;
+}
+
+class RGWSelectObj_ObjStore_S3 : public RGWGetObj_ObjStore_S3
+{
+
+private:
+  std::unique_ptr<s3selectEngine::s3select> s3select_syntax;
+  std::string m_s3select_query;
+  std::string m_result;
+  std::unique_ptr<s3selectEngine::csv_object> m_s3_csv_object;
+  std::string m_column_delimiter;
+  std::string m_quot;
+  std::string m_row_delimiter;
+  std::string m_compression_type;
+  std::string m_escape_char;
+  std::unique_ptr<char[]>  m_buff_header;
+  std::string m_header_info;
+  std::string m_sql_query;
+
+public:
+  unsigned int chunk_number;
+
+  enum header_name_En
+  {
+    EVENT_TYPE,
+    CONTENT_TYPE,
+    MESSAGE_TYPE
+  };
+  static const char* header_name_str[3];
+
+  enum header_value_En
+  {
+    RECORDS,
+    OCTET_STREAM,
+    EVENT
+  };
+  static const char* header_value_str[3];
+
+  RGWSelectObj_ObjStore_S3();
+  virtual ~RGWSelectObj_ObjStore_S3();
+
+  virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
+
+  virtual int get_params() override;
+
+private:
+  void encode_short(char* buff, uint16_t s, int& i);
+
+  void encode_int(char* buff, u_int32_t s, int& i);
+
+  int create_header_records(char* buff);
+
+  std::unique_ptr<boost::crc_32_type> crc32;
+
+  int create_message(char* buff, u_int32_t result_len, u_int32_t header_len);
+
+  int run_s3select(const char* query, const char* input, size_t input_length);
+
+  int extract_by_tag(std::string tag_name, std::string& result);
+
+  void convert_escape_seq(std::string& esc);
+
+  int handle_aws_cli_parameters(std::string& sql_query);
+};
 
 
 namespace rgw::auth::s3 {
