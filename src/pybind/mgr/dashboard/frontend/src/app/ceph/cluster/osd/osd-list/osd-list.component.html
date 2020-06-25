@@ -77,8 +77,8 @@
 
 <ng-template #osdUsageTpl
              let-row="row">
-  <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
-                [usedBytes]="row.stats.stat_bytes_used">
+  <cd-usage-bar [total]="row.stats.stat_bytes"
+                [used]="row.stats.stat_bytes_used">
   </cd-usage-bar>
 </ng-template>
 
