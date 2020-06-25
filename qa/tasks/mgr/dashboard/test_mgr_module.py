@@ -45,7 +45,7 @@ class MgrModuleTest(MgrModuleTestCase):
         'long_desc': str,
         'tags': JList(str),
         'see_also': JList(str)
-    })    
+    })
 
 
     def test_list_disabled_module(self):
@@ -137,8 +137,8 @@ class MgrModuleTest(MgrModuleTestCase):
                     'organization': str,
                     'proxy': str,
                     'url': str
-                }))            
-                
+                }))
+
     def test_module_options(self):
         data = self._get('/api/mgr/module/telemetry/options')
         self.assertStatus(200)
@@ -163,15 +163,15 @@ class MgrModuleTest(MgrModuleTestCase):
             'url': self.__options_schema
         })
         self.assertSchema(data, schema)
-        
+
     def test_module_enable(self):
         self._post('/api/mgr/module/telemetry/enable')
-        self.assertStatus(200)       
-                                         
+        self.assertStatus(200)
+
     def test_disable(self):
         self._post('/api/mgr/module/iostat/disable')
-        self.assertStatus(200)   
-        
+        self.assertStatus(200)
+
     def test_put(self):
         self.set_config_key('config/mgr/mgr/iostat/log_level', 'critical')
         self.set_config_key('config/mgr/mgr/iostat/log_to_cluster', 'False')
