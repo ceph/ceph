@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class OSDService(CephadmService):
+    TYPE = 'osd'
+
     def create(self, drive_group: DriveGroupSpec) -> str:
         logger.debug(f"Processing DriveGroup {drive_group}")
         ret = []

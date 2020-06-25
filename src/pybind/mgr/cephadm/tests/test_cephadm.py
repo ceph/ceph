@@ -536,6 +536,36 @@ class TestCephadm(object):
 
             assert_rm_service(cephadm_module, spec.service_name())
 
+    @mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")
+    def test_daemon_ok_to_stop(self, ok_to_stop, cephadm_module: CephadmOrchestrator):
+        spec = ServiceSpec(
+            'mds',
+            service_id='fsname',
+            placement=PlacementSpec(hosts=['host1', 'host2'])
+        )
+        with with_host(cephadm_module, 'host1'), with_host(cephadm_module, 'host2'):
+            c = cephadm_module.apply_mds(spec)
+            out = wait(cephadm_module, c)
+            match_glob(out, "Scheduled mds.fsname update...")
+            cephadm_module._apply_all_services()
+
+            [daemon] = cephadm_module.cache.daemons['host1'].keys()
+
+            spec.placement.set_hosts(['host2'])
+
+            ok_to_stop.side_effect = False
+
+            c = cephadm_module.apply_mds(spec)
+            out = wait(cephadm_module, c)
+            match_glob(out, "Scheduled mds.fsname update...")
+            cephadm_module._apply_all_services()
+
+            ok_to_stop.assert_called_with([daemon[4:]])
+
+            assert_rm_daemon(cephadm_module, spec.service_name(), 'host1')  # verifies ok-to-stop
+            assert_rm_daemon(cephadm_module, spec.service_name(), 'host2')
+
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
