@@ -305,12 +305,14 @@ public:
   int wait(const utime_t& interval);
   bool drain_children(int num_cr_left,
                       RGWCoroutinesStack *skip_stack = nullptr,
-                      std::optional<std::function<void(int ret)> > err_cb = std::nullopt); /* returns true if needed to be called again,
-                                                                                              err_cb is just for reporting error */
+                      std::optional<std::function<void(int ret)> > cb = std::nullopt); /* returns true if needed to be called again,
+                                                                                          cb will be called on completion of every
+                                                                                          completion. */
   bool drain_children(int num_cr_left,
-                      std::optional<std::function<int(int ret)> > err_cb); /* returns true if needed to be called again,
-                                                                               err_cb is for filtering error. A negative return
-                                                                               value means that we need to exit current cr */
+                      std::optional<std::function<int(int ret)> > cb); /* returns true if needed to be called again,
+                                                                          cb will be called on every completion, can filter errors.
+                                                                          A negative return value from cb means that current cr
+                                                                          will need to exit */
   void wakeup();
   void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
 
@@ -369,9 +371,9 @@ do {                            \
   drain_status.init(); \
   yield_until_true(drain_children(1, stack, cb))
 
-#define drain_with_cb(n, err_cb) \
+#define drain_with_cb(n, cb) \
   drain_status.init(); \
-  yield_until_true(drain_children(n, err_cb)); \
+  yield_until_true(drain_children(n, cb)); \
   if (drain_status.should_exit) { \
     return set_cr_error(drain_status.ret); \
   }
@@ -379,10 +381,10 @@ do {                            \
 #define drain_all_cb(cb) \
   drain_with_cb(0, cb)
 
-#define yield_spawn_window(cr, n, err_cb) \
+#define yield_spawn_window(cr, n, cb) \
   do { \
     spawn(cr, false); \
-    drain_with_cb(n, err_cb); /* this is guaranteed to yield */ \
+    drain_with_cb(n, cb); /* this is guaranteed to yield */ \
   } while (0)
 
 
