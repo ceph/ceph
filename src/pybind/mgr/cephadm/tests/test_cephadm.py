@@ -111,7 +111,7 @@ class TestCephadm(object):
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
             c = cephadm_module.describe_service()
-            out = [o.to_json() for o in wait(cephadm_module, c)]
+            out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
             expected = [
                 {
                     'placement': {'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]},
@@ -126,8 +126,10 @@ class TestCephadm(object):
                         'count': 1,
                         'hosts': [{'hostname': 'test', 'name': '', 'network': ''}]
                     },
-                    'rgw_realm': 'r',
-                    'rgw_zone': 'z',
+                    'spec': {
+                        'rgw_realm': 'r',
+                        'rgw_zone': 'z',
+                    },
                     'service_id': 'r.z',
                     'service_name': 'rgw.r.z',
                     'service_type': 'rgw',
