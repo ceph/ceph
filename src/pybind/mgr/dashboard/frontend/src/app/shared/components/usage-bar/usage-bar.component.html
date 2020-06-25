@@ -2,11 +2,11 @@
   <table>
     <tr>
       <td class="text-left">Used:&nbsp;</td>
-      <td class="text-right"><strong> {{ usedBytes | dimlessBinary }}</strong></td>
+      <td class="text-right"><strong> {{ isBinary ? (used | dimlessBinary) : (used | dimless) }}</strong></td>
     </tr>
     <tr>
       <td class="text-left">Free:&nbsp;</td>
-      <td class="'text-right"><strong>{{ freeBytes | dimlessBinary }}</strong></td>
+      <td class="'text-right"><strong>{{ isBinary ? (total - used | dimlessBinary) : (total - used | dimless) }}</strong></td>
     </tr>
   </table>
 </ng-template>
