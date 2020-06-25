@@ -309,6 +309,8 @@ describe('PoolListComponent', () => {
           stats: {
             bytes_used: { latest: 0, rate: 0, rates: [] },
             max_avail: { latest: 0, rate: 0, rates: [] },
+            avail_raw: { latest: 0, rate: 0, rates: [] },
+            percent_used: { latest: 0, rate: 0, rates: [] },
             rd: { latest: 0, rate: 0, rates: [] },
             rd_bytes: { latest: 0, rate: 0, rates: [] },
             wr: { latest: 0, rate: 0, rates: [] },
@@ -328,7 +330,8 @@ describe('PoolListComponent', () => {
       pool = _.merge(pool, {
         stats: {
           bytes_used: { latest: 5, rate: 0, rates: [] },
-          max_avail: { latest: 15, rate: 0, rates: [] },
+          avail_raw: { latest: 15, rate: 0, rates: [] },
+          percent_used: { latest: 0.25, rate: 0, rates: [] },
           rd_bytes: {
             latest: 6,
             rate: 4,
@@ -345,7 +348,8 @@ describe('PoolListComponent', () => {
           pg_status: '8 active+clean, 2 down',
           stats: {
             bytes_used: { latest: 5, rate: 0, rates: [] },
-            max_avail: { latest: 15, rate: 0, rates: [] },
+            avail_raw: { latest: 15, rate: 0, rates: [] },
+            percent_used: { latest: 0.25, rate: 0, rates: [] },
             rd_bytes: { latest: 6, rate: 4, rates: [2, 6] }
           },
           usage: 0.25
