@@ -1221,6 +1221,7 @@ def clear_old_log():
         init_log()
         log.info('logging in a fresh file now...')
 
+
 def exec_test():
     # Parse arguments
     opt_interactive_on_error = False
@@ -1381,18 +1382,38 @@ def exec_test():
         def __init__(self):
             self.buffer = ""
 
+        def _del_result_lines(self):
+            """
+            Don't let unittest.TextTestRunner print "Ran X tests in Ys",
+            vstart_runner.py will do it for itself since it runs tests in a
+            testsuite one by one.
+            """
+            self.buffer = re.sub('\n\n'+'-'*70+'\nran [0-9]* test in [0-9.]*s\n\n',
+                                 '', self.buffer, flags=re.I)
+
+            self.buffer = self.buffer.replace('OK\n', '')
+
         def write(self, data):
             self.buffer += data
-            if "\n" in self.buffer:
-                lines = self.buffer.split("\n")
-                for line in lines[:-1]:
-                    pass
-                    # sys.stderr.write(line + "\n")
-                    log.info(line)
-                self.buffer = lines[-1]
+            if self.buffer.count("\n") > 5:
+                self._write()
+
+        def _write(self):
+            self._del_result_lines()
+            if self.buffer == '':
+                return
+
+            lines = self.buffer.split("\n")
+            for line in lines:
+                # sys.stderr.write(line + "\n")
+                log.info(line)
+            self.buffer = ''
 
         def flush(self):
             pass
+
+        def __del__(self):
+            self._write()
 
     decorating_loader = DecoratingLoader({
         "ctx": ctx,
@@ -1483,11 +1504,27 @@ def exec_test():
                 super(LoggingResult, self).addSkip(test, reason)
 
     # Execute!
-    result = unittest.TextTestRunner(
-        stream=LogStream(),
-        resultclass=LoggingResult,
-        verbosity=2,
-        failfast=True).run(overall_suite)
+    overall_suite = load_tests(modules, loader.TestLoader())
+    no_of_tests_execed = 0
+    started_at = datetime.datetime.utcnow()
+    for suite_, case in enumerate_methods(overall_suite):
+        result = unittest.TextTestRunner(stream=LogStream(),
+                                         resultclass=LoggingResult,
+                                         verbosity=2, failfast=True).run(case)
+        if not result.wasSuccessful():
+            break
+
+        no_of_tests_execed += 1
+
+    time_elapsed = (datetime.datetime.utcnow() - started_at).total_seconds()
+
+    if result.wasSuccessful():
+        log.info('')
+        log.info('-'*70)
+        log.info('Ran {} tests in {}s'.format(no_of_tests_execed,
+                                              time_elapsed))
+        log.info('')
+        log.info('OK')
 
     CephFSMount.cleanup_stale_netnses_and_bridge(remote)
 
