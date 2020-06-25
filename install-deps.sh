@@ -299,16 +299,7 @@ else
     centos|fedora|rhel|ol|virtuozzo)
         yumdnf="dnf"
         builddepcmd="dnf -y builddep --allowerasing"
-        if [[ $ID =~ centos|rhel ]] && version_lt $VERSION_ID 8; then
-            yumdnf="yum"
-            builddepcmd="yum-builddep -y --setopt=*.skip_if_unavailable=true"
-        fi
         echo "Using $yumdnf to install dependencies"
-	if [ "$ID" = "centos" -a "$ARCH" = "aarch64" ]; then
-	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
-	    $SUDO yum-config-manager --disable centos-sclo-rh || true
-	    $SUDO yum remove centos-release-scl || true
-	fi
         case "$ID" in
             fedora)
                 $SUDO $yumdnf install -y $yumdnf-utils
@@ -320,23 +311,7 @@ else
 		    $SUDO $yumdnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $ID = centos -a $MAJOR_VERSION = 7 ; then
-		    case "$ARCH" in
-			x86_64)
-			    $SUDO $yumdnf -y install centos-release-scl
-			    ;;
-			aarch64)
-			    $SUDO $yumdnf -y install centos-release-scl-rh
-			    $SUDO yum-config-manager --disable centos-sclo-rh
-			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    ;;
-		    esac
-                elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
-                    $SUDO yum-config-manager \
-			  --enable rhel-server-rhscl-7-rpms \
-			  --enable rhel-7-server-optional-rpms \
-			  --enable rhel-7-server-devtools-rpms
-                elif test $ID = centos -a $MAJOR_VERSION = 8 ; then
+		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
                     $SUDO dnf config-manager --set-enabled PowerTools
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
