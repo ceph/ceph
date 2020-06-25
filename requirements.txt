@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=requirements.txt
 #
-ansible==2.8.2            # via teuthology
+ansible==2.8.8            # via teuthology
 apache-libcloud==2.8.0    # via teuthology
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0           # via teuthology
