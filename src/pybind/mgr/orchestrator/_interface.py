@@ -1238,7 +1238,7 @@ class DaemonDescription(object):
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
-        self.daemon_id = daemon_id
+        self.daemon_id: str = daemon_id
 
         # Service version that was deployed
         self.version = version
