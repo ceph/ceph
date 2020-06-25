@@ -192,7 +192,11 @@ def run_job(job_config, teuth_bin_path, archive_dir, verbose):
     safe_archive = safepath.munge(job_config['name'])
     if job_config.get('first_in_suite') or job_config.get('last_in_suite'):
         if teuth_config.results_server:
-            report.try_delete_jobs(job_config['name'], job_config['job_id'])
+            try:
+                report.try_delete_jobs(job_config['name'], job_config['job_id'])
+            except Exception as e:
+                log.warning("Unable to delete job %s, exception occurred: %s",
+                            job_config['job_id'], e)
         suite_archive_dir = os.path.join(archive_dir, safe_archive)
         safepath.makedirs('/', suite_archive_dir)
         args = [
