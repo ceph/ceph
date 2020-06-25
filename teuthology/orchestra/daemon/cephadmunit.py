@@ -50,7 +50,7 @@ class CephadmUnit(DaemonState):
                   '-u',
                   'ceph-%s@%s.service' % (self.fsid, name)
             ],
-            logger=logging.getLogger(self.cluster + '.' + name),
+            logger=logging.getLogger('journalctl@' + self.cluster + '.' + name),
             label=name,
             wait=False,
             check_status=False,
