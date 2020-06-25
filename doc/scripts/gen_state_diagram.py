@@ -23,7 +23,7 @@ def acc_lines(generator):
 def to_char(generator):
     for line in generator:
         for char in line:
-            if char is not '\n':
+            if char != '\n':
                 yield char
             else:
                 yield ' '
@@ -41,22 +41,22 @@ def remove_multiline_comments(generator):
     in_comment = False
     for char in generator:
         if in_comment:
-            if saw is "*":
-                if char is "/":
+            if saw == "*":
+                if char == "/":
                     in_comment = False
                 saw = ""
-            if char is "*":
+            if char == "*":
                 saw = "*"
             continue
-        if saw is "/":
-            if char is '*':
+        if saw == "/":
+            if char == '*':
                 in_comment = True
                 saw = ""
                 continue
             else:
                 yield saw
                 saw = ""
-        if char is '/':
+        if char == '/':
             saw = "/"
             continue
         yield char
@@ -129,7 +129,7 @@ class StateMachineRenderer(object):
             if tokens.group(2) not in self.state_contents.keys():
                 self.state_contents[tokens.group(2)] = []
             self.state_contents[tokens.group(2)].append(tokens.group(1))
-            if tokens.group(3) is not "":
+            if tokens.group(3):
                 self.machines[tokens.group(1)] = tokens.group(3)
             self.context.append((tokens.group(1), self.context_depth, ""))
             return
@@ -140,14 +140,14 @@ class StateMachineRenderer(object):
                                  line):
                 if i.group(1) not in self.edges.keys():
                     self.edges[i.group(1)] = []
-                if len(self.context) is 0:
+                if not self.context:
                     raise Exception("no context at line: " + line)
                 self.edges[i.group(1)].append((self.context[-1][0], i.group(2)))
         i = re.search("return\s+transit<\s*(\w*)\s*>()", line)
         if i is not None:
-            if len(self.context) is 0:
+            if not self.context:
                 raise Exception("no context at line: " + line)
-            if self.context[-1][2] is "":
+            if not self.context[-1][2]:
                 raise Exception("no event in context at line: " + line)
             if self.context[-1][2] not in self.edges.keys():
                 self.edges[self.context[-1][2]] = []
