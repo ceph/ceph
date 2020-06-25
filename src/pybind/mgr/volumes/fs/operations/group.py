@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import cephfs
 
 from .snapshot_util import mksnap, rmsnap
+from .pin_util import pin
 from .template import GroupTemplate
 from ..fs_util import listdir, get_ancestor_xattr
 from ..exception import VolumeException
@@ -60,6 +61,9 @@ class Group(GroupTemplate):
             if ve.errno == -errno.ENOENT and self.is_default_group():
                 return []
             raise
+
+    def pin(self, pin_type, pin_setting):
+        return pin(self.fs, self.path, pin_type, pin_setting)
 
     def create_snapshot(self, snapname):
         snappath = os.path.join(self.path,
