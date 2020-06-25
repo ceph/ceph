@@ -370,6 +370,9 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
 
     // report failed always_on modules as health errors
     for (const auto& name : mgr_map.get_always_on_modules()) {
+      if (active_modules->is_pending(name)) {
+	continue;
+      }
       if (!active_modules->module_exists(name)) {
         if (failed_modules.find(name) == failed_modules.end() &&
             dependency_modules.find(name) == dependency_modules.end()) {
