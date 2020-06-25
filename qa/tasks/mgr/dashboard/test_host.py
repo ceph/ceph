@@ -89,7 +89,7 @@ class HostControllerTest(DashboardTestCase):
                 'path': str
             }))
         })))
-    
+
     def test_host_daemons(self):
         hosts = self._get('{}'.format(self.URL_HOST))
         hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
@@ -101,14 +101,14 @@ class HostControllerTest(DashboardTestCase):
             'daemon_id': str,
             'daemon_type': str
         })))
-        
+
     def test_host_smart(self):
         hosts = self._get('{}'.format(self.URL_HOST))
         hosts = [host['hostname'] for host in hosts if host['hostname'] != '']
         assert hosts[0]
         data = self._get('{}/smart'.format('{}/{}'.format(self.URL_HOST, hosts[0])))
-        self.assertStatus(200)    
-     
+        self.assertStatus(200)
+
 
 class HostControllerNoOrchestratorTest(DashboardTestCase):
     def test_host_create(self):
