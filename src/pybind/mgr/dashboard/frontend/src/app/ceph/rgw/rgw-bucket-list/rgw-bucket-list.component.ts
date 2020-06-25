@@ -103,31 +103,31 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
       {
         name: this.i18n('Owner'),
         prop: 'owner',
-        flexGrow: 3
+        flexGrow: 2.5
       },
       {
         name: this.i18n('Used Capacity'),
         prop: 'bucket_size',
-        flexGrow: 0.5,
+        flexGrow: 0.6,
         pipe: this.dimlessBinaryPipe
       },
       {
         name: this.i18n('Capacity Limit %'),
         prop: 'size_usage',
         cellTemplate: this.bucketSizeTpl,
-        flexGrow: 1
+        flexGrow: 0.8
       },
       {
         name: this.i18n('Objects'),
         prop: 'num_objects',
-        flexGrow: 0.5,
+        flexGrow: 0.6,
         pipe: this.dimlessPipe
       },
       {
         name: this.i18n('Object Limit %'),
         prop: 'object_usage',
         cellTemplate: this.bucketObjectTpl,
-        flexGrow: 1
+        flexGrow: 0.8
       }
     ];
   }
