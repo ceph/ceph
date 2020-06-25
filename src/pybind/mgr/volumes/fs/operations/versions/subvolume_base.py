@@ -6,6 +6,7 @@ from hashlib import md5
 
 import cephfs
 
+from ..pin_util import pin
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
 from ...fs_util import get_ancestor_xattr
@@ -194,6 +195,9 @@ class SubvolumeBase(object):
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], "Cannot set new size for the subvolume. '{0}'".format(e.args[1]))
         return newsize, subvolstat.st_size
+
+    def pin(self, pin_type, pin_setting):
+        return pin(self.fs, self.base_path, pin_type, pin_setting)
 
     def init_config(self, version, subvolume_type, subvolume_path, subvolume_state):
         self.metadata_mgr.init(version, subvolume_type, subvolume_path, subvolume_state)

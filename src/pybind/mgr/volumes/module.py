@@ -114,6 +114,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'fs subvolumegroup pin'
+                   ' name=vol_name,type=CephString'
+                   ' name=group_name,type=CephString,req=true'
+                   ' name=pin_type,type=CephChoices,strings=export|distributed|random'
+                   ' name=pin_setting,type=CephString,req=true',
+            'desc': "Set MDS pinning policy for subvolumegroup",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolumegroup snapshot ls '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString ',
@@ -184,6 +193,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=group_name,type=CephString,req=false '
                    'name=no_shrink,type=CephBool,req=false ',
             'desc': "Resize a CephFS subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume pin'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=pin_type,type=CephChoices,strings=export|distributed|random'
+                   ' name=pin_setting,type=CephString,req=true'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Set MDS pinning policy for subvolume",
             'perm': 'rw'
         },
         {
@@ -384,6 +403,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       sub_name=cmd['sub_name'],
                                       group_name=cmd.get('group_name', None))
 
+    def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):
+        return self.vc.pin_subvolume_group(vol_name=cmd['vol_name'],
+            group_name=cmd['group_name'], pin_type=cmd['pin_type'],
+            pin_setting=cmd['pin_setting'])
+
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
         return self.vc.create_subvolume_group_snapshot(vol_name=cmd['vol_name'],
                                                        group_name=cmd['group_name'],
@@ -427,6 +451,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.resize_subvolume(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
                                         new_size=cmd['new_size'], group_name=cmd.get('group_name', None),
                                         no_shrink=cmd.get('no_shrink', False))
+
+    def _cmd_fs_subvolume_pin(self, inbuf, cmd):
+        return self.vc.subvolume_pin(vol_name=cmd['vol_name'],
+            sub_name=cmd['sub_name'], pin_type=cmd['pin_type'],
+            pin_setting=cmd['pin_setting'],
+            group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolume_snapshot_protect(self, inbuf, cmd):
         return self.vc.protect_subvolume_snapshot(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
