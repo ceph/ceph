@@ -85,9 +85,6 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%if 0%{?rhel} == 7
-%define __python %{__python3}
-%endif
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
@@ -134,20 +131,10 @@ BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	gperf
-%if 0%{?rhel} == 7
-BuildRequires:  cmake3 > 3.5
-%else
 BuildRequires:  cmake > 3.5
-%endif
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
-%if 0%{?rhel} == 7
-# devtoolset offers newer make and valgrind-devel, but the old ones are good
-# enough.
-BuildRequires:	devtoolset-8-gcc-c++ >= 8.3.1-3.1
-%else
 BuildRequires:	gcc-c++
-%endif
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 %if 0%{?fedora} || 0%{?rhel}
@@ -195,35 +182,15 @@ BuildRequires:  librdkafka-devel
 %if 0%{with make_check}
 BuildRequires:  jq
 BuildRequires:	libuuid-devel
-%if 0%{?rhel} == 7
-BuildRequires:	python%{python3_version_nodots}-bcrypt
-BuildRequires:	python%{python3_version_nodots}-nose
-BuildRequires:	python%{python3_version_nodots}-requests
-BuildRequires:	python%{python3_version_nodots}-dateutil
-%else
 BuildRequires:	python%{python3_pkgversion}-bcrypt
 BuildRequires:	python%{python3_pkgversion}-nose
 BuildRequires:	python%{python3_pkgversion}-pecan
 BuildRequires:	python%{python3_pkgversion}-requests
 BuildRequires:	python%{python3_pkgversion}-dateutil
-%endif
-%if 0%{?rhel} == 7
-BuildRequires:	python%{python3_version_nodots}-six
-BuildRequires:	python%{python3_version_nodots}-virtualenv
-%else
 BuildRequires:	python%{python3_pkgversion}-six
 BuildRequires:	python%{python3_pkgversion}-virtualenv
-%endif
-%if 0%{?rhel} == 7
-BuildRequires:	python%{python3_version_nodots}-coverage
-%else
 BuildRequires:	python%{python3_pkgversion}-coverage
-%endif
-%if 0%{?rhel} == 7
-BuildRequires:	python%{python3_version_nodots}-pyOpenSSL
-%else
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
-%endif
 BuildRequires:	socat
 %endif
 %if 0%{with seastar}
@@ -241,11 +208,6 @@ BuildRequires:  fmt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  libatomic
-%endif
-%if 0%{?rhel} == 7
-BuildRequires:  devtoolset-8-libubsan
-BuildRequires:  devtoolset-8-libasan
-BuildRequires:  devtoolset-8-libatomic
 %endif
 %endif
 #################################################################################
@@ -290,11 +252,7 @@ BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-setuptools
-%if 0%{?rhel} == 7
-BuildRequires:	python%{python3_version_nodots}-Cython
-%else
 BuildRequires:	python%{python3_pkgversion}-Cython
-%endif
 BuildRequires:	python%{python3_pkgversion}-prettytable
 BuildRequires:	python%{python3_pkgversion}-sphinx
 BuildRequires:	lz4-devel >= 1.7
@@ -310,21 +268,12 @@ BuildRequires:	xmlsec1-nss
 %endif
 BuildRequires:	xmlsec1-openssl
 BuildRequires:	xmlsec1-openssl-devel
-%if 0%{?rhel} == 7
-BuildRequires:	python%{python3_version_nodots}-jwt
-BuildRequires:	python%{python3_version_nodots}-scipy
-%else
 BuildRequires:	python%{python3_pkgversion}-cherrypy
 BuildRequires:	python%{python3_pkgversion}-jwt
 BuildRequires:	python%{python3_pkgversion}-routes
 BuildRequires:	python%{python3_pkgversion}-scipy
 BuildRequires:	python%{python3_pkgversion}-werkzeug
-%endif
-%if 0%{?rhel} == 7
-BuildRequires:	python%{python3_version_nodots}-pyOpenSSL
-%else
 BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
-%endif
 %endif
 %if 0%{?suse_version}
 BuildRequires:	libxmlsec1-1
@@ -497,11 +446,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
-%if 0%{?rhel} == 7
-Requires:       python%{python3_version_nodots}-six
-%else
 Requires:       python%{python3_pkgversion}-six
-%endif
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
@@ -556,10 +501,6 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-numpy
 Requires:       python3-scipy
-%if 0%{?rhel} == 7
-Requires:       numpy
-Requires:       scipy
-%endif
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
 disk failures using local algorithms and machine-learning databases.
@@ -588,19 +529,11 @@ BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
-%if 0%{?rhel} == 7
-Requires:       python%{python3_version_nodots}-bcrypt
-Requires:       python%{python3_version_nodots}-pyOpenSSL
-Requires:       python%{python3_version_nodots}-requests
-Requires:       python%{python3_version_nodots}-PyYAML
-Requires:       python%{python3_version_nodots}-dateutil
-%else
 Requires:       python%{python3_pkgversion}-bcrypt
 Requires:       python%{python3_pkgversion}-pecan
 Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-dateutil
-%endif
 %if 0%{?fedora} || 0%{?rhel} >= 8
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-pyyaml
@@ -1135,10 +1068,6 @@ This package provides Ceph’s default alerts for Prometheus.
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200
 %define _lto_cflags %{nil}
 
-%if 0%{?rhel} == 7
-. /opt/rh/devtoolset-8/enable
-%endif
-
 %if 0%{with cephfs_java}
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
@@ -1182,11 +1111,7 @@ env | sort
 
 mkdir build
 cd build
-%if 0%{?rhel} == 7
-CMAKE=cmake3
-%else
 CMAKE=cmake
-%endif
 ${CMAKE} .. \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR=%{_libdir} \
@@ -1618,9 +1543,6 @@ fi
 %dir %{_datadir}/ceph/mgr
 %{_datadir}/ceph/mgr/mgr_module.*
 %{_datadir}/ceph/mgr/mgr_util.*
-%if 0%{?rhel} == 7
-%{_datadir}/ceph/mgr/__pycache__
-%endif
 %{_unitdir}/ceph-mgr@.service
 %{_unitdir}/ceph-mgr.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mgr
