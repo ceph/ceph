@@ -960,6 +960,7 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("compress_under_bytes", statfs.data_compressed_original);
       // Stored by user amplified by replication
       f->dump_int("stored_raw", stored_raw);
+      f->dump_unsigned("avail_raw", avail);
     }
   } else {
     tbl << stringify(byte_u_t(stored_normalized));
@@ -1178,7 +1179,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 
     auto pool_statfs_iter =
       pool_statfs.find(std::make_pair(update_pool, update_osd));
-    if (pg_pool_sum.count(update_pool)) { 
+    if (pg_pool_sum.count(update_pool)) {
       pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
       if (pool_statfs_iter == pool_statfs.end()) {
         pool_statfs.emplace(std::make_pair(update_pool, update_osd), statfs_inc);
