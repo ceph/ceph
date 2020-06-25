@@ -39,6 +39,9 @@ class PyModuleRegistry;
 
 class ActivePyModules
 {
+  // module class instances not yet created
+  std::set<std::string, std::less<>> pending_modules;
+  // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
   std::map<std::string, std::string> store_cache;
@@ -158,6 +161,9 @@ public:
                   const std::string &notify_id);
   void notify_all(const LogEntry &log_entry);
 
+  bool is_pending(std::string_view name) const {
+    return pending_modules.count(name) > 0;
+  }
   bool module_exists(const std::string &name) const
   {
     return modules.count(name) > 0;
