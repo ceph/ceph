@@ -10,6 +10,7 @@ from teuthology.exceptions import CommandFailedError
 log = logging.getLogger(__name__)
 
 
+# TODO Add test for cluster update when ganesha can be deployed on multiple ports.
 class TestNFS(MgrTestCase):
     def _cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
