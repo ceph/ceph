@@ -297,18 +297,17 @@ else
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
     centos|fedora|rhel|ol|virtuozzo)
-        yumdnf="dnf"
         builddepcmd="dnf -y builddep --allowerasing"
-        echo "Using $yumdnf to install dependencies"
+        echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
-                $SUDO $yumdnf install -y $yumdnf-utils
+                $SUDO dnf install -y dnf-utils
                 ;;
             centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
-                $SUDO $yumdnf install -y $yumdnf-utils
+                $SUDO dnf install -y dnf-utils
                 rpm --quiet --query epel-release || \
-		    $SUDO $yumdnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
+		    $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
 		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
@@ -325,7 +324,7 @@ else
         esac
         munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
-        $SUDO $yumdnf install -y python3-devel
+        $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
