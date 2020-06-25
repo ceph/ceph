@@ -13,6 +13,7 @@
           <div class="form-group row cd-{{field.name}}-form-group">
             <label *ngIf="field.label"
                    class="cd-col-form-label"
+                   [ngClass]="{'required': field?.required === true}"
                    [for]="field.name">
               {{ field.label }}
             </label>
@@ -34,15 +35,22 @@
                       class="form-control custom-select"
                       [id]="field.name"
                       [formControlName]="field.name">
-                <option *ngIf="field.placeholder"
+                <option *ngIf="field?.typeConfig?.placeholder"
                         [ngValue]="null">
-                  {{ field.placeholder }}
+                  {{ field?.typeConfig?.placeholder }}
                 </option>
-                <option *ngFor="let option of field.options"
+                <option *ngFor="let option of field?.typeConfig?.options"
                         [value]="option.value">
                   {{ option.text }}
                 </option>
               </select>
+              <cd-select-badges *ngIf="field.type === 'select-badges'"
+                                [id]="field.name"
+                                [data]="field.value"
+                                [customBadges]="field?.typeConfig?.customBadges"
+                                [options]="field?.typeConfig?.options"
+                                [messages]="field?.typeConfig?.messages">
+              </cd-select-badges>
               <span *ngIf="formGroup.showError(field.name, formDir)"
                     class="invalid-feedback">
                 {{ getError(field) }}

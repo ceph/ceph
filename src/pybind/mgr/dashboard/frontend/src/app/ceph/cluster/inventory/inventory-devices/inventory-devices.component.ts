@@ -193,13 +193,15 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
             name: 'duration',
             value: 300,
             required: true,
-            options: [
-              { text: this.i18n('1 minute'), value: 60 },
-              { text: this.i18n('2 minutes'), value: 120 },
-              { text: this.i18n('5 minutes'), value: 300 },
-              { text: this.i18n('10 minutes'), value: 600 },
-              { text: this.i18n('15 minutes'), value: 900 }
-            ]
+            typeConfig: {
+              options: [
+                { text: this.i18n('1 minute'), value: 60 },
+                { text: this.i18n('2 minutes'), value: 120 },
+                { text: this.i18n('5 minutes'), value: 300 },
+                { text: this.i18n('10 minutes'), value: 600 },
+                { text: this.i18n('15 minutes'), value: 900 }
+              ]
+            }
           }
         ],
         submitButtonText: this.i18n('Execute'),

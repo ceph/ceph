@@ -42,4 +42,12 @@ export class HostService {
   getDaemons(hostname: string): Observable<Daemon[]> {
     return this.http.get<Daemon[]>(`${this.baseURL}/${hostname}/daemons`);
   }
+
+  getLabels(): Observable<string[]> {
+    return this.http.get<string[]>('ui-api/host/labels');
+  }
+
+  update(hostname: string, labels: string[]) {
+    return this.http.put(`${this.baseURL}/${hostname}`, { labels: labels });
+  }
 }

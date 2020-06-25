@@ -66,6 +66,14 @@ class HostManger(ResourceManager):
     def remove(self, hostname: str):
         return self.api.remove_host(hostname)
 
+    @wait_api_result
+    def add_label(self, host: str, label: str) -> Completion:
+        return self.api.add_host_label(host, label)
+
+    @wait_api_result
+    def remove_label(self, host: str, label: str) -> Completion:
+        return self.api.remove_host_label(host, label)
+
 
 class InventoryManager(ResourceManager):
     @wait_api_result
