@@ -35,10 +35,10 @@
 
 #include <string_view>
 
-#include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
+#include "messages/MMDSOp.h"
 
 #include <sys/types.h>
 #include <utime.h>
@@ -48,7 +48,7 @@
 
 // metadata ops.
 
-class MClientRequest : public SafeMessage {
+class MClientRequest : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
@@ -89,9 +89,9 @@ public:
 protected:
   // cons
   MClientRequest()
-    : SafeMessage(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
   MClientRequest(int op)
-    : SafeMessage(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }

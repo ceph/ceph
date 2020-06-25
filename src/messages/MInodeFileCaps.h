@@ -16,9 +16,9 @@
 #ifndef CEPH_MINODEFILECAPS_H
 #define CEPH_MINODEFILECAPS_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MInodeFileCaps : public SafeMessage {
+class MInodeFileCaps : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -30,9 +30,9 @@ public:
   int       get_caps() const { return caps; }
 
 protected:
-  MInodeFileCaps() : SafeMessage(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {}
+  MInodeFileCaps() : MMDSOp(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    SafeMessage(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {
+    MMDSOp(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {
     this->ino = ino;
     this->caps = caps;
   }

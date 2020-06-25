@@ -16,14 +16,14 @@
 #ifndef CEPH_MLOCK_H
 #define CEPH_MLOCK_H
 
-#include "msg/Message.h"
 #include "mds/locks.h"
 #include "mds/SimpleLock.h"
+#include "messages/MMDSOp.h"
 
-class MLock : public SafeMessage {
+class MLock : public MMDSOp {
 private:
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   int32_t     action = 0;  // action type
   mds_rank_t  asker = 0;  // who is initiating this request
@@ -46,19 +46,19 @@ public:
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
 protected:
-  MLock() : SafeMessage{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION} {}
+  MLock() : MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION} {}
   MLock(int ac, mds_rank_t as) :
-    SafeMessage{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as),
     lock_type(0) { }
   MLock(SimpleLock *lock, int ac, mds_rank_t as) :
-    SafeMessage{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
   MLock(SimpleLock *lock, int ac, mds_rank_t as, ceph::buffer::list& bl) :
-    SafeMessage{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
+    MMDSOp{MSG_MDS_LOCK, HEAD_VERSION, COMPAT_VERSION},
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);

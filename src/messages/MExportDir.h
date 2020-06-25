@@ -16,10 +16,9 @@
 #ifndef CEPH_MEXPORTDIR_H
 #define CEPH_MEXPORTDIR_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-
-class MExportDir : public SafeMessage {
+class MExportDir : public MMDSOp {
 public:
   dirfrag_t dirfrag;
   ceph::buffer::list export_data;
@@ -27,9 +26,9 @@ public:
   ceph::buffer::list client_map;
 
 protected:
-  MExportDir() : SafeMessage{MSG_MDS_EXPORTDIR} {}
+  MExportDir() : MMDSOp{MSG_MDS_EXPORTDIR} {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    SafeMessage{MSG_MDS_EXPORTDIR}, dirfrag(df) {
+    MMDSOp{MSG_MDS_EXPORTDIR}, dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDir() override {}
