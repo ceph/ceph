@@ -107,9 +107,9 @@ class Module(MgrModule):
                             5
                         ) + "/s"
 
-                    metadata = self.get_metadata('mds', info['name'])
-                    version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
-                    mds_versions[version].append(info['name'])
+                    defaults = defaultdict(lambda: None, {'version' : 'unknown'})
+                    metadata = self.get_metadata('mds', info['name'], default=defaults)
+                    mds_versions[metadata['ceph_version']].append(info['name'])
                     rank_table.add_row([
                         mgr_util.bold(rank.__str__()), c_state, info['name'],
                         activity,
@@ -135,9 +135,9 @@ class Module(MgrModule):
                     5
                 ) + "/s"
 
-                metadata = self.get_metadata('mds', daemon_info['name'])
-                version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
-                mds_versions[version].append(daemon_info['name'])
+                defaults = defaultdict(lambda: None, {'version' : 'unknown'})
+                metadata = self.get_metadata('mds', daemon_info['name'], default=defaults)
+                mds_versions[metadata['ceph_version']].append(daemon_info['name'])
 
                 rank_table.add_row([
                     "{0}-s".format(daemon_info['rank']), "standby-replay",
@@ -174,9 +174,9 @@ class Module(MgrModule):
 
         standby_table = PrettyTable(["Standby MDS"])
         for standby in fsmap['standbys']:
-            metadata = self.get_metadata('mds', standby['name'])
-            version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
-            mds_versions[version].append(standby['name'])
+            defaults = defaultdict(lambda: None, {'version' : 'unknown'})
+            metadata = self.get_metadata('mds', standby['name'], default=defaults)
+            mds_versions[metadata['ceph_version']].append(standby['name'])
 
             standby_table.add_row([standby['name']])
 
@@ -228,7 +228,8 @@ class Module(MgrModule):
             kb_avail = 0
 
             if osd_id in osd_stats:
-                metadata = self.get_metadata('osd', "%s" % osd_id)
+                defaults = defaultdict(lambda: None, {'hostname' : ''})
+                metadata = self.get_metadata('osd', str(osd_id), default=defaults)
                 stats = osd_stats[osd_id]
                 hostname = metadata['hostname']
                 kb_used = stats['kb_used'] * 1024
