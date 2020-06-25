@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { SettingsService } from '../../api/settings.service';
 import { CdPwdExpirationSettings } from '../../models/cd-pwd-expiration-settings';
@@ -9,10 +9,11 @@ import { AuthStorageService } from '../../services/auth-storage.service';
   templateUrl: './pwd-expiration-notification.component.html',
   styleUrls: ['./pwd-expiration-notification.component.scss']
 })
-export class PwdExpirationNotificationComponent implements OnInit {
+export class PwdExpirationNotificationComponent implements OnInit, OnDestroy {
   alertType: string;
   expirationDays: number;
   pwdExpirationSettings: CdPwdExpirationSettings;
+  displayNotification = false;
 
   constructor(
     private settingsService: SettingsService,
@@ -30,10 +31,14 @@ export class PwdExpirationNotificationComponent implements OnInit {
         } else {
           this.alertType = 'warning';
         }
-
+        this.displayNotification = true;
         this.authStorageService.isPwdDisplayedSource.next(true);
       }
     });
+  }
+
+  ngOnDestroy() {
+    this.authStorageService.isPwdDisplayedSource.next(false);
   }
 
   private getExpirationDays(pwdExpirationDate: number): number {
@@ -44,5 +49,6 @@ export class PwdExpirationNotificationComponent implements OnInit {
 
   close() {
     this.authStorageService.isPwdDisplayedSource.next(false);
+    this.displayNotification = false;
   }
 }
