@@ -500,6 +500,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-numpy
+Requires:       python%{python3_pkgversion}-scikit-learn
 Requires:       python3-scipy
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr module that tries to predict
