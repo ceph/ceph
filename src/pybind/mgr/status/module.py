@@ -111,9 +111,10 @@ class Module(MgrModule):
                         if output_format not in ('json', 'json-pretty'):
                             activity = "Reqs: " + mgr_util.format_dimless(rate, 5) + "/s"
 
-                    metadata = self.get_metadata('mds', info['name'])
-                    version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
-                    mds_versions[version].append(info['name'])
+                    defaults = defaultdict(lambda: None, {'version' : 'unknown'})
+                    metadata = self.get_metadata('mds', info['name'], default=defaults)
+                    mds_versions[metadata['ceph_version']].append(info['name'])
+
                     if output_format in ('json', 'json-pretty'):
                         json_output['mdsmap'].append({
                             'rank': rank,
@@ -153,9 +154,9 @@ class Module(MgrModule):
                 if output_format not in ('json', 'json-pretty'):
                     activity = "Evts: " + mgr_util.format_dimless(events, 5) + "/s"
 
-                metadata = self.get_metadata('mds', daemon_info['name'])
-                version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
-                mds_versions[version].append(daemon_info['name'])
+                defaults = defaultdict(lambda: None, {'version' : 'unknown'})
+                metadata = self.get_metadata('mds', daemon_info['name'], default=defaults)
+                mds_versions[metadata['ceph_version']].append(daemon_info['name'])
 
                 if output_format in ('json', 'json-pretty'):
                     json_output['mdsmap'].append({
@@ -223,9 +224,9 @@ class Module(MgrModule):
         standby_table.left_padding_width = 0
         standby_table.right_padding_width = 2
         for standby in fsmap['standbys']:
-            metadata = self.get_metadata('mds', standby['name'])
-            version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
-            mds_versions[version].append(standby['name'])
+            defaults = defaultdict(lambda: None, {'version' : 'unknown'})
+            metadata = self.get_metadata('mds', standby['name'], default=defaults)
+            mds_versions[metadata['ceph_version']].append(standby['name'])
 
             if output_format in ('json', 'json-pretty'):
                 json_output['mdsmap'].append({
@@ -315,7 +316,8 @@ class Module(MgrModule):
             kb_avail = 0
 
             if osd_id in osd_stats:
-                metadata = self.get_metadata('osd', "%s" % osd_id)
+                defaults = defaultdict(lambda: None, {'hostname' : ''})
+                metadata = self.get_metadata('osd', str(osd_id), default=defaults)
                 stats = osd_stats[osd_id]
                 hostname = metadata['hostname']
                 kb_used = stats['kb_used'] * 1024
