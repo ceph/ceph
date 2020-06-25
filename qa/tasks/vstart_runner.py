@@ -763,7 +763,7 @@ class LocalFuseMount(FuseMount):
                                   self.mountpoint]
 
         self.fuse_daemon = self.client_remote.run(args=fuse_cmd_args,
-                                                  wait=False)
+                                                  wait=False, omit_sudo=False)
         self._set_fuse_daemon_pid()
         log.info("Mounting client.{0} with pid "
                  "{1}".format(self.client_id, self.fuse_daemon.subproc.pid))
