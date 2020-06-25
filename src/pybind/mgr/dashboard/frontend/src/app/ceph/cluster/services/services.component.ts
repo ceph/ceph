@@ -73,7 +73,9 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       {
         name: this.i18n('Running'),
         prop: 'status.running',
-        flexGrow: 1
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.checkIcon
       },
       {
         name: this.i18n('Size'),
