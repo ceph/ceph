@@ -27,10 +27,6 @@ def create_parser(prog, description):
         help='Crush device class to assign this OSD to',
     )
     parser.add_argument(
-        '--cluster-fsid',
-        help='Specify the cluster fsid, useful when no ceph.conf is available',
-    )
-    parser.add_argument(
         '--no-tmpfs',
         action='store_true',
         help='Do not use a tmpfs mount for OSD data dir'

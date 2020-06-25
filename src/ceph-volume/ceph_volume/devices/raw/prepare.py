@@ -7,7 +7,7 @@ from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util import disk
 from ceph_volume.util import system
-from ceph_volume import conf, decorators, terminal
+from ceph_volume import decorators, terminal
 from ceph_volume.devices.lvm.common import rollback_osd
 from .common import create_parser
 
@@ -97,15 +97,6 @@ class Prepare(object):
         dmcrypt_log = 'dmcrypt' if args.dmcrypt else 'clear'
         terminal.success("ceph-volume raw {} prepare successful for: {}".format(dmcrypt_log, self.args.data))
 
-    def get_cluster_fsid(self):
-        """
-        Allows using --cluster-fsid as an argument, but can fallback to reading
-        from ceph.conf if that is unset (the default behavior).
-        """
-        if self.args.cluster_fsid:
-            return self.args.cluster_fsid
-
-        return conf.ceph.get('global', 'fsid')
 
     @decorators.needs_root
     def prepare(self):
