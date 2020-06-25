@@ -1,1 +1,31 @@
-../smoke/fixed-2.yaml
+roles:
+- - mon.a
+  - mon.c
+  - mgr.y
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - client.0
+#   - ceph.rgw.realm.zone.a # Disabled, needs 15.2.4 as an upgrade start
+  - node-exporter.a
+  - alertmanager.a
+- - mon.b
+  - mgr.x
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.1
+  - prometheus.a
+  - grafana.a
+  - node-exporter.b
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 10 # GB
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
