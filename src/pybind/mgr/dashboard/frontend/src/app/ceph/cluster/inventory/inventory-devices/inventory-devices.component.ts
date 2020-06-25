@@ -116,7 +116,9 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
       {
         name: this.i18n('Available'),
         prop: 'available',
-        flexGrow: 1
+        flexGrow: 1,
+        cellClass: 'text-center',
+        cellTransformation: CellTemplate.checkIcon
       },
       {
         name: this.i18n('Vendor'),
