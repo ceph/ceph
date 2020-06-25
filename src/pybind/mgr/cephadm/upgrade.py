@@ -230,13 +230,13 @@ class CephadmUpgrade:
 
                 # make sure host has latest container image
                 out, err, code = self.mgr._run_cephadm(
-                    d.hostname, None, 'inspect-image', [],
+                    d.hostname, '', 'inspect-image', [],
                     image=target_name, no_fsid=True, error_ok=True)
                 if code or json.loads(''.join(out)).get('image_id') != target_id:
                     logger.info('Upgrade: Pulling %s on %s' % (target_name,
                                                                  d.hostname))
                     out, err, code = self.mgr._run_cephadm(
-                        d.hostname, None, 'pull', [],
+                        d.hostname, '', 'pull', [],
                         image=target_name, no_fsid=True, error_ok=True)
                     if code:
                         self._fail_upgrade('UPGRADE_FAILED_PULL', {
