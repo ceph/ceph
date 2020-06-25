@@ -546,7 +546,9 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-numpy
+%if 0%{?fedora} || 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-scikit-learn
+%endif
 Requires:       python3-scipy
 %if 0%{?rhel} == 7
 Requires:       numpy
