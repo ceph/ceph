@@ -124,6 +124,16 @@ ENDOFKEY
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/${ARCH}-linux-gnu-g++
 }
 
+function ensure_python3_sphinx_on_ubuntu {
+    local sphinx_command=/usr/bin/sphinx-build
+    # python-sphinx points $sphinx_command to
+    # ../share/sphinx/scripts/python2/sphinx-build when it's installed
+    # let's "correct" this
+    if test -e $sphinx_command  && head -n1 $sphinx_command | grep -q python$; then
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove python-sphinx
+    fi
+}
+
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -263,6 +273,7 @@ else
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
+        ensure_python3_sphinx_on_ubuntu
         case "$VERSION" in
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
