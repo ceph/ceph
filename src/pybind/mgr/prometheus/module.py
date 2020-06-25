@@ -8,7 +8,8 @@ import re
 import socket
 import threading
 import time
-from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
+from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES, \
+    Option, PerfCounterPrio
 from mgr_util import get_default_addr
 from rbd import RBD
 
@@ -193,7 +194,7 @@ class MetricCollectionThread(threading.Thread):
                 duration = time.time() - start_time
 
                 self.mod.log.debug('collecting cache in thread done')
-                
+
                 sleep_time = self.mod.scrape_interval - duration
                 if sleep_time < 0:
                     self.mod.log.warning(
@@ -227,17 +228,20 @@ class Module(MgrModule):
         },
     ]
 
-    MODULE_OPTIONS = [
-        {'name': 'server_addr'},
-        {'name': 'server_port'},
-        {'name': 'scrape_interval'},
-        {'name': 'stale_cache_strategy'},
-        {'name': 'rbd_stats_pools'},
-        {'name': 'rbd_stats_pools_refresh_interval', 'type': 'int', 'default': 300},
-    ]
-
     STALE_CACHE_FAIL = 'fail'
     STALE_CACHE_RETURN = 'return'
+
+    MODULE_OPTIONS = [
+        Option('server_addr'),
+        Option('server_port', type='int'),
+        Option('scrape_interval', type='int', default=15),
+        Option('stale_cache_strategy', type='str', default='log',
+               enum_allowed=['log', STALE_CACHE_FAIL, STALE_CACHE_RETURN]),
+        Option('rbd_stats_pools', type=str),
+        Option('rbd_stats_pools_refresh_interval', type=int, default=300),
+        Option('perf_counter_prio_limit', type='str', default='PRIO_USEFUL',
+               runtime=True, enum_allowed=[prio.name for prio in PerfCounterPrio])
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -1014,7 +1018,8 @@ class Module(MgrModule):
         self.get_pg_status()
         self.get_num_objects()
 
-        for daemon, counters in self.get_all_perf_counters().items():
+        limit = PerfCounterPrio(self.get_module_option('perf_counter_prio_limit')).value
+        for daemon, counters in self.get_all_perf_counters(prio_limit=limit).items():
             for path, counter_info in counters.items():
                 # Skip histograms, they are represented by long running avgs
                 stattype = self._stattype_to_str(counter_info['type'])
@@ -1185,9 +1190,9 @@ class Module(MgrModule):
                     raise cherrypy.HTTPError(503, msg)
 
         # Make the cache timeout for collecting configurable
-        self.scrape_interval = float(self.get_localized_module_option('scrape_interval', 15.0))
+        self.scrape_interval = self.get_localized_module_option('scrape_interval')
 
-        self.stale_cache_strategy = self.get_localized_module_option('stale_cache_strategy', 'log')
+        self.stale_cache_strategy = self.get_localized_module_option('stale_cache_strategy')
         if self.stale_cache_strategy not in [self.STALE_CACHE_FAIL,
                                              self.STALE_CACHE_RETURN]:
             self.stale_cache_strategy = self.STALE_CACHE_FAIL

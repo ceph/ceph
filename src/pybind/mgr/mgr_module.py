@@ -6,6 +6,7 @@ except ImportError:
     # just for type checking
     pass
 import logging
+import enum
 import errno
 import json
 import six
@@ -677,17 +678,21 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             return r
 
 
+class PerfCounterPrio(enum.IntEnum):
+    """
+    Redundant naming (PerfCounterPrio.PRIO_*) kept to match C++ enum
+    """
+    PRIO_DEBUGONLY = 0
+    PRIO_UNINTERESTING = 2
+    PRIO_USEFUL = 5
+    PRIO_INTERESTING = 8
+    PRIO_CRITICAL = 10
+
+
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     COMMANDS = []  # type: List[Any]
     MODULE_OPTIONS = []  # type: List[dict]
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
-    # Priority definitions for perf counters
-    PRIO_CRITICAL = 10
-    PRIO_INTERESTING = 8
-    PRIO_USEFUL = 5
-    PRIO_UNINTERESTING = 2
-    PRIO_DEBUGONLY = 0
 
     # counter value types
     PERFCOUNTER_TIME = 1
@@ -1380,7 +1385,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return 0, 0
 
-    def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
+    def get_all_perf_counters(self, prio_limit=PerfCounterPrio.PRIO_USEFUL.value,
                               services=("mds", "mon", "osd",
                                         "rbd-mirror", "rgw", "tcmu-runner")):
         """
