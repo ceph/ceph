@@ -114,7 +114,8 @@ class Module(MgrModule):
                             activity = "Reqs: " + mgr_util.format_dimless(rate, 5) + "/s"
 
                     metadata = self.get_metadata('mds', info['name'])
-                    mds_versions[metadata.get('ceph_version', "unknown")].append(info['name'])
+                    version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
+                    mds_versions[version].append(info['name'])
                     if output_format in ('json', 'json-pretty'):
                         json_output['mdsmap'].append({
                             'rank': rank,
@@ -161,7 +162,8 @@ class Module(MgrModule):
                     activity = "Evts: " + mgr_util.format_dimless(events, 5) + "/s"
 
                 metadata = self.get_metadata('mds', daemon_info['name'])
-                mds_versions[metadata.get('ceph_version', "unknown")].append(daemon_info['name'])
+                version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
+                mds_versions[version].append(daemon_info['name'])
 
                 if output_format in ('json', 'json-pretty'):
                     json_output['mdsmap'].append({
@@ -234,7 +236,8 @@ class Module(MgrModule):
         standby_table.right_padding_width = 2
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
-            mds_versions[metadata.get('ceph_version', "unknown")].append(standby['name'])
+            version = metadata.get('ceph_version', 'unknown') if metadata else 'unknown'
+            mds_versions[version].append(standby['name'])
 
             if output_format in ('json', 'json-pretty'):
                 json_output['mdsmap'].append({
