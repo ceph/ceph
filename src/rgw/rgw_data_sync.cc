@@ -1577,7 +1577,9 @@ public:
 
           drain_all_but_stack_cb(lease_stack.get(),
                                  [&](int ret) {
-                                   tn->log(10, "a sync operation returned error");
+                                   if (ret < 0) {
+                                     tn->log(10, "a sync operation returned error");
+                                   }
                                  });
         }
       } while (omapvals->more);
@@ -1723,7 +1725,9 @@ public:
 
           drain_all_but_stack_cb(lease_stack.get(),
                                  [&](int ret) {
-                                   tn->log(10, "a sync operation returned error");
+                                   if (ret < 0) {
+                                     tn->log(10, "a sync operation returned error");
+                                   }
                                  });
         }
 
@@ -3789,8 +3793,10 @@ int RGWBucketShardFullSyncCR::operate()
         }
         drain_with_cb(BUCKET_SYNC_SPAWN_WINDOW,
                       [&](int ret) {
-                tn->log(10, "a sync operation returned error");
-                sync_status = ret;
+                if (ret < 0) {
+                  tn->log(10, "a sync operation returned error");
+                  sync_status = ret;
+                }
                 return 0;
               });
       }
@@ -3799,8 +3805,10 @@ int RGWBucketShardFullSyncCR::operate()
     /* wait for all operations to complete */
 
     drain_all_cb([&](int ret) {
-      tn->log(10, "a sync operation returned error");
-      sync_status = ret;
+      if (ret < 0) {
+        tn->log(10, "a sync operation returned error");
+        sync_status = ret;
+      }
       return 0;
     });
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
@@ -4082,16 +4090,20 @@ int RGWBucketShardIncrementalSyncCR::operate()
         // }
         drain_with_cb(BUCKET_SYNC_SPAWN_WINDOW,
                       [&](int ret) {
-                tn->log(10, "a sync operation returned error");
-                sync_status = ret;
+                if (ret < 0) {
+                  tn->log(10, "a sync operation returned error");
+                  sync_status = ret;
+                }
                 return 0;
               });
       }
     } while (!list_result.empty() && sync_status == 0 && !syncstopped);
 
     drain_all_cb([&](int ret) {
-      tn->log(10, "a sync operation returned error");
-      sync_status = ret;
+      if (ret < 0) {
+        tn->log(10, "a sync operation returned error");
+        sync_status = ret;
+      }
       return 0;
     });
     tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
@@ -4340,13 +4352,17 @@ int RGWRunBucketSourcesSyncCR::operate()
                                                          &*cur_shard_progress),
                            BUCKET_SYNC_SPAWN_WINDOW,
                            [&](int ret) {
-                             tn->log(10, "a sync operation returned error");
+                             if (ret < 0) {
+                               tn->log(10, "a sync operation returned error");
+                             }
                              return ret;
                            });
       }
     }
     drain_all_cb([&](int ret) {
-                   tn->log(10, "a sync operation returned error");
+                   if (ret < 0) {
+                     tn->log(10, "a sync operation returned error");
+                   }
                    return ret;
                  });
     if (progress) {
