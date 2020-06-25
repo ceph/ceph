@@ -575,6 +575,21 @@ struct rgw_bucket_index_marker_info {
 
 class RGWBucketPipeSyncInfoCRHandler;
 
+struct RGWBucketSyncCtx {
+  CephContext *cct{nullptr};
+  RGWDataSyncCtx *sc{nullptr};
+  RGWDataSyncEnv *env{nullptr};
+  RGWBucketPipeSyncInfoCRHandler *si{nullptr};
+
+  void init(RGWDataSyncCtx *_sc,
+            RGWBucketPipeSyncInfoCRHandler *_si) {
+    cct = _sc->cct;
+    sc = _sc;
+    env = _sc->env;
+    si = _si;
+  }
+};
+
 
 class RGWRemoteBucketManager {
   const DoutPrefixProvider *dpp;
@@ -586,12 +601,16 @@ class RGWRemoteBucketManager {
 
   std::vector<rgw_bucket_sync_pair_info> sync_pairs;
 
-  RGWDataSyncCtx sc;
+  struct {
+    RGWDataSyncCtx sc;
+    vector<std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> > bsis;
+  } _ctxs;
+
+  vector<RGWBucketSyncCtx> bscs;
+
   rgw_bucket_shard_sync_info init_status;
 
   RGWBucketSyncCR *sync_cr{nullptr};
-
-  vector<std::shared_ptr<RGWBucketPipeSyncInfoCRHandler> > bsis;
 
 public:
   RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,

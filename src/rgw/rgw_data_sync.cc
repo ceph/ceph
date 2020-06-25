@@ -1135,10 +1135,9 @@ public:
 using RGWBucketPipeInfoHandlerRef = std::shared_ptr<RGWBucketPipeSyncInfoCRHandler>;
 
 class RGWRunBucketSyncCoroutine : public RGWCoroutine {
-  RGWDataSyncCtx *sc;
+  RGWBucketSyncCtx *bsc;
   RGWDataSyncEnv *sync_env;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
-  RGWBucketPipeInfoHandlerRef bsi;
   rgw_bucket_sync_pair_info sync_pair;
   rgw_bucket_sync_pipe sync_pipe;
   rgw_bucket_shard_sync_info sync_status;
@@ -1150,14 +1149,13 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
 
 public:
-  RGWRunBucketSyncCoroutine(RGWDataSyncCtx *_sc,
+  RGWRunBucketSyncCoroutine(RGWBucketSyncCtx *_bsc,
                             boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
-                            RGWBucketPipeInfoHandlerRef& _bsi,
                             const RGWSyncTraceNodeRef& _tn_parent,
                             ceph::real_time* progress)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      lease_cr(std::move(lease_cr)), bsi(_bsi),
-      sync_pair(_bsi->get_sync_pair()), progress(progress),
+    : RGWCoroutine(_bsc->sc->cct), bsc(_bsc), sync_env(_bsc->sc->env),
+      lease_cr(std::move(lease_cr)),
+      sync_pair(_bsc->si->get_sync_pair()), progress(progress),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket",
                                          SSTR(bucket_shard_str{sync_pair.dest_bs} << "<-" << bucket_shard_str{sync_pair.source_bs} ))) {
   }
@@ -1362,13 +1360,19 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   rgw_sync_pipe_info_set::iterator siter;
 
   rgw_bucket_sync_pair_info sync_pair;
-  RGWBucketPipeInfoHandlerRef bsi;
 
   RGWSyncTraceNodeRef tn;
   ceph::real_time* progress;
-  std::map<uint64_t, ceph::real_time> shard_progress;
+  
+  struct stack_info {
+    ceph::real_time progress;
+    RGWBucketPipeInfoHandlerRef bsi;
+    RGWBucketSyncCtx bsc;
+  };
 
-  ceph::real_time *cur_progress{nullptr};
+  std::map<uint64_t, stack_info> stacks_info;
+
+  stack_info *cur_stack{nullptr};
   std::optional<ceph::real_time> min_progress;
 
   RGWRESTConn *conn{nullptr};
@@ -1392,22 +1396,23 @@ public:
   int operate(const DoutPrefixProvider *dpp) override;
 
   void handle_complete_stack(uint64_t stack_id) {
-    auto iter = shard_progress.find(stack_id);
-    if (iter == shard_progress.end()) {
+    auto iter = stacks_info.find(stack_id);
+    if (iter == stacks_info.end()) {
       lderr(cct) << "ERROR: RGWRunBucketSourcesSyncCR::handle_complete_stack(): stack_id=" << stack_id << " not found! Likely a bug" << dendl;
       return;
     }
+    auto& sinfo = iter->second;
     if (progress) {
       if (!min_progress) {
-        min_progress = iter->second;
+        min_progress = sinfo.progress;
       } else {
-        if (iter->second < *min_progress) {
-          min_progress = iter->second;
+        if (sinfo.progress < *min_progress) {
+          min_progress = sinfo.progress;
         }
       }
     }
 
-    shard_progress.erase(stack_id);
+    stacks_info.erase(stack_id);
   }
 };
 
@@ -2982,29 +2987,20 @@ public:
 };
 
 class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
-
-  RGWBucketPipeInfoHandlerRef bsi;
-
-  const rgw_bucket_sync_pair_info& sync_pair;
+  RGWBucketSyncCtx *bsc;
 
   rgw_bucket_shard_sync_info& status;
   rgw_bucket_index_marker_info info;
 public:
-  RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncCtx *_sc,
-                                        RGWBucketPipeInfoHandlerRef& _bsi,
+  RGWInitBucketShardSyncStatusCoroutine(RGWBucketSyncCtx *_bsc,
                                         rgw_bucket_shard_sync_info& _status)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      bsi(_bsi),
-      sync_pair(_bsi->get_sync_pair()),
-      status(_status)
+    : RGWCoroutine(_bsc->cct), bsc(_bsc), status(_status)
   {}
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       /* fetch current position in logs */
-      yield call(bsi->get_inc_pos_cr(&info));
+      yield call(bsc->si->get_inc_pos_cr(&info));
       if (retcode < 0 && retcode != -ENOENT) {
         ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
         return set_cr_error(retcode);
@@ -3014,13 +3010,13 @@ public:
         bool write_status = false;
 
         if (info.syncstopped) {
-          if (stopped && !sync_env->sync_module->should_full_sync()) {
+          if (stopped && !bsc->env->sync_module->should_full_sync()) {
             // preserve our current incremental marker position
             write_status = true;
           }
         } else {
           // whether or not to do full sync, incremental sync will follow anyway
-          if (sync_env->sync_module->should_full_sync()) {
+          if (bsc->env->sync_module->should_full_sync()) {
             status.state = rgw_bucket_shard_sync_info::StateFullSync;
             status.inc_marker.modify().position = info.max_marker;
           } else {
@@ -3035,9 +3031,9 @@ public:
         }
 
         if (write_status) {
-          call(bsi->write_status_cr(dpp, status));
+          call(bsc->si->write_status_cr(dpp, status));
         } else {
-          call(bsi->remove_status_cr());
+          call(bsc->si->remove_status_cr());
         }
       }
       if (info.syncstopped) {
@@ -3084,12 +3080,17 @@ RGWRemoteBucketManager::RGWRemoteBucketManager(const DoutPrefixProvider *_dpp,
     }
   }
 
+  auto& sc = _ctxs.sc;
+  auto& bsis = _ctxs.bsis;
+
   sc.init(sync_env, conn, source_zone);
 
   bsis.resize(num_shards);
 
   for (int i = 0; i < num_shards; ++i) {
-    bsis[i].reset(new RGWBucketSyncInfoCRHandler_Legacy(&sc, sync_pairs[i]));
+    auto bsi = new RGWBucketSyncInfoCRHandler_Legacy(&sc, sync_pairs[i]);
+    bsis[i].reset(bsi);
+    bscs[i].init(&sc, bsi);
   }
 }
 
@@ -3100,7 +3101,7 @@ RGWCoroutine *RGWRemoteBucketManager::init_sync_status_cr(int num)
   if ((size_t)num >= sync_pairs.size()) {
     return nullptr;
   }
-  return new RGWInitBucketShardSyncStatusCoroutine(&sc, bsis[num], init_status);
+  return new RGWInitBucketShardSyncStatusCoroutine(&bscs[num], init_status);
 }
 
 #define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
@@ -3349,7 +3350,7 @@ RGWCoroutine *RGWRemoteBucketManager::read_sync_status_cr(int num, rgw_bucket_sh
     return nullptr;
   }
 
-  return bsis[num]->read_status_cr(sync_status);
+  return bscs[num].si->read_status_cr(sync_status);
 }
 
 RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RadosStore* _store,
@@ -3555,21 +3556,17 @@ RGWCoroutine *RGWBucketSyncInfoCRHandler_Legacy::fetch_inc_cr(const string& mark
 #define BUCKET_SYNC_UPDATE_MARKER_WINDOW 10
 
 class RGWBucketFullSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<rgw_obj_key, rgw_obj_key> {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
+  RGWBucketSyncCtx *bsc;
 
-  RGWBucketPipeInfoHandlerRef bsi;
   rgw_bucket_shard_sync_info status;
   RGWSyncTraceNodeRef tn;
 
 public:
-  RGWBucketFullSyncShardMarkerTrack(RGWDataSyncCtx *_sc,
-                                    RGWBucketPipeInfoHandlerRef _bsi,
+  RGWBucketFullSyncShardMarkerTrack(RGWBucketSyncCtx *_bsc,
                                     const rgw_bucket_shard_full_sync_marker& _marker,
                                     RGWSyncTraceNodeRef tn)
     : RGWSyncShardMarkerTrack(BUCKET_SYNC_UPDATE_MARKER_WINDOW),
-      sc(_sc), sync_env(_sc->env), bsi(_bsi),
-      tn(std::move(tn))
+      bsc(_bsc), tn(std::move(tn))
   {
     status.full_marker = _marker;
   }
@@ -3581,7 +3578,7 @@ public:
 
     tn->log(20, SSTR("updating marker=" << new_marker));
 
-    auto cr = bsi->write_status_cr(dpp, status);
+    auto cr = bsc->si->write_status_cr(dpp, status);
 
     status.full_marker.clean();
 
@@ -3589,23 +3586,22 @@ public:
   }
 
   RGWOrderCallCR *allocate_order_control_cr() override {
-    return new RGWLastCallerWinsCR(sync_env->cct);
+    return new RGWLastCallerWinsCR(bsc->cct);
   }
 };
 
 // write the incremental sync status and update 'stable_timestamp' on success
 class RGWWriteBucketShardIncSyncStatus : public RGWCoroutine {
-  RGWDataSyncEnv *sync_env;
-  RGWBucketPipeInfoHandlerRef bsi;
+  RGWBucketSyncCtx *bsc;
   rgw_bucket_shard_sync_info status;
   ceph::real_time* stable_timestamp;
   std::map<std::string, bufferlist> attrs;
  public:
-  RGWWriteBucketShardIncSyncStatus(RGWDataSyncEnv *sync_env,
-                                   RGWBucketPipeInfoHandlerRef bsi,
+  RGWWriteBucketShardIncSyncStatus(RGWBucketSyncCtx *bsc,
                                    const rgw_bucket_shard_inc_sync_marker& sync_marker,
                                    ceph::real_time* stable_timestamp)
-    : RGWCoroutine(sync_env->cct), sync_env(sync_env),
+    : RGWCoroutine(bsc->cct),
+      bsc(bsc),
       stable_timestamp(stable_timestamp)
   {
     status.inc_marker = sync_marker;
@@ -3613,7 +3609,7 @@ class RGWWriteBucketShardIncSyncStatus : public RGWCoroutine {
 
   int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
-      yield call(bsi->write_status_cr(dpp, status));
+      yield call(bsc->si->write_status_cr(dpp, status));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -3627,10 +3623,8 @@ class RGWWriteBucketShardIncSyncStatus : public RGWCoroutine {
 };
 
 class RGWBucketIncSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, rgw_obj_key> {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
+  RGWBucketSyncCtx *bsc;
 
-  RGWBucketPipeInfoHandlerRef bsi;
   rgw_bucket_shard_inc_sync_marker sync_marker;
   map<rgw_obj_key, string> key_to_marker;
 
@@ -3659,14 +3653,12 @@ class RGWBucketIncSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, 
   }
 
 public:
-  RGWBucketIncSyncShardMarkerTrack(RGWDataSyncCtx *_sc,
-                         RGWBucketPipeInfoHandlerRef _bsi,
+  RGWBucketIncSyncShardMarkerTrack(RGWBucketSyncCtx *_bsc,
                          const rgw_bucket_shard_inc_sync_marker& _marker,
                          RGWSyncTraceNodeRef tn,
                          ceph::real_time* stable_timestamp)
     : RGWSyncShardMarkerTrack(BUCKET_SYNC_UPDATE_MARKER_WINDOW),
-      sc(_sc), sync_env(_sc->env), bsi(_bsi),
-      sync_marker(_marker), tn(std::move(tn)),
+      bsc(_bsc), sync_marker(_marker), tn(std::move(tn)),
       stable_timestamp(stable_timestamp)
   {}
 
@@ -3675,8 +3667,7 @@ public:
     sync_marker.timestamp = timestamp;
 
     tn->log(20, SSTR("updating marker=" << new_marker << " timestamp=" << timestamp));
-    return new RGWWriteBucketShardIncSyncStatus(sync_env, bsi, sync_marker,
-                                                stable_timestamp);
+    return new RGWWriteBucketShardIncSyncStatus(bsc, sync_marker, stable_timestamp);
 
   }
 
@@ -3713,7 +3704,7 @@ public:
   }
 
   RGWOrderCallCR *allocate_order_control_cr() override {
-    return new RGWLastCallerWinsCR(sync_env->cct);
+    return new RGWLastCallerWinsCR(bsc->cct);
   }
 };
 
@@ -3961,8 +3952,7 @@ public:
 #define BUCKET_SYNC_SPAWN_WINDOW 20
 
 class RGWBucketShardFullSyncCR : public RGWCoroutine {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
+  RGWBucketSyncCtx *bsc;
   rgw_bucket_sync_pipe& sync_pipe;
   rgw_bucket_shard& bs;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
@@ -4028,21 +4018,19 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   } prefix_handler;
 
 public:
-  RGWBucketShardFullSyncCR(RGWDataSyncCtx *_sc,
+  RGWBucketShardFullSyncCR(RGWBucketSyncCtx *_bsc,
                            rgw_bucket_sync_pipe& _sync_pipe,
-                           RGWBucketPipeInfoHandlerRef _bsi,
                            boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
                            rgw_bucket_shard_sync_info& sync_info,
                            RGWSyncTraceNodeRef tn_parent)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
+    : RGWCoroutine(_bsc->sc->cct), bsc(_bsc),
       sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
       lease_cr(std::move(lease_cr)), sync_info(sync_info),
-      bsi(_bsi),
-      tn(sync_env->sync_tracer->add_node(tn_parent, "full_sync",
+      tn(bsc->env->sync_tracer->add_node(tn_parent, "full_sync",
                                          SSTR(bucket_shard_str{bs}))),
-      marker_tracker(sc, bsi, *sync_info.full_marker, tn)
+      marker_tracker(bsc, *sync_info.full_marker, tn)
   {
-    zones_trace.insert(sc->source_zone.id, sync_pipe.info.dest_bs.bucket.get_key());
+    zones_trace.insert(bsc->sc->source_zone.id, sync_pipe.info.dest_bs.bucket.get_key());
     prefix_handler.set_rules(sync_pipe.get_rules());
   }
 
@@ -4063,14 +4051,14 @@ int RGWBucketShardFullSyncCR::operate(const DoutPrefixProvider *dpp)
       set_status("listing remote bucket");
       tn->log(20, "listing bucket for full sync");
 
-#warning move prefix handler into bsi
+#warning move prefix handler into bsc->si
       if (!prefix_handler.revalidate_marker(&list_marker)) {
         set_status() << "finished iterating over all available prefixes: last marker=" << list_marker;
         tn->log(20, SSTR("finished iterating over all available prefixes: last marker=" << list_marker));
         break;
       }
 
-      yield call(bsi->fetch_full_cr(list_marker, &list_result));
+      yield call(bsc->si->fetch_full_cr(list_marker, &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
         set_status("failed bucket listing, going down");
         drain_all();
@@ -4099,7 +4087,7 @@ int RGWBucketShardFullSyncCR::operate(const DoutPrefixProvider *dpp)
           tn->log(0, SSTR("ERROR: cannot start syncing " << entry->key << ". Duplicate entry?"));
         } else {
           using SyncCR = RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>;
-          yield spawn(new SyncCR(sc, sync_pipe, entry->key,
+          yield spawn(new SyncCR(bsc->sc, sync_pipe, entry->key,
                                  false, /* versioned, only matters for object removal */
                                  entry->versioned_epoch, entry->mtime,
                                  entry->owner, entry->get_modify_op(), CLS_RGW_STATE_COMPLETE,
@@ -4134,7 +4122,7 @@ int RGWBucketShardFullSyncCR::operate(const DoutPrefixProvider *dpp)
     if (sync_status == 0) {
       yield {
         sync_info.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
-        call(bsi->write_status_cr(dpp, sync_info));
+        call(bsc->si->write_status_cr(dpp, sync_info));
       }
     } else {
       tn->log(10, SSTR("backing out with sync_status=" << sync_status));
@@ -4157,10 +4145,8 @@ static bool has_olh_epoch(RGWModifyOp op) {
 }
 
 class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
-  RGWDataSyncCtx *sc;
-  RGWDataSyncEnv *sync_env;
+  RGWBucketSyncCtx *bsc;
   rgw_bucket_sync_pipe& sync_pipe;
-  RGWBucketPipeInfoHandlerRef bsi;
   RGWBucketSyncFlowManager::pipe_rules_ref rules;
   rgw_bucket_shard& bs;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
@@ -4183,21 +4169,20 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWBucketIncSyncShardMarkerTrack marker_tracker;
 
 public:
-  RGWBucketShardIncrementalSyncCR(RGWDataSyncCtx *_sc,
+  RGWBucketShardIncrementalSyncCR(RGWBucketSyncCtx *_bsc,
                                   rgw_bucket_sync_pipe& _sync_pipe,
-                                  RGWBucketPipeInfoHandlerRef _bsi,
                                   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr,
                                   rgw_bucket_shard_sync_info& sync_info,
                                   RGWSyncTraceNodeRef& _tn_parent,
                                   ceph::real_time* stable_timestamp)
-    : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      sync_pipe(_sync_pipe), bsi(_bsi),
+    : RGWCoroutine(_bsc->cct), bsc(_bsc),
+      sync_pipe(_sync_pipe),
       bs(_sync_pipe.info.source_bs),
       lease_cr(std::move(lease_cr)), sync_info(sync_info),
-      zone_id(sync_env->svc->zone->get_zone().id),
-      tn(sync_env->sync_tracer->add_node(_tn_parent, "inc_sync",
+      zone_id(bsc->env->svc->zone->get_zone().id),
+      tn(bsc->env->sync_tracer->add_node(_tn_parent, "inc_sync",
                                          SSTR(bucket_shard_str{bs}))),
-      marker_tracker(sc, _bsi, *sync_info.inc_marker, tn,
+      marker_tracker(bsc, *sync_info.inc_marker, tn,
                      stable_timestamp)
   {
     set_description() << "bucket shard incremental sync bucket="
@@ -4233,8 +4218,8 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       }
       tn->log(20, SSTR("listing bilog for incremental sync position=" << sync_info.inc_marker->position));
       set_status() << "listing bilog; position=" << sync_info.inc_marker->position;
-      yield call(bsi->fetch_inc_cr(sync_info.inc_marker->position,
-                                   &list_result));
+      yield call(bsc->si->fetch_inc_cr(sync_info.inc_marker->position,
+                                       &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
         drain_all();
@@ -4246,7 +4231,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       for (; entries_iter != entries_end; ++entries_iter) {
         auto e = *entries_iter;
         if (e.op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP) {
-          ldpp_dout(dpp, 20) << "syncstop on " << e.timestamp << dendl;
+          ldout(dpp, 20) << "syncstop on " << e.timestamp << dendl;
           syncstopped = true;
           entries_end = std::next(entries_iter); // stop after this entry
           break;
@@ -4291,7 +4276,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
         sync_info.inc_marker.modify().position = cur_id;
 
         if (entry->op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP || entry->op == RGWModifyOp::CLS_RGW_OP_RESYNC) {
-          ldpp_dout(dpp, 20) << "detected syncstop or resync on " << entries_iter->timestamp << ", skipping entry" << dendl;
+          ldout(dpp, 20) << "detected syncstop or resync on " << entries_iter->timestamp << ", skipping entry" << dendl;
           marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
@@ -4393,7 +4378,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
             }
             tn->log(20, SSTR("entry->timestamp=" << entry->timestamp));
             using SyncCR = RGWBucketSyncSingleEntryCR<string, rgw_obj_key>;
-            spawn(new SyncCR(sc, sync_pipe, key,
+            spawn(new SyncCR(bsc->sc, sync_pipe, key,
                              entry->is_versioned(), versioned_epoch,
                              entry->timestamp, owner, entry->op, entry->state,
                              cur_id, &marker_tracker, entry->zones_trace, tn),
@@ -4659,12 +4644,13 @@ int RGWRunBucketSourcesSyncCR::operate(const DoutPrefixProvider *dpp)
 
         ldpp_dout(dpp, 20) << __func__ << "(): sync_pair=" << sync_pair << dendl;
 
-        cur_progress = (progress ? &shard_progress[prealloc_stack_id()] : nullptr);
+        cur_stack = &stacks_info[prealloc_stack_id()];
 
-        bsi.reset(new RGWBucketSyncInfoCRHandler_Legacy(sc, sync_pair));
+        cur_stack->bsi.reset(new RGWBucketSyncInfoCRHandler_Legacy(sc, sync_pair));
+        cur_stack->bsc.init(sc, cur_stack->bsi.get());
 
-        yield_spawn_window(new RGWRunBucketSyncCoroutine(sc, lease_cr, bsi, tn,
-                                                         cur_progress),
+        yield_spawn_window(new RGWRunBucketSyncCoroutine(&cur_stack->bsc, lease_cr, tn,
+                                                         &cur_stack->progress),
                            BUCKET_SYNC_SPAWN_WINDOW,
                            [&](uint64_t stack_id, int ret) {
                              handle_complete_stack(stack_id);
@@ -4979,7 +4965,7 @@ int RGWRunBucketsSyncBySourceCR::operate(const DoutPrefixProvider *dpp)
 int RGWRunBucketSyncCoroutine::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
-    yield call(bsi->read_status_cr(&sync_status));
+    yield call(bsc->si->read_status_cr(&sync_status));
     if (retcode < 0 && retcode != -ENOENT) {
       tn->log(0, "ERROR: failed to read sync status for bucket");
       drain_all();
@@ -5009,7 +4995,7 @@ int RGWRunBucketSyncCoroutine::operate(const DoutPrefixProvider *dpp)
     do {
       if (sync_status.state == rgw_bucket_shard_sync_info::StateInit ||
           sync_status.state == rgw_bucket_shard_sync_info::StateStopped) {
-        yield call(new RGWInitBucketShardSyncStatusCoroutine(sc, bsi, sync_status));
+        yield call(new RGWInitBucketShardSyncStatusCoroutine(bsc, sync_status));
         if (retcode == -ENOENT) {
           tn->log(0, "bucket sync disabled");
           drain_all();
@@ -5026,8 +5012,8 @@ int RGWRunBucketSyncCoroutine::operate(const DoutPrefixProvider *dpp)
       }
 
       if (sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
-        yield call(new RGWBucketShardFullSyncCR(sc, sync_pipe,
-                                                bsi, lease_cr,
+        yield call(new RGWBucketShardFullSyncCR(bsc, sync_pipe,
+                                                lease_cr,
                                                 sync_status, tn));
         if (retcode < 0) {
           tn->log(5, SSTR("full sync on bucket failed, retcode=" << retcode));
@@ -5037,8 +5023,8 @@ int RGWRunBucketSyncCoroutine::operate(const DoutPrefixProvider *dpp)
       }
 
       if (sync_status.state == rgw_bucket_shard_sync_info::StateIncrementalSync) {
-        yield call(new RGWBucketShardIncrementalSyncCR(sc, sync_pipe,
-                                                       bsi, lease_cr,
+        yield call(new RGWBucketShardIncrementalSyncCR(bsc, sync_pipe,
+                                                       lease_cr,
                                                        sync_status, tn,
                                                        progress));
         if (retcode < 0) {
@@ -5063,7 +5049,7 @@ RGWCoroutine *RGWRemoteBucketManager::run_sync_cr(int num)
     return nullptr;
   }
 
-  return new RGWRunBucketSyncCoroutine(&sc, nullptr, bsis[num], sync_env->sync_tracer->root_node, nullptr);
+  return new RGWRunBucketSyncCoroutine(&bscs[num], nullptr, sync_env->sync_tracer->root_node, nullptr);
 }
 
 int RGWBucketPipeSyncStatusManager::init(const DoutPrefixProvider *dpp)
