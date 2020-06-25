@@ -15,21 +15,21 @@
 #ifndef CEPH_MDSOPENINOREPLY_H
 #define CEPH_MDSOPENINOREPLY_H
 
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MMDSOpenInoReply : public SafeMessage {
+class MMDSOpenInoReply : public MMDSOp {
 public:
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
   inodeno_t ino;
   std::vector<inode_backpointer_t> ancestors;
   mds_rank_t hint;
   int32_t error;
 
 protected:
-  MMDSOpenInoReply() : SafeMessage{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, error(0) {}
+  MMDSOpenInoReply() : MMDSOp{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    SafeMessage{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, ino(i), hint(h), error(e) {
+    MMDSOp{MSG_MDS_OPENINOREPLY, HEAD_VERSION, COMPAT_VERSION}, ino(i), hint(h), error(e) {
     header.tid = t;
   }
 

@@ -16,9 +16,9 @@
 #define CEPH_MEXPORTDIRACK_H
 
 #include "MExportDir.h"
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MExportDirAck : public SafeMessage {
+class MExportDirAck : public MMDSOp {
 public:
   dirfrag_t dirfrag;
   ceph::buffer::list imported_caps;
@@ -26,9 +26,9 @@ public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
   
 protected:
-  MExportDirAck() : SafeMessage{MSG_MDS_EXPORTDIRACK} {}
+  MExportDirAck() : MMDSOp{MSG_MDS_EXPORTDIRACK} {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :
-    SafeMessage{MSG_MDS_EXPORTDIRACK}, dirfrag(df) {
+    MMDSOp{MSG_MDS_EXPORTDIRACK}, dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirAck() override {}
