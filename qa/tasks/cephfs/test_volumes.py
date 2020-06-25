@@ -30,6 +30,9 @@ class TestVolumes(CephFSTestCase):
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
 
+    def _raw_cmd(self, *args):
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
+
     def __check_clone_state(self, state, clone, clone_group=None, timo=120):
         check = 0
         args = ["clone", "status", self.volname, clone]
@@ -308,6 +311,27 @@ class TestVolumes(CephFSTestCase):
                                        "The volume {0} not removed.".format(self.volname))
         else:
             raise RuntimeError("expected the 'fs volume rm' command to fail.")
+
+    def test_volume_rm_arbitrary_pool_removal(self):
+        """
+        That the arbitrary pool added to the volume out of band is removed
+        successfully on volume removal.
+        """
+        new_pool = "new_pool"
+        # add arbitrary data pool
+        self.fs.add_data_pool(new_pool)
+        vol_status = json.loads(self._fs_cmd("status", self.volname, "--format=json-pretty"))
+        self._fs_cmd("volume", "rm", self.volname, "--yes-i-really-mean-it")
+
+        #check if fs is gone
+        volumes = json.loads(self._fs_cmd("volume", "ls", "--format=json-pretty"))
+        volnames = [volume['name'] for volume in volumes]
+        self.assertNotIn(self.volname, volnames)
+
+        #check if osd pools are gone
+        pools = json.loads(self._raw_cmd("osd", "pool", "ls", "--format=json-pretty"))
+        for pool in vol_status["pools"]:
+            self.assertNotIn(pool["name"], pools)
 
     ### basic subvolume operations
 
