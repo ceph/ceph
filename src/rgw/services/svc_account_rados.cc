@@ -95,7 +95,7 @@ int RGWSI_Account_RADOS::store_account_info(const DoutPrefixProvider *dpp,
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
   auto obj_ctx = ctx->obj_ctx;
-  return rgw_put_system_obj(dpp, *obj_ctx, svc.zone->get_zone_params().user_swift_pool,
+  return rgw_put_system_obj(dpp, *obj_ctx, svc.zone->get_zone_params().account_pool,
                             info.get_id(), data_bl, exclusive, nullptr, real_time(), y);
 }
 
