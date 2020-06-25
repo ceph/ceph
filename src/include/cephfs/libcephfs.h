@@ -44,6 +44,14 @@ extern "C" {
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
 
+#if __GNUC__ >= 4
+  #define LIBCEPHFS_DEPRECATED   __attribute__((deprecated))
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#else
+  #define LIBCEPHFS_DEPRECATED
+#endif
+
 /*
  * If using glibc check that file offset is 64-bit.
  */
@@ -748,25 +756,33 @@ int ceph_statx(struct ceph_mount_info *cmount, const char *path, struct ceph_sta
 /**
  * Get a file's statistics and attributes.
  *
- * @param cmount the ceph mount handle to use for performing the stat.
- * @param path the file or directory to get the statistics of.
- * @param stbuf the stat struct that will be filled in with the file's statistics.
- * @returns 0 on success or negative error code on failure.
- */
-int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
-
-/**
- * Get a file's statistics and attributes, without following symlinks.
+ * ceph_stat() is deprecated, use ceph_statx() instead.
  *
  * @param cmount the ceph mount handle to use for performing the stat.
  * @param path the file or directory to get the statistics of.
  * @param stbuf the stat struct that will be filled in with the file's statistics.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf);
+int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf)
+  LIBCEPHFS_DEPRECATED;
+
+/**
+ * Get a file's statistics and attributes, without following symlinks.
+ *
+ * ceph_lstat() is deprecated, use ceph_statx(.., AT_SYMLINK_NOFOLLOW) instead.
+ *
+ * @param cmount the ceph mount handle to use for performing the stat.
+ * @param path the file or directory to get the statistics of.
+ * @param stbuf the stat struct that will be filled in with the file's statistics.
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf)
+  LIBCEPHFS_DEPRECATED;
 
 /**
  * Get the open file's statistics.
+ *
+ * ceph_fstat() is deprecated, use ceph_fstatx() instead.
  *
  * @param cmount the ceph mount handle to use for performing the fstat.
  * @param fd the file descriptor of the file to get statistics of.
@@ -774,7 +790,8 @@ int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *st
  *    function.
  * @returns 0 on success or a negative error code on failure
  */
-int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf);
+int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf)
+  LIBCEPHFS_DEPRECATED;
 
 /**
  * Set a file's attributes.
