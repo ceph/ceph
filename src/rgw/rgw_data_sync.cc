@@ -1576,7 +1576,7 @@ public:
           sync_marker.marker = iter->first;
 
           drain_all_but_stack_cb(lease_stack.get(),
-                                 [&](int ret) {
+                                 [&](uint64_t stack_id, int ret) {
                                    if (ret < 0) {
                                      tn->log(10, "a sync operation returned error");
                                    }
@@ -1724,7 +1724,7 @@ public:
           }
 
           drain_all_but_stack_cb(lease_stack.get(),
-                                 [&](int ret) {
+                                 [&](uint64_t stack_id, int ret) {
                                    if (ret < 0) {
                                      tn->log(10, "a sync operation returned error");
                                    }
@@ -3792,7 +3792,7 @@ int RGWBucketShardFullSyncCR::operate()
                       false);
         }
         drain_with_cb(BUCKET_SYNC_SPAWN_WINDOW,
-                      [&](int ret) {
+                      [&](uint64_t stack_id, int ret) {
                 if (ret < 0) {
                   tn->log(10, "a sync operation returned error");
                   sync_status = ret;
@@ -3804,7 +3804,7 @@ int RGWBucketShardFullSyncCR::operate()
     set_status("done iterating over all objects");
     /* wait for all operations to complete */
 
-    drain_all_cb([&](int ret) {
+    drain_all_cb([&](uint64_t stack_id, int ret) {
       if (ret < 0) {
         tn->log(10, "a sync operation returned error");
         sync_status = ret;
@@ -4089,7 +4089,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           }
         // }
         drain_with_cb(BUCKET_SYNC_SPAWN_WINDOW,
-                      [&](int ret) {
+                      [&](uint64_t stack_id, int ret) {
                 if (ret < 0) {
                   tn->log(10, "a sync operation returned error");
                   sync_status = ret;
@@ -4099,7 +4099,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
     } while (!list_result.empty() && sync_status == 0 && !syncstopped);
 
-    drain_all_cb([&](int ret) {
+    drain_all_cb([&](uint64_t stack_id, int ret) {
       if (ret < 0) {
         tn->log(10, "a sync operation returned error");
         sync_status = ret;
@@ -4351,7 +4351,7 @@ int RGWRunBucketSourcesSyncCR::operate()
         yield_spawn_window(new RGWRunBucketSyncCoroutine(sc, lease_cr, sync_pair, tn,
                                                          &*cur_shard_progress),
                            BUCKET_SYNC_SPAWN_WINDOW,
-                           [&](int ret) {
+                           [&](uint64_t stack_id, int ret) {
                              if (ret < 0) {
                                tn->log(10, "a sync operation returned error");
                              }
@@ -4359,7 +4359,7 @@ int RGWRunBucketSourcesSyncCR::operate()
                            });
       }
     }
-    drain_all_cb([&](int ret) {
+    drain_all_cb([&](uint64_t stack_id, int ret) {
                    if (ret < 0) {
                      tn->log(10, "a sync operation returned error");
                    }

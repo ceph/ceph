@@ -299,20 +299,20 @@ public:
 
   void call(RGWCoroutine *op); /* call at the same stack we're in */
   RGWCoroutinesStack *spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
-  bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
+  bool collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id = nullptr); /* returns true if needs to be called again */
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
   int wait(const utime_t& interval);
   bool drain_children(int num_cr_left,
                       RGWCoroutinesStack *skip_stack = nullptr,
-                      std::optional<std::function<void(int ret)> > cb = std::nullopt); /* returns true if needed to be called again,
-                                                                                          cb will be called on completion of every
-                                                                                          completion. */
+                      std::optional<std::function<void(uint64_t stack_id, int ret)> > cb = std::nullopt); /* returns true if needed to be called again,
+                                                                                                             cb will be called on completion of every
+                                                                                                             completion. */
   bool drain_children(int num_cr_left,
-                      std::optional<std::function<int(int ret)> > cb); /* returns true if needed to be called again,
-                                                                          cb will be called on every completion, can filter errors.
-                                                                          A negative return value from cb means that current cr
-                                                                          will need to exit */
+                      std::optional<std::function<int(uint64_t stack_id, int ret)> > cb); /* returns true if needed to be called again,
+                                                                                             cb will be called on every completion, can filter errors.
+                                                                                             A negative return value from cb means that current cr
+                                                                                             will need to exit */
   void wakeup();
   void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
 
@@ -425,6 +425,8 @@ class RGWCoroutinesStack : public RefCountedObject {
 
   CephContext *cct;
 
+  int64_t id{-1};
+
   RGWCoroutinesManager *ops_mgr;
 
   list<RGWCoroutine *> ops;
@@ -457,11 +459,15 @@ protected:
   RGWCoroutinesStack *parent;
 
   RGWCoroutinesStack *spawn(RGWCoroutine *source_op, RGWCoroutine *next_op, bool wait);
-  bool collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
+  bool collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id); /* returns true if needs to be called again */
   bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
   ~RGWCoroutinesStack() override;
+
+  int64_t get_id() const {
+    return id;
+  }
 
   int operate(RGWCoroutinesEnv *env);
 
@@ -534,7 +540,7 @@ public:
   }
   void io_complete(const rgw_io_id& io_id);
 
-  bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
+  bool collect(int *ret, RGWCoroutinesStack *skip_stack, uint64_t *stack_id); /* returns true if needs to be called again */
 
   void cancel();
 
@@ -617,6 +623,7 @@ class RGWCoroutinesManager {
   map<uint64_t, set<RGWCoroutinesStack *> > run_contexts;
 
   std::atomic<int64_t> max_io_id = { 0 };
+  std::atomic<uint64_t> max_stack_id = { 0 };
 
   mutable ceph::shared_mutex lock =
     ceph::make_shared_mutex("RGWCoroutinesManager::lock");
@@ -671,6 +678,7 @@ public:
   RGWCoroutinesStack *allocate_stack();
 
   int64_t get_next_io_id();
+  uint64_t get_next_stack_id();
 
   void set_sleeping(RGWCoroutine *cr, bool flag);
   void io_complete(RGWCoroutine *cr, const rgw_io_id& io_id);
