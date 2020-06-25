@@ -12,6 +12,7 @@ from .fs_util import create_pool
 
 log = logging.getLogger(__name__)
 
+
 def available_clusters(mgr):
     '''
     This method returns list of available cluster ids.
@@ -409,7 +410,7 @@ class FSExport(object):
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.{}'.format(entity),
-            'caps' : ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
+            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
             'format': 'json',
             })
 
@@ -443,8 +444,8 @@ class FSExport(object):
                     raw_config = obj.read(size)
                     raw_config = raw_config.decode("utf-8")
                     log.debug("read export configuration from rados "
-                            "object %s/%s/%s:\n%s", self.rados_pool,
-                            rados_namespace, obj.key, raw_config)
+                              "object %s/%s/%s:\n%s", self.rados_pool,
+                              rados_namespace, obj.key, raw_config)
                     self.export_conf_objs.append(Export.from_export_block(
                         GaneshaConfParser(raw_config).parse()[0], rados_namespace))
 
@@ -480,8 +481,7 @@ class FSExport(object):
         common_conf = 'conf-nfs.ganesha-{}'.format(cluster_id)
         conf_blocks = {
                 'block_name': '%url',
-                'value': self._make_rados_url(
-                'export-{}'.format(ex_id))
+                'value': self._make_rados_url('export-{}'.format(ex_id))
                 }
         self._write_raw_config(conf_blocks, common_conf, True)
 
@@ -544,7 +544,7 @@ class FSExport(object):
                         'cluster_id': cluster_id,
                         'access_type': access_type,
                         'fsal': {"name": "CEPH", "user_id": user_id,
-                            "fs_name": fs_name, "sec_label_xattr": ""},
+                                 "fs_name": fs_name, "sec_label_xattr": ""},
                         'clients': []
                         }
                 export = Export.from_dict(ex_id, ex_dict)
@@ -662,7 +662,7 @@ class NFSCluster:
                 log.info(f"Pool Status: {out}")
 
                 self.mgr.check_mon_command({'prefix': 'osd pool application enable',
-                    'pool': self.pool_name, 'app': 'nfs'})
+                                            'pool': self.pool_name, 'app': 'nfs'})
 
             self.create_empty_rados_obj()
 
