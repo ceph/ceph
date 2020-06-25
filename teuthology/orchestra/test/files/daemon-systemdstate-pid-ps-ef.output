@@ -1,0 +1,5 @@
+ceph       658     1  0 Jun08 ?        00:07:43 /usr/bin/ceph-mgr -f --cluster ceph --id host1 --setuser ceph --setgroup ceph
+ceph      1634     1  0 Jun08 ?        00:02:17 /usr/bin/ceph-mds -f --cluster ceph --id host1 --setuser ceph --setgroup ceph
+ceph     31555     1  0 Jun08 ?        01:13:50 /usr/bin/ceph-mon -f --cluster ceph --id host1 --setuser ceph --setgroup ceph
+ceph     31765     1  0 Jun08 ?        00:48:42 /usr/bin/radosgw -f --cluster ceph --name client.rgw.host1.rgw0 --setuser ceph --setgroup ceph
+ceph     97427     1  0 Jun17 ?        00:41:39 /usr/bin/ceph-osd -f --cluster ceph --id 0 --setuser ceph --setgroup ceph

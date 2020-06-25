@@ -112,7 +112,7 @@ class SystemDState(DaemonState):
         # process regex to match RADOSGW process command string
         # eg. "/usr/bin/radosgw -f --cluster ceph --name <daemon-id=self.id_>"
         if self.type_ == "rgw":
-            proc_regex = "{}.* --name .*{}".format(self.daemon_type, self.id_)
+            proc_regex = '"{}.*--name.*{}"'.format(self.daemon_type, self.id_)
 
         args = ['ps', '-ef',
                 run.Raw('|'),
