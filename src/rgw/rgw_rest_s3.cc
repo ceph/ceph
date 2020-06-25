@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/tokenizer.hpp>
+#include <s3select/include/s3select.h>
 
 #include <liboath/oath.h>
 
@@ -4585,6 +4586,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
 
   if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
+  
+  if (is_select_op())
+    return new RGWSelectObj_ObjStore_S3;
 
   return new RGWPostObj_ObjStore_S3;
 }
@@ -5354,6 +5358,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
+	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
@@ -5942,4 +5947,292 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   std::tie(version, route) = discover_aws_flavour(s->info);
 
   return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
+}
+
+
+using namespace s3selectEngine;
+const char* RGWSelectObj_ObjStore_S3::header_name_str[3] = {":event-type", ":content-type", ":message-type"};
+const char* RGWSelectObj_ObjStore_S3::header_value_str[3] = {"Records", "application/octet-stream", "event"};
+
+RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
+  s3select_syntax(std::make_unique<s3selectEngine::s3select>()),
+  m_s3_csv_object(std::unique_ptr<s3selectEngine::csv_object>()),
+  m_buff_header(std::make_unique<char[]>(1000)),
+  chunk_number(0),
+  crc32(std::unique_ptr<boost::crc_32_type>())
+{
+  set_get_data(true);
+}
+
+RGWSelectObj_ObjStore_S3::~RGWSelectObj_ObjStore_S3()
+{
+}
+
+int RGWSelectObj_ObjStore_S3::get_params()
+{
+
+  //retrieve s3-select query from payload
+  bufferlist data;
+  int ret;
+  int max_size = 4096;
+  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  if (ret != 0) {
+    ldout(s->cct, 10) << "s3-select query: failed to retrieve query; ret = " << ret << dendl;
+    return ret;
+  }
+
+  m_s3select_query = data.to_str();
+  if (m_s3select_query.length() > 0) {
+    ldout(s->cct, 10) << "s3-select query: " << m_s3select_query << dendl;
+  }
+  else {
+    ldout(s->cct, 10) << "s3-select query: failed to retrieve query;" << dendl;
+    return -1;
+  }
+
+  int status = handle_aws_cli_parameters(m_sql_query);
+
+  if (status<0) {
+    return status;
+  }
+
+  return RGWGetObj_ObjStore_S3::get_params();
+}
+
+void RGWSelectObj_ObjStore_S3::encode_short(char* buff, uint16_t s, int& i)
+{
+  short x = htons(s);
+  memcpy(buff, &x, sizeof(s));
+  i+=sizeof(s);
+}
+
+void RGWSelectObj_ObjStore_S3::encode_int(char* buff, u_int32_t s, int& i)
+{
+  u_int32_t x = htonl(s);
+  memcpy(buff, &x, sizeof(s));
+  i+=sizeof(s);
+}
+
+int RGWSelectObj_ObjStore_S3::create_header_records(char* buff)
+{
+  int i = 0;
+
+  //1
+  buff[i++] = char(strlen(header_name_str[EVENT_TYPE]));
+  memcpy(&buff[i], header_name_str[EVENT_TYPE], strlen(header_name_str[EVENT_TYPE]));
+  i += strlen(header_name_str[EVENT_TYPE]);
+  buff[i++] = char(7);
+  encode_short(&buff[i], uint16_t(strlen(header_value_str[RECORDS])), i);
+  memcpy(&buff[i], header_value_str[RECORDS], strlen(header_value_str[RECORDS]));
+  i += strlen(header_value_str[RECORDS]);
+
+  //2
+  buff[i++] = char(strlen(header_name_str[CONTENT_TYPE]));
+  memcpy(&buff[i], header_name_str[CONTENT_TYPE], strlen(header_name_str[CONTENT_TYPE]));
+  i += strlen(header_name_str[CONTENT_TYPE]);
+  buff[i++] = char(7);
+  encode_short(&buff[i], uint16_t(strlen(header_value_str[OCTET_STREAM])), i);
+  memcpy(&buff[i], header_value_str[OCTET_STREAM], strlen(header_value_str[OCTET_STREAM]));
+  i += strlen(header_value_str[OCTET_STREAM]);
+
+  //3
+  buff[i++] = char(strlen(header_name_str[MESSAGE_TYPE]));
+  memcpy(&buff[i], header_name_str[MESSAGE_TYPE], strlen(header_name_str[MESSAGE_TYPE]));
+  i += strlen(header_name_str[MESSAGE_TYPE]);
+  buff[i++] = char(7);
+  encode_short(&buff[i], uint16_t(strlen(header_value_str[EVENT])), i);
+  memcpy(&buff[i], header_value_str[EVENT], strlen(header_value_str[EVENT]));
+  i += strlen(header_value_str[EVENT]);
+
+  return i;
+}
+
+int RGWSelectObj_ObjStore_S3::create_message(char* buff, u_int32_t result_len, u_int32_t header_len)
+{
+  u_int32_t total_byte_len = 0;
+  u_int32_t preload_crc = 0;
+  u_int32_t message_crc = 0;
+  int i = 0;
+
+  if(crc32 ==0) {
+    // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
+    crc32 = std::unique_ptr<boost::crc_32_type>(new boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true>);
+  }
+
+  total_byte_len = result_len + 16;
+
+  encode_int(&buff[i], total_byte_len, i);
+  encode_int(&buff[i], header_len, i);
+
+  crc32->reset();
+  *crc32 = std::for_each( buff, buff + 8, *crc32 );
+  preload_crc = (*crc32)();
+  encode_int(&buff[i], preload_crc, i);
+
+  i += result_len;
+
+  crc32->reset();
+  *crc32 = std::for_each( buff, buff + i, *crc32 );
+  message_crc = (*crc32)();
+  encode_int(&buff[i], message_crc, i);
+
+  return i;
+}
+
+#define PAYLOAD_LINE "\n<Payload>\n<Records>\n<Payload>\n"
+#define END_PAYLOAD_LINE "\n</Payload></Records></Payload>"
+
+int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input, size_t input_length)
+{
+  int status = 0;
+  csv_object::csv_defintions csv;
+
+  m_result = "012345678901"; //12 positions for header-crc
+
+  int header_size = 0;
+
+  if (m_s3_csv_object==0) {
+    s3select_syntax->parse_query(query);
+
+    if (m_row_delimiter.size()) {
+      csv.row_delimiter = *m_row_delimiter.c_str();
+    }
+
+    if (m_column_delimiter.size()) {
+      csv.column_delimiter = *m_column_delimiter.c_str();
+    }
+
+    if (m_quot.size()) {
+      csv.quot_char = *m_quot.c_str();
+    }
+
+    if (m_escape_char.size()) {
+      csv.escape_char = *m_escape_char.c_str();
+    }
+
+    if(m_header_info.compare("IGNORE")==0) {
+      csv.ignore_header_info=true;
+    }
+    else if(m_header_info.compare("USE")==0) {
+      csv.use_header_info=true;
+    }
+
+    m_s3_csv_object = std::unique_ptr<s3selectEngine::csv_object>(new s3selectEngine::csv_object(s3select_syntax.get(), csv));
+  }
+
+  if (s3select_syntax->get_error_description().empty() == false) {
+    header_size = create_header_records(m_buff_header.get());
+    m_result.append(m_buff_header.get(), header_size);
+    m_result.append(PAYLOAD_LINE);
+    m_result.append(s3select_syntax->get_error_description());
+    ldout(s->cct, 10) << "s3-select query: failed to prase query; {" << s3select_syntax->get_error_description() << "}"<< dendl;
+    status = -1;
+  }
+  else {
+    header_size = create_header_records(m_buff_header.get());
+    m_result.append(m_buff_header.get(), header_size);
+    m_result.append(PAYLOAD_LINE);
+    status = m_s3_csv_object->run_s3select_on_stream(m_result, input, input_length, s->obj_size);
+    if(status<0) {
+      m_result.append(m_s3_csv_object->get_error_description());
+    }
+  }
+
+  if (m_result.size() > strlen(PAYLOAD_LINE)) {
+    m_result.append(END_PAYLOAD_LINE);
+    int buff_len = create_message(m_result.data(), m_result.size() - 12, header_size);
+    s->formatter->write_bin_data(m_result.data(), buff_len);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+  }
+  rgw_flush_formatter_and_reset(s, s->formatter);
+
+  return status;
+}
+
+int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
+{
+
+  if(chunk_number !=0) {
+    return 0;
+  }
+
+#define GT "&gt;"
+#define LT "&lt;"
+  if (m_s3select_query.find(GT) != std::string::npos) {
+    boost::replace_all(m_s3select_query, GT, ">");
+  }
+  if (m_s3select_query.find(LT) != std::string::npos) {
+    boost::replace_all(m_s3select_query, LT, "<");
+  }
+
+  //AWS cli s3select parameters
+  extract_by_tag("Expression", sql_query);
+  extract_by_tag("FieldDelimiter", m_column_delimiter);
+  extract_by_tag("QuoteCharacter", m_quot);
+  extract_by_tag("RecordDelimiter", m_row_delimiter);
+  if (m_row_delimiter.size()==0) {
+    m_row_delimiter='\n';
+  }
+
+  extract_by_tag("QuoteEscapeCharacter", m_escape_char);
+  extract_by_tag("CompressionType", m_compression_type);
+  if (m_compression_type.length()>0 && m_compression_type.compare("NONE") != 0) {
+    ldout(s->cct, 10) << "RGW supports currently only NONE option for compression type" << dendl;
+    return -1;
+  }
+
+  extract_by_tag("FileHeaderInfo", m_header_info);
+
+  return 0;
+}
+
+int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string tag_name, std::string& result)
+{
+  result = "";
+  size_t _qs = m_s3select_query.find("<" + tag_name + ">", 0) + tag_name.size() + 2;
+  if (_qs == std::string::npos) {
+    return -1;
+  }
+  size_t _qe = m_s3select_query.find("</" + tag_name + ">", _qs);
+  if (_qe == std::string::npos) {
+    return -1;
+  }
+
+  result = m_s3select_query.substr(_qs, _qe - _qs);
+
+  return 0;
+}
+
+int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
+{
+  if (len == 0) {
+    return 0;
+  }
+
+  if (chunk_number == 0) {
+    if (op_ret < 0) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+  }
+
+  // Explicitly use chunked transfer encoding so that we can stream the result
+  // to the user without having to wait for the full length of it.
+  if (chunk_number == 0) {
+    end_header(s, this, "application/xml", CHUNKED_TRANSFER_ENCODING);
+  }
+
+  int status=0;
+  for(auto& it : bl.buffers()) {
+    status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
+    if(status<0) {
+      break;
+    }
+  }
+
+  chunk_number++;
+
+  return status;
 }
