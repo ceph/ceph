@@ -426,6 +426,35 @@ class ServiceSpec(object):
         # then, the real type is: (dict) -> ServiceSpecs
         """
         Initialize 'ServiceSpec' object data from a json structure
+
+        There are two valid styles for service specs:
+
+        the "old" style:
+
+        .. code:: yaml
+
+            service_type: nfs
+            service_id: foo
+            pool: mypool
+            namespace: myns
+
+        and the "new" style:
+
+        .. code:: yaml
+
+            service_type: nfs
+            service_id: foo
+            spec:
+              pool: mypool
+              namespace: myns
+
+        In https://tracker.ceph.com/issues/45321 we decided that we'd like to
+        prefer the new style as it is more readable and provides a better
+        understanding of what fields are special for a give service type.
+
+        Note, we'll need to stay compatible with both versions for the
+        the next two major releases (octoups, pacific).
+
         :param json_spec: A valid dict with ServiceSpec
         """
 
