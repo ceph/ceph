@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
 	ceph_conf_read_file(cmount, NULL);
 	ceph_init(cmount);
 
-	int ret = ceph_mount(cmount, NULL);
+	[[maybe_unused]] int ret = ceph_mount(cmount, NULL);
 	assert(ret >= 0);
 	ret = ceph_mkdir(cmount, DIRNAME, 0755);
 	assert(ret >= 0);
