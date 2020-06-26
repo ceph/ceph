@@ -376,8 +376,8 @@ class TestCephadm(object):
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
-                ['--config-json', '-', '--', 'lvm', 'prepare',
-                    '--bluestore', '--data', '/dev/sdb', '--no-systemd'],
+                ['--config-json', '-', '--', 'lvm', 'batch',
+                    '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with(
                 'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
@@ -418,12 +418,12 @@ class TestCephadm(object):
         "devices, preview, exp_command",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, "lvm prepare --bluestore --data /dev/sda --no-systemd"),
+            (['/dev/sda'], False, "lvm batch --no-auto /dev/sda --yes --no-systemd"),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
              "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --report --format json"),
+            (['/dev/sda'], True, "lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
              "CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"),
