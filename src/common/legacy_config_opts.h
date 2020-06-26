@@ -915,6 +915,7 @@ OPTION(bluefs_sync_write, OPT_BOOL)
 OPTION(bluefs_allocator, OPT_STR)     // stupid | bitmap
 OPTION(bluefs_log_replay_check_allocations, OPT_BOOL)
 OPTION(bluefs_replay_recovery, OPT_BOOL)
+OPTION(bluefs_replay_recovery_disable_compact, OPT_BOOL)
 
 OPTION(bluestore_bluefs, OPT_BOOL)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL) // mirror to normal Env for debug
