@@ -31,6 +31,7 @@ public:
     RGWSI_Zone *zone {nullptr};
     RGWSI_Meta *meta {nullptr};
     RGWSI_MetaBackend *meta_be {nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
   } svc;
 
   RGWSI_Account_RADOS(CephContext *cct);
@@ -44,7 +45,8 @@ public:
 
   void init(RGWSI_Zone *_zone_svc,
 	    RGWSI_Meta *_meta_svc,
-	    RGWSI_MetaBackend *_meta_be_svc);
+	    RGWSI_MetaBackend *_meta_be_svc,
+	    RGWSI_SysObj *_sysobj_svc);
 
   int store_account_info(const DoutPrefixProvider *dpp,
 			 RGWSI_MetaBackend::Context *ctx,
@@ -72,8 +74,7 @@ public:
 
   int add_user(RGWSI_MetaBackend::Context *ctx,
   	       const std::string& account_id,
-  	       const rgw_user& rgw_user) override
-  { return -ERR_NOT_IMPLEMENTED; }
+  	       const rgw_user& rgw_user) override;
 
   int remove_user(RGWSI_MetaBackend::Context *ctx,
   		  const std::string& account_id,

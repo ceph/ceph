@@ -52,11 +52,13 @@ RGWSI_Account_RADOS::RGWSI_Account_RADOS(CephContext *cct) :
 
 void RGWSI_Account_RADOS::init(RGWSI_Zone *_zone_svc,
                                RGWSI_Meta *_meta_svc,
-                               RGWSI_MetaBackend *_meta_be_svc)
+                               RGWSI_MetaBackend *_meta_be_svc,
+                               RGWSI_SysObj *_sysobj_svc)
 {
   svc.zone = _zone_svc;
   svc.meta = _meta_svc;
   svc.meta_be = _meta_be_svc;
+  svc.sysobj = _sysobj_svc;
 }
 
 int RGWSI_Account_RADOS::do_start(optional_yield y, const DoutPrefixProvider *dpp)
@@ -142,5 +144,13 @@ int RGWSI_Account_RADOS::remove_account_info(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 0) << "ERROR: could not remove account: " << account_id << dendl;
     return ret;
   }
+  return 0;
+}
+
+int RGWSI_Account_RADOS::add_user(RGWSI_MetaBackend::Context *ctx,
+                                  const std::string& account_id,
+                                  const rgw_user& rgw_user)
+{
+
   return 0;
 }
