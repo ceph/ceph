@@ -77,7 +77,7 @@ public:
 	RGWObjectDirectory() {}
 	virtual ~RGWObjectDirectory() { cout << "RGWObject Directory is destroyed!";}
 	int getValue(cache_obj *ptr);
-	std::vector<std::pair<std::string, std::string>> get_aged_keys(string startTime, string endTime);
+	vector<vector<string>> get_aged_keys(string startTime, string endTime);
 
 private:
 	int setKey(string key, cache_obj *ptr);

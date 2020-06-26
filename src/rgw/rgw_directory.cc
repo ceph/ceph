@@ -234,7 +234,7 @@ string RGWObjectDirectory::buildIndex(cache_obj *ptr){
  * based on bucket_name, obj_name, chunk_id, and etag
  */
 string RGWBlockDirectory::buildIndex(cache_obj *ptr){
-	return ptr->bucket_name + "_" + ptr->obj_name + "_" + to_string(ptr->chunk_id) + ptr->etag;
+	return ptr->bucket_name + "_" + ptr->obj_name + "_" + to_string(ptr->chunk_id) + "_" + ptr->etag;
 }
 
 
@@ -598,14 +598,17 @@ int RGWObjectDirectory::updateValue(cache_obj *ptr, string field, string value){
 */
 
 
-//returns all the keys between startTime and endTime as <key, time> paris
-std::vector<std::pair<std::string, std::string>> RGWObjectDirectory::get_aged_keys(string startTime, string endTime){
-	std::vector<std::pair<std::string, std::string>> list;
-	std::string key;
-	std::string time;
+/* returns all the keys between startTime and endTime 
+ * as a vector of <bucket_name, object_name, chunk_id, owner, creationTime> vectors
+ */
+vector<vector<string>> RGWObjectDirectory::get_aged_keys(string startTime, string endTime){
+	vector<std::pair<std::string, std::string>> list;
+	vector<vector<string>> keys; //return aged keys
+	string key;
+	string time;
+	int rep_size = 0;
 
 	cpp_redis::client client;
-	//	//client.connect();
 	client.connect("127.0.0.1", 7000);
 
 	std::string dirKey = "keyObjectDirectory";
@@ -618,12 +621,37 @@ std::vector<std::pair<std::string, std::string>> RGWObjectDirectory::get_aged_ke
 			  list.push_back(make_pair(key, time));
 	      }
 	      //if (reply.is_error() == false)
-  });
-
-	// synchronous commit, no timeout
+	});
 	client.sync_commit();
 
-	return list;
+	rep_size = list.size();
+	for (int i=0; i < rep_size; i++){
+		vector<string> vTmp;
+		string owner;
+
+	    stringstream key(list[i].first);
+		string sTmp;
+		//bucket_object_chunkID
+    	while(getline(key, sTmp, '_'))
+        	vTmp.push_back(sTmp);
+
+		//getting owner for the directory
+		client.hget(list[i].first, "owner", [&owner](cpp_redis::reply &reply){
+          owner = reply.as_string()[0];
+    	});
+		client.sync_commit();
+
+		vTmp.push_back(owner);
+
+		//creationTime
+		vTmp.push_back(list[i].second);
+
+		keys.push_back(vTmp);
+				
+	}
+	
+
+	return keys;
 }
 
 

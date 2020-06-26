@@ -429,7 +429,7 @@ void DataCache::retrieve_obj_info(cache_obj* c_obj, RGWRados *store){
 
 void retrieve_aged_objList(RGWRados *store, string start_time, string end_time){
 //  ldout(cct, 0) << __func__ <<dendl;
-  std::vector<std::pair<std::string, std::string>> object_list;
+  vector<vector<string>> object_list;
   object_list = store->objDirectory.get_aged_keys(start_time, end_time);
 }
 
