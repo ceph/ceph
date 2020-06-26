@@ -84,10 +84,10 @@ describe('SilenceFormComponent', () => {
 
   const changeAction = (action: string) => {
     const modes = {
-      add: '/monitoring/silence/add',
-      alertAdd: '/monitoring/silence/add/someAlert',
-      recreate: '/monitoring/silence/recreate/someExpiredId',
-      edit: '/monitoring/silence/edit/someNotExpiredId'
+      add: '/monitoring/silences/add',
+      alertAdd: '/monitoring/silences/add/someAlert',
+      recreate: '/monitoring/silences/recreate/someExpiredId',
+      edit: '/monitoring/silences/edit/someNotExpiredId'
     };
     Object.defineProperty(router, 'url', { value: modes[action] });
     callInit();
