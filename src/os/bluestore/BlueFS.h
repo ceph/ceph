@@ -365,6 +365,7 @@ private:
 			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
   bool _should_compact_log();
+  void _maybe_compact_log(std::unique_lock<ceph::mutex>& l);
 
   enum {
     REMOVE_DB = 1,
