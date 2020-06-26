@@ -1,11 +1,15 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { RouterTestingModule } from '@angular/router/testing';
+
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
 import { SettingsService } from '../../../../shared/api/settings.service';
 import { SharedModule } from '../../../../shared/shared.module';
+import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
 import { RulesListComponent } from './rules-list.component';
 
 describe('RulesListComponent', () => {
@@ -13,8 +17,14 @@ describe('RulesListComponent', () => {
   let fixture: ComponentFixture<RulesListComponent>;
 
   configureTestBed({
-    declarations: [RulesListComponent],
-    imports: [HttpClientTestingModule, SharedModule, BrowserAnimationsModule],
+    declarations: [RulesListComponent, PrometheusTabsComponent],
+    imports: [
+      HttpClientTestingModule,
+      SharedModule,
+      NgbNavModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
     providers: [PrometheusService, SettingsService, i18nProviders]
   });
 
