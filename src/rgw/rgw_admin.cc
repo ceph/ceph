@@ -829,6 +829,7 @@ enum class OPT {
   ACCOUNT_CREATE,
   ACCOUNT_GET,
   ACCOUNT_RM,
+  ACCOUNT_USER_ADD,
 };
 
 }
@@ -1065,6 +1066,7 @@ static SimpleCmd::Commands all_cmds = {
   { "account create", OPT::ACCOUNT_CREATE },
   { "account get", OPT::ACCOUNT_GET },
   { "account rm", OPT::ACCOUNT_RM },
+  { "account user add", OPT::ACCOUNT_USER_ADD },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -4406,7 +4408,8 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ROLE_POLICY_DELETE
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
-                          && opt_cmd != OPT::RESHARD_STATUS) {
+                          && opt_cmd != OPT::RESHARD_STATUS
+                          && opt_cmd != OPT::ACCOUNT_USER_ADD) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -10474,9 +10477,11 @@ next:
 
   if (opt_cmd == OPT::ACCOUNT_CREATE ||
       opt_cmd == OPT::ACCOUNT_GET ||
-      opt_cmd == OPT::ACCOUNT_RM) {
+      opt_cmd == OPT::ACCOUNT_RM ||
+      opt_cmd == OPT::ACCOUNT_USER_ADD) {
     if (account_id.empty()) {
       cerr << "ERROR: Account id was not provided (via --account)" << std::endl;
+      return EINVAL;
     }
     RGWObjVersionTracker objv_tracker;
 
@@ -10515,6 +10520,19 @@ next:
           dpp(), account_id, &objv_tracker, null_yield);
       if (ret < 0) {
         cerr << "ERROR: could not remove account " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_USER_ADD) {
+      if (rgw::sal::User::empty(user)) {
+        cerr << "ERROR: User id was not provided (via --uid)" << std::endl;
+        return EINVAL;
+      }
+      ret = static_cast<rgw::sal::RadosStore*>(store)->ctl()->account->add_user(
+          dpp(), account_id, user->get_id(), null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: could not add user" << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
     }
