@@ -1593,6 +1593,10 @@ static int send_to_url(const string& url, const string& access,
                        const string& secret, req_info& info,
                        bufferlist& in_data, JSONParser& parser)
 {
+  if (url.empty()) {
+    cerr << "A --url must be provided." << std::endl;
+    return -EINVAL;
+  }
   if (access.empty() || secret.empty()) {
     cerr << "An --access-key and --secret must be provided with --url." << std::endl;
     return -EINVAL;
@@ -1620,9 +1624,6 @@ static int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
                                  req_info& info, bufferlist& in_data,
                                  JSONParser& parser)
 {
-  if (url.empty()) {
-    return send_to_remote_gateway(conn, info, in_data, parser);
-  }
   return send_to_url(url, access, secret, info, in_data, parser);
 }
 
