@@ -17,7 +17,7 @@
 
 #define BOOST_SPIRIT_THREADSAFE  // uncomment for multithreaded use, requires linking to boost.thread
 
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/function.hpp>
 #include <boost/version.hpp>
 
@@ -210,6 +210,8 @@ namespace json_spirit
 
         return get_str( tmp.begin(), tmp.end() );
     }
+
+    using namespace boost::placeholders;
 
     // this class's methods get called by the spirit parse resulting
     // in the creation of a JSON object or array
