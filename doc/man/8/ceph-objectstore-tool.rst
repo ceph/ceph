@@ -89,10 +89,6 @@ Make sure that the target OSD is down::
 
    systemctl status ceph-osd@$OSD_NUMBER
 
-List objects with ceph-objectstore-tool::
-
-    systemctl status ceph-osd@$OSD_NUMBER
-
 Identify all objects within an OSD::
 
    ceph-objectstore-tool --data-path $PATH_TO_OSD --op list
