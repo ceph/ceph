@@ -753,6 +753,16 @@ void ConfigMonitor::on_active()
 
 void ConfigMonitor::load_config()
 {
+  std::map<std::string,std::string> renamed_pacific = {
+    { "mon_osd_blacklist_default_expire", "mon_osd_blocklist_default_expire" },
+    { "mon_mds_blacklist_interval", "mon_mds_blocklist_interval" },
+    { "mon_mgr_blacklist_interval", "mon_mgr_blocklist_interval" },
+    { "rbd_blacklist_on_break_lock", "rbd_blocklist_on_break_lock" },
+    { "rbd_blacklist_expire_seconds", "rbd_blocklist_expire_seconds" },
+    { "mds_session_blacklist_on_timeout", "mds_session_blocklist_on_timeout" },
+    { "mds_session_blacklist_on_evict", "mds_session_blocklist_on_evict" },
+  };
+
   unsigned num = 0;
   KeyValueDB::Iterator it = mon->store->get_iterator(CONFIG_PREFIX);
   it->lower_bound(KEY_PREFIX);
@@ -777,6 +787,20 @@ void ConfigMonitor::load_config()
     } else {
       name = key.substr(last_slash + 1);
       who = key.substr(0, last_slash);
+    }
+
+    // has this option been renamed?
+    {
+      auto p = renamed_pacific.find(name);
+      if (p != renamed_pacific.end()) {
+	if (mon->monmap->min_mon_release >= ceph_release_t::pacific) {
+	  // schedule a cleanup
+	  pending_cleanup[key] = boost::none;
+	  pending_cleanup[who + "/" + p->second] = it->value();
+	}
+	// continue loading under the new name
+	name = p->second;
+      }
     }
 
     const Option *opt = g_conf().find_option(name);
