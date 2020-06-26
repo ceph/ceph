@@ -171,8 +171,10 @@ public:
       int get_vals(const string& marker, uint64_t count,
                    std::map<string, bufferlist> *m,
                    bool *pmore, optional_yield y);
+      int get_header(bufferlist *bl, optional_yield y);
       int set(const std::string& key, bufferlist& bl, optional_yield y);
       int set(const map<std::string, bufferlist>& m, optional_yield y);
+      int set_header(const bufferlist& bl, optional_yield y);
       int del(const std::string& key, optional_yield y);
     };
 
