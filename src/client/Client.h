@@ -793,6 +793,7 @@ protected:
 
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
+  void get_caps_asok_interface(std::string relpath, int mask, Formatter *f);
 
   int make_request(MetaRequest *req, const UserPerm& perms,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
