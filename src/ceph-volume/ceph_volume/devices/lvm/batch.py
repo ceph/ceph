@@ -339,6 +339,9 @@ class Batch(object):
         Sorts drives into rotating and non-rotating, the latter being used for
         db or journal.
         '''
+        mlogger.warning('DEPRECATION NOTICE')
+        mlogger.warning('You are using the legacy automatic disk sorting behavior')
+        mlogger.warning('The Pacific release will change the default to --notauto')
         rotating = []
         ssd = []
         for d in self.args.devices:
