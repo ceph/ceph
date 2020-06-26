@@ -18,10 +18,40 @@
 #include "librados/librados_asio.h"
 
 #include "rgw_aio.h"
+#include "rgw_cacherequest.h"
+#include <aio.h>
 
 namespace rgw {
-
 namespace {
+
+void cache_aio_cb(sigval_t sigval){
+  LocalRequest *c = static_cast<LocalRequest *>(sigval.sival_ptr);
+  int status = c->status();
+  if (status == ECANCELED) {
+  c->r->result = -1;
+  c->aio->put(*(c->r));
+  return;
+  } else if (status == 0) {
+  c->finish();
+  c->r->result = 0;
+  c->aio->put(*(c->r));
+  }
+}
+
+struct cache_state {
+  Aio* aio;
+  LocalRequest *c;
+  cache_state(Aio* aio, AioResult& r)
+    : aio(aio) {}
+
+  int submit_op(LocalRequest *cc){
+    int ret = 0;
+    if((ret = ::aio_read(cc->paiocb)) != 0) {
+    return ret; }
+    return ret;
+  }
+};
+
 
 void cb(librados::completion_t, void* arg);
 
@@ -43,6 +73,9 @@ void cb(librados::completion_t, void* arg) {
   s->c->release();
   s->aio->put(r);
 }
+
+
+
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op) {
@@ -93,8 +126,57 @@ Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
                               bind_executor(ex, Handler{aio, r}));
     };
 }
-#endif // HAVE_BOOST_CONTEXT
 
+template <typename Op>
+Aio::OpFunc cache_aio_abstract(Op&& op, off_t obj_ofs, off_t read_ofs, uint64_t  read_len) {
+  return [op = std::move(op), obj_ofs, read_ofs, read_len] (Aio* aio, AioResult& r) mutable{
+  auto& ref = r.obj.get_ref();
+  auto cs = new (&r.user_data) cache_state(aio, r);
+  cs->c = new LocalRequest();
+  cs->c->prepare_op(ref.obj.oid, &r.data, read_len, obj_ofs, read_ofs, cache_aio_cb, aio, &r);
+  int ret = cs->submit_op(cs->c);
+  if ( ret < 0 ) {
+      r.result = -1;
+      cs->aio->put(r);
+  }
+  };
+}
+
+template <typename Op>
+Aio::OpFunc remote_aio_abstract(Op&& op, off_t obj_ofs, off_t read_ofs, uint64_t  read_len, string dest,  RemoteRequest *c) {
+  return [op = std::move(op), obj_ofs, read_ofs, read_len, dest, c] (Aio* aio, AioResult& r) mutable{
+  auto& ref = r.obj.get_ref();
+//   RemoteRequest *c2 = static_cast<RemoteRequest *>(c);
+   c->prepare_op(ref.obj.oid, &r.data, read_len, obj_ofs, read_ofs, dest, aio, &r);
+  //c->submit_op();
+  };
+}
+
+
+/* datacache */
+
+#endif // HAVE_BOOST_CONTEXT
+template <typename Op>
+Aio::OpFunc cache_aio_abstract(Op&& op, optional_yield y, off_t obj_ofs, off_t read_ofs, uint64_t read_len) {
+  static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
+  static_assert(!std::is_lvalue_reference_v<Op>);
+  static_assert(!std::is_const_v<Op>);
+
+  #ifdef HAVE_BOOST_CONTEXT
+  return cache_aio_abstract(std::forward<Op>(op),obj_ofs, read_ofs, read_len);
+  #endif
+}
+
+template <typename Op>
+Aio::OpFunc remote_aio_abstract(Op&& op, optional_yield y, off_t obj_ofs, off_t read_ofs, uint64_t read_len, string dest,  RemoteRequest *c) {
+  static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
+  static_assert(!std::is_lvalue_reference_v<Op>);
+  static_assert(!std::is_const_v<Op>);
+  #ifdef HAVE_BOOST_CONTEXT
+  return remote_aio_abstract(std::forward<Op>(op),obj_ofs, read_ofs, read_len, dest, c);
+  #endif
+}
+/* datacache */
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, optional_yield y) {
   static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
@@ -118,6 +200,15 @@ Aio::OpFunc Aio::librados_op(librados::ObjectReadOperation&& op,
 Aio::OpFunc Aio::librados_op(librados::ObjectWriteOperation&& op,
                              optional_yield y) {
   return aio_abstract(std::move(op), y);
+}
+
+/* datacache */
+Aio::OpFunc Aio::cache_op(librados::ObjectReadOperation&& op, optional_yield y, off_t obj_ofs, off_t read_ofs, uint64_t read_len) {
+    return cache_aio_abstract(std::move(op), y, obj_ofs, read_ofs, read_len);
+}
+
+Aio::OpFunc Aio::remote_op(librados::ObjectReadOperation&& op, optional_yield y, off_t obj_ofs, off_t read_ofs, uint64_t read_len, string dest,  RemoteRequest *c) {
+    return remote_aio_abstract(std::move(op), y, obj_ofs, read_ofs, read_len, dest, c);
 }
 
 } // namespace rgw

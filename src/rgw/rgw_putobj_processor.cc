@@ -13,6 +13,7 @@
  *
  */
 
+#include <time.h>
 #include "rgw_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
@@ -324,6 +325,31 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   if (!obj_op.meta.canceled) {
     // on success, clear the set of objects for deletion
     writer.clear_written();
+    
+    /* datacache */
+
+    cache_obj cacheObj;
+
+    cacheObj.user =  op_target.get_bucket_info().owner.id;
+    cacheObj.bucket_name = op_target.get_obj().bucket.name;
+    cacheObj.obj_name = op_target.get_obj().key.name;
+
+    cacheObj.host_list.push_back("writecache");
+    cacheObj.size_in_bytes = manifest.get_obj_size();
+    cacheObj.chunk_id = 0; //FIXME
+    cacheObj.dirty = true;
+    cacheObj.etag = etag;
+    time_t rawTime = time(NULL);
+    cacheObj.creationTime = asctime(gmtime(&rawTime));
+    cacheObj.lastAccessTime = asctime(gmtime(&rawTime));
+    cacheObj.backendProtocol =  S3;
+    cacheObj.acl = "acl_test"; //FIXME
+    cacheObj.aclTimeStamp = asctime(gmtime(&rawTime)); //FIXME
+   
+    r = store->getRados()->objDirectory.setValue(&store->getRados()->objDirectory, &cacheObj);
+    /* datacache */
+
+
   }
   if (pcanceled) {
     *pcanceled = obj_op.meta.canceled;
@@ -567,7 +593,6 @@ int AppendObjectProcessor::prepare(optional_yield y)
     }
     cur_manifest = &(*astate->manifest);
     manifest.set_prefix(cur_manifest->get_prefix());
-    astate->keep_tail = true;
   }
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
 

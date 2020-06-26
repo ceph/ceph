@@ -69,13 +69,6 @@ include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${PROJECT_SOURCE_DIR}/src)
 
-if(WIN32)
-  include_directories(
-  ${PROJECT_SOURCE_DIR}/src/include/win32)
-  # Boost complains if winsock2.h (or windows.h) is included before asio.hpp.
-  add_definitions(-include winsock_wrapper.h)
-endif()
-
 if(OFED_PREFIX)
   include_directories(SYSTEM ${OFED_PREFIX}/include)
   link_directories(${OFED_PREFIX}/lib)
@@ -93,7 +86,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-include(GNUInstallDirs)
 include(CephChecks)
 
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
@@ -167,7 +159,7 @@ endif()
 
 option(WITH_FUSE "Fuse is here" ON)
 if(WITH_FUSE)
-  find_package(FUSE)
+  find_package(fuse)
   set(HAVE_LIBFUSE ${FUSE_FOUND})
 endif()
 
@@ -175,6 +167,18 @@ option(WITH_XFS "XFS is here" ON)
 if(WITH_XFS)
   find_package(xfs)
   set(HAVE_LIBXFS ${XFS_FOUND})
+endif()
+
+option(WITH_CPP_REDIS "CPP_REDIS is here" ON)
+if(WITH_CPP_REDIS)
+  find_package(cpp_redis)
+  set(HAVE_LIBCPP_REDIS ${CPP_REDIS_FOUND})
+endif()
+
+option(WITH_TACOPIE "TACOPIE is here" ON)
+if(WITH_TACOPIE)
+  find_package(tacopie)
+  set(HAVE_LIBTACOPIE ${TACOPIE_FOUND})
 endif()
 
 option(WITH_ZFS "enable LibZFS if found" OFF)
@@ -188,8 +192,6 @@ if(WITH_BLUESTORE)
   if(LINUX)
     find_package(aio)
     set(HAVE_LIBAIO ${AIO_FOUND})
-    find_package(zbc)
-    set(HAVE_LIBZBC ${ZBC_FOUND})
   elseif(FREEBSD)
     # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
     set(HAVE_POSIXAIO ON)
@@ -197,12 +199,9 @@ if(WITH_BLUESTORE)
 endif()
 
 include(CMakeDependentOption)
-CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" OFF
+CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Build with liburing library support" OFF
   "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
 set(HAVE_LIBURING ${WITH_LIBURING})
-
-CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system liburing" OFF
-  "HAVE_LIBAIO;WITH_BLUESTORE" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
@@ -352,15 +351,14 @@ endif()
 
 option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
 if(WITH_BLKIN)
-  find_package(LTTngUST REQUIRED)
   set(BLKIN_LIBRARIES blkin ${LTTNGUST_LIBRARIES} lttng-ust-fork)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
 option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
-if(WITH_BOOST_CONTEXT)
-  set(HAVE_BOOST_CONTEXT ON)
-endif()
+#if(WITH_BOOST_CONTEXT)
+set(HAVE_BOOST_CONTEXT ON)
+#endif()
 
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
@@ -453,11 +451,6 @@ if(WITH_MGR)
   set(MGR_PYTHON_LIBRARIES ${Python3_LIBRARIES})
   set(MGR_PYTHON_VERSION_MAJOR ${Python3_VERSION_MAJOR})
   set(MGR_PYTHON_VERSION_MINOR ${Python3_VERSION_MINOR})
-  # https://tracker.ceph.com/issues/45147
-  if(Python3_VERSION VERSION_GREATER_EQUAL 3.8)
-    set(MGR_DISABLED_MODULES "diskprediction_local")
-    message(STATUS "mgr module disabled for ${Python3_VERSION}: ${MGR_DISABLED_MODULES}")
-  endif()
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
@@ -554,7 +547,8 @@ endif()
 
 if(sanitizers)
   find_package(Sanitizers REQUIRED ${sanitizers})
-  add_compile_options(${Sanitizers_COMPILE_OPTIONS})
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
 endif()
@@ -685,4 +679,6 @@ add_tags(ctags
   EXCLUDES "*.js" "*.css")
 add_custom_target(tags DEPENDS ctags)
 
+find_package(CppCheck)
+find_package(IWYU)
 set(VERSION 15.2.0)

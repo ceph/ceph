@@ -150,6 +150,13 @@ public:
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
               bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
+  /* datacache */
+    int get_obj(std::string userid, uint64_t read_ofs, uint64_t read_len, const rgw_obj& obj,
+              bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
+              bool skip_decrypt, bool send,
+	      RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
+  /* datacache */
+
   int complete_request(RGWRESTStreamRWRequest *req,
                        string *etag,
                        ceph::real_time *mtime,

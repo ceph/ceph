@@ -25,7 +25,6 @@ class PoolAsyncCompletion;
 class Rados;
 class WatchCtx;
 class WatchCtx2;
-
 } // inline namespace v14_2_0
 } // namespace librados
 

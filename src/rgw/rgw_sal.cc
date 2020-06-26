@@ -302,8 +302,9 @@ rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct
 
   store->setRados(rados);
   rados->set_store(store);
-
+  
   if ((*rados).set_use_cache(use_cache)
+              .set_use_datacache(cct->_conf->rgw_datacache_enabled) //datacache
               .set_run_gc_thread(use_gc_thread)
               .set_run_lc_thread(use_lc_thread)
               .set_run_quota_threads(quota_threads)

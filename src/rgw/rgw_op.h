@@ -60,6 +60,7 @@
 using ceph::crypto::SHA1;
 
 struct req_state;
+//struct objectDirectory_t; //datacache
 class RGWOp;
 class RGWRados;
 
@@ -190,6 +191,14 @@ public:
   virtual int verify_op_mask();
   virtual void pre_exec() {}
   virtual void execute() = 0;
+  /*datacache*/
+  virtual void fetch_remote_execute() {} 
+  virtual void cache_execute() {} 
+  virtual void directory_lookup() {} 
+  cache_obj c_obj;
+  RGWObjectDirectory objectDirectory;
+  //RGWBlockDirectory blockDirectory;
+  /*datacache*/
   virtual void send_response() {}
   virtual void complete() {
     send_response();
@@ -340,6 +349,9 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
+  void fetch_remote_execute(); // datacache
+  void cache_execute(); // datacache
+  void directory_lookup(); // datacache
   int parse_range();
   int read_user_manifest_part(
     rgw_bucket& bucket,
@@ -620,7 +632,7 @@ protected:
   virtual void send_response() override = 0;
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
-  parse_path(const std::string_view& path);
+  parse_path(const boost::string_ref& path);
   
   std::pair<std::string, std::string>
   handle_upload_path(struct req_state *s);
@@ -629,12 +641,12 @@ protected:
 				     const rgw_obj& obj,
 				     std::map<std::string, ceph::bufferlist>& battrs,
                                      ACLOwner& bucket_owner /* out */);
-  int handle_file(std::string_view path,
+  int handle_file(boost::string_ref path,
                   size_t size,
                   AlignedStreamGetter& body);
 
   int handle_dir_verify_permission();
-  int handle_dir(std::string_view path);
+  int handle_dir(boost::string_ref path);
 
 public:
   RGWBulkUploadOp()
@@ -1476,7 +1488,7 @@ public:
     copy_if_newer = false;
   }
 
-  static bool parse_copy_location(const std::string_view& src,
+  static bool parse_copy_location(const boost::string_view& src,
                                   string& bucket_name,
                                   rgw_obj_key& object);
 
@@ -1829,13 +1841,6 @@ public:
 struct RGWMultipartUploadEntry {
   rgw_bucket_dir_entry obj;
   RGWMPObj mp;
-
-  friend std::ostream& operator<<(std::ostream& out,
-				  const RGWMultipartUploadEntry& e) {
-    constexpr char quote = '"';
-    return out << "RGWMultipartUploadEntry{ obj.key=" <<
-      quote << e.obj.key << quote << " mp=" << e.mp << " }";
-  }
 };
 
 class RGWListBucketMultiparts : public RGWOp {

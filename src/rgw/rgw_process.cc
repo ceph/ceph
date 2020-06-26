@@ -88,8 +88,30 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               req_state * const s,
                               const bool skip_retarget)
 {
+
+   /* datacache
+   If data sits in the datalake
+   we issue remote_fetch operation
+   data is read from backend , stored in osds and also served back to client
+   */
+  
+  int ret;
+  ldpp_dout(op, 2) << "rgw_process_authenticated" << dendl;
+   if ( (strcmp("get_obj",op->name()) == 0) && (s->cct->_conf->rgw_datacache_enabled) ){
+    if ( (OP_GET == s->op) ) {
+      ldpp_dout(op, 2) << "executing" << dendl;
+      op->cache_execute(); 
+      ldpp_dout(op, 2) << "completing" << dendl;
+      op->complete();
+      return 0;
+    }
+
+  }
+
+
+
   ldpp_dout(op, 2) << "init permissions" << dendl;
-  int ret = handler->init_permissions(op);
+  ret = handler->init_permissions(op);
   if (ret < 0) {
     return ret;
   }

@@ -885,8 +885,8 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
   if (cb) {
     in_data.append((const char *)ptr, len);
 
+    ldout(cct, 0) << "ugur RGWHTTPStreamRWRequest::receive_data" << dendl;
     size_t orig_in_data_len = in_data.length();
-
     int ret = cb->handle_data(in_data, pause);
     if (ret < 0)
       return ret;

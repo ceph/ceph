@@ -189,7 +189,30 @@ static void set_header(T val, map<string, string>& headers, const string& header
   headers[header_name] = s.str();
 }
 
+/* datacache */
+int RGWRESTConn::get_obj(string userid,  uint64_t read_ofs, uint64_t read_len, const rgw_obj& obj,
+                         bool prepend_metadata, bool get_op, bool rgwx_stat,
+                         bool sync_manifest, bool skip_decrypt, bool send,
+			RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req)
+{
+  rgw_user uid(userid);
 
+  get_obj_params params;
+  params.uid = uid;
+  params.prepend_metadata = prepend_metadata;
+  params.get_op = get_op;
+  params.rgwx_stat = rgwx_stat;
+  params.sync_manifest = sync_manifest;
+  params.skip_decrypt = skip_decrypt;
+  params.range_is_set = true;
+  params.range_start = read_ofs;
+  params.range_end = read_ofs + read_len -1;
+  params.cb = cb;
+  return get_obj(obj, params, send, req);
+}
+
+
+/* datacache */
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
