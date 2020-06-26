@@ -800,8 +800,22 @@ int librados::RadosClient::blocklist_add(const string& client_address,
   cmds.push_back(cmd.str());
   bufferlist inbl;
   int r = mon_command(cmds, inbl, NULL, NULL);
+  if (r == -EINVAL) {
+    // try legacy blacklist command
+    std::stringstream cmd;
+    cmd << "{"
+	<< "\"prefix\": \"osd blacklist\", "
+	<< "\"blacklistop\": \"add\", "
+	<< "\"addr\": \"" << client_address << "\"";
+    if (expire_seconds != 0) {
+      cmd << ", \"expire\": " << expire_seconds << ".0";
+    }
+    cmd << "}";
+    cmds.clear();
+    cmds.push_back(cmd.str());
+    r = mon_command(cmds, inbl, NULL, NULL);
+  }
   if (r < 0) {
-#warning blocklist fallback
     return r;
   }
 
