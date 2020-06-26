@@ -95,15 +95,7 @@ int RGWSI_Account_RADOS::store_account_info(RGWSI_MetaBackend::Context *_ctx,
   encode(info, data_bl);
 
   RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
-
-  int r = svc.meta_be->put(_ctx, get_meta_key(info), params, objv_tracker, y);
-  if (r < 0)
-    return r;
-  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
-
-  auto obj_ctx = ctx->obj_ctx;
-  return rgw_put_system_obj(*obj_ctx, svc.zone->get_zone_params().account_pool,
-                            info.get_id(), data_bl, exclusive, nullptr, real_time(), y);
+  return svc.meta_be->put(_ctx, get_meta_key(info), params, objv_tracker, y);
 }
 
 int RGWSI_Account_RADOS::read_account_info(RGWSI_MetaBackend::Context *ctx,
